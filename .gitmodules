@@ -1,0 +1,3 @@
+[submodule "docs/vibe-c2-docs"]
+	path = docs/vibe-c2-docs
+	url = https://github.com/vibe-c2/vibe-c2-docs
