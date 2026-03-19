@@ -1,18 +1,16 @@
 package models
 
 import (
-	"time"
-
-	"go.mongodb.org/mongo-driver/v2/bson"
+	"github.com/google/uuid"
+	"github.com/qiniu/qmgo/field"
 )
 
 type User struct {
-	ID        bson.ObjectID `bson:"_id,omitempty" json:"id"`
-	Username  string        `bson:"username" json:"username"`
-	Email     string        `bson:"email" json:"email"`
-	Password  string        `bson:"password" json:"-"`
-	Role      string        `bson:"role" json:"role"`
-	Active    bool          `bson:"active" json:"active"`
-	CreatedAt time.Time     `bson:"created_at" json:"created_at"`
-	UpdatedAt time.Time     `bson:"updated_at" json:"updated_at"`
+	field.DefaultField `bson:",inline"`
+	UserID             uuid.UUID `bson:"user_id" json:"user_id"`
+	Username           string    `bson:"username" json:"username"`
+	Email              string    `bson:"email" json:"email"`
+	Password           string    `bson:"password" json:"-"`
+	Role               string    `bson:"role" json:"role"`
+	Active             bool      `bson:"active" json:"active"`
 }
