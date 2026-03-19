@@ -9,6 +9,8 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/vibe-c2/vibe-c2-core/core/pkg/auth"
+	"github.com/vibe-c2/vibe-c2-core/core/pkg/cache"
 	"github.com/vibe-c2/vibe-c2-core/core/pkg/database"
 	"github.com/vibe-c2/vibe-c2-core/core/pkg/environment"
 	"github.com/vibe-c2/vibe-c2-core/core/pkg/logger"
@@ -22,18 +24,18 @@ type Repositories struct {
 }
 
 type App struct {
-	logger *zap.Logger
-	db     database.Database
-	env    *environment.EnvironmentSettings
-	repos  *Repositories
+	logger       *zap.Logger
+	db           database.Database
+	env          *environment.EnvironmentSettings
+	repos        *Repositories
+	authProvider auth.IAuthProvider
+	cache        cache.Cache
 
 	// Future integration points:
-	// cache            cache.ICache
 	// rabbitmq         rabbitmq.IRabbitMQ
 	// broker           broker.IBroker
 	// sseManager       sse.ISSEManager
 	// matrixNotifier   matrix.IMatrixNotifier
-	// authProvider     auth.IAuthProvider
 	// confEngine       confengine.IConfigurationEngine
 	// setupManager     setupmanager.ISetupManager
 	// conditionChecker setupmanager.IConditionChecker
@@ -58,17 +60,28 @@ func NewApp() (*App, error) {
 		User: repository.NewUserRepository(db),
 	}
 
+	// Initialize cache
+	redisCfg := cache.RedisConfig{
+		Host:         e.RedisHost,
+		Port:         e.RedisPort,
+		Password:     e.RedisPassword,
+		CacheEnabled: e.CacheEnabled,
+		Logger:       l,
+	}
+	c, err := cache.NewRedisCache(ctx, redisCfg)
+	if err != nil {
+		l.Warn("Failed to initialize Redis cache, continuing without cache", zap.Error(err))
+		c = cache.NewNoopCache()
+	}
+
+	// Initialize auth provider
+	authProvider := auth.NewAuthProvider(c, e.JWTSecretKey)
+
 	// --- Future integration patterns ---
-	//
-	// Cache (Redis):
-	//   cache := cache.NewRedisCache()
 	//
 	// RabbitMQ:
 	//   rmq, err := rabbitmq.NewRabbitMQClient()
 	//   if err != nil { l.Warn("Failed to initialize RabbitMQ", zap.Error(err)) }
-	//
-	// Auth provider:
-	//   authProvider := auth.NewAuthProvider(cache, accessTokenRepo)
 	//
 	// Event broker + SSE:
 	//   eventBroker := broker.NewBroker()
@@ -89,10 +102,12 @@ func NewApp() (*App, error) {
 	// ------------------------------------
 
 	app := &App{
-		logger: l,
-		db:     db,
-		env:    e,
-		repos:  repos,
+		logger:       l,
+		db:           db,
+		env:          e,
+		repos:        repos,
+		authProvider: authProvider,
+		cache:        c,
 	}
 
 	return app, nil
@@ -171,8 +186,14 @@ func (a *App) StartServerWithGracefulShutdown() {
 			a.logger.Info("Database connection closed successfully")
 		}
 
+		// Close cache
+		if err := a.cache.Close(); err != nil {
+			a.logger.Error("Error closing Redis cache", zap.Error(err))
+		} else {
+			a.logger.Info("Redis cache connection closed successfully")
+		}
+
 		// Future: close other services
-		// a.cache.Close()
 		// a.rabbitmq.Close()
 
 		a.logger.Info("Server successfully exited")

@@ -32,6 +32,12 @@ type EnvironmentSettings struct {
 
 	// JWT
 	JWTSecretKey string
+
+	// Redis
+	RedisHost     string
+	RedisPort     string
+	RedisPassword string
+	CacheEnabled  bool
 }
 
 func init() {
@@ -49,6 +55,9 @@ func init() {
 	viper.SetDefault("APP_RABBITMQ_HOST", "localhost")
 	viper.SetDefault("APP_RABBITMQ_PORT", "5672")
 	viper.SetDefault("SEAWEEDFS_S3_ENDPOINT", "http://localhost:8333")
+	viper.SetDefault("REDIS_HOST", "localhost")
+	viper.SetDefault("REDIS_PORT", "6379")
+	viper.SetDefault("CACHE_ENABLED", true)
 
 	env = &EnvironmentSettings{
 		StageStatus: viper.GetString("APP_STAGE_STATUS"),
@@ -71,6 +80,12 @@ func init() {
 
 		// JWT
 		JWTSecretKey: viper.GetString("JWT_SECRET_KEY"),
+
+		// Redis
+		RedisHost:     viper.GetString("REDIS_HOST"),
+		RedisPort:     viper.GetString("REDIS_PORT"),
+		RedisPassword: viper.GetString("REDIS_PASSWORD"),
+		CacheEnabled:  viper.GetBool("CACHE_ENABLED"),
 	}
 }
 
