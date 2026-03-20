@@ -1,4 +1,34 @@
 services:
+  core-dev:
+    build:
+      context: ./core
+      dockerfile: dev.Dockerfile
+    container_name: vibec2-core-dev
+    restart: unless-stopped
+    profiles:
+      - development
+    ports:
+      - "8002:8002"
+    volumes:
+      - ./core:/app
+    environment:
+      APP_STAGE_STATUS: ${APP_STAGE_STATUS}
+      APP_DEBUG: ${APP_DEBUG}
+      JWT_SECRET_KEY: ${JWT_SECRET_KEY}
+      MONGO_URI: mongodb://${MONGO_INITDB_ROOT_USERNAME}:${MONGO_INITDB_ROOT_PASSWORD}@mongodb:27017
+      MONGO_DATABASE: ${MONGO_DATABASE}
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      REDIS_PASSWORD: ${REDIS_PASSWORD}
+      CACHE_ENABLED: ${CACHE_ENABLED}
+    depends_on:
+      mongodb:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - vibec2
+
   rabbitmq:
     image: rabbitmq:3-management-alpine
     container_name: vibec2-rabbitmq

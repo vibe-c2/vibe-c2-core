@@ -4,10 +4,14 @@ import (
 	"net/http"
 
 	"github.com/gin-gonic/gin"
+	swaggerFiles "github.com/swaggo/files"
+	ginSwagger "github.com/swaggo/gin-swagger"
 	"github.com/vibe-c2/vibe-c2-core/core/pkg/auth/permissions"
 	"github.com/vibe-c2/vibe-c2-core/core/pkg/controller"
 	"github.com/vibe-c2/vibe-c2-core/core/pkg/middleware"
 	"github.com/vibe-c2/vibe-c2-core/core/pkg/responses"
+
+	_ "github.com/vibe-c2/vibe-c2-core/core/docs"
 )
 
 func (a *App) NewRouter() *gin.Engine {
@@ -24,6 +28,9 @@ func (a *App) NewRouter() *gin.Engine {
 
 	// Controllers
 	authCtrl := controller.NewAuthController(a.repos.User, a.authProvider, a.logger)
+
+	// Swagger documentation
+	r.GET("/swagger/*any", ginSwagger.WrapHandler(swaggerFiles.Handler))
 
 	v1 := r.Group("/api/v1")
 	{

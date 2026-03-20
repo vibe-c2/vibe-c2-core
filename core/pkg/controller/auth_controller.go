@@ -41,6 +41,17 @@ func NewAuthController(
 }
 
 // Login authenticates a user with username/password and issues a token pair.
+//
+//	@Summary		Login
+//	@Description	Authenticate with username and password to receive a token pair.
+//	@Tags			Auth
+//	@Accept			json
+//	@Produce		json
+//	@Param			body	body		requests.LoginRequest	true	"Login credentials"
+//	@Success		200		{object}	responses.AuthResponse
+//	@Failure		400		{object}	responses.ErrorResponse
+//	@Failure		500		{object}	responses.ErrorResponse
+//	@Router			/login [post]
 func (ctrl *authController) Login(c *gin.Context) {
 	log := logger.From(c.Request.Context())
 
@@ -99,6 +110,18 @@ func (ctrl *authController) Login(c *gin.Context) {
 }
 
 // Refresh rotates the refresh token and issues a new token pair.
+//
+//	@Summary		Refresh tokens
+//	@Description	Rotate the refresh token and receive a new token pair.
+//	@Tags			Auth
+//	@Accept			json
+//	@Produce		json
+//	@Param			body	body		requests.RefreshRequest	true	"Refresh token payload"
+//	@Success		200		{object}	responses.AuthResponse
+//	@Failure		400		{object}	responses.ErrorResponse
+//	@Failure		401		{object}	responses.ErrorResponse
+//	@Failure		500		{object}	responses.ErrorResponse
+//	@Router			/login/refresh [post]
 func (ctrl *authController) Refresh(c *gin.Context) {
 	log := logger.From(c.Request.Context())
 
@@ -146,6 +169,15 @@ func (ctrl *authController) Refresh(c *gin.Context) {
 }
 
 // Logout invalidates all refresh tokens for the authenticated user.
+//
+//	@Summary		Logout
+//	@Description	Invalidate all refresh tokens for the current user.
+//	@Tags			Auth
+//	@Produce		json
+//	@Success		200	{object}	responses.SuccessResponse
+//	@Failure		500	{object}	responses.ErrorResponse
+//	@Security		BearerAuth
+//	@Router			/logout [post]
 func (ctrl *authController) Logout(c *gin.Context) {
 	log := logger.From(c.Request.Context())
 	userID := c.GetString("userID")
@@ -164,6 +196,15 @@ func (ctrl *authController) Logout(c *gin.Context) {
 }
 
 // Me returns the current user info with fresh tokens.
+//
+//	@Summary		Current user
+//	@Description	Return the authenticated user's info with a fresh token pair.
+//	@Tags			Auth
+//	@Produce		json
+//	@Success		200	{object}	responses.AuthResponse
+//	@Failure		500	{object}	responses.ErrorResponse
+//	@Security		BearerAuth
+//	@Router			/login/me [get]
 func (ctrl *authController) Me(c *gin.Context) {
 	log := logger.From(c.Request.Context())
 
