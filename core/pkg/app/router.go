@@ -28,6 +28,8 @@ func (a *App) NewRouter() *gin.Engine {
 
 	// Controllers
 	authCtrl := controller.NewAuthController(a.repos.User, a.authProvider, a.logger)
+	enrollCtrl := controller.NewEnrollController(a.repos.User, a.authProvider, a.logger)
+	statusCtrl := controller.NewStatusController(a.repos.User, a.logger)
 
 	// Swagger documentation
 	r.GET("/swagger/*any", ginSwagger.WrapHandler(swaggerFiles.Handler))
@@ -36,7 +38,9 @@ func (a *App) NewRouter() *gin.Engine {
 	{
 		v1.GET("/", healthcheck)
 
-		// Public auth routes
+		// Public routes
+		v1.GET("/status", statusCtrl.Status)
+		v1.POST("/enroll", enrollCtrl.Enroll)
 		v1.POST("/login", authCtrl.Login)
 		v1.POST("/login/refresh", authCtrl.Refresh)
 

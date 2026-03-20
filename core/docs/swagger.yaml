@@ -1,5 +1,15 @@
 basePath: /api/v1
 definitions:
+  requests.EnrollRequest:
+    properties:
+      password:
+        type: string
+      username:
+        type: string
+    required:
+    - password
+    - username
+    type: object
   requests.LoginRequest:
     properties:
       password:
@@ -42,6 +52,11 @@ definitions:
       error:
         type: string
     type: object
+  responses.StatusResponse:
+    properties:
+      enrolled:
+        type: boolean
+    type: object
   responses.SuccessResponse:
     properties:
       message:
@@ -53,6 +68,41 @@ info:
   title: VibeC2 Core API
   version: "1.0"
 paths:
+  /enroll:
+    post:
+      consumes:
+      - application/json
+      description: Create the initial admin account. Only works when no users exist
+        (cold startup).
+      parameters:
+      - description: Admin credentials
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/requests.EnrollRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/responses.AuthResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/responses.ErrorResponse'
+        "409":
+          description: Conflict
+          schema:
+            $ref: '#/definitions/responses.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/responses.ErrorResponse'
+      summary: Enroll first admin
+      tags:
+      - Enrollment
   /login:
     post:
       consumes:
@@ -155,6 +205,24 @@ paths:
       summary: Logout
       tags:
       - Auth
+  /status:
+    get:
+      description: Returns system state including whether initial enrollment has been
+        completed.
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/responses.StatusResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/responses.ErrorResponse'
+      summary: System status
+      tags:
+      - Status
 securityDefinitions:
   BearerAuth:
     description: Bearer JWT token (e.g. "Bearer eyJhb...")
