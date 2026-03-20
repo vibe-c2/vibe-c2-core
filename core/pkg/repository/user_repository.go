@@ -94,6 +94,6 @@ func buildSearchFilter(search string) bson.M {
 	regex := bson.M{"$regex": search, "$options": "i"}
 	return bson.M{"$or": bson.A{
 		bson.M{"username": regex},
-		bson.M{"role": regex},
+		bson.M{"roles": regex},
 	}}
 }

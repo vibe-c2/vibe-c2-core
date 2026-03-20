@@ -128,15 +128,11 @@ func NewApp() (*App, error) {
 }
 
 func (a *App) StartServer() {
-	mux := http.NewServeMux()
-	mux.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
-		w.WriteHeader(http.StatusOK)
-		w.Write([]byte("ok"))
-	})
+	router := a.NewRouter()
 
 	srv := &http.Server{
 		Addr:    "0.0.0.0:8002",
-		Handler: mux,
+		Handler: router,
 	}
 
 	// Future: start background workers
@@ -152,15 +148,11 @@ func (a *App) StartServer() {
 }
 
 func (a *App) StartServerWithGracefulShutdown() {
-	mux := http.NewServeMux()
-	mux.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
-		w.WriteHeader(http.StatusOK)
-		w.Write([]byte("ok"))
-	})
+	router := a.NewRouter()
 
 	srv := &http.Server{
 		Addr:    "0.0.0.0:8002",
-		Handler: mux,
+		Handler: router,
 	}
 
 	// Future: start background workers

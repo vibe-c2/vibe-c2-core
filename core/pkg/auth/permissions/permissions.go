@@ -43,3 +43,34 @@ func HasPermission(role string, permission string) (bool, error) {
 	}
 	return false, nil
 }
+
+// GetPermissionsForRoles aggregates and deduplicates permissions across
+// multiple roles. Unknown roles are silently skipped.
+func GetPermissionsForRoles(roles []string) []string {
+	seen := make(map[string]struct{})
+	var perms []string
+	for _, role := range roles {
+		rp, err := GetPermissionsByRole(role)
+		if err != nil {
+			continue
+		}
+		for _, p := range rp {
+			if _, ok := seen[p]; !ok {
+				seen[p] = struct{}{}
+				perms = append(perms, p)
+			}
+		}
+	}
+	return perms
+}
+
+// HasPermissionForRoles checks if any of the given roles grants the permission.
+func HasPermissionForRoles(roles []string, permission string) bool {
+	for _, role := range roles {
+		ok, _ := HasPermission(role, permission)
+		if ok {
+			return true
+		}
+	}
+	return false
+}

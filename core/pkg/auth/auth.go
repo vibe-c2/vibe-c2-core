@@ -36,25 +36,25 @@ const (
 // Custom:
 //
 //	preferred_username — OIDC convention for display username
-//	role               — user role for RBAC
+//	roles              — user roles for RBAC
 type Claims struct {
-	PreferredUsername string `json:"preferred_username"`
-	Role             string `json:"role"`
+	PreferredUsername string   `json:"preferred_username"`
+	Roles            []string `json:"roles"`
 	jwt.RegisteredClaims
 }
 
 // RefreshTokenMeta is stored alongside the hashed refresh token.
 // Contains user metadata to avoid DB lookups on token refresh.
 type RefreshTokenMeta struct {
-	Username  string `json:"username"`
-	Role      string `json:"role"`
-	CreatedAt string `json:"created_at"`
+	Username  string   `json:"username"`
+	Roles     []string `json:"roles"`
+	CreatedAt string   `json:"created_at"`
 }
 
 type IAuthProvider interface {
-	GenerateAuthToken(userID, username, role string) (string, error)
+	GenerateAuthToken(userID, username string, roles []string) (string, error)
 	ValidateAuthToken(tokenString string) (*Claims, error)
-	GenerateRefreshToken(ctx context.Context, userID, username, role string) (string, error)
+	GenerateRefreshToken(ctx context.Context, userID, username string, roles []string) (string, error)
 	ValidateRefreshToken(ctx context.Context, userID, rawToken string) (*RefreshTokenMeta, error)
 	RotateRefreshToken(ctx context.Context, userID, oldRawToken string) (accessToken, newRefreshToken string, err error)
 	InvalidateRefreshToken(ctx context.Context, userID, rawToken string) error
@@ -73,12 +73,12 @@ func NewAuthProvider(store TokenStore, jwtSecret string) IAuthProvider {
 	}
 }
 
-func (ap *authProvider) GenerateAuthToken(userID, username, role string) (string, error) {
+func (ap *authProvider) GenerateAuthToken(userID, username string, roles []string) (string, error) {
 	now := time.Now().UTC()
 
 	claims := &Claims{
 		PreferredUsername: username,
-		Role:             role,
+		Roles:            roles,
 		RegisteredClaims: jwt.RegisteredClaims{
 			Subject:   userID,
 			Issuer:    Issuer,
@@ -115,7 +115,7 @@ func (ap *authProvider) ValidateAuthToken(tokenString string) (*Claims, error) {
 	return claims, nil
 }
 
-func (ap *authProvider) GenerateRefreshToken(ctx context.Context, userID, username, role string) (string, error) {
+func (ap *authProvider) GenerateRefreshToken(ctx context.Context, userID, username string, roles []string) (string, error) {
 	// Check max sessions using SCARD (O(1))
 	count, err := ap.store.UserSessionCount(ctx, userID)
 	if err != nil {
@@ -136,7 +136,7 @@ func (ap *authProvider) GenerateRefreshToken(ctx context.Context, userID, userna
 	key := fmt.Sprintf("%s:%s:%s", RefreshTokenPrefix, userID, tokenHash)
 	meta := RefreshTokenMeta{
 		Username:  username,
-		Role:      role,
+		Roles:     roles,
 		CreatedAt: time.Now().UTC().Format(time.RFC3339),
 	}
 
@@ -174,12 +174,12 @@ func (ap *authProvider) RotateRefreshToken(ctx context.Context, userID, oldRawTo
 
 	// Generate new token pair before deleting old token.
 	// This ensures the user keeps their session if generation fails.
-	accessToken, err := ap.GenerateAuthToken(userID, meta.Username, meta.Role)
+	accessToken, err := ap.GenerateAuthToken(userID, meta.Username, meta.Roles)
 	if err != nil {
 		return "", "", fmt.Errorf("failed to generate access token: %w", err)
 	}
 
-	newRefreshToken, err := ap.GenerateRefreshToken(ctx, userID, meta.Username, meta.Role)
+	newRefreshToken, err := ap.GenerateRefreshToken(ctx, userID, meta.Username, meta.Roles)
 	if err != nil {
 		return "", "", fmt.Errorf("failed to generate refresh token: %w", err)
 	}
