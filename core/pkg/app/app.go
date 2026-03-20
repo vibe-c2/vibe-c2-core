@@ -30,6 +30,7 @@ type App struct {
 	repos        *Repositories
 	authProvider auth.IAuthProvider
 	cache        cache.Cache
+	tokenStore   auth.TokenStore
 
 	// Future integration points:
 	// rabbitmq         rabbitmq.IRabbitMQ
@@ -60,7 +61,7 @@ func NewApp() (*App, error) {
 		User: repository.NewUserRepository(db),
 	}
 
-	// Initialize cache
+	// Initialize cache (noop fallback is acceptable for caching)
 	redisCfg := cache.RedisConfig{
 		Host:         e.RedisHost,
 		Port:         e.RedisPort,
@@ -74,8 +75,20 @@ func NewApp() (*App, error) {
 		c = cache.NewNoopCache()
 	}
 
+	// Initialize token store (failure is fatal — auth requires durable session storage)
+	tokenStore, err := auth.NewRedisTokenStore(ctx, auth.RedisTokenStoreConfig{
+		Host:     e.RedisHost,
+		Port:     e.RedisPort,
+		Password: e.RedisPassword,
+		DB:       1,
+		Logger:   l,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("failed to initialize token store (required): %w", err)
+	}
+
 	// Initialize auth provider
-	authProvider := auth.NewAuthProvider(c, e.JWTSecretKey)
+	authProvider := auth.NewAuthProvider(tokenStore, e.JWTSecretKey)
 
 	// --- Future integration patterns ---
 	//
@@ -108,6 +121,7 @@ func NewApp() (*App, error) {
 		repos:        repos,
 		authProvider: authProvider,
 		cache:        c,
+		tokenStore:   tokenStore,
 	}
 
 	return app, nil
@@ -191,6 +205,13 @@ func (a *App) StartServerWithGracefulShutdown() {
 			a.logger.Error("Error closing Redis cache", zap.Error(err))
 		} else {
 			a.logger.Info("Redis cache connection closed successfully")
+		}
+
+		// Close token store
+		if err := a.tokenStore.Close(); err != nil {
+			a.logger.Error("Error closing token store", zap.Error(err))
+		} else {
+			a.logger.Info("Token store connection closed successfully")
 		}
 
 		// Future: close other services

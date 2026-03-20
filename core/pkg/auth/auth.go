@@ -6,12 +6,9 @@ import (
 	"crypto/sha256"
 	"encoding/base64"
 	"encoding/hex"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"time"
-
-	"github.com/vibe-c2/vibe-c2-core/core/pkg/cache"
 
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/google/uuid"
@@ -22,6 +19,7 @@ const (
 	Issuer             = "vibe-c2"
 	RefreshTokenPrefix = "refresh"
 	MaxSessionsPerUser = 10
+	TTLRefreshToken    = 7 * 24 * time.Hour
 )
 
 // Claims uses RFC 7519 registered claims via jwt.RegisteredClaims
@@ -45,7 +43,7 @@ type Claims struct {
 	jwt.RegisteredClaims
 }
 
-// RefreshTokenMeta is stored in Redis alongside the hashed refresh token.
+// RefreshTokenMeta is stored alongside the hashed refresh token.
 // Contains user metadata to avoid DB lookups on token refresh.
 type RefreshTokenMeta struct {
 	Username  string `json:"username"`
@@ -64,13 +62,13 @@ type IAuthProvider interface {
 }
 
 type authProvider struct {
-	cache     cache.Cache
+	store     TokenStore
 	jwtSecret []byte
 }
 
-func NewAuthProvider(c cache.Cache, jwtSecret string) IAuthProvider {
+func NewAuthProvider(store TokenStore, jwtSecret string) IAuthProvider {
 	return &authProvider{
-		cache:     c,
+		store:     store,
 		jwtSecret: []byte(jwtSecret),
 	}
 }
@@ -118,36 +116,32 @@ func (ap *authProvider) ValidateAuthToken(tokenString string) (*Claims, error) {
 }
 
 func (ap *authProvider) GenerateRefreshToken(ctx context.Context, userID, username, role string) (string, error) {
-	// Check max sessions
-	pattern := fmt.Sprintf("%s:%s:*", RefreshTokenPrefix, userID)
-	existingKeys, err := ap.cache.Keys(ctx, pattern)
-	if err != nil && !errors.Is(err, cache.ErrCacheDisabled) {
+	// Check max sessions using SCARD (O(1))
+	count, err := ap.store.UserSessionCount(ctx, userID)
+	if err != nil {
 		return "", fmt.Errorf("failed to check existing sessions: %w", err)
 	}
-	if len(existingKeys) >= MaxSessionsPerUser {
+	if count >= MaxSessionsPerUser {
 		return "", fmt.Errorf("%w: limit is %d", ErrSessionLimitReached, MaxSessionsPerUser)
 	}
 
 	// Generate opaque token
-	rawToken := GenerateRandomKey()
+	rawToken, err := GenerateRandomKey()
+	if err != nil {
+		return "", err
+	}
 	tokenHash := HashToken(rawToken)
 
-	// Build Redis key and value
+	// Build key and metadata
 	key := fmt.Sprintf("%s:%s:%s", RefreshTokenPrefix, userID, tokenHash)
 	meta := RefreshTokenMeta{
 		Username:  username,
 		Role:      role,
 		CreatedAt: time.Now().UTC().Format(time.RFC3339),
 	}
-	metaJSON, err := json.Marshal(meta)
-	if err != nil {
-		return "", fmt.Errorf("failed to marshal refresh token metadata: %w", err)
-	}
 
-	// Store with tag for per-user invalidation
-	tag := fmt.Sprintf("%s:%s", RefreshTokenPrefix, userID)
-	err = ap.cache.SetWithTags(ctx, key, string(metaJSON), []string{tag}, cache.TTLRefreshToken)
-	if err != nil {
+	// Store token and add to user index in a single pipeline
+	if err := ap.store.StoreWithIndex(ctx, key, meta, userID, TTLRefreshToken); err != nil {
 		return "", fmt.Errorf("failed to store refresh token: %w", err)
 	}
 
@@ -158,17 +152,15 @@ func (ap *authProvider) ValidateRefreshToken(ctx context.Context, userID, rawTok
 	tokenHash := HashToken(rawToken)
 	key := fmt.Sprintf("%s:%s:%s", RefreshTokenPrefix, userID, tokenHash)
 
-	data, err := ap.cache.Get(ctx, key)
+	meta, err := ap.store.Lookup(ctx, key)
 	if err != nil {
-		return nil, ErrTokenInvalid
+		if errors.Is(err, ErrTokenNotFound) {
+			return nil, ErrTokenInvalid
+		}
+		return nil, err
 	}
 
-	var meta RefreshTokenMeta
-	if err := json.Unmarshal([]byte(data), &meta); err != nil {
-		return nil, fmt.Errorf("%w: %v", ErrTokenCorrupted, err)
-	}
-
-	return &meta, nil
+	return meta, nil
 }
 
 func (ap *authProvider) RotateRefreshToken(ctx context.Context, userID, oldRawToken string) (string, string, error) {
@@ -180,12 +172,8 @@ func (ap *authProvider) RotateRefreshToken(ctx context.Context, userID, oldRawTo
 		return "", "", ErrTokenInvalid
 	}
 
-	// Delete old token
-	if err := ap.InvalidateRefreshToken(ctx, userID, oldRawToken); err != nil {
-		return "", "", fmt.Errorf("failed to invalidate old refresh token: %w", err)
-	}
-
-	// Generate new token pair
+	// Generate new token pair before deleting old token.
+	// This ensures the user keeps their session if generation fails.
 	accessToken, err := ap.GenerateAuthToken(userID, meta.Username, meta.Role)
 	if err != nil {
 		return "", "", fmt.Errorf("failed to generate access token: %w", err)
@@ -196,22 +184,24 @@ func (ap *authProvider) RotateRefreshToken(ctx context.Context, userID, oldRawTo
 		return "", "", fmt.Errorf("failed to generate refresh token: %w", err)
 	}
 
+	// Delete old token last — if this fails, the user has two valid
+	// refresh tokens temporarily, which is safe (old one expires via TTL).
+	if err := ap.InvalidateRefreshToken(ctx, userID, oldRawToken); err != nil {
+		return "", "", fmt.Errorf("failed to invalidate old refresh token: %w", err)
+	}
+
 	return accessToken, newRefreshToken, nil
 }
 
 func (ap *authProvider) InvalidateRefreshToken(ctx context.Context, userID, rawToken string) error {
 	tokenHash := HashToken(rawToken)
 	key := fmt.Sprintf("%s:%s:%s", RefreshTokenPrefix, userID, tokenHash)
-	tagKey := fmt.Sprintf("tag:%s:%s", RefreshTokenPrefix, userID)
 
-	if err := ap.cache.Del(ctx, key); err != nil {
-		return err
-	}
-	return ap.cache.SRem(ctx, tagKey, key)
+	return ap.store.DeleteAndUnindex(ctx, key, userID)
 }
 
 func (ap *authProvider) InvalidateAllRefreshTokens(ctx context.Context, userID string) error {
-	return ap.cache.InvalidateCache(ctx, RefreshTokenPrefix, userID)
+	return ap.store.DeleteAllUserSessions(ctx, userID)
 }
 
 func HashPassword(password string) (string, error) {
@@ -219,13 +209,12 @@ func HashPassword(password string) (string, error) {
 	return string(bytes), err
 }
 
-func GenerateRandomKey() string {
+func GenerateRandomKey() (string, error) {
 	key := make([]byte, 32)
-	_, err := rand.Read(key)
-	if err != nil {
-		panic("Failed to generate random key: " + err.Error())
+	if _, err := rand.Read(key); err != nil {
+		return "", fmt.Errorf("failed to generate random key: %w", err)
 	}
-	return base64.StdEncoding.EncodeToString(key)
+	return base64.StdEncoding.EncodeToString(key), nil
 }
 
 // HashToken creates a SHA-256 hash of a token

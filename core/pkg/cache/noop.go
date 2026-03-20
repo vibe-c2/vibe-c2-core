@@ -36,11 +36,3 @@ func (n *noopCache) Del(ctx context.Context, keys ...string) error {
 func (n *noopCache) InvalidateCache(ctx context.Context, entityName string, entityID string) error {
 	return nil
 }
-
-func (n *noopCache) Keys(ctx context.Context, pattern string) ([]string, error) {
-	return nil, ErrCacheDisabled
-}
-
-func (n *noopCache) SRem(ctx context.Context, setKey string, members ...interface{}) error {
-	return nil
-}

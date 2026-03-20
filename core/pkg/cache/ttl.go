@@ -20,9 +20,6 @@ const (
 
 	// TTLDefault - default TTL for cache keys
 	TTLDefault = TTLSingle
-
-	// TTLRefreshToken - for refresh tokens (7 days)
-	TTLRefreshToken = 7 * 24 * time.Hour
 )
 
 func GetTTLForKey(cacheKey string) time.Duration {

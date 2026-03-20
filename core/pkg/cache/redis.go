@@ -99,14 +99,6 @@ func (r *redisCache) Close() error {
 	return r.client.Close()
 }
 
-func (r *redisCache) Keys(ctx context.Context, pattern string) ([]string, error) {
-	return r.client.Keys(ctx, pattern).Result()
-}
-
-func (r *redisCache) SRem(ctx context.Context, setKey string, members ...interface{}) error {
-	return r.client.SRem(ctx, setKey, members...).Err()
-}
-
 func (r *redisCache) InvalidateCache(ctx context.Context, entityName string, entityID string) error {
 	if !r.cacheEnabled {
 		return nil
