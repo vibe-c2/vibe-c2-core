@@ -64,3 +64,18 @@ models:
         resolver: true         # field.DefaultField.CreateAt -> string
       updatedAt:
         resolver: true         # field.DefaultField.UpdateAt -> string
+
+  # Map the GraphQL "Operation" type to our existing Operation model.
+  # Same pattern as User — fields that don't map directly get custom resolvers.
+  Operation:
+    model:
+      - github.com/vibe-c2/vibe-c2-core/core/pkg/models.Operation
+    fields:
+      id:
+        resolver: true         # OperationID (uuid.UUID) -> ID (string)
+      members:
+        resolver: true         # MemberIDs ([]uuid.UUID) -> [User!]! (fetched from DB)
+      createdAt:
+        resolver: true         # field.DefaultField.CreateAt -> string
+      updatedAt:
+        resolver: true         # field.DefaultField.UpdateAt -> string

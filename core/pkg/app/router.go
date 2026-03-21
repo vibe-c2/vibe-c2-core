@@ -55,7 +55,7 @@ func (a *App) NewRouter() *gin.Engine {
 		// Authentication is handled by the JWTAuth middleware above (same as REST).
 		// Authorization (RBAC) is handled by the @hasPermission directive inside
 		// the GraphQL schema — each query/mutation declares what permission it needs.
-		v1.POST("/graphql", gql.NewHandler(a.repos.User))
+		v1.POST("/graphql", gql.NewHandler(a.repos.User, a.repos.Operation))
 
 		// GraphQL Playground — a browser-based IDE for writing and testing queries.
 		// Only available in dev mode (like Swagger docs).

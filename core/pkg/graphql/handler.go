@@ -31,11 +31,12 @@ import (
 //  3. It injects them into context.Context as AuthInfo
 //  4. gqlgen takes over: parses the query, runs directives, calls resolvers
 //  5. The response (JSON) is written back through Gin
-func NewHandler(userRepo repository.IUserRepository) gin.HandlerFunc {
+func NewHandler(userRepo repository.IUserRepository, operationRepo repository.IOperationRepository) gin.HandlerFunc {
 	// Create the resolver root with all dependencies injected.
 	// The resolver holds the repository directly (same as controllers do).
 	resolverRoot := &resolver.Resolver{
-		UserRepo: userRepo,
+		UserRepo:      userRepo,
+		OperationRepo: operationRepo,
 	}
 
 	// Build the gqlgen server with our schema, resolvers, and directive.

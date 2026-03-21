@@ -181,6 +181,190 @@ func (r *mutationResolver) UpdateOwnProfile(ctx context.Context, input model.Upd
 	return &updated, nil
 }
 
+// CreateOperation creates a new operation.
+//
+// Example:
+//
+//	mutation {
+//	    createOperation(input: { name: "Red Dawn", description: "APT simulation" }) {
+//	        id name description members { id username }
+//	    }
+//	}
+func (r *mutationResolver) CreateOperation(ctx context.Context, input model.CreateOperationInput) (*models.Operation, error) {
+	description := ""
+	if input.Description != nil {
+		description = *input.Description
+	}
+
+	op := &models.Operation{
+		OperationID: uuid.New(),
+		Name:        input.Name,
+		Description: description,
+		MemberIDs:   []uuid.UUID{},
+	}
+
+	if err := r.OperationRepo.Create(ctx, op); err != nil {
+		return nil, fmt.Errorf("failed to create operation: %w", err)
+	}
+
+	return op, nil
+}
+
+// UpdateOperation modifies an existing operation's name or description.
+func (r *mutationResolver) UpdateOperation(ctx context.Context, id string, input model.UpdateOperationInput) (*models.Operation, error) {
+	uid, err := uuid.Parse(id)
+	if err != nil {
+		return nil, fmt.Errorf("invalid operation ID: %w", err)
+	}
+
+	op, err := r.OperationRepo.FindByID(ctx, uid)
+	if err != nil {
+		return nil, fmt.Errorf("operation not found: %w", err)
+	}
+
+	updates := make(map[string]interface{})
+	if input.Name != nil {
+		updates["name"] = *input.Name
+	}
+	if input.Description != nil {
+		updates["description"] = *input.Description
+	}
+
+	if len(updates) == 0 {
+		return &op, nil
+	}
+
+	if err := r.OperationRepo.Update(ctx, &op, updates); err != nil {
+		return nil, fmt.Errorf("failed to update operation: %w", err)
+	}
+
+	updated, err := r.OperationRepo.FindByID(ctx, uid)
+	if err != nil {
+		return nil, fmt.Errorf("failed to fetch updated operation: %w", err)
+	}
+
+	return &updated, nil
+}
+
+// DeleteOperation removes an operation by ID.
+func (r *mutationResolver) DeleteOperation(ctx context.Context, id string) (bool, error) {
+	uid, err := uuid.Parse(id)
+	if err != nil {
+		return false, fmt.Errorf("invalid operation ID: %w", err)
+	}
+
+	op, err := r.OperationRepo.FindByID(ctx, uid)
+	if err != nil {
+		return false, fmt.Errorf("operation not found: %w", err)
+	}
+
+	if err := r.OperationRepo.Delete(ctx, &op); err != nil {
+		return false, fmt.Errorf("failed to delete operation: %w", err)
+	}
+	return true, nil
+}
+
+// AddOperationMember assigns a user to an operation.
+// Validates that both the operation and user exist before adding.
+func (r *mutationResolver) AddOperationMember(ctx context.Context, operationID string, userID string) (*models.Operation, error) {
+	opUID, err := uuid.Parse(operationID)
+	if err != nil {
+		return nil, fmt.Errorf("invalid operation ID: %w", err)
+	}
+
+	userUID, err := uuid.Parse(userID)
+	if err != nil {
+		return nil, fmt.Errorf("invalid user ID: %w", err)
+	}
+
+	// Verify operation exists
+	if _, err := r.OperationRepo.FindByID(ctx, opUID); err != nil {
+		return nil, fmt.Errorf("operation not found: %w", err)
+	}
+
+	// Verify user exists
+	if _, err := r.UserRepo.FindByID(ctx, userUID); err != nil {
+		return nil, fmt.Errorf("user not found: %w", err)
+	}
+
+	// $addToSet is idempotent — adding an existing member is a no-op
+	if err := r.OperationRepo.AddMember(ctx, opUID, userUID); err != nil {
+		return nil, fmt.Errorf("failed to add member: %w", err)
+	}
+
+	updated, err := r.OperationRepo.FindByID(ctx, opUID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to fetch updated operation: %w", err)
+	}
+
+	return &updated, nil
+}
+
+// RemoveOperationMember removes a user from an operation.
+func (r *mutationResolver) RemoveOperationMember(ctx context.Context, operationID string, userID string) (*models.Operation, error) {
+	opUID, err := uuid.Parse(operationID)
+	if err != nil {
+		return nil, fmt.Errorf("invalid operation ID: %w", err)
+	}
+
+	userUID, err := uuid.Parse(userID)
+	if err != nil {
+		return nil, fmt.Errorf("invalid user ID: %w", err)
+	}
+
+	// Verify operation exists
+	if _, err := r.OperationRepo.FindByID(ctx, opUID); err != nil {
+		return nil, fmt.Errorf("operation not found: %w", err)
+	}
+
+	// $pull is idempotent — removing a non-member is a no-op
+	if err := r.OperationRepo.RemoveMember(ctx, opUID, userUID); err != nil {
+		return nil, fmt.Errorf("failed to remove member: %w", err)
+	}
+
+	updated, err := r.OperationRepo.FindByID(ctx, opUID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to fetch updated operation: %w", err)
+	}
+
+	return &updated, nil
+}
+
+// ID converts the Operation's UUID to a GraphQL ID string.
+func (r *operationResolver) ID(ctx context.Context, obj *models.Operation) (string, error) {
+	return obj.OperationID.String(), nil
+}
+
+// Members resolves the operation's member_ids into full User objects.
+// This is the many-to-many "join" — we fetch each user by their UUID.
+func (r *operationResolver) Members(ctx context.Context, obj *models.Operation) ([]*models.User, error) {
+	if len(obj.MemberIDs) == 0 {
+		return []*models.User{}, nil
+	}
+
+	members := make([]*models.User, 0, len(obj.MemberIDs))
+	for _, uid := range obj.MemberIDs {
+		user, err := r.UserRepo.FindByID(ctx, uid)
+		if err != nil {
+			// Skip users that no longer exist (e.g. deleted after being added)
+			continue
+		}
+		members = append(members, &user)
+	}
+
+	return members, nil
+}
+
+// CreatedAt converts the qmgo DefaultField timestamp to an ISO 8601 string.
+func (r *operationResolver) CreatedAt(ctx context.Context, obj *models.Operation) (string, error) {
+	return obj.CreateAt.Format(time.RFC3339), nil
+}
+
+// UpdatedAt converts the qmgo DefaultField timestamp to an ISO 8601 string.
+func (r *operationResolver) UpdatedAt(ctx context.Context, obj *models.Operation) (string, error) {
+	return obj.UpdateAt.Format(time.RFC3339), nil
+}
+
 // Me returns the currently authenticated user.
 // The user ID is extracted from the JWT token in the context.
 func (r *queryResolver) Me(ctx context.Context) (*models.User, error) {
@@ -266,6 +450,70 @@ func (r *queryResolver) Users(ctx context.Context, search *string, offset *int, 
 	}, nil
 }
 
+// Operation returns a single operation by its ID.
+func (r *queryResolver) Operation(ctx context.Context, id string) (*models.Operation, error) {
+	uid, err := uuid.Parse(id)
+	if err != nil {
+		return nil, fmt.Errorf("invalid operation ID: %w", err)
+	}
+
+	op, err := r.OperationRepo.FindByID(ctx, uid)
+	if err != nil {
+		return nil, fmt.Errorf("operation not found: %w", err)
+	}
+	return &op, nil
+}
+
+// Operations returns a paginated list of operations with optional search.
+//
+// Example:
+//
+//	query {
+//	    operations(search: "red", limit: 10) {
+//	        totalCount
+//	        operations { id name description members { id username } }
+//	    }
+//	}
+func (r *queryResolver) Operations(ctx context.Context, search *string, offset *int, limit *int) (*model.OperationPagination, error) {
+	s := ""
+	if search != nil {
+		s = *search
+	}
+	off := int64(0)
+	if offset != nil {
+		off = int64(*offset)
+	}
+	lim := int64(20)
+	if limit != nil {
+		lim = int64(*limit)
+	}
+
+	total, err := r.OperationRepo.Count(ctx, s)
+	if err != nil {
+		return nil, fmt.Errorf("failed to count operations: %w", err)
+	}
+
+	ops, err := r.OperationRepo.FindAll(ctx, s, off, lim)
+	if err != nil {
+		return nil, fmt.Errorf("failed to list operations: %w", err)
+	}
+
+	ptrs := make([]*models.Operation, len(ops))
+	for i := range ops {
+		ptrs[i] = &ops[i]
+	}
+
+	hasNext := off+lim < total
+	hasPrev := off > 0
+
+	return &model.OperationPagination{
+		Operations:      ptrs,
+		TotalCount:      int(total),
+		HasNextPage:     hasNext,
+		HasPreviousPage: hasPrev,
+	}, nil
+}
+
 // ID converts the User's UUID to a GraphQL ID string.
 // In the Go model, UserID is a uuid.UUID; in GraphQL, id is a String/ID.
 func (r *userResolver) ID(ctx context.Context, obj *models.User) (string, error) {
@@ -286,6 +534,9 @@ func (r *userResolver) UpdatedAt(ctx context.Context, obj *models.User) (string,
 // Mutation returns generated.MutationResolver implementation.
 func (r *Resolver) Mutation() generated.MutationResolver { return &mutationResolver{r} }
 
+// Operation returns generated.OperationResolver implementation.
+func (r *Resolver) Operation() generated.OperationResolver { return &operationResolver{r} }
+
 // Query returns generated.QueryResolver implementation.
 func (r *Resolver) Query() generated.QueryResolver { return &queryResolver{r} }
 
@@ -293,5 +544,6 @@ func (r *Resolver) Query() generated.QueryResolver { return &queryResolver{r} }
 func (r *Resolver) User() generated.UserResolver { return &userResolver{r} }
 
 type mutationResolver struct{ *Resolver }
+type operationResolver struct{ *Resolver }
 type queryResolver struct{ *Resolver }
 type userResolver struct{ *Resolver }

@@ -6,6 +6,11 @@ import (
 	"github.com/vibe-c2/vibe-c2-core/core/pkg/models"
 )
 
+type CreateOperationInput struct {
+	Name        string  `json:"name"`
+	Description *string `json:"description,omitempty"`
+}
+
 type CreateUserInput struct {
 	Username string   `json:"username"`
 	Password string   `json:"password"`
@@ -16,7 +21,19 @@ type CreateUserInput struct {
 type Mutation struct {
 }
 
+type OperationPagination struct {
+	Operations      []*models.Operation `json:"operations"`
+	TotalCount      int                 `json:"totalCount"`
+	HasNextPage     bool                `json:"hasNextPage"`
+	HasPreviousPage bool                `json:"hasPreviousPage"`
+}
+
 type Query struct {
+}
+
+type UpdateOperationInput struct {
+	Name        *string `json:"name,omitempty"`
+	Description *string `json:"description,omitempty"`
 }
 
 type UpdateUserInput struct {

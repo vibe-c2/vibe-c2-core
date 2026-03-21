@@ -54,6 +54,27 @@ type UserPagination {
   hasPreviousPage: Boolean! # True if there are users before this page (offset > 0)
 }
 
+# Operation represents an operational context in the C2 system.
+# Operations group users (and later implants, agents, etc.) together.
+# The relationship between users and operations is many-to-many:
+# a user can belong to multiple operations, and an operation has multiple members.
+type Operation {
+  id: ID!                  # Unique identifier (UUID as string)
+  name: String!            # Operation name (unique)
+  description: String!     # What this operation is about
+  members: [User!]!        # Users assigned to this operation
+  createdAt: String!       # ISO 8601 timestamp
+  updatedAt: String!       # ISO 8601 timestamp
+}
+
+# OperationPagination wraps a paginated list of operations.
+type OperationPagination {
+  operations: [Operation!]!
+  totalCount: Int!
+  hasNextPage: Boolean!
+  hasPreviousPage: Boolean!
+}
+
 # -----------------------------------------------------------------------------
 # Queries (read operations)
 # -----------------------------------------------------------------------------
@@ -86,6 +107,16 @@ type Query {
     offset: Int = 0
     limit: Int = 20
   ): UserPagination! @hasPermission(permission: "user:read")
+
+  # operation returns a single operation by its ID.
+  operation(id: ID!): Operation! @hasPermission(permission: "operation:read")
+
+  # operations returns a paginated, searchable list of all operations.
+  operations(
+    search: String
+    offset: Int = 0
+    limit: Int = 20
+  ): OperationPagination! @hasPermission(permission: "operation:read")
 }
 
 # -----------------------------------------------------------------------------
@@ -110,6 +141,18 @@ input UpdateUserInput {
   password: String          # If provided, will be re-hashed
   roles: [String]
   active: Boolean
+}
+
+# CreateOperationInput — fields needed to create a new operation.
+input CreateOperationInput {
+  name: String!             # Must be unique
+  description: String       # Optional, defaults to empty string
+}
+
+# UpdateOperationInput — partial update for an operation.
+input UpdateOperationInput {
+  name: String
+  description: String
 }
 
 # -----------------------------------------------------------------------------
@@ -146,4 +189,29 @@ type Mutation {
   # The server determines which user to update from the JWT token.
   updateOwnProfile(input: UpdateUserInput!): User!
     @hasPermission(permission: "user:update:own")
+
+  # createOperation registers a new operation.
+  # Requires operation:create permission (admin only).
+  createOperation(input: CreateOperationInput!): Operation!
+    @hasPermission(permission: "operation:create")
+
+  # updateOperation modifies an existing operation by ID.
+  # Requires operation:update permission (admin only).
+  updateOperation(id: ID!, input: UpdateOperationInput!): Operation!
+    @hasPermission(permission: "operation:update")
+
+  # deleteOperation removes an operation by ID.
+  # Requires operation:delete permission (admin only).
+  deleteOperation(id: ID!): Boolean!
+    @hasPermission(permission: "operation:delete")
+
+  # addOperationMember assigns a user to an operation.
+  # Requires operation:update permission (admin only).
+  addOperationMember(operationId: ID!, userId: ID!): Operation!
+    @hasPermission(permission: "operation:update")
+
+  # removeOperationMember removes a user from an operation.
+  # Requires operation:update permission (admin only).
+  removeOperationMember(operationId: ID!, userId: ID!): Operation!
+    @hasPermission(permission: "operation:update")
 }
