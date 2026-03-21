@@ -1,4 +1,4 @@
-.PHONY: infra infra-stop infra-reset services services-stop services-reset swag help
+.PHONY: infra infra-stop infra-reset services services-stop services-reset swag gqlgen help
 
 include .env
 export
@@ -30,6 +30,9 @@ services-reset: ## Reset all services and volumes
 swag: ## swag: Generates or updates the Swagger/OpenAPI documentation files.
 	@echo "Generating API documentation"
 	cd core && go run github.com/swaggo/swag/cmd/swag@latest init
+
+gqlgen: ## Regenerate GraphQL code from schema (resolvers, models, runtime)
+	$(MAKE) -C core gqlgen
 
 help: ## help: Displays all available targets with their descriptions.
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' Makefile | sort | awk 'BEGIN {FS = ":.*?## "}; {printf "\033[36m%-25s\033[0m %s\n", $$1, $$2}'

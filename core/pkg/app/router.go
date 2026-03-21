@@ -8,6 +8,7 @@ import (
 	ginSwagger "github.com/swaggo/gin-swagger"
 	"github.com/vibe-c2/vibe-c2-core/core/pkg/auth/permissions"
 	"github.com/vibe-c2/vibe-c2-core/core/pkg/controller"
+	gql "github.com/vibe-c2/vibe-c2-core/core/pkg/graphql"
 	"github.com/vibe-c2/vibe-c2-core/core/pkg/middleware"
 	"github.com/vibe-c2/vibe-c2-core/core/pkg/responses"
 
@@ -49,6 +50,18 @@ func (a *App) NewRouter() *gin.Engine {
 
 		v1.GET("/login/me", middleware.RBAC(permissions.BasicPermission), authCtrl.Me)
 		v1.POST("/logout", middleware.RBAC(permissions.BasicPermission), authCtrl.Logout)
+
+		// GraphQL endpoint — all user management queries and mutations.
+		// Authentication is handled by the JWTAuth middleware above (same as REST).
+		// Authorization (RBAC) is handled by the @hasPermission directive inside
+		// the GraphQL schema — each query/mutation declares what permission it needs.
+		v1.POST("/graphql", gql.NewHandler(a.repos.User))
+
+		// GraphQL Playground — a browser-based IDE for writing and testing queries.
+		// Only available in dev mode (like Swagger docs).
+		if a.env.StageStatus == "dev" {
+			v1.GET("/graphql", gql.NewPlaygroundHandler("/api/v1/graphql"))
+		}
 	}
 
 	return r

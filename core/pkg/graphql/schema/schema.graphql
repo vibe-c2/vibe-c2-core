@@ -1,0 +1,149 @@
+# =============================================================================
+# GraphQL Schema for Vibe C2 Core
+# =============================================================================
+#
+# This file defines the entire GraphQL API using SDL (Schema Definition Language).
+# Think of it as a contract between the backend and frontend — it describes:
+#   - What data types exist (User, UserPagination)
+#   - What queries you can run (read data)
+#   - What mutations you can run (write/modify data)
+#   - What inputs are needed for mutations
+#
+# gqlgen reads this file and generates Go code (resolver interfaces, types)
+# that you then implement. If the schema and your resolvers don't match,
+# the build will fail — this is a feature, not a bug!
+# =============================================================================
+
+# -----------------------------------------------------------------------------
+# Directive: @hasPermission
+# -----------------------------------------------------------------------------
+# Directives are annotations you attach to schema fields to add behavior.
+# This custom directive runs BEFORE the resolver function, checking if the
+# authenticated user has the required RBAC permission. If they don't,
+# a "forbidden" error is returned without ever calling the resolver.
+#
+# Example: @hasPermission(permission: "user:read") means "only users whose
+# roles grant 'user:read' can call this query."
+# -----------------------------------------------------------------------------
+directive @hasPermission(permission: String!) on FIELD_DEFINITION
+
+# -----------------------------------------------------------------------------
+# Types
+# -----------------------------------------------------------------------------
+# A GraphQL type defines the shape of data that can be returned.
+# Fields with "!" are non-nullable (guaranteed to have a value).
+# [String!]! means a non-null array of non-null strings.
+
+# User represents an operator account in the C2 system.
+type User {
+  id: ID!                  # Unique identifier (UUID as string)
+  username: String!        # Login name (unique)
+  roles: [String!]!        # RBAC roles, e.g. ["admin"] or ["user"]
+  active: Boolean!         # Whether this account is enabled
+  createdAt: String!       # ISO 8601 timestamp
+  updatedAt: String!       # ISO 8601 timestamp
+}
+
+# UserPagination wraps a paginated list of users.
+# This pattern (returning items + pagination metadata) is common in GraphQL
+# for enabling pagination in the frontend.
+type UserPagination {
+  users: [User!]!          # The page of users
+  totalCount: Int!         # Total users matching the query (for page count)
+  hasNextPage: Boolean!    # True if there are more users after this page
+  hasPreviousPage: Boolean! # True if there are users before this page (offset > 0)
+}
+
+# -----------------------------------------------------------------------------
+# Queries (read operations)
+# -----------------------------------------------------------------------------
+# In GraphQL, all read operations live under the Query type.
+# Each field is a "query" that the client can call.
+#
+# Example client query:
+#   query {
+#     users(search: "admin", limit: 10) {
+#       totalCount
+#       users { id username roles }
+#     }
+#   }
+
+type Query {
+  # me returns the currently authenticated user.
+  # Requires basic auth (any logged-in user).
+  me: User! @hasPermission(permission: "*")
+
+  # user returns a single user by their ID.
+  # Requires user:read permission (admin only by default).
+  user(id: ID!): User! @hasPermission(permission: "user:read")
+
+  # users returns a paginated, searchable list of all users.
+  # - search: optional text filter (matches username and roles)
+  # - offset: skip N users (for pagination), default 0
+  # - limit:  return at most N users, default 20
+  users(
+    search: String
+    offset: Int = 0
+    limit: Int = 20
+  ): UserPagination! @hasPermission(permission: "user:read")
+}
+
+# -----------------------------------------------------------------------------
+# Inputs (data sent by the client for mutations)
+# -----------------------------------------------------------------------------
+# Input types are like "request bodies" in REST. They define what fields
+# the client must/can send when creating or updating data.
+
+# CreateUserInput — all fields required to create a new user.
+input CreateUserInput {
+  username: String!         # Must be unique
+  password: String!         # Will be bcrypt-hashed before storage
+  roles: [String!]!         # e.g. ["admin"] or ["user"]
+  active: Boolean = true    # Defaults to true if omitted
+}
+
+# UpdateUserInput — all fields optional (only send what you want to change).
+# This is a "partial update" pattern — if a field is null/omitted, it is
+# left unchanged on the server.
+input UpdateUserInput {
+  username: String
+  password: String          # If provided, will be re-hashed
+  roles: [String]
+  active: Boolean
+}
+
+# -----------------------------------------------------------------------------
+# Mutations (write operations)
+# -----------------------------------------------------------------------------
+# Mutations change data. Each returns the affected object so the client
+# can update its UI without a separate query.
+#
+# Example client mutation:
+#   mutation {
+#     createUser(input: { username: "bob", password: "s3cret", roles: ["user"] }) {
+#       id username roles active
+#     }
+#   }
+
+type Mutation {
+  # createUser registers a new user account.
+  # Requires user:create permission (admin only).
+  createUser(input: CreateUserInput!): User!
+    @hasPermission(permission: "user:create")
+
+  # updateUser modifies an existing user by ID.
+  # Requires user:update permission (admin only).
+  updateUser(id: ID!, input: UpdateUserInput!): User!
+    @hasPermission(permission: "user:update")
+
+  # deleteUser removes a user account by ID.
+  # Requires user:delete permission (admin only).
+  deleteUser(id: ID!): Boolean!
+    @hasPermission(permission: "user:delete")
+
+  # updateOwnProfile lets a user modify their own account.
+  # Requires user:update:own permission (any authenticated user).
+  # The server determines which user to update from the JWT token.
+  updateOwnProfile(input: UpdateUserInput!): User!
+    @hasPermission(permission: "user:update:own")
+}

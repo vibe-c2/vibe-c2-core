@@ -1,0 +1,66 @@
+# =============================================================================
+# gqlgen Configuration
+# =============================================================================
+#
+# This file tells gqlgen how to generate Go code from the GraphQL schema.
+# When you run `go generate`, gqlgen reads this config to know:
+#   - Where the .graphql schema files are
+#   - Where to output the generated Go code
+#   - How to map GraphQL types to existing Go structs
+#
+# After changing the schema, run:  go generate ./pkg/graphql/...
+# =============================================================================
+
+# Where to find the GraphQL SDL schema files.
+# You can split your schema across multiple files if it gets large.
+schema:
+  - schema/*.graphql
+
+# The generated "executable schema" — this is the core runtime that gqlgen
+# produces. You never edit this file; it's regenerated every time.
+exec:
+  filename: generated/generated.go
+  package: generated
+
+# Where gqlgen puts generated Go types for GraphQL inputs and types
+# that aren't mapped to existing structs. For example, CreateUserInput
+# will be generated here because we don't have a Go struct for it yet.
+model:
+  filename: model/models_gen.go
+  package: model
+
+# The resolver skeleton. gqlgen generates a resolver interface and
+# (on first run) stub implementations that you fill in with real logic.
+resolver:
+  layout: follow-schema          # One resolver file per schema file
+  dir: resolver                  # Directory for resolver files
+  package: resolver
+  filename_template: "{name}.resolvers.go"
+
+# Model mappings — this is the key part!
+# Here we tell gqlgen: "Don't generate a new User struct. Instead, use
+# our existing models.User from the codebase." This avoids duplication
+# and lets resolvers work directly with our domain model.
+models:
+  # Map GraphQL ID scalar to Go string (default is usually fine, but
+  # being explicit helps avoid confusion).
+  ID:
+    model:
+      - github.com/99designs/gqlgen/graphql.ID
+
+  # Map the GraphQL "User" type to our existing User model.
+  # Because some fields don't match exactly (e.g., UserID vs id,
+  # DefaultField timestamps vs createdAt/updatedAt), we'll use
+  # custom field resolvers to bridge the gap.
+  User:
+    model:
+      - github.com/vibe-c2/vibe-c2-core/core/pkg/models.User
+    fields:
+      # These fields need custom resolvers because the Go struct field
+      # names/types don't match the GraphQL field names directly.
+      id:
+        resolver: true         # UserID (uuid.UUID) -> ID (string)
+      createdAt:
+        resolver: true         # field.DefaultField.CreateAt -> string
+      updatedAt:
+        resolver: true         # field.DefaultField.UpdateAt -> string
