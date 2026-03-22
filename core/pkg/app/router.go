@@ -10,13 +10,14 @@ import (
 	"github.com/vibe-c2/vibe-c2-core/core/pkg/controller"
 	gql "github.com/vibe-c2/vibe-c2-core/core/pkg/graphql"
 	"github.com/vibe-c2/vibe-c2-core/core/pkg/middleware"
+	"github.com/vibe-c2/vibe-c2-core/core/pkg/resolver"
 	"github.com/vibe-c2/vibe-c2-core/core/pkg/responses"
 
 	_ "github.com/vibe-c2/vibe-c2-core/core/docs"
 )
 
 func (a *App) NewRouter() *gin.Engine {
-	if a.env.StageStatus != "dev" {
+	if a.env.StageStatus != "development" {
 		gin.SetMode(gin.ReleaseMode)
 	}
 
@@ -32,6 +33,10 @@ func (a *App) NewRouter() *gin.Engine {
 	enrollCtrl := controller.NewEnrollController(a.repos.User, a.authProvider, a.logger)
 	statusCtrl := controller.NewStatusController(a.repos.User, a.logger)
 
+	// Resolvers (GraphQL business logic, same pattern as controllers)
+	userRes := resolver.NewUserResolver(a.repos.User)
+	opRes := resolver.NewOperationResolver(a.repos.Operation, a.repos.User)
+
 	// Swagger documentation
 	r.GET("/swagger/*any", ginSwagger.WrapHandler(swaggerFiles.Handler))
 
@@ -45,6 +50,13 @@ func (a *App) NewRouter() *gin.Engine {
 		v1.POST("/login", authCtrl.Login)
 		v1.POST("/login/refresh", authCtrl.Refresh)
 
+		// GraphQL Playground — browser-based IDE for testing queries (dev only).
+		// Served publicly because browsers can't set Authorization headers on page loads.
+		// The actual GraphQL queries from Playground go through POST /graphql, which is protected.
+		if a.env.StageStatus == "development" {
+			v1.GET("/graphql", gql.NewPlaygroundHandler("/api/v1/graphql"))
+		}
+
 		// Protected routes (JWT required)
 		v1.Use(middleware.JWTAuth(a.authProvider))
 
@@ -55,13 +67,8 @@ func (a *App) NewRouter() *gin.Engine {
 		// Authentication is handled by the JWTAuth middleware above (same as REST).
 		// Authorization (RBAC) is handled by the @hasPermission directive inside
 		// the GraphQL schema — each query/mutation declares what permission it needs.
-		v1.POST("/graphql", gql.NewHandler(a.repos.User, a.repos.Operation))
+		v1.POST("/graphql", gql.NewHandler(userRes, opRes))
 
-		// GraphQL Playground — a browser-based IDE for writing and testing queries.
-		// Only available in dev mode (like Swagger docs).
-		if a.env.StageStatus == "dev" {
-			v1.GET("/graphql", gql.NewPlaygroundHandler("/api/v1/graphql"))
-		}
 	}
 
 	return r

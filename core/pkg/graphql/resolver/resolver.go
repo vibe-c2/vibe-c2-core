@@ -11,18 +11,19 @@
 // complex fields (like ID which needs UUID->string conversion), we write
 // custom resolvers.
 //
-// The Resolver struct holds all dependencies (like the user repository) that
-// resolvers need. This is the dependency injection root for GraphQL —
-// same pattern as controllers, which also hold the repository directly.
+// The Resolver struct holds entity-specific resolvers (Users, Operations)
+// that contain the actual business logic. This file is the dependency
+// injection root — gqlgen's generated mutationResolver, queryResolver, etc.
+// embed this struct to access the entity resolvers.
 package resolver
 
-import "github.com/vibe-c2/vibe-c2-core/core/pkg/repository"
+import "github.com/vibe-c2/vibe-c2-core/core/pkg/resolver"
 
-// Resolver is the root resolver. It holds dependencies that all
-// query/mutation resolvers need access to.
+// Resolver is the root resolver. It delegates to domain-specific entity
+// resolvers that hold the actual business logic.
 // gqlgen generates mutationResolver and queryResolver structs that
-// embed this, so they inherit access to UserRepo.
+// embed this, so they inherit access to entity resolvers.
 type Resolver struct {
-	UserRepo      repository.IUserRepository
-	OperationRepo repository.IOperationRepository
+	UserResolver      resolver.IUserResolver
+	OperationResolver resolver.IOperationResolver
 }

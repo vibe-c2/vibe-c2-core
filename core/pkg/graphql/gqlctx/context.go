@@ -1,4 +1,4 @@
-// context.go — Bridges authentication data from the Gin HTTP layer into
+// Package gqlctx bridges authentication data from the Gin HTTP layer into
 // the GraphQL resolver layer via Go's context.Context.
 //
 // How the auth flow works:
@@ -13,8 +13,7 @@
 // Why not just use gin.Context directly?
 // Because GraphQL resolvers receive a plain context.Context, not a *gin.Context.
 // We need to transfer the auth data from Gin's world into Go's standard context.
-
-package resolver
+package gqlctx
 
 import "context"
 

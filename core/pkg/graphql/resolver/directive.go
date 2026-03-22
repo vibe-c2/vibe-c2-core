@@ -25,6 +25,7 @@ import (
 
 	"github.com/99designs/gqlgen/graphql"
 	"github.com/vibe-c2/vibe-c2-core/core/pkg/auth/permissions"
+	"github.com/vibe-c2/vibe-c2-core/core/pkg/graphql/gqlctx"
 )
 
 // HasPermission is the directive handler for @hasPermission.
@@ -41,7 +42,7 @@ import (
 func HasPermission(ctx context.Context, obj interface{}, next graphql.Resolver, permission string) (interface{}, error) {
 	// Extract the authenticated user's info from the context.
 	// This was placed there by the GraphQL handler (see handler.go).
-	auth := AuthFromContext(ctx)
+	auth := gqlctx.AuthFromContext(ctx)
 
 	// Check if any of the user's roles grant the required permission.
 	// For example, the "admin" role has "user:read", but the "user" role does not.

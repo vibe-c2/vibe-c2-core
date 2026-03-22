@@ -19,8 +19,9 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/vektah/gqlparser/v2/ast"
 	"github.com/vibe-c2/vibe-c2-core/core/pkg/graphql/generated"
-	"github.com/vibe-c2/vibe-c2-core/core/pkg/graphql/resolver"
-	"github.com/vibe-c2/vibe-c2-core/core/pkg/repository"
+	"github.com/vibe-c2/vibe-c2-core/core/pkg/graphql/gqlctx"
+	gqlresolver "github.com/vibe-c2/vibe-c2-core/core/pkg/graphql/resolver"
+	"github.com/vibe-c2/vibe-c2-core/core/pkg/resolver"
 )
 
 // NewHandler creates a Gin handler that serves GraphQL requests.
@@ -31,12 +32,12 @@ import (
 //  3. It injects them into context.Context as AuthInfo
 //  4. gqlgen takes over: parses the query, runs directives, calls resolvers
 //  5. The response (JSON) is written back through Gin
-func NewHandler(userRepo repository.IUserRepository, operationRepo repository.IOperationRepository) gin.HandlerFunc {
-	// Create the resolver root with all dependencies injected.
-	// The resolver holds the repository directly (same as controllers do).
-	resolverRoot := &resolver.Resolver{
-		UserRepo:      userRepo,
-		OperationRepo: operationRepo,
+func NewHandler(users resolver.IUserResolver, operations resolver.IOperationResolver) gin.HandlerFunc {
+	// Create the resolver root with entity resolvers injected.
+	// The root resolver delegates to domain-specific resolvers for business logic.
+	resolverRoot := &gqlresolver.Resolver{
+		UserResolver:      users,
+		OperationResolver: operations,
 	}
 
 	// Build the gqlgen server with our schema, resolvers, and directive.
@@ -50,7 +51,7 @@ func NewHandler(userRepo repository.IUserRepository, operationRepo repository.IO
 			// Wire up the @hasPermission directive to our handler function.
 			// Every time gqlgen encounters @hasPermission in the schema,
 			// it calls this function before the resolver.
-			HasPermission: resolver.HasPermission,
+			HasPermission: gqlresolver.HasPermission,
 		},
 	}))
 
@@ -90,7 +91,7 @@ func NewHandler(userRepo repository.IUserRepository, operationRepo repository.IO
 		roles, _ := c.Get("roles")
 		rolesSlice, _ := roles.([]string)
 
-		ctx := resolver.WithAuthInfo(c.Request.Context(), resolver.AuthInfo{
+		ctx := gqlctx.WithAuthInfo(c.Request.Context(), gqlctx.AuthInfo{
 			UserID:   c.GetString("userID"),
 			Username: c.GetString("username"),
 			Roles:    rolesSlice,
