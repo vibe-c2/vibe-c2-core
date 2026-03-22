@@ -14,7 +14,8 @@ Follow these steps:
 
 3. **Wait for user confirmation** — do NOT proceed until the user explicitly accepts the proposed version.
 
-4. **Tag and push** — once confirmed:
+4. **Push branch and tag** — once confirmed:
+   - Push the current branch to origin first: `git push origin <current-branch>` — the tag must belong to a branch on the remote, otherwise GitHub shows "This commit does not belong to any branch".
    - Create an annotated git tag: `git tag -a v<version> -m "Release v<version>"`
    - Push the tag to origin: `git push origin v<version>`
    - Report the published version and the tag URL.
