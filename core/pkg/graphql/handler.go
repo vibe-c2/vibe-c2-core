@@ -105,18 +105,26 @@ func NewHandler(users resolver.IUserResolver, operations resolver.IOperationReso
 	}
 }
 
-// NewPlaygroundHandler creates a Gin handler that serves the GraphQL Playground UI.
+// NewPlaygroundHandler creates a Gin handler that serves the Altair GraphQL Client UI.
 //
-// GraphQL Playground is a browser-based IDE for writing and testing queries.
-// It's like Swagger UI, but for GraphQL. You open it in your browser, write
-// queries on the left, and see results on the right.
+// Altair is a feature-rich browser-based IDE for writing and testing GraphQL
+// queries — like Postman, but specifically for GraphQL. It supports easy header
+// management, environment variables, collections, and request history.
 //
-// The "title" is shown in the browser tab, and "endpoint" is where
-// Playground sends its GraphQL requests.
+// The "endpoint" is where Altair sends its GraphQL POST requests.
+// The Authorization header is pre-filled with a placeholder so users can
+// quickly paste their JWT token.
 func NewPlaygroundHandler(endpoint string) gin.HandlerFunc {
-	// playground.Handler returns a standard http.HandlerFunc that serves
-	// the Playground HTML/JS application.
-	h := playground.Handler("Vibe C2 — GraphQL Playground", endpoint)
+	// playground.AltairHandler returns a standard http.HandlerFunc that serves
+	// the Altair HTML/JS application from CDN.
+	//
+	// The options map is passed to AltairGraphQL.init() on the client side.
+	// "initialHeaders" pre-populates the headers editor in the UI.
+	h := playground.AltairHandler("Vibe C2 — GraphQL", endpoint, map[string]any{
+		"initialHeaders": map[string]string{
+			"Authorization": "Bearer <your-jwt-token>",
+		},
+	})
 
 	return func(c *gin.Context) {
 		h.ServeHTTP(c.Writer, c.Request)
