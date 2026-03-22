@@ -90,7 +90,11 @@ func NewApp() (*App, error) {
 	}
 
 	// Initialize auth provider
-	authProvider := auth.NewAuthProvider(tokenStore, e.JWTSecretKey)
+	authTokenTTL := 15 * time.Minute
+	if e.StageStatus == "development" {
+		authTokenTTL = 24 * time.Hour
+	}
+	authProvider := auth.NewAuthProvider(tokenStore, e.JWTSecretKey, authTokenTTL)
 
 	// --- Future integration patterns ---
 	//

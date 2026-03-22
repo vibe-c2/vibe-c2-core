@@ -24,7 +24,7 @@ func main() {
 		log.Fatalf("Failed to initialize app: %v", err)
 	}
 
-	if e.StageStatus == "dev" {
+	if e.StageStatus == "development" {
 		application.StartServer()
 	} else {
 		application.StartServerWithGracefulShutdown()

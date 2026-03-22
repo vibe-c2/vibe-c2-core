@@ -62,14 +62,16 @@ type IAuthProvider interface {
 }
 
 type authProvider struct {
-	store     TokenStore
-	jwtSecret []byte
+	store       TokenStore
+	jwtSecret   []byte
+	authTokenTTL time.Duration
 }
 
-func NewAuthProvider(store TokenStore, jwtSecret string) IAuthProvider {
+func NewAuthProvider(store TokenStore, jwtSecret string, authTokenTTL time.Duration) IAuthProvider {
 	return &authProvider{
-		store:     store,
-		jwtSecret: []byte(jwtSecret),
+		store:        store,
+		jwtSecret:    []byte(jwtSecret),
+		authTokenTTL: authTokenTTL,
 	}
 }
 
@@ -82,7 +84,7 @@ func (ap *authProvider) GenerateAuthToken(userID, username string, roles []strin
 		RegisteredClaims: jwt.RegisteredClaims{
 			Subject:   userID,
 			Issuer:    Issuer,
-			ExpiresAt: jwt.NewNumericDate(now.Add(15 * time.Minute)),
+			ExpiresAt: jwt.NewNumericDate(now.Add(ap.authTokenTTL)),
 			IssuedAt:  jwt.NewNumericDate(now),
 			ID:        uuid.NewString(),
 		},
