@@ -32,6 +32,14 @@ import (
 //  3. It injects them into context.Context as AuthInfo
 //  4. gqlgen takes over: parses the query, runs directives, calls resolvers
 //  5. The response (JSON) is written back through Gin
+//
+//	@Summary		GraphQL endpoint
+//	@Description	Execute GraphQL queries and mutations. See the GraphQL schema for available operations. Use the Altair playground (GET /graphql) to explore the API interactively.
+//	@Tags			GraphQL
+//	@Accept			json
+//	@Produce		json
+//	@Security		BearerAuth
+//	@Router			/graphql [post]
 func NewHandler(users resolver.IUserResolver, operations resolver.IOperationResolver) gin.HandlerFunc {
 	// Create the resolver root with entity resolvers injected.
 	// The root resolver delegates to domain-specific resolvers for business logic.
@@ -114,6 +122,12 @@ func NewHandler(users resolver.IUserResolver, operations resolver.IOperationReso
 // The "endpoint" is where Altair sends its GraphQL POST requests.
 // The Authorization header is pre-filled with a placeholder so users can
 // quickly paste their JWT token.
+//
+//	@Summary		GraphQL Playground (Altair)
+//	@Description	Serves the Altair GraphQL Client UI for interactive query testing. Development only.
+//	@Tags			GraphQL
+//	@Produce		html
+//	@Router			/graphql [get]
 func NewPlaygroundHandler(endpoint string) gin.HandlerFunc {
 	// playground.AltairHandler returns a standard http.HandlerFunc that serves
 	// the Altair HTML/JS application from CDN.

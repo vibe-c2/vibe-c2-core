@@ -67,6 +67,38 @@ const docTemplate = `{
                 }
             }
         },
+        "/graphql": {
+            "get": {
+                "description": "Serves the Altair GraphQL Client UI for interactive query testing. Development only.",
+                "produces": [
+                    "text/html"
+                ],
+                "tags": [
+                    "GraphQL"
+                ],
+                "summary": "GraphQL Playground (Altair)",
+                "responses": {}
+            },
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Execute GraphQL queries and mutations. See the GraphQL schema for available operations. Use the Altair playground (GET /graphql) to explore the API interactively.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "GraphQL"
+                ],
+                "summary": "GraphQL endpoint",
+                "responses": {}
+            }
+        },
         "/login": {
             "post": {
                 "description": "Authenticate with username and password to receive a token pair.",

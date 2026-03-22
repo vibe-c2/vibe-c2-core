@@ -103,6 +103,30 @@ paths:
       summary: Enroll first admin
       tags:
       - Enrollment
+  /graphql:
+    get:
+      description: Serves the Altair GraphQL Client UI for interactive query testing.
+        Development only.
+      produces:
+      - text/html
+      responses: {}
+      summary: GraphQL Playground (Altair)
+      tags:
+      - GraphQL
+    post:
+      consumes:
+      - application/json
+      description: Execute GraphQL queries and mutations. See the GraphQL schema for
+        available operations. Use the Altair playground (GET /graphql) to explore
+        the API interactively.
+      produces:
+      - application/json
+      responses: {}
+      security:
+      - BearerAuth: []
+      summary: GraphQL endpoint
+      tags:
+      - GraphQL
   /login:
     post:
       consumes:
