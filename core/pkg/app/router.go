@@ -35,7 +35,9 @@ func (a *App) NewRouter() *gin.Engine {
 
 	// Resolvers (GraphQL business logic, same pattern as controllers)
 	userRes := resolver.NewUserResolver(a.repos.User)
-	opRes := resolver.NewOperationResolver(a.repos.Operation, a.repos.User)
+	opRes := resolver.NewOperationResolver(a.repos.Operation, a.repos.User,
+		resolver.WithSchemeNetworkPointRepo(a.repos.SchemeNetworkPoint))
+	snpRes := resolver.NewSchemeNetworkPointResolver(a.repos.SchemeNetworkPoint, a.repos.Operation)
 
 	// Swagger documentation
 	r.GET("/swagger/*any", ginSwagger.WrapHandler(swaggerFiles.Handler))
@@ -67,7 +69,7 @@ func (a *App) NewRouter() *gin.Engine {
 		// Authentication is handled by the JWTAuth middleware above (same as REST).
 		// Authorization (RBAC) is handled by the @hasPermission directive inside
 		// the GraphQL schema — each query/mutation declares what permission it needs.
-		v1.POST("/graphql", gql.NewHandler(userRes, opRes))
+		v1.POST("/graphql", gql.NewHandler(userRes, opRes, snpRes))
 
 	}
 

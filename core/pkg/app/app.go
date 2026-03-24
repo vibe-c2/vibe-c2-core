@@ -20,8 +20,9 @@ import (
 )
 
 type Repositories struct {
-	User      repository.IUserRepository
-	Operation repository.IOperationRepository
+	User               repository.IUserRepository
+	Operation          repository.IOperationRepository
+	SchemeNetworkPoint repository.ISchemeNetworkPointRepository
 }
 
 type App struct {
@@ -59,8 +60,9 @@ func NewApp() (*App, error) {
 
 	// Initialize repositories
 	repos := &Repositories{
-		User:      repository.NewUserRepository(db),
-		Operation: repository.NewOperationRepository(db),
+		User:               repository.NewUserRepository(db),
+		Operation:          repository.NewOperationRepository(db),
+		SchemeNetworkPoint: repository.NewSchemeNetworkPointRepository(db),
 	}
 
 	// Initialize cache (noop fallback is acceptable for caching)

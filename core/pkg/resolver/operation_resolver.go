@@ -40,17 +40,33 @@ type IOperationResolver interface {
 
 type operationResolver struct {
 	operationRepo repository.IOperationRepository
-	userRepo      repository.IUserRepository // needed for Members field resolver
+	userRepo      repository.IUserRepository                    // needed for Members field resolver
+	snpRepo       repository.ISchemeNetworkPointRepository      // needed for cascade delete
 }
 
 // NewOperationResolver creates a new operation resolver with the given dependencies.
 func NewOperationResolver(
 	operationRepo repository.IOperationRepository,
 	userRepo repository.IUserRepository,
+	opts ...OperationResolverOption,
 ) IOperationResolver {
-	return &operationResolver{
+	r := &operationResolver{
 		operationRepo: operationRepo,
 		userRepo:      userRepo,
+	}
+	for _, opt := range opts {
+		opt(r)
+	}
+	return r
+}
+
+// OperationResolverOption is a functional option for configuring the operation resolver.
+type OperationResolverOption func(*operationResolver)
+
+// WithSchemeNetworkPointRepo adds the SchemeNetworkPoint repository for cascade delete.
+func WithSchemeNetworkPointRepo(repo repository.ISchemeNetworkPointRepository) OperationResolverOption {
+	return func(r *operationResolver) {
+		r.snpRepo = repo
 	}
 }
 
@@ -185,6 +201,13 @@ func (r *operationResolver) DeleteOperation(ctx context.Context, id string) (boo
 	op, err := r.operationRepo.FindByID(ctx, uid)
 	if err != nil {
 		return false, fmt.Errorf("operation not found: %w", err)
+	}
+
+	// Cascade delete: remove all scheme network points belonging to this operation
+	if r.snpRepo != nil {
+		if err := r.snpRepo.DeleteByOperationID(ctx, op.OperationID); err != nil {
+			return false, fmt.Errorf("failed to delete operation's network points: %w", err)
+		}
 	}
 
 	if err := r.operationRepo.Delete(ctx, &op); err != nil {

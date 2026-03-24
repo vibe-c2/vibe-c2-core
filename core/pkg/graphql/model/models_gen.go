@@ -11,6 +11,19 @@ type CreateOperationInput struct {
 	Description *string `json:"description,omitempty"`
 }
 
+type CreateSchemeNetworkPointInput struct {
+	Names       []string `json:"names"`
+	Description *string  `json:"description,omitempty"`
+	Tags        []string `json:"tags,omitempty"`
+}
+
+type CreateSchemeNetworkPortInput struct {
+	Number   int     `json:"number"`
+	Protocol *string `json:"protocol,omitempty"`
+	Service  *string `json:"service,omitempty"`
+	Notes    *string `json:"notes,omitempty"`
+}
+
 type CreateUserInput struct {
 	Username string   `json:"username"`
 	Password string   `json:"password"`
@@ -31,9 +44,29 @@ type OperationPagination struct {
 type Query struct {
 }
 
+type SchemeNetworkPointPagination struct {
+	Points          []*models.SchemeNetworkPoint `json:"points"`
+	TotalCount      int                          `json:"totalCount"`
+	HasNextPage     bool                         `json:"hasNextPage"`
+	HasPreviousPage bool                         `json:"hasPreviousPage"`
+}
+
 type UpdateOperationInput struct {
 	Name        *string `json:"name,omitempty"`
 	Description *string `json:"description,omitempty"`
+}
+
+type UpdateSchemeNetworkPointInput struct {
+	Names       []string `json:"names,omitempty"`
+	Description *string  `json:"description,omitempty"`
+	Tags        []string `json:"tags,omitempty"`
+}
+
+type UpdateSchemeNetworkPortInput struct {
+	Number   *int    `json:"number,omitempty"`
+	Protocol *string `json:"protocol,omitempty"`
+	Service  *string `json:"service,omitempty"`
+	Notes    *string `json:"notes,omitempty"`
 }
 
 type UpdateUserInput struct {

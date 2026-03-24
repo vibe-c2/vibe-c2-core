@@ -32,6 +32,8 @@ type ResolverRoot interface {
 	Operation() OperationResolver
 	OperationMember() OperationMemberResolver
 	Query() QueryResolver
+	SchemeNetworkPoint() SchemeNetworkPointResolver
+	SchemeNetworkPort() SchemeNetworkPortResolver
 	User() UserResolver
 }
 
@@ -42,14 +44,20 @@ type DirectiveRoot struct {
 type ComplexityRoot struct {
 	Mutation struct {
 		AddOperationMember        func(childComplexity int, operationID string, userID string, role models.OperationRole) int
+		AddSchemeNetworkPort      func(childComplexity int, pointID string, input model.CreateSchemeNetworkPortInput) int
 		CreateOperation           func(childComplexity int, input model.CreateOperationInput) int
+		CreateSchemeNetworkPoint  func(childComplexity int, operationID string, input model.CreateSchemeNetworkPointInput) int
 		CreateUser                func(childComplexity int, input model.CreateUserInput) int
 		DeleteOperation           func(childComplexity int, id string) int
+		DeleteSchemeNetworkPoint  func(childComplexity int, id string) int
 		DeleteUser                func(childComplexity int, id string) int
 		RemoveOperationMember     func(childComplexity int, operationID string, userID string) int
+		RemoveSchemeNetworkPort   func(childComplexity int, pointID string, portID string) int
 		UpdateOperation           func(childComplexity int, id string, input model.UpdateOperationInput) int
 		UpdateOperationMemberRole func(childComplexity int, operationID string, userID string, role models.OperationRole) int
 		UpdateOwnProfile          func(childComplexity int, input model.UpdateUserInput) int
+		UpdateSchemeNetworkPoint  func(childComplexity int, id string, input model.UpdateSchemeNetworkPointInput) int
+		UpdateSchemeNetworkPort   func(childComplexity int, pointID string, portID string, input model.UpdateSchemeNetworkPortInput) int
 		UpdateUser                func(childComplexity int, id string, input model.UpdateUserInput) int
 	}
 
@@ -75,12 +83,40 @@ type ComplexityRoot struct {
 	}
 
 	Query struct {
-		Me              func(childComplexity int) int
-		MyOperationRole func(childComplexity int, operationID string) int
-		Operation       func(childComplexity int, id string) int
-		Operations      func(childComplexity int, search *string, offset *int, limit *int) int
-		User            func(childComplexity int, id string) int
-		Users           func(childComplexity int, search *string, offset *int, limit *int) int
+		Me                  func(childComplexity int) int
+		MyOperationRole     func(childComplexity int, operationID string) int
+		Operation           func(childComplexity int, id string) int
+		Operations          func(childComplexity int, search *string, offset *int, limit *int) int
+		SchemeNetworkPoint  func(childComplexity int, id string) int
+		SchemeNetworkPoints func(childComplexity int, operationID string, search *string, offset *int, limit *int) int
+		User                func(childComplexity int, id string) int
+		Users               func(childComplexity int, search *string, offset *int, limit *int) int
+	}
+
+	SchemeNetworkPoint struct {
+		CreatedAt   func(childComplexity int) int
+		Description func(childComplexity int) int
+		ID          func(childComplexity int) int
+		Names       func(childComplexity int) int
+		OperationID func(childComplexity int) int
+		Ports       func(childComplexity int) int
+		Tags        func(childComplexity int) int
+		UpdatedAt   func(childComplexity int) int
+	}
+
+	SchemeNetworkPointPagination struct {
+		HasNextPage     func(childComplexity int) int
+		HasPreviousPage func(childComplexity int) int
+		Points          func(childComplexity int) int
+		TotalCount      func(childComplexity int) int
+	}
+
+	SchemeNetworkPort struct {
+		ID       func(childComplexity int) int
+		Notes    func(childComplexity int) int
+		Number   func(childComplexity int) int
+		Protocol func(childComplexity int) int
+		Service  func(childComplexity int) int
 	}
 
 	User struct {
@@ -111,6 +147,12 @@ type MutationResolver interface {
 	AddOperationMember(ctx context.Context, operationID string, userID string, role models.OperationRole) (*models.Operation, error)
 	RemoveOperationMember(ctx context.Context, operationID string, userID string) (*models.Operation, error)
 	UpdateOperationMemberRole(ctx context.Context, operationID string, userID string, role models.OperationRole) (*models.Operation, error)
+	CreateSchemeNetworkPoint(ctx context.Context, operationID string, input model.CreateSchemeNetworkPointInput) (*models.SchemeNetworkPoint, error)
+	UpdateSchemeNetworkPoint(ctx context.Context, id string, input model.UpdateSchemeNetworkPointInput) (*models.SchemeNetworkPoint, error)
+	DeleteSchemeNetworkPoint(ctx context.Context, id string) (bool, error)
+	AddSchemeNetworkPort(ctx context.Context, pointID string, input model.CreateSchemeNetworkPortInput) (*models.SchemeNetworkPoint, error)
+	UpdateSchemeNetworkPort(ctx context.Context, pointID string, portID string, input model.UpdateSchemeNetworkPortInput) (*models.SchemeNetworkPoint, error)
+	RemoveSchemeNetworkPort(ctx context.Context, pointID string, portID string) (*models.SchemeNetworkPoint, error)
 }
 type OperationResolver interface {
 	ID(ctx context.Context, obj *models.Operation) (string, error)
@@ -129,6 +171,19 @@ type QueryResolver interface {
 	Operation(ctx context.Context, id string) (*models.Operation, error)
 	Operations(ctx context.Context, search *string, offset *int, limit *int) (*model.OperationPagination, error)
 	MyOperationRole(ctx context.Context, operationID string) (*models.OperationRole, error)
+	SchemeNetworkPoint(ctx context.Context, id string) (*models.SchemeNetworkPoint, error)
+	SchemeNetworkPoints(ctx context.Context, operationID string, search *string, offset *int, limit *int) (*model.SchemeNetworkPointPagination, error)
+}
+type SchemeNetworkPointResolver interface {
+	ID(ctx context.Context, obj *models.SchemeNetworkPoint) (string, error)
+	OperationID(ctx context.Context, obj *models.SchemeNetworkPoint) (string, error)
+
+	Ports(ctx context.Context, obj *models.SchemeNetworkPoint) ([]*models.SchemeNetworkPort, error)
+	CreatedAt(ctx context.Context, obj *models.SchemeNetworkPoint) (string, error)
+	UpdatedAt(ctx context.Context, obj *models.SchemeNetworkPoint) (string, error)
+}
+type SchemeNetworkPortResolver interface {
+	ID(ctx context.Context, obj *models.SchemeNetworkPort) (string, error)
 }
 type UserResolver interface {
 	ID(ctx context.Context, obj *models.User) (string, error)
@@ -162,6 +217,17 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.Mutation.AddOperationMember(childComplexity, args["operationId"].(string), args["userId"].(string), args["role"].(models.OperationRole)), true
+	case "Mutation.addSchemeNetworkPort":
+		if e.ComplexityRoot.Mutation.AddSchemeNetworkPort == nil {
+			break
+		}
+
+		args, err := ec.field_Mutation_addSchemeNetworkPort_args(ctx, rawArgs)
+		if err != nil {
+			return 0, false
+		}
+
+		return e.ComplexityRoot.Mutation.AddSchemeNetworkPort(childComplexity, args["pointId"].(string), args["input"].(model.CreateSchemeNetworkPortInput)), true
 	case "Mutation.createOperation":
 		if e.ComplexityRoot.Mutation.CreateOperation == nil {
 			break
@@ -173,6 +239,17 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.Mutation.CreateOperation(childComplexity, args["input"].(model.CreateOperationInput)), true
+	case "Mutation.createSchemeNetworkPoint":
+		if e.ComplexityRoot.Mutation.CreateSchemeNetworkPoint == nil {
+			break
+		}
+
+		args, err := ec.field_Mutation_createSchemeNetworkPoint_args(ctx, rawArgs)
+		if err != nil {
+			return 0, false
+		}
+
+		return e.ComplexityRoot.Mutation.CreateSchemeNetworkPoint(childComplexity, args["operationId"].(string), args["input"].(model.CreateSchemeNetworkPointInput)), true
 	case "Mutation.createUser":
 		if e.ComplexityRoot.Mutation.CreateUser == nil {
 			break
@@ -195,6 +272,17 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.Mutation.DeleteOperation(childComplexity, args["id"].(string)), true
+	case "Mutation.deleteSchemeNetworkPoint":
+		if e.ComplexityRoot.Mutation.DeleteSchemeNetworkPoint == nil {
+			break
+		}
+
+		args, err := ec.field_Mutation_deleteSchemeNetworkPoint_args(ctx, rawArgs)
+		if err != nil {
+			return 0, false
+		}
+
+		return e.ComplexityRoot.Mutation.DeleteSchemeNetworkPoint(childComplexity, args["id"].(string)), true
 	case "Mutation.deleteUser":
 		if e.ComplexityRoot.Mutation.DeleteUser == nil {
 			break
@@ -217,6 +305,17 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.Mutation.RemoveOperationMember(childComplexity, args["operationId"].(string), args["userId"].(string)), true
+	case "Mutation.removeSchemeNetworkPort":
+		if e.ComplexityRoot.Mutation.RemoveSchemeNetworkPort == nil {
+			break
+		}
+
+		args, err := ec.field_Mutation_removeSchemeNetworkPort_args(ctx, rawArgs)
+		if err != nil {
+			return 0, false
+		}
+
+		return e.ComplexityRoot.Mutation.RemoveSchemeNetworkPort(childComplexity, args["pointId"].(string), args["portId"].(string)), true
 	case "Mutation.updateOperation":
 		if e.ComplexityRoot.Mutation.UpdateOperation == nil {
 			break
@@ -250,6 +349,28 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.Mutation.UpdateOwnProfile(childComplexity, args["input"].(model.UpdateUserInput)), true
+	case "Mutation.updateSchemeNetworkPoint":
+		if e.ComplexityRoot.Mutation.UpdateSchemeNetworkPoint == nil {
+			break
+		}
+
+		args, err := ec.field_Mutation_updateSchemeNetworkPoint_args(ctx, rawArgs)
+		if err != nil {
+			return 0, false
+		}
+
+		return e.ComplexityRoot.Mutation.UpdateSchemeNetworkPoint(childComplexity, args["id"].(string), args["input"].(model.UpdateSchemeNetworkPointInput)), true
+	case "Mutation.updateSchemeNetworkPort":
+		if e.ComplexityRoot.Mutation.UpdateSchemeNetworkPort == nil {
+			break
+		}
+
+		args, err := ec.field_Mutation_updateSchemeNetworkPort_args(ctx, rawArgs)
+		if err != nil {
+			return 0, false
+		}
+
+		return e.ComplexityRoot.Mutation.UpdateSchemeNetworkPort(childComplexity, args["pointId"].(string), args["portId"].(string), args["input"].(model.UpdateSchemeNetworkPortInput)), true
 	case "Mutation.updateUser":
 		if e.ComplexityRoot.Mutation.UpdateUser == nil {
 			break
@@ -376,6 +497,28 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.Query.Operations(childComplexity, args["search"].(*string), args["offset"].(*int), args["limit"].(*int)), true
+	case "Query.schemeNetworkPoint":
+		if e.ComplexityRoot.Query.SchemeNetworkPoint == nil {
+			break
+		}
+
+		args, err := ec.field_Query_schemeNetworkPoint_args(ctx, rawArgs)
+		if err != nil {
+			return 0, false
+		}
+
+		return e.ComplexityRoot.Query.SchemeNetworkPoint(childComplexity, args["id"].(string)), true
+	case "Query.schemeNetworkPoints":
+		if e.ComplexityRoot.Query.SchemeNetworkPoints == nil {
+			break
+		}
+
+		args, err := ec.field_Query_schemeNetworkPoints_args(ctx, rawArgs)
+		if err != nil {
+			return 0, false
+		}
+
+		return e.ComplexityRoot.Query.SchemeNetworkPoints(childComplexity, args["operationId"].(string), args["search"].(*string), args["offset"].(*int), args["limit"].(*int)), true
 	case "Query.user":
 		if e.ComplexityRoot.Query.User == nil {
 			break
@@ -398,6 +541,111 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.Query.Users(childComplexity, args["search"].(*string), args["offset"].(*int), args["limit"].(*int)), true
+
+	case "SchemeNetworkPoint.createdAt":
+		if e.ComplexityRoot.SchemeNetworkPoint.CreatedAt == nil {
+			break
+		}
+
+		return e.ComplexityRoot.SchemeNetworkPoint.CreatedAt(childComplexity), true
+	case "SchemeNetworkPoint.description":
+		if e.ComplexityRoot.SchemeNetworkPoint.Description == nil {
+			break
+		}
+
+		return e.ComplexityRoot.SchemeNetworkPoint.Description(childComplexity), true
+	case "SchemeNetworkPoint.id":
+		if e.ComplexityRoot.SchemeNetworkPoint.ID == nil {
+			break
+		}
+
+		return e.ComplexityRoot.SchemeNetworkPoint.ID(childComplexity), true
+	case "SchemeNetworkPoint.names":
+		if e.ComplexityRoot.SchemeNetworkPoint.Names == nil {
+			break
+		}
+
+		return e.ComplexityRoot.SchemeNetworkPoint.Names(childComplexity), true
+	case "SchemeNetworkPoint.operationId":
+		if e.ComplexityRoot.SchemeNetworkPoint.OperationID == nil {
+			break
+		}
+
+		return e.ComplexityRoot.SchemeNetworkPoint.OperationID(childComplexity), true
+	case "SchemeNetworkPoint.ports":
+		if e.ComplexityRoot.SchemeNetworkPoint.Ports == nil {
+			break
+		}
+
+		return e.ComplexityRoot.SchemeNetworkPoint.Ports(childComplexity), true
+	case "SchemeNetworkPoint.tags":
+		if e.ComplexityRoot.SchemeNetworkPoint.Tags == nil {
+			break
+		}
+
+		return e.ComplexityRoot.SchemeNetworkPoint.Tags(childComplexity), true
+	case "SchemeNetworkPoint.updatedAt":
+		if e.ComplexityRoot.SchemeNetworkPoint.UpdatedAt == nil {
+			break
+		}
+
+		return e.ComplexityRoot.SchemeNetworkPoint.UpdatedAt(childComplexity), true
+
+	case "SchemeNetworkPointPagination.hasNextPage":
+		if e.ComplexityRoot.SchemeNetworkPointPagination.HasNextPage == nil {
+			break
+		}
+
+		return e.ComplexityRoot.SchemeNetworkPointPagination.HasNextPage(childComplexity), true
+	case "SchemeNetworkPointPagination.hasPreviousPage":
+		if e.ComplexityRoot.SchemeNetworkPointPagination.HasPreviousPage == nil {
+			break
+		}
+
+		return e.ComplexityRoot.SchemeNetworkPointPagination.HasPreviousPage(childComplexity), true
+	case "SchemeNetworkPointPagination.points":
+		if e.ComplexityRoot.SchemeNetworkPointPagination.Points == nil {
+			break
+		}
+
+		return e.ComplexityRoot.SchemeNetworkPointPagination.Points(childComplexity), true
+	case "SchemeNetworkPointPagination.totalCount":
+		if e.ComplexityRoot.SchemeNetworkPointPagination.TotalCount == nil {
+			break
+		}
+
+		return e.ComplexityRoot.SchemeNetworkPointPagination.TotalCount(childComplexity), true
+
+	case "SchemeNetworkPort.id":
+		if e.ComplexityRoot.SchemeNetworkPort.ID == nil {
+			break
+		}
+
+		return e.ComplexityRoot.SchemeNetworkPort.ID(childComplexity), true
+	case "SchemeNetworkPort.notes":
+		if e.ComplexityRoot.SchemeNetworkPort.Notes == nil {
+			break
+		}
+
+		return e.ComplexityRoot.SchemeNetworkPort.Notes(childComplexity), true
+	case "SchemeNetworkPort.number":
+		if e.ComplexityRoot.SchemeNetworkPort.Number == nil {
+			break
+		}
+
+		return e.ComplexityRoot.SchemeNetworkPort.Number(childComplexity), true
+	case "SchemeNetworkPort.protocol":
+		if e.ComplexityRoot.SchemeNetworkPort.Protocol == nil {
+			break
+		}
+
+		return e.ComplexityRoot.SchemeNetworkPort.Protocol(childComplexity), true
+	case "SchemeNetworkPort.service":
+		if e.ComplexityRoot.SchemeNetworkPort.Service == nil {
+			break
+		}
+
+		return e.ComplexityRoot.SchemeNetworkPort.Service(childComplexity), true
 
 	case "User.active":
 		if e.ComplexityRoot.User.Active == nil {
@@ -470,8 +718,12 @@ func (e *executableSchema) Exec(ctx context.Context) graphql.ResponseHandler {
 	ec := newExecutionContext(opCtx, e, make(chan graphql.DeferredResult))
 	inputUnmarshalMap := graphql.BuildUnmarshalerMap(
 		ec.unmarshalInputCreateOperationInput,
+		ec.unmarshalInputCreateSchemeNetworkPointInput,
+		ec.unmarshalInputCreateSchemeNetworkPortInput,
 		ec.unmarshalInputCreateUserInput,
 		ec.unmarshalInputUpdateOperationInput,
+		ec.unmarshalInputUpdateSchemeNetworkPointInput,
+		ec.unmarshalInputUpdateSchemeNetworkPortInput,
 		ec.unmarshalInputUpdateUserInput,
 	)
 	first := true
@@ -647,6 +899,44 @@ type OperationPagination {
   hasPreviousPage: Boolean!
 }
 
+# =============================================================================
+# Scheme Engine — Network Points & Ports
+# =============================================================================
+# SchemeNetworkPoint is the first building block of the scheme engine.
+# It represents any network device (server, VM, or any IP-addressable entity)
+# in an operation's scheme. Ports are embedded sub-documents.
+
+# SchemeNetworkPort represents a network port on a SchemeNetworkPoint.
+# Embedded within SchemeNetworkPoint (not queried independently).
+type SchemeNetworkPort {
+  id: ID!                  # Unique identifier (UUID)
+  number: Int!             # Port number (1-65535)
+  protocol: String!        # "tcp", "udp", etc.
+  service: String!         # Detected service name (e.g. "ssh", "http")
+  notes: String!           # Free-form operator notes
+}
+
+# SchemeNetworkPoint represents a network device in an operation's scheme.
+# A device with one or more network identifiers (IP, hostname, domain).
+type SchemeNetworkPoint {
+  id: ID!                          # Unique identifier (UUID)
+  operationId: ID!                 # The operation this point belongs to
+  names: [String!]!                # Network identifiers (ipv4, ipv6, hostname, domain)
+  description: String!             # What this network point is
+  tags: [String!]!                 # User-defined labels for filtering
+  ports: [SchemeNetworkPort!]!     # Network ports on this device
+  createdAt: String!               # ISO 8601 timestamp
+  updatedAt: String!               # ISO 8601 timestamp
+}
+
+# SchemeNetworkPointPagination wraps a paginated list of network points.
+type SchemeNetworkPointPagination {
+  points: [SchemeNetworkPoint!]!
+  totalCount: Int!
+  hasNextPage: Boolean!
+  hasPreviousPage: Boolean!
+}
+
 # -----------------------------------------------------------------------------
 # Queries (read operations)
 # -----------------------------------------------------------------------------
@@ -695,6 +985,20 @@ type Query {
   # Useful for the frontend to know which UI controls to show.
   myOperationRole(operationId: ID!): OperationRole
     @hasPermission(permission: "operation:member")
+
+  # schemeNetworkPoint returns a single network point by its ID.
+  # App-level gate; resolver checks caller's operation membership.
+  schemeNetworkPoint(id: ID!): SchemeNetworkPoint!
+    @hasPermission(permission: "operation:member")
+
+  # schemeNetworkPoints returns a paginated list of network points for an operation.
+  schemeNetworkPoints(
+    operationId: ID!
+    search: String
+    offset: Int = 0
+    limit: Int = 20
+  ): SchemeNetworkPointPagination!
+    @hasPermission(permission: "operation:member")
 }
 
 # -----------------------------------------------------------------------------
@@ -731,6 +1035,37 @@ input CreateOperationInput {
 input UpdateOperationInput {
   name: String
   description: String
+}
+
+# CreateSchemeNetworkPointInput — fields needed to create a network point.
+# names is required (at least one network identifier).
+input CreateSchemeNetworkPointInput {
+  names: [String!]!               # At least one required (validated in resolver)
+  description: String
+  tags: [String!]
+}
+
+# UpdateSchemeNetworkPointInput — partial update for a network point.
+input UpdateSchemeNetworkPointInput {
+  names: [String!]                # If provided, replaces entire array
+  description: String
+  tags: [String!]
+}
+
+# CreateSchemeNetworkPortInput — fields needed to add a port.
+input CreateSchemeNetworkPortInput {
+  number: Int!                    # Required: port number
+  protocol: String
+  service: String
+  notes: String
+}
+
+# UpdateSchemeNetworkPortInput — partial update for a port.
+input UpdateSchemeNetworkPortInput {
+  number: Int
+  protocol: String
+  service: String
+  notes: String
 }
 
 # -----------------------------------------------------------------------------
@@ -798,6 +1133,38 @@ type Mutation {
   # App-level gate; resolver checks that caller is an operation admin.
   updateOperationMemberRole(operationId: ID!, userId: ID!, role: OperationRole!): Operation!
     @hasPermission(permission: "operation:member")
+
+  # --- Scheme Network Point mutations ---
+
+  # createSchemeNetworkPoint creates a new network point in an operation.
+  # Requires at least operator role in the operation.
+  createSchemeNetworkPoint(operationId: ID!, input: CreateSchemeNetworkPointInput!): SchemeNetworkPoint!
+    @hasPermission(permission: "operation:member")
+
+  # updateSchemeNetworkPoint modifies an existing network point.
+  # Requires at least operator role in the operation.
+  updateSchemeNetworkPoint(id: ID!, input: UpdateSchemeNetworkPointInput!): SchemeNetworkPoint!
+    @hasPermission(permission: "operation:member")
+
+  # deleteSchemeNetworkPoint removes a network point by ID.
+  # Requires at least operator role in the operation.
+  deleteSchemeNetworkPoint(id: ID!): Boolean!
+    @hasPermission(permission: "operation:member")
+
+  # addSchemeNetworkPort adds a port to a network point.
+  # Requires at least operator role in the operation.
+  addSchemeNetworkPort(pointId: ID!, input: CreateSchemeNetworkPortInput!): SchemeNetworkPoint!
+    @hasPermission(permission: "operation:member")
+
+  # updateSchemeNetworkPort updates a port on a network point.
+  # Requires at least operator role in the operation.
+  updateSchemeNetworkPort(pointId: ID!, portId: ID!, input: UpdateSchemeNetworkPortInput!): SchemeNetworkPoint!
+    @hasPermission(permission: "operation:member")
+
+  # removeSchemeNetworkPort removes a port from a network point.
+  # Requires at least operator role in the operation.
+  removeSchemeNetworkPort(pointId: ID!, portId: ID!): SchemeNetworkPoint!
+    @hasPermission(permission: "operation:member")
 }
 `, BuiltIn: false},
 }
@@ -839,6 +1206,22 @@ func (ec *executionContext) field_Mutation_addOperationMember_args(ctx context.C
 	return args, nil
 }
 
+func (ec *executionContext) field_Mutation_addSchemeNetworkPort_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
+	var err error
+	args := map[string]any{}
+	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "pointId", ec.unmarshalNID2string)
+	if err != nil {
+		return nil, err
+	}
+	args["pointId"] = arg0
+	arg1, err := graphql.ProcessArgField(ctx, rawArgs, "input", ec.unmarshalNCreateSchemeNetworkPortInput2githubᚗcomᚋvibeᚑc2ᚋvibeᚑc2ᚑcoreᚋcoreᚋpkgᚋgraphqlᚋmodelᚐCreateSchemeNetworkPortInput)
+	if err != nil {
+		return nil, err
+	}
+	args["input"] = arg1
+	return args, nil
+}
+
 func (ec *executionContext) field_Mutation_createOperation_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
 	var err error
 	args := map[string]any{}
@@ -847,6 +1230,22 @@ func (ec *executionContext) field_Mutation_createOperation_args(ctx context.Cont
 		return nil, err
 	}
 	args["input"] = arg0
+	return args, nil
+}
+
+func (ec *executionContext) field_Mutation_createSchemeNetworkPoint_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
+	var err error
+	args := map[string]any{}
+	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "operationId", ec.unmarshalNID2string)
+	if err != nil {
+		return nil, err
+	}
+	args["operationId"] = arg0
+	arg1, err := graphql.ProcessArgField(ctx, rawArgs, "input", ec.unmarshalNCreateSchemeNetworkPointInput2githubᚗcomᚋvibeᚑc2ᚋvibeᚑc2ᚑcoreᚋcoreᚋpkgᚋgraphqlᚋmodelᚐCreateSchemeNetworkPointInput)
+	if err != nil {
+		return nil, err
+	}
+	args["input"] = arg1
 	return args, nil
 }
 
@@ -862,6 +1261,17 @@ func (ec *executionContext) field_Mutation_createUser_args(ctx context.Context, 
 }
 
 func (ec *executionContext) field_Mutation_deleteOperation_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
+	var err error
+	args := map[string]any{}
+	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "id", ec.unmarshalNID2string)
+	if err != nil {
+		return nil, err
+	}
+	args["id"] = arg0
+	return args, nil
+}
+
+func (ec *executionContext) field_Mutation_deleteSchemeNetworkPoint_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
 	var err error
 	args := map[string]any{}
 	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "id", ec.unmarshalNID2string)
@@ -896,6 +1306,22 @@ func (ec *executionContext) field_Mutation_removeOperationMember_args(ctx contex
 		return nil, err
 	}
 	args["userId"] = arg1
+	return args, nil
+}
+
+func (ec *executionContext) field_Mutation_removeSchemeNetworkPort_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
+	var err error
+	args := map[string]any{}
+	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "pointId", ec.unmarshalNID2string)
+	if err != nil {
+		return nil, err
+	}
+	args["pointId"] = arg0
+	arg1, err := graphql.ProcessArgField(ctx, rawArgs, "portId", ec.unmarshalNID2string)
+	if err != nil {
+		return nil, err
+	}
+	args["portId"] = arg1
 	return args, nil
 }
 
@@ -944,6 +1370,43 @@ func (ec *executionContext) field_Mutation_updateOwnProfile_args(ctx context.Con
 		return nil, err
 	}
 	args["input"] = arg0
+	return args, nil
+}
+
+func (ec *executionContext) field_Mutation_updateSchemeNetworkPoint_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
+	var err error
+	args := map[string]any{}
+	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "id", ec.unmarshalNID2string)
+	if err != nil {
+		return nil, err
+	}
+	args["id"] = arg0
+	arg1, err := graphql.ProcessArgField(ctx, rawArgs, "input", ec.unmarshalNUpdateSchemeNetworkPointInput2githubᚗcomᚋvibeᚑc2ᚋvibeᚑc2ᚑcoreᚋcoreᚋpkgᚋgraphqlᚋmodelᚐUpdateSchemeNetworkPointInput)
+	if err != nil {
+		return nil, err
+	}
+	args["input"] = arg1
+	return args, nil
+}
+
+func (ec *executionContext) field_Mutation_updateSchemeNetworkPort_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
+	var err error
+	args := map[string]any{}
+	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "pointId", ec.unmarshalNID2string)
+	if err != nil {
+		return nil, err
+	}
+	args["pointId"] = arg0
+	arg1, err := graphql.ProcessArgField(ctx, rawArgs, "portId", ec.unmarshalNID2string)
+	if err != nil {
+		return nil, err
+	}
+	args["portId"] = arg1
+	arg2, err := graphql.ProcessArgField(ctx, rawArgs, "input", ec.unmarshalNUpdateSchemeNetworkPortInput2githubᚗcomᚋvibeᚑc2ᚋvibeᚑc2ᚑcoreᚋcoreᚋpkgᚋgraphqlᚋmodelᚐUpdateSchemeNetworkPortInput)
+	if err != nil {
+		return nil, err
+	}
+	args["input"] = arg2
 	return args, nil
 }
 
@@ -1014,6 +1477,43 @@ func (ec *executionContext) field_Query_operations_args(ctx context.Context, raw
 		return nil, err
 	}
 	args["limit"] = arg2
+	return args, nil
+}
+
+func (ec *executionContext) field_Query_schemeNetworkPoint_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
+	var err error
+	args := map[string]any{}
+	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "id", ec.unmarshalNID2string)
+	if err != nil {
+		return nil, err
+	}
+	args["id"] = arg0
+	return args, nil
+}
+
+func (ec *executionContext) field_Query_schemeNetworkPoints_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
+	var err error
+	args := map[string]any{}
+	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "operationId", ec.unmarshalNID2string)
+	if err != nil {
+		return nil, err
+	}
+	args["operationId"] = arg0
+	arg1, err := graphql.ProcessArgField(ctx, rawArgs, "search", ec.unmarshalOString2ᚖstring)
+	if err != nil {
+		return nil, err
+	}
+	args["search"] = arg1
+	arg2, err := graphql.ProcessArgField(ctx, rawArgs, "offset", ec.unmarshalOInt2ᚖint)
+	if err != nil {
+		return nil, err
+	}
+	args["offset"] = arg2
+	arg3, err := graphql.ProcessArgField(ctx, rawArgs, "limit", ec.unmarshalOInt2ᚖint)
+	if err != nil {
+		return nil, err
+	}
+	args["limit"] = arg3
 	return args, nil
 }
 
@@ -1797,6 +2297,450 @@ func (ec *executionContext) fieldContext_Mutation_updateOperationMemberRole(ctx 
 	}()
 	ctx = graphql.WithFieldContext(ctx, fc)
 	if fc.Args, err = ec.field_Mutation_updateOperationMemberRole_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
+		ec.Error(ctx, err)
+		return fc, err
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Mutation_createSchemeNetworkPoint(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Mutation_createSchemeNetworkPoint,
+		func(ctx context.Context) (any, error) {
+			fc := graphql.GetFieldContext(ctx)
+			return ec.Resolvers.Mutation().CreateSchemeNetworkPoint(ctx, fc.Args["operationId"].(string), fc.Args["input"].(model.CreateSchemeNetworkPointInput))
+		},
+		func(ctx context.Context, next graphql.Resolver) graphql.Resolver {
+			directive0 := next
+
+			directive1 := func(ctx context.Context) (any, error) {
+				permission, err := ec.unmarshalNString2string(ctx, "operation:member")
+				if err != nil {
+					var zeroVal *models.SchemeNetworkPoint
+					return zeroVal, err
+				}
+				if ec.Directives.HasPermission == nil {
+					var zeroVal *models.SchemeNetworkPoint
+					return zeroVal, errors.New("directive hasPermission is not implemented")
+				}
+				return ec.Directives.HasPermission(ctx, nil, directive0, permission)
+			}
+
+			next = directive1
+			return next
+		},
+		ec.marshalNSchemeNetworkPoint2ᚖgithubᚗcomᚋvibeᚑc2ᚋvibeᚑc2ᚑcoreᚋcoreᚋpkgᚋmodelsᚐSchemeNetworkPoint,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_Mutation_createSchemeNetworkPoint(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Mutation",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "id":
+				return ec.fieldContext_SchemeNetworkPoint_id(ctx, field)
+			case "operationId":
+				return ec.fieldContext_SchemeNetworkPoint_operationId(ctx, field)
+			case "names":
+				return ec.fieldContext_SchemeNetworkPoint_names(ctx, field)
+			case "description":
+				return ec.fieldContext_SchemeNetworkPoint_description(ctx, field)
+			case "tags":
+				return ec.fieldContext_SchemeNetworkPoint_tags(ctx, field)
+			case "ports":
+				return ec.fieldContext_SchemeNetworkPoint_ports(ctx, field)
+			case "createdAt":
+				return ec.fieldContext_SchemeNetworkPoint_createdAt(ctx, field)
+			case "updatedAt":
+				return ec.fieldContext_SchemeNetworkPoint_updatedAt(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type SchemeNetworkPoint", field.Name)
+		},
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			err = ec.Recover(ctx, r)
+			ec.Error(ctx, err)
+		}
+	}()
+	ctx = graphql.WithFieldContext(ctx, fc)
+	if fc.Args, err = ec.field_Mutation_createSchemeNetworkPoint_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
+		ec.Error(ctx, err)
+		return fc, err
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Mutation_updateSchemeNetworkPoint(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Mutation_updateSchemeNetworkPoint,
+		func(ctx context.Context) (any, error) {
+			fc := graphql.GetFieldContext(ctx)
+			return ec.Resolvers.Mutation().UpdateSchemeNetworkPoint(ctx, fc.Args["id"].(string), fc.Args["input"].(model.UpdateSchemeNetworkPointInput))
+		},
+		func(ctx context.Context, next graphql.Resolver) graphql.Resolver {
+			directive0 := next
+
+			directive1 := func(ctx context.Context) (any, error) {
+				permission, err := ec.unmarshalNString2string(ctx, "operation:member")
+				if err != nil {
+					var zeroVal *models.SchemeNetworkPoint
+					return zeroVal, err
+				}
+				if ec.Directives.HasPermission == nil {
+					var zeroVal *models.SchemeNetworkPoint
+					return zeroVal, errors.New("directive hasPermission is not implemented")
+				}
+				return ec.Directives.HasPermission(ctx, nil, directive0, permission)
+			}
+
+			next = directive1
+			return next
+		},
+		ec.marshalNSchemeNetworkPoint2ᚖgithubᚗcomᚋvibeᚑc2ᚋvibeᚑc2ᚑcoreᚋcoreᚋpkgᚋmodelsᚐSchemeNetworkPoint,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_Mutation_updateSchemeNetworkPoint(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Mutation",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "id":
+				return ec.fieldContext_SchemeNetworkPoint_id(ctx, field)
+			case "operationId":
+				return ec.fieldContext_SchemeNetworkPoint_operationId(ctx, field)
+			case "names":
+				return ec.fieldContext_SchemeNetworkPoint_names(ctx, field)
+			case "description":
+				return ec.fieldContext_SchemeNetworkPoint_description(ctx, field)
+			case "tags":
+				return ec.fieldContext_SchemeNetworkPoint_tags(ctx, field)
+			case "ports":
+				return ec.fieldContext_SchemeNetworkPoint_ports(ctx, field)
+			case "createdAt":
+				return ec.fieldContext_SchemeNetworkPoint_createdAt(ctx, field)
+			case "updatedAt":
+				return ec.fieldContext_SchemeNetworkPoint_updatedAt(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type SchemeNetworkPoint", field.Name)
+		},
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			err = ec.Recover(ctx, r)
+			ec.Error(ctx, err)
+		}
+	}()
+	ctx = graphql.WithFieldContext(ctx, fc)
+	if fc.Args, err = ec.field_Mutation_updateSchemeNetworkPoint_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
+		ec.Error(ctx, err)
+		return fc, err
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Mutation_deleteSchemeNetworkPoint(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Mutation_deleteSchemeNetworkPoint,
+		func(ctx context.Context) (any, error) {
+			fc := graphql.GetFieldContext(ctx)
+			return ec.Resolvers.Mutation().DeleteSchemeNetworkPoint(ctx, fc.Args["id"].(string))
+		},
+		func(ctx context.Context, next graphql.Resolver) graphql.Resolver {
+			directive0 := next
+
+			directive1 := func(ctx context.Context) (any, error) {
+				permission, err := ec.unmarshalNString2string(ctx, "operation:member")
+				if err != nil {
+					var zeroVal bool
+					return zeroVal, err
+				}
+				if ec.Directives.HasPermission == nil {
+					var zeroVal bool
+					return zeroVal, errors.New("directive hasPermission is not implemented")
+				}
+				return ec.Directives.HasPermission(ctx, nil, directive0, permission)
+			}
+
+			next = directive1
+			return next
+		},
+		ec.marshalNBoolean2bool,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_Mutation_deleteSchemeNetworkPoint(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Mutation",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Boolean does not have child fields")
+		},
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			err = ec.Recover(ctx, r)
+			ec.Error(ctx, err)
+		}
+	}()
+	ctx = graphql.WithFieldContext(ctx, fc)
+	if fc.Args, err = ec.field_Mutation_deleteSchemeNetworkPoint_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
+		ec.Error(ctx, err)
+		return fc, err
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Mutation_addSchemeNetworkPort(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Mutation_addSchemeNetworkPort,
+		func(ctx context.Context) (any, error) {
+			fc := graphql.GetFieldContext(ctx)
+			return ec.Resolvers.Mutation().AddSchemeNetworkPort(ctx, fc.Args["pointId"].(string), fc.Args["input"].(model.CreateSchemeNetworkPortInput))
+		},
+		func(ctx context.Context, next graphql.Resolver) graphql.Resolver {
+			directive0 := next
+
+			directive1 := func(ctx context.Context) (any, error) {
+				permission, err := ec.unmarshalNString2string(ctx, "operation:member")
+				if err != nil {
+					var zeroVal *models.SchemeNetworkPoint
+					return zeroVal, err
+				}
+				if ec.Directives.HasPermission == nil {
+					var zeroVal *models.SchemeNetworkPoint
+					return zeroVal, errors.New("directive hasPermission is not implemented")
+				}
+				return ec.Directives.HasPermission(ctx, nil, directive0, permission)
+			}
+
+			next = directive1
+			return next
+		},
+		ec.marshalNSchemeNetworkPoint2ᚖgithubᚗcomᚋvibeᚑc2ᚋvibeᚑc2ᚑcoreᚋcoreᚋpkgᚋmodelsᚐSchemeNetworkPoint,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_Mutation_addSchemeNetworkPort(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Mutation",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "id":
+				return ec.fieldContext_SchemeNetworkPoint_id(ctx, field)
+			case "operationId":
+				return ec.fieldContext_SchemeNetworkPoint_operationId(ctx, field)
+			case "names":
+				return ec.fieldContext_SchemeNetworkPoint_names(ctx, field)
+			case "description":
+				return ec.fieldContext_SchemeNetworkPoint_description(ctx, field)
+			case "tags":
+				return ec.fieldContext_SchemeNetworkPoint_tags(ctx, field)
+			case "ports":
+				return ec.fieldContext_SchemeNetworkPoint_ports(ctx, field)
+			case "createdAt":
+				return ec.fieldContext_SchemeNetworkPoint_createdAt(ctx, field)
+			case "updatedAt":
+				return ec.fieldContext_SchemeNetworkPoint_updatedAt(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type SchemeNetworkPoint", field.Name)
+		},
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			err = ec.Recover(ctx, r)
+			ec.Error(ctx, err)
+		}
+	}()
+	ctx = graphql.WithFieldContext(ctx, fc)
+	if fc.Args, err = ec.field_Mutation_addSchemeNetworkPort_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
+		ec.Error(ctx, err)
+		return fc, err
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Mutation_updateSchemeNetworkPort(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Mutation_updateSchemeNetworkPort,
+		func(ctx context.Context) (any, error) {
+			fc := graphql.GetFieldContext(ctx)
+			return ec.Resolvers.Mutation().UpdateSchemeNetworkPort(ctx, fc.Args["pointId"].(string), fc.Args["portId"].(string), fc.Args["input"].(model.UpdateSchemeNetworkPortInput))
+		},
+		func(ctx context.Context, next graphql.Resolver) graphql.Resolver {
+			directive0 := next
+
+			directive1 := func(ctx context.Context) (any, error) {
+				permission, err := ec.unmarshalNString2string(ctx, "operation:member")
+				if err != nil {
+					var zeroVal *models.SchemeNetworkPoint
+					return zeroVal, err
+				}
+				if ec.Directives.HasPermission == nil {
+					var zeroVal *models.SchemeNetworkPoint
+					return zeroVal, errors.New("directive hasPermission is not implemented")
+				}
+				return ec.Directives.HasPermission(ctx, nil, directive0, permission)
+			}
+
+			next = directive1
+			return next
+		},
+		ec.marshalNSchemeNetworkPoint2ᚖgithubᚗcomᚋvibeᚑc2ᚋvibeᚑc2ᚑcoreᚋcoreᚋpkgᚋmodelsᚐSchemeNetworkPoint,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_Mutation_updateSchemeNetworkPort(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Mutation",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "id":
+				return ec.fieldContext_SchemeNetworkPoint_id(ctx, field)
+			case "operationId":
+				return ec.fieldContext_SchemeNetworkPoint_operationId(ctx, field)
+			case "names":
+				return ec.fieldContext_SchemeNetworkPoint_names(ctx, field)
+			case "description":
+				return ec.fieldContext_SchemeNetworkPoint_description(ctx, field)
+			case "tags":
+				return ec.fieldContext_SchemeNetworkPoint_tags(ctx, field)
+			case "ports":
+				return ec.fieldContext_SchemeNetworkPoint_ports(ctx, field)
+			case "createdAt":
+				return ec.fieldContext_SchemeNetworkPoint_createdAt(ctx, field)
+			case "updatedAt":
+				return ec.fieldContext_SchemeNetworkPoint_updatedAt(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type SchemeNetworkPoint", field.Name)
+		},
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			err = ec.Recover(ctx, r)
+			ec.Error(ctx, err)
+		}
+	}()
+	ctx = graphql.WithFieldContext(ctx, fc)
+	if fc.Args, err = ec.field_Mutation_updateSchemeNetworkPort_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
+		ec.Error(ctx, err)
+		return fc, err
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Mutation_removeSchemeNetworkPort(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Mutation_removeSchemeNetworkPort,
+		func(ctx context.Context) (any, error) {
+			fc := graphql.GetFieldContext(ctx)
+			return ec.Resolvers.Mutation().RemoveSchemeNetworkPort(ctx, fc.Args["pointId"].(string), fc.Args["portId"].(string))
+		},
+		func(ctx context.Context, next graphql.Resolver) graphql.Resolver {
+			directive0 := next
+
+			directive1 := func(ctx context.Context) (any, error) {
+				permission, err := ec.unmarshalNString2string(ctx, "operation:member")
+				if err != nil {
+					var zeroVal *models.SchemeNetworkPoint
+					return zeroVal, err
+				}
+				if ec.Directives.HasPermission == nil {
+					var zeroVal *models.SchemeNetworkPoint
+					return zeroVal, errors.New("directive hasPermission is not implemented")
+				}
+				return ec.Directives.HasPermission(ctx, nil, directive0, permission)
+			}
+
+			next = directive1
+			return next
+		},
+		ec.marshalNSchemeNetworkPoint2ᚖgithubᚗcomᚋvibeᚑc2ᚋvibeᚑc2ᚑcoreᚋcoreᚋpkgᚋmodelsᚐSchemeNetworkPoint,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_Mutation_removeSchemeNetworkPort(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Mutation",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "id":
+				return ec.fieldContext_SchemeNetworkPoint_id(ctx, field)
+			case "operationId":
+				return ec.fieldContext_SchemeNetworkPoint_operationId(ctx, field)
+			case "names":
+				return ec.fieldContext_SchemeNetworkPoint_names(ctx, field)
+			case "description":
+				return ec.fieldContext_SchemeNetworkPoint_description(ctx, field)
+			case "tags":
+				return ec.fieldContext_SchemeNetworkPoint_tags(ctx, field)
+			case "ports":
+				return ec.fieldContext_SchemeNetworkPoint_ports(ctx, field)
+			case "createdAt":
+				return ec.fieldContext_SchemeNetworkPoint_createdAt(ctx, field)
+			case "updatedAt":
+				return ec.fieldContext_SchemeNetworkPoint_updatedAt(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type SchemeNetworkPoint", field.Name)
+		},
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			err = ec.Recover(ctx, r)
+			ec.Error(ctx, err)
+		}
+	}()
+	ctx = graphql.WithFieldContext(ctx, fc)
+	if fc.Args, err = ec.field_Mutation_removeSchemeNetworkPort_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
 		ec.Error(ctx, err)
 		return fc, err
 	}
@@ -2589,6 +3533,152 @@ func (ec *executionContext) fieldContext_Query_myOperationRole(ctx context.Conte
 	return fc, nil
 }
 
+func (ec *executionContext) _Query_schemeNetworkPoint(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Query_schemeNetworkPoint,
+		func(ctx context.Context) (any, error) {
+			fc := graphql.GetFieldContext(ctx)
+			return ec.Resolvers.Query().SchemeNetworkPoint(ctx, fc.Args["id"].(string))
+		},
+		func(ctx context.Context, next graphql.Resolver) graphql.Resolver {
+			directive0 := next
+
+			directive1 := func(ctx context.Context) (any, error) {
+				permission, err := ec.unmarshalNString2string(ctx, "operation:member")
+				if err != nil {
+					var zeroVal *models.SchemeNetworkPoint
+					return zeroVal, err
+				}
+				if ec.Directives.HasPermission == nil {
+					var zeroVal *models.SchemeNetworkPoint
+					return zeroVal, errors.New("directive hasPermission is not implemented")
+				}
+				return ec.Directives.HasPermission(ctx, nil, directive0, permission)
+			}
+
+			next = directive1
+			return next
+		},
+		ec.marshalNSchemeNetworkPoint2ᚖgithubᚗcomᚋvibeᚑc2ᚋvibeᚑc2ᚑcoreᚋcoreᚋpkgᚋmodelsᚐSchemeNetworkPoint,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_Query_schemeNetworkPoint(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Query",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "id":
+				return ec.fieldContext_SchemeNetworkPoint_id(ctx, field)
+			case "operationId":
+				return ec.fieldContext_SchemeNetworkPoint_operationId(ctx, field)
+			case "names":
+				return ec.fieldContext_SchemeNetworkPoint_names(ctx, field)
+			case "description":
+				return ec.fieldContext_SchemeNetworkPoint_description(ctx, field)
+			case "tags":
+				return ec.fieldContext_SchemeNetworkPoint_tags(ctx, field)
+			case "ports":
+				return ec.fieldContext_SchemeNetworkPoint_ports(ctx, field)
+			case "createdAt":
+				return ec.fieldContext_SchemeNetworkPoint_createdAt(ctx, field)
+			case "updatedAt":
+				return ec.fieldContext_SchemeNetworkPoint_updatedAt(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type SchemeNetworkPoint", field.Name)
+		},
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			err = ec.Recover(ctx, r)
+			ec.Error(ctx, err)
+		}
+	}()
+	ctx = graphql.WithFieldContext(ctx, fc)
+	if fc.Args, err = ec.field_Query_schemeNetworkPoint_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
+		ec.Error(ctx, err)
+		return fc, err
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Query_schemeNetworkPoints(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Query_schemeNetworkPoints,
+		func(ctx context.Context) (any, error) {
+			fc := graphql.GetFieldContext(ctx)
+			return ec.Resolvers.Query().SchemeNetworkPoints(ctx, fc.Args["operationId"].(string), fc.Args["search"].(*string), fc.Args["offset"].(*int), fc.Args["limit"].(*int))
+		},
+		func(ctx context.Context, next graphql.Resolver) graphql.Resolver {
+			directive0 := next
+
+			directive1 := func(ctx context.Context) (any, error) {
+				permission, err := ec.unmarshalNString2string(ctx, "operation:member")
+				if err != nil {
+					var zeroVal *model.SchemeNetworkPointPagination
+					return zeroVal, err
+				}
+				if ec.Directives.HasPermission == nil {
+					var zeroVal *model.SchemeNetworkPointPagination
+					return zeroVal, errors.New("directive hasPermission is not implemented")
+				}
+				return ec.Directives.HasPermission(ctx, nil, directive0, permission)
+			}
+
+			next = directive1
+			return next
+		},
+		ec.marshalNSchemeNetworkPointPagination2ᚖgithubᚗcomᚋvibeᚑc2ᚋvibeᚑc2ᚑcoreᚋcoreᚋpkgᚋgraphqlᚋmodelᚐSchemeNetworkPointPagination,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_Query_schemeNetworkPoints(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Query",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "points":
+				return ec.fieldContext_SchemeNetworkPointPagination_points(ctx, field)
+			case "totalCount":
+				return ec.fieldContext_SchemeNetworkPointPagination_totalCount(ctx, field)
+			case "hasNextPage":
+				return ec.fieldContext_SchemeNetworkPointPagination_hasNextPage(ctx, field)
+			case "hasPreviousPage":
+				return ec.fieldContext_SchemeNetworkPointPagination_hasPreviousPage(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type SchemeNetworkPointPagination", field.Name)
+		},
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			err = ec.Recover(ctx, r)
+			ec.Error(ctx, err)
+		}
+	}()
+	ctx = graphql.WithFieldContext(ctx, fc)
+	if fc.Args, err = ec.field_Query_schemeNetworkPoints_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
+		ec.Error(ctx, err)
+		return fc, err
+	}
+	return fc, nil
+}
+
 func (ec *executionContext) _Query___type(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
@@ -2692,6 +3782,529 @@ func (ec *executionContext) fieldContext_Query___schema(_ context.Context, field
 				return ec.fieldContext___Schema_directives(ctx, field)
 			}
 			return nil, fmt.Errorf("no field named %q was found under type __Schema", field.Name)
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _SchemeNetworkPoint_id(ctx context.Context, field graphql.CollectedField, obj *models.SchemeNetworkPoint) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_SchemeNetworkPoint_id,
+		func(ctx context.Context) (any, error) {
+			return ec.Resolvers.SchemeNetworkPoint().ID(ctx, obj)
+		},
+		nil,
+		ec.marshalNID2string,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_SchemeNetworkPoint_id(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "SchemeNetworkPoint",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type ID does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _SchemeNetworkPoint_operationId(ctx context.Context, field graphql.CollectedField, obj *models.SchemeNetworkPoint) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_SchemeNetworkPoint_operationId,
+		func(ctx context.Context) (any, error) {
+			return ec.Resolvers.SchemeNetworkPoint().OperationID(ctx, obj)
+		},
+		nil,
+		ec.marshalNID2string,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_SchemeNetworkPoint_operationId(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "SchemeNetworkPoint",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type ID does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _SchemeNetworkPoint_names(ctx context.Context, field graphql.CollectedField, obj *models.SchemeNetworkPoint) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_SchemeNetworkPoint_names,
+		func(ctx context.Context) (any, error) {
+			return obj.Names, nil
+		},
+		nil,
+		ec.marshalNString2ᚕstringᚄ,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_SchemeNetworkPoint_names(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "SchemeNetworkPoint",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _SchemeNetworkPoint_description(ctx context.Context, field graphql.CollectedField, obj *models.SchemeNetworkPoint) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_SchemeNetworkPoint_description,
+		func(ctx context.Context) (any, error) {
+			return obj.Description, nil
+		},
+		nil,
+		ec.marshalNString2string,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_SchemeNetworkPoint_description(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "SchemeNetworkPoint",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _SchemeNetworkPoint_tags(ctx context.Context, field graphql.CollectedField, obj *models.SchemeNetworkPoint) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_SchemeNetworkPoint_tags,
+		func(ctx context.Context) (any, error) {
+			return obj.Tags, nil
+		},
+		nil,
+		ec.marshalNString2ᚕstringᚄ,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_SchemeNetworkPoint_tags(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "SchemeNetworkPoint",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _SchemeNetworkPoint_ports(ctx context.Context, field graphql.CollectedField, obj *models.SchemeNetworkPoint) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_SchemeNetworkPoint_ports,
+		func(ctx context.Context) (any, error) {
+			return ec.Resolvers.SchemeNetworkPoint().Ports(ctx, obj)
+		},
+		nil,
+		ec.marshalNSchemeNetworkPort2ᚕᚖgithubᚗcomᚋvibeᚑc2ᚋvibeᚑc2ᚑcoreᚋcoreᚋpkgᚋmodelsᚐSchemeNetworkPortᚄ,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_SchemeNetworkPoint_ports(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "SchemeNetworkPoint",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "id":
+				return ec.fieldContext_SchemeNetworkPort_id(ctx, field)
+			case "number":
+				return ec.fieldContext_SchemeNetworkPort_number(ctx, field)
+			case "protocol":
+				return ec.fieldContext_SchemeNetworkPort_protocol(ctx, field)
+			case "service":
+				return ec.fieldContext_SchemeNetworkPort_service(ctx, field)
+			case "notes":
+				return ec.fieldContext_SchemeNetworkPort_notes(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type SchemeNetworkPort", field.Name)
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _SchemeNetworkPoint_createdAt(ctx context.Context, field graphql.CollectedField, obj *models.SchemeNetworkPoint) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_SchemeNetworkPoint_createdAt,
+		func(ctx context.Context) (any, error) {
+			return ec.Resolvers.SchemeNetworkPoint().CreatedAt(ctx, obj)
+		},
+		nil,
+		ec.marshalNString2string,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_SchemeNetworkPoint_createdAt(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "SchemeNetworkPoint",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _SchemeNetworkPoint_updatedAt(ctx context.Context, field graphql.CollectedField, obj *models.SchemeNetworkPoint) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_SchemeNetworkPoint_updatedAt,
+		func(ctx context.Context) (any, error) {
+			return ec.Resolvers.SchemeNetworkPoint().UpdatedAt(ctx, obj)
+		},
+		nil,
+		ec.marshalNString2string,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_SchemeNetworkPoint_updatedAt(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "SchemeNetworkPoint",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _SchemeNetworkPointPagination_points(ctx context.Context, field graphql.CollectedField, obj *model.SchemeNetworkPointPagination) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_SchemeNetworkPointPagination_points,
+		func(ctx context.Context) (any, error) {
+			return obj.Points, nil
+		},
+		nil,
+		ec.marshalNSchemeNetworkPoint2ᚕᚖgithubᚗcomᚋvibeᚑc2ᚋvibeᚑc2ᚑcoreᚋcoreᚋpkgᚋmodelsᚐSchemeNetworkPointᚄ,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_SchemeNetworkPointPagination_points(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "SchemeNetworkPointPagination",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "id":
+				return ec.fieldContext_SchemeNetworkPoint_id(ctx, field)
+			case "operationId":
+				return ec.fieldContext_SchemeNetworkPoint_operationId(ctx, field)
+			case "names":
+				return ec.fieldContext_SchemeNetworkPoint_names(ctx, field)
+			case "description":
+				return ec.fieldContext_SchemeNetworkPoint_description(ctx, field)
+			case "tags":
+				return ec.fieldContext_SchemeNetworkPoint_tags(ctx, field)
+			case "ports":
+				return ec.fieldContext_SchemeNetworkPoint_ports(ctx, field)
+			case "createdAt":
+				return ec.fieldContext_SchemeNetworkPoint_createdAt(ctx, field)
+			case "updatedAt":
+				return ec.fieldContext_SchemeNetworkPoint_updatedAt(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type SchemeNetworkPoint", field.Name)
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _SchemeNetworkPointPagination_totalCount(ctx context.Context, field graphql.CollectedField, obj *model.SchemeNetworkPointPagination) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_SchemeNetworkPointPagination_totalCount,
+		func(ctx context.Context) (any, error) {
+			return obj.TotalCount, nil
+		},
+		nil,
+		ec.marshalNInt2int,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_SchemeNetworkPointPagination_totalCount(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "SchemeNetworkPointPagination",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Int does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _SchemeNetworkPointPagination_hasNextPage(ctx context.Context, field graphql.CollectedField, obj *model.SchemeNetworkPointPagination) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_SchemeNetworkPointPagination_hasNextPage,
+		func(ctx context.Context) (any, error) {
+			return obj.HasNextPage, nil
+		},
+		nil,
+		ec.marshalNBoolean2bool,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_SchemeNetworkPointPagination_hasNextPage(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "SchemeNetworkPointPagination",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Boolean does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _SchemeNetworkPointPagination_hasPreviousPage(ctx context.Context, field graphql.CollectedField, obj *model.SchemeNetworkPointPagination) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_SchemeNetworkPointPagination_hasPreviousPage,
+		func(ctx context.Context) (any, error) {
+			return obj.HasPreviousPage, nil
+		},
+		nil,
+		ec.marshalNBoolean2bool,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_SchemeNetworkPointPagination_hasPreviousPage(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "SchemeNetworkPointPagination",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Boolean does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _SchemeNetworkPort_id(ctx context.Context, field graphql.CollectedField, obj *models.SchemeNetworkPort) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_SchemeNetworkPort_id,
+		func(ctx context.Context) (any, error) {
+			return ec.Resolvers.SchemeNetworkPort().ID(ctx, obj)
+		},
+		nil,
+		ec.marshalNID2string,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_SchemeNetworkPort_id(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "SchemeNetworkPort",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type ID does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _SchemeNetworkPort_number(ctx context.Context, field graphql.CollectedField, obj *models.SchemeNetworkPort) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_SchemeNetworkPort_number,
+		func(ctx context.Context) (any, error) {
+			return obj.Number, nil
+		},
+		nil,
+		ec.marshalNInt2int,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_SchemeNetworkPort_number(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "SchemeNetworkPort",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Int does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _SchemeNetworkPort_protocol(ctx context.Context, field graphql.CollectedField, obj *models.SchemeNetworkPort) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_SchemeNetworkPort_protocol,
+		func(ctx context.Context) (any, error) {
+			return obj.Protocol, nil
+		},
+		nil,
+		ec.marshalNString2string,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_SchemeNetworkPort_protocol(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "SchemeNetworkPort",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _SchemeNetworkPort_service(ctx context.Context, field graphql.CollectedField, obj *models.SchemeNetworkPort) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_SchemeNetworkPort_service,
+		func(ctx context.Context) (any, error) {
+			return obj.Service, nil
+		},
+		nil,
+		ec.marshalNString2string,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_SchemeNetworkPort_service(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "SchemeNetworkPort",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _SchemeNetworkPort_notes(ctx context.Context, field graphql.CollectedField, obj *models.SchemeNetworkPort) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_SchemeNetworkPort_notes,
+		func(ctx context.Context) (any, error) {
+			return obj.Notes, nil
+		},
+		nil,
+		ec.marshalNString2string,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_SchemeNetworkPort_notes(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "SchemeNetworkPort",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
 		},
 	}
 	return fc, nil
@@ -4484,6 +6097,101 @@ func (ec *executionContext) unmarshalInputCreateOperationInput(ctx context.Conte
 	return it, nil
 }
 
+func (ec *executionContext) unmarshalInputCreateSchemeNetworkPointInput(ctx context.Context, obj any) (model.CreateSchemeNetworkPointInput, error) {
+	var it model.CreateSchemeNetworkPointInput
+	if obj == nil {
+		return it, nil
+	}
+
+	asMap := map[string]any{}
+	for k, v := range obj.(map[string]any) {
+		asMap[k] = v
+	}
+
+	fieldsInOrder := [...]string{"names", "description", "tags"}
+	for _, k := range fieldsInOrder {
+		v, ok := asMap[k]
+		if !ok {
+			continue
+		}
+		switch k {
+		case "names":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("names"))
+			data, err := ec.unmarshalNString2ᚕstringᚄ(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.Names = data
+		case "description":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("description"))
+			data, err := ec.unmarshalOString2ᚖstring(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.Description = data
+		case "tags":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("tags"))
+			data, err := ec.unmarshalOString2ᚕstringᚄ(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.Tags = data
+		}
+	}
+	return it, nil
+}
+
+func (ec *executionContext) unmarshalInputCreateSchemeNetworkPortInput(ctx context.Context, obj any) (model.CreateSchemeNetworkPortInput, error) {
+	var it model.CreateSchemeNetworkPortInput
+	if obj == nil {
+		return it, nil
+	}
+
+	asMap := map[string]any{}
+	for k, v := range obj.(map[string]any) {
+		asMap[k] = v
+	}
+
+	fieldsInOrder := [...]string{"number", "protocol", "service", "notes"}
+	for _, k := range fieldsInOrder {
+		v, ok := asMap[k]
+		if !ok {
+			continue
+		}
+		switch k {
+		case "number":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("number"))
+			data, err := ec.unmarshalNInt2int(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.Number = data
+		case "protocol":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("protocol"))
+			data, err := ec.unmarshalOString2ᚖstring(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.Protocol = data
+		case "service":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("service"))
+			data, err := ec.unmarshalOString2ᚖstring(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.Service = data
+		case "notes":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("notes"))
+			data, err := ec.unmarshalOString2ᚖstring(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.Notes = data
+		}
+	}
+	return it, nil
+}
+
 func (ec *executionContext) unmarshalInputCreateUserInput(ctx context.Context, obj any) (model.CreateUserInput, error) {
 	var it model.CreateUserInput
 	if obj == nil {
@@ -4571,6 +6279,101 @@ func (ec *executionContext) unmarshalInputUpdateOperationInput(ctx context.Conte
 				return it, err
 			}
 			it.Description = data
+		}
+	}
+	return it, nil
+}
+
+func (ec *executionContext) unmarshalInputUpdateSchemeNetworkPointInput(ctx context.Context, obj any) (model.UpdateSchemeNetworkPointInput, error) {
+	var it model.UpdateSchemeNetworkPointInput
+	if obj == nil {
+		return it, nil
+	}
+
+	asMap := map[string]any{}
+	for k, v := range obj.(map[string]any) {
+		asMap[k] = v
+	}
+
+	fieldsInOrder := [...]string{"names", "description", "tags"}
+	for _, k := range fieldsInOrder {
+		v, ok := asMap[k]
+		if !ok {
+			continue
+		}
+		switch k {
+		case "names":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("names"))
+			data, err := ec.unmarshalOString2ᚕstringᚄ(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.Names = data
+		case "description":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("description"))
+			data, err := ec.unmarshalOString2ᚖstring(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.Description = data
+		case "tags":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("tags"))
+			data, err := ec.unmarshalOString2ᚕstringᚄ(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.Tags = data
+		}
+	}
+	return it, nil
+}
+
+func (ec *executionContext) unmarshalInputUpdateSchemeNetworkPortInput(ctx context.Context, obj any) (model.UpdateSchemeNetworkPortInput, error) {
+	var it model.UpdateSchemeNetworkPortInput
+	if obj == nil {
+		return it, nil
+	}
+
+	asMap := map[string]any{}
+	for k, v := range obj.(map[string]any) {
+		asMap[k] = v
+	}
+
+	fieldsInOrder := [...]string{"number", "protocol", "service", "notes"}
+	for _, k := range fieldsInOrder {
+		v, ok := asMap[k]
+		if !ok {
+			continue
+		}
+		switch k {
+		case "number":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("number"))
+			data, err := ec.unmarshalOInt2ᚖint(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.Number = data
+		case "protocol":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("protocol"))
+			data, err := ec.unmarshalOString2ᚖstring(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.Protocol = data
+		case "service":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("service"))
+			data, err := ec.unmarshalOString2ᚖstring(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.Service = data
+		case "notes":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("notes"))
+			data, err := ec.unmarshalOString2ᚖstring(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.Notes = data
 		}
 	}
 	return it, nil
@@ -4720,6 +6523,48 @@ func (ec *executionContext) _Mutation(ctx context.Context, sel ast.SelectionSet)
 		case "updateOperationMemberRole":
 			out.Values[i] = ec.OperationContext.RootResolverMiddleware(innerCtx, func(ctx context.Context) (res graphql.Marshaler) {
 				return ec._Mutation_updateOperationMemberRole(ctx, field)
+			})
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "createSchemeNetworkPoint":
+			out.Values[i] = ec.OperationContext.RootResolverMiddleware(innerCtx, func(ctx context.Context) (res graphql.Marshaler) {
+				return ec._Mutation_createSchemeNetworkPoint(ctx, field)
+			})
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "updateSchemeNetworkPoint":
+			out.Values[i] = ec.OperationContext.RootResolverMiddleware(innerCtx, func(ctx context.Context) (res graphql.Marshaler) {
+				return ec._Mutation_updateSchemeNetworkPoint(ctx, field)
+			})
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "deleteSchemeNetworkPoint":
+			out.Values[i] = ec.OperationContext.RootResolverMiddleware(innerCtx, func(ctx context.Context) (res graphql.Marshaler) {
+				return ec._Mutation_deleteSchemeNetworkPoint(ctx, field)
+			})
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "addSchemeNetworkPort":
+			out.Values[i] = ec.OperationContext.RootResolverMiddleware(innerCtx, func(ctx context.Context) (res graphql.Marshaler) {
+				return ec._Mutation_addSchemeNetworkPort(ctx, field)
+			})
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "updateSchemeNetworkPort":
+			out.Values[i] = ec.OperationContext.RootResolverMiddleware(innerCtx, func(ctx context.Context) (res graphql.Marshaler) {
+				return ec._Mutation_updateSchemeNetworkPort(ctx, field)
+			})
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "removeSchemeNetworkPort":
+			out.Values[i] = ec.OperationContext.RootResolverMiddleware(innerCtx, func(ctx context.Context) (res graphql.Marshaler) {
+				return ec._Mutation_removeSchemeNetworkPort(ctx, field)
 			})
 			if out.Values[i] == graphql.Null {
 				out.Invalids++
@@ -5212,6 +7057,50 @@ func (ec *executionContext) _Query(ctx context.Context, sel ast.SelectionSet) gr
 			}
 
 			out.Concurrently(i, func(ctx context.Context) graphql.Marshaler { return rrm(innerCtx) })
+		case "schemeNetworkPoint":
+			field := field
+
+			innerFunc := func(ctx context.Context, fs *graphql.FieldSet) (res graphql.Marshaler) {
+				defer func() {
+					if r := recover(); r != nil {
+						ec.Error(ctx, ec.Recover(ctx, r))
+					}
+				}()
+				res = ec._Query_schemeNetworkPoint(ctx, field)
+				if res == graphql.Null {
+					atomic.AddUint32(&fs.Invalids, 1)
+				}
+				return res
+			}
+
+			rrm := func(ctx context.Context) graphql.Marshaler {
+				return ec.OperationContext.RootResolverMiddleware(ctx,
+					func(ctx context.Context) graphql.Marshaler { return innerFunc(ctx, out) })
+			}
+
+			out.Concurrently(i, func(ctx context.Context) graphql.Marshaler { return rrm(innerCtx) })
+		case "schemeNetworkPoints":
+			field := field
+
+			innerFunc := func(ctx context.Context, fs *graphql.FieldSet) (res graphql.Marshaler) {
+				defer func() {
+					if r := recover(); r != nil {
+						ec.Error(ctx, ec.Recover(ctx, r))
+					}
+				}()
+				res = ec._Query_schemeNetworkPoints(ctx, field)
+				if res == graphql.Null {
+					atomic.AddUint32(&fs.Invalids, 1)
+				}
+				return res
+			}
+
+			rrm := func(ctx context.Context) graphql.Marshaler {
+				return ec.OperationContext.RootResolverMiddleware(ctx,
+					func(ctx context.Context) graphql.Marshaler { return innerFunc(ctx, out) })
+			}
+
+			out.Concurrently(i, func(ctx context.Context) graphql.Marshaler { return rrm(innerCtx) })
 		case "__type":
 			out.Values[i] = ec.OperationContext.RootResolverMiddleware(innerCtx, func(ctx context.Context) (res graphql.Marshaler) {
 				return ec._Query___type(ctx, field)
@@ -5220,6 +7109,379 @@ func (ec *executionContext) _Query(ctx context.Context, sel ast.SelectionSet) gr
 			out.Values[i] = ec.OperationContext.RootResolverMiddleware(innerCtx, func(ctx context.Context) (res graphql.Marshaler) {
 				return ec._Query___schema(ctx, field)
 			})
+		default:
+			panic("unknown field " + strconv.Quote(field.Name))
+		}
+	}
+	out.Dispatch(ctx)
+	if out.Invalids > 0 {
+		return graphql.Null
+	}
+
+	atomic.AddInt32(&ec.Deferred, int32(len(deferred)))
+
+	for label, dfs := range deferred {
+		ec.ProcessDeferredGroup(graphql.DeferredGroup{
+			Label:    label,
+			Path:     graphql.GetPath(ctx),
+			FieldSet: dfs,
+			Context:  ctx,
+		})
+	}
+
+	return out
+}
+
+var schemeNetworkPointImplementors = []string{"SchemeNetworkPoint"}
+
+func (ec *executionContext) _SchemeNetworkPoint(ctx context.Context, sel ast.SelectionSet, obj *models.SchemeNetworkPoint) graphql.Marshaler {
+	fields := graphql.CollectFields(ec.OperationContext, sel, schemeNetworkPointImplementors)
+
+	out := graphql.NewFieldSet(fields)
+	deferred := make(map[string]*graphql.FieldSet)
+	for i, field := range fields {
+		switch field.Name {
+		case "__typename":
+			out.Values[i] = graphql.MarshalString("SchemeNetworkPoint")
+		case "id":
+			field := field
+
+			innerFunc := func(ctx context.Context, fs *graphql.FieldSet) (res graphql.Marshaler) {
+				defer func() {
+					if r := recover(); r != nil {
+						ec.Error(ctx, ec.Recover(ctx, r))
+					}
+				}()
+				res = ec._SchemeNetworkPoint_id(ctx, field, obj)
+				if res == graphql.Null {
+					atomic.AddUint32(&fs.Invalids, 1)
+				}
+				return res
+			}
+
+			if field.Deferrable != nil {
+				dfs, ok := deferred[field.Deferrable.Label]
+				di := 0
+				if ok {
+					dfs.AddField(field)
+					di = len(dfs.Values) - 1
+				} else {
+					dfs = graphql.NewFieldSet([]graphql.CollectedField{field})
+					deferred[field.Deferrable.Label] = dfs
+				}
+				dfs.Concurrently(di, func(ctx context.Context) graphql.Marshaler {
+					return innerFunc(ctx, dfs)
+				})
+
+				// don't run the out.Concurrently() call below
+				out.Values[i] = graphql.Null
+				continue
+			}
+
+			out.Concurrently(i, func(ctx context.Context) graphql.Marshaler { return innerFunc(ctx, out) })
+		case "operationId":
+			field := field
+
+			innerFunc := func(ctx context.Context, fs *graphql.FieldSet) (res graphql.Marshaler) {
+				defer func() {
+					if r := recover(); r != nil {
+						ec.Error(ctx, ec.Recover(ctx, r))
+					}
+				}()
+				res = ec._SchemeNetworkPoint_operationId(ctx, field, obj)
+				if res == graphql.Null {
+					atomic.AddUint32(&fs.Invalids, 1)
+				}
+				return res
+			}
+
+			if field.Deferrable != nil {
+				dfs, ok := deferred[field.Deferrable.Label]
+				di := 0
+				if ok {
+					dfs.AddField(field)
+					di = len(dfs.Values) - 1
+				} else {
+					dfs = graphql.NewFieldSet([]graphql.CollectedField{field})
+					deferred[field.Deferrable.Label] = dfs
+				}
+				dfs.Concurrently(di, func(ctx context.Context) graphql.Marshaler {
+					return innerFunc(ctx, dfs)
+				})
+
+				// don't run the out.Concurrently() call below
+				out.Values[i] = graphql.Null
+				continue
+			}
+
+			out.Concurrently(i, func(ctx context.Context) graphql.Marshaler { return innerFunc(ctx, out) })
+		case "names":
+			out.Values[i] = ec._SchemeNetworkPoint_names(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				atomic.AddUint32(&out.Invalids, 1)
+			}
+		case "description":
+			out.Values[i] = ec._SchemeNetworkPoint_description(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				atomic.AddUint32(&out.Invalids, 1)
+			}
+		case "tags":
+			out.Values[i] = ec._SchemeNetworkPoint_tags(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				atomic.AddUint32(&out.Invalids, 1)
+			}
+		case "ports":
+			field := field
+
+			innerFunc := func(ctx context.Context, fs *graphql.FieldSet) (res graphql.Marshaler) {
+				defer func() {
+					if r := recover(); r != nil {
+						ec.Error(ctx, ec.Recover(ctx, r))
+					}
+				}()
+				res = ec._SchemeNetworkPoint_ports(ctx, field, obj)
+				if res == graphql.Null {
+					atomic.AddUint32(&fs.Invalids, 1)
+				}
+				return res
+			}
+
+			if field.Deferrable != nil {
+				dfs, ok := deferred[field.Deferrable.Label]
+				di := 0
+				if ok {
+					dfs.AddField(field)
+					di = len(dfs.Values) - 1
+				} else {
+					dfs = graphql.NewFieldSet([]graphql.CollectedField{field})
+					deferred[field.Deferrable.Label] = dfs
+				}
+				dfs.Concurrently(di, func(ctx context.Context) graphql.Marshaler {
+					return innerFunc(ctx, dfs)
+				})
+
+				// don't run the out.Concurrently() call below
+				out.Values[i] = graphql.Null
+				continue
+			}
+
+			out.Concurrently(i, func(ctx context.Context) graphql.Marshaler { return innerFunc(ctx, out) })
+		case "createdAt":
+			field := field
+
+			innerFunc := func(ctx context.Context, fs *graphql.FieldSet) (res graphql.Marshaler) {
+				defer func() {
+					if r := recover(); r != nil {
+						ec.Error(ctx, ec.Recover(ctx, r))
+					}
+				}()
+				res = ec._SchemeNetworkPoint_createdAt(ctx, field, obj)
+				if res == graphql.Null {
+					atomic.AddUint32(&fs.Invalids, 1)
+				}
+				return res
+			}
+
+			if field.Deferrable != nil {
+				dfs, ok := deferred[field.Deferrable.Label]
+				di := 0
+				if ok {
+					dfs.AddField(field)
+					di = len(dfs.Values) - 1
+				} else {
+					dfs = graphql.NewFieldSet([]graphql.CollectedField{field})
+					deferred[field.Deferrable.Label] = dfs
+				}
+				dfs.Concurrently(di, func(ctx context.Context) graphql.Marshaler {
+					return innerFunc(ctx, dfs)
+				})
+
+				// don't run the out.Concurrently() call below
+				out.Values[i] = graphql.Null
+				continue
+			}
+
+			out.Concurrently(i, func(ctx context.Context) graphql.Marshaler { return innerFunc(ctx, out) })
+		case "updatedAt":
+			field := field
+
+			innerFunc := func(ctx context.Context, fs *graphql.FieldSet) (res graphql.Marshaler) {
+				defer func() {
+					if r := recover(); r != nil {
+						ec.Error(ctx, ec.Recover(ctx, r))
+					}
+				}()
+				res = ec._SchemeNetworkPoint_updatedAt(ctx, field, obj)
+				if res == graphql.Null {
+					atomic.AddUint32(&fs.Invalids, 1)
+				}
+				return res
+			}
+
+			if field.Deferrable != nil {
+				dfs, ok := deferred[field.Deferrable.Label]
+				di := 0
+				if ok {
+					dfs.AddField(field)
+					di = len(dfs.Values) - 1
+				} else {
+					dfs = graphql.NewFieldSet([]graphql.CollectedField{field})
+					deferred[field.Deferrable.Label] = dfs
+				}
+				dfs.Concurrently(di, func(ctx context.Context) graphql.Marshaler {
+					return innerFunc(ctx, dfs)
+				})
+
+				// don't run the out.Concurrently() call below
+				out.Values[i] = graphql.Null
+				continue
+			}
+
+			out.Concurrently(i, func(ctx context.Context) graphql.Marshaler { return innerFunc(ctx, out) })
+		default:
+			panic("unknown field " + strconv.Quote(field.Name))
+		}
+	}
+	out.Dispatch(ctx)
+	if out.Invalids > 0 {
+		return graphql.Null
+	}
+
+	atomic.AddInt32(&ec.Deferred, int32(len(deferred)))
+
+	for label, dfs := range deferred {
+		ec.ProcessDeferredGroup(graphql.DeferredGroup{
+			Label:    label,
+			Path:     graphql.GetPath(ctx),
+			FieldSet: dfs,
+			Context:  ctx,
+		})
+	}
+
+	return out
+}
+
+var schemeNetworkPointPaginationImplementors = []string{"SchemeNetworkPointPagination"}
+
+func (ec *executionContext) _SchemeNetworkPointPagination(ctx context.Context, sel ast.SelectionSet, obj *model.SchemeNetworkPointPagination) graphql.Marshaler {
+	fields := graphql.CollectFields(ec.OperationContext, sel, schemeNetworkPointPaginationImplementors)
+
+	out := graphql.NewFieldSet(fields)
+	deferred := make(map[string]*graphql.FieldSet)
+	for i, field := range fields {
+		switch field.Name {
+		case "__typename":
+			out.Values[i] = graphql.MarshalString("SchemeNetworkPointPagination")
+		case "points":
+			out.Values[i] = ec._SchemeNetworkPointPagination_points(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "totalCount":
+			out.Values[i] = ec._SchemeNetworkPointPagination_totalCount(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "hasNextPage":
+			out.Values[i] = ec._SchemeNetworkPointPagination_hasNextPage(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "hasPreviousPage":
+			out.Values[i] = ec._SchemeNetworkPointPagination_hasPreviousPage(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		default:
+			panic("unknown field " + strconv.Quote(field.Name))
+		}
+	}
+	out.Dispatch(ctx)
+	if out.Invalids > 0 {
+		return graphql.Null
+	}
+
+	atomic.AddInt32(&ec.Deferred, int32(len(deferred)))
+
+	for label, dfs := range deferred {
+		ec.ProcessDeferredGroup(graphql.DeferredGroup{
+			Label:    label,
+			Path:     graphql.GetPath(ctx),
+			FieldSet: dfs,
+			Context:  ctx,
+		})
+	}
+
+	return out
+}
+
+var schemeNetworkPortImplementors = []string{"SchemeNetworkPort"}
+
+func (ec *executionContext) _SchemeNetworkPort(ctx context.Context, sel ast.SelectionSet, obj *models.SchemeNetworkPort) graphql.Marshaler {
+	fields := graphql.CollectFields(ec.OperationContext, sel, schemeNetworkPortImplementors)
+
+	out := graphql.NewFieldSet(fields)
+	deferred := make(map[string]*graphql.FieldSet)
+	for i, field := range fields {
+		switch field.Name {
+		case "__typename":
+			out.Values[i] = graphql.MarshalString("SchemeNetworkPort")
+		case "id":
+			field := field
+
+			innerFunc := func(ctx context.Context, fs *graphql.FieldSet) (res graphql.Marshaler) {
+				defer func() {
+					if r := recover(); r != nil {
+						ec.Error(ctx, ec.Recover(ctx, r))
+					}
+				}()
+				res = ec._SchemeNetworkPort_id(ctx, field, obj)
+				if res == graphql.Null {
+					atomic.AddUint32(&fs.Invalids, 1)
+				}
+				return res
+			}
+
+			if field.Deferrable != nil {
+				dfs, ok := deferred[field.Deferrable.Label]
+				di := 0
+				if ok {
+					dfs.AddField(field)
+					di = len(dfs.Values) - 1
+				} else {
+					dfs = graphql.NewFieldSet([]graphql.CollectedField{field})
+					deferred[field.Deferrable.Label] = dfs
+				}
+				dfs.Concurrently(di, func(ctx context.Context) graphql.Marshaler {
+					return innerFunc(ctx, dfs)
+				})
+
+				// don't run the out.Concurrently() call below
+				out.Values[i] = graphql.Null
+				continue
+			}
+
+			out.Concurrently(i, func(ctx context.Context) graphql.Marshaler { return innerFunc(ctx, out) })
+		case "number":
+			out.Values[i] = ec._SchemeNetworkPort_number(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				atomic.AddUint32(&out.Invalids, 1)
+			}
+		case "protocol":
+			out.Values[i] = ec._SchemeNetworkPort_protocol(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				atomic.AddUint32(&out.Invalids, 1)
+			}
+		case "service":
+			out.Values[i] = ec._SchemeNetworkPort_service(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				atomic.AddUint32(&out.Invalids, 1)
+			}
+		case "notes":
+			out.Values[i] = ec._SchemeNetworkPort_notes(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				atomic.AddUint32(&out.Invalids, 1)
+			}
 		default:
 			panic("unknown field " + strconv.Quote(field.Name))
 		}
@@ -5810,6 +8072,16 @@ func (ec *executionContext) unmarshalNCreateOperationInput2githubᚗcomᚋvibe�
 	return res, graphql.ErrorOnPath(ctx, err)
 }
 
+func (ec *executionContext) unmarshalNCreateSchemeNetworkPointInput2githubᚗcomᚋvibeᚑc2ᚋvibeᚑc2ᚑcoreᚋcoreᚋpkgᚋgraphqlᚋmodelᚐCreateSchemeNetworkPointInput(ctx context.Context, v any) (model.CreateSchemeNetworkPointInput, error) {
+	res, err := ec.unmarshalInputCreateSchemeNetworkPointInput(ctx, v)
+	return res, graphql.ErrorOnPath(ctx, err)
+}
+
+func (ec *executionContext) unmarshalNCreateSchemeNetworkPortInput2githubᚗcomᚋvibeᚑc2ᚋvibeᚑc2ᚑcoreᚋcoreᚋpkgᚋgraphqlᚋmodelᚐCreateSchemeNetworkPortInput(ctx context.Context, v any) (model.CreateSchemeNetworkPortInput, error) {
+	res, err := ec.unmarshalInputCreateSchemeNetworkPortInput(ctx, v)
+	return res, graphql.ErrorOnPath(ctx, err)
+}
+
 func (ec *executionContext) unmarshalNCreateUserInput2githubᚗcomᚋvibeᚑc2ᚋvibeᚑc2ᚑcoreᚋcoreᚋpkgᚋgraphqlᚋmodelᚐCreateUserInput(ctx context.Context, v any) (model.CreateUserInput, error) {
 	res, err := ec.unmarshalInputCreateUserInput(ctx, v)
 	return res, graphql.ErrorOnPath(ctx, err)
@@ -5927,6 +8199,76 @@ func (ec *executionContext) marshalNOperationRole2githubᚗcomᚋvibeᚑc2ᚋvib
 	return v
 }
 
+func (ec *executionContext) marshalNSchemeNetworkPoint2githubᚗcomᚋvibeᚑc2ᚋvibeᚑc2ᚑcoreᚋcoreᚋpkgᚋmodelsᚐSchemeNetworkPoint(ctx context.Context, sel ast.SelectionSet, v models.SchemeNetworkPoint) graphql.Marshaler {
+	return ec._SchemeNetworkPoint(ctx, sel, &v)
+}
+
+func (ec *executionContext) marshalNSchemeNetworkPoint2ᚕᚖgithubᚗcomᚋvibeᚑc2ᚋvibeᚑc2ᚑcoreᚋcoreᚋpkgᚋmodelsᚐSchemeNetworkPointᚄ(ctx context.Context, sel ast.SelectionSet, v []*models.SchemeNetworkPoint) graphql.Marshaler {
+	ret := graphql.MarshalSliceConcurrently(ctx, len(v), 0, false, func(ctx context.Context, i int) graphql.Marshaler {
+		fc := graphql.GetFieldContext(ctx)
+		fc.Result = &v[i]
+		return ec.marshalNSchemeNetworkPoint2ᚖgithubᚗcomᚋvibeᚑc2ᚋvibeᚑc2ᚑcoreᚋcoreᚋpkgᚋmodelsᚐSchemeNetworkPoint(ctx, sel, v[i])
+	})
+
+	for _, e := range ret {
+		if e == graphql.Null {
+			return graphql.Null
+		}
+	}
+
+	return ret
+}
+
+func (ec *executionContext) marshalNSchemeNetworkPoint2ᚖgithubᚗcomᚋvibeᚑc2ᚋvibeᚑc2ᚑcoreᚋcoreᚋpkgᚋmodelsᚐSchemeNetworkPoint(ctx context.Context, sel ast.SelectionSet, v *models.SchemeNetworkPoint) graphql.Marshaler {
+	if v == nil {
+		if !graphql.HasFieldError(ctx, graphql.GetFieldContext(ctx)) {
+			graphql.AddErrorf(ctx, "the requested element is null which the schema does not allow")
+		}
+		return graphql.Null
+	}
+	return ec._SchemeNetworkPoint(ctx, sel, v)
+}
+
+func (ec *executionContext) marshalNSchemeNetworkPointPagination2githubᚗcomᚋvibeᚑc2ᚋvibeᚑc2ᚑcoreᚋcoreᚋpkgᚋgraphqlᚋmodelᚐSchemeNetworkPointPagination(ctx context.Context, sel ast.SelectionSet, v model.SchemeNetworkPointPagination) graphql.Marshaler {
+	return ec._SchemeNetworkPointPagination(ctx, sel, &v)
+}
+
+func (ec *executionContext) marshalNSchemeNetworkPointPagination2ᚖgithubᚗcomᚋvibeᚑc2ᚋvibeᚑc2ᚑcoreᚋcoreᚋpkgᚋgraphqlᚋmodelᚐSchemeNetworkPointPagination(ctx context.Context, sel ast.SelectionSet, v *model.SchemeNetworkPointPagination) graphql.Marshaler {
+	if v == nil {
+		if !graphql.HasFieldError(ctx, graphql.GetFieldContext(ctx)) {
+			graphql.AddErrorf(ctx, "the requested element is null which the schema does not allow")
+		}
+		return graphql.Null
+	}
+	return ec._SchemeNetworkPointPagination(ctx, sel, v)
+}
+
+func (ec *executionContext) marshalNSchemeNetworkPort2ᚕᚖgithubᚗcomᚋvibeᚑc2ᚋvibeᚑc2ᚑcoreᚋcoreᚋpkgᚋmodelsᚐSchemeNetworkPortᚄ(ctx context.Context, sel ast.SelectionSet, v []*models.SchemeNetworkPort) graphql.Marshaler {
+	ret := graphql.MarshalSliceConcurrently(ctx, len(v), 0, false, func(ctx context.Context, i int) graphql.Marshaler {
+		fc := graphql.GetFieldContext(ctx)
+		fc.Result = &v[i]
+		return ec.marshalNSchemeNetworkPort2ᚖgithubᚗcomᚋvibeᚑc2ᚋvibeᚑc2ᚑcoreᚋcoreᚋpkgᚋmodelsᚐSchemeNetworkPort(ctx, sel, v[i])
+	})
+
+	for _, e := range ret {
+		if e == graphql.Null {
+			return graphql.Null
+		}
+	}
+
+	return ret
+}
+
+func (ec *executionContext) marshalNSchemeNetworkPort2ᚖgithubᚗcomᚋvibeᚑc2ᚋvibeᚑc2ᚑcoreᚋcoreᚋpkgᚋmodelsᚐSchemeNetworkPort(ctx context.Context, sel ast.SelectionSet, v *models.SchemeNetworkPort) graphql.Marshaler {
+	if v == nil {
+		if !graphql.HasFieldError(ctx, graphql.GetFieldContext(ctx)) {
+			graphql.AddErrorf(ctx, "the requested element is null which the schema does not allow")
+		}
+		return graphql.Null
+	}
+	return ec._SchemeNetworkPort(ctx, sel, v)
+}
+
 func (ec *executionContext) unmarshalNString2string(ctx context.Context, v any) (string, error) {
 	res, err := graphql.UnmarshalString(v)
 	return res, graphql.ErrorOnPath(ctx, err)
@@ -5975,6 +8317,16 @@ func (ec *executionContext) marshalNString2ᚕstringᚄ(ctx context.Context, sel
 
 func (ec *executionContext) unmarshalNUpdateOperationInput2githubᚗcomᚋvibeᚑc2ᚋvibeᚑc2ᚑcoreᚋcoreᚋpkgᚋgraphqlᚋmodelᚐUpdateOperationInput(ctx context.Context, v any) (model.UpdateOperationInput, error) {
 	res, err := ec.unmarshalInputUpdateOperationInput(ctx, v)
+	return res, graphql.ErrorOnPath(ctx, err)
+}
+
+func (ec *executionContext) unmarshalNUpdateSchemeNetworkPointInput2githubᚗcomᚋvibeᚑc2ᚋvibeᚑc2ᚑcoreᚋcoreᚋpkgᚋgraphqlᚋmodelᚐUpdateSchemeNetworkPointInput(ctx context.Context, v any) (model.UpdateSchemeNetworkPointInput, error) {
+	res, err := ec.unmarshalInputUpdateSchemeNetworkPointInput(ctx, v)
+	return res, graphql.ErrorOnPath(ctx, err)
+}
+
+func (ec *executionContext) unmarshalNUpdateSchemeNetworkPortInput2githubᚗcomᚋvibeᚑc2ᚋvibeᚑc2ᚑcoreᚋcoreᚋpkgᚋgraphqlᚋmodelᚐUpdateSchemeNetworkPortInput(ctx context.Context, v any) (model.UpdateSchemeNetworkPortInput, error) {
+	res, err := ec.unmarshalInputUpdateSchemeNetworkPortInput(ctx, v)
 	return res, graphql.ErrorOnPath(ctx, err)
 }
 
@@ -6230,6 +8582,42 @@ func (ec *executionContext) marshalOOperationRole2ᚖgithubᚗcomᚋvibeᚑc2ᚋ
 		return graphql.Null
 	}
 	return v
+}
+
+func (ec *executionContext) unmarshalOString2ᚕstringᚄ(ctx context.Context, v any) ([]string, error) {
+	if v == nil {
+		return nil, nil
+	}
+	var vSlice []any
+	vSlice = graphql.CoerceList(v)
+	var err error
+	res := make([]string, len(vSlice))
+	for i := range vSlice {
+		ctx := graphql.WithPathContext(ctx, graphql.NewPathWithIndex(i))
+		res[i], err = ec.unmarshalNString2string(ctx, vSlice[i])
+		if err != nil {
+			return nil, err
+		}
+	}
+	return res, nil
+}
+
+func (ec *executionContext) marshalOString2ᚕstringᚄ(ctx context.Context, sel ast.SelectionSet, v []string) graphql.Marshaler {
+	if v == nil {
+		return graphql.Null
+	}
+	ret := make(graphql.Array, len(v))
+	for i := range v {
+		ret[i] = ec.marshalNString2string(ctx, sel, v[i])
+	}
+
+	for _, e := range ret {
+		if e == graphql.Null {
+			return graphql.Null
+		}
+	}
+
+	return ret
 }
 
 func (ec *executionContext) unmarshalOString2ᚕᚖstring(ctx context.Context, v any) ([]*string, error) {

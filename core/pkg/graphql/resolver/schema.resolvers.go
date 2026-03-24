@@ -63,6 +63,36 @@ func (r *mutationResolver) UpdateOperationMemberRole(ctx context.Context, operat
 	return r.OperationResolver.UpdateOperationMemberRole(ctx, operationID, userID, role)
 }
 
+// CreateSchemeNetworkPoint creates a new network point in an operation.
+func (r *mutationResolver) CreateSchemeNetworkPoint(ctx context.Context, operationID string, input model.CreateSchemeNetworkPointInput) (*models.SchemeNetworkPoint, error) {
+	return r.SchemeNetworkPointResolver.CreateSchemeNetworkPoint(ctx, operationID, input)
+}
+
+// UpdateSchemeNetworkPoint modifies an existing network point.
+func (r *mutationResolver) UpdateSchemeNetworkPoint(ctx context.Context, id string, input model.UpdateSchemeNetworkPointInput) (*models.SchemeNetworkPoint, error) {
+	return r.SchemeNetworkPointResolver.UpdateSchemeNetworkPoint(ctx, id, input)
+}
+
+// DeleteSchemeNetworkPoint removes a network point by ID.
+func (r *mutationResolver) DeleteSchemeNetworkPoint(ctx context.Context, id string) (bool, error) {
+	return r.SchemeNetworkPointResolver.DeleteSchemeNetworkPoint(ctx, id)
+}
+
+// AddSchemeNetworkPort adds a port to a network point.
+func (r *mutationResolver) AddSchemeNetworkPort(ctx context.Context, pointID string, input model.CreateSchemeNetworkPortInput) (*models.SchemeNetworkPoint, error) {
+	return r.SchemeNetworkPointResolver.AddSchemeNetworkPort(ctx, pointID, input)
+}
+
+// UpdateSchemeNetworkPort updates a port on a network point.
+func (r *mutationResolver) UpdateSchemeNetworkPort(ctx context.Context, pointID string, portID string, input model.UpdateSchemeNetworkPortInput) (*models.SchemeNetworkPoint, error) {
+	return r.SchemeNetworkPointResolver.UpdateSchemeNetworkPort(ctx, pointID, portID, input)
+}
+
+// RemoveSchemeNetworkPort removes a port from a network point.
+func (r *mutationResolver) RemoveSchemeNetworkPort(ctx context.Context, pointID string, portID string) (*models.SchemeNetworkPoint, error) {
+	return r.SchemeNetworkPointResolver.RemoveSchemeNetworkPort(ctx, pointID, portID)
+}
+
 // ID converts the Operation's UUID to a GraphQL ID string.
 func (r *operationResolver) ID(ctx context.Context, obj *models.Operation) (string, error) {
 	return r.OperationResolver.ID(ctx, obj)
@@ -118,6 +148,46 @@ func (r *queryResolver) MyOperationRole(ctx context.Context, operationID string)
 	return r.OperationResolver.MyOperationRole(ctx, operationID)
 }
 
+// SchemeNetworkPoint returns a single network point by ID.
+func (r *queryResolver) SchemeNetworkPoint(ctx context.Context, id string) (*models.SchemeNetworkPoint, error) {
+	return r.SchemeNetworkPointResolver.SchemeNetworkPoint(ctx, id)
+}
+
+// SchemeNetworkPoints returns a paginated list of network points for an operation.
+func (r *queryResolver) SchemeNetworkPoints(ctx context.Context, operationID string, search *string, offset *int, limit *int) (*model.SchemeNetworkPointPagination, error) {
+	return r.SchemeNetworkPointResolver.SchemeNetworkPoints(ctx, operationID, search, offset, limit)
+}
+
+// ID converts the SchemeNetworkPoint's UUID to a GraphQL ID string.
+func (r *schemeNetworkPointResolver) ID(ctx context.Context, obj *models.SchemeNetworkPoint) (string, error) {
+	return r.SchemeNetworkPointResolver.ID(ctx, obj)
+}
+
+// OperationID converts the OperationID UUID to a GraphQL ID string.
+func (r *schemeNetworkPointResolver) OperationID(ctx context.Context, obj *models.SchemeNetworkPoint) (string, error) {
+	return r.SchemeNetworkPointResolver.OperationIDField(ctx, obj)
+}
+
+// Ports returns the network point's port list as pointers for GraphQL resolution.
+func (r *schemeNetworkPointResolver) Ports(ctx context.Context, obj *models.SchemeNetworkPoint) ([]*models.SchemeNetworkPort, error) {
+	return r.SchemeNetworkPointResolver.Ports(ctx, obj)
+}
+
+// CreatedAt converts the qmgo DefaultField timestamp to an ISO 8601 string.
+func (r *schemeNetworkPointResolver) CreatedAt(ctx context.Context, obj *models.SchemeNetworkPoint) (string, error) {
+	return r.SchemeNetworkPointResolver.CreatedAt(ctx, obj)
+}
+
+// UpdatedAt converts the qmgo DefaultField timestamp to an ISO 8601 string.
+func (r *schemeNetworkPointResolver) UpdatedAt(ctx context.Context, obj *models.SchemeNetworkPoint) (string, error) {
+	return r.SchemeNetworkPointResolver.UpdatedAt(ctx, obj)
+}
+
+// ID converts the SchemeNetworkPort's UUID to a GraphQL ID string.
+func (r *schemeNetworkPortResolver) ID(ctx context.Context, obj *models.SchemeNetworkPort) (string, error) {
+	return r.SchemeNetworkPointResolver.PortID(ctx, obj)
+}
+
 // ID converts the User's UUID to a GraphQL ID string.
 func (r *userResolver) ID(ctx context.Context, obj *models.User) (string, error) {
 	return r.UserResolver.ID(ctx, obj)
@@ -147,6 +217,16 @@ func (r *Resolver) OperationMember() generated.OperationMemberResolver {
 // Query returns generated.QueryResolver implementation.
 func (r *Resolver) Query() generated.QueryResolver { return &queryResolver{r} }
 
+// SchemeNetworkPoint returns generated.SchemeNetworkPointResolver implementation.
+func (r *Resolver) SchemeNetworkPoint() generated.SchemeNetworkPointResolver {
+	return &schemeNetworkPointResolver{r}
+}
+
+// SchemeNetworkPort returns generated.SchemeNetworkPortResolver implementation.
+func (r *Resolver) SchemeNetworkPort() generated.SchemeNetworkPortResolver {
+	return &schemeNetworkPortResolver{r}
+}
+
 // User returns generated.UserResolver implementation.
 func (r *Resolver) User() generated.UserResolver { return &userResolver{r} }
 
@@ -154,4 +234,6 @@ type mutationResolver struct{ *Resolver }
 type operationResolver struct{ *Resolver }
 type operationMemberResolver struct{ *Resolver }
 type queryResolver struct{ *Resolver }
+type schemeNetworkPointResolver struct{ *Resolver }
+type schemeNetworkPortResolver struct{ *Resolver }
 type userResolver struct{ *Resolver }

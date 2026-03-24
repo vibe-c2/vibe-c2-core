@@ -40,12 +40,13 @@ import (
 //	@Produce		json
 //	@Security		BearerAuth
 //	@Router			/graphql [post]
-func NewHandler(users resolver.IUserResolver, operations resolver.IOperationResolver) gin.HandlerFunc {
+func NewHandler(users resolver.IUserResolver, operations resolver.IOperationResolver, schemeNetworkPoints resolver.ISchemeNetworkPointResolver) gin.HandlerFunc {
 	// Create the resolver root with entity resolvers injected.
 	// The root resolver delegates to domain-specific resolvers for business logic.
 	resolverRoot := &gqlresolver.Resolver{
-		UserResolver:      users,
-		OperationResolver: operations,
+		UserResolver:               users,
+		OperationResolver:          operations,
+		SchemeNetworkPointResolver: schemeNetworkPoints,
 	}
 
 	// Build the gqlgen server with our schema, resolvers, and directive.

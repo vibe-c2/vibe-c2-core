@@ -97,6 +97,44 @@ type OperationPagination {
   hasPreviousPage: Boolean!
 }
 
+# =============================================================================
+# Scheme Engine — Network Points & Ports
+# =============================================================================
+# SchemeNetworkPoint is the first building block of the scheme engine.
+# It represents any network device (server, VM, or any IP-addressable entity)
+# in an operation's scheme. Ports are embedded sub-documents.
+
+# SchemeNetworkPort represents a network port on a SchemeNetworkPoint.
+# Embedded within SchemeNetworkPoint (not queried independently).
+type SchemeNetworkPort {
+  id: ID!                  # Unique identifier (UUID)
+  number: Int!             # Port number (1-65535)
+  protocol: String!        # "tcp", "udp", etc.
+  service: String!         # Detected service name (e.g. "ssh", "http")
+  notes: String!           # Free-form operator notes
+}
+
+# SchemeNetworkPoint represents a network device in an operation's scheme.
+# A device with one or more network identifiers (IP, hostname, domain).
+type SchemeNetworkPoint {
+  id: ID!                          # Unique identifier (UUID)
+  operationId: ID!                 # The operation this point belongs to
+  names: [String!]!                # Network identifiers (ipv4, ipv6, hostname, domain)
+  description: String!             # What this network point is
+  tags: [String!]!                 # User-defined labels for filtering
+  ports: [SchemeNetworkPort!]!     # Network ports on this device
+  createdAt: String!               # ISO 8601 timestamp
+  updatedAt: String!               # ISO 8601 timestamp
+}
+
+# SchemeNetworkPointPagination wraps a paginated list of network points.
+type SchemeNetworkPointPagination {
+  points: [SchemeNetworkPoint!]!
+  totalCount: Int!
+  hasNextPage: Boolean!
+  hasPreviousPage: Boolean!
+}
+
 # -----------------------------------------------------------------------------
 # Queries (read operations)
 # -----------------------------------------------------------------------------
@@ -145,6 +183,20 @@ type Query {
   # Useful for the frontend to know which UI controls to show.
   myOperationRole(operationId: ID!): OperationRole
     @hasPermission(permission: "operation:member")
+
+  # schemeNetworkPoint returns a single network point by its ID.
+  # App-level gate; resolver checks caller's operation membership.
+  schemeNetworkPoint(id: ID!): SchemeNetworkPoint!
+    @hasPermission(permission: "operation:member")
+
+  # schemeNetworkPoints returns a paginated list of network points for an operation.
+  schemeNetworkPoints(
+    operationId: ID!
+    search: String
+    offset: Int = 0
+    limit: Int = 20
+  ): SchemeNetworkPointPagination!
+    @hasPermission(permission: "operation:member")
 }
 
 # -----------------------------------------------------------------------------
@@ -181,6 +233,37 @@ input CreateOperationInput {
 input UpdateOperationInput {
   name: String
   description: String
+}
+
+# CreateSchemeNetworkPointInput — fields needed to create a network point.
+# names is required (at least one network identifier).
+input CreateSchemeNetworkPointInput {
+  names: [String!]!               # At least one required (validated in resolver)
+  description: String
+  tags: [String!]
+}
+
+# UpdateSchemeNetworkPointInput — partial update for a network point.
+input UpdateSchemeNetworkPointInput {
+  names: [String!]                # If provided, replaces entire array
+  description: String
+  tags: [String!]
+}
+
+# CreateSchemeNetworkPortInput — fields needed to add a port.
+input CreateSchemeNetworkPortInput {
+  number: Int!                    # Required: port number
+  protocol: String
+  service: String
+  notes: String
+}
+
+# UpdateSchemeNetworkPortInput — partial update for a port.
+input UpdateSchemeNetworkPortInput {
+  number: Int
+  protocol: String
+  service: String
+  notes: String
 }
 
 # -----------------------------------------------------------------------------
@@ -247,5 +330,37 @@ type Mutation {
   # updateOperationMemberRole changes a member's role in an operation.
   # App-level gate; resolver checks that caller is an operation admin.
   updateOperationMemberRole(operationId: ID!, userId: ID!, role: OperationRole!): Operation!
+    @hasPermission(permission: "operation:member")
+
+  # --- Scheme Network Point mutations ---
+
+  # createSchemeNetworkPoint creates a new network point in an operation.
+  # Requires at least operator role in the operation.
+  createSchemeNetworkPoint(operationId: ID!, input: CreateSchemeNetworkPointInput!): SchemeNetworkPoint!
+    @hasPermission(permission: "operation:member")
+
+  # updateSchemeNetworkPoint modifies an existing network point.
+  # Requires at least operator role in the operation.
+  updateSchemeNetworkPoint(id: ID!, input: UpdateSchemeNetworkPointInput!): SchemeNetworkPoint!
+    @hasPermission(permission: "operation:member")
+
+  # deleteSchemeNetworkPoint removes a network point by ID.
+  # Requires at least operator role in the operation.
+  deleteSchemeNetworkPoint(id: ID!): Boolean!
+    @hasPermission(permission: "operation:member")
+
+  # addSchemeNetworkPort adds a port to a network point.
+  # Requires at least operator role in the operation.
+  addSchemeNetworkPort(pointId: ID!, input: CreateSchemeNetworkPortInput!): SchemeNetworkPoint!
+    @hasPermission(permission: "operation:member")
+
+  # updateSchemeNetworkPort updates a port on a network point.
+  # Requires at least operator role in the operation.
+  updateSchemeNetworkPort(pointId: ID!, portId: ID!, input: UpdateSchemeNetworkPortInput!): SchemeNetworkPoint!
+    @hasPermission(permission: "operation:member")
+
+  # removeSchemeNetworkPort removes a port from a network point.
+  # Requires at least operator role in the operation.
+  removeSchemeNetworkPort(pointId: ID!, portId: ID!): SchemeNetworkPoint!
     @hasPermission(permission: "operation:member")
 }

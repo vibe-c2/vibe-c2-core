@@ -95,3 +95,28 @@ models:
         resolver: true         # field.DefaultField.CreateAt -> string
       updatedAt:
         resolver: true         # field.DefaultField.UpdateAt -> string
+
+  # Map the GraphQL "SchemeNetworkPoint" type to our existing model.
+  # Field resolvers bridge UUID->string and timestamp->RFC3339 conversions.
+  SchemeNetworkPoint:
+    model:
+      - github.com/vibe-c2/vibe-c2-core/core/pkg/models.SchemeNetworkPoint
+    fields:
+      id:
+        resolver: true         # PointID (uuid.UUID) -> ID (string)
+      operationId:
+        resolver: true         # OperationID (uuid.UUID) -> ID (string)
+      ports:
+        resolver: true         # []SchemeNetworkPort -> []*SchemeNetworkPort (pointer slice)
+      createdAt:
+        resolver: true         # field.DefaultField.CreateAt -> string
+      updatedAt:
+        resolver: true         # field.DefaultField.UpdateAt -> string
+
+  # Map the GraphQL "SchemeNetworkPort" type to our existing model.
+  SchemeNetworkPort:
+    model:
+      - github.com/vibe-c2/vibe-c2-core/core/pkg/models.SchemeNetworkPort
+    fields:
+      id:
+        resolver: true         # PortID (uuid.UUID) -> ID (string)

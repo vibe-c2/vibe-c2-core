@@ -24,6 +24,7 @@ import "github.com/vibe-c2/vibe-c2-core/core/pkg/resolver"
 // gqlgen generates mutationResolver and queryResolver structs that
 // embed this, so they inherit access to entity resolvers.
 type Resolver struct {
-	UserResolver      resolver.IUserResolver
-	OperationResolver resolver.IOperationResolver
+	UserResolver               resolver.IUserResolver
+	OperationResolver          resolver.IOperationResolver
+	SchemeNetworkPointResolver resolver.ISchemeNetworkPointResolver
 }
