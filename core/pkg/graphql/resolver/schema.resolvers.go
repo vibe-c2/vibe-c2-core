@@ -48,14 +48,19 @@ func (r *mutationResolver) DeleteOperation(ctx context.Context, id string) (bool
 	return r.OperationResolver.DeleteOperation(ctx, id)
 }
 
-// AddOperationMember assigns a user to an operation.
-func (r *mutationResolver) AddOperationMember(ctx context.Context, operationID string, userID string) (*models.Operation, error) {
-	return r.OperationResolver.AddOperationMember(ctx, operationID, userID)
+// AddOperationMember assigns a user to an operation with the given role.
+func (r *mutationResolver) AddOperationMember(ctx context.Context, operationID string, userID string, role models.OperationRole) (*models.Operation, error) {
+	return r.OperationResolver.AddOperationMember(ctx, operationID, userID, role)
 }
 
 // RemoveOperationMember removes a user from an operation.
 func (r *mutationResolver) RemoveOperationMember(ctx context.Context, operationID string, userID string) (*models.Operation, error) {
 	return r.OperationResolver.RemoveOperationMember(ctx, operationID, userID)
+}
+
+// UpdateOperationMemberRole changes a member's role in an operation.
+func (r *mutationResolver) UpdateOperationMemberRole(ctx context.Context, operationID string, userID string, role models.OperationRole) (*models.Operation, error) {
+	return r.OperationResolver.UpdateOperationMemberRole(ctx, operationID, userID, role)
 }
 
 // ID converts the Operation's UUID to a GraphQL ID string.
@@ -64,7 +69,7 @@ func (r *operationResolver) ID(ctx context.Context, obj *models.Operation) (stri
 }
 
 // Members resolves the operation's member_ids into full User objects.
-func (r *operationResolver) Members(ctx context.Context, obj *models.Operation) ([]*models.User, error) {
+func (r *operationResolver) Members(ctx context.Context, obj *models.Operation) ([]*models.OperationMember, error) {
 	return r.OperationResolver.Members(ctx, obj)
 }
 
@@ -76,6 +81,11 @@ func (r *operationResolver) CreatedAt(ctx context.Context, obj *models.Operation
 // UpdatedAt converts the qmgo DefaultField timestamp to an ISO 8601 string.
 func (r *operationResolver) UpdatedAt(ctx context.Context, obj *models.Operation) (string, error) {
 	return r.OperationResolver.UpdatedAt(ctx, obj)
+}
+
+// User resolves the full User object for an OperationMember.
+func (r *operationMemberResolver) User(ctx context.Context, obj *models.OperationMember) (*models.User, error) {
+	return r.OperationResolver.OperationMemberUser(ctx, obj)
 }
 
 // Me returns the currently authenticated user.
@@ -103,6 +113,11 @@ func (r *queryResolver) Operations(ctx context.Context, search *string, offset *
 	return r.OperationResolver.Operations(ctx, search, offset, limit)
 }
 
+// MyOperationRole returns the caller's role in a specific operation.
+func (r *queryResolver) MyOperationRole(ctx context.Context, operationID string) (*models.OperationRole, error) {
+	return r.OperationResolver.MyOperationRole(ctx, operationID)
+}
+
 // ID converts the User's UUID to a GraphQL ID string.
 func (r *userResolver) ID(ctx context.Context, obj *models.User) (string, error) {
 	return r.UserResolver.ID(ctx, obj)
@@ -124,6 +139,11 @@ func (r *Resolver) Mutation() generated.MutationResolver { return &mutationResol
 // Operation returns generated.OperationResolver implementation.
 func (r *Resolver) Operation() generated.OperationResolver { return &operationResolver{r} }
 
+// OperationMember returns generated.OperationMemberResolver implementation.
+func (r *Resolver) OperationMember() generated.OperationMemberResolver {
+	return &operationMemberResolver{r}
+}
+
 // Query returns generated.QueryResolver implementation.
 func (r *Resolver) Query() generated.QueryResolver { return &queryResolver{r} }
 
@@ -132,5 +152,6 @@ func (r *Resolver) User() generated.UserResolver { return &userResolver{r} }
 
 type mutationResolver struct{ *Resolver }
 type operationResolver struct{ *Resolver }
+type operationMemberResolver struct{ *Resolver }
 type queryResolver struct{ *Resolver }
 type userResolver struct{ *Resolver }

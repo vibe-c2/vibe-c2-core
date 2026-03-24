@@ -27,6 +27,7 @@ func GetPermissionsByRole(role string) ([]string, error) {
 			UserUpdateOwnPermission,
 
 			OperationReadPermission,
+			OperationMemberPermission,
 		}, nil
 	default:
 		return nil, fmt.Errorf("role '%v' does not exist", role)

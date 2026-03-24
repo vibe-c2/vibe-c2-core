@@ -28,6 +28,21 @@
 directive @hasPermission(permission: String!) on FIELD_DEFINITION
 
 # -----------------------------------------------------------------------------
+# Enums
+# -----------------------------------------------------------------------------
+
+# OperationRole represents a user's role within an operation.
+# Roles form a hierarchy: ADMIN > OPERATOR > VIEWER.
+#   - ADMIN: can manage operation users/roles and edit operation metadata
+#   - OPERATOR: can manage entities within the operation (future)
+#   - VIEWER: read-only access to the operation
+enum OperationRole {
+  ADMIN
+  OPERATOR
+  VIEWER
+}
+
+# -----------------------------------------------------------------------------
 # Types
 # -----------------------------------------------------------------------------
 # A GraphQL type defines the shape of data that can be returned.
@@ -54,15 +69,22 @@ type UserPagination {
   hasPreviousPage: Boolean! # True if there are users before this page (offset > 0)
 }
 
+# OperationMember represents a user's membership in an operation with their role.
+type OperationMember {
+  user: User!              # The member user
+  role: OperationRole!     # Their role in this operation
+}
+
 # Operation represents an operational context in the C2 system.
 # Operations group users (and later implants, agents, etc.) together.
 # The relationship between users and operations is many-to-many:
 # a user can belong to multiple operations, and an operation has multiple members.
+# Each member has a role (admin, operator, viewer) that controls their access.
 type Operation {
   id: ID!                  # Unique identifier (UUID as string)
   name: String!            # Operation name (unique)
   description: String!     # What this operation is about
-  members: [User!]!        # Users assigned to this operation
+  members: [OperationMember!]! # Users assigned to this operation with their roles
   createdAt: String!       # ISO 8601 timestamp
   updatedAt: String!       # ISO 8601 timestamp
 }
@@ -117,6 +139,12 @@ type Query {
     offset: Int = 0
     limit: Int = 20
   ): OperationPagination! @hasPermission(permission: "operation:read")
+
+  # myOperationRole returns the caller's role in a specific operation,
+  # or null if the caller is not a member of that operation.
+  # Useful for the frontend to know which UI controls to show.
+  myOperationRole(operationId: ID!): OperationRole
+    @hasPermission(permission: "operation:member")
 }
 
 # -----------------------------------------------------------------------------
@@ -192,26 +220,32 @@ type Mutation {
 
   # createOperation registers a new operation.
   # Requires operation:create permission (admin only).
+  # The creator is automatically added as an operation admin.
   createOperation(input: CreateOperationInput!): Operation!
     @hasPermission(permission: "operation:create")
 
   # updateOperation modifies an existing operation by ID.
-  # Requires operation:update permission (admin only).
+  # App-level gate; resolver checks that caller is an operation admin.
   updateOperation(id: ID!, input: UpdateOperationInput!): Operation!
-    @hasPermission(permission: "operation:update")
+    @hasPermission(permission: "operation:member")
 
   # deleteOperation removes an operation by ID.
-  # Requires operation:delete permission (admin only).
+  # Requires operation:delete permission (app admin only).
   deleteOperation(id: ID!): Boolean!
     @hasPermission(permission: "operation:delete")
 
-  # addOperationMember assigns a user to an operation.
-  # Requires operation:update permission (admin only).
-  addOperationMember(operationId: ID!, userId: ID!): Operation!
-    @hasPermission(permission: "operation:update")
+  # addOperationMember assigns a user to an operation with the given role.
+  # App-level gate; resolver checks that caller is an operation admin.
+  addOperationMember(operationId: ID!, userId: ID!, role: OperationRole!): Operation!
+    @hasPermission(permission: "operation:member")
 
   # removeOperationMember removes a user from an operation.
-  # Requires operation:update permission (admin only).
+  # App-level gate; resolver checks that caller is an operation admin.
   removeOperationMember(operationId: ID!, userId: ID!): Operation!
-    @hasPermission(permission: "operation:update")
+    @hasPermission(permission: "operation:member")
+
+  # updateOperationMemberRole changes a member's role in an operation.
+  # App-level gate; resolver checks that caller is an operation admin.
+  updateOperationMemberRole(operationId: ID!, userId: ID!, role: OperationRole!): Operation!
+    @hasPermission(permission: "operation:member")
 }

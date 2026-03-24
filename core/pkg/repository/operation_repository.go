@@ -23,8 +23,9 @@ type IOperationRepository interface {
 	Delete(ctx context.Context, op *models.Operation) error
 
 	// Membership operations
-	AddMember(ctx context.Context, operationID uuid.UUID, userID uuid.UUID) error
+	AddMember(ctx context.Context, operationID uuid.UUID, userID uuid.UUID, role models.OperationRole) error
 	RemoveMember(ctx context.Context, operationID uuid.UUID, userID uuid.UUID) error
+	UpdateMemberRole(ctx context.Context, operationID uuid.UUID, userID uuid.UUID, role models.OperationRole) error
 	FindByMemberID(ctx context.Context, userID uuid.UUID) ([]models.Operation, error)
 }
 
@@ -38,7 +39,7 @@ func NewOperationRepository(db database.Database) IOperationRepository {
 	coll.CreateIndexes(context.Background(), []opts.IndexModel{
 		{Key: []string{"operation_id"}, IndexOptions: new(options.IndexOptions).SetUnique(true)},
 		{Key: []string{"name"}, IndexOptions: new(options.IndexOptions).SetUnique(true)},
-		{Key: []string{"member_ids"}},
+		{Key: []string{"members.user_id"}},
 	})
 
 	return &operationRepository{coll: coll}
@@ -78,23 +79,42 @@ func (r *operationRepository) Delete(ctx context.Context, op *models.Operation) 
 	return r.coll.Remove(ctx, bson.M{"operation_id": op.OperationID})
 }
 
-func (r *operationRepository) AddMember(ctx context.Context, operationID uuid.UUID, userID uuid.UUID) error {
+// AddMember adds a user to an operation with the given role.
+// Uses a filter to prevent duplicate membership (checks user_id not already present).
+func (r *operationRepository) AddMember(ctx context.Context, operationID uuid.UUID, userID uuid.UUID, role models.OperationRole) error {
 	return r.coll.UpdateOne(ctx,
-		bson.M{"operation_id": operationID},
-		bson.M{"$addToSet": bson.M{"member_ids": userID}},
+		bson.M{
+			"operation_id":    operationID,
+			"members.user_id": bson.M{"$ne": userID},
+		},
+		bson.M{"$push": bson.M{"members": models.OperationMember{
+			UserID: userID,
+			Role:   role,
+		}}},
 	)
 }
 
 func (r *operationRepository) RemoveMember(ctx context.Context, operationID uuid.UUID, userID uuid.UUID) error {
 	return r.coll.UpdateOne(ctx,
 		bson.M{"operation_id": operationID},
-		bson.M{"$pull": bson.M{"member_ids": userID}},
+		bson.M{"$pull": bson.M{"members": bson.M{"user_id": userID}}},
+	)
+}
+
+// UpdateMemberRole changes a member's role using the positional $ operator.
+func (r *operationRepository) UpdateMemberRole(ctx context.Context, operationID uuid.UUID, userID uuid.UUID, role models.OperationRole) error {
+	return r.coll.UpdateOne(ctx,
+		bson.M{
+			"operation_id":    operationID,
+			"members.user_id": userID,
+		},
+		bson.M{"$set": bson.M{"members.$.role": role}},
 	)
 }
 
 func (r *operationRepository) FindByMemberID(ctx context.Context, userID uuid.UUID) ([]models.Operation, error) {
 	var ops []models.Operation
-	err := r.coll.Find(ctx, bson.M{"member_ids": userID}).
+	err := r.coll.Find(ctx, bson.M{"members.user_id": userID}).
 		Sort("-createAt").
 		All(&ops)
 

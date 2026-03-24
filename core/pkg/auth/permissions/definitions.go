@@ -13,4 +13,5 @@ const (
 	OperationCreatePermission string = "operation:create"
 	OperationUpdatePermission string = "operation:update"
 	OperationDeletePermission string = "operation:delete"
+	OperationMemberPermission string = "operation:member" // can participate in operations (gate for operation-level auth)
 )

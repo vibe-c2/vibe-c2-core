@@ -30,6 +30,7 @@ type Config = graphql.Config[ResolverRoot, DirectiveRoot, ComplexityRoot]
 type ResolverRoot interface {
 	Mutation() MutationResolver
 	Operation() OperationResolver
+	OperationMember() OperationMemberResolver
 	Query() QueryResolver
 	User() UserResolver
 }
@@ -40,15 +41,16 @@ type DirectiveRoot struct {
 
 type ComplexityRoot struct {
 	Mutation struct {
-		AddOperationMember    func(childComplexity int, operationID string, userID string) int
-		CreateOperation       func(childComplexity int, input model.CreateOperationInput) int
-		CreateUser            func(childComplexity int, input model.CreateUserInput) int
-		DeleteOperation       func(childComplexity int, id string) int
-		DeleteUser            func(childComplexity int, id string) int
-		RemoveOperationMember func(childComplexity int, operationID string, userID string) int
-		UpdateOperation       func(childComplexity int, id string, input model.UpdateOperationInput) int
-		UpdateOwnProfile      func(childComplexity int, input model.UpdateUserInput) int
-		UpdateUser            func(childComplexity int, id string, input model.UpdateUserInput) int
+		AddOperationMember        func(childComplexity int, operationID string, userID string, role models.OperationRole) int
+		CreateOperation           func(childComplexity int, input model.CreateOperationInput) int
+		CreateUser                func(childComplexity int, input model.CreateUserInput) int
+		DeleteOperation           func(childComplexity int, id string) int
+		DeleteUser                func(childComplexity int, id string) int
+		RemoveOperationMember     func(childComplexity int, operationID string, userID string) int
+		UpdateOperation           func(childComplexity int, id string, input model.UpdateOperationInput) int
+		UpdateOperationMemberRole func(childComplexity int, operationID string, userID string, role models.OperationRole) int
+		UpdateOwnProfile          func(childComplexity int, input model.UpdateUserInput) int
+		UpdateUser                func(childComplexity int, id string, input model.UpdateUserInput) int
 	}
 
 	Operation struct {
@@ -60,6 +62,11 @@ type ComplexityRoot struct {
 		UpdatedAt   func(childComplexity int) int
 	}
 
+	OperationMember struct {
+		Role func(childComplexity int) int
+		User func(childComplexity int) int
+	}
+
 	OperationPagination struct {
 		HasNextPage     func(childComplexity int) int
 		HasPreviousPage func(childComplexity int) int
@@ -68,11 +75,12 @@ type ComplexityRoot struct {
 	}
 
 	Query struct {
-		Me         func(childComplexity int) int
-		Operation  func(childComplexity int, id string) int
-		Operations func(childComplexity int, search *string, offset *int, limit *int) int
-		User       func(childComplexity int, id string) int
-		Users      func(childComplexity int, search *string, offset *int, limit *int) int
+		Me              func(childComplexity int) int
+		MyOperationRole func(childComplexity int, operationID string) int
+		Operation       func(childComplexity int, id string) int
+		Operations      func(childComplexity int, search *string, offset *int, limit *int) int
+		User            func(childComplexity int, id string) int
+		Users           func(childComplexity int, search *string, offset *int, limit *int) int
 	}
 
 	User struct {
@@ -100,15 +108,19 @@ type MutationResolver interface {
 	CreateOperation(ctx context.Context, input model.CreateOperationInput) (*models.Operation, error)
 	UpdateOperation(ctx context.Context, id string, input model.UpdateOperationInput) (*models.Operation, error)
 	DeleteOperation(ctx context.Context, id string) (bool, error)
-	AddOperationMember(ctx context.Context, operationID string, userID string) (*models.Operation, error)
+	AddOperationMember(ctx context.Context, operationID string, userID string, role models.OperationRole) (*models.Operation, error)
 	RemoveOperationMember(ctx context.Context, operationID string, userID string) (*models.Operation, error)
+	UpdateOperationMemberRole(ctx context.Context, operationID string, userID string, role models.OperationRole) (*models.Operation, error)
 }
 type OperationResolver interface {
 	ID(ctx context.Context, obj *models.Operation) (string, error)
 
-	Members(ctx context.Context, obj *models.Operation) ([]*models.User, error)
+	Members(ctx context.Context, obj *models.Operation) ([]*models.OperationMember, error)
 	CreatedAt(ctx context.Context, obj *models.Operation) (string, error)
 	UpdatedAt(ctx context.Context, obj *models.Operation) (string, error)
+}
+type OperationMemberResolver interface {
+	User(ctx context.Context, obj *models.OperationMember) (*models.User, error)
 }
 type QueryResolver interface {
 	Me(ctx context.Context) (*models.User, error)
@@ -116,6 +128,7 @@ type QueryResolver interface {
 	Users(ctx context.Context, search *string, offset *int, limit *int) (*model.UserPagination, error)
 	Operation(ctx context.Context, id string) (*models.Operation, error)
 	Operations(ctx context.Context, search *string, offset *int, limit *int) (*model.OperationPagination, error)
+	MyOperationRole(ctx context.Context, operationID string) (*models.OperationRole, error)
 }
 type UserResolver interface {
 	ID(ctx context.Context, obj *models.User) (string, error)
@@ -148,7 +161,7 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 			return 0, false
 		}
 
-		return e.ComplexityRoot.Mutation.AddOperationMember(childComplexity, args["operationId"].(string), args["userId"].(string)), true
+		return e.ComplexityRoot.Mutation.AddOperationMember(childComplexity, args["operationId"].(string), args["userId"].(string), args["role"].(models.OperationRole)), true
 	case "Mutation.createOperation":
 		if e.ComplexityRoot.Mutation.CreateOperation == nil {
 			break
@@ -215,6 +228,17 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.Mutation.UpdateOperation(childComplexity, args["id"].(string), args["input"].(model.UpdateOperationInput)), true
+	case "Mutation.updateOperationMemberRole":
+		if e.ComplexityRoot.Mutation.UpdateOperationMemberRole == nil {
+			break
+		}
+
+		args, err := ec.field_Mutation_updateOperationMemberRole_args(ctx, rawArgs)
+		if err != nil {
+			return 0, false
+		}
+
+		return e.ComplexityRoot.Mutation.UpdateOperationMemberRole(childComplexity, args["operationId"].(string), args["userId"].(string), args["role"].(models.OperationRole)), true
 	case "Mutation.updateOwnProfile":
 		if e.ComplexityRoot.Mutation.UpdateOwnProfile == nil {
 			break
@@ -275,6 +299,19 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 
 		return e.ComplexityRoot.Operation.UpdatedAt(childComplexity), true
 
+	case "OperationMember.role":
+		if e.ComplexityRoot.OperationMember.Role == nil {
+			break
+		}
+
+		return e.ComplexityRoot.OperationMember.Role(childComplexity), true
+	case "OperationMember.user":
+		if e.ComplexityRoot.OperationMember.User == nil {
+			break
+		}
+
+		return e.ComplexityRoot.OperationMember.User(childComplexity), true
+
 	case "OperationPagination.hasNextPage":
 		if e.ComplexityRoot.OperationPagination.HasNextPage == nil {
 			break
@@ -306,6 +343,17 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.Query.Me(childComplexity), true
+	case "Query.myOperationRole":
+		if e.ComplexityRoot.Query.MyOperationRole == nil {
+			break
+		}
+
+		args, err := ec.field_Query_myOperationRole_args(ctx, rawArgs)
+		if err != nil {
+			return 0, false
+		}
+
+		return e.ComplexityRoot.Query.MyOperationRole(childComplexity, args["operationId"].(string)), true
 	case "Query.operation":
 		if e.ComplexityRoot.Query.Operation == nil {
 			break
@@ -530,6 +578,21 @@ var sources = []*ast.Source{
 directive @hasPermission(permission: String!) on FIELD_DEFINITION
 
 # -----------------------------------------------------------------------------
+# Enums
+# -----------------------------------------------------------------------------
+
+# OperationRole represents a user's role within an operation.
+# Roles form a hierarchy: ADMIN > OPERATOR > VIEWER.
+#   - ADMIN: can manage operation users/roles and edit operation metadata
+#   - OPERATOR: can manage entities within the operation (future)
+#   - VIEWER: read-only access to the operation
+enum OperationRole {
+  ADMIN
+  OPERATOR
+  VIEWER
+}
+
+# -----------------------------------------------------------------------------
 # Types
 # -----------------------------------------------------------------------------
 # A GraphQL type defines the shape of data that can be returned.
@@ -556,15 +619,22 @@ type UserPagination {
   hasPreviousPage: Boolean! # True if there are users before this page (offset > 0)
 }
 
+# OperationMember represents a user's membership in an operation with their role.
+type OperationMember {
+  user: User!              # The member user
+  role: OperationRole!     # Their role in this operation
+}
+
 # Operation represents an operational context in the C2 system.
 # Operations group users (and later implants, agents, etc.) together.
 # The relationship between users and operations is many-to-many:
 # a user can belong to multiple operations, and an operation has multiple members.
+# Each member has a role (admin, operator, viewer) that controls their access.
 type Operation {
   id: ID!                  # Unique identifier (UUID as string)
   name: String!            # Operation name (unique)
   description: String!     # What this operation is about
-  members: [User!]!        # Users assigned to this operation
+  members: [OperationMember!]! # Users assigned to this operation with their roles
   createdAt: String!       # ISO 8601 timestamp
   updatedAt: String!       # ISO 8601 timestamp
 }
@@ -619,6 +689,12 @@ type Query {
     offset: Int = 0
     limit: Int = 20
   ): OperationPagination! @hasPermission(permission: "operation:read")
+
+  # myOperationRole returns the caller's role in a specific operation,
+  # or null if the caller is not a member of that operation.
+  # Useful for the frontend to know which UI controls to show.
+  myOperationRole(operationId: ID!): OperationRole
+    @hasPermission(permission: "operation:member")
 }
 
 # -----------------------------------------------------------------------------
@@ -694,28 +770,34 @@ type Mutation {
 
   # createOperation registers a new operation.
   # Requires operation:create permission (admin only).
+  # The creator is automatically added as an operation admin.
   createOperation(input: CreateOperationInput!): Operation!
     @hasPermission(permission: "operation:create")
 
   # updateOperation modifies an existing operation by ID.
-  # Requires operation:update permission (admin only).
+  # App-level gate; resolver checks that caller is an operation admin.
   updateOperation(id: ID!, input: UpdateOperationInput!): Operation!
-    @hasPermission(permission: "operation:update")
+    @hasPermission(permission: "operation:member")
 
   # deleteOperation removes an operation by ID.
-  # Requires operation:delete permission (admin only).
+  # Requires operation:delete permission (app admin only).
   deleteOperation(id: ID!): Boolean!
     @hasPermission(permission: "operation:delete")
 
-  # addOperationMember assigns a user to an operation.
-  # Requires operation:update permission (admin only).
-  addOperationMember(operationId: ID!, userId: ID!): Operation!
-    @hasPermission(permission: "operation:update")
+  # addOperationMember assigns a user to an operation with the given role.
+  # App-level gate; resolver checks that caller is an operation admin.
+  addOperationMember(operationId: ID!, userId: ID!, role: OperationRole!): Operation!
+    @hasPermission(permission: "operation:member")
 
   # removeOperationMember removes a user from an operation.
-  # Requires operation:update permission (admin only).
+  # App-level gate; resolver checks that caller is an operation admin.
   removeOperationMember(operationId: ID!, userId: ID!): Operation!
-    @hasPermission(permission: "operation:update")
+    @hasPermission(permission: "operation:member")
+
+  # updateOperationMemberRole changes a member's role in an operation.
+  # App-level gate; resolver checks that caller is an operation admin.
+  updateOperationMemberRole(operationId: ID!, userId: ID!, role: OperationRole!): Operation!
+    @hasPermission(permission: "operation:member")
 }
 `, BuiltIn: false},
 }
@@ -749,6 +831,11 @@ func (ec *executionContext) field_Mutation_addOperationMember_args(ctx context.C
 		return nil, err
 	}
 	args["userId"] = arg1
+	arg2, err := graphql.ProcessArgField(ctx, rawArgs, "role", ec.unmarshalNOperationRole2githubᚗcomᚋvibeᚑc2ᚋvibeᚑc2ᚑcoreᚋcoreᚋpkgᚋmodelsᚐOperationRole)
+	if err != nil {
+		return nil, err
+	}
+	args["role"] = arg2
 	return args, nil
 }
 
@@ -812,6 +899,27 @@ func (ec *executionContext) field_Mutation_removeOperationMember_args(ctx contex
 	return args, nil
 }
 
+func (ec *executionContext) field_Mutation_updateOperationMemberRole_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
+	var err error
+	args := map[string]any{}
+	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "operationId", ec.unmarshalNID2string)
+	if err != nil {
+		return nil, err
+	}
+	args["operationId"] = arg0
+	arg1, err := graphql.ProcessArgField(ctx, rawArgs, "userId", ec.unmarshalNID2string)
+	if err != nil {
+		return nil, err
+	}
+	args["userId"] = arg1
+	arg2, err := graphql.ProcessArgField(ctx, rawArgs, "role", ec.unmarshalNOperationRole2githubᚗcomᚋvibeᚑc2ᚋvibeᚑc2ᚑcoreᚋcoreᚋpkgᚋmodelsᚐOperationRole)
+	if err != nil {
+		return nil, err
+	}
+	args["role"] = arg2
+	return args, nil
+}
+
 func (ec *executionContext) field_Mutation_updateOperation_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
 	var err error
 	args := map[string]any{}
@@ -863,6 +971,17 @@ func (ec *executionContext) field_Query___type_args(ctx context.Context, rawArgs
 		return nil, err
 	}
 	args["name"] = arg0
+	return args, nil
+}
+
+func (ec *executionContext) field_Query_myOperationRole_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
+	var err error
+	args := map[string]any{}
+	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "operationId", ec.unmarshalNID2string)
+	if err != nil {
+		return nil, err
+	}
+	args["operationId"] = arg0
 	return args, nil
 }
 
@@ -1347,7 +1466,7 @@ func (ec *executionContext) _Mutation_updateOperation(ctx context.Context, field
 			directive0 := next
 
 			directive1 := func(ctx context.Context) (any, error) {
-				permission, err := ec.unmarshalNString2string(ctx, "operation:update")
+				permission, err := ec.unmarshalNString2string(ctx, "operation:member")
 				if err != nil {
 					var zeroVal *models.Operation
 					return zeroVal, err
@@ -1473,13 +1592,13 @@ func (ec *executionContext) _Mutation_addOperationMember(ctx context.Context, fi
 		ec.fieldContext_Mutation_addOperationMember,
 		func(ctx context.Context) (any, error) {
 			fc := graphql.GetFieldContext(ctx)
-			return ec.Resolvers.Mutation().AddOperationMember(ctx, fc.Args["operationId"].(string), fc.Args["userId"].(string))
+			return ec.Resolvers.Mutation().AddOperationMember(ctx, fc.Args["operationId"].(string), fc.Args["userId"].(string), fc.Args["role"].(models.OperationRole))
 		},
 		func(ctx context.Context, next graphql.Resolver) graphql.Resolver {
 			directive0 := next
 
 			directive1 := func(ctx context.Context) (any, error) {
-				permission, err := ec.unmarshalNString2string(ctx, "operation:update")
+				permission, err := ec.unmarshalNString2string(ctx, "operation:member")
 				if err != nil {
 					var zeroVal *models.Operation
 					return zeroVal, err
@@ -1552,7 +1671,7 @@ func (ec *executionContext) _Mutation_removeOperationMember(ctx context.Context,
 			directive0 := next
 
 			directive1 := func(ctx context.Context) (any, error) {
-				permission, err := ec.unmarshalNString2string(ctx, "operation:update")
+				permission, err := ec.unmarshalNString2string(ctx, "operation:member")
 				if err != nil {
 					var zeroVal *models.Operation
 					return zeroVal, err
@@ -1605,6 +1724,79 @@ func (ec *executionContext) fieldContext_Mutation_removeOperationMember(ctx cont
 	}()
 	ctx = graphql.WithFieldContext(ctx, fc)
 	if fc.Args, err = ec.field_Mutation_removeOperationMember_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
+		ec.Error(ctx, err)
+		return fc, err
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Mutation_updateOperationMemberRole(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Mutation_updateOperationMemberRole,
+		func(ctx context.Context) (any, error) {
+			fc := graphql.GetFieldContext(ctx)
+			return ec.Resolvers.Mutation().UpdateOperationMemberRole(ctx, fc.Args["operationId"].(string), fc.Args["userId"].(string), fc.Args["role"].(models.OperationRole))
+		},
+		func(ctx context.Context, next graphql.Resolver) graphql.Resolver {
+			directive0 := next
+
+			directive1 := func(ctx context.Context) (any, error) {
+				permission, err := ec.unmarshalNString2string(ctx, "operation:member")
+				if err != nil {
+					var zeroVal *models.Operation
+					return zeroVal, err
+				}
+				if ec.Directives.HasPermission == nil {
+					var zeroVal *models.Operation
+					return zeroVal, errors.New("directive hasPermission is not implemented")
+				}
+				return ec.Directives.HasPermission(ctx, nil, directive0, permission)
+			}
+
+			next = directive1
+			return next
+		},
+		ec.marshalNOperation2ᚖgithubᚗcomᚋvibeᚑc2ᚋvibeᚑc2ᚑcoreᚋcoreᚋpkgᚋmodelsᚐOperation,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_Mutation_updateOperationMemberRole(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Mutation",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "id":
+				return ec.fieldContext_Operation_id(ctx, field)
+			case "name":
+				return ec.fieldContext_Operation_name(ctx, field)
+			case "description":
+				return ec.fieldContext_Operation_description(ctx, field)
+			case "members":
+				return ec.fieldContext_Operation_members(ctx, field)
+			case "createdAt":
+				return ec.fieldContext_Operation_createdAt(ctx, field)
+			case "updatedAt":
+				return ec.fieldContext_Operation_updatedAt(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type Operation", field.Name)
+		},
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			err = ec.Recover(ctx, r)
+			ec.Error(ctx, err)
+		}
+	}()
+	ctx = graphql.WithFieldContext(ctx, fc)
+	if fc.Args, err = ec.field_Mutation_updateOperationMemberRole_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
 		ec.Error(ctx, err)
 		return fc, err
 	}
@@ -1708,7 +1900,7 @@ func (ec *executionContext) _Operation_members(ctx context.Context, field graphq
 			return ec.Resolvers.Operation().Members(ctx, obj)
 		},
 		nil,
-		ec.marshalNUser2ᚕᚖgithubᚗcomᚋvibeᚑc2ᚋvibeᚑc2ᚑcoreᚋcoreᚋpkgᚋmodelsᚐUserᚄ,
+		ec.marshalNOperationMember2ᚕᚖgithubᚗcomᚋvibeᚑc2ᚋvibeᚑc2ᚑcoreᚋcoreᚋpkgᚋmodelsᚐOperationMemberᚄ,
 		true,
 		true,
 	)
@@ -1722,20 +1914,12 @@ func (ec *executionContext) fieldContext_Operation_members(_ context.Context, fi
 		IsResolver: true,
 		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
 			switch field.Name {
-			case "id":
-				return ec.fieldContext_User_id(ctx, field)
-			case "username":
-				return ec.fieldContext_User_username(ctx, field)
-			case "roles":
-				return ec.fieldContext_User_roles(ctx, field)
-			case "active":
-				return ec.fieldContext_User_active(ctx, field)
-			case "createdAt":
-				return ec.fieldContext_User_createdAt(ctx, field)
-			case "updatedAt":
-				return ec.fieldContext_User_updatedAt(ctx, field)
+			case "user":
+				return ec.fieldContext_OperationMember_user(ctx, field)
+			case "role":
+				return ec.fieldContext_OperationMember_role(ctx, field)
 			}
-			return nil, fmt.Errorf("no field named %q was found under type User", field.Name)
+			return nil, fmt.Errorf("no field named %q was found under type OperationMember", field.Name)
 		},
 	}
 	return fc, nil
@@ -1794,6 +1978,78 @@ func (ec *executionContext) fieldContext_Operation_updatedAt(_ context.Context, 
 		IsResolver: true,
 		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
 			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _OperationMember_user(ctx context.Context, field graphql.CollectedField, obj *models.OperationMember) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_OperationMember_user,
+		func(ctx context.Context) (any, error) {
+			return ec.Resolvers.OperationMember().User(ctx, obj)
+		},
+		nil,
+		ec.marshalNUser2ᚖgithubᚗcomᚋvibeᚑc2ᚋvibeᚑc2ᚑcoreᚋcoreᚋpkgᚋmodelsᚐUser,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_OperationMember_user(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "OperationMember",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "id":
+				return ec.fieldContext_User_id(ctx, field)
+			case "username":
+				return ec.fieldContext_User_username(ctx, field)
+			case "roles":
+				return ec.fieldContext_User_roles(ctx, field)
+			case "active":
+				return ec.fieldContext_User_active(ctx, field)
+			case "createdAt":
+				return ec.fieldContext_User_createdAt(ctx, field)
+			case "updatedAt":
+				return ec.fieldContext_User_updatedAt(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type User", field.Name)
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _OperationMember_role(ctx context.Context, field graphql.CollectedField, obj *models.OperationMember) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_OperationMember_role,
+		func(ctx context.Context) (any, error) {
+			return obj.Role, nil
+		},
+		nil,
+		ec.marshalNOperationRole2githubᚗcomᚋvibeᚑc2ᚋvibeᚑc2ᚑcoreᚋcoreᚋpkgᚋmodelsᚐOperationRole,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_OperationMember_role(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "OperationMember",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type OperationRole does not have child fields")
 		},
 	}
 	return fc, nil
@@ -2268,6 +2524,65 @@ func (ec *executionContext) fieldContext_Query_operations(ctx context.Context, f
 	}()
 	ctx = graphql.WithFieldContext(ctx, fc)
 	if fc.Args, err = ec.field_Query_operations_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
+		ec.Error(ctx, err)
+		return fc, err
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Query_myOperationRole(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Query_myOperationRole,
+		func(ctx context.Context) (any, error) {
+			fc := graphql.GetFieldContext(ctx)
+			return ec.Resolvers.Query().MyOperationRole(ctx, fc.Args["operationId"].(string))
+		},
+		func(ctx context.Context, next graphql.Resolver) graphql.Resolver {
+			directive0 := next
+
+			directive1 := func(ctx context.Context) (any, error) {
+				permission, err := ec.unmarshalNString2string(ctx, "operation:member")
+				if err != nil {
+					var zeroVal *models.OperationRole
+					return zeroVal, err
+				}
+				if ec.Directives.HasPermission == nil {
+					var zeroVal *models.OperationRole
+					return zeroVal, errors.New("directive hasPermission is not implemented")
+				}
+				return ec.Directives.HasPermission(ctx, nil, directive0, permission)
+			}
+
+			next = directive1
+			return next
+		},
+		ec.marshalOOperationRole2ᚖgithubᚗcomᚋvibeᚑc2ᚋvibeᚑc2ᚑcoreᚋcoreᚋpkgᚋmodelsᚐOperationRole,
+		true,
+		false,
+	)
+}
+
+func (ec *executionContext) fieldContext_Query_myOperationRole(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Query",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type OperationRole does not have child fields")
+		},
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			err = ec.Recover(ctx, r)
+			ec.Error(ctx, err)
+		}
+	}()
+	ctx = graphql.WithFieldContext(ctx, fc)
+	if fc.Args, err = ec.field_Query_myOperationRole_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
 		ec.Error(ctx, err)
 		return fc, err
 	}
@@ -4402,6 +4717,13 @@ func (ec *executionContext) _Mutation(ctx context.Context, sel ast.SelectionSet)
 			if out.Values[i] == graphql.Null {
 				out.Invalids++
 			}
+		case "updateOperationMemberRole":
+			out.Values[i] = ec.OperationContext.RootResolverMiddleware(innerCtx, func(ctx context.Context) (res graphql.Marshaler) {
+				return ec._Mutation_updateOperationMemberRole(ctx, field)
+			})
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
 		default:
 			panic("unknown field " + strconv.Quote(field.Name))
 		}
@@ -4613,6 +4935,81 @@ func (ec *executionContext) _Operation(ctx context.Context, sel ast.SelectionSet
 	return out
 }
 
+var operationMemberImplementors = []string{"OperationMember"}
+
+func (ec *executionContext) _OperationMember(ctx context.Context, sel ast.SelectionSet, obj *models.OperationMember) graphql.Marshaler {
+	fields := graphql.CollectFields(ec.OperationContext, sel, operationMemberImplementors)
+
+	out := graphql.NewFieldSet(fields)
+	deferred := make(map[string]*graphql.FieldSet)
+	for i, field := range fields {
+		switch field.Name {
+		case "__typename":
+			out.Values[i] = graphql.MarshalString("OperationMember")
+		case "user":
+			field := field
+
+			innerFunc := func(ctx context.Context, fs *graphql.FieldSet) (res graphql.Marshaler) {
+				defer func() {
+					if r := recover(); r != nil {
+						ec.Error(ctx, ec.Recover(ctx, r))
+					}
+				}()
+				res = ec._OperationMember_user(ctx, field, obj)
+				if res == graphql.Null {
+					atomic.AddUint32(&fs.Invalids, 1)
+				}
+				return res
+			}
+
+			if field.Deferrable != nil {
+				dfs, ok := deferred[field.Deferrable.Label]
+				di := 0
+				if ok {
+					dfs.AddField(field)
+					di = len(dfs.Values) - 1
+				} else {
+					dfs = graphql.NewFieldSet([]graphql.CollectedField{field})
+					deferred[field.Deferrable.Label] = dfs
+				}
+				dfs.Concurrently(di, func(ctx context.Context) graphql.Marshaler {
+					return innerFunc(ctx, dfs)
+				})
+
+				// don't run the out.Concurrently() call below
+				out.Values[i] = graphql.Null
+				continue
+			}
+
+			out.Concurrently(i, func(ctx context.Context) graphql.Marshaler { return innerFunc(ctx, out) })
+		case "role":
+			out.Values[i] = ec._OperationMember_role(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				atomic.AddUint32(&out.Invalids, 1)
+			}
+		default:
+			panic("unknown field " + strconv.Quote(field.Name))
+		}
+	}
+	out.Dispatch(ctx)
+	if out.Invalids > 0 {
+		return graphql.Null
+	}
+
+	atomic.AddInt32(&ec.Deferred, int32(len(deferred)))
+
+	for label, dfs := range deferred {
+		ec.ProcessDeferredGroup(graphql.DeferredGroup{
+			Label:    label,
+			Path:     graphql.GetPath(ctx),
+			FieldSet: dfs,
+			Context:  ctx,
+		})
+	}
+
+	return out
+}
+
 var operationPaginationImplementors = []string{"OperationPagination"}
 
 func (ec *executionContext) _OperationPagination(ctx context.Context, sel ast.SelectionSet, obj *model.OperationPagination) graphql.Marshaler {
@@ -4787,6 +5184,25 @@ func (ec *executionContext) _Query(ctx context.Context, sel ast.SelectionSet) gr
 				if res == graphql.Null {
 					atomic.AddUint32(&fs.Invalids, 1)
 				}
+				return res
+			}
+
+			rrm := func(ctx context.Context) graphql.Marshaler {
+				return ec.OperationContext.RootResolverMiddleware(ctx,
+					func(ctx context.Context) graphql.Marshaler { return innerFunc(ctx, out) })
+			}
+
+			out.Concurrently(i, func(ctx context.Context) graphql.Marshaler { return rrm(innerCtx) })
+		case "myOperationRole":
+			field := field
+
+			innerFunc := func(ctx context.Context, _ *graphql.FieldSet) (res graphql.Marshaler) {
+				defer func() {
+					if r := recover(); r != nil {
+						ec.Error(ctx, ec.Recover(ctx, r))
+					}
+				}()
+				res = ec._Query_myOperationRole(ctx, field)
 				return res
 			}
 
@@ -5461,6 +5877,32 @@ func (ec *executionContext) marshalNOperation2ᚖgithubᚗcomᚋvibeᚑc2ᚋvibe
 	return ec._Operation(ctx, sel, v)
 }
 
+func (ec *executionContext) marshalNOperationMember2ᚕᚖgithubᚗcomᚋvibeᚑc2ᚋvibeᚑc2ᚑcoreᚋcoreᚋpkgᚋmodelsᚐOperationMemberᚄ(ctx context.Context, sel ast.SelectionSet, v []*models.OperationMember) graphql.Marshaler {
+	ret := graphql.MarshalSliceConcurrently(ctx, len(v), 0, false, func(ctx context.Context, i int) graphql.Marshaler {
+		fc := graphql.GetFieldContext(ctx)
+		fc.Result = &v[i]
+		return ec.marshalNOperationMember2ᚖgithubᚗcomᚋvibeᚑc2ᚋvibeᚑc2ᚑcoreᚋcoreᚋpkgᚋmodelsᚐOperationMember(ctx, sel, v[i])
+	})
+
+	for _, e := range ret {
+		if e == graphql.Null {
+			return graphql.Null
+		}
+	}
+
+	return ret
+}
+
+func (ec *executionContext) marshalNOperationMember2ᚖgithubᚗcomᚋvibeᚑc2ᚋvibeᚑc2ᚑcoreᚋcoreᚋpkgᚋmodelsᚐOperationMember(ctx context.Context, sel ast.SelectionSet, v *models.OperationMember) graphql.Marshaler {
+	if v == nil {
+		if !graphql.HasFieldError(ctx, graphql.GetFieldContext(ctx)) {
+			graphql.AddErrorf(ctx, "the requested element is null which the schema does not allow")
+		}
+		return graphql.Null
+	}
+	return ec._OperationMember(ctx, sel, v)
+}
+
 func (ec *executionContext) marshalNOperationPagination2githubᚗcomᚋvibeᚑc2ᚋvibeᚑc2ᚑcoreᚋcoreᚋpkgᚋgraphqlᚋmodelᚐOperationPagination(ctx context.Context, sel ast.SelectionSet, v model.OperationPagination) graphql.Marshaler {
 	return ec._OperationPagination(ctx, sel, &v)
 }
@@ -5473,6 +5915,16 @@ func (ec *executionContext) marshalNOperationPagination2ᚖgithubᚗcomᚋvibe�
 		return graphql.Null
 	}
 	return ec._OperationPagination(ctx, sel, v)
+}
+
+func (ec *executionContext) unmarshalNOperationRole2githubᚗcomᚋvibeᚑc2ᚋvibeᚑc2ᚑcoreᚋcoreᚋpkgᚋmodelsᚐOperationRole(ctx context.Context, v any) (models.OperationRole, error) {
+	var res models.OperationRole
+	err := res.UnmarshalGQL(v)
+	return res, graphql.ErrorOnPath(ctx, err)
+}
+
+func (ec *executionContext) marshalNOperationRole2githubᚗcomᚋvibeᚑc2ᚋvibeᚑc2ᚑcoreᚋcoreᚋpkgᚋmodelsᚐOperationRole(ctx context.Context, sel ast.SelectionSet, v models.OperationRole) graphql.Marshaler {
+	return v
 }
 
 func (ec *executionContext) unmarshalNString2string(ctx context.Context, v any) (string, error) {
@@ -5762,6 +6214,22 @@ func (ec *executionContext) marshalOInt2ᚖint(ctx context.Context, sel ast.Sele
 	_ = ctx
 	res := graphql.MarshalInt(*v)
 	return res
+}
+
+func (ec *executionContext) unmarshalOOperationRole2ᚖgithubᚗcomᚋvibeᚑc2ᚋvibeᚑc2ᚑcoreᚋcoreᚋpkgᚋmodelsᚐOperationRole(ctx context.Context, v any) (*models.OperationRole, error) {
+	if v == nil {
+		return nil, nil
+	}
+	var res = new(models.OperationRole)
+	err := res.UnmarshalGQL(v)
+	return res, graphql.ErrorOnPath(ctx, err)
+}
+
+func (ec *executionContext) marshalOOperationRole2ᚖgithubᚗcomᚋvibeᚑc2ᚋvibeᚑc2ᚑcoreᚋcoreᚋpkgᚋmodelsᚐOperationRole(ctx context.Context, sel ast.SelectionSet, v *models.OperationRole) graphql.Marshaler {
+	if v == nil {
+		return graphql.Null
+	}
+	return v
 }
 
 func (ec *executionContext) unmarshalOString2ᚕᚖstring(ctx context.Context, v any) ([]*string, error) {

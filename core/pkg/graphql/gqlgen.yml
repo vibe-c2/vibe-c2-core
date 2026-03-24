@@ -65,6 +65,22 @@ models:
       updatedAt:
         resolver: true         # field.DefaultField.UpdateAt -> string
 
+  # Map the GraphQL "OperationRole" enum to our existing OperationRole type.
+  # The Go type implements MarshalGQL/UnmarshalGQL for case conversion.
+  OperationRole:
+    model:
+      - github.com/vibe-c2/vibe-c2-core/core/pkg/models.OperationRole
+
+  # Map the GraphQL "OperationMember" type to our existing OperationMember model.
+  # The "user" field needs a resolver because the Go struct stores a UserID (UUID)
+  # but GraphQL expects a full User object (requires a DB lookup).
+  OperationMember:
+    model:
+      - github.com/vibe-c2/vibe-c2-core/core/pkg/models.OperationMember
+    fields:
+      user:
+        resolver: true         # UserID (uuid.UUID) -> User (fetched from DB)
+
   # Map the GraphQL "Operation" type to our existing Operation model.
   # Same pattern as User — fields that don't map directly get custom resolvers.
   Operation:
@@ -74,7 +90,7 @@ models:
       id:
         resolver: true         # OperationID (uuid.UUID) -> ID (string)
       members:
-        resolver: true         # MemberIDs ([]uuid.UUID) -> [User!]! (fetched from DB)
+        resolver: true         # []OperationMember -> [OperationMember!]! (resolve User for each)
       createdAt:
         resolver: true         # field.DefaultField.CreateAt -> string
       updatedAt:
