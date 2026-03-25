@@ -1,14 +1,9 @@
 import * as React from "react"
-import {
-  LayoutDashboardIcon,
-  NetworkIcon,
-  BotIcon,
-  Settings2Icon,
-  TerminalSquareIcon,
-} from "lucide-react"
+import { TerminalSquareIcon } from "lucide-react"
 
 import { NavMain } from "@/components/nav-main"
 import { NavUser } from "@/components/nav-user"
+import { navigationItems, navigationAdminItems } from "@/navigation"
 import {
   Sidebar,
   SidebarContent,
@@ -20,42 +15,6 @@ import {
   SidebarRail,
 } from "@/components/ui/sidebar"
 import { useAuthStore } from "@/stores/auth"
-
-const navMain = [
-  {
-    title: "Dashboard",
-    url: "/",
-    icon: <LayoutDashboardIcon />,
-    isActive: true,
-  },
-  {
-    title: "Operations",
-    url: "#",
-    icon: <NetworkIcon />,
-    items: [
-      { title: "Overview", url: "#" },
-      { title: "Create", url: "#" },
-    ],
-  },
-  {
-    title: "Agents",
-    url: "#",
-    icon: <BotIcon />,
-    items: [
-      { title: "Active", url: "#" },
-      { title: "Payloads", url: "#" },
-    ],
-  },
-  {
-    title: "Settings",
-    url: "#",
-    icon: <Settings2Icon />,
-    items: [
-      { title: "General", url: "#" },
-      { title: "Users", url: "#" },
-    ],
-  },
-]
 
 export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
   const user = useAuthStore((s) => s.user)
@@ -79,8 +38,11 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
           </SidebarMenuItem>
         </SidebarMenu>
       </SidebarHeader>
-      <SidebarContent>
-        <NavMain items={navMain} />
+      <SidebarContent className="flex flex-col">
+        <NavMain items={navigationItems} />
+        <div className="mt-auto">
+          <NavMain items={navigationAdminItems} />
+        </div>
       </SidebarContent>
       <SidebarFooter>
         <NavUser
