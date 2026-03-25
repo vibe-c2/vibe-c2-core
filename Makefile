@@ -1,4 +1,4 @@
-.PHONY: infra infra-stop infra-reset services services-stop services-reset swag gqlgen help
+.PHONY: infra infra-stop infra-reset services services-stop services-reset swag gqlgen frontend help
 
 include .env
 export
@@ -30,6 +30,9 @@ services-reset: ## Reset all services and volumes
 swag: ## swag: Generates or updates the Swagger/OpenAPI documentation files.
 	@echo "Generating API documentation"
 	cd core && go run github.com/swaggo/swag/cmd/swag@latest init
+
+frontend: ## Start frontend dev server
+	$(MAKE) -C frontend frontend
 
 gqlgen: ## Regenerate GraphQL code from schema (resolvers, models, runtime)
 	$(MAKE) -C core gqlgen
