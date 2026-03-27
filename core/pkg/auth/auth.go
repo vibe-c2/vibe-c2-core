@@ -124,7 +124,9 @@ func (ap *authProvider) GenerateRefreshToken(ctx context.Context, userID, userna
 		return "", fmt.Errorf("failed to check existing sessions: %w", err)
 	}
 	if count >= MaxSessionsPerUser {
-		return "", fmt.Errorf("%w: limit is %d", ErrSessionLimitReached, MaxSessionsPerUser)
+		if _, err := ap.store.EvictOldestSession(ctx, userID); err != nil {
+			return "", fmt.Errorf("failed to evict oldest session: %w", err)
+		}
 	}
 
 	// Generate opaque token

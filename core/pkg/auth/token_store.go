@@ -30,6 +30,11 @@ type TokenStore interface {
 	// DeleteAllUserSessions removes all tokens and the index for a user.
 	DeleteAllUserSessions(ctx context.Context, userID string) error
 
+	// EvictOldestSession atomically removes the session with the earliest
+	// CreatedAt for the given user. Returns the evicted key, or "" if no
+	// sessions exist. Also cleans up stale index entries.
+	EvictOldestSession(ctx context.Context, userID string) (string, error)
+
 	// Close releases resources.
 	Close() error
 }

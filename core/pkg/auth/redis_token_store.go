@@ -131,6 +131,53 @@ func (s *redisTokenStore) DeleteAllUserSessions(ctx context.Context, userID stri
 	return err
 }
 
+// evictOldestScript atomically finds and removes the session with the
+// earliest created_at. Also cleans up stale index entries where the
+// token key expired via TTL but the SET entry lingers.
+// RFC3339 timestamps are lexicographically sortable, so string
+// comparison is correct for ordering.
+var evictOldestScript = redis.NewScript(`
+	local index_key = KEYS[1]
+	local members = redis.call('SMEMBERS', index_key)
+	if #members == 0 then
+		return ''
+	end
+
+	local oldest_key = nil
+	local oldest_time = nil
+
+	for _, key in ipairs(members) do
+		local data = redis.call('GET', key)
+		if data then
+			local meta = cjson.decode(data)
+			local created = meta['created_at']
+			if created and (oldest_time == nil or created < oldest_time) then
+				oldest_time = created
+				oldest_key = key
+			end
+		else
+			redis.call('SREM', index_key, key)
+		end
+	end
+
+	if oldest_key then
+		redis.call('DEL', oldest_key)
+		redis.call('SREM', index_key, oldest_key)
+		return oldest_key
+	end
+
+	return ''
+`)
+
+func (s *redisTokenStore) EvictOldestSession(ctx context.Context, userID string) (string, error) {
+	indexKey := s.userIndexKey(userID)
+	result, err := evictOldestScript.Run(ctx, s.client, []string{indexKey}).Text()
+	if err != nil && err != redis.Nil {
+		return "", fmt.Errorf("evict oldest session: %w", err)
+	}
+	return result, nil
+}
+
 func (s *redisTokenStore) Close() error {
 	return s.client.Close()
 }
