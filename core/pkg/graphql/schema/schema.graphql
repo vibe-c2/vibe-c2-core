@@ -4,7 +4,7 @@
 #
 # This file defines the entire GraphQL API using SDL (Schema Definition Language).
 # Think of it as a contract between the backend and frontend — it describes:
-#   - What data types exist (User, UserPagination)
+#   - What data types exist (User, UserConnection)
 #   - What queries you can run (read data)
 #   - What mutations you can run (write/modify data)
 #   - What inputs are needed for mutations
@@ -59,14 +59,37 @@ type User {
   updatedAt: String!       # ISO 8601 timestamp
 }
 
-# UserPagination wraps a paginated list of users.
-# This pattern (returning items + pagination metadata) is common in GraphQL
-# for enabling pagination in the frontend.
-type UserPagination {
-  users: [User!]!          # The page of users
-  totalCount: Int!         # Total users matching the query (for page count)
-  hasNextPage: Boolean!    # True if there are more users after this page
-  hasPreviousPage: Boolean! # True if there are users before this page (offset > 0)
+# -----------------------------------------------------------------------------
+# Relay Connection Types
+# -----------------------------------------------------------------------------
+# The Relay Connection spec is the standard GraphQL pagination pattern.
+# Instead of offset/limit, it uses opaque cursors that point to specific items.
+#
+# Connection: wraps the result list with edges + pageInfo + totalCount
+# Edge:       wraps each item with the item itself (node) and its cursor
+# PageInfo:   tells the client whether more pages exist and provides cursors
+#             for the first and last items in the current page
+#
+# To paginate forward:  use first/after  (e.g. first: 20, after: "<endCursor>")
+# To paginate backward: use last/before  (e.g. last: 20, before: "<startCursor>")
+
+# PageInfo is shared across all connection types.
+type PageInfo {
+  hasNextPage: Boolean!      # True if more items exist after the last edge
+  hasPreviousPage: Boolean!  # True if more items exist before the first edge
+  startCursor: String        # Cursor of the first edge (null if empty)
+  endCursor: String          # Cursor of the last edge (null if empty)
+}
+
+type UserEdge {
+  node: User!                # The actual user object
+  cursor: String!            # Opaque cursor for this user's position
+}
+
+type UserConnection {
+  edges: [UserEdge!]!        # The page of users, each wrapped with a cursor
+  pageInfo: PageInfo!        # Pagination metadata
+  totalCount: Int!           # Total users matching the query (for UI counters)
 }
 
 # OperationMember represents a user's membership in an operation with their role.
@@ -89,12 +112,15 @@ type Operation {
   updatedAt: String!       # ISO 8601 timestamp
 }
 
-# OperationPagination wraps a paginated list of operations.
-type OperationPagination {
-  operations: [Operation!]!
+type OperationEdge {
+  node: Operation!
+  cursor: String!
+}
+
+type OperationConnection {
+  edges: [OperationEdge!]!
+  pageInfo: PageInfo!
   totalCount: Int!
-  hasNextPage: Boolean!
-  hasPreviousPage: Boolean!
 }
 
 # =============================================================================
@@ -127,12 +153,15 @@ type SchemeNetworkPoint {
   updatedAt: String!               # ISO 8601 timestamp
 }
 
-# SchemeNetworkPointPagination wraps a paginated list of network points.
-type SchemeNetworkPointPagination {
-  points: [SchemeNetworkPoint!]!
+type SchemeNetworkPointEdge {
+  node: SchemeNetworkPoint!
+  cursor: String!
+}
+
+type SchemeNetworkPointConnection {
+  edges: [SchemeNetworkPointEdge!]!
+  pageInfo: PageInfo!
   totalCount: Int!
-  hasNextPage: Boolean!
-  hasPreviousPage: Boolean!
 }
 
 # -----------------------------------------------------------------------------
@@ -143,9 +172,10 @@ type SchemeNetworkPointPagination {
 #
 # Example client query:
 #   query {
-#     users(search: "admin", limit: 10) {
+#     users(search: "admin", first: 10) {
+#       edges { node { id username roles } cursor }
+#       pageInfo { hasNextPage endCursor }
 #       totalCount
-#       users { id username roles }
 #     }
 #   }
 
@@ -159,14 +189,17 @@ type Query {
   user(id: ID!): User! @hasPermission(permission: "user:read")
 
   # users returns a paginated, searchable list of all users.
+  # Uses cursor-based pagination (Relay Connection spec):
+  # - first/after:  forward pagination (get N items after cursor)
+  # - last/before:  backward pagination (get N items before cursor)
   # - search: optional text filter (matches username and roles)
-  # - offset: skip N users (for pagination), default 0
-  # - limit:  return at most N users, default 20
   users(
     search: String
-    offset: Int = 0
-    limit: Int = 20
-  ): UserPagination! @hasPermission(permission: "user:read")
+    first: Int = 20
+    after: String
+    last: Int
+    before: String
+  ): UserConnection! @hasPermission(permission: "user:read")
 
   # operation returns a single operation by its ID.
   operation(id: ID!): Operation! @hasPermission(permission: "operation:read")
@@ -174,9 +207,11 @@ type Query {
   # operations returns a paginated, searchable list of all operations.
   operations(
     search: String
-    offset: Int = 0
-    limit: Int = 20
-  ): OperationPagination! @hasPermission(permission: "operation:read")
+    first: Int = 20
+    after: String
+    last: Int
+    before: String
+  ): OperationConnection! @hasPermission(permission: "operation:read")
 
   # myOperationRole returns the caller's role in a specific operation,
   # or null if the caller is not a member of that operation.
@@ -193,9 +228,11 @@ type Query {
   schemeNetworkPoints(
     operationId: ID!
     search: String
-    offset: Int = 0
-    limit: Int = 20
-  ): SchemeNetworkPointPagination!
+    first: Int = 20
+    after: String
+    last: Int
+    before: String
+  ): SchemeNetworkPointConnection!
     @hasPermission(permission: "operation:member")
 }
 

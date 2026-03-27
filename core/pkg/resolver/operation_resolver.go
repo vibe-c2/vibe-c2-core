@@ -9,6 +9,7 @@ import (
 	"github.com/vibe-c2/vibe-c2-core/core/pkg/graphql/gqlctx"
 	"github.com/vibe-c2/vibe-c2-core/core/pkg/graphql/model"
 	"github.com/vibe-c2/vibe-c2-core/core/pkg/models"
+	"github.com/vibe-c2/vibe-c2-core/core/pkg/pagination"
 	"github.com/vibe-c2/vibe-c2-core/core/pkg/repository"
 )
 
@@ -25,7 +26,7 @@ type IOperationResolver interface {
 
 	// Queries
 	Operation(ctx context.Context, id string) (*models.Operation, error)
-	Operations(ctx context.Context, search *string, offset *int, limit *int) (*model.OperationPagination, error)
+	Operations(ctx context.Context, search *string, first *int, after *string, last *int, before *string) (*model.OperationConnection, error)
 	MyOperationRole(ctx context.Context, operationID string) (*models.OperationRole, error)
 
 	// Field resolvers for Operation type
@@ -382,28 +383,26 @@ func (r *operationResolver) Operation(ctx context.Context, id string) (*models.O
 	return &op, nil
 }
 
-// Operations returns a paginated list of operations with optional search.
+// Operations returns a cursor-paginated list of operations with optional search.
 //
 // Example:
 //
 //	query {
-//	    operations(search: "red", limit: 10) {
+//	    operations(search: "red", first: 10) {
+//	        edges { node { id name description } cursor }
+//	        pageInfo { hasNextPage endCursor }
 //	        totalCount
-//	        operations { id name description members { user { id username } role } }
 //	    }
 //	}
-func (r *operationResolver) Operations(ctx context.Context, search *string, offset *int, limit *int) (*model.OperationPagination, error) {
+func (r *operationResolver) Operations(ctx context.Context, search *string, first *int, after *string, last *int, before *string) (*model.OperationConnection, error) {
+	args, err := pagination.ParseArgs(first, after, last, before)
+	if err != nil {
+		return nil, fmt.Errorf("invalid pagination args: %w", err)
+	}
+
 	s := ""
 	if search != nil {
 		s = *search
-	}
-	off := int64(0)
-	if offset != nil {
-		off = int64(*offset)
-	}
-	lim := int64(20)
-	if limit != nil {
-		lim = int64(*limit)
 	}
 
 	total, err := r.operationRepo.Count(ctx, s)
@@ -411,24 +410,38 @@ func (r *operationResolver) Operations(ctx context.Context, search *string, offs
 		return nil, fmt.Errorf("failed to count operations: %w", err)
 	}
 
-	ops, err := r.operationRepo.FindAll(ctx, s, off, lim)
+	ops, err := r.operationRepo.FindWithCursor(ctx, s, args.Cursor, args.Limit+1, args.Forward)
 	if err != nil {
 		return nil, fmt.Errorf("failed to list operations: %w", err)
 	}
 
-	ptrs := make([]*models.Operation, len(ops))
-	for i := range ops {
-		ptrs[i] = &ops[i]
+	hasMore := int64(len(ops)) > args.Limit
+	if hasMore {
+		ops = ops[:args.Limit]
 	}
 
-	hasNext := off+lim < total
-	hasPrev := off > 0
+	edges := make([]*model.OperationEdge, len(ops))
+	for i := range ops {
+		cursor := pagination.EncodeCursor(ops[i].CreateAt, ops[i].Id)
+		edges[i] = &model.OperationEdge{
+			Node:   &ops[i],
+			Cursor: cursor,
+		}
+	}
 
-	return &model.OperationPagination{
-		Operations:      ptrs,
-		TotalCount:      int(total),
-		HasNextPage:     hasNext,
-		HasPreviousPage: hasPrev,
+	pageInfo := pagination.PageInfo{
+		HasNextPage:     args.Forward && hasMore,
+		HasPreviousPage: (!args.Forward && hasMore) || (args.Forward && args.Cursor != nil),
+	}
+	if len(edges) > 0 {
+		pageInfo.StartCursor = &edges[0].Cursor
+		pageInfo.EndCursor = &edges[len(edges)-1].Cursor
+	}
+
+	return &model.OperationConnection{
+		Edges:      edges,
+		PageInfo:   &pageInfo,
+		TotalCount: int(total),
 	}, nil
 }
 

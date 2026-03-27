@@ -10,6 +10,7 @@ import (
 	"github.com/vibe-c2/vibe-c2-core/core/pkg/graphql/gqlctx"
 	"github.com/vibe-c2/vibe-c2-core/core/pkg/graphql/model"
 	"github.com/vibe-c2/vibe-c2-core/core/pkg/models"
+	"github.com/vibe-c2/vibe-c2-core/core/pkg/pagination"
 	"github.com/vibe-c2/vibe-c2-core/core/pkg/repository"
 )
 
@@ -28,7 +29,7 @@ type ISchemeNetworkPointResolver interface {
 
 	// Queries
 	SchemeNetworkPoint(ctx context.Context, id string) (*models.SchemeNetworkPoint, error)
-	SchemeNetworkPoints(ctx context.Context, operationID string, search *string, offset *int, limit *int) (*model.SchemeNetworkPointPagination, error)
+	SchemeNetworkPoints(ctx context.Context, operationID string, search *string, first *int, after *string, last *int, before *string) (*model.SchemeNetworkPointConnection, error)
 
 	// Field resolvers for SchemeNetworkPoint type
 	ID(ctx context.Context, obj *models.SchemeNetworkPoint) (string, error)
@@ -387,18 +388,19 @@ func (r *schemeNetworkPointResolver) SchemeNetworkPoint(ctx context.Context, id 
 	return &point, nil
 }
 
-// SchemeNetworkPoints returns a paginated list of network points for an operation.
+// SchemeNetworkPoints returns a cursor-paginated list of network points for an operation.
 // Requires at least viewer role in the operation.
 //
 // Example:
 //
 //	query {
-//	    schemeNetworkPoints(operationId: "...", search: "192.168", limit: 10) {
+//	    schemeNetworkPoints(operationId: "...", search: "192.168", first: 10) {
+//	        edges { node { id names description tags } cursor }
+//	        pageInfo { hasNextPage endCursor }
 //	        totalCount
-//	        points { id names description tags ports { id number protocol service } }
 //	    }
 //	}
-func (r *schemeNetworkPointResolver) SchemeNetworkPoints(ctx context.Context, operationID string, search *string, offset *int, limit *int) (*model.SchemeNetworkPointPagination, error) {
+func (r *schemeNetworkPointResolver) SchemeNetworkPoints(ctx context.Context, operationID string, search *string, first *int, after *string, last *int, before *string) (*model.SchemeNetworkPointConnection, error) {
 	opUID, err := uuid.Parse(operationID)
 	if err != nil {
 		return nil, fmt.Errorf("invalid operation ID: %w", err)
@@ -408,17 +410,14 @@ func (r *schemeNetworkPointResolver) SchemeNetworkPoints(ctx context.Context, op
 		return nil, err
 	}
 
+	args, err := pagination.ParseArgs(first, after, last, before)
+	if err != nil {
+		return nil, fmt.Errorf("invalid pagination args: %w", err)
+	}
+
 	s := ""
 	if search != nil {
 		s = *search
-	}
-	off := int64(0)
-	if offset != nil {
-		off = int64(*offset)
-	}
-	lim := int64(20)
-	if limit != nil {
-		lim = int64(*limit)
 	}
 
 	total, err := r.pointRepo.CountByOperationID(ctx, opUID, s)
@@ -426,24 +425,38 @@ func (r *schemeNetworkPointResolver) SchemeNetworkPoints(ctx context.Context, op
 		return nil, fmt.Errorf("failed to count network points: %w", err)
 	}
 
-	points, err := r.pointRepo.FindByOperationID(ctx, opUID, s, off, lim)
+	points, err := r.pointRepo.FindByOperationIDWithCursor(ctx, opUID, s, args.Cursor, args.Limit+1, args.Forward)
 	if err != nil {
 		return nil, fmt.Errorf("failed to list network points: %w", err)
 	}
 
-	ptrs := make([]*models.SchemeNetworkPoint, len(points))
-	for i := range points {
-		ptrs[i] = &points[i]
+	hasMore := int64(len(points)) > args.Limit
+	if hasMore {
+		points = points[:args.Limit]
 	}
 
-	hasNext := off+lim < total
-	hasPrev := off > 0
+	edges := make([]*model.SchemeNetworkPointEdge, len(points))
+	for i := range points {
+		cursor := pagination.EncodeCursor(points[i].CreateAt, points[i].Id)
+		edges[i] = &model.SchemeNetworkPointEdge{
+			Node:   &points[i],
+			Cursor: cursor,
+		}
+	}
 
-	return &model.SchemeNetworkPointPagination{
-		Points:          ptrs,
-		TotalCount:      int(total),
-		HasNextPage:     hasNext,
-		HasPreviousPage: hasPrev,
+	pageInfo := pagination.PageInfo{
+		HasNextPage:     args.Forward && hasMore,
+		HasPreviousPage: (!args.Forward && hasMore) || (args.Forward && args.Cursor != nil),
+	}
+	if len(edges) > 0 {
+		pageInfo.StartCursor = &edges[0].Cursor
+		pageInfo.EndCursor = &edges[len(edges)-1].Cursor
+	}
+
+	return &model.SchemeNetworkPointConnection{
+		Edges:      edges,
+		PageInfo:   &pageInfo,
+		TotalCount: int(total),
 	}, nil
 }
 

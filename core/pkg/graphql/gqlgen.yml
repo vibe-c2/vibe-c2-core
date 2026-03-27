@@ -42,6 +42,12 @@ resolver:
 # our existing models.User from the codebase." This avoids duplication
 # and lets resolvers work directly with our domain model.
 models:
+  # Map PageInfo to our shared pagination package struct so gqlgen
+  # uses it directly instead of generating a new type.
+  PageInfo:
+    model:
+      - github.com/vibe-c2/vibe-c2-core/core/pkg/pagination.PageInfo
+
   # Map GraphQL ID scalar to Go string (default is usually fine, but
   # being explicit helps avoid confusion).
   ID:

@@ -1,4 +1,4 @@
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query"
+import { useQuery, useInfiniteQuery, useMutation, useQueryClient } from "@tanstack/react-query"
 import { graphqlClient } from "@/lib/graphql-client"
 import type { CreateUserInput, UpdateUserInput } from "@/graphql/gql/graphql"
 import {
@@ -15,7 +15,7 @@ import {
 export const userKeys = {
   all: ["users"] as const,
   lists: () => [...userKeys.all, "list"] as const,
-  list: (params: { search?: string | null; offset?: number | null; limit?: number | null }) =>
+  list: (params: { search?: string | null; first?: number; after?: string }) =>
     [...userKeys.lists(), params] as const,
   details: () => [...userKeys.all, "detail"] as const,
   detail: (id: string) => [...userKeys.details(), id] as const,
@@ -37,10 +37,27 @@ export function useUser(id: string) {
   })
 }
 
-export function useUsers(params: { search?: string | null; offset?: number | null; limit?: number | null } = {}) {
+export function useUsers(params: { search?: string | null; first?: number; after?: string } = {}) {
   return useQuery({
     queryKey: userKeys.list(params),
     queryFn: () => graphqlClient(UsersDocument, params),
+  })
+}
+
+export function useInfiniteUsers(params: { search?: string | null; first?: number }) {
+  return useInfiniteQuery({
+    queryKey: userKeys.list(params),
+    queryFn: ({ pageParam }) =>
+      graphqlClient(UsersDocument, {
+        search: params.search,
+        first: params.first ?? 20,
+        after: pageParam,
+      }),
+    initialPageParam: undefined as string | undefined,
+    getNextPageParam: (lastPage) =>
+      lastPage.users.pageInfo.hasNextPage
+        ? lastPage.users.pageInfo.endCursor ?? undefined
+        : undefined,
   })
 }
 

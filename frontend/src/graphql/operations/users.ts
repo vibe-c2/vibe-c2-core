@@ -28,14 +28,21 @@ export const UserQuery = graphql(`
 `)
 
 export const UsersQuery = graphql(`
-  query Users($search: String, $offset: Int, $limit: Int) {
-    users(search: $search, offset: $offset, limit: $limit) {
-      users {
-        ...UserFields
+  query Users($search: String, $first: Int, $after: String) {
+    users(search: $search, first: $first, after: $after) {
+      edges {
+        node {
+          ...UserFields
+        }
+        cursor
+      }
+      pageInfo {
+        hasNextPage
+        hasPreviousPage
+        startCursor
+        endCursor
       }
       totalCount
-      hasNextPage
-      hasPreviousPage
     }
   }
 `)

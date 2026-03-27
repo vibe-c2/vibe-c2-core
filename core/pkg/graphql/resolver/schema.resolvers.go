@@ -129,8 +129,8 @@ func (r *queryResolver) User(ctx context.Context, id string) (*models.User, erro
 }
 
 // Users returns a paginated list of users with optional search.
-func (r *queryResolver) Users(ctx context.Context, search *string, offset *int, limit *int) (*model.UserPagination, error) {
-	return r.UserResolver.Users(ctx, search, offset, limit)
+func (r *queryResolver) Users(ctx context.Context, search *string, first *int, after *string, last *int, before *string) (*model.UserConnection, error) {
+	return r.UserResolver.Users(ctx, search, first, after, last, before)
 }
 
 // Operation returns a single operation by its ID.
@@ -139,8 +139,8 @@ func (r *queryResolver) Operation(ctx context.Context, id string) (*models.Opera
 }
 
 // Operations returns a paginated list of operations with optional search.
-func (r *queryResolver) Operations(ctx context.Context, search *string, offset *int, limit *int) (*model.OperationPagination, error) {
-	return r.OperationResolver.Operations(ctx, search, offset, limit)
+func (r *queryResolver) Operations(ctx context.Context, search *string, first *int, after *string, last *int, before *string) (*model.OperationConnection, error) {
+	return r.OperationResolver.Operations(ctx, search, first, after, last, before)
 }
 
 // MyOperationRole returns the caller's role in a specific operation.
@@ -154,8 +154,8 @@ func (r *queryResolver) SchemeNetworkPoint(ctx context.Context, id string) (*mod
 }
 
 // SchemeNetworkPoints returns a paginated list of network points for an operation.
-func (r *queryResolver) SchemeNetworkPoints(ctx context.Context, operationID string, search *string, offset *int, limit *int) (*model.SchemeNetworkPointPagination, error) {
-	return r.SchemeNetworkPointResolver.SchemeNetworkPoints(ctx, operationID, search, offset, limit)
+func (r *queryResolver) SchemeNetworkPoints(ctx context.Context, operationID string, search *string, first *int, after *string, last *int, before *string) (*model.SchemeNetworkPointConnection, error) {
+	return r.SchemeNetworkPointResolver.SchemeNetworkPoints(ctx, operationID, search, first, after, last, before)
 }
 
 // ID converts the SchemeNetworkPoint's UUID to a GraphQL ID string.

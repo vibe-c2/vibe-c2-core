@@ -7,6 +7,7 @@ import (
 	opts "github.com/qiniu/qmgo/options"
 	"github.com/vibe-c2/vibe-c2-core/core/pkg/database"
 	"github.com/vibe-c2/vibe-c2-core/core/pkg/models"
+	"github.com/vibe-c2/vibe-c2-core/core/pkg/pagination"
 	"go.mongodb.org/mongo-driver/v2/bson"
 	"go.mongodb.org/mongo-driver/mongo/options"
 )
@@ -21,6 +22,7 @@ type IUserRepository interface {
 
 	Count(ctx context.Context, search string) (int64, error)
 	FindAll(ctx context.Context, search string, offset, limit int64) ([]models.User, error)
+	FindWithCursor(ctx context.Context, search string, cursor *pagination.Cursor, limit int64, forward bool) ([]models.User, error)
 
 	FindByID(ctx context.Context, id uuid.UUID) (models.User, error)
 	Update(ctx context.Context, user *models.User, updates map[string]interface{}) error
@@ -37,6 +39,7 @@ func NewUserRepository(db database.Database) IUserRepository {
 	coll.CreateIndexes(context.Background(), []opts.IndexModel{
 		{Key: []string{"username"}, IndexOptions: new(options.IndexOptions).SetUnique(true)},
 		{Key: []string{"user_id"}, IndexOptions: new(options.IndexOptions).SetUnique(true)},
+		{Key: []string{"-createAt", "-_id"}}, // Supports cursor-based pagination
 	})
 
 	return &userRepository{coll: coll}
@@ -69,6 +72,32 @@ func (r *userRepository) FindAll(ctx context.Context, search string, offset, lim
 		Skip(offset).
 		Limit(limit).
 		All(&users)
+
+	return users, err
+}
+
+func (r *userRepository) FindWithCursor(ctx context.Context, search string, cursor *pagination.Cursor, limit int64, forward bool) ([]models.User, error) {
+	filter := buildSearchFilter(search)
+
+	if cursorFilter := pagination.BuildCursorFilter(cursor, forward); len(cursorFilter) > 0 {
+		for k, v := range cursorFilter {
+			filter[k] = v
+		}
+	}
+
+	var users []models.User
+	err := r.coll.Find(ctx, filter).
+		Sort(pagination.SortFields(forward)...).
+		Limit(limit).
+		All(&users)
+
+	if !forward && len(users) > 0 {
+		// Backward pagination fetches in ascending order; reverse to maintain
+		// descending createAt order that the client expects.
+		for i, j := 0, len(users)-1; i < j; i, j = i+1, j-1 {
+			users[i], users[j] = users[j], users[i]
+		}
+	}
 
 	return users, err
 }

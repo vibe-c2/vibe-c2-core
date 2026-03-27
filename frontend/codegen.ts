@@ -7,6 +7,7 @@ const config: CodegenConfig = {
     "./src/graphql/gql/": {
       preset: "client",
       config: {
+        useTypeImports: true,
         scalars: {
           ID: "string",
         },

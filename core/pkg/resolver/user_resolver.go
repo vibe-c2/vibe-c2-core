@@ -10,6 +10,7 @@ import (
 	"github.com/vibe-c2/vibe-c2-core/core/pkg/graphql/gqlctx"
 	"github.com/vibe-c2/vibe-c2-core/core/pkg/graphql/model"
 	"github.com/vibe-c2/vibe-c2-core/core/pkg/models"
+	"github.com/vibe-c2/vibe-c2-core/core/pkg/pagination"
 	"github.com/vibe-c2/vibe-c2-core/core/pkg/repository"
 )
 
@@ -25,7 +26,7 @@ type IUserResolver interface {
 	// Queries
 	Me(ctx context.Context) (*models.User, error)
 	User(ctx context.Context, id string) (*models.User, error)
-	Users(ctx context.Context, search *string, offset *int, limit *int) (*model.UserPagination, error)
+	Users(ctx context.Context, search *string, first *int, after *string, last *int, before *string) (*model.UserConnection, error)
 
 	// Field resolvers — these handle fields where the Go model doesn't
 	// map directly to the GraphQL type (e.g. UUID → String, time.Time → String).
@@ -237,29 +238,30 @@ func (r *userResolver) User(ctx context.Context, id string) (*models.User, error
 	return &user, nil
 }
 
-// Users returns a paginated list of users with optional search.
+// Users returns a cursor-paginated list of users with optional search.
+//
+// Uses the Relay Connection spec: first/after for forward pagination,
+// last/before for backward pagination. Cursors are opaque strings
+// encoding the item's position (createAt + _id).
 //
 // Example:
 //
 //	query {
-//	    users(search: "admin", offset: 0, limit: 10) {
+//	    users(search: "admin", first: 10) {
+//	        edges { node { id username roles active } cursor }
+//	        pageInfo { hasNextPage endCursor }
 //	        totalCount
-//	        users { id username roles active }
 //	    }
 //	}
-func (r *userResolver) Users(ctx context.Context, search *string, offset *int, limit *int) (*model.UserPagination, error) {
-	// Apply defaults for optional pagination parameters.
+func (r *userResolver) Users(ctx context.Context, search *string, first *int, after *string, last *int, before *string) (*model.UserConnection, error) {
+	args, err := pagination.ParseArgs(first, after, last, before)
+	if err != nil {
+		return nil, fmt.Errorf("invalid pagination args: %w", err)
+	}
+
 	s := ""
 	if search != nil {
 		s = *search
-	}
-	off := int64(0)
-	if offset != nil {
-		off = int64(*offset)
-	}
-	lim := int64(20)
-	if limit != nil {
-		lim = int64(*limit)
 	}
 
 	total, err := r.userRepo.Count(ctx, s)
@@ -267,28 +269,39 @@ func (r *userResolver) Users(ctx context.Context, search *string, offset *int, l
 		return nil, fmt.Errorf("failed to count users: %w", err)
 	}
 
-	users, err := r.userRepo.FindAll(ctx, s, off, lim)
+	// Fetch limit+1 to detect if there are more items beyond this page.
+	users, err := r.userRepo.FindWithCursor(ctx, s, args.Cursor, args.Limit+1, args.Forward)
 	if err != nil {
 		return nil, fmt.Errorf("failed to list users: %w", err)
 	}
 
-	// Convert []models.User to []*models.User (gqlgen uses pointers).
-	ptrs := make([]*models.User, len(users))
-	for i := range users {
-		ptrs[i] = &users[i]
+	hasMore := int64(len(users)) > args.Limit
+	if hasMore {
+		users = users[:args.Limit]
 	}
 
-	// Compute pagination flags for the frontend.
-	// hasNextPage:     true if there are more users beyond this page
-	// hasPreviousPage: true if we skipped some users (offset > 0)
-	hasNext := off+lim < total
-	hasPrev := off > 0
+	edges := make([]*model.UserEdge, len(users))
+	for i := range users {
+		cursor := pagination.EncodeCursor(users[i].CreateAt, users[i].Id)
+		edges[i] = &model.UserEdge{
+			Node:   &users[i],
+			Cursor: cursor,
+		}
+	}
 
-	return &model.UserPagination{
-		Users:           ptrs,
-		TotalCount:      int(total),
-		HasNextPage:     hasNext,
-		HasPreviousPage: hasPrev,
+	pageInfo := pagination.PageInfo{
+		HasNextPage:     args.Forward && hasMore,
+		HasPreviousPage: (!args.Forward && hasMore) || (args.Forward && args.Cursor != nil),
+	}
+	if len(edges) > 0 {
+		pageInfo.StartCursor = &edges[0].Cursor
+		pageInfo.EndCursor = &edges[len(edges)-1].Cursor
+	}
+
+	return &model.UserConnection{
+		Edges:      edges,
+		PageInfo:   &pageInfo,
+		TotalCount: int(total),
 	}, nil
 }
 

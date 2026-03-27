@@ -7,6 +7,7 @@ import (
 	opts "github.com/qiniu/qmgo/options"
 	"github.com/vibe-c2/vibe-c2-core/core/pkg/database"
 	"github.com/vibe-c2/vibe-c2-core/core/pkg/models"
+	"github.com/vibe-c2/vibe-c2-core/core/pkg/pagination"
 	"go.mongodb.org/mongo-driver/v2/bson"
 	"go.mongodb.org/mongo-driver/mongo/options"
 )
@@ -18,6 +19,7 @@ type IOperationRepository interface {
 	Create(ctx context.Context, op *models.Operation) error
 	FindByID(ctx context.Context, id uuid.UUID) (models.Operation, error)
 	FindAll(ctx context.Context, search string, offset, limit int64) ([]models.Operation, error)
+	FindWithCursor(ctx context.Context, search string, cursor *pagination.Cursor, limit int64, forward bool) ([]models.Operation, error)
 	Count(ctx context.Context, search string) (int64, error)
 	Update(ctx context.Context, op *models.Operation, updates map[string]interface{}) error
 	Delete(ctx context.Context, op *models.Operation) error
@@ -40,6 +42,7 @@ func NewOperationRepository(db database.Database) IOperationRepository {
 		{Key: []string{"operation_id"}, IndexOptions: new(options.IndexOptions).SetUnique(true)},
 		{Key: []string{"name"}, IndexOptions: new(options.IndexOptions).SetUnique(true)},
 		{Key: []string{"members.user_id"}},
+		{Key: []string{"-createAt", "-_id"}}, // Supports cursor-based pagination
 	})
 
 	return &operationRepository{coll: coll}
@@ -63,6 +66,30 @@ func (r *operationRepository) FindAll(ctx context.Context, search string, offset
 		Skip(offset).
 		Limit(limit).
 		All(&ops)
+
+	return ops, err
+}
+
+func (r *operationRepository) FindWithCursor(ctx context.Context, search string, cursor *pagination.Cursor, limit int64, forward bool) ([]models.Operation, error) {
+	filter := buildOperationSearchFilter(search)
+
+	if cursorFilter := pagination.BuildCursorFilter(cursor, forward); len(cursorFilter) > 0 {
+		for k, v := range cursorFilter {
+			filter[k] = v
+		}
+	}
+
+	var ops []models.Operation
+	err := r.coll.Find(ctx, filter).
+		Sort(pagination.SortFields(forward)...).
+		Limit(limit).
+		All(&ops)
+
+	if !forward && len(ops) > 0 {
+		for i, j := 0, len(ops)-1; i < j; i, j = i+1, j-1 {
+			ops[i], ops[j] = ops[j], ops[i]
+		}
+	}
 
 	return ops, err
 }

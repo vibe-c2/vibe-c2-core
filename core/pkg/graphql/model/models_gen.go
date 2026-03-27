@@ -4,6 +4,7 @@ package model
 
 import (
 	"github.com/vibe-c2/vibe-c2-core/core/pkg/models"
+	"github.com/vibe-c2/vibe-c2-core/core/pkg/pagination"
 )
 
 type CreateOperationInput struct {
@@ -34,21 +35,29 @@ type CreateUserInput struct {
 type Mutation struct {
 }
 
-type OperationPagination struct {
-	Operations      []*models.Operation `json:"operations"`
-	TotalCount      int                 `json:"totalCount"`
-	HasNextPage     bool                `json:"hasNextPage"`
-	HasPreviousPage bool                `json:"hasPreviousPage"`
+type OperationConnection struct {
+	Edges      []*OperationEdge     `json:"edges"`
+	PageInfo   *pagination.PageInfo `json:"pageInfo"`
+	TotalCount int                  `json:"totalCount"`
+}
+
+type OperationEdge struct {
+	Node   *models.Operation `json:"node"`
+	Cursor string            `json:"cursor"`
 }
 
 type Query struct {
 }
 
-type SchemeNetworkPointPagination struct {
-	Points          []*models.SchemeNetworkPoint `json:"points"`
-	TotalCount      int                          `json:"totalCount"`
-	HasNextPage     bool                         `json:"hasNextPage"`
-	HasPreviousPage bool                         `json:"hasPreviousPage"`
+type SchemeNetworkPointConnection struct {
+	Edges      []*SchemeNetworkPointEdge `json:"edges"`
+	PageInfo   *pagination.PageInfo      `json:"pageInfo"`
+	TotalCount int                       `json:"totalCount"`
+}
+
+type SchemeNetworkPointEdge struct {
+	Node   *models.SchemeNetworkPoint `json:"node"`
+	Cursor string                     `json:"cursor"`
 }
 
 type UpdateOperationInput struct {
@@ -76,9 +85,13 @@ type UpdateUserInput struct {
 	Active   *bool     `json:"active,omitempty"`
 }
 
-type UserPagination struct {
-	Users           []*models.User `json:"users"`
-	TotalCount      int            `json:"totalCount"`
-	HasNextPage     bool           `json:"hasNextPage"`
-	HasPreviousPage bool           `json:"hasPreviousPage"`
+type UserConnection struct {
+	Edges      []*UserEdge          `json:"edges"`
+	PageInfo   *pagination.PageInfo `json:"pageInfo"`
+	TotalCount int                  `json:"totalCount"`
+}
+
+type UserEdge struct {
+	Node   *models.User `json:"node"`
+	Cursor string       `json:"cursor"`
 }

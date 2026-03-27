@@ -7,6 +7,7 @@ import (
 	opts "github.com/qiniu/qmgo/options"
 	"github.com/vibe-c2/vibe-c2-core/core/pkg/database"
 	"github.com/vibe-c2/vibe-c2-core/core/pkg/models"
+	"github.com/vibe-c2/vibe-c2-core/core/pkg/pagination"
 	"go.mongodb.org/mongo-driver/v2/bson"
 	"go.mongodb.org/mongo-driver/mongo/options"
 )
@@ -19,6 +20,7 @@ type ISchemeNetworkPointRepository interface {
 	Create(ctx context.Context, point *models.SchemeNetworkPoint) error
 	FindByID(ctx context.Context, id uuid.UUID) (models.SchemeNetworkPoint, error)
 	FindByOperationID(ctx context.Context, operationID uuid.UUID, search string, offset, limit int64) ([]models.SchemeNetworkPoint, error)
+	FindByOperationIDWithCursor(ctx context.Context, operationID uuid.UUID, search string, cursor *pagination.Cursor, limit int64, forward bool) ([]models.SchemeNetworkPoint, error)
 	CountByOperationID(ctx context.Context, operationID uuid.UUID, search string) (int64, error)
 	Update(ctx context.Context, point *models.SchemeNetworkPoint, updates map[string]interface{}) error
 	Delete(ctx context.Context, point *models.SchemeNetworkPoint) error
@@ -41,6 +43,7 @@ func NewSchemeNetworkPointRepository(db database.Database) ISchemeNetworkPointRe
 		{Key: []string{"point_id"}, IndexOptions: new(options.IndexOptions).SetUnique(true)},
 		{Key: []string{"operation_id"}},
 		{Key: []string{"names"}},
+		{Key: []string{"operation_id", "-createAt", "-_id"}}, // Supports cursor-based pagination
 	})
 
 	return &schemeNetworkPointRepository{coll: coll}
@@ -64,6 +67,30 @@ func (r *schemeNetworkPointRepository) FindByOperationID(ctx context.Context, op
 		Skip(offset).
 		Limit(limit).
 		All(&points)
+
+	return points, err
+}
+
+func (r *schemeNetworkPointRepository) FindByOperationIDWithCursor(ctx context.Context, operationID uuid.UUID, search string, cursor *pagination.Cursor, limit int64, forward bool) ([]models.SchemeNetworkPoint, error) {
+	filter := buildSchemeNetworkPointFilter(operationID, search)
+
+	if cursorFilter := pagination.BuildCursorFilter(cursor, forward); len(cursorFilter) > 0 {
+		for k, v := range cursorFilter {
+			filter[k] = v
+		}
+	}
+
+	var points []models.SchemeNetworkPoint
+	err := r.coll.Find(ctx, filter).
+		Sort(pagination.SortFields(forward)...).
+		Limit(limit).
+		All(&points)
+
+	if !forward && len(points) > 0 {
+		for i, j := 0, len(points)-1; i < j; i, j = i+1, j-1 {
+			points[i], points[j] = points[j], points[i]
+		}
+	}
 
 	return points, err
 }

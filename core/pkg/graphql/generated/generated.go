@@ -16,6 +16,7 @@ import (
 	"github.com/vektah/gqlparser/v2/ast"
 	"github.com/vibe-c2/vibe-c2-core/core/pkg/graphql/model"
 	"github.com/vibe-c2/vibe-c2-core/core/pkg/models"
+	"github.com/vibe-c2/vibe-c2-core/core/pkg/pagination"
 )
 
 // region    ************************** generated!.gotpl **************************
@@ -70,27 +71,38 @@ type ComplexityRoot struct {
 		UpdatedAt   func(childComplexity int) int
 	}
 
+	OperationConnection struct {
+		Edges      func(childComplexity int) int
+		PageInfo   func(childComplexity int) int
+		TotalCount func(childComplexity int) int
+	}
+
+	OperationEdge struct {
+		Cursor func(childComplexity int) int
+		Node   func(childComplexity int) int
+	}
+
 	OperationMember struct {
 		Role func(childComplexity int) int
 		User func(childComplexity int) int
 	}
 
-	OperationPagination struct {
+	PageInfo struct {
+		EndCursor       func(childComplexity int) int
 		HasNextPage     func(childComplexity int) int
 		HasPreviousPage func(childComplexity int) int
-		Operations      func(childComplexity int) int
-		TotalCount      func(childComplexity int) int
+		StartCursor     func(childComplexity int) int
 	}
 
 	Query struct {
 		Me                  func(childComplexity int) int
 		MyOperationRole     func(childComplexity int, operationID string) int
 		Operation           func(childComplexity int, id string) int
-		Operations          func(childComplexity int, search *string, offset *int, limit *int) int
+		Operations          func(childComplexity int, search *string, first *int, after *string, last *int, before *string) int
 		SchemeNetworkPoint  func(childComplexity int, id string) int
-		SchemeNetworkPoints func(childComplexity int, operationID string, search *string, offset *int, limit *int) int
+		SchemeNetworkPoints func(childComplexity int, operationID string, search *string, first *int, after *string, last *int, before *string) int
 		User                func(childComplexity int, id string) int
-		Users               func(childComplexity int, search *string, offset *int, limit *int) int
+		Users               func(childComplexity int, search *string, first *int, after *string, last *int, before *string) int
 	}
 
 	SchemeNetworkPoint struct {
@@ -104,11 +116,15 @@ type ComplexityRoot struct {
 		UpdatedAt   func(childComplexity int) int
 	}
 
-	SchemeNetworkPointPagination struct {
-		HasNextPage     func(childComplexity int) int
-		HasPreviousPage func(childComplexity int) int
-		Points          func(childComplexity int) int
-		TotalCount      func(childComplexity int) int
+	SchemeNetworkPointConnection struct {
+		Edges      func(childComplexity int) int
+		PageInfo   func(childComplexity int) int
+		TotalCount func(childComplexity int) int
+	}
+
+	SchemeNetworkPointEdge struct {
+		Cursor func(childComplexity int) int
+		Node   func(childComplexity int) int
 	}
 
 	SchemeNetworkPort struct {
@@ -128,11 +144,15 @@ type ComplexityRoot struct {
 		Username  func(childComplexity int) int
 	}
 
-	UserPagination struct {
-		HasNextPage     func(childComplexity int) int
-		HasPreviousPage func(childComplexity int) int
-		TotalCount      func(childComplexity int) int
-		Users           func(childComplexity int) int
+	UserConnection struct {
+		Edges      func(childComplexity int) int
+		PageInfo   func(childComplexity int) int
+		TotalCount func(childComplexity int) int
+	}
+
+	UserEdge struct {
+		Cursor func(childComplexity int) int
+		Node   func(childComplexity int) int
 	}
 }
 
@@ -167,12 +187,12 @@ type OperationMemberResolver interface {
 type QueryResolver interface {
 	Me(ctx context.Context) (*models.User, error)
 	User(ctx context.Context, id string) (*models.User, error)
-	Users(ctx context.Context, search *string, offset *int, limit *int) (*model.UserPagination, error)
+	Users(ctx context.Context, search *string, first *int, after *string, last *int, before *string) (*model.UserConnection, error)
 	Operation(ctx context.Context, id string) (*models.Operation, error)
-	Operations(ctx context.Context, search *string, offset *int, limit *int) (*model.OperationPagination, error)
+	Operations(ctx context.Context, search *string, first *int, after *string, last *int, before *string) (*model.OperationConnection, error)
 	MyOperationRole(ctx context.Context, operationID string) (*models.OperationRole, error)
 	SchemeNetworkPoint(ctx context.Context, id string) (*models.SchemeNetworkPoint, error)
-	SchemeNetworkPoints(ctx context.Context, operationID string, search *string, offset *int, limit *int) (*model.SchemeNetworkPointPagination, error)
+	SchemeNetworkPoints(ctx context.Context, operationID string, search *string, first *int, after *string, last *int, before *string) (*model.SchemeNetworkPointConnection, error)
 }
 type SchemeNetworkPointResolver interface {
 	ID(ctx context.Context, obj *models.SchemeNetworkPoint) (string, error)
@@ -420,6 +440,38 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 
 		return e.ComplexityRoot.Operation.UpdatedAt(childComplexity), true
 
+	case "OperationConnection.edges":
+		if e.ComplexityRoot.OperationConnection.Edges == nil {
+			break
+		}
+
+		return e.ComplexityRoot.OperationConnection.Edges(childComplexity), true
+	case "OperationConnection.pageInfo":
+		if e.ComplexityRoot.OperationConnection.PageInfo == nil {
+			break
+		}
+
+		return e.ComplexityRoot.OperationConnection.PageInfo(childComplexity), true
+	case "OperationConnection.totalCount":
+		if e.ComplexityRoot.OperationConnection.TotalCount == nil {
+			break
+		}
+
+		return e.ComplexityRoot.OperationConnection.TotalCount(childComplexity), true
+
+	case "OperationEdge.cursor":
+		if e.ComplexityRoot.OperationEdge.Cursor == nil {
+			break
+		}
+
+		return e.ComplexityRoot.OperationEdge.Cursor(childComplexity), true
+	case "OperationEdge.node":
+		if e.ComplexityRoot.OperationEdge.Node == nil {
+			break
+		}
+
+		return e.ComplexityRoot.OperationEdge.Node(childComplexity), true
+
 	case "OperationMember.role":
 		if e.ComplexityRoot.OperationMember.Role == nil {
 			break
@@ -433,30 +485,30 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 
 		return e.ComplexityRoot.OperationMember.User(childComplexity), true
 
-	case "OperationPagination.hasNextPage":
-		if e.ComplexityRoot.OperationPagination.HasNextPage == nil {
+	case "PageInfo.endCursor":
+		if e.ComplexityRoot.PageInfo.EndCursor == nil {
 			break
 		}
 
-		return e.ComplexityRoot.OperationPagination.HasNextPage(childComplexity), true
-	case "OperationPagination.hasPreviousPage":
-		if e.ComplexityRoot.OperationPagination.HasPreviousPage == nil {
+		return e.ComplexityRoot.PageInfo.EndCursor(childComplexity), true
+	case "PageInfo.hasNextPage":
+		if e.ComplexityRoot.PageInfo.HasNextPage == nil {
 			break
 		}
 
-		return e.ComplexityRoot.OperationPagination.HasPreviousPage(childComplexity), true
-	case "OperationPagination.operations":
-		if e.ComplexityRoot.OperationPagination.Operations == nil {
+		return e.ComplexityRoot.PageInfo.HasNextPage(childComplexity), true
+	case "PageInfo.hasPreviousPage":
+		if e.ComplexityRoot.PageInfo.HasPreviousPage == nil {
 			break
 		}
 
-		return e.ComplexityRoot.OperationPagination.Operations(childComplexity), true
-	case "OperationPagination.totalCount":
-		if e.ComplexityRoot.OperationPagination.TotalCount == nil {
+		return e.ComplexityRoot.PageInfo.HasPreviousPage(childComplexity), true
+	case "PageInfo.startCursor":
+		if e.ComplexityRoot.PageInfo.StartCursor == nil {
 			break
 		}
 
-		return e.ComplexityRoot.OperationPagination.TotalCount(childComplexity), true
+		return e.ComplexityRoot.PageInfo.StartCursor(childComplexity), true
 
 	case "Query.me":
 		if e.ComplexityRoot.Query.Me == nil {
@@ -496,7 +548,7 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 			return 0, false
 		}
 
-		return e.ComplexityRoot.Query.Operations(childComplexity, args["search"].(*string), args["offset"].(*int), args["limit"].(*int)), true
+		return e.ComplexityRoot.Query.Operations(childComplexity, args["search"].(*string), args["first"].(*int), args["after"].(*string), args["last"].(*int), args["before"].(*string)), true
 	case "Query.schemeNetworkPoint":
 		if e.ComplexityRoot.Query.SchemeNetworkPoint == nil {
 			break
@@ -518,7 +570,7 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 			return 0, false
 		}
 
-		return e.ComplexityRoot.Query.SchemeNetworkPoints(childComplexity, args["operationId"].(string), args["search"].(*string), args["offset"].(*int), args["limit"].(*int)), true
+		return e.ComplexityRoot.Query.SchemeNetworkPoints(childComplexity, args["operationId"].(string), args["search"].(*string), args["first"].(*int), args["after"].(*string), args["last"].(*int), args["before"].(*string)), true
 	case "Query.user":
 		if e.ComplexityRoot.Query.User == nil {
 			break
@@ -540,7 +592,7 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 			return 0, false
 		}
 
-		return e.ComplexityRoot.Query.Users(childComplexity, args["search"].(*string), args["offset"].(*int), args["limit"].(*int)), true
+		return e.ComplexityRoot.Query.Users(childComplexity, args["search"].(*string), args["first"].(*int), args["after"].(*string), args["last"].(*int), args["before"].(*string)), true
 
 	case "SchemeNetworkPoint.createdAt":
 		if e.ComplexityRoot.SchemeNetworkPoint.CreatedAt == nil {
@@ -591,30 +643,37 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 
 		return e.ComplexityRoot.SchemeNetworkPoint.UpdatedAt(childComplexity), true
 
-	case "SchemeNetworkPointPagination.hasNextPage":
-		if e.ComplexityRoot.SchemeNetworkPointPagination.HasNextPage == nil {
+	case "SchemeNetworkPointConnection.edges":
+		if e.ComplexityRoot.SchemeNetworkPointConnection.Edges == nil {
 			break
 		}
 
-		return e.ComplexityRoot.SchemeNetworkPointPagination.HasNextPage(childComplexity), true
-	case "SchemeNetworkPointPagination.hasPreviousPage":
-		if e.ComplexityRoot.SchemeNetworkPointPagination.HasPreviousPage == nil {
+		return e.ComplexityRoot.SchemeNetworkPointConnection.Edges(childComplexity), true
+	case "SchemeNetworkPointConnection.pageInfo":
+		if e.ComplexityRoot.SchemeNetworkPointConnection.PageInfo == nil {
 			break
 		}
 
-		return e.ComplexityRoot.SchemeNetworkPointPagination.HasPreviousPage(childComplexity), true
-	case "SchemeNetworkPointPagination.points":
-		if e.ComplexityRoot.SchemeNetworkPointPagination.Points == nil {
+		return e.ComplexityRoot.SchemeNetworkPointConnection.PageInfo(childComplexity), true
+	case "SchemeNetworkPointConnection.totalCount":
+		if e.ComplexityRoot.SchemeNetworkPointConnection.TotalCount == nil {
 			break
 		}
 
-		return e.ComplexityRoot.SchemeNetworkPointPagination.Points(childComplexity), true
-	case "SchemeNetworkPointPagination.totalCount":
-		if e.ComplexityRoot.SchemeNetworkPointPagination.TotalCount == nil {
+		return e.ComplexityRoot.SchemeNetworkPointConnection.TotalCount(childComplexity), true
+
+	case "SchemeNetworkPointEdge.cursor":
+		if e.ComplexityRoot.SchemeNetworkPointEdge.Cursor == nil {
 			break
 		}
 
-		return e.ComplexityRoot.SchemeNetworkPointPagination.TotalCount(childComplexity), true
+		return e.ComplexityRoot.SchemeNetworkPointEdge.Cursor(childComplexity), true
+	case "SchemeNetworkPointEdge.node":
+		if e.ComplexityRoot.SchemeNetworkPointEdge.Node == nil {
+			break
+		}
+
+		return e.ComplexityRoot.SchemeNetworkPointEdge.Node(childComplexity), true
 
 	case "SchemeNetworkPort.id":
 		if e.ComplexityRoot.SchemeNetworkPort.ID == nil {
@@ -684,30 +743,37 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 
 		return e.ComplexityRoot.User.Username(childComplexity), true
 
-	case "UserPagination.hasNextPage":
-		if e.ComplexityRoot.UserPagination.HasNextPage == nil {
+	case "UserConnection.edges":
+		if e.ComplexityRoot.UserConnection.Edges == nil {
 			break
 		}
 
-		return e.ComplexityRoot.UserPagination.HasNextPage(childComplexity), true
-	case "UserPagination.hasPreviousPage":
-		if e.ComplexityRoot.UserPagination.HasPreviousPage == nil {
+		return e.ComplexityRoot.UserConnection.Edges(childComplexity), true
+	case "UserConnection.pageInfo":
+		if e.ComplexityRoot.UserConnection.PageInfo == nil {
 			break
 		}
 
-		return e.ComplexityRoot.UserPagination.HasPreviousPage(childComplexity), true
-	case "UserPagination.totalCount":
-		if e.ComplexityRoot.UserPagination.TotalCount == nil {
+		return e.ComplexityRoot.UserConnection.PageInfo(childComplexity), true
+	case "UserConnection.totalCount":
+		if e.ComplexityRoot.UserConnection.TotalCount == nil {
 			break
 		}
 
-		return e.ComplexityRoot.UserPagination.TotalCount(childComplexity), true
-	case "UserPagination.users":
-		if e.ComplexityRoot.UserPagination.Users == nil {
+		return e.ComplexityRoot.UserConnection.TotalCount(childComplexity), true
+
+	case "UserEdge.cursor":
+		if e.ComplexityRoot.UserEdge.Cursor == nil {
 			break
 		}
 
-		return e.ComplexityRoot.UserPagination.Users(childComplexity), true
+		return e.ComplexityRoot.UserEdge.Cursor(childComplexity), true
+	case "UserEdge.node":
+		if e.ComplexityRoot.UserEdge.Node == nil {
+			break
+		}
+
+		return e.ComplexityRoot.UserEdge.Node(childComplexity), true
 
 	}
 	return 0, false
@@ -806,7 +872,7 @@ var sources = []*ast.Source{
 #
 # This file defines the entire GraphQL API using SDL (Schema Definition Language).
 # Think of it as a contract between the backend and frontend — it describes:
-#   - What data types exist (User, UserPagination)
+#   - What data types exist (User, UserConnection)
 #   - What queries you can run (read data)
 #   - What mutations you can run (write/modify data)
 #   - What inputs are needed for mutations
@@ -861,14 +927,37 @@ type User {
   updatedAt: String!       # ISO 8601 timestamp
 }
 
-# UserPagination wraps a paginated list of users.
-# This pattern (returning items + pagination metadata) is common in GraphQL
-# for enabling pagination in the frontend.
-type UserPagination {
-  users: [User!]!          # The page of users
-  totalCount: Int!         # Total users matching the query (for page count)
-  hasNextPage: Boolean!    # True if there are more users after this page
-  hasPreviousPage: Boolean! # True if there are users before this page (offset > 0)
+# -----------------------------------------------------------------------------
+# Relay Connection Types
+# -----------------------------------------------------------------------------
+# The Relay Connection spec is the standard GraphQL pagination pattern.
+# Instead of offset/limit, it uses opaque cursors that point to specific items.
+#
+# Connection: wraps the result list with edges + pageInfo + totalCount
+# Edge:       wraps each item with the item itself (node) and its cursor
+# PageInfo:   tells the client whether more pages exist and provides cursors
+#             for the first and last items in the current page
+#
+# To paginate forward:  use first/after  (e.g. first: 20, after: "<endCursor>")
+# To paginate backward: use last/before  (e.g. last: 20, before: "<startCursor>")
+
+# PageInfo is shared across all connection types.
+type PageInfo {
+  hasNextPage: Boolean!      # True if more items exist after the last edge
+  hasPreviousPage: Boolean!  # True if more items exist before the first edge
+  startCursor: String        # Cursor of the first edge (null if empty)
+  endCursor: String          # Cursor of the last edge (null if empty)
+}
+
+type UserEdge {
+  node: User!                # The actual user object
+  cursor: String!            # Opaque cursor for this user's position
+}
+
+type UserConnection {
+  edges: [UserEdge!]!        # The page of users, each wrapped with a cursor
+  pageInfo: PageInfo!        # Pagination metadata
+  totalCount: Int!           # Total users matching the query (for UI counters)
 }
 
 # OperationMember represents a user's membership in an operation with their role.
@@ -891,12 +980,15 @@ type Operation {
   updatedAt: String!       # ISO 8601 timestamp
 }
 
-# OperationPagination wraps a paginated list of operations.
-type OperationPagination {
-  operations: [Operation!]!
+type OperationEdge {
+  node: Operation!
+  cursor: String!
+}
+
+type OperationConnection {
+  edges: [OperationEdge!]!
+  pageInfo: PageInfo!
   totalCount: Int!
-  hasNextPage: Boolean!
-  hasPreviousPage: Boolean!
 }
 
 # =============================================================================
@@ -929,12 +1021,15 @@ type SchemeNetworkPoint {
   updatedAt: String!               # ISO 8601 timestamp
 }
 
-# SchemeNetworkPointPagination wraps a paginated list of network points.
-type SchemeNetworkPointPagination {
-  points: [SchemeNetworkPoint!]!
+type SchemeNetworkPointEdge {
+  node: SchemeNetworkPoint!
+  cursor: String!
+}
+
+type SchemeNetworkPointConnection {
+  edges: [SchemeNetworkPointEdge!]!
+  pageInfo: PageInfo!
   totalCount: Int!
-  hasNextPage: Boolean!
-  hasPreviousPage: Boolean!
 }
 
 # -----------------------------------------------------------------------------
@@ -945,9 +1040,10 @@ type SchemeNetworkPointPagination {
 #
 # Example client query:
 #   query {
-#     users(search: "admin", limit: 10) {
+#     users(search: "admin", first: 10) {
+#       edges { node { id username roles } cursor }
+#       pageInfo { hasNextPage endCursor }
 #       totalCount
-#       users { id username roles }
 #     }
 #   }
 
@@ -961,14 +1057,17 @@ type Query {
   user(id: ID!): User! @hasPermission(permission: "user:read")
 
   # users returns a paginated, searchable list of all users.
+  # Uses cursor-based pagination (Relay Connection spec):
+  # - first/after:  forward pagination (get N items after cursor)
+  # - last/before:  backward pagination (get N items before cursor)
   # - search: optional text filter (matches username and roles)
-  # - offset: skip N users (for pagination), default 0
-  # - limit:  return at most N users, default 20
   users(
     search: String
-    offset: Int = 0
-    limit: Int = 20
-  ): UserPagination! @hasPermission(permission: "user:read")
+    first: Int = 20
+    after: String
+    last: Int
+    before: String
+  ): UserConnection! @hasPermission(permission: "user:read")
 
   # operation returns a single operation by its ID.
   operation(id: ID!): Operation! @hasPermission(permission: "operation:read")
@@ -976,9 +1075,11 @@ type Query {
   # operations returns a paginated, searchable list of all operations.
   operations(
     search: String
-    offset: Int = 0
-    limit: Int = 20
-  ): OperationPagination! @hasPermission(permission: "operation:read")
+    first: Int = 20
+    after: String
+    last: Int
+    before: String
+  ): OperationConnection! @hasPermission(permission: "operation:read")
 
   # myOperationRole returns the caller's role in a specific operation,
   # or null if the caller is not a member of that operation.
@@ -995,9 +1096,11 @@ type Query {
   schemeNetworkPoints(
     operationId: ID!
     search: String
-    offset: Int = 0
-    limit: Int = 20
-  ): SchemeNetworkPointPagination!
+    first: Int = 20
+    after: String
+    last: Int
+    before: String
+  ): SchemeNetworkPointConnection!
     @hasPermission(permission: "operation:member")
 }
 
@@ -1467,16 +1570,26 @@ func (ec *executionContext) field_Query_operations_args(ctx context.Context, raw
 		return nil, err
 	}
 	args["search"] = arg0
-	arg1, err := graphql.ProcessArgField(ctx, rawArgs, "offset", ec.unmarshalOInt2ᚖint)
+	arg1, err := graphql.ProcessArgField(ctx, rawArgs, "first", ec.unmarshalOInt2ᚖint)
 	if err != nil {
 		return nil, err
 	}
-	args["offset"] = arg1
-	arg2, err := graphql.ProcessArgField(ctx, rawArgs, "limit", ec.unmarshalOInt2ᚖint)
+	args["first"] = arg1
+	arg2, err := graphql.ProcessArgField(ctx, rawArgs, "after", ec.unmarshalOString2ᚖstring)
 	if err != nil {
 		return nil, err
 	}
-	args["limit"] = arg2
+	args["after"] = arg2
+	arg3, err := graphql.ProcessArgField(ctx, rawArgs, "last", ec.unmarshalOInt2ᚖint)
+	if err != nil {
+		return nil, err
+	}
+	args["last"] = arg3
+	arg4, err := graphql.ProcessArgField(ctx, rawArgs, "before", ec.unmarshalOString2ᚖstring)
+	if err != nil {
+		return nil, err
+	}
+	args["before"] = arg4
 	return args, nil
 }
 
@@ -1504,16 +1617,26 @@ func (ec *executionContext) field_Query_schemeNetworkPoints_args(ctx context.Con
 		return nil, err
 	}
 	args["search"] = arg1
-	arg2, err := graphql.ProcessArgField(ctx, rawArgs, "offset", ec.unmarshalOInt2ᚖint)
+	arg2, err := graphql.ProcessArgField(ctx, rawArgs, "first", ec.unmarshalOInt2ᚖint)
 	if err != nil {
 		return nil, err
 	}
-	args["offset"] = arg2
-	arg3, err := graphql.ProcessArgField(ctx, rawArgs, "limit", ec.unmarshalOInt2ᚖint)
+	args["first"] = arg2
+	arg3, err := graphql.ProcessArgField(ctx, rawArgs, "after", ec.unmarshalOString2ᚖstring)
 	if err != nil {
 		return nil, err
 	}
-	args["limit"] = arg3
+	args["after"] = arg3
+	arg4, err := graphql.ProcessArgField(ctx, rawArgs, "last", ec.unmarshalOInt2ᚖint)
+	if err != nil {
+		return nil, err
+	}
+	args["last"] = arg4
+	arg5, err := graphql.ProcessArgField(ctx, rawArgs, "before", ec.unmarshalOString2ᚖstring)
+	if err != nil {
+		return nil, err
+	}
+	args["before"] = arg5
 	return args, nil
 }
 
@@ -1536,16 +1659,26 @@ func (ec *executionContext) field_Query_users_args(ctx context.Context, rawArgs 
 		return nil, err
 	}
 	args["search"] = arg0
-	arg1, err := graphql.ProcessArgField(ctx, rawArgs, "offset", ec.unmarshalOInt2ᚖint)
+	arg1, err := graphql.ProcessArgField(ctx, rawArgs, "first", ec.unmarshalOInt2ᚖint)
 	if err != nil {
 		return nil, err
 	}
-	args["offset"] = arg1
-	arg2, err := graphql.ProcessArgField(ctx, rawArgs, "limit", ec.unmarshalOInt2ᚖint)
+	args["first"] = arg1
+	arg2, err := graphql.ProcessArgField(ctx, rawArgs, "after", ec.unmarshalOString2ᚖstring)
 	if err != nil {
 		return nil, err
 	}
-	args["limit"] = arg2
+	args["after"] = arg2
+	arg3, err := graphql.ProcessArgField(ctx, rawArgs, "last", ec.unmarshalOInt2ᚖint)
+	if err != nil {
+		return nil, err
+	}
+	args["last"] = arg3
+	arg4, err := graphql.ProcessArgField(ctx, rawArgs, "before", ec.unmarshalOString2ᚖstring)
+	if err != nil {
+		return nil, err
+	}
+	args["before"] = arg4
 	return args, nil
 }
 
@@ -2927,6 +3060,181 @@ func (ec *executionContext) fieldContext_Operation_updatedAt(_ context.Context, 
 	return fc, nil
 }
 
+func (ec *executionContext) _OperationConnection_edges(ctx context.Context, field graphql.CollectedField, obj *model.OperationConnection) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_OperationConnection_edges,
+		func(ctx context.Context) (any, error) {
+			return obj.Edges, nil
+		},
+		nil,
+		ec.marshalNOperationEdge2ᚕᚖgithubᚗcomᚋvibeᚑc2ᚋvibeᚑc2ᚑcoreᚋcoreᚋpkgᚋgraphqlᚋmodelᚐOperationEdgeᚄ,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_OperationConnection_edges(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "OperationConnection",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "node":
+				return ec.fieldContext_OperationEdge_node(ctx, field)
+			case "cursor":
+				return ec.fieldContext_OperationEdge_cursor(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type OperationEdge", field.Name)
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _OperationConnection_pageInfo(ctx context.Context, field graphql.CollectedField, obj *model.OperationConnection) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_OperationConnection_pageInfo,
+		func(ctx context.Context) (any, error) {
+			return obj.PageInfo, nil
+		},
+		nil,
+		ec.marshalNPageInfo2ᚖgithubᚗcomᚋvibeᚑc2ᚋvibeᚑc2ᚑcoreᚋcoreᚋpkgᚋpaginationᚐPageInfo,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_OperationConnection_pageInfo(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "OperationConnection",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "hasNextPage":
+				return ec.fieldContext_PageInfo_hasNextPage(ctx, field)
+			case "hasPreviousPage":
+				return ec.fieldContext_PageInfo_hasPreviousPage(ctx, field)
+			case "startCursor":
+				return ec.fieldContext_PageInfo_startCursor(ctx, field)
+			case "endCursor":
+				return ec.fieldContext_PageInfo_endCursor(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type PageInfo", field.Name)
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _OperationConnection_totalCount(ctx context.Context, field graphql.CollectedField, obj *model.OperationConnection) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_OperationConnection_totalCount,
+		func(ctx context.Context) (any, error) {
+			return obj.TotalCount, nil
+		},
+		nil,
+		ec.marshalNInt2int,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_OperationConnection_totalCount(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "OperationConnection",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Int does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _OperationEdge_node(ctx context.Context, field graphql.CollectedField, obj *model.OperationEdge) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_OperationEdge_node,
+		func(ctx context.Context) (any, error) {
+			return obj.Node, nil
+		},
+		nil,
+		ec.marshalNOperation2ᚖgithubᚗcomᚋvibeᚑc2ᚋvibeᚑc2ᚑcoreᚋcoreᚋpkgᚋmodelsᚐOperation,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_OperationEdge_node(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "OperationEdge",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "id":
+				return ec.fieldContext_Operation_id(ctx, field)
+			case "name":
+				return ec.fieldContext_Operation_name(ctx, field)
+			case "description":
+				return ec.fieldContext_Operation_description(ctx, field)
+			case "members":
+				return ec.fieldContext_Operation_members(ctx, field)
+			case "createdAt":
+				return ec.fieldContext_Operation_createdAt(ctx, field)
+			case "updatedAt":
+				return ec.fieldContext_Operation_updatedAt(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type Operation", field.Name)
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _OperationEdge_cursor(ctx context.Context, field graphql.CollectedField, obj *model.OperationEdge) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_OperationEdge_cursor,
+		func(ctx context.Context) (any, error) {
+			return obj.Cursor, nil
+		},
+		nil,
+		ec.marshalNString2string,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_OperationEdge_cursor(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "OperationEdge",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
 func (ec *executionContext) _OperationMember_user(ctx context.Context, field graphql.CollectedField, obj *models.OperationMember) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
@@ -2999,84 +3307,12 @@ func (ec *executionContext) fieldContext_OperationMember_role(_ context.Context,
 	return fc, nil
 }
 
-func (ec *executionContext) _OperationPagination_operations(ctx context.Context, field graphql.CollectedField, obj *model.OperationPagination) (ret graphql.Marshaler) {
+func (ec *executionContext) _PageInfo_hasNextPage(ctx context.Context, field graphql.CollectedField, obj *pagination.PageInfo) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
 		ec.OperationContext,
 		field,
-		ec.fieldContext_OperationPagination_operations,
-		func(ctx context.Context) (any, error) {
-			return obj.Operations, nil
-		},
-		nil,
-		ec.marshalNOperation2ᚕᚖgithubᚗcomᚋvibeᚑc2ᚋvibeᚑc2ᚑcoreᚋcoreᚋpkgᚋmodelsᚐOperationᚄ,
-		true,
-		true,
-	)
-}
-
-func (ec *executionContext) fieldContext_OperationPagination_operations(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
-	fc = &graphql.FieldContext{
-		Object:     "OperationPagination",
-		Field:      field,
-		IsMethod:   false,
-		IsResolver: false,
-		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
-			switch field.Name {
-			case "id":
-				return ec.fieldContext_Operation_id(ctx, field)
-			case "name":
-				return ec.fieldContext_Operation_name(ctx, field)
-			case "description":
-				return ec.fieldContext_Operation_description(ctx, field)
-			case "members":
-				return ec.fieldContext_Operation_members(ctx, field)
-			case "createdAt":
-				return ec.fieldContext_Operation_createdAt(ctx, field)
-			case "updatedAt":
-				return ec.fieldContext_Operation_updatedAt(ctx, field)
-			}
-			return nil, fmt.Errorf("no field named %q was found under type Operation", field.Name)
-		},
-	}
-	return fc, nil
-}
-
-func (ec *executionContext) _OperationPagination_totalCount(ctx context.Context, field graphql.CollectedField, obj *model.OperationPagination) (ret graphql.Marshaler) {
-	return graphql.ResolveField(
-		ctx,
-		ec.OperationContext,
-		field,
-		ec.fieldContext_OperationPagination_totalCount,
-		func(ctx context.Context) (any, error) {
-			return obj.TotalCount, nil
-		},
-		nil,
-		ec.marshalNInt2int,
-		true,
-		true,
-	)
-}
-
-func (ec *executionContext) fieldContext_OperationPagination_totalCount(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
-	fc = &graphql.FieldContext{
-		Object:     "OperationPagination",
-		Field:      field,
-		IsMethod:   false,
-		IsResolver: false,
-		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
-			return nil, errors.New("field of type Int does not have child fields")
-		},
-	}
-	return fc, nil
-}
-
-func (ec *executionContext) _OperationPagination_hasNextPage(ctx context.Context, field graphql.CollectedField, obj *model.OperationPagination) (ret graphql.Marshaler) {
-	return graphql.ResolveField(
-		ctx,
-		ec.OperationContext,
-		field,
-		ec.fieldContext_OperationPagination_hasNextPage,
+		ec.fieldContext_PageInfo_hasNextPage,
 		func(ctx context.Context) (any, error) {
 			return obj.HasNextPage, nil
 		},
@@ -3087,9 +3323,9 @@ func (ec *executionContext) _OperationPagination_hasNextPage(ctx context.Context
 	)
 }
 
-func (ec *executionContext) fieldContext_OperationPagination_hasNextPage(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+func (ec *executionContext) fieldContext_PageInfo_hasNextPage(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
 	fc = &graphql.FieldContext{
-		Object:     "OperationPagination",
+		Object:     "PageInfo",
 		Field:      field,
 		IsMethod:   false,
 		IsResolver: false,
@@ -3100,12 +3336,12 @@ func (ec *executionContext) fieldContext_OperationPagination_hasNextPage(_ conte
 	return fc, nil
 }
 
-func (ec *executionContext) _OperationPagination_hasPreviousPage(ctx context.Context, field graphql.CollectedField, obj *model.OperationPagination) (ret graphql.Marshaler) {
+func (ec *executionContext) _PageInfo_hasPreviousPage(ctx context.Context, field graphql.CollectedField, obj *pagination.PageInfo) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
 		ec.OperationContext,
 		field,
-		ec.fieldContext_OperationPagination_hasPreviousPage,
+		ec.fieldContext_PageInfo_hasPreviousPage,
 		func(ctx context.Context) (any, error) {
 			return obj.HasPreviousPage, nil
 		},
@@ -3116,14 +3352,72 @@ func (ec *executionContext) _OperationPagination_hasPreviousPage(ctx context.Con
 	)
 }
 
-func (ec *executionContext) fieldContext_OperationPagination_hasPreviousPage(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+func (ec *executionContext) fieldContext_PageInfo_hasPreviousPage(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
 	fc = &graphql.FieldContext{
-		Object:     "OperationPagination",
+		Object:     "PageInfo",
 		Field:      field,
 		IsMethod:   false,
 		IsResolver: false,
 		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
 			return nil, errors.New("field of type Boolean does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _PageInfo_startCursor(ctx context.Context, field graphql.CollectedField, obj *pagination.PageInfo) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_PageInfo_startCursor,
+		func(ctx context.Context) (any, error) {
+			return obj.StartCursor, nil
+		},
+		nil,
+		ec.marshalOString2ᚖstring,
+		true,
+		false,
+	)
+}
+
+func (ec *executionContext) fieldContext_PageInfo_startCursor(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "PageInfo",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _PageInfo_endCursor(ctx context.Context, field graphql.CollectedField, obj *pagination.PageInfo) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_PageInfo_endCursor,
+		func(ctx context.Context) (any, error) {
+			return obj.EndCursor, nil
+		},
+		nil,
+		ec.marshalOString2ᚖstring,
+		true,
+		false,
+	)
+}
+
+func (ec *executionContext) fieldContext_PageInfo_endCursor(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "PageInfo",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
 		},
 	}
 	return fc, nil
@@ -3271,7 +3565,7 @@ func (ec *executionContext) _Query_users(ctx context.Context, field graphql.Coll
 		ec.fieldContext_Query_users,
 		func(ctx context.Context) (any, error) {
 			fc := graphql.GetFieldContext(ctx)
-			return ec.Resolvers.Query().Users(ctx, fc.Args["search"].(*string), fc.Args["offset"].(*int), fc.Args["limit"].(*int))
+			return ec.Resolvers.Query().Users(ctx, fc.Args["search"].(*string), fc.Args["first"].(*int), fc.Args["after"].(*string), fc.Args["last"].(*int), fc.Args["before"].(*string))
 		},
 		func(ctx context.Context, next graphql.Resolver) graphql.Resolver {
 			directive0 := next
@@ -3279,11 +3573,11 @@ func (ec *executionContext) _Query_users(ctx context.Context, field graphql.Coll
 			directive1 := func(ctx context.Context) (any, error) {
 				permission, err := ec.unmarshalNString2string(ctx, "user:read")
 				if err != nil {
-					var zeroVal *model.UserPagination
+					var zeroVal *model.UserConnection
 					return zeroVal, err
 				}
 				if ec.Directives.HasPermission == nil {
-					var zeroVal *model.UserPagination
+					var zeroVal *model.UserConnection
 					return zeroVal, errors.New("directive hasPermission is not implemented")
 				}
 				return ec.Directives.HasPermission(ctx, nil, directive0, permission)
@@ -3292,7 +3586,7 @@ func (ec *executionContext) _Query_users(ctx context.Context, field graphql.Coll
 			next = directive1
 			return next
 		},
-		ec.marshalNUserPagination2ᚖgithubᚗcomᚋvibeᚑc2ᚋvibeᚑc2ᚑcoreᚋcoreᚋpkgᚋgraphqlᚋmodelᚐUserPagination,
+		ec.marshalNUserConnection2ᚖgithubᚗcomᚋvibeᚑc2ᚋvibeᚑc2ᚑcoreᚋcoreᚋpkgᚋgraphqlᚋmodelᚐUserConnection,
 		true,
 		true,
 	)
@@ -3306,16 +3600,14 @@ func (ec *executionContext) fieldContext_Query_users(ctx context.Context, field 
 		IsResolver: true,
 		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
 			switch field.Name {
-			case "users":
-				return ec.fieldContext_UserPagination_users(ctx, field)
+			case "edges":
+				return ec.fieldContext_UserConnection_edges(ctx, field)
+			case "pageInfo":
+				return ec.fieldContext_UserConnection_pageInfo(ctx, field)
 			case "totalCount":
-				return ec.fieldContext_UserPagination_totalCount(ctx, field)
-			case "hasNextPage":
-				return ec.fieldContext_UserPagination_hasNextPage(ctx, field)
-			case "hasPreviousPage":
-				return ec.fieldContext_UserPagination_hasPreviousPage(ctx, field)
+				return ec.fieldContext_UserConnection_totalCount(ctx, field)
 			}
-			return nil, fmt.Errorf("no field named %q was found under type UserPagination", field.Name)
+			return nil, fmt.Errorf("no field named %q was found under type UserConnection", field.Name)
 		},
 	}
 	defer func() {
@@ -3413,7 +3705,7 @@ func (ec *executionContext) _Query_operations(ctx context.Context, field graphql
 		ec.fieldContext_Query_operations,
 		func(ctx context.Context) (any, error) {
 			fc := graphql.GetFieldContext(ctx)
-			return ec.Resolvers.Query().Operations(ctx, fc.Args["search"].(*string), fc.Args["offset"].(*int), fc.Args["limit"].(*int))
+			return ec.Resolvers.Query().Operations(ctx, fc.Args["search"].(*string), fc.Args["first"].(*int), fc.Args["after"].(*string), fc.Args["last"].(*int), fc.Args["before"].(*string))
 		},
 		func(ctx context.Context, next graphql.Resolver) graphql.Resolver {
 			directive0 := next
@@ -3421,11 +3713,11 @@ func (ec *executionContext) _Query_operations(ctx context.Context, field graphql
 			directive1 := func(ctx context.Context) (any, error) {
 				permission, err := ec.unmarshalNString2string(ctx, "operation:read")
 				if err != nil {
-					var zeroVal *model.OperationPagination
+					var zeroVal *model.OperationConnection
 					return zeroVal, err
 				}
 				if ec.Directives.HasPermission == nil {
-					var zeroVal *model.OperationPagination
+					var zeroVal *model.OperationConnection
 					return zeroVal, errors.New("directive hasPermission is not implemented")
 				}
 				return ec.Directives.HasPermission(ctx, nil, directive0, permission)
@@ -3434,7 +3726,7 @@ func (ec *executionContext) _Query_operations(ctx context.Context, field graphql
 			next = directive1
 			return next
 		},
-		ec.marshalNOperationPagination2ᚖgithubᚗcomᚋvibeᚑc2ᚋvibeᚑc2ᚑcoreᚋcoreᚋpkgᚋgraphqlᚋmodelᚐOperationPagination,
+		ec.marshalNOperationConnection2ᚖgithubᚗcomᚋvibeᚑc2ᚋvibeᚑc2ᚑcoreᚋcoreᚋpkgᚋgraphqlᚋmodelᚐOperationConnection,
 		true,
 		true,
 	)
@@ -3448,16 +3740,14 @@ func (ec *executionContext) fieldContext_Query_operations(ctx context.Context, f
 		IsResolver: true,
 		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
 			switch field.Name {
-			case "operations":
-				return ec.fieldContext_OperationPagination_operations(ctx, field)
+			case "edges":
+				return ec.fieldContext_OperationConnection_edges(ctx, field)
+			case "pageInfo":
+				return ec.fieldContext_OperationConnection_pageInfo(ctx, field)
 			case "totalCount":
-				return ec.fieldContext_OperationPagination_totalCount(ctx, field)
-			case "hasNextPage":
-				return ec.fieldContext_OperationPagination_hasNextPage(ctx, field)
-			case "hasPreviousPage":
-				return ec.fieldContext_OperationPagination_hasPreviousPage(ctx, field)
+				return ec.fieldContext_OperationConnection_totalCount(ctx, field)
 			}
-			return nil, fmt.Errorf("no field named %q was found under type OperationPagination", field.Name)
+			return nil, fmt.Errorf("no field named %q was found under type OperationConnection", field.Name)
 		},
 	}
 	defer func() {
@@ -3618,7 +3908,7 @@ func (ec *executionContext) _Query_schemeNetworkPoints(ctx context.Context, fiel
 		ec.fieldContext_Query_schemeNetworkPoints,
 		func(ctx context.Context) (any, error) {
 			fc := graphql.GetFieldContext(ctx)
-			return ec.Resolvers.Query().SchemeNetworkPoints(ctx, fc.Args["operationId"].(string), fc.Args["search"].(*string), fc.Args["offset"].(*int), fc.Args["limit"].(*int))
+			return ec.Resolvers.Query().SchemeNetworkPoints(ctx, fc.Args["operationId"].(string), fc.Args["search"].(*string), fc.Args["first"].(*int), fc.Args["after"].(*string), fc.Args["last"].(*int), fc.Args["before"].(*string))
 		},
 		func(ctx context.Context, next graphql.Resolver) graphql.Resolver {
 			directive0 := next
@@ -3626,11 +3916,11 @@ func (ec *executionContext) _Query_schemeNetworkPoints(ctx context.Context, fiel
 			directive1 := func(ctx context.Context) (any, error) {
 				permission, err := ec.unmarshalNString2string(ctx, "operation:member")
 				if err != nil {
-					var zeroVal *model.SchemeNetworkPointPagination
+					var zeroVal *model.SchemeNetworkPointConnection
 					return zeroVal, err
 				}
 				if ec.Directives.HasPermission == nil {
-					var zeroVal *model.SchemeNetworkPointPagination
+					var zeroVal *model.SchemeNetworkPointConnection
 					return zeroVal, errors.New("directive hasPermission is not implemented")
 				}
 				return ec.Directives.HasPermission(ctx, nil, directive0, permission)
@@ -3639,7 +3929,7 @@ func (ec *executionContext) _Query_schemeNetworkPoints(ctx context.Context, fiel
 			next = directive1
 			return next
 		},
-		ec.marshalNSchemeNetworkPointPagination2ᚖgithubᚗcomᚋvibeᚑc2ᚋvibeᚑc2ᚑcoreᚋcoreᚋpkgᚋgraphqlᚋmodelᚐSchemeNetworkPointPagination,
+		ec.marshalNSchemeNetworkPointConnection2ᚖgithubᚗcomᚋvibeᚑc2ᚋvibeᚑc2ᚑcoreᚋcoreᚋpkgᚋgraphqlᚋmodelᚐSchemeNetworkPointConnection,
 		true,
 		true,
 	)
@@ -3653,16 +3943,14 @@ func (ec *executionContext) fieldContext_Query_schemeNetworkPoints(ctx context.C
 		IsResolver: true,
 		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
 			switch field.Name {
-			case "points":
-				return ec.fieldContext_SchemeNetworkPointPagination_points(ctx, field)
+			case "edges":
+				return ec.fieldContext_SchemeNetworkPointConnection_edges(ctx, field)
+			case "pageInfo":
+				return ec.fieldContext_SchemeNetworkPointConnection_pageInfo(ctx, field)
 			case "totalCount":
-				return ec.fieldContext_SchemeNetworkPointPagination_totalCount(ctx, field)
-			case "hasNextPage":
-				return ec.fieldContext_SchemeNetworkPointPagination_hasNextPage(ctx, field)
-			case "hasPreviousPage":
-				return ec.fieldContext_SchemeNetworkPointPagination_hasPreviousPage(ctx, field)
+				return ec.fieldContext_SchemeNetworkPointConnection_totalCount(ctx, field)
 			}
-			return nil, fmt.Errorf("no field named %q was found under type SchemeNetworkPointPagination", field.Name)
+			return nil, fmt.Errorf("no field named %q was found under type SchemeNetworkPointConnection", field.Name)
 		},
 	}
 	defer func() {
@@ -4031,25 +4319,128 @@ func (ec *executionContext) fieldContext_SchemeNetworkPoint_updatedAt(_ context.
 	return fc, nil
 }
 
-func (ec *executionContext) _SchemeNetworkPointPagination_points(ctx context.Context, field graphql.CollectedField, obj *model.SchemeNetworkPointPagination) (ret graphql.Marshaler) {
+func (ec *executionContext) _SchemeNetworkPointConnection_edges(ctx context.Context, field graphql.CollectedField, obj *model.SchemeNetworkPointConnection) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
 		ec.OperationContext,
 		field,
-		ec.fieldContext_SchemeNetworkPointPagination_points,
+		ec.fieldContext_SchemeNetworkPointConnection_edges,
 		func(ctx context.Context) (any, error) {
-			return obj.Points, nil
+			return obj.Edges, nil
 		},
 		nil,
-		ec.marshalNSchemeNetworkPoint2ᚕᚖgithubᚗcomᚋvibeᚑc2ᚋvibeᚑc2ᚑcoreᚋcoreᚋpkgᚋmodelsᚐSchemeNetworkPointᚄ,
+		ec.marshalNSchemeNetworkPointEdge2ᚕᚖgithubᚗcomᚋvibeᚑc2ᚋvibeᚑc2ᚑcoreᚋcoreᚋpkgᚋgraphqlᚋmodelᚐSchemeNetworkPointEdgeᚄ,
 		true,
 		true,
 	)
 }
 
-func (ec *executionContext) fieldContext_SchemeNetworkPointPagination_points(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+func (ec *executionContext) fieldContext_SchemeNetworkPointConnection_edges(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
 	fc = &graphql.FieldContext{
-		Object:     "SchemeNetworkPointPagination",
+		Object:     "SchemeNetworkPointConnection",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "node":
+				return ec.fieldContext_SchemeNetworkPointEdge_node(ctx, field)
+			case "cursor":
+				return ec.fieldContext_SchemeNetworkPointEdge_cursor(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type SchemeNetworkPointEdge", field.Name)
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _SchemeNetworkPointConnection_pageInfo(ctx context.Context, field graphql.CollectedField, obj *model.SchemeNetworkPointConnection) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_SchemeNetworkPointConnection_pageInfo,
+		func(ctx context.Context) (any, error) {
+			return obj.PageInfo, nil
+		},
+		nil,
+		ec.marshalNPageInfo2ᚖgithubᚗcomᚋvibeᚑc2ᚋvibeᚑc2ᚑcoreᚋcoreᚋpkgᚋpaginationᚐPageInfo,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_SchemeNetworkPointConnection_pageInfo(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "SchemeNetworkPointConnection",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "hasNextPage":
+				return ec.fieldContext_PageInfo_hasNextPage(ctx, field)
+			case "hasPreviousPage":
+				return ec.fieldContext_PageInfo_hasPreviousPage(ctx, field)
+			case "startCursor":
+				return ec.fieldContext_PageInfo_startCursor(ctx, field)
+			case "endCursor":
+				return ec.fieldContext_PageInfo_endCursor(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type PageInfo", field.Name)
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _SchemeNetworkPointConnection_totalCount(ctx context.Context, field graphql.CollectedField, obj *model.SchemeNetworkPointConnection) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_SchemeNetworkPointConnection_totalCount,
+		func(ctx context.Context) (any, error) {
+			return obj.TotalCount, nil
+		},
+		nil,
+		ec.marshalNInt2int,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_SchemeNetworkPointConnection_totalCount(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "SchemeNetworkPointConnection",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Int does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _SchemeNetworkPointEdge_node(ctx context.Context, field graphql.CollectedField, obj *model.SchemeNetworkPointEdge) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_SchemeNetworkPointEdge_node,
+		func(ctx context.Context) (any, error) {
+			return obj.Node, nil
+		},
+		nil,
+		ec.marshalNSchemeNetworkPoint2ᚖgithubᚗcomᚋvibeᚑc2ᚋvibeᚑc2ᚑcoreᚋcoreᚋpkgᚋmodelsᚐSchemeNetworkPoint,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_SchemeNetworkPointEdge_node(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "SchemeNetworkPointEdge",
 		Field:      field,
 		IsMethod:   false,
 		IsResolver: false,
@@ -4078,88 +4469,30 @@ func (ec *executionContext) fieldContext_SchemeNetworkPointPagination_points(_ c
 	return fc, nil
 }
 
-func (ec *executionContext) _SchemeNetworkPointPagination_totalCount(ctx context.Context, field graphql.CollectedField, obj *model.SchemeNetworkPointPagination) (ret graphql.Marshaler) {
+func (ec *executionContext) _SchemeNetworkPointEdge_cursor(ctx context.Context, field graphql.CollectedField, obj *model.SchemeNetworkPointEdge) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
 		ec.OperationContext,
 		field,
-		ec.fieldContext_SchemeNetworkPointPagination_totalCount,
+		ec.fieldContext_SchemeNetworkPointEdge_cursor,
 		func(ctx context.Context) (any, error) {
-			return obj.TotalCount, nil
+			return obj.Cursor, nil
 		},
 		nil,
-		ec.marshalNInt2int,
+		ec.marshalNString2string,
 		true,
 		true,
 	)
 }
 
-func (ec *executionContext) fieldContext_SchemeNetworkPointPagination_totalCount(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+func (ec *executionContext) fieldContext_SchemeNetworkPointEdge_cursor(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
 	fc = &graphql.FieldContext{
-		Object:     "SchemeNetworkPointPagination",
+		Object:     "SchemeNetworkPointEdge",
 		Field:      field,
 		IsMethod:   false,
 		IsResolver: false,
 		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
-			return nil, errors.New("field of type Int does not have child fields")
-		},
-	}
-	return fc, nil
-}
-
-func (ec *executionContext) _SchemeNetworkPointPagination_hasNextPage(ctx context.Context, field graphql.CollectedField, obj *model.SchemeNetworkPointPagination) (ret graphql.Marshaler) {
-	return graphql.ResolveField(
-		ctx,
-		ec.OperationContext,
-		field,
-		ec.fieldContext_SchemeNetworkPointPagination_hasNextPage,
-		func(ctx context.Context) (any, error) {
-			return obj.HasNextPage, nil
-		},
-		nil,
-		ec.marshalNBoolean2bool,
-		true,
-		true,
-	)
-}
-
-func (ec *executionContext) fieldContext_SchemeNetworkPointPagination_hasNextPage(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
-	fc = &graphql.FieldContext{
-		Object:     "SchemeNetworkPointPagination",
-		Field:      field,
-		IsMethod:   false,
-		IsResolver: false,
-		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
-			return nil, errors.New("field of type Boolean does not have child fields")
-		},
-	}
-	return fc, nil
-}
-
-func (ec *executionContext) _SchemeNetworkPointPagination_hasPreviousPage(ctx context.Context, field graphql.CollectedField, obj *model.SchemeNetworkPointPagination) (ret graphql.Marshaler) {
-	return graphql.ResolveField(
-		ctx,
-		ec.OperationContext,
-		field,
-		ec.fieldContext_SchemeNetworkPointPagination_hasPreviousPage,
-		func(ctx context.Context) (any, error) {
-			return obj.HasPreviousPage, nil
-		},
-		nil,
-		ec.marshalNBoolean2bool,
-		true,
-		true,
-	)
-}
-
-func (ec *executionContext) fieldContext_SchemeNetworkPointPagination_hasPreviousPage(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
-	fc = &graphql.FieldContext{
-		Object:     "SchemeNetworkPointPagination",
-		Field:      field,
-		IsMethod:   false,
-		IsResolver: false,
-		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
-			return nil, errors.New("field of type Boolean does not have child fields")
+			return nil, errors.New("field of type String does not have child fields")
 		},
 	}
 	return fc, nil
@@ -4484,25 +4817,128 @@ func (ec *executionContext) fieldContext_User_updatedAt(_ context.Context, field
 	return fc, nil
 }
 
-func (ec *executionContext) _UserPagination_users(ctx context.Context, field graphql.CollectedField, obj *model.UserPagination) (ret graphql.Marshaler) {
+func (ec *executionContext) _UserConnection_edges(ctx context.Context, field graphql.CollectedField, obj *model.UserConnection) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
 		ec.OperationContext,
 		field,
-		ec.fieldContext_UserPagination_users,
+		ec.fieldContext_UserConnection_edges,
 		func(ctx context.Context) (any, error) {
-			return obj.Users, nil
+			return obj.Edges, nil
 		},
 		nil,
-		ec.marshalNUser2ᚕᚖgithubᚗcomᚋvibeᚑc2ᚋvibeᚑc2ᚑcoreᚋcoreᚋpkgᚋmodelsᚐUserᚄ,
+		ec.marshalNUserEdge2ᚕᚖgithubᚗcomᚋvibeᚑc2ᚋvibeᚑc2ᚑcoreᚋcoreᚋpkgᚋgraphqlᚋmodelᚐUserEdgeᚄ,
 		true,
 		true,
 	)
 }
 
-func (ec *executionContext) fieldContext_UserPagination_users(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+func (ec *executionContext) fieldContext_UserConnection_edges(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
 	fc = &graphql.FieldContext{
-		Object:     "UserPagination",
+		Object:     "UserConnection",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "node":
+				return ec.fieldContext_UserEdge_node(ctx, field)
+			case "cursor":
+				return ec.fieldContext_UserEdge_cursor(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type UserEdge", field.Name)
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _UserConnection_pageInfo(ctx context.Context, field graphql.CollectedField, obj *model.UserConnection) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_UserConnection_pageInfo,
+		func(ctx context.Context) (any, error) {
+			return obj.PageInfo, nil
+		},
+		nil,
+		ec.marshalNPageInfo2ᚖgithubᚗcomᚋvibeᚑc2ᚋvibeᚑc2ᚑcoreᚋcoreᚋpkgᚋpaginationᚐPageInfo,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_UserConnection_pageInfo(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "UserConnection",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "hasNextPage":
+				return ec.fieldContext_PageInfo_hasNextPage(ctx, field)
+			case "hasPreviousPage":
+				return ec.fieldContext_PageInfo_hasPreviousPage(ctx, field)
+			case "startCursor":
+				return ec.fieldContext_PageInfo_startCursor(ctx, field)
+			case "endCursor":
+				return ec.fieldContext_PageInfo_endCursor(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type PageInfo", field.Name)
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _UserConnection_totalCount(ctx context.Context, field graphql.CollectedField, obj *model.UserConnection) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_UserConnection_totalCount,
+		func(ctx context.Context) (any, error) {
+			return obj.TotalCount, nil
+		},
+		nil,
+		ec.marshalNInt2int,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_UserConnection_totalCount(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "UserConnection",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Int does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _UserEdge_node(ctx context.Context, field graphql.CollectedField, obj *model.UserEdge) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_UserEdge_node,
+		func(ctx context.Context) (any, error) {
+			return obj.Node, nil
+		},
+		nil,
+		ec.marshalNUser2ᚖgithubᚗcomᚋvibeᚑc2ᚋvibeᚑc2ᚑcoreᚋcoreᚋpkgᚋmodelsᚐUser,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_UserEdge_node(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "UserEdge",
 		Field:      field,
 		IsMethod:   false,
 		IsResolver: false,
@@ -4527,88 +4963,30 @@ func (ec *executionContext) fieldContext_UserPagination_users(_ context.Context,
 	return fc, nil
 }
 
-func (ec *executionContext) _UserPagination_totalCount(ctx context.Context, field graphql.CollectedField, obj *model.UserPagination) (ret graphql.Marshaler) {
+func (ec *executionContext) _UserEdge_cursor(ctx context.Context, field graphql.CollectedField, obj *model.UserEdge) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
 		ec.OperationContext,
 		field,
-		ec.fieldContext_UserPagination_totalCount,
+		ec.fieldContext_UserEdge_cursor,
 		func(ctx context.Context) (any, error) {
-			return obj.TotalCount, nil
+			return obj.Cursor, nil
 		},
 		nil,
-		ec.marshalNInt2int,
+		ec.marshalNString2string,
 		true,
 		true,
 	)
 }
 
-func (ec *executionContext) fieldContext_UserPagination_totalCount(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+func (ec *executionContext) fieldContext_UserEdge_cursor(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
 	fc = &graphql.FieldContext{
-		Object:     "UserPagination",
+		Object:     "UserEdge",
 		Field:      field,
 		IsMethod:   false,
 		IsResolver: false,
 		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
-			return nil, errors.New("field of type Int does not have child fields")
-		},
-	}
-	return fc, nil
-}
-
-func (ec *executionContext) _UserPagination_hasNextPage(ctx context.Context, field graphql.CollectedField, obj *model.UserPagination) (ret graphql.Marshaler) {
-	return graphql.ResolveField(
-		ctx,
-		ec.OperationContext,
-		field,
-		ec.fieldContext_UserPagination_hasNextPage,
-		func(ctx context.Context) (any, error) {
-			return obj.HasNextPage, nil
-		},
-		nil,
-		ec.marshalNBoolean2bool,
-		true,
-		true,
-	)
-}
-
-func (ec *executionContext) fieldContext_UserPagination_hasNextPage(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
-	fc = &graphql.FieldContext{
-		Object:     "UserPagination",
-		Field:      field,
-		IsMethod:   false,
-		IsResolver: false,
-		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
-			return nil, errors.New("field of type Boolean does not have child fields")
-		},
-	}
-	return fc, nil
-}
-
-func (ec *executionContext) _UserPagination_hasPreviousPage(ctx context.Context, field graphql.CollectedField, obj *model.UserPagination) (ret graphql.Marshaler) {
-	return graphql.ResolveField(
-		ctx,
-		ec.OperationContext,
-		field,
-		ec.fieldContext_UserPagination_hasPreviousPage,
-		func(ctx context.Context) (any, error) {
-			return obj.HasPreviousPage, nil
-		},
-		nil,
-		ec.marshalNBoolean2bool,
-		true,
-		true,
-	)
-}
-
-func (ec *executionContext) fieldContext_UserPagination_hasPreviousPage(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
-	fc = &graphql.FieldContext{
-		Object:     "UserPagination",
-		Field:      field,
-		IsMethod:   false,
-		IsResolver: false,
-		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
-			return nil, errors.New("field of type Boolean does not have child fields")
+			return nil, errors.New("field of type String does not have child fields")
 		},
 	}
 	return fc, nil
@@ -6780,6 +7158,99 @@ func (ec *executionContext) _Operation(ctx context.Context, sel ast.SelectionSet
 	return out
 }
 
+var operationConnectionImplementors = []string{"OperationConnection"}
+
+func (ec *executionContext) _OperationConnection(ctx context.Context, sel ast.SelectionSet, obj *model.OperationConnection) graphql.Marshaler {
+	fields := graphql.CollectFields(ec.OperationContext, sel, operationConnectionImplementors)
+
+	out := graphql.NewFieldSet(fields)
+	deferred := make(map[string]*graphql.FieldSet)
+	for i, field := range fields {
+		switch field.Name {
+		case "__typename":
+			out.Values[i] = graphql.MarshalString("OperationConnection")
+		case "edges":
+			out.Values[i] = ec._OperationConnection_edges(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "pageInfo":
+			out.Values[i] = ec._OperationConnection_pageInfo(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "totalCount":
+			out.Values[i] = ec._OperationConnection_totalCount(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		default:
+			panic("unknown field " + strconv.Quote(field.Name))
+		}
+	}
+	out.Dispatch(ctx)
+	if out.Invalids > 0 {
+		return graphql.Null
+	}
+
+	atomic.AddInt32(&ec.Deferred, int32(len(deferred)))
+
+	for label, dfs := range deferred {
+		ec.ProcessDeferredGroup(graphql.DeferredGroup{
+			Label:    label,
+			Path:     graphql.GetPath(ctx),
+			FieldSet: dfs,
+			Context:  ctx,
+		})
+	}
+
+	return out
+}
+
+var operationEdgeImplementors = []string{"OperationEdge"}
+
+func (ec *executionContext) _OperationEdge(ctx context.Context, sel ast.SelectionSet, obj *model.OperationEdge) graphql.Marshaler {
+	fields := graphql.CollectFields(ec.OperationContext, sel, operationEdgeImplementors)
+
+	out := graphql.NewFieldSet(fields)
+	deferred := make(map[string]*graphql.FieldSet)
+	for i, field := range fields {
+		switch field.Name {
+		case "__typename":
+			out.Values[i] = graphql.MarshalString("OperationEdge")
+		case "node":
+			out.Values[i] = ec._OperationEdge_node(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "cursor":
+			out.Values[i] = ec._OperationEdge_cursor(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		default:
+			panic("unknown field " + strconv.Quote(field.Name))
+		}
+	}
+	out.Dispatch(ctx)
+	if out.Invalids > 0 {
+		return graphql.Null
+	}
+
+	atomic.AddInt32(&ec.Deferred, int32(len(deferred)))
+
+	for label, dfs := range deferred {
+		ec.ProcessDeferredGroup(graphql.DeferredGroup{
+			Label:    label,
+			Path:     graphql.GetPath(ctx),
+			FieldSet: dfs,
+			Context:  ctx,
+		})
+	}
+
+	return out
+}
+
 var operationMemberImplementors = []string{"OperationMember"}
 
 func (ec *executionContext) _OperationMember(ctx context.Context, sel ast.SelectionSet, obj *models.OperationMember) graphql.Marshaler {
@@ -6855,37 +7326,31 @@ func (ec *executionContext) _OperationMember(ctx context.Context, sel ast.Select
 	return out
 }
 
-var operationPaginationImplementors = []string{"OperationPagination"}
+var pageInfoImplementors = []string{"PageInfo"}
 
-func (ec *executionContext) _OperationPagination(ctx context.Context, sel ast.SelectionSet, obj *model.OperationPagination) graphql.Marshaler {
-	fields := graphql.CollectFields(ec.OperationContext, sel, operationPaginationImplementors)
+func (ec *executionContext) _PageInfo(ctx context.Context, sel ast.SelectionSet, obj *pagination.PageInfo) graphql.Marshaler {
+	fields := graphql.CollectFields(ec.OperationContext, sel, pageInfoImplementors)
 
 	out := graphql.NewFieldSet(fields)
 	deferred := make(map[string]*graphql.FieldSet)
 	for i, field := range fields {
 		switch field.Name {
 		case "__typename":
-			out.Values[i] = graphql.MarshalString("OperationPagination")
-		case "operations":
-			out.Values[i] = ec._OperationPagination_operations(ctx, field, obj)
-			if out.Values[i] == graphql.Null {
-				out.Invalids++
-			}
-		case "totalCount":
-			out.Values[i] = ec._OperationPagination_totalCount(ctx, field, obj)
-			if out.Values[i] == graphql.Null {
-				out.Invalids++
-			}
+			out.Values[i] = graphql.MarshalString("PageInfo")
 		case "hasNextPage":
-			out.Values[i] = ec._OperationPagination_hasNextPage(ctx, field, obj)
+			out.Values[i] = ec._PageInfo_hasNextPage(ctx, field, obj)
 			if out.Values[i] == graphql.Null {
 				out.Invalids++
 			}
 		case "hasPreviousPage":
-			out.Values[i] = ec._OperationPagination_hasPreviousPage(ctx, field, obj)
+			out.Values[i] = ec._PageInfo_hasPreviousPage(ctx, field, obj)
 			if out.Values[i] == graphql.Null {
 				out.Invalids++
 			}
+		case "startCursor":
+			out.Values[i] = ec._PageInfo_startCursor(ctx, field, obj)
+		case "endCursor":
+			out.Values[i] = ec._PageInfo_endCursor(ctx, field, obj)
 		default:
 			panic("unknown field " + strconv.Quote(field.Name))
 		}
@@ -7361,34 +7826,73 @@ func (ec *executionContext) _SchemeNetworkPoint(ctx context.Context, sel ast.Sel
 	return out
 }
 
-var schemeNetworkPointPaginationImplementors = []string{"SchemeNetworkPointPagination"}
+var schemeNetworkPointConnectionImplementors = []string{"SchemeNetworkPointConnection"}
 
-func (ec *executionContext) _SchemeNetworkPointPagination(ctx context.Context, sel ast.SelectionSet, obj *model.SchemeNetworkPointPagination) graphql.Marshaler {
-	fields := graphql.CollectFields(ec.OperationContext, sel, schemeNetworkPointPaginationImplementors)
+func (ec *executionContext) _SchemeNetworkPointConnection(ctx context.Context, sel ast.SelectionSet, obj *model.SchemeNetworkPointConnection) graphql.Marshaler {
+	fields := graphql.CollectFields(ec.OperationContext, sel, schemeNetworkPointConnectionImplementors)
 
 	out := graphql.NewFieldSet(fields)
 	deferred := make(map[string]*graphql.FieldSet)
 	for i, field := range fields {
 		switch field.Name {
 		case "__typename":
-			out.Values[i] = graphql.MarshalString("SchemeNetworkPointPagination")
-		case "points":
-			out.Values[i] = ec._SchemeNetworkPointPagination_points(ctx, field, obj)
+			out.Values[i] = graphql.MarshalString("SchemeNetworkPointConnection")
+		case "edges":
+			out.Values[i] = ec._SchemeNetworkPointConnection_edges(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "pageInfo":
+			out.Values[i] = ec._SchemeNetworkPointConnection_pageInfo(ctx, field, obj)
 			if out.Values[i] == graphql.Null {
 				out.Invalids++
 			}
 		case "totalCount":
-			out.Values[i] = ec._SchemeNetworkPointPagination_totalCount(ctx, field, obj)
+			out.Values[i] = ec._SchemeNetworkPointConnection_totalCount(ctx, field, obj)
 			if out.Values[i] == graphql.Null {
 				out.Invalids++
 			}
-		case "hasNextPage":
-			out.Values[i] = ec._SchemeNetworkPointPagination_hasNextPage(ctx, field, obj)
+		default:
+			panic("unknown field " + strconv.Quote(field.Name))
+		}
+	}
+	out.Dispatch(ctx)
+	if out.Invalids > 0 {
+		return graphql.Null
+	}
+
+	atomic.AddInt32(&ec.Deferred, int32(len(deferred)))
+
+	for label, dfs := range deferred {
+		ec.ProcessDeferredGroup(graphql.DeferredGroup{
+			Label:    label,
+			Path:     graphql.GetPath(ctx),
+			FieldSet: dfs,
+			Context:  ctx,
+		})
+	}
+
+	return out
+}
+
+var schemeNetworkPointEdgeImplementors = []string{"SchemeNetworkPointEdge"}
+
+func (ec *executionContext) _SchemeNetworkPointEdge(ctx context.Context, sel ast.SelectionSet, obj *model.SchemeNetworkPointEdge) graphql.Marshaler {
+	fields := graphql.CollectFields(ec.OperationContext, sel, schemeNetworkPointEdgeImplementors)
+
+	out := graphql.NewFieldSet(fields)
+	deferred := make(map[string]*graphql.FieldSet)
+	for i, field := range fields {
+		switch field.Name {
+		case "__typename":
+			out.Values[i] = graphql.MarshalString("SchemeNetworkPointEdge")
+		case "node":
+			out.Values[i] = ec._SchemeNetworkPointEdge_node(ctx, field, obj)
 			if out.Values[i] == graphql.Null {
 				out.Invalids++
 			}
-		case "hasPreviousPage":
-			out.Values[i] = ec._SchemeNetworkPointPagination_hasPreviousPage(ctx, field, obj)
+		case "cursor":
+			out.Values[i] = ec._SchemeNetworkPointEdge_cursor(ctx, field, obj)
 			if out.Values[i] == graphql.Null {
 				out.Invalids++
 			}
@@ -7662,34 +8166,73 @@ func (ec *executionContext) _User(ctx context.Context, sel ast.SelectionSet, obj
 	return out
 }
 
-var userPaginationImplementors = []string{"UserPagination"}
+var userConnectionImplementors = []string{"UserConnection"}
 
-func (ec *executionContext) _UserPagination(ctx context.Context, sel ast.SelectionSet, obj *model.UserPagination) graphql.Marshaler {
-	fields := graphql.CollectFields(ec.OperationContext, sel, userPaginationImplementors)
+func (ec *executionContext) _UserConnection(ctx context.Context, sel ast.SelectionSet, obj *model.UserConnection) graphql.Marshaler {
+	fields := graphql.CollectFields(ec.OperationContext, sel, userConnectionImplementors)
 
 	out := graphql.NewFieldSet(fields)
 	deferred := make(map[string]*graphql.FieldSet)
 	for i, field := range fields {
 		switch field.Name {
 		case "__typename":
-			out.Values[i] = graphql.MarshalString("UserPagination")
-		case "users":
-			out.Values[i] = ec._UserPagination_users(ctx, field, obj)
+			out.Values[i] = graphql.MarshalString("UserConnection")
+		case "edges":
+			out.Values[i] = ec._UserConnection_edges(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "pageInfo":
+			out.Values[i] = ec._UserConnection_pageInfo(ctx, field, obj)
 			if out.Values[i] == graphql.Null {
 				out.Invalids++
 			}
 		case "totalCount":
-			out.Values[i] = ec._UserPagination_totalCount(ctx, field, obj)
+			out.Values[i] = ec._UserConnection_totalCount(ctx, field, obj)
 			if out.Values[i] == graphql.Null {
 				out.Invalids++
 			}
-		case "hasNextPage":
-			out.Values[i] = ec._UserPagination_hasNextPage(ctx, field, obj)
+		default:
+			panic("unknown field " + strconv.Quote(field.Name))
+		}
+	}
+	out.Dispatch(ctx)
+	if out.Invalids > 0 {
+		return graphql.Null
+	}
+
+	atomic.AddInt32(&ec.Deferred, int32(len(deferred)))
+
+	for label, dfs := range deferred {
+		ec.ProcessDeferredGroup(graphql.DeferredGroup{
+			Label:    label,
+			Path:     graphql.GetPath(ctx),
+			FieldSet: dfs,
+			Context:  ctx,
+		})
+	}
+
+	return out
+}
+
+var userEdgeImplementors = []string{"UserEdge"}
+
+func (ec *executionContext) _UserEdge(ctx context.Context, sel ast.SelectionSet, obj *model.UserEdge) graphql.Marshaler {
+	fields := graphql.CollectFields(ec.OperationContext, sel, userEdgeImplementors)
+
+	out := graphql.NewFieldSet(fields)
+	deferred := make(map[string]*graphql.FieldSet)
+	for i, field := range fields {
+		switch field.Name {
+		case "__typename":
+			out.Values[i] = graphql.MarshalString("UserEdge")
+		case "node":
+			out.Values[i] = ec._UserEdge_node(ctx, field, obj)
 			if out.Values[i] == graphql.Null {
 				out.Invalids++
 			}
-		case "hasPreviousPage":
-			out.Values[i] = ec._UserPagination_hasPreviousPage(ctx, field, obj)
+		case "cursor":
+			out.Values[i] = ec._UserEdge_cursor(ctx, field, obj)
 			if out.Values[i] == graphql.Null {
 				out.Invalids++
 			}
@@ -8123,11 +8666,35 @@ func (ec *executionContext) marshalNOperation2githubᚗcomᚋvibeᚑc2ᚋvibeᚑ
 	return ec._Operation(ctx, sel, &v)
 }
 
-func (ec *executionContext) marshalNOperation2ᚕᚖgithubᚗcomᚋvibeᚑc2ᚋvibeᚑc2ᚑcoreᚋcoreᚋpkgᚋmodelsᚐOperationᚄ(ctx context.Context, sel ast.SelectionSet, v []*models.Operation) graphql.Marshaler {
+func (ec *executionContext) marshalNOperation2ᚖgithubᚗcomᚋvibeᚑc2ᚋvibeᚑc2ᚑcoreᚋcoreᚋpkgᚋmodelsᚐOperation(ctx context.Context, sel ast.SelectionSet, v *models.Operation) graphql.Marshaler {
+	if v == nil {
+		if !graphql.HasFieldError(ctx, graphql.GetFieldContext(ctx)) {
+			graphql.AddErrorf(ctx, "the requested element is null which the schema does not allow")
+		}
+		return graphql.Null
+	}
+	return ec._Operation(ctx, sel, v)
+}
+
+func (ec *executionContext) marshalNOperationConnection2githubᚗcomᚋvibeᚑc2ᚋvibeᚑc2ᚑcoreᚋcoreᚋpkgᚋgraphqlᚋmodelᚐOperationConnection(ctx context.Context, sel ast.SelectionSet, v model.OperationConnection) graphql.Marshaler {
+	return ec._OperationConnection(ctx, sel, &v)
+}
+
+func (ec *executionContext) marshalNOperationConnection2ᚖgithubᚗcomᚋvibeᚑc2ᚋvibeᚑc2ᚑcoreᚋcoreᚋpkgᚋgraphqlᚋmodelᚐOperationConnection(ctx context.Context, sel ast.SelectionSet, v *model.OperationConnection) graphql.Marshaler {
+	if v == nil {
+		if !graphql.HasFieldError(ctx, graphql.GetFieldContext(ctx)) {
+			graphql.AddErrorf(ctx, "the requested element is null which the schema does not allow")
+		}
+		return graphql.Null
+	}
+	return ec._OperationConnection(ctx, sel, v)
+}
+
+func (ec *executionContext) marshalNOperationEdge2ᚕᚖgithubᚗcomᚋvibeᚑc2ᚋvibeᚑc2ᚑcoreᚋcoreᚋpkgᚋgraphqlᚋmodelᚐOperationEdgeᚄ(ctx context.Context, sel ast.SelectionSet, v []*model.OperationEdge) graphql.Marshaler {
 	ret := graphql.MarshalSliceConcurrently(ctx, len(v), 0, false, func(ctx context.Context, i int) graphql.Marshaler {
 		fc := graphql.GetFieldContext(ctx)
 		fc.Result = &v[i]
-		return ec.marshalNOperation2ᚖgithubᚗcomᚋvibeᚑc2ᚋvibeᚑc2ᚑcoreᚋcoreᚋpkgᚋmodelsᚐOperation(ctx, sel, v[i])
+		return ec.marshalNOperationEdge2ᚖgithubᚗcomᚋvibeᚑc2ᚋvibeᚑc2ᚑcoreᚋcoreᚋpkgᚋgraphqlᚋmodelᚐOperationEdge(ctx, sel, v[i])
 	})
 
 	for _, e := range ret {
@@ -8139,14 +8706,14 @@ func (ec *executionContext) marshalNOperation2ᚕᚖgithubᚗcomᚋvibeᚑc2ᚋv
 	return ret
 }
 
-func (ec *executionContext) marshalNOperation2ᚖgithubᚗcomᚋvibeᚑc2ᚋvibeᚑc2ᚑcoreᚋcoreᚋpkgᚋmodelsᚐOperation(ctx context.Context, sel ast.SelectionSet, v *models.Operation) graphql.Marshaler {
+func (ec *executionContext) marshalNOperationEdge2ᚖgithubᚗcomᚋvibeᚑc2ᚋvibeᚑc2ᚑcoreᚋcoreᚋpkgᚋgraphqlᚋmodelᚐOperationEdge(ctx context.Context, sel ast.SelectionSet, v *model.OperationEdge) graphql.Marshaler {
 	if v == nil {
 		if !graphql.HasFieldError(ctx, graphql.GetFieldContext(ctx)) {
 			graphql.AddErrorf(ctx, "the requested element is null which the schema does not allow")
 		}
 		return graphql.Null
 	}
-	return ec._Operation(ctx, sel, v)
+	return ec._OperationEdge(ctx, sel, v)
 }
 
 func (ec *executionContext) marshalNOperationMember2ᚕᚖgithubᚗcomᚋvibeᚑc2ᚋvibeᚑc2ᚑcoreᚋcoreᚋpkgᚋmodelsᚐOperationMemberᚄ(ctx context.Context, sel ast.SelectionSet, v []*models.OperationMember) graphql.Marshaler {
@@ -8175,20 +8742,6 @@ func (ec *executionContext) marshalNOperationMember2ᚖgithubᚗcomᚋvibeᚑc2�
 	return ec._OperationMember(ctx, sel, v)
 }
 
-func (ec *executionContext) marshalNOperationPagination2githubᚗcomᚋvibeᚑc2ᚋvibeᚑc2ᚑcoreᚋcoreᚋpkgᚋgraphqlᚋmodelᚐOperationPagination(ctx context.Context, sel ast.SelectionSet, v model.OperationPagination) graphql.Marshaler {
-	return ec._OperationPagination(ctx, sel, &v)
-}
-
-func (ec *executionContext) marshalNOperationPagination2ᚖgithubᚗcomᚋvibeᚑc2ᚋvibeᚑc2ᚑcoreᚋcoreᚋpkgᚋgraphqlᚋmodelᚐOperationPagination(ctx context.Context, sel ast.SelectionSet, v *model.OperationPagination) graphql.Marshaler {
-	if v == nil {
-		if !graphql.HasFieldError(ctx, graphql.GetFieldContext(ctx)) {
-			graphql.AddErrorf(ctx, "the requested element is null which the schema does not allow")
-		}
-		return graphql.Null
-	}
-	return ec._OperationPagination(ctx, sel, v)
-}
-
 func (ec *executionContext) unmarshalNOperationRole2githubᚗcomᚋvibeᚑc2ᚋvibeᚑc2ᚑcoreᚋcoreᚋpkgᚋmodelsᚐOperationRole(ctx context.Context, v any) (models.OperationRole, error) {
 	var res models.OperationRole
 	err := res.UnmarshalGQL(v)
@@ -8199,24 +8752,18 @@ func (ec *executionContext) marshalNOperationRole2githubᚗcomᚋvibeᚑc2ᚋvib
 	return v
 }
 
-func (ec *executionContext) marshalNSchemeNetworkPoint2githubᚗcomᚋvibeᚑc2ᚋvibeᚑc2ᚑcoreᚋcoreᚋpkgᚋmodelsᚐSchemeNetworkPoint(ctx context.Context, sel ast.SelectionSet, v models.SchemeNetworkPoint) graphql.Marshaler {
-	return ec._SchemeNetworkPoint(ctx, sel, &v)
+func (ec *executionContext) marshalNPageInfo2ᚖgithubᚗcomᚋvibeᚑc2ᚋvibeᚑc2ᚑcoreᚋcoreᚋpkgᚋpaginationᚐPageInfo(ctx context.Context, sel ast.SelectionSet, v *pagination.PageInfo) graphql.Marshaler {
+	if v == nil {
+		if !graphql.HasFieldError(ctx, graphql.GetFieldContext(ctx)) {
+			graphql.AddErrorf(ctx, "the requested element is null which the schema does not allow")
+		}
+		return graphql.Null
+	}
+	return ec._PageInfo(ctx, sel, v)
 }
 
-func (ec *executionContext) marshalNSchemeNetworkPoint2ᚕᚖgithubᚗcomᚋvibeᚑc2ᚋvibeᚑc2ᚑcoreᚋcoreᚋpkgᚋmodelsᚐSchemeNetworkPointᚄ(ctx context.Context, sel ast.SelectionSet, v []*models.SchemeNetworkPoint) graphql.Marshaler {
-	ret := graphql.MarshalSliceConcurrently(ctx, len(v), 0, false, func(ctx context.Context, i int) graphql.Marshaler {
-		fc := graphql.GetFieldContext(ctx)
-		fc.Result = &v[i]
-		return ec.marshalNSchemeNetworkPoint2ᚖgithubᚗcomᚋvibeᚑc2ᚋvibeᚑc2ᚑcoreᚋcoreᚋpkgᚋmodelsᚐSchemeNetworkPoint(ctx, sel, v[i])
-	})
-
-	for _, e := range ret {
-		if e == graphql.Null {
-			return graphql.Null
-		}
-	}
-
-	return ret
+func (ec *executionContext) marshalNSchemeNetworkPoint2githubᚗcomᚋvibeᚑc2ᚋvibeᚑc2ᚑcoreᚋcoreᚋpkgᚋmodelsᚐSchemeNetworkPoint(ctx context.Context, sel ast.SelectionSet, v models.SchemeNetworkPoint) graphql.Marshaler {
+	return ec._SchemeNetworkPoint(ctx, sel, &v)
 }
 
 func (ec *executionContext) marshalNSchemeNetworkPoint2ᚖgithubᚗcomᚋvibeᚑc2ᚋvibeᚑc2ᚑcoreᚋcoreᚋpkgᚋmodelsᚐSchemeNetworkPoint(ctx context.Context, sel ast.SelectionSet, v *models.SchemeNetworkPoint) graphql.Marshaler {
@@ -8229,18 +8776,44 @@ func (ec *executionContext) marshalNSchemeNetworkPoint2ᚖgithubᚗcomᚋvibeᚑ
 	return ec._SchemeNetworkPoint(ctx, sel, v)
 }
 
-func (ec *executionContext) marshalNSchemeNetworkPointPagination2githubᚗcomᚋvibeᚑc2ᚋvibeᚑc2ᚑcoreᚋcoreᚋpkgᚋgraphqlᚋmodelᚐSchemeNetworkPointPagination(ctx context.Context, sel ast.SelectionSet, v model.SchemeNetworkPointPagination) graphql.Marshaler {
-	return ec._SchemeNetworkPointPagination(ctx, sel, &v)
+func (ec *executionContext) marshalNSchemeNetworkPointConnection2githubᚗcomᚋvibeᚑc2ᚋvibeᚑc2ᚑcoreᚋcoreᚋpkgᚋgraphqlᚋmodelᚐSchemeNetworkPointConnection(ctx context.Context, sel ast.SelectionSet, v model.SchemeNetworkPointConnection) graphql.Marshaler {
+	return ec._SchemeNetworkPointConnection(ctx, sel, &v)
 }
 
-func (ec *executionContext) marshalNSchemeNetworkPointPagination2ᚖgithubᚗcomᚋvibeᚑc2ᚋvibeᚑc2ᚑcoreᚋcoreᚋpkgᚋgraphqlᚋmodelᚐSchemeNetworkPointPagination(ctx context.Context, sel ast.SelectionSet, v *model.SchemeNetworkPointPagination) graphql.Marshaler {
+func (ec *executionContext) marshalNSchemeNetworkPointConnection2ᚖgithubᚗcomᚋvibeᚑc2ᚋvibeᚑc2ᚑcoreᚋcoreᚋpkgᚋgraphqlᚋmodelᚐSchemeNetworkPointConnection(ctx context.Context, sel ast.SelectionSet, v *model.SchemeNetworkPointConnection) graphql.Marshaler {
 	if v == nil {
 		if !graphql.HasFieldError(ctx, graphql.GetFieldContext(ctx)) {
 			graphql.AddErrorf(ctx, "the requested element is null which the schema does not allow")
 		}
 		return graphql.Null
 	}
-	return ec._SchemeNetworkPointPagination(ctx, sel, v)
+	return ec._SchemeNetworkPointConnection(ctx, sel, v)
+}
+
+func (ec *executionContext) marshalNSchemeNetworkPointEdge2ᚕᚖgithubᚗcomᚋvibeᚑc2ᚋvibeᚑc2ᚑcoreᚋcoreᚋpkgᚋgraphqlᚋmodelᚐSchemeNetworkPointEdgeᚄ(ctx context.Context, sel ast.SelectionSet, v []*model.SchemeNetworkPointEdge) graphql.Marshaler {
+	ret := graphql.MarshalSliceConcurrently(ctx, len(v), 0, false, func(ctx context.Context, i int) graphql.Marshaler {
+		fc := graphql.GetFieldContext(ctx)
+		fc.Result = &v[i]
+		return ec.marshalNSchemeNetworkPointEdge2ᚖgithubᚗcomᚋvibeᚑc2ᚋvibeᚑc2ᚑcoreᚋcoreᚋpkgᚋgraphqlᚋmodelᚐSchemeNetworkPointEdge(ctx, sel, v[i])
+	})
+
+	for _, e := range ret {
+		if e == graphql.Null {
+			return graphql.Null
+		}
+	}
+
+	return ret
+}
+
+func (ec *executionContext) marshalNSchemeNetworkPointEdge2ᚖgithubᚗcomᚋvibeᚑc2ᚋvibeᚑc2ᚑcoreᚋcoreᚋpkgᚋgraphqlᚋmodelᚐSchemeNetworkPointEdge(ctx context.Context, sel ast.SelectionSet, v *model.SchemeNetworkPointEdge) graphql.Marshaler {
+	if v == nil {
+		if !graphql.HasFieldError(ctx, graphql.GetFieldContext(ctx)) {
+			graphql.AddErrorf(ctx, "the requested element is null which the schema does not allow")
+		}
+		return graphql.Null
+	}
+	return ec._SchemeNetworkPointEdge(ctx, sel, v)
 }
 
 func (ec *executionContext) marshalNSchemeNetworkPort2ᚕᚖgithubᚗcomᚋvibeᚑc2ᚋvibeᚑc2ᚑcoreᚋcoreᚋpkgᚋmodelsᚐSchemeNetworkPortᚄ(ctx context.Context, sel ast.SelectionSet, v []*models.SchemeNetworkPort) graphql.Marshaler {
@@ -8339,11 +8912,35 @@ func (ec *executionContext) marshalNUser2githubᚗcomᚋvibeᚑc2ᚋvibeᚑc2ᚑ
 	return ec._User(ctx, sel, &v)
 }
 
-func (ec *executionContext) marshalNUser2ᚕᚖgithubᚗcomᚋvibeᚑc2ᚋvibeᚑc2ᚑcoreᚋcoreᚋpkgᚋmodelsᚐUserᚄ(ctx context.Context, sel ast.SelectionSet, v []*models.User) graphql.Marshaler {
+func (ec *executionContext) marshalNUser2ᚖgithubᚗcomᚋvibeᚑc2ᚋvibeᚑc2ᚑcoreᚋcoreᚋpkgᚋmodelsᚐUser(ctx context.Context, sel ast.SelectionSet, v *models.User) graphql.Marshaler {
+	if v == nil {
+		if !graphql.HasFieldError(ctx, graphql.GetFieldContext(ctx)) {
+			graphql.AddErrorf(ctx, "the requested element is null which the schema does not allow")
+		}
+		return graphql.Null
+	}
+	return ec._User(ctx, sel, v)
+}
+
+func (ec *executionContext) marshalNUserConnection2githubᚗcomᚋvibeᚑc2ᚋvibeᚑc2ᚑcoreᚋcoreᚋpkgᚋgraphqlᚋmodelᚐUserConnection(ctx context.Context, sel ast.SelectionSet, v model.UserConnection) graphql.Marshaler {
+	return ec._UserConnection(ctx, sel, &v)
+}
+
+func (ec *executionContext) marshalNUserConnection2ᚖgithubᚗcomᚋvibeᚑc2ᚋvibeᚑc2ᚑcoreᚋcoreᚋpkgᚋgraphqlᚋmodelᚐUserConnection(ctx context.Context, sel ast.SelectionSet, v *model.UserConnection) graphql.Marshaler {
+	if v == nil {
+		if !graphql.HasFieldError(ctx, graphql.GetFieldContext(ctx)) {
+			graphql.AddErrorf(ctx, "the requested element is null which the schema does not allow")
+		}
+		return graphql.Null
+	}
+	return ec._UserConnection(ctx, sel, v)
+}
+
+func (ec *executionContext) marshalNUserEdge2ᚕᚖgithubᚗcomᚋvibeᚑc2ᚋvibeᚑc2ᚑcoreᚋcoreᚋpkgᚋgraphqlᚋmodelᚐUserEdgeᚄ(ctx context.Context, sel ast.SelectionSet, v []*model.UserEdge) graphql.Marshaler {
 	ret := graphql.MarshalSliceConcurrently(ctx, len(v), 0, false, func(ctx context.Context, i int) graphql.Marshaler {
 		fc := graphql.GetFieldContext(ctx)
 		fc.Result = &v[i]
-		return ec.marshalNUser2ᚖgithubᚗcomᚋvibeᚑc2ᚋvibeᚑc2ᚑcoreᚋcoreᚋpkgᚋmodelsᚐUser(ctx, sel, v[i])
+		return ec.marshalNUserEdge2ᚖgithubᚗcomᚋvibeᚑc2ᚋvibeᚑc2ᚑcoreᚋcoreᚋpkgᚋgraphqlᚋmodelᚐUserEdge(ctx, sel, v[i])
 	})
 
 	for _, e := range ret {
@@ -8355,28 +8952,14 @@ func (ec *executionContext) marshalNUser2ᚕᚖgithubᚗcomᚋvibeᚑc2ᚋvibe�
 	return ret
 }
 
-func (ec *executionContext) marshalNUser2ᚖgithubᚗcomᚋvibeᚑc2ᚋvibeᚑc2ᚑcoreᚋcoreᚋpkgᚋmodelsᚐUser(ctx context.Context, sel ast.SelectionSet, v *models.User) graphql.Marshaler {
+func (ec *executionContext) marshalNUserEdge2ᚖgithubᚗcomᚋvibeᚑc2ᚋvibeᚑc2ᚑcoreᚋcoreᚋpkgᚋgraphqlᚋmodelᚐUserEdge(ctx context.Context, sel ast.SelectionSet, v *model.UserEdge) graphql.Marshaler {
 	if v == nil {
 		if !graphql.HasFieldError(ctx, graphql.GetFieldContext(ctx)) {
 			graphql.AddErrorf(ctx, "the requested element is null which the schema does not allow")
 		}
 		return graphql.Null
 	}
-	return ec._User(ctx, sel, v)
-}
-
-func (ec *executionContext) marshalNUserPagination2githubᚗcomᚋvibeᚑc2ᚋvibeᚑc2ᚑcoreᚋcoreᚋpkgᚋgraphqlᚋmodelᚐUserPagination(ctx context.Context, sel ast.SelectionSet, v model.UserPagination) graphql.Marshaler {
-	return ec._UserPagination(ctx, sel, &v)
-}
-
-func (ec *executionContext) marshalNUserPagination2ᚖgithubᚗcomᚋvibeᚑc2ᚋvibeᚑc2ᚑcoreᚋcoreᚋpkgᚋgraphqlᚋmodelᚐUserPagination(ctx context.Context, sel ast.SelectionSet, v *model.UserPagination) graphql.Marshaler {
-	if v == nil {
-		if !graphql.HasFieldError(ctx, graphql.GetFieldContext(ctx)) {
-			graphql.AddErrorf(ctx, "the requested element is null which the schema does not allow")
-		}
-		return graphql.Null
-	}
-	return ec._UserPagination(ctx, sel, v)
+	return ec._UserEdge(ctx, sel, v)
 }
 
 func (ec *executionContext) marshalN__Directive2githubᚗcomᚋ99designsᚋgqlgenᚋgraphqlᚋintrospectionᚐDirective(ctx context.Context, sel ast.SelectionSet, v introspection.Directive) graphql.Marshaler {
