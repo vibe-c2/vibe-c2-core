@@ -37,8 +37,8 @@ export function NavUser({
   const navigate = useNavigate()
   const logout = useAuthStore((s) => s.logout)
 
-  function handleLogout() {
-    logout()
+  async function handleLogout() {
+    await logout()
     navigate("/login", { replace: true })
   }
 

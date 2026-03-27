@@ -1,4 +1,4 @@
-.PHONY: infra infra-stop infra-reset services services-stop services-reset swag gqlgen frontend help
+.PHONY: infra infra-stop infra-reset services services-stop services-reset swag gqlgen gqlcodegen frontend help
 
 include .env
 export
@@ -36,6 +36,9 @@ frontend: ## Start frontend dev server
 
 gqlgen: ## Regenerate GraphQL code from schema (resolvers, models, runtime)
 	$(MAKE) -C core gqlgen
+
+gqlcodegen: ## Regenerate frontend GraphQL types from schema
+	$(MAKE) -C frontend codegen
 
 help: ## help: Displays all available targets with their descriptions.
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' Makefile | sort | awk 'BEGIN {FS = ":.*?## "}; {printf "\033[36m%-25s\033[0m %s\n", $$1, $$2}'

@@ -18,6 +18,12 @@ import { useAuthStore } from "@/stores/auth"
 
 export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
   const user = useAuthStore((s) => s.user)
+  const hasPermission = useAuthStore((s) => s.hasPermission)
+
+  // Filter admin nav items by the user's permissions
+  const visibleAdminItems = navigationAdminItems.filter(
+    (item) => !item.permission || hasPermission(item.permission),
+  )
 
   return (
     <Sidebar collapsible="icon" {...props}>
@@ -40,9 +46,11 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
       </SidebarHeader>
       <SidebarContent className="flex flex-col">
         <NavMain items={navigationItems} />
-        <div className="mt-auto">
-          <NavMain items={navigationAdminItems} />
-        </div>
+        {visibleAdminItems.length > 0 && (
+          <div className="mt-auto">
+            <NavMain items={visibleAdminItems} />
+          </div>
+        )}
       </SidebarContent>
       <SidebarFooter>
         <NavUser

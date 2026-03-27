@@ -1,0 +1,23 @@
+import type { CodegenConfig } from "@graphql-codegen/cli"
+
+const config: CodegenConfig = {
+  schema: "../core/pkg/graphql/schema/schema.graphql",
+  documents: "src/graphql/operations/**/*.ts",
+  generates: {
+    "./src/graphql/gql/": {
+      preset: "client",
+      config: {
+        scalars: {
+          ID: "string",
+        },
+        skipTypename: true,
+      },
+      presetConfig: {
+        fragmentMasking: false,
+      },
+    },
+  },
+  ignoreNoDocuments: false,
+}
+
+export default config

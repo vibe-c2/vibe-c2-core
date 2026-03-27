@@ -1,44 +1,40 @@
-import { type FormEvent, useEffect, useState } from "react"
+import { type FormEvent, useState } from "react"
 import { useNavigate } from "react-router"
 import { TerminalSquareIcon } from "lucide-react"
 import { Button } from "@/components/ui/button"
-import { Card, CardContent } from "@/components/ui/card"
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Field, FieldGroup, FieldLabel } from "@/components/ui/field"
 import { Input } from "@/components/ui/input"
 import { useAuthStore } from "@/stores/auth"
 import { authService } from "@/services/auth"
 
-export function LoginPage() {
+export function EnrollPage() {
   const navigate = useNavigate()
   const setAuth = useAuthStore((s) => s.setAuth)
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
 
-  // Redirect to enroll if the system hasn't been set up yet
-  useEffect(() => {
-    authService
-      .getStatus()
-      .then(({ enrolled }) => {
-        if (!enrolled) navigate("/enroll", { replace: true })
-      })
-      .catch(() => {})
-  }, [navigate])
-
   async function handleSubmit(e: FormEvent<HTMLFormElement>) {
     e.preventDefault()
     setError(null)
-    setLoading(true)
 
     const form = new FormData(e.currentTarget)
     const username = form.get("username") as string
     const password = form.get("password") as string
+    const confirmPassword = form.get("confirm-password") as string
 
+    if (password !== confirmPassword) {
+      setError("Passwords do not match")
+      return
+    }
+
+    setLoading(true)
     try {
-      const response = await authService.login(username, password)
+      const response = await authService.enroll(username, password)
       setAuth(response)
       navigate("/", { replace: true })
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Login failed")
+      setError(err instanceof Error ? err.message : "Enrollment failed")
     } finally {
       setLoading(false)
     }
@@ -54,7 +50,13 @@ export function LoginPage() {
           Vibe C2
         </a>
         <Card>
-          <CardContent className="pt-6">
+          <CardHeader className="text-center">
+            <CardTitle>Create Admin Account</CardTitle>
+            <CardDescription>
+              Set up the first administrator to get started
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
             <form onSubmit={handleSubmit}>
               <FieldGroup>
                 {error && (
@@ -82,8 +84,19 @@ export function LoginPage() {
                   />
                 </Field>
                 <Field>
+                  <FieldLabel htmlFor="confirm-password">
+                    Confirm Password
+                  </FieldLabel>
+                  <Input
+                    id="confirm-password"
+                    name="confirm-password"
+                    type="password"
+                    required
+                  />
+                </Field>
+                <Field>
                   <Button type="submit" disabled={loading}>
-                    {loading ? "Logging in..." : "Login"}
+                    {loading ? "Creating..." : "Create Account"}
                   </Button>
                 </Field>
               </FieldGroup>
