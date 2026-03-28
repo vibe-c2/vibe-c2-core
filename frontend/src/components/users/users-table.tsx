@@ -43,23 +43,8 @@ export function UsersTable({
   const hasActions = canUpdate || canDelete
   const gridCols = hasActions ? GRID_COLS : GRID_COLS_NO_ACTIONS
 
-  if (isLoading) {
-    return (
-      <div className="space-y-3">
-        {Array.from({ length: 5 }).map((_, i) => (
-          <Skeleton key={i} className="h-12 w-full" />
-        ))}
-      </div>
-    )
-  }
-
-  if (users.length === 0) {
-    return (
-      <div className="rounded-lg border bg-card flex items-center justify-center py-12 text-muted-foreground">
-        No users found.
-      </div>
-    )
-  }
+  const showEmpty = !isLoading && users.length === 0
+  const showList = !isLoading && users.length > 0
 
   return (
     <div className="rounded-lg border bg-card flex-1 flex flex-col min-h-0 overflow-hidden">
@@ -74,102 +59,118 @@ export function UsersTable({
         </div>
       </div>
 
-      {/* Virtual list */}
-      <div className="flex flex-col flex-1 min-h-0" ref={containerRef}>
-        <Virtuoso
-          data={users}
-          endReached={() => {
-            if (hasNextPage && !isFetchingNextPage) fetchNextPage()
-          }}
-          overscan={200}
-          style={{ height: "100%" }}
-          className="flex-1 min-h-0"
-          itemContent={(_index, user) => (
-            <div
-              className={`grid ${gridCols} gap-4 px-4 py-2 border-b hover:bg-muted/50 transition-colors items-center text-sm`}
-            >
-              <div className="font-medium truncate">{user.username}</div>
-              <div className="flex gap-1">
-                {user.roles.map((role) => (
-                  <Badge
-                    key={role}
-                    variant={role === "admin" ? "default" : "secondary"}
-                  >
-                    {role}
-                  </Badge>
-                ))}
-              </div>
-              <div>
-                <span className={`inline-flex items-center gap-1.5 text-sm ${user.active ? "text-green-600 dark:text-green-400" : "text-red-600 dark:text-red-400"}`}>
-                  <span className={`size-2 rounded-full ${user.active ? "bg-green-600 dark:bg-green-400" : "bg-red-600 dark:bg-red-400"}`} />
-                  {user.active ? "Active" : "Inactive"}
-                </span>
-              </div>
-              <div className="text-sm text-muted-foreground">
-                {new Date(user.createdAt).toLocaleDateString()}
-              </div>
-              {hasActions && (
-                <div>
-                  <DropdownMenu>
-                    <DropdownMenuTrigger
-                      render={<Button variant="ghost" size="icon-sm" />}
+      {/* Body */}
+      {isLoading && (
+        <div className="p-4 space-y-3">
+          {Array.from({ length: 5 }).map((_, i) => (
+            <Skeleton key={i} className="h-12 w-full" />
+          ))}
+        </div>
+      )}
+
+      {showEmpty && (
+        <div className="flex items-center justify-center py-12 text-muted-foreground">
+          No users found.
+        </div>
+      )}
+
+      {showList && (
+        <div className="flex flex-col flex-1 min-h-0" ref={containerRef}>
+          <Virtuoso
+            data={users}
+            endReached={() => {
+              if (hasNextPage && !isFetchingNextPage) fetchNextPage()
+            }}
+            overscan={200}
+            style={{ height: "100%" }}
+            className="flex-1 min-h-0"
+            itemContent={(_index, user) => (
+              <div
+                className={`grid ${gridCols} gap-4 px-4 py-2 border-b hover:bg-muted/50 transition-colors items-center text-sm`}
+              >
+                <div className="font-medium truncate">{user.username}</div>
+                <div className="flex gap-1">
+                  {user.roles.map((role) => (
+                    <Badge
+                      key={role}
+                      variant={role === "admin" ? "default" : "secondary"}
                     >
-                      <EllipsisIcon className="size-4" />
-                    </DropdownMenuTrigger>
-                    <DropdownMenuContent align="end">
-                      {canUpdate && (
-                        <DropdownMenuItem
-                          onClick={() =>
-                            openEditDialog({
-                              id: user.id,
-                              username: user.username,
-                            })
-                          }
-                        >
-                          <PencilIcon className="size-4" />
-                          Edit
-                        </DropdownMenuItem>
-                      )}
-                      {canDelete && user.id !== currentUserId && (
-                        <DropdownMenuItem
-                          onClick={() =>
-                            openDeleteDialog({
-                              id: user.id,
-                              username: user.username,
-                            })
-                          }
-                        >
-                          <TrashIcon className="size-4" />
-                          Delete
-                        </DropdownMenuItem>
-                      )}
-                    </DropdownMenuContent>
-                  </DropdownMenu>
+                      {role}
+                    </Badge>
+                  ))}
                 </div>
-              )}
-            </div>
-          )}
-          components={{
-            Footer: () => {
-              if (isFetchingNextPage) {
-                return (
-                  <div className="flex items-center justify-center py-4">
-                    <LoaderIcon className="size-4 animate-spin" />
+                <div>
+                  <span className={`inline-flex items-center gap-1.5 text-sm ${user.active ? "text-green-600 dark:text-green-400" : "text-red-600 dark:text-red-400"}`}>
+                    <span className={`size-2 rounded-full ${user.active ? "bg-green-600 dark:bg-green-400" : "bg-red-600 dark:bg-red-400"}`} />
+                    {user.active ? "Active" : "Inactive"}
+                  </span>
+                </div>
+                <div className="text-sm text-muted-foreground">
+                  {new Date(user.createdAt).toLocaleDateString()}
+                </div>
+                {hasActions && (
+                  <div>
+                    <DropdownMenu>
+                      <DropdownMenuTrigger
+                        render={<Button variant="ghost" size="icon-sm" />}
+                      >
+                        <EllipsisIcon className="size-4" />
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="end">
+                        {canUpdate && (
+                          <DropdownMenuItem
+                            onClick={() =>
+                              openEditDialog({
+                                id: user.id,
+                                username: user.username,
+                              })
+                            }
+                          >
+                            <PencilIcon className="size-4" />
+                            Edit
+                          </DropdownMenuItem>
+                        )}
+                        {canDelete && user.id !== currentUserId && (
+                          <DropdownMenuItem
+                            onClick={() =>
+                              openDeleteDialog({
+                                id: user.id,
+                                username: user.username,
+                              })
+                            }
+                          >
+                            <TrashIcon className="size-4" />
+                            Delete
+                          </DropdownMenuItem>
+                        )}
+                      </DropdownMenuContent>
+                    </DropdownMenu>
                   </div>
-                )
-              }
-              if (!hasNextPage && users.length > 0) {
-                return (
-                  <div className="flex items-center justify-center py-4 text-sm text-muted-foreground">
-                    No more users to load
-                  </div>
-                )
-              }
-              return null
-            },
-          }}
-        />
-      </div>
+                )}
+              </div>
+            )}
+            components={{
+              Footer: () => {
+                if (isFetchingNextPage) {
+                  return (
+                    <div className="flex items-center justify-center py-4">
+                      <LoaderIcon className="size-4 animate-spin" />
+                    </div>
+                  )
+                }
+                if (!hasNextPage && users.length > 0) {
+                  return (
+                    <div className="flex items-center justify-center py-4 text-sm text-muted-foreground">
+                      No more users to load
+                    </div>
+                  )
+                }
+                return null
+              },
+            }}
+          />
+        </div>
+      )}
     </div>
   )
 }
