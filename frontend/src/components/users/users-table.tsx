@@ -13,6 +13,7 @@ import { Skeleton } from "@/components/ui/skeleton"
 import { useAuthStore } from "@/stores/auth"
 import { useUserStore } from "@/stores/users"
 import { Permissions } from "@/constants/permissions"
+import { FormattedDateTimeText } from "@/components/ui/formatted-date-time-text"
 import type { UserFieldsFragment } from "@/graphql/gql/graphql"
 
 interface UsersTableProps {
@@ -106,7 +107,7 @@ export function UsersTable({
                   </span>
                 </div>
                 <div className="text-sm text-muted-foreground">
-                  {new Date(user.createdAt).toLocaleDateString()}
+                  <FormattedDateTimeText date={user.createdAt} />
                 </div>
                 {hasActions && (
                   <div>

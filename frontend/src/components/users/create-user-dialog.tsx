@@ -64,7 +64,7 @@ export function CreateUserDialog() {
             Add a new user to the system.
           </DialogDescription>
         </DialogHeader>
-        <form onSubmit={handleSubmit}>
+        <form onSubmit={handleSubmit} autoComplete="off">
           <FieldGroup>
             {error && (
               <div className="rounded-md bg-destructive/15 p-3 text-sm text-destructive">
