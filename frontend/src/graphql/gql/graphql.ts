@@ -178,11 +178,10 @@ export type OperationMember = {
   user: User;
 };
 
-export enum OperationRole {
-  Admin = 'ADMIN',
-  Operator = 'OPERATOR',
-  Viewer = 'VIEWER'
-}
+export type OperationRole =
+  | 'ADMIN'
+  | 'OPERATOR'
+  | 'VIEWER';
 
 export type PageInfo = {
   endCursor?: Maybe<Scalars['String']['output']>;
