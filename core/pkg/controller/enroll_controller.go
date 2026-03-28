@@ -7,6 +7,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/vibe-c2/vibe-c2-core/core/pkg/auth"
 	"github.com/vibe-c2/vibe-c2-core/core/pkg/auth/permissions"
+	"github.com/vibe-c2/vibe-c2-core/core/pkg/eventbus"
 	"github.com/vibe-c2/vibe-c2-core/core/pkg/logger"
 	"github.com/vibe-c2/vibe-c2-core/core/pkg/models"
 	"github.com/vibe-c2/vibe-c2-core/core/pkg/repository"
@@ -22,17 +23,20 @@ type IEnrollController interface {
 type enrollController struct {
 	userRepo     repository.IUserRepository
 	authProvider auth.IAuthProvider
+	eventBus     eventbus.IEventBus
 	log          *zap.Logger
 }
 
 func NewEnrollController(
 	userRepo repository.IUserRepository,
 	authProvider auth.IAuthProvider,
+	eventBus eventbus.IEventBus,
 	log *zap.Logger,
 ) IEnrollController {
 	return &enrollController{
 		userRepo:     userRepo,
 		authProvider: authProvider,
+		eventBus:     eventBus,
 		log:          log,
 	}
 }
@@ -111,6 +115,7 @@ func (ctrl *enrollController) Enroll(c *gin.Context) {
 	perms := permissions.GetPermissionsForRoles(user.Roles)
 
 	log.Info("enroll: first admin created", zap.String("username", user.Username))
+	ctrl.eventBus.Publish(eventbus.NewEvent(eventbus.TopicAuthEnroll, eventbus.UserActor(userID), user.Username))
 
 	c.JSON(http.StatusOK, responses.AuthResponse{
 		AuthToken:    authToken,

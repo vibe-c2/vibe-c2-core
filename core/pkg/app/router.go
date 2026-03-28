@@ -29,14 +29,15 @@ func (a *App) NewRouter() *gin.Engine {
 	r.Use(middleware.Logger(a.logger))
 
 	// Controllers
-	authCtrl := controller.NewAuthController(a.repos.User, a.authProvider, a.logger)
-	enrollCtrl := controller.NewEnrollController(a.repos.User, a.authProvider, a.logger)
+	authCtrl := controller.NewAuthController(a.repos.User, a.authProvider, a.eventBus, a.logger)
+	enrollCtrl := controller.NewEnrollController(a.repos.User, a.authProvider, a.eventBus, a.logger)
 	statusCtrl := controller.NewStatusController(a.repos.User, a.logger)
 
 	// Resolvers (GraphQL business logic, same pattern as controllers)
-	userRes := resolver.NewUserResolver(a.repos.User)
+	userRes := resolver.NewUserResolver(a.repos.User, a.eventBus)
 	opRes := resolver.NewOperationResolver(a.repos.Operation, a.repos.User,
-		resolver.WithSchemeNetworkPointRepo(a.repos.SchemeNetworkPoint))
+		resolver.WithSchemeNetworkPointRepo(a.repos.SchemeNetworkPoint),
+		resolver.WithEventBus(a.eventBus))
 	snpRes := resolver.NewSchemeNetworkPointResolver(a.repos.SchemeNetworkPoint, a.repos.Operation)
 
 	// Swagger documentation

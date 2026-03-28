@@ -7,6 +7,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/vibe-c2/vibe-c2-core/core/pkg/auth"
 	"github.com/vibe-c2/vibe-c2-core/core/pkg/auth/permissions"
+	"github.com/vibe-c2/vibe-c2-core/core/pkg/eventbus"
 	"github.com/vibe-c2/vibe-c2-core/core/pkg/logger"
 	"github.com/vibe-c2/vibe-c2-core/core/pkg/repository"
 	"github.com/vibe-c2/vibe-c2-core/core/pkg/requests"
@@ -25,17 +26,20 @@ type IAuthController interface {
 type authController struct {
 	userRepo     repository.IUserRepository
 	authProvider auth.IAuthProvider
+	eventBus     eventbus.IEventBus
 	log          *zap.Logger
 }
 
 func NewAuthController(
 	userRepo repository.IUserRepository,
 	authProvider auth.IAuthProvider,
+	eventBus eventbus.IEventBus,
 	log *zap.Logger,
 ) IAuthController {
 	return &authController{
 		userRepo:     userRepo,
 		authProvider: authProvider,
+		eventBus:     eventBus,
 		log:          log,
 	}
 }
@@ -99,6 +103,7 @@ func (ctrl *authController) Login(c *gin.Context) {
 	perms := permissions.GetPermissionsForRoles(user.Roles)
 
 	log.Info("login: success", zap.String("user_id", userID))
+	ctrl.eventBus.Publish(eventbus.NewEvent(eventbus.TopicAuthLogin, eventbus.UserActor(userID), user.Username))
 
 	c.JSON(http.StatusOK, responses.AuthResponse{
 		AuthToken:    authToken,
@@ -137,6 +142,7 @@ func (ctrl *authController) Refresh(c *gin.Context) {
 	newAuthToken, newRefreshToken, err := ctrl.authProvider.RotateRefreshToken(c.Request.Context(), req.UserID, req.RefreshToken)
 	if err != nil {
 		log.Warn("refresh: rotation failed", zap.String("user_id", req.UserID), zap.Error(err))
+		ctrl.eventBus.Publish(eventbus.NewEvent(eventbus.TopicAuthReplayDetected, eventbus.UserActor(req.UserID), nil))
 		c.JSON(http.StatusUnauthorized, responses.ErrUnauthorized)
 		return
 	}
@@ -158,6 +164,7 @@ func (ctrl *authController) Refresh(c *gin.Context) {
 	perms := permissions.GetPermissionsForRoles(user.Roles)
 
 	log.Info("refresh: success", zap.String("user_id", req.UserID))
+	ctrl.eventBus.Publish(eventbus.NewEvent(eventbus.TopicAuthRefresh, eventbus.UserActor(req.UserID), nil))
 
 	c.JSON(http.StatusOK, responses.AuthResponse{
 		AuthToken:    newAuthToken,
@@ -189,6 +196,7 @@ func (ctrl *authController) Logout(c *gin.Context) {
 	}
 
 	log.Info("logout: success", zap.String("user_id", userID))
+	ctrl.eventBus.Publish(eventbus.NewEvent(eventbus.TopicAuthLogout, eventbus.UserActor(userID), nil))
 
 	c.JSON(http.StatusOK, responses.SuccessResponse{
 		Message: "Logout successful. All sessions have been revoked.",

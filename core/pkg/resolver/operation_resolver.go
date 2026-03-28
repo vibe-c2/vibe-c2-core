@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/vibe-c2/vibe-c2-core/core/pkg/eventbus"
 	"github.com/vibe-c2/vibe-c2-core/core/pkg/graphql/gqlctx"
 	"github.com/vibe-c2/vibe-c2-core/core/pkg/graphql/model"
 	"github.com/vibe-c2/vibe-c2-core/core/pkg/models"
@@ -41,8 +42,9 @@ type IOperationResolver interface {
 
 type operationResolver struct {
 	operationRepo repository.IOperationRepository
-	userRepo      repository.IUserRepository                    // needed for Members field resolver
-	snpRepo       repository.ISchemeNetworkPointRepository      // needed for cascade delete
+	userRepo      repository.IUserRepository               // needed for Members field resolver
+	snpRepo       repository.ISchemeNetworkPointRepository  // needed for cascade delete
+	eventBus      eventbus.IEventBus                        // async event publishing
 }
 
 // NewOperationResolver creates a new operation resolver with the given dependencies.
@@ -68,6 +70,13 @@ type OperationResolverOption func(*operationResolver)
 func WithSchemeNetworkPointRepo(repo repository.ISchemeNetworkPointRepository) OperationResolverOption {
 	return func(r *operationResolver) {
 		r.snpRepo = repo
+	}
+}
+
+// WithEventBus adds the event bus for publishing domain events.
+func WithEventBus(bus eventbus.IEventBus) OperationResolverOption {
+	return func(r *operationResolver) {
+		r.eventBus = bus
 	}
 }
 
@@ -147,6 +156,10 @@ func (r *operationResolver) CreateOperation(ctx context.Context, input model.Cre
 		return nil, fmt.Errorf("failed to create operation: %w", err)
 	}
 
+	if r.eventBus != nil {
+		r.eventBus.Publish(eventbus.NewEvent(eventbus.TopicOperationCreated, eventbus.UserActor(auth.UserID), op))
+	}
+
 	return op, nil
 }
 
@@ -188,6 +201,11 @@ func (r *operationResolver) UpdateOperation(ctx context.Context, id string, inpu
 		return nil, fmt.Errorf("failed to fetch updated operation: %w", err)
 	}
 
+	if r.eventBus != nil {
+		auth := gqlctx.AuthFromContext(ctx)
+		r.eventBus.Publish(eventbus.NewEvent(eventbus.TopicOperationUpdated, eventbus.UserActor(auth.UserID), &updated))
+	}
+
 	return &updated, nil
 }
 
@@ -214,6 +232,12 @@ func (r *operationResolver) DeleteOperation(ctx context.Context, id string) (boo
 	if err := r.operationRepo.Delete(ctx, &op); err != nil {
 		return false, fmt.Errorf("failed to delete operation: %w", err)
 	}
+
+	if r.eventBus != nil {
+		auth := gqlctx.AuthFromContext(ctx)
+		r.eventBus.Publish(eventbus.NewEvent(eventbus.TopicOperationDeleted, eventbus.UserActor(auth.UserID), id))
+	}
+
 	return true, nil
 }
 
@@ -265,6 +289,11 @@ func (r *operationResolver) AddOperationMember(ctx context.Context, operationID 
 		return nil, fmt.Errorf("failed to fetch updated operation: %w", err)
 	}
 
+	if r.eventBus != nil {
+		auth := gqlctx.AuthFromContext(ctx)
+		r.eventBus.Publish(eventbus.NewEvent(eventbus.TopicOperationMemberAdded, eventbus.UserActor(auth.UserID), &updated))
+	}
+
 	return &updated, nil
 }
 
@@ -307,6 +336,11 @@ func (r *operationResolver) RemoveOperationMember(ctx context.Context, operation
 	updated, err := r.operationRepo.FindByID(ctx, opUID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to fetch updated operation: %w", err)
+	}
+
+	if r.eventBus != nil {
+		auth := gqlctx.AuthFromContext(ctx)
+		r.eventBus.Publish(eventbus.NewEvent(eventbus.TopicOperationMemberRemoved, eventbus.UserActor(auth.UserID), &updated))
 	}
 
 	return &updated, nil
@@ -364,6 +398,11 @@ func (r *operationResolver) UpdateOperationMemberRole(ctx context.Context, opera
 	updated, err := r.operationRepo.FindByID(ctx, opUID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to fetch updated operation: %w", err)
+	}
+
+	if r.eventBus != nil {
+		auth := gqlctx.AuthFromContext(ctx)
+		r.eventBus.Publish(eventbus.NewEvent(eventbus.TopicOperationMemberUpdated, eventbus.UserActor(auth.UserID), &updated))
 	}
 
 	return &updated, nil

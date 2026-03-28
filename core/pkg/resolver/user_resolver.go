@@ -7,6 +7,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/vibe-c2/vibe-c2-core/core/pkg/auth"
+	"github.com/vibe-c2/vibe-c2-core/core/pkg/eventbus"
 	"github.com/vibe-c2/vibe-c2-core/core/pkg/graphql/gqlctx"
 	"github.com/vibe-c2/vibe-c2-core/core/pkg/graphql/model"
 	"github.com/vibe-c2/vibe-c2-core/core/pkg/models"
@@ -37,11 +38,12 @@ type IUserResolver interface {
 
 type userResolver struct {
 	userRepo repository.IUserRepository
+	eventBus eventbus.IEventBus
 }
 
 // NewUserResolver creates a new user resolver with the given dependencies.
-func NewUserResolver(userRepo repository.IUserRepository) IUserResolver {
-	return &userResolver{userRepo: userRepo}
+func NewUserResolver(userRepo repository.IUserRepository, eventBus eventbus.IEventBus) IUserResolver {
+	return &userResolver{userRepo: userRepo, eventBus: eventBus}
 }
 
 // CreateUser handles the createUser mutation.
@@ -89,6 +91,9 @@ func (r *userResolver) CreateUser(ctx context.Context, input model.CreateUserInp
 	if err := r.userRepo.Create(ctx, user); err != nil {
 		return nil, fmt.Errorf("failed to create user: %w", err)
 	}
+
+	authInfo := gqlctx.AuthFromContext(ctx)
+	r.eventBus.Publish(eventbus.NewEvent(eventbus.TopicUserCreated, eventbus.UserActor(authInfo.UserID), user))
 
 	return user, nil
 }
@@ -140,6 +145,9 @@ func (r *userResolver) UpdateUser(ctx context.Context, id string, input model.Up
 		return nil, fmt.Errorf("failed to fetch updated user: %w", err)
 	}
 
+	authInfo := gqlctx.AuthFromContext(ctx)
+	r.eventBus.Publish(eventbus.NewEvent(eventbus.TopicUserUpdated, eventbus.UserActor(authInfo.UserID), &updated))
+
 	return &updated, nil
 }
 
@@ -159,6 +167,10 @@ func (r *userResolver) DeleteUser(ctx context.Context, id string) (bool, error) 
 	if err := r.userRepo.Delete(ctx, &user); err != nil {
 		return false, fmt.Errorf("failed to delete user: %w", err)
 	}
+
+	authInfo := gqlctx.AuthFromContext(ctx)
+	r.eventBus.Publish(eventbus.NewEvent(eventbus.TopicUserDeleted, eventbus.UserActor(authInfo.UserID), id))
+
 	return true, nil
 }
 
@@ -204,6 +216,8 @@ func (r *userResolver) UpdateOwnProfile(ctx context.Context, input model.UpdateU
 	if err != nil {
 		return nil, fmt.Errorf("failed to fetch updated user: %w", err)
 	}
+
+	r.eventBus.Publish(eventbus.NewEvent(eventbus.TopicUserUpdated, eventbus.UserActor(authInfo.UserID), &updated))
 
 	return &updated, nil
 }

@@ -13,6 +13,7 @@ import (
 	"github.com/vibe-c2/vibe-c2-core/core/pkg/cache"
 	"github.com/vibe-c2/vibe-c2-core/core/pkg/database"
 	"github.com/vibe-c2/vibe-c2-core/core/pkg/environment"
+	"github.com/vibe-c2/vibe-c2-core/core/pkg/eventbus"
 	"github.com/vibe-c2/vibe-c2-core/core/pkg/logger"
 	"github.com/vibe-c2/vibe-c2-core/core/pkg/repository"
 
@@ -33,10 +34,10 @@ type App struct {
 	authProvider auth.IAuthProvider
 	cache        cache.Cache
 	tokenStore   auth.TokenStore
+	eventBus     eventbus.IEventBus
 
 	// Future integration points:
 	// rabbitmq         rabbitmq.IRabbitMQ
-	// broker           broker.IBroker
 	// sseManager       sse.ISSEManager
 	// matrixNotifier   matrix.IMatrixNotifier
 	// confEngine       confengine.IConfigurationEngine
@@ -98,28 +99,30 @@ func NewApp() (*App, error) {
 	}
 	authProvider := auth.NewAuthProvider(tokenStore, e.JWTSecretKey, authTokenTTL)
 
+	// Initialize event bus
+	bus := eventbus.NewEventBus(l)
+
 	// --- Future integration patterns ---
 	//
 	// RabbitMQ:
 	//   rmq, err := rabbitmq.NewRabbitMQClient()
 	//   if err != nil { l.Warn("Failed to initialize RabbitMQ", zap.Error(err)) }
 	//
-	// Event broker + SSE:
-	//   eventBroker := broker.NewBroker()
+	// SSE (subscribes to event bus):
 	//   sseManager := sse.NewSSEManager()
-	//   eventBroker.Subscribe(sseManager)
+	//   bus.Subscribe(eventbus.TopicUserCreated, sseManager.HandleEvent)
 	//
 	// Matrix notifier:
-	//   matrixNotifier := matrix.SetupNotifier(matrix.Config{...}, l, eventBroker)
+	//   matrixNotifier := matrix.SetupNotifier(matrix.Config{...}, l, bus)
 	//
 	// Configuration engine:
-	//   confEngine := confengine.NewConfigurationEngine(repos..., eventBroker)
+	//   confEngine := confengine.NewConfigurationEngine(repos..., bus)
 	//
 	// Setup manager (requires RabbitMQ):
-	//   sm := setupmanager.NewSetupManager(repos..., rmq, eventBroker, l)
+	//   sm := setupmanager.NewSetupManager(repos..., rmq, bus, l)
 	//
 	// Condition checker (requires setup manager):
-	//   cc := setupmanager.NewConditionChecker(repos..., sm, eventBroker, l)
+	//   cc := setupmanager.NewConditionChecker(repos..., sm, bus, l)
 	// ------------------------------------
 
 	app := &App{
@@ -130,6 +133,7 @@ func NewApp() (*App, error) {
 		authProvider: authProvider,
 		cache:        c,
 		tokenStore:   tokenStore,
+		eventBus:     bus,
 	}
 
 	return app, nil
@@ -142,6 +146,8 @@ func (a *App) StartServer() {
 		Addr:    "0.0.0.0:8002",
 		Handler: router,
 	}
+
+	a.eventBus.Start()
 
 	// Future: start background workers
 	// p.Start()        // pinger
@@ -162,6 +168,8 @@ func (a *App) StartServerWithGracefulShutdown() {
 		Addr:    "0.0.0.0:8002",
 		Handler: router,
 	}
+
+	a.eventBus.Start()
 
 	// Future: start background workers
 	// p.Start()
@@ -190,6 +198,9 @@ func (a *App) StartServerWithGracefulShutdown() {
 		if err := srv.Shutdown(ctxTimeout); err != nil {
 			a.logger.Error("Server forced to shutdown", zap.Error(err))
 		}
+
+		// Drain event bus before closing infrastructure — handlers may need DB/cache.
+		a.eventBus.Stop(ctxTimeout)
 
 		a.logger.Info("Closing services...")
 
