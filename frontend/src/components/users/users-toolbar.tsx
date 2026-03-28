@@ -1,7 +1,6 @@
-import { useEffect, useState } from "react"
-import { PlusIcon, SearchIcon } from "lucide-react"
+import { PlusIcon } from "lucide-react"
 import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
+import { TableSearchInput } from "@/components/ui/table-search-input"
 import { useAuthStore } from "@/stores/auth"
 import { useUserStore } from "@/stores/users"
 import { Permissions } from "@/constants/permissions"
@@ -10,30 +9,13 @@ export function UsersToolbar() {
   const hasPermission = useAuthStore((s) => s.hasPermission)
   const { search, setSearch, openCreateDialog } = useUserStore()
 
-  // Debounce search input — local state syncs to store after 300ms
-  const [inputValue, setInputValue] = useState(search)
-
-  useEffect(() => {
-    const timeout = setTimeout(() => setSearch(inputValue), 300)
-    return () => clearTimeout(timeout)
-  }, [inputValue, setSearch])
-
-  // Keep local input in sync if store search is reset externally
-  useEffect(() => {
-    setInputValue(search)
-  }, [search])
-
   return (
     <div className="flex items-center justify-between gap-3">
-      <div className="relative w-full max-w-md">
-        <SearchIcon className="absolute left-2.5 top-1/2 -translate-y-1/2 size-4 text-muted-foreground" />
-        <Input
-          placeholder="Search users..."
-          value={inputValue}
-          onChange={(e) => setInputValue(e.target.value)}
-          className="pl-9"
-        />
-      </div>
+      <TableSearchInput
+        value={search}
+        onValueChange={setSearch}
+        placeholder="Search users..."
+      />
       {hasPermission(Permissions.USER_CREATE) && (
         <Button onClick={openCreateDialog}>
           <PlusIcon className="size-4" />
