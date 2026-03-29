@@ -3,20 +3,25 @@ package eventbus
 import (
 	"context"
 	"sync"
+	"sync/atomic"
 
 	"go.uber.org/zap"
 )
 
-const defaultBufferSize = 256
+const (
+	defaultBufferSize            = 256
+	defaultMaxConcurrentHandlers = 64
+)
 
 type eventBus struct {
-	logger       *zap.Logger
-	ch           chan Event
-	handlers     map[Topic][]Handler
-	mu           sync.RWMutex   // protects handlers map
-	wg           sync.WaitGroup // tracks in-flight handler goroutines
-	done         chan struct{}   // signals dispatcher to stop accepting new events
-	dispatched   chan struct{}   // closed when dispatcher goroutine has fully drained and exited
+	logger     *zap.Logger
+	ch         chan Event
+	handlers   map[Topic][]Handler
+	mu         sync.RWMutex   // protects handlers map
+	wg         sync.WaitGroup // tracks in-flight handler goroutines
+	sem        chan struct{}   // limits concurrent handler goroutines
+	stopped    atomic.Bool    // prevents send on closed channel
+	dispatched chan struct{}   // closed when dispatcher goroutine has fully drained and exited
 }
 
 // NewEventBus creates a new channel-based event bus.
@@ -25,7 +30,7 @@ func NewEventBus(logger *zap.Logger) IEventBus {
 		logger:     logger,
 		ch:         make(chan Event, defaultBufferSize),
 		handlers:   make(map[Topic][]Handler),
-		done:       make(chan struct{}),
+		sem:        make(chan struct{}, defaultMaxConcurrentHandlers),
 		dispatched: make(chan struct{}),
 	}
 }
@@ -37,12 +42,21 @@ func (b *eventBus) Subscribe(topic Topic, handler Handler) {
 }
 
 func (b *eventBus) Publish(event Event) {
+	if b.stopped.Load() {
+		b.logger.Warn("event bus: publish after stop, dropping event",
+			zap.String("topic", string(event.Topic)),
+			zap.String("event_id", event.ID),
+		)
+		return
+	}
+
 	select {
 	case b.ch <- event:
 	default:
 		// Channel full — drop event to avoid blocking the publisher (HTTP handler).
 		b.logger.Warn("event bus: channel full, dropping event",
 			zap.String("topic", string(event.Topic)),
+			zap.String("event_id", event.ID),
 			zap.String("actor_id", event.Actor.ID),
 			zap.String("actor_type", string(event.Actor.Type)),
 		)
@@ -53,24 +67,14 @@ func (b *eventBus) Start() {
 	go b.dispatch()
 }
 
+// dispatch processes events from the channel until it is closed.
+// Using range over the channel guarantees all queued events are drained
+// before the dispatcher exits — no race between done signal and event reads.
 func (b *eventBus) dispatch() {
 	defer close(b.dispatched)
 
-	for {
-		select {
-		case event := <-b.ch:
-			b.fanOut(event)
-		case <-b.done:
-			// Drain remaining events before exiting
-			for {
-				select {
-				case event := <-b.ch:
-					b.fanOut(event)
-				default:
-					return
-				}
-			}
-		}
+	for event := range b.ch {
+		b.fanOut(event)
 	}
 }
 
@@ -81,12 +85,15 @@ func (b *eventBus) fanOut(event Event) {
 
 	for _, h := range handlers {
 		b.wg.Add(1)
+		b.sem <- struct{}{} // acquire slot (blocks if at capacity)
 		go func(handler Handler) {
+			defer func() { <-b.sem }() // release slot
 			defer b.wg.Done()
 			defer func() {
 				if r := recover(); r != nil {
 					b.logger.Error("event bus: handler panicked",
 						zap.String("topic", string(event.Topic)),
+						zap.String("event_id", event.ID),
 						zap.Any("panic", r),
 					)
 				}
@@ -99,7 +106,8 @@ func (b *eventBus) fanOut(event Event) {
 }
 
 func (b *eventBus) Stop(ctx context.Context) {
-	close(b.done)
+	b.stopped.Store(true)
+	close(b.ch)
 
 	// Wait for the dispatcher to finish draining all queued events.
 	// This ensures no more wg.Add() calls will happen after this point.

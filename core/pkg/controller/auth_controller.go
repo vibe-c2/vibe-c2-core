@@ -103,7 +103,9 @@ func (ctrl *authController) Login(c *gin.Context) {
 	perms := permissions.GetPermissionsForRoles(user.Roles)
 
 	log.Info("login: success", zap.String("user_id", userID))
-	ctrl.eventBus.Publish(eventbus.NewEvent(eventbus.TopicAuthLogin, eventbus.UserActor(userID), user.Username))
+	ctrl.eventBus.Publish(eventbus.NewAuthLoginEvent(eventbus.UserActor(userID), eventbus.AuthEventPayload{
+		UserID: userID, Username: user.Username,
+	}))
 
 	c.JSON(http.StatusOK, responses.AuthResponse{
 		AuthToken:    authToken,
@@ -142,7 +144,7 @@ func (ctrl *authController) Refresh(c *gin.Context) {
 	newAuthToken, newRefreshToken, err := ctrl.authProvider.RotateRefreshToken(c.Request.Context(), req.UserID, req.RefreshToken)
 	if err != nil {
 		log.Warn("refresh: rotation failed", zap.String("user_id", req.UserID), zap.Error(err))
-		ctrl.eventBus.Publish(eventbus.NewEvent(eventbus.TopicAuthReplayDetected, eventbus.UserActor(req.UserID), nil))
+		ctrl.eventBus.Publish(eventbus.NewAuthReplayDetectedEvent(eventbus.UserActor(req.UserID)))
 		c.JSON(http.StatusUnauthorized, responses.ErrUnauthorized)
 		return
 	}
@@ -164,7 +166,7 @@ func (ctrl *authController) Refresh(c *gin.Context) {
 	perms := permissions.GetPermissionsForRoles(user.Roles)
 
 	log.Info("refresh: success", zap.String("user_id", req.UserID))
-	ctrl.eventBus.Publish(eventbus.NewEvent(eventbus.TopicAuthRefresh, eventbus.UserActor(req.UserID), nil))
+	ctrl.eventBus.Publish(eventbus.NewAuthRefreshEvent(eventbus.UserActor(req.UserID)))
 
 	c.JSON(http.StatusOK, responses.AuthResponse{
 		AuthToken:    newAuthToken,
@@ -196,7 +198,7 @@ func (ctrl *authController) Logout(c *gin.Context) {
 	}
 
 	log.Info("logout: success", zap.String("user_id", userID))
-	ctrl.eventBus.Publish(eventbus.NewEvent(eventbus.TopicAuthLogout, eventbus.UserActor(userID), nil))
+	ctrl.eventBus.Publish(eventbus.NewAuthLogoutEvent(eventbus.UserActor(userID)))
 
 	c.JSON(http.StatusOK, responses.SuccessResponse{
 		Message: "Logout successful. All sessions have been revoked.",

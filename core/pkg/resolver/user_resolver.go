@@ -93,7 +93,9 @@ func (r *userResolver) CreateUser(ctx context.Context, input model.CreateUserInp
 	}
 
 	authInfo := gqlctx.AuthFromContext(ctx)
-	r.eventBus.Publish(eventbus.NewEvent(eventbus.TopicUserCreated, eventbus.UserActor(authInfo.UserID), user))
+	r.eventBus.Publish(eventbus.NewUserCreatedEvent(eventbus.UserActor(authInfo.UserID), eventbus.UserEventPayload{
+		UserID: user.UserID.String(), Username: user.Username,
+	}))
 
 	return user, nil
 }
@@ -146,7 +148,9 @@ func (r *userResolver) UpdateUser(ctx context.Context, id string, input model.Up
 	}
 
 	authInfo := gqlctx.AuthFromContext(ctx)
-	r.eventBus.Publish(eventbus.NewEvent(eventbus.TopicUserUpdated, eventbus.UserActor(authInfo.UserID), &updated))
+	r.eventBus.Publish(eventbus.NewUserUpdatedEvent(eventbus.UserActor(authInfo.UserID), eventbus.UserEventPayload{
+		UserID: updated.UserID.String(), Username: updated.Username,
+	}))
 
 	return &updated, nil
 }
@@ -169,7 +173,9 @@ func (r *userResolver) DeleteUser(ctx context.Context, id string) (bool, error) 
 	}
 
 	authInfo := gqlctx.AuthFromContext(ctx)
-	r.eventBus.Publish(eventbus.NewEvent(eventbus.TopicUserDeleted, eventbus.UserActor(authInfo.UserID), id))
+	r.eventBus.Publish(eventbus.NewUserDeletedEvent(eventbus.UserActor(authInfo.UserID), eventbus.UserDeletedPayload{
+		UserID: id,
+	}))
 
 	return true, nil
 }
@@ -217,7 +223,9 @@ func (r *userResolver) UpdateOwnProfile(ctx context.Context, input model.UpdateU
 		return nil, fmt.Errorf("failed to fetch updated user: %w", err)
 	}
 
-	r.eventBus.Publish(eventbus.NewEvent(eventbus.TopicUserUpdated, eventbus.UserActor(authInfo.UserID), &updated))
+	r.eventBus.Publish(eventbus.NewUserUpdatedEvent(eventbus.UserActor(authInfo.UserID), eventbus.UserEventPayload{
+		UserID: updated.UserID.String(), Username: updated.Username,
+	}))
 
 	return &updated, nil
 }

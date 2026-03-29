@@ -115,7 +115,9 @@ func (ctrl *enrollController) Enroll(c *gin.Context) {
 	perms := permissions.GetPermissionsForRoles(user.Roles)
 
 	log.Info("enroll: first admin created", zap.String("username", user.Username))
-	ctrl.eventBus.Publish(eventbus.NewEvent(eventbus.TopicAuthEnroll, eventbus.UserActor(userID), user.Username))
+	ctrl.eventBus.Publish(eventbus.NewAuthEnrollEvent(eventbus.UserActor(userID), eventbus.AuthEventPayload{
+		UserID: userID, Username: user.Username,
+	}))
 
 	c.JSON(http.StatusOK, responses.AuthResponse{
 		AuthToken:    authToken,

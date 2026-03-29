@@ -3,6 +3,8 @@ package eventbus
 import (
 	"context"
 	"time"
+
+	"github.com/google/uuid"
 )
 
 // Topic identifies the kind of event. String-based for readability in logs.
@@ -62,15 +64,17 @@ func ServiceActor(name string) Actor {
 
 // Event represents a domain event emitted by the application.
 type Event struct {
+	ID        string // unique event identifier for correlation/debugging
 	Topic     Topic
 	Payload   any
 	Actor     Actor
 	Timestamp time.Time
 }
 
-// NewEvent creates a new Event with the current timestamp.
+// NewEvent creates a new Event with the current timestamp and a unique ID.
 func NewEvent(topic Topic, actor Actor, payload any) Event {
 	return Event{
+		ID:        uuid.New().String(),
 		Topic:     topic,
 		Payload:   payload,
 		Actor:     actor,
@@ -91,7 +95,8 @@ type IEventBus interface {
 	Publish(event Event)
 
 	// Subscribe registers a handler for a specific topic.
-	// Multiple handlers can subscribe to the same topic. Must be called before Start().
+	// Multiple handlers can subscribe to the same topic.
+	// Safe to call before or after Start().
 	Subscribe(topic Topic, handler Handler)
 
 	// Start begins the dispatcher goroutine. Call once at startup.

@@ -56,6 +56,7 @@ func NewOperationResolver(
 	r := &operationResolver{
 		operationRepo: operationRepo,
 		userRepo:      userRepo,
+		eventBus:      eventbus.NewNopEventBus(),
 	}
 	for _, opt := range opts {
 		opt(r)
@@ -156,9 +157,9 @@ func (r *operationResolver) CreateOperation(ctx context.Context, input model.Cre
 		return nil, fmt.Errorf("failed to create operation: %w", err)
 	}
 
-	if r.eventBus != nil {
-		r.eventBus.Publish(eventbus.NewEvent(eventbus.TopicOperationCreated, eventbus.UserActor(auth.UserID), op))
-	}
+	r.eventBus.Publish(eventbus.NewOperationCreatedEvent(eventbus.UserActor(auth.UserID), eventbus.OperationEventPayload{
+		OperationID: op.OperationID.String(), Name: op.Name,
+	}))
 
 	return op, nil
 }
@@ -201,10 +202,10 @@ func (r *operationResolver) UpdateOperation(ctx context.Context, id string, inpu
 		return nil, fmt.Errorf("failed to fetch updated operation: %w", err)
 	}
 
-	if r.eventBus != nil {
-		auth := gqlctx.AuthFromContext(ctx)
-		r.eventBus.Publish(eventbus.NewEvent(eventbus.TopicOperationUpdated, eventbus.UserActor(auth.UserID), &updated))
-	}
+	auth := gqlctx.AuthFromContext(ctx)
+	r.eventBus.Publish(eventbus.NewOperationUpdatedEvent(eventbus.UserActor(auth.UserID), eventbus.OperationEventPayload{
+		OperationID: updated.OperationID.String(), Name: updated.Name,
+	}))
 
 	return &updated, nil
 }
@@ -233,10 +234,10 @@ func (r *operationResolver) DeleteOperation(ctx context.Context, id string) (boo
 		return false, fmt.Errorf("failed to delete operation: %w", err)
 	}
 
-	if r.eventBus != nil {
-		auth := gqlctx.AuthFromContext(ctx)
-		r.eventBus.Publish(eventbus.NewEvent(eventbus.TopicOperationDeleted, eventbus.UserActor(auth.UserID), id))
-	}
+	auth := gqlctx.AuthFromContext(ctx)
+	r.eventBus.Publish(eventbus.NewOperationDeletedEvent(eventbus.UserActor(auth.UserID), eventbus.OperationDeletedPayload{
+		OperationID: id,
+	}))
 
 	return true, nil
 }
@@ -289,10 +290,10 @@ func (r *operationResolver) AddOperationMember(ctx context.Context, operationID 
 		return nil, fmt.Errorf("failed to fetch updated operation: %w", err)
 	}
 
-	if r.eventBus != nil {
-		auth := gqlctx.AuthFromContext(ctx)
-		r.eventBus.Publish(eventbus.NewEvent(eventbus.TopicOperationMemberAdded, eventbus.UserActor(auth.UserID), &updated))
-	}
+	auth := gqlctx.AuthFromContext(ctx)
+	r.eventBus.Publish(eventbus.NewOperationMemberAddedEvent(eventbus.UserActor(auth.UserID), eventbus.OperationMemberPayload{
+		OperationID: operationID, MemberID: userID,
+	}))
 
 	return &updated, nil
 }
@@ -338,10 +339,10 @@ func (r *operationResolver) RemoveOperationMember(ctx context.Context, operation
 		return nil, fmt.Errorf("failed to fetch updated operation: %w", err)
 	}
 
-	if r.eventBus != nil {
-		auth := gqlctx.AuthFromContext(ctx)
-		r.eventBus.Publish(eventbus.NewEvent(eventbus.TopicOperationMemberRemoved, eventbus.UserActor(auth.UserID), &updated))
-	}
+	auth := gqlctx.AuthFromContext(ctx)
+	r.eventBus.Publish(eventbus.NewOperationMemberRemovedEvent(eventbus.UserActor(auth.UserID), eventbus.OperationMemberPayload{
+		OperationID: operationID, MemberID: userID,
+	}))
 
 	return &updated, nil
 }
@@ -400,10 +401,10 @@ func (r *operationResolver) UpdateOperationMemberRole(ctx context.Context, opera
 		return nil, fmt.Errorf("failed to fetch updated operation: %w", err)
 	}
 
-	if r.eventBus != nil {
-		auth := gqlctx.AuthFromContext(ctx)
-		r.eventBus.Publish(eventbus.NewEvent(eventbus.TopicOperationMemberUpdated, eventbus.UserActor(auth.UserID), &updated))
-	}
+	auth := gqlctx.AuthFromContext(ctx)
+	r.eventBus.Publish(eventbus.NewOperationMemberUpdatedEvent(eventbus.UserActor(auth.UserID), eventbus.OperationMemberPayload{
+		OperationID: operationID, MemberID: userID,
+	}))
 
 	return &updated, nil
 }
