@@ -10,7 +10,7 @@ import { authService } from "@/services/auth"
 
 export function EnrollPage() {
   const navigate = useNavigate()
-  const setAuth = useAuthStore((s) => s.setAuth)
+  const setSession = useAuthStore((s) => s.setSession)
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
 
@@ -31,7 +31,7 @@ export function EnrollPage() {
     setLoading(true)
     try {
       const response = await authService.enroll(username, password)
-      setAuth(response)
+      setSession(response)
       navigate("/", { replace: true })
     } catch (err) {
       setError(err instanceof Error ? err.message : "Enrollment failed")

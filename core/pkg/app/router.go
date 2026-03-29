@@ -29,8 +29,9 @@ func (a *App) NewRouter() *gin.Engine {
 	r.Use(middleware.Logger(a.logger))
 
 	// Controllers
-	authCtrl := controller.NewAuthController(a.repos.User, a.authProvider, a.eventBus, a.logger)
-	enrollCtrl := controller.NewEnrollController(a.repos.User, a.authProvider, a.eventBus, a.logger)
+	isDev := a.env.StageStatus == "development"
+	authCtrl := controller.NewAuthController(a.repos.User, a.authProvider, a.eventBus, a.logger, isDev)
+	enrollCtrl := controller.NewEnrollController(a.repos.User, a.authProvider, a.eventBus, a.logger, isDev)
 	statusCtrl := controller.NewStatusController(a.repos.User, a.logger)
 
 	// Resolvers (GraphQL business logic, same pattern as controllers)
@@ -54,7 +55,7 @@ func (a *App) NewRouter() *gin.Engine {
 		v1.POST("/login/refresh", authCtrl.Refresh)
 
 		// GraphQL Playground — browser-based IDE for testing queries (dev only).
-		// Served publicly because browsers can't set Authorization headers on page loads.
+		// Served publicly so browsers can load the page without auth cookies.
 		// The actual GraphQL queries from Playground go through POST /graphql, which is protected.
 		if a.env.StageStatus == "development" {
 			v1.GET("/graphql", gql.NewPlaygroundHandler("/api/v1/graphql"))

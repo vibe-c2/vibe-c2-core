@@ -1,9 +1,9 @@
 const API_URL = import.meta.env.VITE_API_URL
 
-// Response types — match backend responses.AuthResponse / responses.StatusResponse
-export interface AuthResponse {
-  auth_token: string
-  refresh_token: string
+// Response types — match backend responses.SessionResponse / responses.StatusResponse.
+// Tokens are httpOnly cookies managed by the browser, never in the response body.
+export interface SessionResponse {
+  user_id: string
   roles: string[]
   username: string
   permissions: string[]
@@ -17,12 +17,15 @@ async function authFetch<T>(
   path: string,
   options: RequestInit = {},
 ): Promise<T> {
+  const headers = new Headers(options.headers)
+  if (options.body) {
+    headers.set("Content-Type", "application/json")
+  }
+
   const res = await fetch(`${API_URL}${path}`, {
     ...options,
-    headers: {
-      "Content-Type": "application/json",
-      ...options.headers,
-    },
+    credentials: "include",
+    headers,
   })
 
   if (!res.ok) {
@@ -34,14 +37,14 @@ async function authFetch<T>(
 }
 
 export const authService = {
-  login(username: string, password: string): Promise<AuthResponse> {
+  login(username: string, password: string): Promise<SessionResponse> {
     return authFetch("/login", {
       method: "POST",
       body: JSON.stringify({ username, password }),
     })
   },
 
-  enroll(username: string, password: string): Promise<AuthResponse> {
+  enroll(username: string, password: string): Promise<SessionResponse> {
     return authFetch("/enroll", {
       method: "POST",
       body: JSON.stringify({ username, password }),
@@ -52,11 +55,7 @@ export const authService = {
     return authFetch("/status")
   },
 
-  getMe(token: string): Promise<AuthResponse> {
-    return authFetch("/login/me", {
-      headers: {
-        Authorization: `Bearer ${token}`,
-      },
-    })
+  getMe(): Promise<SessionResponse> {
+    return authFetch("/login/me")
   },
 }

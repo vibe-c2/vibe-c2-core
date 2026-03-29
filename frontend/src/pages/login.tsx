@@ -10,7 +10,7 @@ import { authService } from "@/services/auth"
 
 export function LoginPage() {
   const navigate = useNavigate()
-  const setAuth = useAuthStore((s) => s.setAuth)
+  const setSession = useAuthStore((s) => s.setSession)
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
 
@@ -35,7 +35,7 @@ export function LoginPage() {
 
     try {
       const response = await authService.login(username, password)
-      setAuth(response)
+      setSession(response)
       navigate("/", { replace: true })
     } catch (err) {
       setError(err instanceof Error ? err.message : "Login failed")

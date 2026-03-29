@@ -26,7 +26,7 @@ export async function graphqlClient<TResult, TVariables>(
     method: "POST",
     body: JSON.stringify({
       query: print(document),
-      variables: variables ?? undefined,
+      variables,
     }),
   })
 
@@ -34,6 +34,15 @@ export async function graphqlClient<TResult, TVariables>(
 
   if (json.errors && !json.data) {
     throw new GraphQLRequestError(json.errors)
+  }
+
+  // Partial errors: data is usable but some fields may be null due to
+  // authorization failures or resolver errors. Surface them in dev so
+  // they don't go unnoticed.
+  if (json.errors && json.data) {
+    if (import.meta.env.DEV) {
+      console.warn("[GraphQL] Partial errors:", json.errors)
+    }
   }
 
   return json.data as TResult

@@ -6,6 +6,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
 	"github.com/vibe-c2/vibe-c2-core/core/pkg/auth"
+	"github.com/vibe-c2/vibe-c2-core/core/pkg/auth/cookies"
 	"github.com/vibe-c2/vibe-c2-core/core/pkg/auth/permissions"
 	"github.com/vibe-c2/vibe-c2-core/core/pkg/eventbus"
 	"github.com/vibe-c2/vibe-c2-core/core/pkg/logger"
@@ -25,6 +26,7 @@ type enrollController struct {
 	authProvider auth.IAuthProvider
 	eventBus     eventbus.IEventBus
 	log          *zap.Logger
+	isDev        bool
 }
 
 func NewEnrollController(
@@ -32,12 +34,14 @@ func NewEnrollController(
 	authProvider auth.IAuthProvider,
 	eventBus eventbus.IEventBus,
 	log *zap.Logger,
+	isDev bool,
 ) IEnrollController {
 	return &enrollController{
 		userRepo:     userRepo,
 		authProvider: authProvider,
 		eventBus:     eventBus,
 		log:          log,
+		isDev:        isDev,
 	}
 }
 
@@ -49,7 +53,7 @@ func NewEnrollController(
 //	@Accept			json
 //	@Produce		json
 //	@Param			body	body		requests.EnrollRequest	true	"Admin credentials"
-//	@Success		200		{object}	responses.AuthResponse
+//	@Success		200		{object}	responses.SessionResponse
 //	@Failure		400		{object}	responses.ErrorResponse
 //	@Failure		409		{object}	responses.ErrorResponse
 //	@Failure		500		{object}	responses.ErrorResponse
@@ -119,11 +123,11 @@ func (ctrl *enrollController) Enroll(c *gin.Context) {
 		UserID: userID, Username: user.Username,
 	}))
 
-	c.JSON(http.StatusOK, responses.AuthResponse{
-		AuthToken:    authToken,
-		RefreshToken: refreshToken,
-		Roles:        user.Roles,
-		Username:     user.Username,
-		Permissions:  perms,
+	cookies.SetAuthCookies(c, authToken, refreshToken, ctrl.authProvider.AuthTokenTTL(), ctrl.isDev)
+	c.JSON(http.StatusOK, responses.SessionResponse{
+		UserID:      userID,
+		Roles:       user.Roles,
+		Username:    user.Username,
+		Permissions: perms,
 	})
 }

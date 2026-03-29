@@ -1,5 +1,5 @@
 import { create } from "zustand"
-import type { AuthResponse } from "@/services/auth"
+import type { SessionResponse } from "@/services/auth"
 import { authService } from "@/services/auth"
 
 interface User {
@@ -10,77 +10,59 @@ interface User {
 }
 
 interface AuthState {
-  token: string | null
-  refreshToken: string | null
   user: User | null
+  isAuthenticated: boolean
   isLoading: boolean
-  setAuth: (response: AuthResponse) => void
+  setSession: (response: SessionResponse) => void
+  clearSession: () => void
   logout: () => void
   checkAuth: () => Promise<void>
   hasPermission: (permission: string) => boolean
 }
 
-function parseUserId(token: string): string {
-  const payload = JSON.parse(atob(token.split(".")[1]))
-  return payload.sub as string
-}
+const API_URL = import.meta.env.VITE_API_URL
 
 export const useAuthStore = create<AuthState>((set, get) => ({
-  token: localStorage.getItem("token"),
-  refreshToken: localStorage.getItem("refresh_token"),
-  user: JSON.parse(localStorage.getItem("user") ?? "null"),
-  isLoading: !!localStorage.getItem("token"),
+  user: null,
+  isAuthenticated: false,
+  isLoading: true,
 
-  setAuth: (response) => {
-    const userId = parseUserId(response.auth_token)
+  setSession: (response) => {
     const user: User = {
-      userId,
+      userId: response.user_id,
       username: response.username,
       roles: response.roles,
       permissions: response.permissions,
     }
-    localStorage.setItem("token", response.auth_token)
-    localStorage.setItem("refresh_token", response.refresh_token)
-    localStorage.setItem("user", JSON.stringify(user))
-    set({
-      token: response.auth_token,
-      refreshToken: response.refresh_token,
-      user,
-      isLoading: false,
-    })
+    set({ user, isAuthenticated: true, isLoading: false })
+  },
+
+  clearSession: () => {
+    set({ user: null, isAuthenticated: false, isLoading: false })
   },
 
   logout: () => {
-    // Fire-and-forget backend logout
-    const token = get().token
-    if (token) {
-      const apiUrl = import.meta.env.VITE_API_URL
-      fetch(`${apiUrl}/logout`, {
-        method: "POST",
-        headers: { Authorization: `Bearer ${token}` },
-      }).catch(() => {})
-    }
-    localStorage.removeItem("token")
-    localStorage.removeItem("refresh_token")
-    localStorage.removeItem("user")
-    set({ token: null, refreshToken: null, user: null, isLoading: false })
+    // Fire-and-forget backend logout (clears cookies + revokes refresh tokens)
+    fetch(`${API_URL}/logout`, {
+      method: "POST",
+      credentials: "include",
+    }).catch(() => {})
+    set({ user: null, isAuthenticated: false, isLoading: false })
   },
 
   checkAuth: async () => {
-    const token = get().token
-    if (!token) {
-      set({ isLoading: false })
-      return
-    }
     try {
-      const response = await authService.getMe(token)
-      get().setAuth(response)
-    } catch {
-      // Token invalid or expired — clear auth state
-      localStorage.removeItem("token")
-      localStorage.removeItem("refresh_token")
-      localStorage.removeItem("user")
-      set({ token: null, refreshToken: null, user: null, isLoading: false })
+      const response = await authService.getMe()
+      get().setSession(response)
+    } catch (err) {
+      // Network failure (server down, offline) — don't clear session,
+      // just stop loading. User keeps stale session until next request.
+      if (err instanceof TypeError) {
+        set({ isLoading: false })
+        return
+      }
+      // HTTP error (401, etc.) — not authenticated.
+      set({ user: null, isAuthenticated: false, isLoading: false })
     }
   },
 

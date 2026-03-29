@@ -4,12 +4,11 @@
 // a long-lived HTTP connection and streams events as they arrive.
 //
 // Uses fetch() + ReadableStream instead of the browser's EventSource API
-// because EventSource only supports GET and can't send auth headers or
-// a JSON body.
+// because EventSource only supports GET and can't send a JSON body.
+// Auth is handled via httpOnly cookies (credentials: "include").
 
 import type { TypedDocumentNode } from "@graphql-typed-document-node/core"
 import { print } from "graphql"
-import { useAuthStore } from "@/stores/auth"
 
 const API_URL = import.meta.env.VITE_API_URL
 
@@ -49,20 +48,18 @@ async function connect<TResult, TVariables>(
   controller: AbortController,
 ): Promise<void> {
   try {
-    const { token } = useAuthStore.getState()
-
     const res = await fetch(`${API_URL}/graphql`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
         Accept: "text/event-stream",
-        ...(token ? { Authorization: `Bearer ${token}` } : {}),
       },
       body: JSON.stringify({
         query: print(document),
-        variables: variables ?? undefined,
+        variables,
       }),
       signal: controller.signal,
+      credentials: "include",
     })
 
     if (!res.ok) {
@@ -93,9 +90,12 @@ async function connect<TResult, TVariables>(
 
       for (const line of lines) {
         if (line.startsWith("event:")) {
-          currentEvent = line.slice(6).trim()
+          currentEvent = line[6] === " " ? line.slice(7) : line.slice(6)
         } else if (line.startsWith("data:")) {
-          dataBuffer += line.slice(5).trim()
+          // Per SSE spec: strip only the single space after "data:", not all whitespace.
+          const payload = line[5] === " " ? line.slice(6) : line.slice(5)
+          // Multi-line data fields are joined with newlines.
+          dataBuffer += dataBuffer ? "\n" + payload : payload
         } else if (line === "" && (currentEvent || dataBuffer)) {
           // Blank line = end of SSE frame, dispatch the event.
           if (currentEvent === "next" && dataBuffer) {

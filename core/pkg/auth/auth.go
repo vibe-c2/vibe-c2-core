@@ -54,6 +54,8 @@ type RefreshTokenMeta struct {
 type IAuthProvider interface {
 	GenerateAuthToken(userID, username string, roles []string) (string, error)
 	ValidateAuthToken(tokenString string) (*Claims, error)
+	ParseAuthTokenUnvalidated(tokenString string) (*Claims, error)
+	AuthTokenTTL() time.Duration
 	GenerateRefreshToken(ctx context.Context, userID, username string, roles []string) (string, error)
 	ValidateRefreshToken(ctx context.Context, userID, rawToken string) (*RefreshTokenMeta, error)
 	RotateRefreshToken(ctx context.Context, userID, oldRawToken string) (accessToken, newRefreshToken string, err error)
@@ -115,6 +117,35 @@ func (ap *authProvider) ValidateAuthToken(tokenString string) (*Claims, error) {
 	}
 
 	return claims, nil
+}
+
+// ParseAuthTokenUnvalidated extracts claims from a JWT without checking
+// expiration. Signature and issuer are still verified. Used by the refresh
+// endpoint to read the userID from an expired access token cookie.
+func (ap *authProvider) ParseAuthTokenUnvalidated(tokenString string) (*Claims, error) {
+	claims := &Claims{}
+
+	token, err := jwt.ParseWithClaims(tokenString, claims, func(token *jwt.Token) (interface{}, error) {
+		if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
+			return nil, fmt.Errorf("unexpected signing method: %v", token.Header["alg"])
+		}
+		return ap.jwtSecret, nil
+	}, jwt.WithIssuer(Issuer), jwt.WithoutClaimsValidation())
+
+	if err != nil {
+		return nil, fmt.Errorf("%w: %v", ErrTokenInvalid, err)
+	}
+
+	if token == nil {
+		return nil, ErrTokenInvalid
+	}
+
+	return claims, nil
+}
+
+// AuthTokenTTL returns the configured access token TTL.
+func (ap *authProvider) AuthTokenTTL() time.Duration {
+	return ap.authTokenTTL
 }
 
 func (ap *authProvider) GenerateRefreshToken(ctx context.Context, userID, username string, roles []string) (string, error) {

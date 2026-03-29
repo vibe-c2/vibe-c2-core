@@ -2,11 +2,11 @@ import { Navigate, Outlet } from "react-router"
 import { useAuthStore } from "@/stores/auth"
 
 export function ProtectedRoute({ permission }: { permission?: string }) {
-  const token = useAuthStore((s) => s.token)
+  const isAuthenticated = useAuthStore((s) => s.isAuthenticated)
   const isLoading = useAuthStore((s) => s.isLoading)
   const hasPermission = useAuthStore((s) => s.hasPermission)
 
-  // Still validating the stored token on page reload
+  // Still validating the session via /login/me on page reload
   if (isLoading) {
     return (
       <div className="flex min-h-svh items-center justify-center">
@@ -15,7 +15,7 @@ export function ProtectedRoute({ permission }: { permission?: string }) {
     )
   }
 
-  if (!token) {
+  if (!isAuthenticated) {
     return <Navigate to="/login" replace />
   }
 
