@@ -86,18 +86,27 @@ func NewEvent(topic Topic, actor Actor, payload any) Event {
 // Handlers run in their own goroutines — they must be safe for concurrent use.
 type Handler func(ctx context.Context, event Event)
 
+// Filter is an optional predicate applied after topic matching.
+// Returning true means the subscriber wants this event.
+// Called in the dispatcher goroutine — must be fast and non-blocking.
+type Filter func(event Event) bool
+
 // IEventBus is an in-process async pub/sub event bus.
 // Publishers call Publish() which returns immediately (non-blocking).
-// Subscribers register handlers per topic via Subscribe().
+// Subscribers register handlers for one or more topics via Subscribe().
 type IEventBus interface {
-	// Publish sends an event to all handlers registered for the event's topic.
+	// Publish sends an event to all subscribers whose topic set includes
+	// the event's topic and whose filter (if any) returns true.
 	// Non-blocking — returns immediately. Drops the event if the internal buffer is full.
 	Publish(event Event)
 
-	// Subscribe registers a handler for a specific topic.
-	// Multiple handlers can subscribe to the same topic.
+	// Subscribe registers a handler for the given topics.
+	// A single subscription can cover multiple topics with one channel and one goroutine.
+	// The optional filter is applied after topic matching — only events that match
+	// a topic AND pass the filter are delivered to the handler.
+	// Returns an unsubscribe function that removes this subscription.
 	// Safe to call before or after Start().
-	Subscribe(topic Topic, handler Handler)
+	Subscribe(topics []Topic, handler Handler, filter ...Filter) func()
 
 	// Start begins the dispatcher goroutine. Call once at startup.
 	Start()
