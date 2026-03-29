@@ -1,5 +1,6 @@
 import { useQuery, useInfiniteQuery, useMutation, useQueryClient } from "@tanstack/react-query"
 import { graphqlClient } from "@/lib/graphql-client"
+import { useSubscription } from "@/hooks/use-subscription"
 import type { CreateUserInput, UpdateUserInput } from "@/graphql/gql/graphql"
 import {
   MeDocument,
@@ -9,6 +10,7 @@ import {
   UpdateUserDocument,
   DeleteUserDocument,
   UpdateOwnProfileDocument,
+  UserChangedDocument,
 } from "@/graphql/gql/graphql"
 
 // Query key factory for consistent cache keys and targeted invalidation
@@ -102,6 +104,35 @@ export function useUpdateOwnProfile() {
       graphqlClient(UpdateOwnProfileDocument, { input }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: userKeys.me() })
+    },
+  })
+}
+
+/**
+ * Subscribe to real-time user change events via SSE.
+ *
+ * When another session creates, updates, or deletes a user, this hook
+ * invalidates the React Query cache so the UI refetches automatically.
+ * Call this in any component that displays user data and should stay
+ * in sync across sessions (e.g. the UsersPage).
+ */
+export function useUserChangedSubscription() {
+  const queryClient = useQueryClient()
+
+  useSubscription(UserChangedDocument, undefined, {
+    onData: (data) => {
+      const { action, userId } = data.userChanged
+
+      // Always invalidate list queries so the table refetches.
+      queryClient.invalidateQueries({ queryKey: userKeys.lists() })
+
+      if (action === "DELETED") {
+        // Remove the specific user from cache entirely — it no longer exists.
+        queryClient.removeQueries({ queryKey: userKeys.detail(userId) })
+      } else {
+        // Invalidate the detail cache so edit dialogs get fresh data.
+        queryClient.invalidateQueries({ queryKey: userKeys.detail(userId) })
+      }
     },
   })
 }

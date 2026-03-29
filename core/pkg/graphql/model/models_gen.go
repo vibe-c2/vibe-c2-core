@@ -3,6 +3,11 @@
 package model
 
 import (
+	"bytes"
+	"fmt"
+	"io"
+	"strconv"
+
 	"github.com/vibe-c2/vibe-c2-core/core/pkg/models"
 	"github.com/vibe-c2/vibe-c2-core/core/pkg/pagination"
 )
@@ -46,6 +51,19 @@ type OperationEdge struct {
 	Cursor string            `json:"cursor"`
 }
 
+type OperationEvent struct {
+	Action      EventAction       `json:"action"`
+	OperationID string            `json:"operationId"`
+	Name        *string           `json:"name,omitempty"`
+	Operation   *models.Operation `json:"operation,omitempty"`
+}
+
+type OperationMemberEvent struct {
+	Action      EventAction `json:"action"`
+	OperationID string      `json:"operationId"`
+	UserID      string      `json:"userId"`
+}
+
 type Query struct {
 }
 
@@ -58,6 +76,9 @@ type SchemeNetworkPointConnection struct {
 type SchemeNetworkPointEdge struct {
 	Node   *models.SchemeNetworkPoint `json:"node"`
 	Cursor string                     `json:"cursor"`
+}
+
+type Subscription struct {
 }
 
 type UpdateOperationInput struct {
@@ -94,4 +115,68 @@ type UserConnection struct {
 type UserEdge struct {
 	Node   *models.User `json:"node"`
 	Cursor string       `json:"cursor"`
+}
+
+type UserEvent struct {
+	Action   EventAction  `json:"action"`
+	UserID   string       `json:"userId"`
+	Username *string      `json:"username,omitempty"`
+	User     *models.User `json:"user,omitempty"`
+}
+
+type EventAction string
+
+const (
+	EventActionCreated EventAction = "CREATED"
+	EventActionUpdated EventAction = "UPDATED"
+	EventActionDeleted EventAction = "DELETED"
+)
+
+var AllEventAction = []EventAction{
+	EventActionCreated,
+	EventActionUpdated,
+	EventActionDeleted,
+}
+
+func (e EventAction) IsValid() bool {
+	switch e {
+	case EventActionCreated, EventActionUpdated, EventActionDeleted:
+		return true
+	}
+	return false
+}
+
+func (e EventAction) String() string {
+	return string(e)
+}
+
+func (e *EventAction) UnmarshalGQL(v any) error {
+	str, ok := v.(string)
+	if !ok {
+		return fmt.Errorf("enums must be strings")
+	}
+
+	*e = EventAction(str)
+	if !e.IsValid() {
+		return fmt.Errorf("%s is not a valid EventAction", str)
+	}
+	return nil
+}
+
+func (e EventAction) MarshalGQL(w io.Writer) {
+	fmt.Fprint(w, strconv.Quote(e.String()))
+}
+
+func (e *EventAction) UnmarshalJSON(b []byte) error {
+	s, err := strconv.Unquote(string(b))
+	if err != nil {
+		return err
+	}
+	return e.UnmarshalGQL(s)
+}
+
+func (e EventAction) MarshalJSON() ([]byte, error) {
+	var buf bytes.Buffer
+	e.MarshalGQL(&buf)
+	return buf.Bytes(), nil
 }

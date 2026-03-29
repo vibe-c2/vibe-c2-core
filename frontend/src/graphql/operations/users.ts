@@ -76,3 +76,18 @@ export const UpdateOwnProfileMutation = graphql(`
     }
   }
 `)
+
+// Real-time subscription — streams user create/update/delete events via SSE.
+// The server includes the full User object for CREATE/UPDATE (null on DELETE).
+export const UserChangedSubscription = graphql(`
+  subscription UserChanged {
+    userChanged {
+      action
+      userId
+      username
+      user {
+        ...UserFields
+      }
+    }
+  }
+`)

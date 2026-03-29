@@ -35,6 +35,7 @@ type ResolverRoot interface {
 	Query() QueryResolver
 	SchemeNetworkPoint() SchemeNetworkPointResolver
 	SchemeNetworkPort() SchemeNetworkPortResolver
+	Subscription() SubscriptionResolver
 	User() UserResolver
 }
 
@@ -82,9 +83,22 @@ type ComplexityRoot struct {
 		Node   func(childComplexity int) int
 	}
 
+	OperationEvent struct {
+		Action      func(childComplexity int) int
+		Name        func(childComplexity int) int
+		Operation   func(childComplexity int) int
+		OperationID func(childComplexity int) int
+	}
+
 	OperationMember struct {
 		Role func(childComplexity int) int
 		User func(childComplexity int) int
+	}
+
+	OperationMemberEvent struct {
+		Action      func(childComplexity int) int
+		OperationID func(childComplexity int) int
+		UserID      func(childComplexity int) int
 	}
 
 	PageInfo struct {
@@ -135,6 +149,12 @@ type ComplexityRoot struct {
 		Service  func(childComplexity int) int
 	}
 
+	Subscription struct {
+		OperationChanged       func(childComplexity int, operationID *string) int
+		OperationMemberChanged func(childComplexity int, operationID *string) int
+		UserChanged            func(childComplexity int) int
+	}
+
 	User struct {
 		Active    func(childComplexity int) int
 		CreatedAt func(childComplexity int) int
@@ -153,6 +173,13 @@ type ComplexityRoot struct {
 	UserEdge struct {
 		Cursor func(childComplexity int) int
 		Node   func(childComplexity int) int
+	}
+
+	UserEvent struct {
+		Action   func(childComplexity int) int
+		User     func(childComplexity int) int
+		UserID   func(childComplexity int) int
+		Username func(childComplexity int) int
 	}
 }
 
@@ -204,6 +231,11 @@ type SchemeNetworkPointResolver interface {
 }
 type SchemeNetworkPortResolver interface {
 	ID(ctx context.Context, obj *models.SchemeNetworkPort) (string, error)
+}
+type SubscriptionResolver interface {
+	UserChanged(ctx context.Context) (<-chan *model.UserEvent, error)
+	OperationChanged(ctx context.Context, operationID *string) (<-chan *model.OperationEvent, error)
+	OperationMemberChanged(ctx context.Context, operationID *string) (<-chan *model.OperationMemberEvent, error)
 }
 type UserResolver interface {
 	ID(ctx context.Context, obj *models.User) (string, error)
@@ -472,6 +504,31 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 
 		return e.ComplexityRoot.OperationEdge.Node(childComplexity), true
 
+	case "OperationEvent.action":
+		if e.ComplexityRoot.OperationEvent.Action == nil {
+			break
+		}
+
+		return e.ComplexityRoot.OperationEvent.Action(childComplexity), true
+	case "OperationEvent.name":
+		if e.ComplexityRoot.OperationEvent.Name == nil {
+			break
+		}
+
+		return e.ComplexityRoot.OperationEvent.Name(childComplexity), true
+	case "OperationEvent.operation":
+		if e.ComplexityRoot.OperationEvent.Operation == nil {
+			break
+		}
+
+		return e.ComplexityRoot.OperationEvent.Operation(childComplexity), true
+	case "OperationEvent.operationId":
+		if e.ComplexityRoot.OperationEvent.OperationID == nil {
+			break
+		}
+
+		return e.ComplexityRoot.OperationEvent.OperationID(childComplexity), true
+
 	case "OperationMember.role":
 		if e.ComplexityRoot.OperationMember.Role == nil {
 			break
@@ -484,6 +541,25 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.OperationMember.User(childComplexity), true
+
+	case "OperationMemberEvent.action":
+		if e.ComplexityRoot.OperationMemberEvent.Action == nil {
+			break
+		}
+
+		return e.ComplexityRoot.OperationMemberEvent.Action(childComplexity), true
+	case "OperationMemberEvent.operationId":
+		if e.ComplexityRoot.OperationMemberEvent.OperationID == nil {
+			break
+		}
+
+		return e.ComplexityRoot.OperationMemberEvent.OperationID(childComplexity), true
+	case "OperationMemberEvent.userId":
+		if e.ComplexityRoot.OperationMemberEvent.UserID == nil {
+			break
+		}
+
+		return e.ComplexityRoot.OperationMemberEvent.UserID(childComplexity), true
 
 	case "PageInfo.endCursor":
 		if e.ComplexityRoot.PageInfo.EndCursor == nil {
@@ -706,6 +782,35 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 
 		return e.ComplexityRoot.SchemeNetworkPort.Service(childComplexity), true
 
+	case "Subscription.operationChanged":
+		if e.ComplexityRoot.Subscription.OperationChanged == nil {
+			break
+		}
+
+		args, err := ec.field_Subscription_operationChanged_args(ctx, rawArgs)
+		if err != nil {
+			return 0, false
+		}
+
+		return e.ComplexityRoot.Subscription.OperationChanged(childComplexity, args["operationId"].(*string)), true
+	case "Subscription.operationMemberChanged":
+		if e.ComplexityRoot.Subscription.OperationMemberChanged == nil {
+			break
+		}
+
+		args, err := ec.field_Subscription_operationMemberChanged_args(ctx, rawArgs)
+		if err != nil {
+			return 0, false
+		}
+
+		return e.ComplexityRoot.Subscription.OperationMemberChanged(childComplexity, args["operationId"].(*string)), true
+	case "Subscription.userChanged":
+		if e.ComplexityRoot.Subscription.UserChanged == nil {
+			break
+		}
+
+		return e.ComplexityRoot.Subscription.UserChanged(childComplexity), true
+
 	case "User.active":
 		if e.ComplexityRoot.User.Active == nil {
 			break
@@ -775,6 +880,31 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 
 		return e.ComplexityRoot.UserEdge.Node(childComplexity), true
 
+	case "UserEvent.action":
+		if e.ComplexityRoot.UserEvent.Action == nil {
+			break
+		}
+
+		return e.ComplexityRoot.UserEvent.Action(childComplexity), true
+	case "UserEvent.user":
+		if e.ComplexityRoot.UserEvent.User == nil {
+			break
+		}
+
+		return e.ComplexityRoot.UserEvent.User(childComplexity), true
+	case "UserEvent.userId":
+		if e.ComplexityRoot.UserEvent.UserID == nil {
+			break
+		}
+
+		return e.ComplexityRoot.UserEvent.UserID(childComplexity), true
+	case "UserEvent.username":
+		if e.ComplexityRoot.UserEvent.Username == nil {
+			break
+		}
+
+		return e.ComplexityRoot.UserEvent.Username(childComplexity), true
+
 	}
 	return 0, false
 }
@@ -834,6 +964,23 @@ func (e *executableSchema) Exec(ctx context.Context) graphql.ResponseHandler {
 			ctx = graphql.WithUnmarshalerMap(ctx, inputUnmarshalMap)
 			data := ec._Mutation(ctx, opCtx.Operation.SelectionSet)
 			var buf bytes.Buffer
+			data.MarshalGQL(&buf)
+
+			return &graphql.Response{
+				Data: buf.Bytes(),
+			}
+		}
+	case ast.Subscription:
+		next := ec._Subscription(ctx, opCtx.Operation.SelectionSet)
+
+		var buf bytes.Buffer
+		return func(ctx context.Context) *graphql.Response {
+			buf.Reset()
+			data := next(ctx)
+
+			if data == nil {
+				return nil
+			}
 			data.MarshalGQL(&buf)
 
 			return &graphql.Response{
@@ -1270,6 +1417,79 @@ type Mutation {
     @hasPermission(permission: "operation:member")
 }
 `, BuiltIn: false},
+	{Name: "../schema/subscriptions.graphql", Input: `# =============================================================================
+# GraphQL Subscriptions
+# =============================================================================
+#
+# Subscriptions provide real-time updates over Server-Sent Events (SSE).
+# Unlike queries (one-shot request/response), subscriptions keep the HTTP
+# connection open and stream events as they happen.
+#
+# How it works from the client side:
+#   1. Send a POST to /api/v1/graphql with:
+#      - Header: Accept: text/event-stream
+#      - Header: Content-Type: application/json
+#      - Header: Authorization: Bearer <jwt>
+#      - Body: {"query": "subscription { userChanged { action userId } }"}
+#   2. The server holds the connection open and sends SSE frames:
+#      event: next
+#      data: {"data": {"userChanged": {"action": "CREATED", "userId": "..."}}}
+#   3. When the server is done (or client disconnects):
+#      event: complete
+#
+# Each event wrapper type includes an "action" enum (CREATED/UPDATED/DELETED)
+# so the frontend knows what happened, plus the entity IDs and an optional
+# full entity object (null on DELETE since the entity no longer exists).
+
+# EventAction indicates what happened to the entity.
+enum EventAction {
+  CREATED
+  UPDATED
+  DELETED
+}
+
+# UserEvent wraps a user domain event for real-time updates.
+# The user field is null on DELETE (the entity no longer exists).
+type UserEvent {
+  action: EventAction!
+  userId: ID!
+  username: String
+  user: User
+}
+
+# OperationEvent wraps an operation domain event.
+# The operation field is null on DELETE.
+type OperationEvent {
+  action: EventAction!
+  operationId: ID!
+  name: String
+  operation: Operation
+}
+
+# OperationMemberEvent wraps a membership change event.
+# action: CREATED = member added, UPDATED = role changed, DELETED = member removed.
+type OperationMemberEvent {
+  action: EventAction!
+  operationId: ID!
+  userId: ID!
+}
+
+type Subscription {
+  # Real-time user changes (create/update/delete). Admin only.
+  userChanged: UserEvent! @hasPermission(permission: "user:read")
+
+  # Real-time operation changes. Optional operationId to scope to one operation.
+  # Without operationId, receives events for all operations the caller is a member of.
+  operationChanged(operationId: ID): OperationEvent!
+    @hasPermission(permission: "operation:member")
+
+  # Real-time membership changes (member added/removed/role changed).
+  # Same scoping as operationChanged — provide operationId to filter, or omit
+  # to receive events for all operations the caller belongs to.
+  operationMemberChanged(operationId: ID): OperationMemberEvent!
+    @hasPermission(permission: "operation:member")
+}
+`, BuiltIn: false},
 }
 var parsedSchema = gqlparser.MustLoadSchema(sources...)
 
@@ -1679,6 +1899,28 @@ func (ec *executionContext) field_Query_users_args(ctx context.Context, rawArgs 
 		return nil, err
 	}
 	args["before"] = arg4
+	return args, nil
+}
+
+func (ec *executionContext) field_Subscription_operationChanged_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
+	var err error
+	args := map[string]any{}
+	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "operationId", ec.unmarshalOID2ᚖstring)
+	if err != nil {
+		return nil, err
+	}
+	args["operationId"] = arg0
+	return args, nil
+}
+
+func (ec *executionContext) field_Subscription_operationMemberChanged_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
+	var err error
+	args := map[string]any{}
+	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "operationId", ec.unmarshalOID2ᚖstring)
+	if err != nil {
+		return nil, err
+	}
+	args["operationId"] = arg0
 	return args, nil
 }
 
@@ -3235,6 +3477,136 @@ func (ec *executionContext) fieldContext_OperationEdge_cursor(_ context.Context,
 	return fc, nil
 }
 
+func (ec *executionContext) _OperationEvent_action(ctx context.Context, field graphql.CollectedField, obj *model.OperationEvent) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_OperationEvent_action,
+		func(ctx context.Context) (any, error) {
+			return obj.Action, nil
+		},
+		nil,
+		ec.marshalNEventAction2githubᚗcomᚋvibeᚑc2ᚋvibeᚑc2ᚑcoreᚋcoreᚋpkgᚋgraphqlᚋmodelᚐEventAction,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_OperationEvent_action(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "OperationEvent",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type EventAction does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _OperationEvent_operationId(ctx context.Context, field graphql.CollectedField, obj *model.OperationEvent) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_OperationEvent_operationId,
+		func(ctx context.Context) (any, error) {
+			return obj.OperationID, nil
+		},
+		nil,
+		ec.marshalNID2string,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_OperationEvent_operationId(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "OperationEvent",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type ID does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _OperationEvent_name(ctx context.Context, field graphql.CollectedField, obj *model.OperationEvent) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_OperationEvent_name,
+		func(ctx context.Context) (any, error) {
+			return obj.Name, nil
+		},
+		nil,
+		ec.marshalOString2ᚖstring,
+		true,
+		false,
+	)
+}
+
+func (ec *executionContext) fieldContext_OperationEvent_name(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "OperationEvent",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _OperationEvent_operation(ctx context.Context, field graphql.CollectedField, obj *model.OperationEvent) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_OperationEvent_operation,
+		func(ctx context.Context) (any, error) {
+			return obj.Operation, nil
+		},
+		nil,
+		ec.marshalOOperation2ᚖgithubᚗcomᚋvibeᚑc2ᚋvibeᚑc2ᚑcoreᚋcoreᚋpkgᚋmodelsᚐOperation,
+		true,
+		false,
+	)
+}
+
+func (ec *executionContext) fieldContext_OperationEvent_operation(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "OperationEvent",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "id":
+				return ec.fieldContext_Operation_id(ctx, field)
+			case "name":
+				return ec.fieldContext_Operation_name(ctx, field)
+			case "description":
+				return ec.fieldContext_Operation_description(ctx, field)
+			case "members":
+				return ec.fieldContext_Operation_members(ctx, field)
+			case "createdAt":
+				return ec.fieldContext_Operation_createdAt(ctx, field)
+			case "updatedAt":
+				return ec.fieldContext_Operation_updatedAt(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type Operation", field.Name)
+		},
+	}
+	return fc, nil
+}
+
 func (ec *executionContext) _OperationMember_user(ctx context.Context, field graphql.CollectedField, obj *models.OperationMember) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
@@ -3302,6 +3674,93 @@ func (ec *executionContext) fieldContext_OperationMember_role(_ context.Context,
 		IsResolver: false,
 		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
 			return nil, errors.New("field of type OperationRole does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _OperationMemberEvent_action(ctx context.Context, field graphql.CollectedField, obj *model.OperationMemberEvent) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_OperationMemberEvent_action,
+		func(ctx context.Context) (any, error) {
+			return obj.Action, nil
+		},
+		nil,
+		ec.marshalNEventAction2githubᚗcomᚋvibeᚑc2ᚋvibeᚑc2ᚑcoreᚋcoreᚋpkgᚋgraphqlᚋmodelᚐEventAction,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_OperationMemberEvent_action(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "OperationMemberEvent",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type EventAction does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _OperationMemberEvent_operationId(ctx context.Context, field graphql.CollectedField, obj *model.OperationMemberEvent) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_OperationMemberEvent_operationId,
+		func(ctx context.Context) (any, error) {
+			return obj.OperationID, nil
+		},
+		nil,
+		ec.marshalNID2string,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_OperationMemberEvent_operationId(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "OperationMemberEvent",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type ID does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _OperationMemberEvent_userId(ctx context.Context, field graphql.CollectedField, obj *model.OperationMemberEvent) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_OperationMemberEvent_userId,
+		func(ctx context.Context) (any, error) {
+			return obj.UserID, nil
+		},
+		nil,
+		ec.marshalNID2string,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_OperationMemberEvent_userId(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "OperationMemberEvent",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type ID does not have child fields")
 		},
 	}
 	return fc, nil
@@ -4643,6 +5102,199 @@ func (ec *executionContext) fieldContext_SchemeNetworkPort_notes(_ context.Conte
 	return fc, nil
 }
 
+func (ec *executionContext) _Subscription_userChanged(ctx context.Context, field graphql.CollectedField) (ret func(ctx context.Context) graphql.Marshaler) {
+	return graphql.ResolveFieldStream(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Subscription_userChanged,
+		func(ctx context.Context) (any, error) {
+			return ec.Resolvers.Subscription().UserChanged(ctx)
+		},
+		func(ctx context.Context, next graphql.Resolver) graphql.Resolver {
+			directive0 := next
+
+			directive1 := func(ctx context.Context) (any, error) {
+				permission, err := ec.unmarshalNString2string(ctx, "user:read")
+				if err != nil {
+					var zeroVal *model.UserEvent
+					return zeroVal, err
+				}
+				if ec.Directives.HasPermission == nil {
+					var zeroVal *model.UserEvent
+					return zeroVal, errors.New("directive hasPermission is not implemented")
+				}
+				return ec.Directives.HasPermission(ctx, nil, directive0, permission)
+			}
+
+			next = directive1
+			return next
+		},
+		ec.marshalNUserEvent2ᚖgithubᚗcomᚋvibeᚑc2ᚋvibeᚑc2ᚑcoreᚋcoreᚋpkgᚋgraphqlᚋmodelᚐUserEvent,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_Subscription_userChanged(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Subscription",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "action":
+				return ec.fieldContext_UserEvent_action(ctx, field)
+			case "userId":
+				return ec.fieldContext_UserEvent_userId(ctx, field)
+			case "username":
+				return ec.fieldContext_UserEvent_username(ctx, field)
+			case "user":
+				return ec.fieldContext_UserEvent_user(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type UserEvent", field.Name)
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Subscription_operationChanged(ctx context.Context, field graphql.CollectedField) (ret func(ctx context.Context) graphql.Marshaler) {
+	return graphql.ResolveFieldStream(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Subscription_operationChanged,
+		func(ctx context.Context) (any, error) {
+			fc := graphql.GetFieldContext(ctx)
+			return ec.Resolvers.Subscription().OperationChanged(ctx, fc.Args["operationId"].(*string))
+		},
+		func(ctx context.Context, next graphql.Resolver) graphql.Resolver {
+			directive0 := next
+
+			directive1 := func(ctx context.Context) (any, error) {
+				permission, err := ec.unmarshalNString2string(ctx, "operation:member")
+				if err != nil {
+					var zeroVal *model.OperationEvent
+					return zeroVal, err
+				}
+				if ec.Directives.HasPermission == nil {
+					var zeroVal *model.OperationEvent
+					return zeroVal, errors.New("directive hasPermission is not implemented")
+				}
+				return ec.Directives.HasPermission(ctx, nil, directive0, permission)
+			}
+
+			next = directive1
+			return next
+		},
+		ec.marshalNOperationEvent2ᚖgithubᚗcomᚋvibeᚑc2ᚋvibeᚑc2ᚑcoreᚋcoreᚋpkgᚋgraphqlᚋmodelᚐOperationEvent,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_Subscription_operationChanged(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Subscription",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "action":
+				return ec.fieldContext_OperationEvent_action(ctx, field)
+			case "operationId":
+				return ec.fieldContext_OperationEvent_operationId(ctx, field)
+			case "name":
+				return ec.fieldContext_OperationEvent_name(ctx, field)
+			case "operation":
+				return ec.fieldContext_OperationEvent_operation(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type OperationEvent", field.Name)
+		},
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			err = ec.Recover(ctx, r)
+			ec.Error(ctx, err)
+		}
+	}()
+	ctx = graphql.WithFieldContext(ctx, fc)
+	if fc.Args, err = ec.field_Subscription_operationChanged_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
+		ec.Error(ctx, err)
+		return fc, err
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Subscription_operationMemberChanged(ctx context.Context, field graphql.CollectedField) (ret func(ctx context.Context) graphql.Marshaler) {
+	return graphql.ResolveFieldStream(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Subscription_operationMemberChanged,
+		func(ctx context.Context) (any, error) {
+			fc := graphql.GetFieldContext(ctx)
+			return ec.Resolvers.Subscription().OperationMemberChanged(ctx, fc.Args["operationId"].(*string))
+		},
+		func(ctx context.Context, next graphql.Resolver) graphql.Resolver {
+			directive0 := next
+
+			directive1 := func(ctx context.Context) (any, error) {
+				permission, err := ec.unmarshalNString2string(ctx, "operation:member")
+				if err != nil {
+					var zeroVal *model.OperationMemberEvent
+					return zeroVal, err
+				}
+				if ec.Directives.HasPermission == nil {
+					var zeroVal *model.OperationMemberEvent
+					return zeroVal, errors.New("directive hasPermission is not implemented")
+				}
+				return ec.Directives.HasPermission(ctx, nil, directive0, permission)
+			}
+
+			next = directive1
+			return next
+		},
+		ec.marshalNOperationMemberEvent2ᚖgithubᚗcomᚋvibeᚑc2ᚋvibeᚑc2ᚑcoreᚋcoreᚋpkgᚋgraphqlᚋmodelᚐOperationMemberEvent,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_Subscription_operationMemberChanged(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Subscription",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "action":
+				return ec.fieldContext_OperationMemberEvent_action(ctx, field)
+			case "operationId":
+				return ec.fieldContext_OperationMemberEvent_operationId(ctx, field)
+			case "userId":
+				return ec.fieldContext_OperationMemberEvent_userId(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type OperationMemberEvent", field.Name)
+		},
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			err = ec.Recover(ctx, r)
+			ec.Error(ctx, err)
+		}
+	}()
+	ctx = graphql.WithFieldContext(ctx, fc)
+	if fc.Args, err = ec.field_Subscription_operationMemberChanged_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
+		ec.Error(ctx, err)
+		return fc, err
+	}
+	return fc, nil
+}
+
 func (ec *executionContext) _User_id(ctx context.Context, field graphql.CollectedField, obj *models.User) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
@@ -4987,6 +5639,136 @@ func (ec *executionContext) fieldContext_UserEdge_cursor(_ context.Context, fiel
 		IsResolver: false,
 		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
 			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _UserEvent_action(ctx context.Context, field graphql.CollectedField, obj *model.UserEvent) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_UserEvent_action,
+		func(ctx context.Context) (any, error) {
+			return obj.Action, nil
+		},
+		nil,
+		ec.marshalNEventAction2githubᚗcomᚋvibeᚑc2ᚋvibeᚑc2ᚑcoreᚋcoreᚋpkgᚋgraphqlᚋmodelᚐEventAction,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_UserEvent_action(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "UserEvent",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type EventAction does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _UserEvent_userId(ctx context.Context, field graphql.CollectedField, obj *model.UserEvent) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_UserEvent_userId,
+		func(ctx context.Context) (any, error) {
+			return obj.UserID, nil
+		},
+		nil,
+		ec.marshalNID2string,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_UserEvent_userId(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "UserEvent",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type ID does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _UserEvent_username(ctx context.Context, field graphql.CollectedField, obj *model.UserEvent) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_UserEvent_username,
+		func(ctx context.Context) (any, error) {
+			return obj.Username, nil
+		},
+		nil,
+		ec.marshalOString2ᚖstring,
+		true,
+		false,
+	)
+}
+
+func (ec *executionContext) fieldContext_UserEvent_username(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "UserEvent",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _UserEvent_user(ctx context.Context, field graphql.CollectedField, obj *model.UserEvent) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_UserEvent_user,
+		func(ctx context.Context) (any, error) {
+			return obj.User, nil
+		},
+		nil,
+		ec.marshalOUser2ᚖgithubᚗcomᚋvibeᚑc2ᚋvibeᚑc2ᚑcoreᚋcoreᚋpkgᚋmodelsᚐUser,
+		true,
+		false,
+	)
+}
+
+func (ec *executionContext) fieldContext_UserEvent_user(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "UserEvent",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "id":
+				return ec.fieldContext_User_id(ctx, field)
+			case "username":
+				return ec.fieldContext_User_username(ctx, field)
+			case "roles":
+				return ec.fieldContext_User_roles(ctx, field)
+			case "active":
+				return ec.fieldContext_User_active(ctx, field)
+			case "createdAt":
+				return ec.fieldContext_User_createdAt(ctx, field)
+			case "updatedAt":
+				return ec.fieldContext_User_updatedAt(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type User", field.Name)
 		},
 	}
 	return fc, nil
@@ -7251,6 +8033,54 @@ func (ec *executionContext) _OperationEdge(ctx context.Context, sel ast.Selectio
 	return out
 }
 
+var operationEventImplementors = []string{"OperationEvent"}
+
+func (ec *executionContext) _OperationEvent(ctx context.Context, sel ast.SelectionSet, obj *model.OperationEvent) graphql.Marshaler {
+	fields := graphql.CollectFields(ec.OperationContext, sel, operationEventImplementors)
+
+	out := graphql.NewFieldSet(fields)
+	deferred := make(map[string]*graphql.FieldSet)
+	for i, field := range fields {
+		switch field.Name {
+		case "__typename":
+			out.Values[i] = graphql.MarshalString("OperationEvent")
+		case "action":
+			out.Values[i] = ec._OperationEvent_action(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "operationId":
+			out.Values[i] = ec._OperationEvent_operationId(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "name":
+			out.Values[i] = ec._OperationEvent_name(ctx, field, obj)
+		case "operation":
+			out.Values[i] = ec._OperationEvent_operation(ctx, field, obj)
+		default:
+			panic("unknown field " + strconv.Quote(field.Name))
+		}
+	}
+	out.Dispatch(ctx)
+	if out.Invalids > 0 {
+		return graphql.Null
+	}
+
+	atomic.AddInt32(&ec.Deferred, int32(len(deferred)))
+
+	for label, dfs := range deferred {
+		ec.ProcessDeferredGroup(graphql.DeferredGroup{
+			Label:    label,
+			Path:     graphql.GetPath(ctx),
+			FieldSet: dfs,
+			Context:  ctx,
+		})
+	}
+
+	return out
+}
+
 var operationMemberImplementors = []string{"OperationMember"}
 
 func (ec *executionContext) _OperationMember(ctx context.Context, sel ast.SelectionSet, obj *models.OperationMember) graphql.Marshaler {
@@ -7302,6 +8132,55 @@ func (ec *executionContext) _OperationMember(ctx context.Context, sel ast.Select
 			out.Values[i] = ec._OperationMember_role(ctx, field, obj)
 			if out.Values[i] == graphql.Null {
 				atomic.AddUint32(&out.Invalids, 1)
+			}
+		default:
+			panic("unknown field " + strconv.Quote(field.Name))
+		}
+	}
+	out.Dispatch(ctx)
+	if out.Invalids > 0 {
+		return graphql.Null
+	}
+
+	atomic.AddInt32(&ec.Deferred, int32(len(deferred)))
+
+	for label, dfs := range deferred {
+		ec.ProcessDeferredGroup(graphql.DeferredGroup{
+			Label:    label,
+			Path:     graphql.GetPath(ctx),
+			FieldSet: dfs,
+			Context:  ctx,
+		})
+	}
+
+	return out
+}
+
+var operationMemberEventImplementors = []string{"OperationMemberEvent"}
+
+func (ec *executionContext) _OperationMemberEvent(ctx context.Context, sel ast.SelectionSet, obj *model.OperationMemberEvent) graphql.Marshaler {
+	fields := graphql.CollectFields(ec.OperationContext, sel, operationMemberEventImplementors)
+
+	out := graphql.NewFieldSet(fields)
+	deferred := make(map[string]*graphql.FieldSet)
+	for i, field := range fields {
+		switch field.Name {
+		case "__typename":
+			out.Values[i] = graphql.MarshalString("OperationMemberEvent")
+		case "action":
+			out.Values[i] = ec._OperationMemberEvent_action(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "operationId":
+			out.Values[i] = ec._OperationMemberEvent_operationId(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "userId":
+			out.Values[i] = ec._OperationMemberEvent_userId(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
 			}
 		default:
 			panic("unknown field " + strconv.Quote(field.Name))
@@ -8009,6 +8888,30 @@ func (ec *executionContext) _SchemeNetworkPort(ctx context.Context, sel ast.Sele
 	return out
 }
 
+var subscriptionImplementors = []string{"Subscription"}
+
+func (ec *executionContext) _Subscription(ctx context.Context, sel ast.SelectionSet) func(ctx context.Context) graphql.Marshaler {
+	fields := graphql.CollectFields(ec.OperationContext, sel, subscriptionImplementors)
+	ctx = graphql.WithFieldContext(ctx, &graphql.FieldContext{
+		Object: "Subscription",
+	})
+	if len(fields) != 1 {
+		graphql.AddErrorf(ctx, "must subscribe to exactly one stream")
+		return nil
+	}
+
+	switch fields[0].Name {
+	case "userChanged":
+		return ec._Subscription_userChanged(ctx, fields[0])
+	case "operationChanged":
+		return ec._Subscription_operationChanged(ctx, fields[0])
+	case "operationMemberChanged":
+		return ec._Subscription_operationMemberChanged(ctx, fields[0])
+	default:
+		panic("unknown field " + strconv.Quote(fields[0].Name))
+	}
+}
+
 var userImplementors = []string{"User"}
 
 func (ec *executionContext) _User(ctx context.Context, sel ast.SelectionSet, obj *models.User) graphql.Marshaler {
@@ -8236,6 +9139,54 @@ func (ec *executionContext) _UserEdge(ctx context.Context, sel ast.SelectionSet,
 			if out.Values[i] == graphql.Null {
 				out.Invalids++
 			}
+		default:
+			panic("unknown field " + strconv.Quote(field.Name))
+		}
+	}
+	out.Dispatch(ctx)
+	if out.Invalids > 0 {
+		return graphql.Null
+	}
+
+	atomic.AddInt32(&ec.Deferred, int32(len(deferred)))
+
+	for label, dfs := range deferred {
+		ec.ProcessDeferredGroup(graphql.DeferredGroup{
+			Label:    label,
+			Path:     graphql.GetPath(ctx),
+			FieldSet: dfs,
+			Context:  ctx,
+		})
+	}
+
+	return out
+}
+
+var userEventImplementors = []string{"UserEvent"}
+
+func (ec *executionContext) _UserEvent(ctx context.Context, sel ast.SelectionSet, obj *model.UserEvent) graphql.Marshaler {
+	fields := graphql.CollectFields(ec.OperationContext, sel, userEventImplementors)
+
+	out := graphql.NewFieldSet(fields)
+	deferred := make(map[string]*graphql.FieldSet)
+	for i, field := range fields {
+		switch field.Name {
+		case "__typename":
+			out.Values[i] = graphql.MarshalString("UserEvent")
+		case "action":
+			out.Values[i] = ec._UserEvent_action(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "userId":
+			out.Values[i] = ec._UserEvent_userId(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "username":
+			out.Values[i] = ec._UserEvent_username(ctx, field, obj)
+		case "user":
+			out.Values[i] = ec._UserEvent_user(ctx, field, obj)
 		default:
 			panic("unknown field " + strconv.Quote(field.Name))
 		}
@@ -8630,6 +9581,16 @@ func (ec *executionContext) unmarshalNCreateUserInput2githubᚗcomᚋvibeᚑc2�
 	return res, graphql.ErrorOnPath(ctx, err)
 }
 
+func (ec *executionContext) unmarshalNEventAction2githubᚗcomᚋvibeᚑc2ᚋvibeᚑc2ᚑcoreᚋcoreᚋpkgᚋgraphqlᚋmodelᚐEventAction(ctx context.Context, v any) (model.EventAction, error) {
+	var res model.EventAction
+	err := res.UnmarshalGQL(v)
+	return res, graphql.ErrorOnPath(ctx, err)
+}
+
+func (ec *executionContext) marshalNEventAction2githubᚗcomᚋvibeᚑc2ᚋvibeᚑc2ᚑcoreᚋcoreᚋpkgᚋgraphqlᚋmodelᚐEventAction(ctx context.Context, sel ast.SelectionSet, v model.EventAction) graphql.Marshaler {
+	return v
+}
+
 func (ec *executionContext) unmarshalNID2string(ctx context.Context, v any) (string, error) {
 	res, err := graphql.UnmarshalID(v)
 	return res, graphql.ErrorOnPath(ctx, err)
@@ -8716,6 +9677,20 @@ func (ec *executionContext) marshalNOperationEdge2ᚖgithubᚗcomᚋvibeᚑc2ᚋ
 	return ec._OperationEdge(ctx, sel, v)
 }
 
+func (ec *executionContext) marshalNOperationEvent2githubᚗcomᚋvibeᚑc2ᚋvibeᚑc2ᚑcoreᚋcoreᚋpkgᚋgraphqlᚋmodelᚐOperationEvent(ctx context.Context, sel ast.SelectionSet, v model.OperationEvent) graphql.Marshaler {
+	return ec._OperationEvent(ctx, sel, &v)
+}
+
+func (ec *executionContext) marshalNOperationEvent2ᚖgithubᚗcomᚋvibeᚑc2ᚋvibeᚑc2ᚑcoreᚋcoreᚋpkgᚋgraphqlᚋmodelᚐOperationEvent(ctx context.Context, sel ast.SelectionSet, v *model.OperationEvent) graphql.Marshaler {
+	if v == nil {
+		if !graphql.HasFieldError(ctx, graphql.GetFieldContext(ctx)) {
+			graphql.AddErrorf(ctx, "the requested element is null which the schema does not allow")
+		}
+		return graphql.Null
+	}
+	return ec._OperationEvent(ctx, sel, v)
+}
+
 func (ec *executionContext) marshalNOperationMember2ᚕᚖgithubᚗcomᚋvibeᚑc2ᚋvibeᚑc2ᚑcoreᚋcoreᚋpkgᚋmodelsᚐOperationMemberᚄ(ctx context.Context, sel ast.SelectionSet, v []*models.OperationMember) graphql.Marshaler {
 	ret := graphql.MarshalSliceConcurrently(ctx, len(v), 0, false, func(ctx context.Context, i int) graphql.Marshaler {
 		fc := graphql.GetFieldContext(ctx)
@@ -8740,6 +9715,20 @@ func (ec *executionContext) marshalNOperationMember2ᚖgithubᚗcomᚋvibeᚑc2�
 		return graphql.Null
 	}
 	return ec._OperationMember(ctx, sel, v)
+}
+
+func (ec *executionContext) marshalNOperationMemberEvent2githubᚗcomᚋvibeᚑc2ᚋvibeᚑc2ᚑcoreᚋcoreᚋpkgᚋgraphqlᚋmodelᚐOperationMemberEvent(ctx context.Context, sel ast.SelectionSet, v model.OperationMemberEvent) graphql.Marshaler {
+	return ec._OperationMemberEvent(ctx, sel, &v)
+}
+
+func (ec *executionContext) marshalNOperationMemberEvent2ᚖgithubᚗcomᚋvibeᚑc2ᚋvibeᚑc2ᚑcoreᚋcoreᚋpkgᚋgraphqlᚋmodelᚐOperationMemberEvent(ctx context.Context, sel ast.SelectionSet, v *model.OperationMemberEvent) graphql.Marshaler {
+	if v == nil {
+		if !graphql.HasFieldError(ctx, graphql.GetFieldContext(ctx)) {
+			graphql.AddErrorf(ctx, "the requested element is null which the schema does not allow")
+		}
+		return graphql.Null
+	}
+	return ec._OperationMemberEvent(ctx, sel, v)
 }
 
 func (ec *executionContext) unmarshalNOperationRole2githubᚗcomᚋvibeᚑc2ᚋvibeᚑc2ᚑcoreᚋcoreᚋpkgᚋmodelsᚐOperationRole(ctx context.Context, v any) (models.OperationRole, error) {
@@ -8962,6 +9951,20 @@ func (ec *executionContext) marshalNUserEdge2ᚖgithubᚗcomᚋvibeᚑc2ᚋvibe�
 	return ec._UserEdge(ctx, sel, v)
 }
 
+func (ec *executionContext) marshalNUserEvent2githubᚗcomᚋvibeᚑc2ᚋvibeᚑc2ᚑcoreᚋcoreᚋpkgᚋgraphqlᚋmodelᚐUserEvent(ctx context.Context, sel ast.SelectionSet, v model.UserEvent) graphql.Marshaler {
+	return ec._UserEvent(ctx, sel, &v)
+}
+
+func (ec *executionContext) marshalNUserEvent2ᚖgithubᚗcomᚋvibeᚑc2ᚋvibeᚑc2ᚑcoreᚋcoreᚋpkgᚋgraphqlᚋmodelᚐUserEvent(ctx context.Context, sel ast.SelectionSet, v *model.UserEvent) graphql.Marshaler {
+	if v == nil {
+		if !graphql.HasFieldError(ctx, graphql.GetFieldContext(ctx)) {
+			graphql.AddErrorf(ctx, "the requested element is null which the schema does not allow")
+		}
+		return graphql.Null
+	}
+	return ec._UserEvent(ctx, sel, v)
+}
+
 func (ec *executionContext) marshalN__Directive2githubᚗcomᚋ99designsᚋgqlgenᚋgraphqlᚋintrospectionᚐDirective(ctx context.Context, sel ast.SelectionSet, v introspection.Directive) graphql.Marshaler {
 	return ec.___Directive(ctx, sel, &v)
 }
@@ -9133,6 +10136,24 @@ func (ec *executionContext) marshalOBoolean2ᚖbool(ctx context.Context, sel ast
 	return res
 }
 
+func (ec *executionContext) unmarshalOID2ᚖstring(ctx context.Context, v any) (*string, error) {
+	if v == nil {
+		return nil, nil
+	}
+	res, err := graphql.UnmarshalID(v)
+	return &res, graphql.ErrorOnPath(ctx, err)
+}
+
+func (ec *executionContext) marshalOID2ᚖstring(ctx context.Context, sel ast.SelectionSet, v *string) graphql.Marshaler {
+	if v == nil {
+		return graphql.Null
+	}
+	_ = sel
+	_ = ctx
+	res := graphql.MarshalID(*v)
+	return res
+}
+
 func (ec *executionContext) unmarshalOInt2ᚖint(ctx context.Context, v any) (*int, error) {
 	if v == nil {
 		return nil, nil
@@ -9149,6 +10170,13 @@ func (ec *executionContext) marshalOInt2ᚖint(ctx context.Context, sel ast.Sele
 	_ = ctx
 	res := graphql.MarshalInt(*v)
 	return res
+}
+
+func (ec *executionContext) marshalOOperation2ᚖgithubᚗcomᚋvibeᚑc2ᚋvibeᚑc2ᚑcoreᚋcoreᚋpkgᚋmodelsᚐOperation(ctx context.Context, sel ast.SelectionSet, v *models.Operation) graphql.Marshaler {
+	if v == nil {
+		return graphql.Null
+	}
+	return ec._Operation(ctx, sel, v)
 }
 
 func (ec *executionContext) unmarshalOOperationRole2ᚖgithubᚗcomᚋvibeᚑc2ᚋvibeᚑc2ᚑcoreᚋcoreᚋpkgᚋmodelsᚐOperationRole(ctx context.Context, v any) (*models.OperationRole, error) {
@@ -9249,6 +10277,13 @@ func (ec *executionContext) marshalOString2ᚖstring(ctx context.Context, sel as
 	_ = ctx
 	res := graphql.MarshalString(*v)
 	return res
+}
+
+func (ec *executionContext) marshalOUser2ᚖgithubᚗcomᚋvibeᚑc2ᚋvibeᚑc2ᚑcoreᚋcoreᚋpkgᚋmodelsᚐUser(ctx context.Context, sel ast.SelectionSet, v *models.User) graphql.Marshaler {
+	if v == nil {
+		return graphql.Null
+	}
+	return ec._User(ctx, sel, v)
 }
 
 func (ec *executionContext) marshalO__EnumValue2ᚕgithubᚗcomᚋ99designsᚋgqlgenᚋgraphqlᚋintrospectionᚐEnumValueᚄ(ctx context.Context, sel ast.SelectionSet, v []introspection.EnumValue) graphql.Marshaler {

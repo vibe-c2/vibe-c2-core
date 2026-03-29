@@ -11,6 +11,8 @@
 package graphql
 
 import (
+	"time"
+
 	"github.com/99designs/gqlgen/graphql/handler"
 	"github.com/99designs/gqlgen/graphql/handler/extension"
 	"github.com/99designs/gqlgen/graphql/handler/lru"
@@ -18,9 +20,11 @@ import (
 	"github.com/99designs/gqlgen/graphql/playground"
 	"github.com/gin-gonic/gin"
 	"github.com/vektah/gqlparser/v2/ast"
+	"github.com/vibe-c2/vibe-c2-core/core/pkg/eventbus"
 	"github.com/vibe-c2/vibe-c2-core/core/pkg/graphql/generated"
 	"github.com/vibe-c2/vibe-c2-core/core/pkg/graphql/gqlctx"
 	gqlresolver "github.com/vibe-c2/vibe-c2-core/core/pkg/graphql/resolver"
+	"github.com/vibe-c2/vibe-c2-core/core/pkg/repository"
 	"github.com/vibe-c2/vibe-c2-core/core/pkg/resolver"
 )
 
@@ -40,13 +44,24 @@ import (
 //	@Produce		json
 //	@Security		BearerAuth
 //	@Router			/graphql [post]
-func NewHandler(users resolver.IUserResolver, operations resolver.IOperationResolver, schemeNetworkPoints resolver.ISchemeNetworkPointResolver) gin.HandlerFunc {
-	// Create the resolver root with entity resolvers injected.
+func NewHandler(
+	users resolver.IUserResolver,
+	operations resolver.IOperationResolver,
+	schemeNetworkPoints resolver.ISchemeNetworkPointResolver,
+	bus eventbus.IEventBus,
+	userRepo repository.IUserRepository,
+	operationRepo repository.IOperationRepository,
+) gin.HandlerFunc {
+	// Create the resolver root with entity resolvers and subscription dependencies.
 	// The root resolver delegates to domain-specific resolvers for business logic.
+	// EventBus + repos are used by subscription resolvers to stream real-time events.
 	resolverRoot := &gqlresolver.Resolver{
 		UserResolver:               users,
 		OperationResolver:          operations,
 		SchemeNetworkPointResolver: schemeNetworkPoints,
+		EventBus:                   bus,
+		UserRepo:                   userRepo,
+		OperationRepo:              operationRepo,
 	}
 
 	// Build the gqlgen server with our schema, resolvers, and directive.
@@ -66,8 +81,16 @@ func NewHandler(users resolver.IUserResolver, operations resolver.IOperationReso
 
 	// --- Transport configuration ---
 	// Transports define how GraphQL requests are sent over HTTP.
-	// POST is the standard (JSON body with query + variables).
-	// GET is used for simple queries (query string parameters).
+	// gqlgen checks transports in order — the first one whose Supports() returns
+	// true handles the request. SSE must come before POST because SSE requests are
+	// also POST + JSON, but with an additional Accept: text/event-stream header.
+	//
+	// SSE (Server-Sent Events) is used for GraphQL subscriptions:
+	//   Client sends: POST with Accept: text/event-stream + Content-Type: application/json
+	//   Server streams: event: next\ndata: {"data": ...}\n\n  (one per event)
+	//   On completion: event: complete\n\n
+	//   Keep-alive pings every 15s prevent proxy/LB timeouts.
+	srv.AddTransport(transport.SSE{KeepAlivePingInterval: 15 * time.Second})
 	srv.AddTransport(transport.Options{})
 	srv.AddTransport(transport.GET{})
 	srv.AddTransport(transport.POST{})

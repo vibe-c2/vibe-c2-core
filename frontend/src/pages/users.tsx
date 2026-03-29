@@ -1,5 +1,5 @@
 import { useMemo } from "react"
-import { useInfiniteUsers } from "@/graphql/hooks/users"
+import { useInfiniteUsers, useUserChangedSubscription } from "@/graphql/hooks/users"
 import { useUserStore } from "@/stores/users"
 import { UsersToolbar } from "@/components/users/users-toolbar"
 import { UsersTable } from "@/components/users/users-table"
@@ -8,6 +8,11 @@ import { EditUserDialog } from "@/components/users/edit-user-dialog"
 import { DeleteUserDialog } from "@/components/users/delete-user-dialog"
 
 export function UsersPage() {
+  // Subscribe to real-time user changes via SSE.
+  // When another admin creates/updates/deletes a user, the query cache is
+  // invalidated and the table below refetches automatically.
+  useUserChangedSubscription()
+
   const search = useUserStore((s) => s.search)
   const {
     data,

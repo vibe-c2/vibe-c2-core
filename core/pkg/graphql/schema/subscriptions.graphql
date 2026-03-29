@@ -1,0 +1,72 @@
+# =============================================================================
+# GraphQL Subscriptions
+# =============================================================================
+#
+# Subscriptions provide real-time updates over Server-Sent Events (SSE).
+# Unlike queries (one-shot request/response), subscriptions keep the HTTP
+# connection open and stream events as they happen.
+#
+# How it works from the client side:
+#   1. Send a POST to /api/v1/graphql with:
+#      - Header: Accept: text/event-stream
+#      - Header: Content-Type: application/json
+#      - Header: Authorization: Bearer <jwt>
+#      - Body: {"query": "subscription { userChanged { action userId } }"}
+#   2. The server holds the connection open and sends SSE frames:
+#      event: next
+#      data: {"data": {"userChanged": {"action": "CREATED", "userId": "..."}}}
+#   3. When the server is done (or client disconnects):
+#      event: complete
+#
+# Each event wrapper type includes an "action" enum (CREATED/UPDATED/DELETED)
+# so the frontend knows what happened, plus the entity IDs and an optional
+# full entity object (null on DELETE since the entity no longer exists).
+
+# EventAction indicates what happened to the entity.
+enum EventAction {
+  CREATED
+  UPDATED
+  DELETED
+}
+
+# UserEvent wraps a user domain event for real-time updates.
+# The user field is null on DELETE (the entity no longer exists).
+type UserEvent {
+  action: EventAction!
+  userId: ID!
+  username: String
+  user: User
+}
+
+# OperationEvent wraps an operation domain event.
+# The operation field is null on DELETE.
+type OperationEvent {
+  action: EventAction!
+  operationId: ID!
+  name: String
+  operation: Operation
+}
+
+# OperationMemberEvent wraps a membership change event.
+# action: CREATED = member added, UPDATED = role changed, DELETED = member removed.
+type OperationMemberEvent {
+  action: EventAction!
+  operationId: ID!
+  userId: ID!
+}
+
+type Subscription {
+  # Real-time user changes (create/update/delete). Admin only.
+  userChanged: UserEvent! @hasPermission(permission: "user:read")
+
+  # Real-time operation changes. Optional operationId to scope to one operation.
+  # Without operationId, receives events for all operations the caller is a member of.
+  operationChanged(operationId: ID): OperationEvent!
+    @hasPermission(permission: "operation:member")
+
+  # Real-time membership changes (member added/removed/role changed).
+  # Same scoping as operationChanged — provide operationId to filter, or omit
+  # to receive events for all operations the caller belongs to.
+  operationMemberChanged(operationId: ID): OperationMemberEvent!
+    @hasPermission(permission: "operation:member")
+}

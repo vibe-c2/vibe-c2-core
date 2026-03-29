@@ -17,14 +17,27 @@
 // embed this struct to access the entity resolvers.
 package resolver
 
-import "github.com/vibe-c2/vibe-c2-core/core/pkg/resolver"
+import (
+	"github.com/vibe-c2/vibe-c2-core/core/pkg/eventbus"
+	"github.com/vibe-c2/vibe-c2-core/core/pkg/repository"
+	"github.com/vibe-c2/vibe-c2-core/core/pkg/resolver"
+)
 
 // Resolver is the root resolver. It delegates to domain-specific entity
 // resolvers that hold the actual business logic.
 // gqlgen generates mutationResolver and queryResolver structs that
 // embed this, so they inherit access to entity resolvers.
+//
+// EventBus, UserRepo, and OperationRepo are used by subscription resolvers
+// to receive real-time events and fetch full entities from the database.
 type Resolver struct {
 	UserResolver               resolver.IUserResolver
 	OperationResolver          resolver.IOperationResolver
 	SchemeNetworkPointResolver resolver.ISchemeNetworkPointResolver
+
+	// Subscription dependencies — event bus for real-time events,
+	// repos for fetching full entities to include in event payloads.
+	EventBus      eventbus.IEventBus
+	UserRepo      repository.IUserRepository
+	OperationRepo repository.IOperationRepository
 }
