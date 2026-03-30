@@ -126,3 +126,40 @@ models:
     fields:
       id:
         resolver: true         # PortID (uuid.UUID) -> ID (string)
+
+  # Map the GraphQL "Session" type to our existing Session model.
+  Session:
+    model:
+      - github.com/vibe-c2/vibe-c2-core/core/pkg/models.Session
+    fields:
+      id:
+        resolver: true         # SessionID (uuid.UUID) -> ID (string)
+      userId:
+        resolver: true         # UserID (uuid.UUID) -> ID (string)
+      user:
+        resolver: true         # UserID (uuid.UUID) -> User (fetched from DB)
+      status:
+        resolver: true         # SessionStatus type mapping
+      terminationReason:
+        resolver: true         # Nullable enum mapping
+      lastActivityAt:
+        resolver: true         # time.Time -> string (RFC3339)
+      expiresAt:
+        resolver: true         # time.Time -> string (RFC3339)
+      terminatedAt:
+        resolver: true         # *time.Time -> *string (RFC3339, nullable)
+      isCurrent:
+        resolver: true         # Computed field — not stored in model
+      createdAt:
+        resolver: true         # field.DefaultField.CreateAt -> string
+      updatedAt:
+        resolver: true         # field.DefaultField.UpdateAt -> string
+
+  # Map session enums to our existing Go types.
+  SessionStatus:
+    model:
+      - github.com/vibe-c2/vibe-c2-core/core/pkg/models.SessionStatus
+
+  SessionTerminationReason:
+    model:
+      - github.com/vibe-c2/vibe-c2-core/core/pkg/models.SessionTerminationReason

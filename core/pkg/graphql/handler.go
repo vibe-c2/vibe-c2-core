@@ -48,9 +48,11 @@ func NewHandler(
 	users resolver.IUserResolver,
 	operations resolver.IOperationResolver,
 	schemeNetworkPoints resolver.ISchemeNetworkPointResolver,
+	sessions resolver.ISessionResolver,
 	bus eventbus.IEventBus,
 	userRepo repository.IUserRepository,
 	operationRepo repository.IOperationRepository,
+	sessionRepo repository.ISessionRepository,
 ) gin.HandlerFunc {
 	// Create the resolver root with entity resolvers and subscription dependencies.
 	// The root resolver delegates to domain-specific resolvers for business logic.
@@ -59,9 +61,11 @@ func NewHandler(
 		UserResolver:               users,
 		OperationResolver:          operations,
 		SchemeNetworkPointResolver: schemeNetworkPoints,
+		SessionResolver:            sessions,
 		EventBus:                   bus,
 		UserRepo:                   userRepo,
 		OperationRepo:              operationRepo,
+		SessionRepo:                sessionRepo,
 	}
 
 	// Build the gqlgen server with our schema, resolvers, and directive.
@@ -124,9 +128,10 @@ func NewHandler(
 		rolesSlice, _ := roles.([]string)
 
 		ctx := gqlctx.WithAuthInfo(c.Request.Context(), gqlctx.AuthInfo{
-			UserID:   c.GetString("userID"),
-			Username: c.GetString("username"),
-			Roles:    rolesSlice,
+			UserID:           c.GetString("userID"),
+			Username:         c.GetString("username"),
+			Roles:            rolesSlice,
+			CurrentSessionID: c.GetString("sessionID"),
 		})
 
 		// Replace the request context with our auth-enriched context.

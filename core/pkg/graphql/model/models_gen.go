@@ -78,6 +78,24 @@ type SchemeNetworkPointEdge struct {
 	Cursor string                     `json:"cursor"`
 }
 
+type SessionConnection struct {
+	Edges      []*SessionEdge       `json:"edges"`
+	PageInfo   *pagination.PageInfo `json:"pageInfo"`
+	TotalCount int                  `json:"totalCount"`
+}
+
+type SessionEdge struct {
+	Node   *models.Session `json:"node"`
+	Cursor string          `json:"cursor"`
+}
+
+type SessionEvent struct {
+	Action    EventAction     `json:"action"`
+	SessionID string          `json:"sessionId"`
+	UserID    string          `json:"userId"`
+	Session   *models.Session `json:"session,omitempty"`
+}
+
 type Subscription struct {
 }
 

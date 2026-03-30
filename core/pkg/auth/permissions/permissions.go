@@ -19,6 +19,9 @@ func GetPermissionsByRole(role string) ([]string, error) {
 			OperationCreatePermission,
 			OperationUpdatePermission,
 			OperationDeletePermission,
+
+			SessionReadPermission,
+			SessionRevokePermission,
 		}, nil
 	case "user":
 		return []string{
@@ -28,6 +31,9 @@ func GetPermissionsByRole(role string) ([]string, error) {
 
 			OperationReadPermission,
 			OperationMemberPermission,
+
+			SessionReadOwnPermission,
+			SessionRevokeOwnPermission,
 		}, nil
 	default:
 		return nil, fmt.Errorf("role '%v' does not exist", role)

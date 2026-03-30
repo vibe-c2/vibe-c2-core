@@ -34,10 +34,12 @@ type Resolver struct {
 	UserResolver               resolver.IUserResolver
 	OperationResolver          resolver.IOperationResolver
 	SchemeNetworkPointResolver resolver.ISchemeNetworkPointResolver
+	SessionResolver            resolver.ISessionResolver
 
 	// Subscription dependencies — event bus for real-time events,
 	// repos for fetching full entities to include in event payloads.
 	EventBus      eventbus.IEventBus
 	UserRepo      repository.IUserRepository
 	OperationRepo repository.IOperationRepository
+	SessionRepo   repository.ISessionRepository
 }

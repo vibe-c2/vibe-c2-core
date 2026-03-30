@@ -178,6 +178,11 @@ func (s *redisTokenStore) EvictOldestSession(ctx context.Context, userID string)
 	return result, nil
 }
 
+func (s *redisTokenStore) DeleteByTokenHash(ctx context.Context, userID, tokenHash string) error {
+	key := fmt.Sprintf("%s:%s:%s", RefreshTokenPrefix, userID, tokenHash)
+	return s.DeleteAndUnindex(ctx, key, userID)
+}
+
 func (s *redisTokenStore) Close() error {
 	return s.client.Close()
 }

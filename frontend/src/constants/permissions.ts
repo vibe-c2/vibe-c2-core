@@ -17,6 +17,12 @@ export const Permissions = {
   USER_UPDATE: 'user:update',
   USER_DELETE: 'user:delete',
   USER_UPDATE_OWN: 'user:update:own',
+
+  // Session
+  SESSION_READ: 'session:read',
+  SESSION_READ_OWN: 'session:read:own',
+  SESSION_REVOKE: 'session:revoke',
+  SESSION_REVOKE_OWN: 'session:revoke:own',
 } as const;
 
 /**

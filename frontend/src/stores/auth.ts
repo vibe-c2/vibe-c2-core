@@ -42,7 +42,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   },
 
   logout: () => {
-    // Fire-and-forget backend logout (clears cookies + revokes refresh tokens)
+    // Fire-and-forget backend logout (clears cookies + revokes current session)
     fetch(`${API_URL}/logout`, {
       method: "POST",
       credentials: "include",

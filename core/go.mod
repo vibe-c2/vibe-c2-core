@@ -8,6 +8,7 @@ require (
 	github.com/go-redis/redis/v8 v8.11.5
 	github.com/golang-jwt/jwt/v5 v5.3.1
 	github.com/google/uuid v1.6.0
+	github.com/mssola/useragent v1.0.0
 	github.com/qiniu/qmgo v1.1.10
 	github.com/spf13/viper v1.21.0
 	github.com/swaggo/files v1.0.1

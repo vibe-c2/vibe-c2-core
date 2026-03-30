@@ -8,6 +8,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/golang-jwt/jwt/v5"
@@ -40,6 +41,7 @@ const (
 type Claims struct {
 	PreferredUsername string   `json:"preferred_username"`
 	Roles            []string `json:"roles"`
+	SessionID        string   `json:"session_id,omitempty"`
 	jwt.RegisteredClaims
 }
 
@@ -52,13 +54,13 @@ type RefreshTokenMeta struct {
 }
 
 type IAuthProvider interface {
-	GenerateAuthToken(userID, username string, roles []string) (string, error)
+	GenerateAuthToken(userID, username string, roles []string, sessionID string) (string, error)
 	ValidateAuthToken(tokenString string) (*Claims, error)
 	ParseAuthTokenUnvalidated(tokenString string) (*Claims, error)
 	AuthTokenTTL() time.Duration
-	GenerateRefreshToken(ctx context.Context, userID, username string, roles []string) (string, error)
+	GenerateRefreshToken(ctx context.Context, userID, username string, roles []string) (rawToken, evictedTokenHash string, err error)
 	ValidateRefreshToken(ctx context.Context, userID, rawToken string) (*RefreshTokenMeta, error)
-	RotateRefreshToken(ctx context.Context, userID, oldRawToken string) (accessToken, newRefreshToken string, err error)
+	RotateRefreshToken(ctx context.Context, userID, oldRawToken, sessionID string) (accessToken, newRefreshToken string, err error)
 	InvalidateRefreshToken(ctx context.Context, userID, rawToken string) error
 	InvalidateAllRefreshTokens(ctx context.Context, userID string) error
 }
@@ -77,12 +79,13 @@ func NewAuthProvider(store TokenStore, jwtSecret string, authTokenTTL time.Durat
 	}
 }
 
-func (ap *authProvider) GenerateAuthToken(userID, username string, roles []string) (string, error) {
+func (ap *authProvider) GenerateAuthToken(userID, username string, roles []string, sessionID string) (string, error) {
 	now := time.Now().UTC()
 
 	claims := &Claims{
 		PreferredUsername: username,
 		Roles:            roles,
+		SessionID:        sessionID,
 		RegisteredClaims: jwt.RegisteredClaims{
 			Subject:   userID,
 			Issuer:    Issuer,
@@ -148,22 +151,27 @@ func (ap *authProvider) AuthTokenTTL() time.Duration {
 	return ap.authTokenTTL
 }
 
-func (ap *authProvider) GenerateRefreshToken(ctx context.Context, userID, username string, roles []string) (string, error) {
+func (ap *authProvider) GenerateRefreshToken(ctx context.Context, userID, username string, roles []string) (string, string, error) {
+	var evictedTokenHash string
+
 	// Check max sessions using SCARD (O(1))
 	count, err := ap.store.UserSessionCount(ctx, userID)
 	if err != nil {
-		return "", fmt.Errorf("failed to check existing sessions: %w", err)
+		return "", "", fmt.Errorf("failed to check existing sessions: %w", err)
 	}
 	if count >= MaxSessionsPerUser {
-		if _, err := ap.store.EvictOldestSession(ctx, userID); err != nil {
-			return "", fmt.Errorf("failed to evict oldest session: %w", err)
+		evictedKey, err := ap.store.EvictOldestSession(ctx, userID)
+		if err != nil {
+			return "", "", fmt.Errorf("failed to evict oldest session: %w", err)
 		}
+		// Extract token hash from the evicted key (format: "refresh:{userID}:{hash}")
+		evictedTokenHash = extractTokenHashFromKey(evictedKey)
 	}
 
 	// Generate opaque token
 	rawToken, err := GenerateRandomKey()
 	if err != nil {
-		return "", err
+		return "", "", err
 	}
 	tokenHash := HashToken(rawToken)
 
@@ -177,10 +185,10 @@ func (ap *authProvider) GenerateRefreshToken(ctx context.Context, userID, userna
 
 	// Store token and add to user index in a single pipeline
 	if err := ap.store.StoreWithIndex(ctx, key, meta, userID, TTLRefreshToken); err != nil {
-		return "", fmt.Errorf("failed to store refresh token: %w", err)
+		return "", "", fmt.Errorf("failed to store refresh token: %w", err)
 	}
 
-	return rawToken, nil
+	return rawToken, evictedTokenHash, nil
 }
 
 func (ap *authProvider) ValidateRefreshToken(ctx context.Context, userID, rawToken string) (*RefreshTokenMeta, error) {
@@ -198,7 +206,7 @@ func (ap *authProvider) ValidateRefreshToken(ctx context.Context, userID, rawTok
 	return meta, nil
 }
 
-func (ap *authProvider) RotateRefreshToken(ctx context.Context, userID, oldRawToken string) (string, string, error) {
+func (ap *authProvider) RotateRefreshToken(ctx context.Context, userID, oldRawToken, sessionID string) (string, string, error) {
 	// Validate old token
 	meta, err := ap.ValidateRefreshToken(ctx, userID, oldRawToken)
 	if err != nil {
@@ -207,22 +215,21 @@ func (ap *authProvider) RotateRefreshToken(ctx context.Context, userID, oldRawTo
 		return "", "", ErrTokenInvalid
 	}
 
-	// Generate new token pair before deleting old token.
-	// This ensures the user keeps their session if generation fails.
-	accessToken, err := ap.GenerateAuthToken(userID, meta.Username, meta.Roles)
+	// Generate new access token (JWT) with the session ID embedded
+	accessToken, err := ap.GenerateAuthToken(userID, meta.Username, meta.Roles, sessionID)
 	if err != nil {
 		return "", "", fmt.Errorf("failed to generate access token: %w", err)
 	}
 
-	newRefreshToken, err := ap.GenerateRefreshToken(ctx, userID, meta.Username, meta.Roles)
-	if err != nil {
-		return "", "", fmt.Errorf("failed to generate refresh token: %w", err)
-	}
-
-	// Delete old token last — if this fails, the user has two valid
-	// refresh tokens temporarily, which is safe (old one expires via TTL).
+	// Delete old token first so we free a session slot before generating
+	// the new one. This avoids unnecessary eviction during rotation.
 	if err := ap.InvalidateRefreshToken(ctx, userID, oldRawToken); err != nil {
 		return "", "", fmt.Errorf("failed to invalidate old refresh token: %w", err)
+	}
+
+	newRefreshToken, _, err := ap.GenerateRefreshToken(ctx, userID, meta.Username, meta.Roles)
+	if err != nil {
+		return "", "", fmt.Errorf("failed to generate refresh token: %w", err)
 	}
 
 	return accessToken, newRefreshToken, nil
@@ -256,4 +263,14 @@ func GenerateRandomKey() (string, error) {
 func HashToken(token string) string {
 	hash := sha256.Sum256([]byte(token))
 	return hex.EncodeToString(hash[:])
+}
+
+// extractTokenHashFromKey extracts the token hash from a Redis key.
+// Key format: "refresh:{userID}:{tokenHash}"
+func extractTokenHashFromKey(key string) string {
+	parts := strings.SplitN(key, ":", 3)
+	if len(parts) < 3 {
+		return ""
+	}
+	return parts[2]
 }

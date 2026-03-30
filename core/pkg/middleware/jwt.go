@@ -28,6 +28,7 @@ func JWTAuth(provider auth.IAuthProvider) gin.HandlerFunc {
 		c.Set("userID", claims.Subject)
 		c.Set("username", claims.PreferredUsername)
 		c.Set("roles", claims.Roles)
+		c.Set("sessionID", claims.SessionID)
 		c.Next()
 	}
 }

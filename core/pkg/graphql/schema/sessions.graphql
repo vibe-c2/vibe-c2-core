@@ -1,0 +1,128 @@
+# =============================================================================
+# Session Management
+# =============================================================================
+#
+# Sessions represent authenticated user sessions with metadata about the
+# client that created them (IP address, browser, OS, device type).
+#
+# Each login creates a new session. Sessions persist even after they end,
+# providing an audit trail. Active sessions have a corresponding refresh
+# token in Redis; historical sessions show how and when they were terminated.
+#
+# Users can view and manage their own sessions.
+# Admins can view and manage all users' sessions.
+
+# SessionStatus indicates whether a session is currently active.
+enum SessionStatus {
+  ACTIVE
+  INACTIVE
+}
+
+# SessionTerminationReason describes why a session ended.
+enum SessionTerminationReason {
+  LOGOUT              # User logged out normally
+  EXPIRED             # Refresh token TTL expired (7 days)
+  EVICTED             # Removed to make room for a new session (max 10 per user)
+  REPLAY_DETECTED     # Possible token theft — all sessions invalidated
+  ADMIN_REVOKED       # An admin terminated this session
+  USER_REVOKED        # The user terminated this session from another device
+}
+
+# Session represents an authenticated user session with request metadata.
+type Session {
+  id: ID!                                      # Session UUID
+  userId: ID!                                  # Owning user's UUID
+  user: User!                                  # The owning user (resolved from userId)
+  ipAddress: String!                           # IP address at login time
+  userAgent: String!                           # Raw User-Agent header
+  browser: String!                             # Parsed browser name + version (e.g. "Chrome 120")
+  os: String!                                  # Parsed OS (e.g. "macOS 14.2")
+  device: String!                              # "Desktop", "Mobile", "Bot", etc.
+  status: SessionStatus!                       # Active or inactive
+  terminationReason: SessionTerminationReason  # Why the session ended (null if active)
+  lastActivityAt: String!                      # ISO 8601 — updated on each token refresh
+  expiresAt: String!                           # ISO 8601 — when the refresh token expires
+  terminatedAt: String                         # ISO 8601 — null if still active
+  isCurrent: Boolean!                          # True if this is the caller's current session
+  createdAt: String!                           # ISO 8601
+  updatedAt: String!                           # ISO 8601
+}
+
+type SessionEdge {
+  node: Session!
+  cursor: String!
+}
+
+type SessionConnection {
+  edges: [SessionEdge!]!
+  pageInfo: PageInfo!
+  totalCount: Int!
+}
+
+# SessionEvent wraps a session domain event for real-time updates.
+# The session field is null on DELETE (not currently used).
+type SessionEvent {
+  action: EventAction!
+  sessionId: ID!
+  userId: ID!
+  session: Session
+}
+
+extend type Query {
+  # mySessions returns the caller's own sessions (active and/or historical).
+  # Any authenticated user can view their own sessions.
+  mySessions(
+    activeOnly: Boolean = false
+    first: Int = 20
+    after: String
+    last: Int
+    before: String
+  ): SessionConnection! @hasPermission(permission: "session:read:own")
+
+  # sessions returns all sessions across all users (admin only).
+  # Can be filtered by userId, search (username match), and/or activeOnly.
+  sessions(
+    userId: ID
+    search: String
+    activeOnly: Boolean = false
+    first: Int = 20
+    after: String
+    last: Int
+    before: String
+  ): SessionConnection! @hasPermission(permission: "session:read")
+
+  # session returns a single session by ID (admin only).
+  session(id: ID!): Session! @hasPermission(permission: "session:read")
+}
+
+extend type Mutation {
+  # revokeSession terminates a specific session owned by the caller.
+  # Cannot revoke the current session (use logout for that).
+  revokeSession(id: ID!): Boolean!
+    @hasPermission(permission: "session:revoke:own")
+
+  # revokeAllMySessions terminates all active sessions except the current one.
+  # Returns the number of sessions revoked.
+  revokeAllMySessions: Int!
+    @hasPermission(permission: "session:revoke:own")
+
+  # adminRevokeSession terminates any session (admin only).
+  adminRevokeSession(id: ID!): Boolean!
+    @hasPermission(permission: "session:revoke")
+
+  # adminRevokeAllUserSessions terminates all active sessions for a user (admin only).
+  # Returns the number of sessions revoked.
+  adminRevokeAllUserSessions(userId: ID!): Int!
+    @hasPermission(permission: "session:revoke")
+}
+
+extend type Subscription {
+  # Real-time session changes for the caller's own sessions.
+  mySessionChanged: SessionEvent!
+    @hasPermission(permission: "session:read:own")
+
+  # Real-time session changes for all users (admin only).
+  # Optionally filter by userId.
+  sessionChanged(userId: ID): SessionEvent!
+    @hasPermission(permission: "session:read")
+}

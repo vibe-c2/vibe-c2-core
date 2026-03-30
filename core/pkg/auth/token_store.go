@@ -35,6 +35,11 @@ type TokenStore interface {
 	// sessions exist. Also cleans up stale index entries.
 	EvictOldestSession(ctx context.Context, userID string) (string, error)
 
+	// DeleteByTokenHash removes a token by its hash and user ID.
+	// Constructs the Redis key from the hash and calls DeleteAndUnindex.
+	// Used when revoking a session where only the hash (from MongoDB) is known.
+	DeleteByTokenHash(ctx context.Context, userID, tokenHash string) error
+
 	// Close releases resources.
 	Close() error
 }

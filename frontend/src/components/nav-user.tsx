@@ -25,8 +25,10 @@ import {
   SidebarMenuItem,
   useSidebar,
 } from "@/components/ui/sidebar"
-import { ChevronsUpDownIcon, LogOutIcon, MonitorIcon, MoonIcon, SunIcon, UserIcon } from "lucide-react"
+import { ChevronsUpDownIcon, LogOutIcon, MonitorIcon, MonitorSmartphoneIcon, MoonIcon, SunIcon, UserIcon } from "lucide-react"
 import { useAuthStore } from "@/stores/auth"
+import { useSessionStore } from "@/stores/sessions"
+import { MySessionsDialog } from "@/components/sessions/my-sessions-dialog"
 
 export function NavUser({
   user,
@@ -40,6 +42,7 @@ export function NavUser({
   const { isMobile } = useSidebar()
   const navigate = useNavigate()
   const logout = useAuthStore((s) => s.logout)
+  const openMySessionsDialog = useSessionStore((s) => s.openMySessionsDialog)
   const { setTheme } = useTheme()
 
   async function handleLogout() {
@@ -55,6 +58,8 @@ export function NavUser({
     .slice(0, 2)
 
   return (
+    <>
+    <MySessionsDialog />
     <SidebarMenu>
       <SidebarMenuItem>
         <DropdownMenu>
@@ -119,6 +124,10 @@ export function NavUser({
                 </DropdownMenuItem>
               </DropdownMenuSubContent>
             </DropdownMenuSub>
+            <DropdownMenuItem onClick={openMySessionsDialog}>
+              <MonitorSmartphoneIcon className="size-4" />
+              Sessions
+            </DropdownMenuItem>
             <DropdownMenuSeparator />
             <DropdownMenuItem onClick={handleLogout}>
               <LogOutIcon />
@@ -128,5 +137,6 @@ export function NavUser({
         </DropdownMenu>
       </SidebarMenuItem>
     </SidebarMenu>
+    </>
   )
 }

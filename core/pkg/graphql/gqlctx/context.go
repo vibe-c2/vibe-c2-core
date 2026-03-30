@@ -25,9 +25,10 @@ type authKey struct{}
 // AuthInfo holds the authenticated user's identity, extracted from the JWT.
 // This is what resolvers see when they need to know "who is calling?".
 type AuthInfo struct {
-	UserID   string   // The user's UUID (from JWT "sub" claim)
-	Username string   // The user's display name
-	Roles    []string // RBAC roles like ["admin"] or ["user"]
+	UserID           string   // The user's UUID (from JWT "sub" claim)
+	Username         string   // The user's display name
+	Roles            []string // RBAC roles like ["admin"] or ["user"]
+	CurrentSessionID string   // Session UUID from the JWT (for isCurrent detection)
 }
 
 // WithAuthInfo stores authentication data in the context.

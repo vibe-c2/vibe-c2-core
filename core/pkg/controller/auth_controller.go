@@ -2,6 +2,7 @@ package controller
 
 import (
 	"net/http"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
@@ -10,9 +11,11 @@ import (
 	"github.com/vibe-c2/vibe-c2-core/core/pkg/auth/permissions"
 	"github.com/vibe-c2/vibe-c2-core/core/pkg/eventbus"
 	"github.com/vibe-c2/vibe-c2-core/core/pkg/logger"
+	"github.com/vibe-c2/vibe-c2-core/core/pkg/models"
 	"github.com/vibe-c2/vibe-c2-core/core/pkg/repository"
 	"github.com/vibe-c2/vibe-c2-core/core/pkg/requests"
 	"github.com/vibe-c2/vibe-c2-core/core/pkg/responses"
+	"github.com/vibe-c2/vibe-c2-core/core/pkg/session"
 	"go.uber.org/zap"
 	"golang.org/x/crypto/bcrypt"
 )
@@ -25,23 +28,29 @@ type IAuthController interface {
 }
 
 type authController struct {
-	userRepo     repository.IUserRepository
+	userRepo    repository.IUserRepository
+	sessionRepo repository.ISessionRepository
 	authProvider auth.IAuthProvider
-	eventBus     eventbus.IEventBus
-	log          *zap.Logger
-	isDev        bool
+	tokenStore  auth.TokenStore
+	eventBus    eventbus.IEventBus
+	log         *zap.Logger
+	isDev       bool
 }
 
 func NewAuthController(
 	userRepo repository.IUserRepository,
+	sessionRepo repository.ISessionRepository,
 	authProvider auth.IAuthProvider,
+	tokenStore auth.TokenStore,
 	eventBus eventbus.IEventBus,
 	log *zap.Logger,
 	isDev bool,
 ) IAuthController {
 	return &authController{
 		userRepo:     userRepo,
+		sessionRepo:  sessionRepo,
 		authProvider: authProvider,
+		tokenStore:   tokenStore,
 		eventBus:     eventBus,
 		log:          log,
 		isDev:        isDev,
@@ -89,19 +98,52 @@ func (ctrl *authController) Login(c *gin.Context) {
 	}
 
 	userID := user.UserID.String()
+	sessionID := uuid.New()
 
-	authToken, err := ctrl.authProvider.GenerateAuthToken(userID, user.Username, user.Roles)
+	authToken, err := ctrl.authProvider.GenerateAuthToken(userID, user.Username, user.Roles, sessionID.String())
 	if err != nil {
 		log.Error("login: failed to generate auth token", zap.Error(err))
 		c.JSON(http.StatusInternalServerError, responses.ErrInternalError)
 		return
 	}
 
-	refreshToken, err := ctrl.authProvider.GenerateRefreshToken(c.Request.Context(), userID, user.Username, user.Roles)
+	refreshToken, evictedHash, err := ctrl.authProvider.GenerateRefreshToken(c.Request.Context(), userID, user.Username, user.Roles)
 	if err != nil {
 		log.Error("login: failed to generate refresh token", zap.Error(err))
 		c.JSON(http.StatusInternalServerError, responses.ErrInternalError)
 		return
+	}
+
+	// Mark the evicted session in MongoDB (if max sessions was reached)
+	if evictedHash != "" {
+		if err := ctrl.sessionRepo.TerminateByTokenHash(c.Request.Context(), evictedHash, models.TerminationEvicted); err != nil {
+			log.Warn("login: failed to mark evicted session", zap.Error(err))
+		}
+	}
+
+	// Create persistent session record in MongoDB
+	meta := session.Extract(c)
+	now := time.Now().UTC()
+	sess := &models.Session{
+		SessionID:      sessionID,
+		UserID:         user.UserID,
+		TokenHash:      auth.HashToken(refreshToken),
+		IPAddress:      meta.IPAddress,
+		UserAgent:      meta.UserAgent,
+		Browser:        meta.Browser,
+		OS:             meta.OS,
+		Device:         meta.Device,
+		Status:         models.SessionStatusActive,
+		LastActivityAt: now,
+		ExpiresAt:      now.Add(auth.TTLRefreshToken),
+	}
+	if err := ctrl.sessionRepo.Create(c.Request.Context(), sess); err != nil {
+		log.Error("login: failed to create session record", zap.Error(err))
+		// Non-fatal: auth tokens were already issued. Log and continue.
+	} else {
+		ctrl.eventBus.Publish(eventbus.NewSessionCreatedEvent(eventbus.UserActor(userID), eventbus.SessionEventPayload{
+			SessionID: sess.SessionID.String(), UserID: userID,
+		}))
 	}
 
 	perms := permissions.GetPermissionsForRoles(user.Roles)
@@ -156,16 +198,41 @@ func (ctrl *authController) Refresh(c *gin.Context) {
 		return
 	}
 
-	// RotateRefreshToken atomically validates the old token, generates a new
-	// pair, and deletes the old token. If the old token is invalid (possible
-	// replay attack), it invalidates ALL sessions for the user.
-	newAuthToken, newRefreshToken, err := ctrl.authProvider.RotateRefreshToken(c.Request.Context(), userID, refreshTokenStr)
+	// Compute old token hash before rotation so we can update the MongoDB session.
+	oldTokenHash := auth.HashToken(refreshTokenStr)
+
+	// Look up the session ID to embed in the new JWT.
+	var currentSessionID string
+	if sess, err := ctrl.sessionRepo.FindByTokenHash(c.Request.Context(), oldTokenHash); err == nil {
+		currentSessionID = sess.SessionID.String()
+	}
+
+	// RotateRefreshToken validates the old token, deletes it, and generates a new
+	// pair. If the old token is invalid (possible replay attack), it invalidates
+	// ALL sessions for the user.
+	newAuthToken, newRefreshToken, err := ctrl.authProvider.RotateRefreshToken(c.Request.Context(), userID, refreshTokenStr, currentSessionID)
 	if err != nil {
 		log.Warn("refresh: rotation failed", zap.String("user_id", userID), zap.Error(err))
 		ctrl.eventBus.Publish(eventbus.NewAuthReplayDetectedEvent(eventbus.UserActor(userID)))
+		// Mark all MongoDB sessions as terminated due to replay detection
+		if userUUID, parseErr := uuid.Parse(userID); parseErr == nil {
+			if _, termErr := ctrl.sessionRepo.TerminateAllForUser(c.Request.Context(), userUUID, models.TerminationReplayDetected); termErr != nil {
+				log.Warn("refresh: failed to terminate sessions on replay", zap.Error(termErr))
+			}
+		}
 		cookies.ClearAuthCookies(c, ctrl.isDev)
 		c.JSON(http.StatusUnauthorized, responses.ErrUnauthorized)
 		return
+	}
+
+	// Update the MongoDB session: swap token hash and bump activity/expiry
+	newTokenHash := auth.HashToken(newRefreshToken)
+	if err := ctrl.sessionRepo.UpdateOnRefresh(c.Request.Context(), oldTokenHash, newTokenHash, time.Now().UTC().Add(auth.TTLRefreshToken)); err != nil {
+		log.Warn("refresh: failed to update session record", zap.Error(err))
+	} else {
+		ctrl.eventBus.Publish(eventbus.NewSessionRefreshedEvent(eventbus.UserActor(userID), eventbus.SessionEventPayload{
+			UserID: userID,
+		}))
 	}
 
 	// Look up user for current roles/permissions (may have changed since last login).
@@ -196,10 +263,10 @@ func (ctrl *authController) Refresh(c *gin.Context) {
 	})
 }
 
-// Logout invalidates all refresh tokens and clears auth cookies.
+// Logout terminates the current session and clears auth cookies.
 //
 //	@Summary		Logout
-//	@Description	Invalidate all refresh tokens and clear auth cookies.
+//	@Description	Terminate the current session and clear auth cookies.
 //	@Tags			Auth
 //	@Produce		json
 //	@Success		200	{object}	responses.SuccessResponse
@@ -208,11 +275,43 @@ func (ctrl *authController) Refresh(c *gin.Context) {
 func (ctrl *authController) Logout(c *gin.Context) {
 	log := logger.From(c.Request.Context())
 	userID := c.GetString("userID")
+	currentSessionID := c.GetString("sessionID")
 
-	if err := ctrl.authProvider.InvalidateAllRefreshTokens(c.Request.Context(), userID); err != nil {
-		log.Error("logout: failed to invalidate tokens", zap.String("user_id", userID), zap.Error(err))
-		c.JSON(http.StatusInternalServerError, responses.ErrInternalError)
-		return
+	if currentSessionID != "" {
+		// Use the session ID from the JWT to identify and terminate the current session.
+		sessionUUID, err := uuid.Parse(currentSessionID)
+		if err != nil {
+			log.Warn("logout: invalid session ID in token", zap.String("session_id", currentSessionID), zap.Error(err))
+		} else {
+			sess, err := ctrl.sessionRepo.FindByID(c.Request.Context(), sessionUUID)
+			if err != nil {
+				log.Warn("logout: session not found", zap.String("session_id", currentSessionID), zap.Error(err))
+			} else if sess.Status == models.SessionStatusActive {
+				// Delete refresh token from Redis by hash
+				if err := ctrl.tokenStore.DeleteByTokenHash(c.Request.Context(), userID, sess.TokenHash); err != nil {
+					log.Warn("logout: failed to delete refresh token", zap.Error(err))
+				}
+				// Mark session as terminated in MongoDB
+				if err := ctrl.sessionRepo.Terminate(c.Request.Context(), sessionUUID, models.TerminationLogout); err != nil {
+					log.Warn("logout: failed to terminate session", zap.Error(err))
+				}
+				ctrl.eventBus.Publish(eventbus.NewSessionTerminatedEvent(eventbus.UserActor(userID), eventbus.SessionEventPayload{
+					SessionID: currentSessionID, UserID: userID, Reason: string(models.TerminationLogout),
+				}))
+			}
+		}
+	} else {
+		// No session ID in JWT (legacy token before session support) — invalidate all.
+		if err := ctrl.authProvider.InvalidateAllRefreshTokens(c.Request.Context(), userID); err != nil {
+			log.Error("logout: failed to invalidate tokens", zap.String("user_id", userID), zap.Error(err))
+			c.JSON(http.StatusInternalServerError, responses.ErrInternalError)
+			return
+		}
+		if userUUID, parseErr := uuid.Parse(userID); parseErr == nil {
+			if _, err := ctrl.sessionRepo.TerminateAllForUser(c.Request.Context(), userUUID, models.TerminationLogout); err != nil {
+				log.Warn("logout: failed to terminate all session records", zap.Error(err))
+			}
+		}
 	}
 
 	log.Info("logout: success", zap.String("user_id", userID))
@@ -220,7 +319,7 @@ func (ctrl *authController) Logout(c *gin.Context) {
 
 	cookies.ClearAuthCookies(c, ctrl.isDev)
 	c.JSON(http.StatusOK, responses.SuccessResponse{
-		Message: "Logout successful. All sessions have been revoked.",
+		Message: "Logout successful.",
 	})
 }
 

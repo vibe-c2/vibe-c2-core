@@ -112,3 +112,27 @@ func toOperationMemberEvent(event eventbus.Event) *model.OperationMemberEvent {
 	}
 	return evt
 }
+
+// sessionTopics is the list of session event bus topics for subscriptions.
+var sessionTopics = []eventbus.Topic{
+	eventbus.TopicSessionCreated,
+	eventbus.TopicSessionRefreshed,
+	eventbus.TopicSessionTerminated,
+}
+
+// toSessionEvent converts an event bus Event to a GraphQL SessionEvent.
+func toSessionEvent(event eventbus.Event) *model.SessionEvent {
+	action := topicToAction(event.Topic)
+	// Session terminated maps to UPDATED (session still exists, just inactive),
+	// not DELETED (session record is never removed).
+	if event.Topic == eventbus.TopicSessionTerminated {
+		action = model.EventActionUpdated
+	}
+
+	evt := &model.SessionEvent{Action: action}
+	if p, ok := event.Payload.(eventbus.SessionEventPayload); ok {
+		evt.SessionID = p.SessionID
+		evt.UserID = p.UserID
+	}
+	return evt
+}

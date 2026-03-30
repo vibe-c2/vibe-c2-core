@@ -5,8 +5,14 @@ interface SelectedUser {
   username: string
 }
 
+type UsersPageTab = "users" | "sessions"
+
 interface UserStoreState {
   search: string
+
+  // Active tab on the Users page
+  activeTab: UsersPageTab
+  setActiveTab: (tab: UsersPageTab) => void
 
   // Selected user for edit/delete actions
   selectedUser: SelectedUser | null
@@ -26,6 +32,8 @@ interface UserStoreState {
 
 export const useUserStore = create<UserStoreState>((set) => ({
   search: "",
+  activeTab: "users",
+  setActiveTab: (tab) => set({ activeTab: tab }),
 
   selectedUser: null,
 

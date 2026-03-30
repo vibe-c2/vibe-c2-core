@@ -2,6 +2,7 @@ package controller
 
 import (
 	"net/http"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
@@ -14,6 +15,7 @@ import (
 	"github.com/vibe-c2/vibe-c2-core/core/pkg/repository"
 	"github.com/vibe-c2/vibe-c2-core/core/pkg/requests"
 	"github.com/vibe-c2/vibe-c2-core/core/pkg/responses"
+	"github.com/vibe-c2/vibe-c2-core/core/pkg/session"
 	"go.uber.org/zap"
 )
 
@@ -22,15 +24,17 @@ type IEnrollController interface {
 }
 
 type enrollController struct {
-	userRepo     repository.IUserRepository
+	userRepo    repository.IUserRepository
+	sessionRepo repository.ISessionRepository
 	authProvider auth.IAuthProvider
-	eventBus     eventbus.IEventBus
-	log          *zap.Logger
-	isDev        bool
+	eventBus    eventbus.IEventBus
+	log         *zap.Logger
+	isDev       bool
 }
 
 func NewEnrollController(
 	userRepo repository.IUserRepository,
+	sessionRepo repository.ISessionRepository,
 	authProvider auth.IAuthProvider,
 	eventBus eventbus.IEventBus,
 	log *zap.Logger,
@@ -38,6 +42,7 @@ func NewEnrollController(
 ) IEnrollController {
 	return &enrollController{
 		userRepo:     userRepo,
+		sessionRepo:  sessionRepo,
 		authProvider: authProvider,
 		eventBus:     eventBus,
 		log:          log,
@@ -101,19 +106,44 @@ func (ctrl *enrollController) Enroll(c *gin.Context) {
 	}
 
 	userID := user.UserID.String()
+	sessionID := uuid.New()
 
-	authToken, err := ctrl.authProvider.GenerateAuthToken(userID, user.Username, user.Roles)
+	authToken, err := ctrl.authProvider.GenerateAuthToken(userID, user.Username, user.Roles, sessionID.String())
 	if err != nil {
 		log.Error("enroll: failed to generate auth token", zap.Error(err))
 		c.JSON(http.StatusInternalServerError, responses.ErrInternalError)
 		return
 	}
 
-	refreshToken, err := ctrl.authProvider.GenerateRefreshToken(c.Request.Context(), userID, user.Username, user.Roles)
+	refreshToken, _, err := ctrl.authProvider.GenerateRefreshToken(c.Request.Context(), userID, user.Username, user.Roles)
 	if err != nil {
 		log.Error("enroll: failed to generate refresh token", zap.Error(err))
 		c.JSON(http.StatusInternalServerError, responses.ErrInternalError)
 		return
+	}
+
+	// Create persistent session record in MongoDB
+	meta := session.Extract(c)
+	now := time.Now().UTC()
+	sess := &models.Session{
+		SessionID:      sessionID,
+		UserID:         user.UserID,
+		TokenHash:      auth.HashToken(refreshToken),
+		IPAddress:      meta.IPAddress,
+		UserAgent:      meta.UserAgent,
+		Browser:        meta.Browser,
+		OS:             meta.OS,
+		Device:         meta.Device,
+		Status:         models.SessionStatusActive,
+		LastActivityAt: now,
+		ExpiresAt:      now.Add(auth.TTLRefreshToken),
+	}
+	if err := ctrl.sessionRepo.Create(c.Request.Context(), sess); err != nil {
+		log.Error("enroll: failed to create session record", zap.Error(err))
+	} else {
+		ctrl.eventBus.Publish(eventbus.NewSessionCreatedEvent(eventbus.UserActor(userID), eventbus.SessionEventPayload{
+			SessionID: sess.SessionID.String(), UserID: userID,
+		}))
 	}
 
 	perms := permissions.GetPermissionsForRoles(user.Roles)

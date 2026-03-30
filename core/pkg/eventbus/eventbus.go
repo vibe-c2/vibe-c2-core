@@ -30,6 +30,11 @@ const (
 	TopicAuthRefresh        Topic = "auth.refresh"
 	TopicAuthReplayDetected Topic = "auth.replay_detected"
 	TopicAuthEnroll         Topic = "auth.enroll"
+
+	// Session events — emitted by auth controllers and session resolver.
+	TopicSessionCreated    Topic = "session.created"
+	TopicSessionRefreshed  Topic = "session.refreshed"
+	TopicSessionTerminated Topic = "session.terminated"
 )
 
 // ActorType identifies who originated an event.

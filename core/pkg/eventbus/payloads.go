@@ -104,3 +104,24 @@ func NewAuthReplayDetectedEvent(actor Actor) Event {
 func NewAuthEnrollEvent(actor Actor, p AuthEventPayload) Event {
 	return NewEvent(TopicAuthEnroll, actor, p)
 }
+
+// --- Session event payloads ---
+
+// SessionEventPayload is the payload for session events.
+type SessionEventPayload struct {
+	SessionID string
+	UserID    string
+	Reason    string // termination reason (only for terminated events)
+}
+
+func NewSessionCreatedEvent(actor Actor, p SessionEventPayload) Event {
+	return NewEvent(TopicSessionCreated, actor, p)
+}
+
+func NewSessionRefreshedEvent(actor Actor, p SessionEventPayload) Event {
+	return NewEvent(TopicSessionRefreshed, actor, p)
+}
+
+func NewSessionTerminatedEvent(actor Actor, p SessionEventPayload) Event {
+	return NewEvent(TopicSessionTerminated, actor, p)
+}

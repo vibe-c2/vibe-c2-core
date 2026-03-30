@@ -6,6 +6,7 @@ import { Card, CardContent } from "@/components/ui/card"
 import { Field, FieldGroup, FieldLabel } from "@/components/ui/field"
 import { Input } from "@/components/ui/input"
 import { useAuthStore } from "@/stores/auth"
+import { useSessionStore } from "@/stores/sessions"
 import { authService } from "@/services/auth"
 
 export function LoginPage() {
@@ -36,6 +37,8 @@ export function LoginPage() {
     try {
       const response = await authService.login(username, password)
       setSession(response)
+      // Open sessions dialog so the user can review active sessions (security feature)
+      useSessionStore.getState().openMySessionsDialog()
       navigate("/", { replace: true })
     } catch (err) {
       setError(err instanceof Error ? err.message : "Login failed")

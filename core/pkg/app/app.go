@@ -16,6 +16,7 @@ import (
 	"github.com/vibe-c2/vibe-c2-core/core/pkg/eventbus"
 	"github.com/vibe-c2/vibe-c2-core/core/pkg/logger"
 	"github.com/vibe-c2/vibe-c2-core/core/pkg/repository"
+	"github.com/vibe-c2/vibe-c2-core/core/pkg/session"
 
 	"go.uber.org/zap"
 )
@@ -24,6 +25,7 @@ type Repositories struct {
 	User               repository.IUserRepository
 	Operation          repository.IOperationRepository
 	SchemeNetworkPoint repository.ISchemeNetworkPointRepository
+	Session            repository.ISessionRepository
 }
 
 type App struct {
@@ -35,6 +37,8 @@ type App struct {
 	cache        cache.Cache
 	tokenStore   auth.TokenStore
 	eventBus     eventbus.IEventBus
+
+	sessionCleaner *session.Cleaner
 
 	// Future integration points:
 	// rabbitmq         rabbitmq.IRabbitMQ
@@ -64,6 +68,7 @@ func NewApp() (*App, error) {
 		User:               repository.NewUserRepository(db),
 		Operation:          repository.NewOperationRepository(db),
 		SchemeNetworkPoint: repository.NewSchemeNetworkPointRepository(db),
+		Session:            repository.NewSessionRepository(db),
 	}
 
 	// Initialize cache (noop fallback is acceptable for caching)
@@ -102,6 +107,9 @@ func NewApp() (*App, error) {
 	// Initialize event bus
 	bus := eventbus.NewEventBus(l)
 
+	// Initialize session cleaner (marks expired sessions as inactive every hour)
+	sessionCleaner := session.NewCleaner(repos.Session, l, 1*time.Hour)
+
 	// --- Future integration patterns ---
 	//
 	// RabbitMQ:
@@ -126,14 +134,15 @@ func NewApp() (*App, error) {
 	// ------------------------------------
 
 	app := &App{
-		logger:       l,
-		db:           db,
-		env:          e,
-		repos:        repos,
-		authProvider: authProvider,
-		cache:        c,
-		tokenStore:   tokenStore,
-		eventBus:     bus,
+		logger:         l,
+		db:             db,
+		env:            e,
+		repos:          repos,
+		authProvider:   authProvider,
+		cache:          c,
+		tokenStore:     tokenStore,
+		eventBus:       bus,
+		sessionCleaner: sessionCleaner,
 	}
 
 	return app, nil
@@ -148,10 +157,10 @@ func (a *App) StartServer() {
 	}
 
 	a.eventBus.Start()
+	a.sessionCleaner.Start()
 
 	// Future: start background workers
 	// p.Start()        // pinger
-	// cleaner.Start()  // status history cleaner
 	// sm.Start()       // setup manager
 	// cc.Start()       // condition checker
 
@@ -170,10 +179,10 @@ func (a *App) StartServerWithGracefulShutdown() {
 	}
 
 	a.eventBus.Start()
+	a.sessionCleaner.Start()
 
 	// Future: start background workers
 	// p.Start()
-	// cleaner.Start()
 	// sm.Start()
 	// cc.Start()
 
@@ -186,9 +195,10 @@ func (a *App) StartServerWithGracefulShutdown() {
 
 		a.logger.Info("Shutting down server...")
 
+		a.sessionCleaner.Stop()
+
 		// Future: stop background workers
 		// p.Stop()
-		// cleaner.Stop()
 		// cc.Stop()
 		// sm.Stop()
 
