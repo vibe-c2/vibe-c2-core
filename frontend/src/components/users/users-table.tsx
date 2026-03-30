@@ -133,6 +133,7 @@ export function UsersTable({
                         )}
                         {canDelete && user.id !== currentUserId && (
                           <DropdownMenuItem
+                            variant="destructive"
                             onClick={() =>
                               openDeleteDialog({
                                 id: user.id,
