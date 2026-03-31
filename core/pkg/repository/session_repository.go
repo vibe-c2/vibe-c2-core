@@ -30,10 +30,6 @@ type ISessionRepository interface {
 	// Terminate marks a single session as inactive with the given reason.
 	Terminate(ctx context.Context, sessionID uuid.UUID, reason models.SessionTerminationReason) error
 
-	// TerminateByTokenHash marks the session matching this token hash as inactive.
-	// Used during eviction where we only know the Redis key (which contains the hash).
-	TerminateByTokenHash(ctx context.Context, tokenHash string, reason models.SessionTerminationReason) error
-
 	// TerminateAllForUser marks all active sessions for a user as inactive.
 	// Used during replay detection and admin bulk-revoke.
 	TerminateAllForUser(ctx context.Context, userID uuid.UUID, reason models.SessionTerminationReason) (int64, error)
@@ -46,6 +42,10 @@ type ISessionRepository interface {
 	// If userIDs is non-empty, scopes to those users. If activeOnly, only active sessions.
 	FindWithCursor(ctx context.Context, userIDs []uuid.UUID, activeOnly bool,
 		cursor *pagination.Cursor, limit int64, forward bool) ([]models.Session, error)
+
+	// FindActiveSessions returns a batch of active sessions (up to limit).
+	// Used by the session cleaner for reconciliation against Redis.
+	FindActiveSessions(ctx context.Context, limit int64) ([]models.Session, error)
 
 	// MarkExpiredSessions bulk-updates active sessions past their expires_at
 	// to inactive with reason "expired". Returns the count of sessions marked.
@@ -111,18 +111,6 @@ func (r *sessionRepository) Terminate(ctx context.Context, sessionID uuid.UUID, 
 	)
 }
 
-func (r *sessionRepository) TerminateByTokenHash(ctx context.Context, tokenHash string, reason models.SessionTerminationReason) error {
-	now := time.Now().UTC()
-	return r.coll.UpdateOne(ctx,
-		bson.M{"token_hash": tokenHash, "status": string(models.SessionStatusActive)},
-		bson.M{"$set": bson.M{
-			"status":             string(models.SessionStatusInactive),
-			"termination_reason": string(reason),
-			"terminated_at":      now,
-		}},
-	)
-}
-
 func (r *sessionRepository) TerminateAllForUser(ctx context.Context, userID uuid.UUID, reason models.SessionTerminationReason) (int64, error) {
 	now := time.Now().UTC()
 	result, err := r.coll.UpdateAll(ctx,
@@ -170,6 +158,14 @@ func (r *sessionRepository) FindWithCursor(ctx context.Context, userIDs []uuid.U
 		}
 	}
 
+	return sessions, err
+}
+
+func (r *sessionRepository) FindActiveSessions(ctx context.Context, limit int64) ([]models.Session, error) {
+	var sessions []models.Session
+	err := r.coll.Find(ctx, bson.M{"status": string(models.SessionStatusActive)}).
+		Limit(limit).
+		All(&sessions)
 	return sessions, err
 }
 

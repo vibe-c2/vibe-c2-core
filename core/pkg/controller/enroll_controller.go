@@ -115,7 +115,7 @@ func (ctrl *enrollController) Enroll(c *gin.Context) {
 		return
 	}
 
-	refreshToken, _, err := ctrl.authProvider.GenerateRefreshToken(c.Request.Context(), userID, user.Username, user.Roles)
+	refreshToken, err := ctrl.authProvider.GenerateRefreshToken(c.Request.Context(), userID, user.Username, user.Roles)
 	if err != nil {
 		log.Error("enroll: failed to generate refresh token", zap.Error(err))
 		c.JSON(http.StatusInternalServerError, responses.ErrInternalError)

@@ -2,30 +2,37 @@ package session
 
 import (
 	"context"
+	"fmt"
 	"time"
 
+	"github.com/vibe-c2/vibe-c2-core/core/pkg/auth"
+	"github.com/vibe-c2/vibe-c2-core/core/pkg/models"
 	"github.com/vibe-c2/vibe-c2-core/core/pkg/repository"
 	"go.uber.org/zap"
 )
 
-// Cleaner periodically marks expired sessions as inactive in MongoDB.
-// Sessions expire when their refresh token TTL elapses (7 days).
-// The cleaner runs on a fixed interval and bulk-updates any active sessions
-// whose expires_at timestamp has passed.
+// Cleaner periodically marks expired sessions as inactive in MongoDB
+// and reconciles orphaned sessions where the Redis token was deleted
+// but the MongoDB record was not updated (dual-write consistency gap).
 type Cleaner struct {
 	sessionRepo repository.ISessionRepository
+	tokenStore  auth.TokenStore
 	logger      *zap.Logger
 	interval    time.Duration
-	stopCh      chan struct{}
+	ctx         context.Context
+	cancel      context.CancelFunc
 }
 
 // NewCleaner creates a session cleaner with the given interval.
-func NewCleaner(sessionRepo repository.ISessionRepository, logger *zap.Logger, interval time.Duration) *Cleaner {
+func NewCleaner(sessionRepo repository.ISessionRepository, tokenStore auth.TokenStore, logger *zap.Logger, interval time.Duration) *Cleaner {
+	ctx, cancel := context.WithCancel(context.Background())
 	return &Cleaner{
 		sessionRepo: sessionRepo,
+		tokenStore:  tokenStore,
 		logger:      logger,
 		interval:    interval,
-		stopCh:      make(chan struct{}),
+		ctx:         ctx,
+		cancel:      cancel,
 	}
 }
 
@@ -40,13 +47,9 @@ func (c *Cleaner) Start() {
 		for {
 			select {
 			case <-ticker.C:
-				count, err := c.sessionRepo.MarkExpiredSessions(context.Background())
-				if err != nil {
-					c.logger.Error("Session cleanup failed", zap.Error(err))
-				} else if count > 0 {
-					c.logger.Info("Expired sessions cleaned", zap.Int64("count", count))
-				}
-			case <-c.stopCh:
+				c.cleanExpired()
+				c.reconcileOrphaned()
+			case <-c.ctx.Done():
 				c.logger.Info("Session cleaner stopped")
 				return
 			}
@@ -54,7 +57,51 @@ func (c *Cleaner) Start() {
 	}()
 }
 
-// Stop signals the cleaner goroutine to exit.
+// Stop signals the cleaner goroutine to exit and cancels any in-flight operations.
 func (c *Cleaner) Stop() {
-	close(c.stopCh)
+	c.cancel()
+}
+
+// cleanExpired marks sessions past their expires_at as inactive.
+func (c *Cleaner) cleanExpired() {
+	count, err := c.sessionRepo.MarkExpiredSessions(c.ctx)
+	if err != nil {
+		c.logger.Error("Session cleanup failed", zap.Error(err))
+	} else if count > 0 {
+		c.logger.Info("Expired sessions cleaned", zap.Int64("count", count))
+	}
+}
+
+// reconcileOrphaned finds active MongoDB sessions whose Redis token
+// has been deleted (e.g. due to a failed dual-write) and terminates them.
+func (c *Cleaner) reconcileOrphaned() {
+	sessions, err := c.sessionRepo.FindActiveSessions(c.ctx, 500)
+	if err != nil {
+		c.logger.Error("Reconciliation: failed to fetch active sessions", zap.Error(err))
+		return
+	}
+
+	reconciled := 0
+	for _, sess := range sessions {
+		if sess.TokenHash == "" {
+			continue
+		}
+
+		key := fmt.Sprintf("%s:%s:%s", auth.RefreshTokenPrefix, sess.UserID.String(), sess.TokenHash)
+		if _, err := c.tokenStore.Lookup(c.ctx, key); err == nil {
+			continue // Token exists in Redis — session is consistent
+		}
+
+		// Token missing from Redis — mark session as expired in MongoDB
+		if err := c.sessionRepo.Terminate(c.ctx, sess.SessionID, models.TerminationExpired); err != nil {
+			c.logger.Warn("Reconciliation: failed to terminate orphaned session",
+				zap.String("session_id", sess.SessionID.String()), zap.Error(err))
+			continue
+		}
+		reconciled++
+	}
+
+	if reconciled > 0 {
+		c.logger.Info("Orphaned sessions reconciled", zap.Int("count", reconciled))
+	}
 }

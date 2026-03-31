@@ -4,6 +4,8 @@ import (
 	"net/http"
 	"time"
 
+	"errors"
+
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
 	"github.com/vibe-c2/vibe-c2-core/core/pkg/auth"
@@ -87,7 +89,7 @@ func (ctrl *authController) Login(c *gin.Context) {
 
 	if !user.Active {
 		log.Warn("login: inactive account", zap.String("username", req.Username))
-		c.JSON(http.StatusBadRequest, responses.NewErrorResponse("account is inactive"))
+		c.JSON(http.StatusBadRequest, responses.ErrInvalidCredentials)
 		return
 	}
 
@@ -107,18 +109,11 @@ func (ctrl *authController) Login(c *gin.Context) {
 		return
 	}
 
-	refreshToken, evictedHash, err := ctrl.authProvider.GenerateRefreshToken(c.Request.Context(), userID, user.Username, user.Roles)
+	refreshToken, err := ctrl.authProvider.GenerateRefreshToken(c.Request.Context(), userID, user.Username, user.Roles)
 	if err != nil {
 		log.Error("login: failed to generate refresh token", zap.Error(err))
 		c.JSON(http.StatusInternalServerError, responses.ErrInternalError)
 		return
-	}
-
-	// Mark the evicted session in MongoDB (if max sessions was reached)
-	if evictedHash != "" {
-		if err := ctrl.sessionRepo.TerminateByTokenHash(c.Request.Context(), evictedHash, models.TerminationEvicted); err != nil {
-			log.Warn("login: failed to mark evicted session", zap.Error(err))
-		}
 	}
 
 	// Create persistent session record in MongoDB
@@ -209,19 +204,27 @@ func (ctrl *authController) Refresh(c *gin.Context) {
 
 	// RotateRefreshToken validates the old token, deletes it, and generates a new
 	// pair. If the old token is invalid (possible replay attack), it invalidates
-	// ALL sessions for the user.
+	// ALL sessions for the user. Infrastructure errors are returned separately.
 	newAuthToken, newRefreshToken, err := ctrl.authProvider.RotateRefreshToken(c.Request.Context(), userID, refreshTokenStr, currentSessionID)
 	if err != nil {
-		log.Warn("refresh: rotation failed", zap.String("user_id", userID), zap.Error(err))
-		ctrl.eventBus.Publish(eventbus.NewAuthReplayDetectedEvent(eventbus.UserActor(userID)))
-		// Mark all MongoDB sessions as terminated due to replay detection
-		if userUUID, parseErr := uuid.Parse(userID); parseErr == nil {
-			if _, termErr := ctrl.sessionRepo.TerminateAllForUser(c.Request.Context(), userUUID, models.TerminationReplayDetected); termErr != nil {
-				log.Warn("refresh: failed to terminate sessions on replay", zap.Error(termErr))
+		if errors.Is(err, auth.ErrTokenInvalid) {
+			// Replay attack detected — all Redis tokens already invalidated by RotateRefreshToken.
+			// Mark all MongoDB sessions as terminated.
+			log.Warn("refresh: replay detected", zap.String("user_id", userID), zap.Error(err))
+			ctrl.eventBus.Publish(eventbus.NewAuthReplayDetectedEvent(eventbus.UserActor(userID)))
+			if userUUID, parseErr := uuid.Parse(userID); parseErr == nil {
+				if _, termErr := ctrl.sessionRepo.TerminateAllForUser(c.Request.Context(), userUUID, models.TerminationReplayDetected); termErr != nil {
+					log.Warn("refresh: failed to terminate sessions on replay", zap.Error(termErr))
+				}
 			}
+			cookies.ClearAuthCookies(c, ctrl.isDev)
+			c.JSON(http.StatusUnauthorized, responses.ErrUnauthorized)
+		} else {
+			// Infrastructure error (Redis blip, JWT signing failure, etc.)
+			// Do NOT terminate sessions — this is not a replay attack.
+			log.Error("refresh: rotation failed", zap.String("user_id", userID), zap.Error(err))
+			c.JSON(http.StatusInternalServerError, responses.ErrInternalError)
 		}
-		cookies.ClearAuthCookies(c, ctrl.isDev)
-		c.JSON(http.StatusUnauthorized, responses.ErrUnauthorized)
 		return
 	}
 
@@ -231,7 +234,7 @@ func (ctrl *authController) Refresh(c *gin.Context) {
 		log.Warn("refresh: failed to update session record", zap.Error(err))
 	} else {
 		ctrl.eventBus.Publish(eventbus.NewSessionRefreshedEvent(eventbus.UserActor(userID), eventbus.SessionEventPayload{
-			UserID: userID,
+			SessionID: currentSessionID, UserID: userID,
 		}))
 	}
 

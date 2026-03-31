@@ -126,10 +126,10 @@ func (r *subscriptionResolver) MySessionChanged(ctx context.Context) (<-chan *mo
 				return
 			}
 
-			// For non-terminated events, fetch the full session from DB
-			if evt.Action != model.EventActionDeleted && evt.SessionID != "" {
+			// Fetch the full session from DB (use subscription ctx for cancellation)
+			if evt.SessionID != "" {
 				if sid, err := uuid.Parse(evt.SessionID); err == nil {
-					if sess, err := r.SessionRepo.FindByID(context.Background(), sid); err == nil {
+					if sess, err := r.SessionRepo.FindByID(ctx, sid); err == nil {
 						evt.Session = &sess
 					}
 				}
@@ -171,10 +171,10 @@ func (r *subscriptionResolver) SessionChanged(ctx context.Context, userID *strin
 				return
 			}
 
-			// Fetch the full session from DB
+			// Fetch the full session from DB (use subscription ctx for cancellation)
 			if evt.SessionID != "" {
 				if sid, err := uuid.Parse(evt.SessionID); err == nil {
-					if sess, err := r.SessionRepo.FindByID(context.Background(), sid); err == nil {
+					if sess, err := r.SessionRepo.FindByID(ctx, sid); err == nil {
 						evt.Session = &sess
 					}
 				}

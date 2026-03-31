@@ -49,7 +49,7 @@ func (r *subscriptionResolver) UserChanged(ctx context.Context) (<-chan *model.U
 			// frontend gets complete data without a follow-up query.
 			if evt.Action != model.EventActionDeleted {
 				if uid, err := uuid.Parse(evt.UserID); err == nil {
-					if user, err := r.UserRepo.FindByID(context.Background(), uid); err == nil {
+					if user, err := r.UserRepo.FindByID(ctx, uid); err == nil {
 						evt.User = &user
 					}
 				}
@@ -103,7 +103,7 @@ func (r *subscriptionResolver) OperationChanged(ctx context.Context, operationID
 
 			if evt.Action != model.EventActionDeleted {
 				if opID, err := uuid.Parse(evt.OperationID); err == nil {
-					if op, err := r.OperationRepo.FindByID(context.Background(), opID); err == nil {
+					if op, err := r.OperationRepo.FindByID(ctx, opID); err == nil {
 						evt.Operation = &op
 					}
 				}

@@ -8,7 +8,6 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
-	"strings"
 	"time"
 
 	"github.com/golang-jwt/jwt/v5"
@@ -19,7 +18,6 @@ import (
 const (
 	Issuer             = "vibe-c2"
 	RefreshTokenPrefix = "refresh"
-	MaxSessionsPerUser = 10
 	TTLRefreshToken    = 7 * 24 * time.Hour
 )
 
@@ -58,7 +56,7 @@ type IAuthProvider interface {
 	ValidateAuthToken(tokenString string) (*Claims, error)
 	ParseAuthTokenUnvalidated(tokenString string) (*Claims, error)
 	AuthTokenTTL() time.Duration
-	GenerateRefreshToken(ctx context.Context, userID, username string, roles []string) (rawToken, evictedTokenHash string, err error)
+	GenerateRefreshToken(ctx context.Context, userID, username string, roles []string) (rawToken string, err error)
 	ValidateRefreshToken(ctx context.Context, userID, rawToken string) (*RefreshTokenMeta, error)
 	RotateRefreshToken(ctx context.Context, userID, oldRawToken, sessionID string) (accessToken, newRefreshToken string, err error)
 	InvalidateRefreshToken(ctx context.Context, userID, rawToken string) error
@@ -122,9 +120,14 @@ func (ap *authProvider) ValidateAuthToken(tokenString string) (*Claims, error) {
 	return claims, nil
 }
 
+// maxTokenAge is the maximum age of an access token that can be used for refresh.
+// Prevents arbitrarily old stolen tokens from being used indefinitely.
+const maxTokenAge = 30 * 24 * time.Hour
+
 // ParseAuthTokenUnvalidated extracts claims from a JWT without checking
 // expiration. Signature and issuer are still verified. Used by the refresh
 // endpoint to read the userID from an expired access token cookie.
+// Rejects tokens older than maxTokenAge to limit the window for stolen tokens.
 func (ap *authProvider) ParseAuthTokenUnvalidated(tokenString string) (*Claims, error) {
 	claims := &Claims{}
 
@@ -143,6 +146,11 @@ func (ap *authProvider) ParseAuthTokenUnvalidated(tokenString string) (*Claims, 
 		return nil, ErrTokenInvalid
 	}
 
+	// Reject tokens issued too long ago to limit the window for stolen tokens.
+	if claims.IssuedAt != nil && time.Since(claims.IssuedAt.Time) > maxTokenAge {
+		return nil, fmt.Errorf("%w: token too old", ErrTokenExpired)
+	}
+
 	return claims, nil
 }
 
@@ -151,27 +159,11 @@ func (ap *authProvider) AuthTokenTTL() time.Duration {
 	return ap.authTokenTTL
 }
 
-func (ap *authProvider) GenerateRefreshToken(ctx context.Context, userID, username string, roles []string) (string, string, error) {
-	var evictedTokenHash string
-
-	// Check max sessions using SCARD (O(1))
-	count, err := ap.store.UserSessionCount(ctx, userID)
-	if err != nil {
-		return "", "", fmt.Errorf("failed to check existing sessions: %w", err)
-	}
-	if count >= MaxSessionsPerUser {
-		evictedKey, err := ap.store.EvictOldestSession(ctx, userID)
-		if err != nil {
-			return "", "", fmt.Errorf("failed to evict oldest session: %w", err)
-		}
-		// Extract token hash from the evicted key (format: "refresh:{userID}:{hash}")
-		evictedTokenHash = extractTokenHashFromKey(evictedKey)
-	}
-
+func (ap *authProvider) GenerateRefreshToken(ctx context.Context, userID, username string, roles []string) (string, error) {
 	// Generate opaque token
 	rawToken, err := GenerateRandomKey()
 	if err != nil {
-		return "", "", err
+		return "", err
 	}
 	tokenHash := HashToken(rawToken)
 
@@ -185,10 +177,10 @@ func (ap *authProvider) GenerateRefreshToken(ctx context.Context, userID, userna
 
 	// Store token and add to user index in a single pipeline
 	if err := ap.store.StoreWithIndex(ctx, key, meta, userID, TTLRefreshToken); err != nil {
-		return "", "", fmt.Errorf("failed to store refresh token: %w", err)
+		return "", fmt.Errorf("failed to store refresh token: %w", err)
 	}
 
-	return rawToken, evictedTokenHash, nil
+	return rawToken, nil
 }
 
 func (ap *authProvider) ValidateRefreshToken(ctx context.Context, userID, rawToken string) (*RefreshTokenMeta, error) {
@@ -207,7 +199,7 @@ func (ap *authProvider) ValidateRefreshToken(ctx context.Context, userID, rawTok
 }
 
 func (ap *authProvider) RotateRefreshToken(ctx context.Context, userID, oldRawToken, sessionID string) (string, string, error) {
-	// Validate old token
+	// Validate old token — failure here means possible replay attack.
 	meta, err := ap.ValidateRefreshToken(ctx, userID, oldRawToken)
 	if err != nil {
 		// Possible replay attack — invalidate all sessions
@@ -218,18 +210,17 @@ func (ap *authProvider) RotateRefreshToken(ctx context.Context, userID, oldRawTo
 	// Generate new access token (JWT) with the session ID embedded
 	accessToken, err := ap.GenerateAuthToken(userID, meta.Username, meta.Roles, sessionID)
 	if err != nil {
-		return "", "", fmt.Errorf("failed to generate access token: %w", err)
+		return "", "", fmt.Errorf("%w: %v", ErrRotationFailed, err)
 	}
 
-	// Delete old token first so we free a session slot before generating
-	// the new one. This avoids unnecessary eviction during rotation.
+	// Delete old token before generating a new one.
 	if err := ap.InvalidateRefreshToken(ctx, userID, oldRawToken); err != nil {
-		return "", "", fmt.Errorf("failed to invalidate old refresh token: %w", err)
+		return "", "", fmt.Errorf("%w: %v", ErrRotationFailed, err)
 	}
 
-	newRefreshToken, _, err := ap.GenerateRefreshToken(ctx, userID, meta.Username, meta.Roles)
+	newRefreshToken, err := ap.GenerateRefreshToken(ctx, userID, meta.Username, meta.Roles)
 	if err != nil {
-		return "", "", fmt.Errorf("failed to generate refresh token: %w", err)
+		return "", "", fmt.Errorf("%w: %v", ErrRotationFailed, err)
 	}
 
 	return accessToken, newRefreshToken, nil
@@ -265,12 +256,3 @@ func HashToken(token string) string {
 	return hex.EncodeToString(hash[:])
 }
 
-// extractTokenHashFromKey extracts the token hash from a Redis key.
-// Key format: "refresh:{userID}:{tokenHash}"
-func extractTokenHashFromKey(key string) string {
-	parts := strings.SplitN(key, ":", 3)
-	if len(parts) < 3 {
-		return ""
-	}
-	return parts[2]
-}

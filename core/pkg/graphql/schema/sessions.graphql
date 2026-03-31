@@ -22,7 +22,6 @@ enum SessionStatus {
 enum SessionTerminationReason {
   LOGOUT              # User logged out normally
   EXPIRED             # Refresh token TTL expired (7 days)
-  EVICTED             # Removed to make room for a new session (max 10 per user)
   REPLAY_DETECTED     # Possible token theft — all sessions invalidated
   ADMIN_REVOKED       # An admin terminated this session
   USER_REVOKED        # The user terminated this session from another device

@@ -107,8 +107,10 @@ func NewApp() (*App, error) {
 	// Initialize event bus
 	bus := eventbus.NewEventBus(l)
 
-	// Initialize session cleaner (marks expired sessions as inactive every hour)
-	sessionCleaner := session.NewCleaner(repos.Session, l, 1*time.Hour)
+	// Initialize session cleaner (marks expired sessions as inactive and
+	// reconciles orphaned sessions where Redis token was deleted but
+	// MongoDB record was not updated)
+	sessionCleaner := session.NewCleaner(repos.Session, tokenStore, l, 1*time.Hour)
 
 	// --- Future integration patterns ---
 	//

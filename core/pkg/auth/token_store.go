@@ -24,16 +24,8 @@ type TokenStore interface {
 	// session index atomically in a single pipeline.
 	DeleteAndUnindex(ctx context.Context, key string, userID string) error
 
-	// UserSessionCount returns the number of active sessions for a user.
-	UserSessionCount(ctx context.Context, userID string) (int64, error)
-
 	// DeleteAllUserSessions removes all tokens and the index for a user.
 	DeleteAllUserSessions(ctx context.Context, userID string) error
-
-	// EvictOldestSession atomically removes the session with the earliest
-	// CreatedAt for the given user. Returns the evicted key, or "" if no
-	// sessions exist. Also cleans up stale index entries.
-	EvictOldestSession(ctx context.Context, userID string) (string, error)
 
 	// DeleteByTokenHash removes a token by its hash and user ID.
 	// Constructs the Redis key from the hash and calls DeleteAndUnindex.

@@ -84,6 +84,10 @@ func (r *sessionResolver) MySessions(ctx context.Context, activeOnly *bool, firs
 }
 
 func (r *sessionResolver) Sessions(ctx context.Context, userID *string, search *string, activeOnly *bool, first *int, after *string, last *int, before *string) (*model.SessionConnection, error) {
+	if userID != nil && *userID != "" && search != nil && *search != "" {
+		return nil, fmt.Errorf("cannot specify both userID and search")
+	}
+
 	var userIDs []uuid.UUID
 
 	// If a specific userId is provided, use it directly.
@@ -253,22 +257,22 @@ func (r *sessionResolver) RevokeAllMySessions(ctx context.Context) (int, error) 
 		return 0, fmt.Errorf("invalid user ID in token: %w", err)
 	}
 
-	// Find all active sessions for this user
-	sessions, err := r.sessionRepo.FindWithCursor(ctx, []uuid.UUID{userUUID}, true, nil, 100, true)
+	// Fetch all active sessions for this user.
+	sessions, err := r.sessionRepo.FindWithCursor(ctx, []uuid.UUID{userUUID}, true, nil, 1000, true)
 	if err != nil {
 		return 0, fmt.Errorf("failed to find sessions: %w", err)
 	}
 
 	revoked := 0
 	for _, sess := range sessions {
-		// Skip the current session
+		// Skip the current session — it must stay active.
 		if authInfo.CurrentSessionID != "" && sess.SessionID.String() == authInfo.CurrentSessionID {
 			continue
 		}
 
 		// Revoke token in Redis
 		if err := r.tokenStore.DeleteByTokenHash(ctx, authInfo.UserID, sess.TokenHash); err != nil {
-			continue // Best effort — log would be better but keeping it simple
+			continue
 		}
 
 		// Terminate in MongoDB
@@ -276,7 +280,6 @@ func (r *sessionResolver) RevokeAllMySessions(ctx context.Context) (int, error) 
 			continue
 		}
 
-		// Publish per-session event so each revoked session's subscriber can detect it
 		r.eventBus.Publish(eventbus.NewSessionTerminatedEvent(eventbus.UserActor(authInfo.UserID), eventbus.SessionEventPayload{
 			SessionID: sess.SessionID.String(), UserID: authInfo.UserID, Reason: string(models.TerminationUserRevoked),
 		}))
@@ -298,6 +301,11 @@ func (r *sessionResolver) AdminRevokeSession(ctx context.Context, id string) (bo
 	sess, err := r.sessionRepo.FindByID(ctx, sid)
 	if err != nil {
 		return false, fmt.Errorf("session not found: %w", err)
+	}
+
+	// Prevent admin from accidentally revoking their own current session
+	if authInfo.CurrentSessionID != "" && sess.SessionID.String() == authInfo.CurrentSessionID {
+		return false, fmt.Errorf("cannot revoke your own current session — use logout instead")
 	}
 
 	if sess.Status != models.SessionStatusActive {
@@ -330,7 +338,7 @@ func (r *sessionResolver) AdminRevokeAllUserSessions(ctx context.Context, userID
 	}
 
 	// Fetch active sessions before terminating so we can publish per-session events.
-	activeSessions, err := r.sessionRepo.FindWithCursor(ctx, []uuid.UUID{targetUUID}, true, nil, 100, true)
+	activeSessions, err := r.sessionRepo.FindWithCursor(ctx, []uuid.UUID{targetUUID}, true, nil, 1000, true)
 	if err != nil {
 		return 0, fmt.Errorf("failed to find active sessions: %w", err)
 	}
@@ -367,8 +375,8 @@ func (r *sessionResolver) UserID(_ context.Context, obj *models.Session) (string
 }
 
 // User resolves the owning User object from the session's UserID.
-func (r *sessionResolver) User(_ context.Context, obj *models.Session) (*models.User, error) {
-	user, err := r.userRepo.FindByID(context.Background(), obj.UserID)
+func (r *sessionResolver) User(ctx context.Context, obj *models.Session) (*models.User, error) {
+	user, err := r.userRepo.FindByID(ctx, obj.UserID)
 	if err != nil {
 		return nil, fmt.Errorf("session user not found: %w", err)
 	}
