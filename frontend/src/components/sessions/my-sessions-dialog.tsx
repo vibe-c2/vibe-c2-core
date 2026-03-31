@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react"
-import { LoaderIcon, ShieldXIcon } from "lucide-react"
+import { LoaderIcon, ShieldAlertIcon, ShieldXIcon } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import {
   Dialog,
@@ -20,7 +20,7 @@ import { SessionItem } from "./session-item"
 import { RevokeSessionDialog } from "./revoke-session-dialog"
 
 export function MySessionsDialog() {
-  const { mySessionsDialogOpen, closeDialogs, openRevokeDialog } = useSessionStore()
+  const { mySessionsDialogOpen, securityWarning, closeDialogs, openRevokeDialog } = useSessionStore()
   const [activeOnly, setActiveOnly] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
@@ -74,6 +74,16 @@ export function MySessionsDialog() {
               Manage your active sessions across devices.
             </DialogDescription>
           </DialogHeader>
+
+          {securityWarning && (
+            <div className="flex items-start gap-2 rounded-md border border-yellow-500/50 bg-yellow-500/10 p-3 text-sm text-yellow-700 dark:text-yellow-400">
+              <ShieldAlertIcon className="size-4 mt-0.5 shrink-0" />
+              <span>
+                We have detected more than one active session for your account.
+                Security concern is advised!
+              </span>
+            </div>
+          )}
 
           {/* Controls */}
           <div className="flex items-center justify-between gap-2">

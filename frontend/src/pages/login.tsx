@@ -8,6 +8,8 @@ import { Input } from "@/components/ui/input"
 import { useAuthStore } from "@/stores/auth"
 import { useSessionStore } from "@/stores/sessions"
 import { authService } from "@/services/auth"
+import { graphqlClient } from "@/lib/graphql-client"
+import { MySessionsDocument } from "@/graphql/gql/graphql"
 
 export function LoginPage() {
   const navigate = useNavigate()
@@ -37,9 +39,17 @@ export function LoginPage() {
     try {
       const response = await authService.login(username, password)
       setSession(response)
-      // Open sessions dialog so the user can review active sessions (security feature)
-      useSessionStore.getState().openMySessionsDialog()
       navigate("/", { replace: true })
+
+      // Check for multiple active sessions after navigation (fire-and-forget).
+      // If detected, open the sessions dialog with a security warning.
+      graphqlClient(MySessionsDocument, { activeOnly: true, first: 1 })
+        .then((data) => {
+          if (data.mySessions.totalCount > 1) {
+            useSessionStore.getState().openMySessionsDialogWithWarning()
+          }
+        })
+        .catch(() => {}) // Non-critical — silently ignore errors
     } catch (err) {
       setError(err instanceof Error ? err.message : "Login failed")
     } finally {

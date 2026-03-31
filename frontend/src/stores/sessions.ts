@@ -3,7 +3,9 @@ import { create } from "zustand"
 interface SessionStoreState {
   // My Sessions dialog (opened from NavUser dropdown)
   mySessionsDialogOpen: boolean
+  securityWarning: boolean
   openMySessionsDialog: () => void
+  openMySessionsDialogWithWarning: () => void
 
   // Revoke confirmation
   selectedSessionId: string | null
@@ -17,11 +19,13 @@ interface SessionStoreState {
 
 export const useSessionStore = create<SessionStoreState>((set) => ({
   mySessionsDialogOpen: false,
+  securityWarning: false,
   selectedSessionId: null,
   revokeDialogOpen: false,
   revokeIsAdmin: false,
 
-  openMySessionsDialog: () => set({ mySessionsDialogOpen: true }),
+  openMySessionsDialog: () => set({ mySessionsDialogOpen: true, securityWarning: false }),
+  openMySessionsDialogWithWarning: () => set({ mySessionsDialogOpen: true, securityWarning: true }),
 
   openRevokeDialog: (sessionId, isAdmin = false) =>
     set({ revokeDialogOpen: true, selectedSessionId: sessionId, revokeIsAdmin: isAdmin }),
@@ -32,6 +36,7 @@ export const useSessionStore = create<SessionStoreState>((set) => ({
   closeDialogs: () =>
     set({
       mySessionsDialogOpen: false,
+      securityWarning: false,
       revokeDialogOpen: false,
       selectedSessionId: null,
       revokeIsAdmin: false,
