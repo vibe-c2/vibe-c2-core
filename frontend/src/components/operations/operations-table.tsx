@@ -1,5 +1,5 @@
 import { Virtuoso } from "react-virtuoso"
-import { EllipsisIcon, LoaderIcon, PencilIcon, TrashIcon, UsersIcon } from "lucide-react"
+import { SwordsIcon, EllipsisIcon, LoaderIcon, PencilIcon, TrashIcon, UsersIcon } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import {
@@ -11,6 +11,7 @@ import {
 import { Skeleton } from "@/components/ui/skeleton"
 import { useAuthStore } from "@/stores/auth"
 import { useOperationStore } from "@/stores/operations"
+import { useScopedOperationStore } from "@/stores/scoped-operation"
 import { Permissions } from "@/constants/permissions"
 import { FormattedDateTimeText } from "@/components/ui/formatted-date-time-text"
 import type { OperationFieldsFragment } from "@/graphql/gql/graphql"
@@ -23,8 +24,8 @@ interface OperationsTableProps {
   fetchNextPage: () => void
 }
 
-const GRID_COLS = "grid-cols-[2fr_3fr_80px_1fr_48px]"
-const GRID_COLS_NO_ACTIONS = "grid-cols-[2fr_3fr_80px_1fr]"
+const GRID_COLS = "grid-cols-[40px_2fr_3fr_80px_1fr_48px]"
+const GRID_COLS_NO_ACTIONS = "grid-cols-[40px_2fr_3fr_80px_1fr]"
 
 export function OperationsTable({
   operations,
@@ -36,6 +37,9 @@ export function OperationsTable({
   const hasPermission = useAuthStore((s) => s.hasPermission)
   const currentUserId = useAuthStore((s) => s.user?.userId)
   const { openEditDialog, openDeleteDialog, openMembersDialog } = useOperationStore()
+  const scopedOperation = useScopedOperationStore((s) => s.scopedOperation)
+  const scopeOperation = useScopedOperationStore((s) => s.scopeOperation)
+  const unscopeOperation = useScopedOperationStore((s) => s.unscopeOperation)
 
   const canDelete = hasPermission(Permissions.OPERATION_DELETE)
   const canManageMembers = hasPermission(Permissions.OPERATION_MEMBER)
@@ -59,6 +63,7 @@ export function OperationsTable({
       {/* Fixed header */}
       <div className="border-b bg-muted/50 shrink-0">
         <div className={`grid ${gridCols} gap-4 px-4 py-2 text-sm font-medium`}>
+          <div />
           <div>Name</div>
           <div>Description</div>
           <div>Members</div>
@@ -95,10 +100,27 @@ export function OperationsTable({
             itemContent={(_index, op) => {
               const canEdit = isAppAdmin || isOperationAdmin(op)
 
+              const isScoped = scopedOperation?.id === op.id
+
               return (
                 <div
-                  className={`grid ${gridCols} gap-4 px-4 py-2 border-b hover:bg-muted/50 transition-colors items-center text-sm`}
+                  className={`grid ${gridCols} gap-4 px-4 py-2 border-b hover:bg-muted/50 transition-colors items-center text-sm ${isScoped ? "bg-primary/5 border-l-2 border-l-primary" : ""}`}
                 >
+                  <div>
+                    <Button
+                      variant="ghost"
+                      size="icon-sm"
+                      onClick={() =>
+                        isScoped
+                          ? unscopeOperation()
+                          : scopeOperation({ id: op.id, name: op.name, description: op.description })
+                      }
+                      className={isScoped ? "text-primary" : "text-muted-foreground"}
+                      title={isScoped ? "Clear active operation" : "Set as active operation"}
+                    >
+                      <SwordsIcon className="size-4" />
+                    </Button>
+                  </div>
                   <div className="font-medium truncate">{op.name}</div>
                   <div className="truncate text-muted-foreground">
                     {op.description || "\u2014"}

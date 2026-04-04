@@ -2,6 +2,7 @@ import { useEffect } from "react"
 import { BrowserRouter, Route, Routes } from "react-router"
 import { QueryProvider } from "@/providers/query-provider"
 import { ThemeProvider } from "@/components/theme-provider"
+import { Toaster } from "@/components/ui/sonner"
 import { ProtectedRoute } from "@/components/protected-route"
 import { AppLayout } from "@/components/layout/app-layout"
 import { LoginPage } from "@/pages/login"
@@ -22,6 +23,7 @@ function App() {
   return (
     <QueryProvider>
       <ThemeProvider>
+        <Toaster />
         <BrowserRouter>
         <Routes>
           <Route path="/login" element={<LoginPage />} />
