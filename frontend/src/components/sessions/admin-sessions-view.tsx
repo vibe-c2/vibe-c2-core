@@ -14,6 +14,8 @@ export function AdminSessionsView() {
   const {
     data,
     isLoading,
+    isError,
+    error,
     isFetchingNextPage,
     hasNextPage,
     fetchNextPage,
@@ -32,6 +34,11 @@ export function AdminSessionsView() {
 
   return (
     <div className="flex flex-1 flex-col gap-2 min-h-0">
+      {isError && (
+        <div className="rounded-md bg-destructive/15 p-3 text-sm text-destructive">
+          {error instanceof Error ? error.message : "Failed to load sessions"}
+        </div>
+      )}
       <AdminSessionsToolbar
         search={search}
         onSearchChange={setSearch}

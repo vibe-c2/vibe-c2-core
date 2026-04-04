@@ -3,6 +3,7 @@ package auth
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"time"
 
@@ -84,7 +85,10 @@ func (s *redisTokenStore) StoreWithIndex(ctx context.Context, key string, meta R
 func (s *redisTokenStore) Lookup(ctx context.Context, key string) (*RefreshTokenMeta, error) {
 	data, err := s.client.Get(ctx, key).Result()
 	if err != nil {
-		return nil, ErrTokenNotFound
+		if errors.Is(err, redis.Nil) {
+			return nil, ErrTokenNotFound
+		}
+		return nil, fmt.Errorf("redis lookup failed: %w", err)
 	}
 
 	var meta RefreshTokenMeta

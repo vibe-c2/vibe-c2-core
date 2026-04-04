@@ -200,6 +200,11 @@ func (ctrl *authController) Refresh(c *gin.Context) {
 	var currentSessionID string
 	if sess, err := ctrl.sessionRepo.FindByTokenHash(c.Request.Context(), oldTokenHash); err == nil {
 		currentSessionID = sess.SessionID.String()
+	} else if claims.SessionID != "" {
+		// Fallback: use the session ID from the expired JWT if token hash lookup
+		// fails. This handles the case where a previous UpdateOnRefresh failed,
+		// leaving MongoDB with a stale token hash.
+		currentSessionID = claims.SessionID
 	}
 
 	// RotateRefreshToken validates the old token, deletes it, and generates a new
@@ -231,7 +236,7 @@ func (ctrl *authController) Refresh(c *gin.Context) {
 	// Update the MongoDB session: swap token hash and bump activity/expiry
 	newTokenHash := auth.HashToken(newRefreshToken)
 	if err := ctrl.sessionRepo.UpdateOnRefresh(c.Request.Context(), oldTokenHash, newTokenHash, time.Now().UTC().Add(auth.TTLRefreshToken)); err != nil {
-		log.Warn("refresh: failed to update session record", zap.Error(err))
+		log.Error("refresh: failed to update session record — session may become orphaned", zap.Error(err))
 	} else {
 		ctrl.eventBus.Publish(eventbus.NewSessionRefreshedEvent(eventbus.UserActor(userID), eventbus.SessionEventPayload{
 			SessionID: currentSessionID, UserID: userID,

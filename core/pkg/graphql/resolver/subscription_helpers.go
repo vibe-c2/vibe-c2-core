@@ -21,6 +21,41 @@ import (
 func (r *subscriptionResolver) buildOperationFilter(ctx context.Context, auth gqlctx.AuthInfo, operationID *string) (eventbus.Filter, error) {
 	if operationID != nil && *operationID != "" {
 		target := *operationID
+
+		// Verify caller has access to this operation (member or app-level admin).
+		isAdmin := false
+		for _, role := range auth.Roles {
+			if role == "admin" {
+				isAdmin = true
+				break
+			}
+		}
+
+		if !isAdmin {
+			userID, err := uuid.Parse(auth.UserID)
+			if err != nil {
+				return nil, fmt.Errorf("invalid user ID")
+			}
+			opID, err := uuid.Parse(target)
+			if err != nil {
+				return nil, fmt.Errorf("invalid operation ID")
+			}
+			op, err := r.OperationRepo.FindByID(ctx, opID)
+			if err != nil {
+				return nil, fmt.Errorf("operation not found")
+			}
+			isMember := false
+			for _, m := range op.Members {
+				if m.UserID == userID {
+					isMember = true
+					break
+				}
+			}
+			if !isMember {
+				return nil, fmt.Errorf("forbidden: not a member of this operation")
+			}
+		}
+
 		return func(event eventbus.Event) bool {
 			return extractOperationID(event) == target
 		}, nil

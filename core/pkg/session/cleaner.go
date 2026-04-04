@@ -87,12 +87,28 @@ func (c *Cleaner) reconcileOrphaned() {
 			continue
 		}
 
+		// Skip sessions with recent activity — they may be mid-rotation.
+		if time.Since(sess.LastActivityAt) < 2*time.Minute {
+			continue
+		}
+
 		key := fmt.Sprintf("%s:%s:%s", auth.RefreshTokenPrefix, sess.UserID.String(), sess.TokenHash)
 		if _, err := c.tokenStore.Lookup(c.ctx, key); err == nil {
 			continue // Token exists in Redis — session is consistent
 		}
 
-		// Token missing from Redis — mark session as expired in MongoDB
+		// Token appears missing. Re-fetch to guard against TOCTOU race:
+		// the user may have refreshed (rotating to a new token hash)
+		// between our snapshot and the Redis check.
+		current, err := c.sessionRepo.FindByID(c.ctx, sess.SessionID)
+		if err != nil || current.Status != models.SessionStatusActive {
+			continue // Session already terminated or gone
+		}
+		if current.TokenHash != sess.TokenHash {
+			continue // Token was rotated — not orphaned, skip
+		}
+
+		// Token confirmed missing from Redis and unchanged in MongoDB — terminate.
 		if err := c.sessionRepo.Terminate(c.ctx, sess.SessionID, models.TerminationExpired); err != nil {
 			c.logger.Warn("Reconciliation: failed to terminate orphaned session",
 				zap.String("session_id", sess.SessionID.String()), zap.Error(err))

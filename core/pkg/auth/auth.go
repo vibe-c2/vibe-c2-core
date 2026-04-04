@@ -202,8 +202,10 @@ func (ap *authProvider) RotateRefreshToken(ctx context.Context, userID, oldRawTo
 	// Validate old token — failure here means possible replay attack.
 	meta, err := ap.ValidateRefreshToken(ctx, userID, oldRawToken)
 	if err != nil {
-		// Possible replay attack — invalidate all sessions
-		_ = ap.InvalidateAllRefreshTokens(ctx, userID)
+		// Possible replay attack — invalidate all sessions.
+		if invErr := ap.InvalidateAllRefreshTokens(ctx, userID); invErr != nil {
+			return "", "", fmt.Errorf("%w (additionally, failed to invalidate all tokens: %v)", ErrTokenInvalid, invErr)
+		}
 		return "", "", ErrTokenInvalid
 	}
 
@@ -213,13 +215,17 @@ func (ap *authProvider) RotateRefreshToken(ctx context.Context, userID, oldRawTo
 		return "", "", fmt.Errorf("%w: %v", ErrRotationFailed, err)
 	}
 
-	// Delete old token before generating a new one.
-	if err := ap.InvalidateRefreshToken(ctx, userID, oldRawToken); err != nil {
+	// Generate new token BEFORE deleting old — if this fails, the old token
+	// remains valid and the user can retry. The reverse order would lock them out.
+	newRefreshToken, err := ap.GenerateRefreshToken(ctx, userID, meta.Username, meta.Roles)
+	if err != nil {
 		return "", "", fmt.Errorf("%w: %v", ErrRotationFailed, err)
 	}
 
-	newRefreshToken, err := ap.GenerateRefreshToken(ctx, userID, meta.Username, meta.Roles)
-	if err != nil {
+	// Delete old token last. If this fails, both old and new tokens exist
+	// briefly — the old one will expire naturally via TTL. This is safe:
+	// a reused old token triggers replay detection on the next refresh.
+	if err := ap.InvalidateRefreshToken(ctx, userID, oldRawToken); err != nil {
 		return "", "", fmt.Errorf("%w: %v", ErrRotationFailed, err)
 	}
 

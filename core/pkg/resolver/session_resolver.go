@@ -263,7 +263,7 @@ func (r *sessionResolver) RevokeAllMySessions(ctx context.Context) (int, error) 
 		return 0, fmt.Errorf("failed to find sessions: %w", err)
 	}
 
-	revoked := 0
+	var revoked, failed int
 	for _, sess := range sessions {
 		// Skip the current session — it must stay active.
 		if authInfo.CurrentSessionID != "" && sess.SessionID.String() == authInfo.CurrentSessionID {
@@ -272,11 +272,13 @@ func (r *sessionResolver) RevokeAllMySessions(ctx context.Context) (int, error) 
 
 		// Revoke token in Redis
 		if err := r.tokenStore.DeleteByTokenHash(ctx, authInfo.UserID, sess.TokenHash); err != nil {
+			failed++
 			continue
 		}
 
 		// Terminate in MongoDB
 		if err := r.sessionRepo.Terminate(ctx, sess.SessionID, models.TerminationUserRevoked); err != nil {
+			failed++
 			continue
 		}
 
@@ -287,6 +289,9 @@ func (r *sessionResolver) RevokeAllMySessions(ctx context.Context) (int, error) 
 		revoked++
 	}
 
+	if failed > 0 {
+		return revoked, fmt.Errorf("revoked %d sessions but %d failed", revoked, failed)
+	}
 	return revoked, nil
 }
 

@@ -2,6 +2,7 @@ package resolver
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"time"
 
@@ -119,17 +120,6 @@ func (r *operationResolver) authorizeOperationRole(ctx context.Context, op *mode
 	}
 
 	return fmt.Errorf("forbidden: not a member of this operation")
-}
-
-// countAdmins returns the number of members with the admin role.
-func countAdmins(members []models.OperationMember) int {
-	count := 0
-	for _, m := range members {
-		if m.Role == models.OperationRoleAdmin {
-			count++
-		}
-	}
-	return count
 }
 
 // CreateOperation creates a new operation.
@@ -331,16 +321,11 @@ func (r *operationResolver) RemoveOperationMember(ctx context.Context, operation
 		return nil, err
 	}
 
-	// Check if removing this member would leave zero admins
-	for _, m := range op.Members {
-		if m.UserID == userUID && m.Role == models.OperationRoleAdmin {
-			if countAdmins(op.Members) <= 1 {
-				return nil, fmt.Errorf("cannot remove the last admin from an operation")
-			}
+	// Atomically remove the member, refusing if it would leave zero admins.
+	if err := r.operationRepo.RemoveMemberSafe(ctx, opUID, userUID); err != nil {
+		if errors.Is(err, repository.ErrLastAdmin) {
+			return nil, fmt.Errorf("cannot remove the last admin from an operation")
 		}
-	}
-
-	if err := r.operationRepo.RemoveMember(ctx, opUID, userUID); err != nil {
 		return nil, fmt.Errorf("failed to remove member: %w", err)
 	}
 
@@ -384,25 +369,11 @@ func (r *operationResolver) UpdateOperationMemberRole(ctx context.Context, opera
 		return nil, err
 	}
 
-	// Find the target member and validate the change
-	found := false
-	for _, m := range op.Members {
-		if m.UserID == userUID {
-			found = true
-			// Prevent demoting the last admin
-			if m.Role == models.OperationRoleAdmin && role != models.OperationRoleAdmin {
-				if countAdmins(op.Members) <= 1 {
-					return nil, fmt.Errorf("cannot demote the last admin in an operation")
-				}
-			}
-			break
+	// Atomically update the role, refusing if it would leave zero admins.
+	if err := r.operationRepo.UpdateMemberRoleSafe(ctx, opUID, userUID, role); err != nil {
+		if errors.Is(err, repository.ErrLastAdmin) {
+			return nil, fmt.Errorf("cannot demote the last admin in an operation")
 		}
-	}
-	if !found {
-		return nil, fmt.Errorf("user is not a member of this operation")
-	}
-
-	if err := r.operationRepo.UpdateMemberRole(ctx, opUID, userUID, role); err != nil {
 		return nil, fmt.Errorf("failed to update member role: %w", err)
 	}
 

@@ -15,7 +15,7 @@ interface AuthState {
   isLoading: boolean
   setSession: (response: SessionResponse) => void
   clearSession: () => void
-  logout: () => void
+  logout: () => Promise<void>
   checkAuth: () => Promise<void>
   hasPermission: (permission: string) => boolean
 }
@@ -41,13 +41,21 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     set({ user: null, isAuthenticated: false, isLoading: false })
   },
 
-  logout: () => {
-    // Fire-and-forget backend logout (clears cookies + revokes current session)
-    fetch(`${API_URL}/logout`, {
-      method: "POST",
-      credentials: "include",
-    }).catch(() => {})
+  logout: async () => {
+    // Clear local state immediately so the UI redirects to login.
     set({ user: null, isAuthenticated: false, isLoading: false })
+    // Then attempt backend session revocation.
+    try {
+      await fetch(`${API_URL}/logout`, {
+        method: "POST",
+        credentials: "include",
+      })
+    } catch {
+      // Backend logout failed — session may remain active until token expires.
+      // This is acceptable: cookies are cleared by the response, and if the
+      // request never reached the server, the token expires via TTL.
+      console.warn("Backend logout failed — session may persist until token expiry")
+    }
   },
 
   checkAuth: async () => {

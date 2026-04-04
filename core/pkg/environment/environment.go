@@ -87,6 +87,18 @@ func init() {
 		RedisPassword: viper.GetString("REDIS_PASSWORD"),
 		CacheEnabled:  viper.GetBool("CACHE_ENABLED"),
 	}
+
+	// Validate required configuration — fail fast on missing critical values.
+	required := map[string]string{
+		"JWT_SECRET_KEY": env.JWTSecretKey,
+		"MONGO_URI":      env.MongoURI,
+		"MONGO_DATABASE": env.MongoDatabase,
+	}
+	for name, value := range required {
+		if value == "" {
+			log.Fatalf("Required environment variable %s is not set", name)
+		}
+	}
 }
 
 func GetEnvironmentSettings() *EnvironmentSettings {

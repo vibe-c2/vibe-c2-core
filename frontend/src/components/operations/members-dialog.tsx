@@ -154,6 +154,7 @@ export function MembersDialog() {
       open={membersDialogOpen}
       onOpenChange={(open) => {
         if (!open) handleClose()
+        else setError(null)
       }}
     >
       <DialogContent className="max-w-lg">

@@ -17,8 +17,13 @@ type Meta struct {
 // Extract captures session metadata from the current HTTP request.
 // Uses Gin's ClientIP (respects X-Forwarded-For via trusted proxies)
 // and parses the User-Agent header for browser/OS/device information.
+const maxUserAgentLen = 1024
+
 func Extract(c *gin.Context) Meta {
 	rawUA := c.Request.UserAgent()
+	if len(rawUA) > maxUserAgentLen {
+		rawUA = rawUA[:maxUserAgentLen]
+	}
 	ua := useragent.New(rawUA)
 
 	browserName, browserVersion := ua.Browser()

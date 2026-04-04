@@ -2,6 +2,8 @@ package repository
 
 import (
 	"context"
+	"errors"
+	"regexp"
 
 	"github.com/google/uuid"
 	opts "github.com/qiniu/qmgo/options"
@@ -11,6 +13,9 @@ import (
 	"go.mongodb.org/mongo-driver/v2/bson"
 	"go.mongodb.org/mongo-driver/mongo/options"
 )
+
+// ErrLastAdmin is returned when an operation would leave zero admins.
+var ErrLastAdmin = errors.New("cannot remove or demote the last admin")
 
 const operationCollection = "operations"
 
@@ -29,6 +34,11 @@ type IOperationRepository interface {
 	RemoveMember(ctx context.Context, operationID uuid.UUID, userID uuid.UUID) error
 	UpdateMemberRole(ctx context.Context, operationID uuid.UUID, userID uuid.UUID, role models.OperationRole) error
 	FindByMemberID(ctx context.Context, userID uuid.UUID) ([]models.Operation, error)
+
+	// Safe membership operations — atomically enforce the last-admin invariant.
+	// Return ErrLastAdmin if the operation would leave zero admins.
+	RemoveMemberSafe(ctx context.Context, operationID uuid.UUID, userID uuid.UUID) error
+	UpdateMemberRoleSafe(ctx context.Context, operationID uuid.UUID, userID uuid.UUID, role models.OperationRole) error
 }
 
 type operationRepository struct {
@@ -160,11 +170,88 @@ func (r *operationRepository) FindByMemberID(ctx context.Context, userID uuid.UU
 	return ops, err
 }
 
+// lastAdminGuard is a MongoDB filter clause that matches only when it's safe
+// to remove or demote the given user. It passes when the user is NOT an admin,
+// or when there are >= 2 admins in the operation.
+func lastAdminGuard(userID uuid.UUID) bson.M {
+	return bson.M{"$or": bson.A{
+		// Member is not an admin — always safe
+		bson.M{"members": bson.M{"$elemMatch": bson.M{
+			"user_id": userID,
+			"role":    bson.M{"$ne": "admin"},
+		}}},
+		// Member IS an admin but there are >= 2 admins total
+		bson.M{"$expr": bson.M{"$gte": bson.A{
+			bson.M{"$size": bson.M{"$filter": bson.M{
+				"input": "$members",
+				"cond":  bson.M{"$eq": bson.A{"$$this.role", "admin"}},
+			}}},
+			2,
+		}}},
+	}}
+}
+
+// RemoveMemberSafe atomically removes a member only if doing so won't leave
+// the operation with zero admins. Returns ErrLastAdmin if the invariant
+// would be violated.
+func (r *operationRepository) RemoveMemberSafe(ctx context.Context, operationID uuid.UUID, userID uuid.UUID) error {
+	guard := lastAdminGuard(userID)
+	filter := bson.M{
+		"operation_id":    operationID,
+		"members.user_id": userID,
+	}
+	for k, v := range guard {
+		filter[k] = v
+	}
+
+	result, err := r.coll.UpdateAll(ctx, filter,
+		bson.M{"$pull": bson.M{"members": bson.M{"user_id": userID}}},
+	)
+	if err != nil {
+		return err
+	}
+	if result == nil || result.ModifiedCount == 0 {
+		return ErrLastAdmin
+	}
+	return nil
+}
+
+// UpdateMemberRoleSafe atomically changes a member's role only if doing so
+// won't leave zero admins. Returns ErrLastAdmin if the invariant would be
+// violated. Promotions to admin always succeed.
+func (r *operationRepository) UpdateMemberRoleSafe(ctx context.Context, operationID uuid.UUID, userID uuid.UUID, role models.OperationRole) error {
+	if role == models.OperationRoleAdmin {
+		// Promoting to admin — always safe, no guard needed.
+		return r.UpdateMemberRole(ctx, operationID, userID, role)
+	}
+
+	guard := lastAdminGuard(userID)
+	filter := bson.M{
+		"operation_id":    operationID,
+		"members.user_id": userID,
+	}
+	for k, v := range guard {
+		filter[k] = v
+	}
+
+	result, err := r.coll.UpdateAll(ctx, filter,
+		bson.M{"$set": bson.M{"members.$.role": role}},
+	)
+	if err != nil {
+		return err
+	}
+	if result == nil || result.ModifiedCount == 0 {
+		return ErrLastAdmin
+	}
+	return nil
+}
+
 func buildOperationSearchFilter(search string) bson.M {
 	if search == "" {
 		return bson.M{}
 	}
-	regex := bson.M{"$regex": search, "$options": "i"}
+	escaped := regexp.QuoteMeta(search)
+	regex := bson.M{"$regex": escaped, "$options": "i"}
 	return bson.M{"$or": bson.A{
 		bson.M{"name": regex},
 		bson.M{"description": regex},

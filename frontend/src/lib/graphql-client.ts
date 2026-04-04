@@ -30,6 +30,11 @@ export async function graphqlClient<TResult, TVariables>(
     }),
   })
 
+  if (!res.ok) {
+    const text = await res.text().catch(() => res.statusText)
+    throw new Error(`GraphQL request failed (${res.status}): ${text}`)
+  }
+
   const json = await res.json()
 
   if (json.errors && !json.data) {
@@ -37,12 +42,10 @@ export async function graphqlClient<TResult, TVariables>(
   }
 
   // Partial errors: data is usable but some fields may be null due to
-  // authorization failures or resolver errors. Surface them in dev so
-  // they don't go unnoticed.
+  // authorization failures or resolver errors. Always log so they don't
+  // go unnoticed.
   if (json.errors && json.data) {
-    if (import.meta.env.DEV) {
-      console.warn("[GraphQL] Partial errors:", json.errors)
-    }
+    console.warn("[GraphQL] Partial errors:", json.errors)
   }
 
   return json.data as TResult
