@@ -79,7 +79,28 @@ export function useScopedOperationGuard() {
     return () => { cancelled = true }
   }, [scopedId, isValidating, hasPermission, setValidating, unscopeOperation])
 
+  // --- Re-validate scope when tab regains focus ---
+  // SSE subscriptions disconnect when the tab is backgrounded. Membership or
+  // deletion changes during that window are missed, leaving a stale scope.
+  // Triggering validation on visibility change catches those cases.
+  useEffect(() => {
+    if (!scopedId) return
+
+    function handleVisibilityChange() {
+      if (document.visibilityState === "visible") {
+        setValidating(true)
+      }
+    }
+
+    document.addEventListener("visibilitychange", handleVisibilityChange)
+    return () => document.removeEventListener("visibilitychange", handleVisibilityChange)
+  }, [scopedId, setValidating])
+
   // --- Real-time: operation changes (rename, delete) ---
+  // Note: operation names shown in toasts are user-controlled content. Sonner
+  // renders as React nodes (not raw HTML) so this is not XSS, but crafted
+  // names could produce misleading toast text. Accepted risk — names are
+  // already visible throughout the UI.
   useSubscription(
     OperationChangedDocument,
     scopedId ? { operationId: scopedId } : undefined,

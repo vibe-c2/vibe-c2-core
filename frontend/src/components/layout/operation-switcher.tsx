@@ -1,4 +1,5 @@
-import { useEffect, useMemo, useRef, useState } from "react"
+import { useCallback, useEffect, useMemo, useRef, useState } from "react"
+import { Virtuoso, type VirtuosoHandle } from "react-virtuoso"
 import {
   CheckIcon,
   SwordsIcon,
@@ -22,12 +23,23 @@ export function OperationSwitcher() {
 
   const [open, setOpen] = useState(false)
   const [search, setSearch] = useState("")
+  const [debouncedSearch, setDebouncedSearch] = useState("")
   const [highlightedIndex, setHighlightedIndex] = useState(-1)
-  const inputRef = useRef<HTMLInputElement>(null)
-  const listRef = useRef<HTMLDivElement>(null)
+  const virtuosoRef = useRef<VirtuosoHandle>(null)
 
-  const { data, isLoading } = useInfiniteOperations({
-    search: search || null,
+  // Callback ref — focuses the search input when the popover mounts it.
+  const inputCallbackRef = useCallback((node: HTMLInputElement | null) => {
+    if (node) node.focus()
+  }, [])
+
+  // Debounce search — fires query 300ms after the user stops typing.
+  useEffect(() => {
+    const timeout = setTimeout(() => setDebouncedSearch(search), 300)
+    return () => clearTimeout(timeout)
+  }, [search])
+
+  const { data, isLoading, isFetchingNextPage, hasNextPage, fetchNextPage } = useInfiniteOperations({
+    search: debouncedSearch || null,
     first: 20,
   })
 
@@ -40,9 +52,8 @@ export function OperationSwitcher() {
   useEffect(() => {
     if (open) {
       setSearch("")
+      setDebouncedSearch("")
       setHighlightedIndex(-1)
-      // Auto-focus the search input after the popover renders.
-      requestAnimationFrame(() => inputRef.current?.focus())
     }
   }, [open])
 
@@ -51,11 +62,10 @@ export function OperationSwitcher() {
     setHighlightedIndex(-1)
   }, [operations])
 
-  // Scroll highlighted item into view.
+  // Scroll highlighted item into view via Virtuoso.
   useEffect(() => {
-    if (highlightedIndex >= 0 && listRef.current) {
-      const el = listRef.current.children[highlightedIndex] as HTMLElement | undefined
-      el?.scrollIntoView({ block: "nearest" })
+    if (highlightedIndex >= 0) {
+      virtuosoRef.current?.scrollToIndex({ index: highlightedIndex, behavior: "auto" })
     }
   }, [highlightedIndex])
 
@@ -75,6 +85,9 @@ export function OperationSwitcher() {
       setHighlightedIndex((prev) =>
         prev > 0 ? prev - 1 : operations.length - 1,
       )
+    } else if (e.key === "Escape") {
+      e.preventDefault()
+      setOpen(false)
     } else if (e.key === "Enter") {
       e.preventDefault()
       if (highlightedIndex >= 0 && highlightedIndex < operations.length) {
@@ -151,7 +164,7 @@ export function OperationSwitcher() {
         <div className="relative">
           <SearchIcon className="pointer-events-none absolute left-2 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground" />
           <Input
-            ref={inputRef}
+            ref={inputCallbackRef}
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             onKeyDown={handleKeyDown}
@@ -161,21 +174,29 @@ export function OperationSwitcher() {
         </div>
 
         {/* Operations list */}
-        <div ref={listRef} className="max-h-64 overflow-y-auto" role="listbox">
-          {isLoading && (
-            <div className="flex items-center justify-center gap-2 py-4 text-sm text-muted-foreground">
-              <LoaderIcon className="size-3.5 animate-spin" />
-            </div>
-          )}
+        {isLoading && (
+          <div className="flex items-center justify-center gap-2 py-4 text-sm text-muted-foreground">
+            <LoaderIcon className="size-3.5 animate-spin" />
+          </div>
+        )}
 
-          {!isLoading && operations.length === 0 && (
-            <div className="py-4 text-center text-sm text-muted-foreground">
-              No operations found
-            </div>
-          )}
+        {!isLoading && operations.length === 0 && (
+          <div className="py-4 text-center text-sm text-muted-foreground">
+            No operations found
+          </div>
+        )}
 
-          {!isLoading &&
-            operations.map((op, index) => {
+        {!isLoading && operations.length > 0 && (
+          <Virtuoso
+            ref={virtuosoRef}
+            data={operations}
+            style={{ height: "256px" }}
+            endReached={() => {
+              if (hasNextPage && !isFetchingNextPage) fetchNextPage()
+            }}
+            overscan={100}
+            role="listbox"
+            itemContent={(index, op) => {
               const isActive = scopedOperation?.id === op.id
 
               return (
@@ -209,8 +230,21 @@ export function OperationSwitcher() {
                   )}
                 </button>
               )
-            })}
-        </div>
+            }}
+            components={{
+              Footer: () => {
+                if (isFetchingNextPage) {
+                  return (
+                    <div className="flex items-center justify-center py-2">
+                      <LoaderIcon className="size-3.5 animate-spin" />
+                    </div>
+                  )
+                }
+                return null
+              },
+            }}
+          />
+        )}
       </PopoverContent>
     </Popover>
   )

@@ -56,8 +56,22 @@ func (r *subscriptionResolver) buildOperationFilter(ctx context.Context, auth gq
 			}
 		}
 
+		// Track whether the subscriber's membership was revoked mid-subscription.
+		// Safe to mutate — the filter is only called from a single dispatch goroutine.
+		revoked := false
 		return func(event eventbus.Event) bool {
-			return extractOperationID(event) == target
+			if extractOperationID(event) != target {
+				return false
+			}
+			// If this user was removed from the operation, deliver the removal
+			// event (so the client can react) then stop all future events.
+			if p, ok := event.Payload.(eventbus.OperationMemberPayload); ok &&
+				p.MemberID == auth.UserID &&
+				event.Topic == eventbus.TopicOperationMemberRemoved {
+				revoked = true
+				return true
+			}
+			return !revoked
 		}, nil
 	}
 

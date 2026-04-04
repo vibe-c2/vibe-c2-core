@@ -1,4 +1,5 @@
 import { create } from "zustand"
+import { useAuthStore } from "@/stores/auth"
 
 export interface ScopedOperation {
   id: string
@@ -64,6 +65,7 @@ export const useScopedOperationStore = create<ScopedOperationState>((set) => ({
   },
 
   reset: () => {
+    activeUserId = null
     set({ scopedOperation: null, isValidating: false })
   },
 
@@ -77,3 +79,10 @@ export const useScopedOperationStore = create<ScopedOperationState>((set) => ({
 
   setValidating: (v) => set({ isValidating: v }),
 }))
+
+// Auto-reset scope when the user logs out (localStorage preserved for re-login restore).
+useAuthStore.subscribe((state, prevState) => {
+  if (prevState.isAuthenticated && !state.isAuthenticated) {
+    useScopedOperationStore.getState().reset()
+  }
+})

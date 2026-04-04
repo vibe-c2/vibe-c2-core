@@ -1,4 +1,5 @@
 import { useMemo, useState } from "react"
+import { Virtuoso } from "react-virtuoso"
 import { LoaderIcon, ShieldAlertIcon, ShieldXIcon } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import {
@@ -117,46 +118,57 @@ export function MySessionsDialog() {
           )}
 
           {/* Session list */}
-          <div className="flex-1 overflow-y-auto space-y-2 min-h-0">
-            {isLoading && (
-              <div className="space-y-2">
-                {Array.from({ length: 3 }).map((_, i) => (
-                  <Skeleton key={i} className="h-20 w-full" />
-                ))}
-              </div>
-            )}
+          {isLoading && (
+            <div className="space-y-2">
+              {Array.from({ length: 3 }).map((_, i) => (
+                <Skeleton key={i} className="h-20 w-full" />
+              ))}
+            </div>
+          )}
 
-            {!isLoading && sessions.length === 0 && (
-              <div className="flex items-center justify-center py-8 text-sm text-muted-foreground">
-                No sessions found.
-              </div>
-            )}
+          {!isLoading && sessions.length === 0 && (
+            <div className="flex items-center justify-center py-8 text-sm text-muted-foreground">
+              No sessions found.
+            </div>
+          )}
 
-            {sessions.map((session) => (
-              <SessionItem
-                key={session.id}
-                session={session}
-                onRevoke={(id) => openRevokeDialog(id, false)}
-              />
-            ))}
-
-            {hasNextPage && (
-              <div className="flex justify-center py-2">
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => fetchNextPage()}
-                  disabled={isFetchingNextPage}
-                >
-                  {isFetchingNextPage ? (
-                    <LoaderIcon className="size-4 animate-spin" />
-                  ) : (
-                    "Load more"
-                  )}
-                </Button>
-              </div>
-            )}
-          </div>
+          {!isLoading && sessions.length > 0 && (
+            <Virtuoso
+              data={sessions}
+              style={{ height: "400px" }}
+              endReached={() => {
+                if (hasNextPage && !isFetchingNextPage) fetchNextPage()
+              }}
+              overscan={100}
+              itemContent={(_index, session) => (
+                <div className="pb-2">
+                  <SessionItem
+                    session={session}
+                    onRevoke={(id) => openRevokeDialog(id, false)}
+                  />
+                </div>
+              )}
+              components={{
+                Footer: () => {
+                  if (isFetchingNextPage) {
+                    return (
+                      <div className="flex items-center justify-center py-4">
+                        <LoaderIcon className="size-4 animate-spin" />
+                      </div>
+                    )
+                  }
+                  if (!hasNextPage && sessions.length > 0) {
+                    return (
+                      <div className="flex items-center justify-center py-4 text-sm text-muted-foreground">
+                        No more sessions to load
+                      </div>
+                    )
+                  }
+                  return null
+                },
+              }}
+            />
+          )}
         </DialogContent>
       </Dialog>
       <RevokeSessionDialog />

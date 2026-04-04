@@ -100,11 +100,13 @@ func (r *schemeNetworkPointRepository) CountByOperationID(ctx context.Context, o
 }
 
 func (r *schemeNetworkPointRepository) Update(ctx context.Context, point *models.SchemeNetworkPoint, updates map[string]interface{}) error {
-	return r.coll.UpdateOne(ctx, bson.M{"point_id": point.PointID}, bson.M{"$set": updates})
+	// Defense-in-depth: filter includes operation_id so a resolver bug cannot
+	// accidentally mutate a point belonging to a different operation.
+	return r.coll.UpdateOne(ctx, bson.M{"point_id": point.PointID, "operation_id": point.OperationID}, bson.M{"$set": updates})
 }
 
 func (r *schemeNetworkPointRepository) Delete(ctx context.Context, point *models.SchemeNetworkPoint) error {
-	return r.coll.Remove(ctx, bson.M{"point_id": point.PointID})
+	return r.coll.Remove(ctx, bson.M{"point_id": point.PointID, "operation_id": point.OperationID})
 }
 
 func (r *schemeNetworkPointRepository) DeleteByOperationID(ctx context.Context, operationID uuid.UUID) error {

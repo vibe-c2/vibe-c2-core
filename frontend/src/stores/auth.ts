@@ -1,7 +1,6 @@
 import { create } from "zustand"
 import type { SessionResponse } from "@/services/auth"
 import { authService } from "@/services/auth"
-import { useScopedOperationStore } from "@/stores/scoped-operation"
 
 interface User {
   userId: string
@@ -40,8 +39,6 @@ export const useAuthStore = create<AuthState>((set, get) => ({
 
   clearSession: () => {
     set({ user: null, isAuthenticated: false, isLoading: false })
-    // Clear in-memory scope state (localStorage preserved so scope restores on re-login).
-    useScopedOperationStore.getState().reset()
   },
 
   logout: async () => {

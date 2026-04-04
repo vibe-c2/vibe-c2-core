@@ -25,6 +25,8 @@ export function ProtectedRoute({ permission }: { permission?: string }) {
   // Validate the restored scope and subscribe to real-time changes.
   useScopedOperationGuard()
 
+  const isValidating = useScopedOperationStore((s) => s.isValidating)
+
   // Still validating the session via /login/me on page reload
   if (isLoading) {
     return (
@@ -40,6 +42,17 @@ export function ProtectedRoute({ permission }: { permission?: string }) {
 
   if (permission && !hasPermission(permission)) {
     return <Navigate to="/" replace />
+  }
+
+  // Block rendering while the scoped operation is being validated (e.g. after
+  // hydrate from localStorage or tab re-focus). Prevents briefly showing stale
+  // scoped pages before a redirect if validation fails.
+  if (isValidating) {
+    return (
+      <div className="flex min-h-svh items-center justify-center">
+        <div className="text-muted-foreground">Loading...</div>
+      </div>
+    )
   }
 
   return <Outlet />
