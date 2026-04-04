@@ -12,19 +12,28 @@ Inspired by [Outline](https://getoutline.com), adapted for the C2 team collabora
 
 The wiki uses a **single `WikiDocument` entity** that forms a recursive tree. Every document is equal — it can have content, children, an icon, and a color. Root-level documents (parentDocumentId = nil) appear as top-level entries in the sidebar; nested documents appear under their parent. There is no distinction between "collections" and "pages" — all documents are the same.
 
-**Why:** A single uniform entity is simpler — one model, one repository, one resolver. Any document can gain children at any time, nesting depth is unlimited, and reparenting is a single field update.
+**Why:** A single uniform entity is simpler — one model, one repository, one resolver. Any document can gain children at any time, and reparenting is a single field update.
 
 **How it works:**
 - All documents have `icon` and `color` for visual identity
 - Any document can have content AND children simultaneously
-- Moving a document is just reparenting: `updateWikiDocument(id, {parentDocumentId: newParentId})`
+- Moving a document is just an update: `updateWikiDocument(id, {parentDocumentId: newParentId, sortOrder: newOrder})`
 - The frontend decides rendering based on tree depth (indentation, expansion, etc.)
 
 ### 2.2 No Document Status / Lifecycle States
 
-Documents have no draft/published/archived status. Every document is live and visible to all operation members once created. Deletion is permanent (hard delete).
+Documents have no draft/published/archived status. Every document is live and visible to all operation members once created. There is no publishing workflow.
 
-**Why:** In a C2 team context, documents are working artifacts — not publishing workflows. Draft/archive states add UI and backend complexity without clear value. If a document isn't ready, the author simply doesn't share the link. If it's obsolete, delete it.
+**Deletion is soft delete** — deleting a document moves it to the operation's trash can. Trashed documents are hidden from all normal queries but can be browsed and restored. Children of a deleted document are also moved to trash alongside their parent.
+
+**Trash can behavior:**
+- Each operation has a trash view listing soft-deleted documents
+- Restore from trash puts a document back at its original tree position (preserves `parentDocumentId`). If the original parent was also permanently deleted, the document is restored to root level.
+- "Permanently delete" removes a single document from trash (admin only, hard delete)
+- "Empty trash" permanently deletes all trashed documents in an operation (admin only)
+- A pre-delete backup is auto-created before soft-deleting, so the document's state is always recoverable even after permanent deletion from trash
+
+**Why:** In a C2 team context, documents are working artifacts — not publishing workflows. Draft/archive states add UI and backend complexity without clear value. Soft delete with trash provides an undo safety net without adding lifecycle complexity.
 
 ### 2.3 Backups Instead of Revisions
 
@@ -34,23 +43,54 @@ Documents use **periodic backups** instead of per-edit revisions. With real-time
 - **Automatic** — the system creates a backup every N minutes (configurable, default 30min). Only created if content actually changed since the last backup.
 - **Manual** — any operator can trigger a backup with an optional description (e.g., "Before restructuring section 3").
 
-**Why:** Revisions tied to saves are incompatible with continuous collaborative editing. Backups give predictable storage growth, meaningful restore points, and user control over what gets snapshotted.
+**Safety backups** are auto-created before destructive operations:
+- Before soft-deleting a document → backup with description "Pre-delete snapshot"
+- Before restoring from a backup → backup with description "Pre-restore snapshot"
+
+**Why:** Revisions tied to saves are incompatible with continuous collaborative editing. Backups give predictable storage growth, meaningful restore points, and user control over what gets snapshotted. Safety backups ensure no data is lost even during delete/restore operations.
 
 ### 2.4 Permissions Inherit from Operation Membership
 
-No per-document ACLs in MVP. The existing operation role hierarchy (admin > operator > viewer) governs all wiki access. All operation members see all wiki content at their role level.
+No per-document ACLs. The existing operation role hierarchy (admin > operator > viewer) governs all wiki access. All operation members see all wiki content at their role level.
 
-**Why:** C2 teams are small and trusted at their role level. Per-document ACLs add complexity with limited benefit. Can be added in Phase 3 if needed.
+**Authorization is extracted to a shared package** (`core/pkg/authorization`) so both the operation resolver and wiki resolver use the same logic. The existing private `authorizeOperationRole` method on `operationResolver` is refactored into a public `AuthorizeOperationRole` function in this shared package.
+
+**Why:** C2 teams are small and trusted at their role level. Per-document ACLs add complexity with limited benefit. A shared authorization package prevents drift between resolvers.
 
 ### 2.5 Content Stored as Markdown
 
-The `content` field stores Markdown as a plain string. This is the single source of truth for MVP. When real-time collaboration is added (Phase 3), a parallel `contentState` field stores Y.js/ProseMirror CRDT state, and Markdown is regenerated on each save.
+The `content` field stores Markdown as a plain string. This is the single source of truth. When real-time collaboration is added (future work), a parallel `contentState` field stores Y.js/ProseMirror CRDT state, and Markdown is regenerated on each save.
 
 **Why:** Markdown is portable, grep-able, and simple to implement. ProseMirror JSON is only needed for real-time CRDT sync.
 
-### 2.6 Real-Time Collaboration in Phase 3
+### 2.6 Fractional Indexing for Sort Order
 
-Real-time co-editing requires WebSocket with Y.js CRDT — a dedicated WebSocket endpoint alongside existing GraphQL SSE subscriptions. Not in MVP.
+Documents use **fractional indexing** (lexicographic strings) for sort order instead of numeric floats. Fractional index strings (e.g. `"a0"`, `"a0V"`, `"Zz"`) allow unlimited insertions between any two positions without precision loss.
+
+**Why:** Float-based ordering degrades after ~50 insertions in the same gap due to IEEE 754 precision limits. Fractional indexing is used by Figma, Linear, and other collaborative tools for this reason. No periodic rebalancing is needed.
+
+**How it works:**
+- New documents get an index after the last sibling
+- Inserting between two documents generates a string lexicographically between their indices
+- The `sortOrder` field is a string, sorted with standard string comparison
+
+### 2.7 Optimistic Locking
+
+Documents have a `version` field (integer, starts at 1) that increments on every successful update. The `updateWikiDocument` mutation requires the caller to send the current `version` — if it doesn't match the stored version, the mutation returns a conflict error.
+
+**Why:** Before real-time CRDT collaboration, two operators can edit the same document simultaneously. Without locking, the last write silently overwrites the first. Optimistic locking detects conflicts and lets the client handle them (e.g., reload and retry). This is a lightweight solution that works well for small teams.
+
+### 2.8 Content and Tree Limits
+
+Conservative limits are enforced at the resolver level on create and update:
+
+| Limit | Value |
+|-------|-------|
+| Content size | 1 MB |
+| Title length | 200 characters |
+| Max nesting depth | 10 levels |
+
+**Why:** Unbounded content could bloat MongoDB documents, backups, and GraphQL responses. Nesting depth limits prevent unusable deep trees and keep recursive queries bounded. Limits are enforced in the resolver (not DB-level constraints) so error messages are clear.
 
 ## 3. Data Models
 
@@ -65,12 +105,15 @@ type WikiDocument struct {
     Title              string     `bson:"title" json:"title"`
     Content            string     `bson:"content" json:"content"`
     Emoji              string     `bson:"emoji" json:"emoji"`
-    Color              string     `bson:"color" json:"color"`          // hex color for UI
-    Icon               string     `bson:"icon" json:"icon"`            // icon identifier
-    SortOrder          float64    `bson:"sort_order" json:"sortOrder"` // float for insertions between
+    Color              string     `bson:"color" json:"color"`            // hex color for UI
+    Icon               string     `bson:"icon" json:"icon"`              // icon identifier
+    SortOrder          string     `bson:"sort_order" json:"sortOrder"`   // fractional index string
+    Version            int64      `bson:"version" json:"version"`        // optimistic locking, starts at 1
     CreatedByID        uuid.UUID  `bson:"created_by_id" json:"createdById"`
     LastEditedByID     uuid.UUID  `bson:"last_edited_by_id" json:"lastEditedById"`
     LastBackupAt       *time.Time `bson:"last_backup_at,omitempty" json:"lastBackupAt,omitempty"`
+    DeletedAt          *time.Time `bson:"deleted_at,omitempty" json:"deletedAt,omitempty"`
+    DeletedByID        *uuid.UUID `bson:"deleted_by_id,omitempty" json:"deletedById,omitempty"`
 }
 ```
 
@@ -78,10 +121,11 @@ type WikiDocument struct {
 
 **Indexes:**
 - `{document_id: 1}` (unique)
-- `{operation_id: 1}` (list all docs in operation)
-- `{operation_id: 1, parent_document_id: 1}` (tree queries — list children, list roots when null)
+- `{operation_id: 1, deleted_at: 1}` (list docs in operation, filter active vs trashed)
+- `{operation_id: 1, parent_document_id: 1, deleted_at: 1}` (tree queries — children, roots)
 - `{createAt: -1, _id: -1}` (cursor pagination)
-- `{operation_id: 1, title: "text", content: "text"}` (text search — Phase 2)
+- `{operation_id: 1, title: "text", content: "text"}` (full-text search)
+- `{last_backup_at: 1, updateAt: 1}` (auto-backup polling — find changed docs)
 
 ### 3.2 WikiDocumentBackup
 
@@ -101,7 +145,7 @@ type WikiDocumentBackup struct {
     Title              string                    `bson:"title" json:"title"`
     Content            string                    `bson:"content" json:"content"`
     Trigger            WikiDocumentBackupTrigger `bson:"trigger" json:"trigger"`
-    Description        string                    `bson:"description" json:"description"` // user-provided label for manual backups
+    Description        string                    `bson:"description" json:"description"` // user-provided label for manual, system label for safety backups
     CreatedByID        uuid.UUID                 `bson:"created_by_id" json:"createdById"`
 }
 ```
@@ -133,11 +177,14 @@ type WikiDocument {
   emoji: String!
   color: String!                     # hex color
   icon: String!                      # icon identifier
-  sortOrder: Float!
-  childCount: Int!                   # computed: number of children
+  sortOrder: String!                 # fractional index
+  version: Int!                      # optimistic locking
+  childCount: Int!                   # computed: number of active (non-deleted) children
   createdBy: User!
   lastEditedBy: User!
   lastBackupAt: String
+  deletedAt: String                  # null if active, ISO timestamp if trashed
+  deletedBy: User                    # null if active
   createdAt: String!
   updatedAt: String!
 }
@@ -159,7 +206,7 @@ type WikiDocumentBackup {
   title: String!
   content: String!
   trigger: WikiDocumentBackupTrigger!
-  description: String!               # empty for auto backups
+  description: String!               # empty for auto backups, system label for safety backups
   createdBy: User!
   createdAt: String!
 }
@@ -186,6 +233,7 @@ input CreateWikiDocumentInput {
   emoji: String
   color: String
   icon: String
+  sortOrder: String                  # fractional index; server generates if omitted
 }
 
 input UpdateWikiDocumentInput {
@@ -195,7 +243,8 @@ input UpdateWikiDocumentInput {
   color: String
   icon: String
   parentDocumentId: ID               # reparent (null = move to root)
-  sortOrder: Float
+  sortOrder: String                  # fractional index
+  version: Int!                      # required — reject if stale
 }
 ```
 
@@ -207,7 +256,7 @@ extend type Query {
   wikiDocument(id: ID!): WikiDocument!
     @hasPermission(permission: "operation:member")
 
-  # List wiki documents within an operation.
+  # List wiki documents within an operation (active documents only).
   # Pass parentDocumentId to list children of a specific document.
   # Omit parentDocumentId to list all documents (flat, for search).
   wikiDocuments(
@@ -221,9 +270,19 @@ extend type Query {
   ): WikiDocumentConnection!
     @hasPermission(permission: "operation:member")
 
-  # Get the full document tree for an operation.
+  # Get the full document tree for an operation (active documents only).
   # Returns a flat list; the frontend reconstructs the tree via parentDocument references.
   wikiDocumentTree(operationId: ID!): [WikiDocument!]!
+    @hasPermission(permission: "operation:member")
+
+  # List soft-deleted documents in the operation's trash.
+  wikiDocumentTrash(
+    operationId: ID!
+    first: Int = 20
+    after: String
+    last: Int
+    before: String
+  ): WikiDocumentConnection!
     @hasPermission(permission: "operation:member")
 
   # List backups for a document, newest first.
@@ -254,23 +313,35 @@ extend type Mutation {
   updateWikiDocument(id: ID!, input: UpdateWikiDocumentInput!): WikiDocument!
     @hasPermission(permission: "operation:member")
 
+  # Soft delete — moves document and its children to trash.
+  # Auto-creates a pre-delete backup for each affected document.
   deleteWikiDocument(id: ID!): Boolean!
+    @hasPermission(permission: "operation:member")
+
+  # Restore a soft-deleted document from trash.
+  # Restores to original tree position; falls back to root if parent was permanently deleted.
+  restoreWikiDocument(id: ID!): WikiDocument!
+    @hasPermission(permission: "operation:member")
+
+  # Permanently delete a single document from trash (hard delete). Admin only.
+  permanentlyDeleteWikiDocument(id: ID!): Boolean!
+    @hasPermission(permission: "operation:member")
+
+  # Permanently delete all trashed documents in an operation. Admin only.
+  emptyWikiDocumentTrash(operationId: ID!): Boolean!
     @hasPermission(permission: "operation:member")
 
   # Manual backup — snapshot the current document state with an optional description
   createWikiDocumentBackup(documentId: ID!, description: String): WikiDocumentBackup!
     @hasPermission(permission: "operation:member")
 
-  # Restore from backup — replaces document content with the backup's content
+  # Restore from backup — replaces document content with the backup's content.
+  # Auto-creates a pre-restore backup before overwriting.
   restoreWikiDocumentBackup(documentId: ID!, backupId: ID!): WikiDocument!
     @hasPermission(permission: "operation:member")
 
   # Delete a specific backup
   deleteWikiDocumentBackup(id: ID!): Boolean!
-    @hasPermission(permission: "operation:member")
-
-  # Move a document to a new parent (convenience mutation for drag-and-drop)
-  moveWikiDocument(id: ID!, parentDocumentId: ID, sortOrder: Float!): WikiDocument!
     @hasPermission(permission: "operation:member")
 }
 ```
@@ -292,23 +363,27 @@ extend type Subscription {
 }
 ```
 
+**Subscription filtering:** The `wikiDocumentChanged` subscription must verify the subscriber is a member of the specified operation, using the same `buildOperationFilter` pattern as the existing `OperationChanged` subscription. If membership is revoked mid-subscription, event delivery stops.
+
 ## 5. Permission Model
 
-All wiki GraphQL fields use `@hasPermission(permission: "operation:member")` as the app-level gate. The resolver checks operation membership and enforces role requirements:
+All wiki GraphQL fields use `@hasPermission(permission: "operation:member")` as the app-level gate. The resolver checks operation membership via the shared `authorization.AuthorizeOperationRole` function and enforces role requirements:
 
 | Action | Minimum Role | Notes |
 |--------|-------------|-------|
 | Read documents | `viewer` | All operation members can read |
+| Browse trash | `viewer` | View soft-deleted documents |
 | Create document | `operator` | |
 | Edit document | `operator` | |
-| Move / reparent | `operator` | Rearrange tree structure |
-| Delete document | `admin` | Hard delete; reparents children |
+| Move / reparent | `operator` | Via `updateWikiDocument` with `parentDocumentId` + `sortOrder` |
+| Soft delete document | `operator` | Moves to trash; auto-creates pre-delete backup |
+| Restore from trash | `operator` | Restores to original tree position |
+| Permanently delete (from trash) | `admin` | Hard delete; irreversible |
+| Empty trash | `admin` | Hard delete all trashed docs in operation |
 | View backups | `viewer` | Read-only history |
 | Create manual backup | `operator` | Snapshot current state |
-| Restore from backup | `operator` | Replaces document content |
+| Restore from backup | `operator` | Replaces document content; auto-creates pre-restore backup |
 | Delete backup | `admin` | |
-
-Reuses the existing `authorizeForOperation` pattern from `SchemeNetworkPointResolver`.
 
 ## 6. Repository Interface
 
@@ -319,6 +394,7 @@ type WikiDocumentFilter struct {
     ParentDocumentID *uuid.UUID  // set = children of that doc
     RootsOnly        bool        // true = only root documents (parentDocumentID is nil)
     Search           string
+    Trashed          bool        // true = only soft-deleted docs, false = only active docs
 }
 
 type IWikiDocumentRepository interface {
@@ -327,12 +403,18 @@ type IWikiDocumentRepository interface {
     FindByOperationIDWithCursor(ctx context.Context, opID uuid.UUID, filter WikiDocumentFilter, cursor *pagination.Cursor, limit int64, forward bool) ([]models.WikiDocument, error)
     CountByOperationID(ctx context.Context, opID uuid.UUID, filter WikiDocumentFilter) (int64, error)
     FindChildDocuments(ctx context.Context, parentID uuid.UUID) ([]models.WikiDocument, error)
-    FindAllByOperationID(ctx context.Context, opID uuid.UUID) ([]models.WikiDocument, error)  // for tree query
-    CountChildDocuments(ctx context.Context, parentID uuid.UUID) (int64, error)                // for childCount field
-    ReparentChildren(ctx context.Context, oldParentID uuid.UUID, newParentID *uuid.UUID) error // for cascade on delete
-    Update(ctx context.Context, doc *models.WikiDocument, updates map[string]interface{}) error
-    Delete(ctx context.Context, doc *models.WikiDocument) error
-    DeleteByOperationID(ctx context.Context, opID uuid.UUID) error
+    FindAllByOperationID(ctx context.Context, opID uuid.UUID) ([]models.WikiDocument, error)  // for tree query (active only)
+    CountChildDocuments(ctx context.Context, parentID uuid.UUID) (int64, error)                // for childCount field (active only)
+    FindDescendants(ctx context.Context, docID uuid.UUID) ([]models.WikiDocument, error)       // for cascading soft-delete to children
+    NestingDepth(ctx context.Context, parentID uuid.UUID) (int, error)                         // for enforcing max depth
+    SoftDelete(ctx context.Context, doc *models.WikiDocument, deletedByID uuid.UUID) error
+    SoftDeleteBatch(ctx context.Context, docIDs []uuid.UUID, deletedByID uuid.UUID) error      // for cascading children
+    Restore(ctx context.Context, doc *models.WikiDocument) error
+    Update(ctx context.Context, doc *models.WikiDocument, updates map[string]interface{}) error  // checks version for optimistic locking
+    HardDelete(ctx context.Context, doc *models.WikiDocument) error
+    HardDeleteByOperationID(ctx context.Context, opID uuid.UUID) error                          // cascade on operation delete
+    HardDeleteTrashed(ctx context.Context, opID uuid.UUID) error                                // empty trash
+    FindChangedSinceLastBackup(ctx context.Context, batchSize int64) ([]models.WikiDocument, error)  // for auto-backup job
 }
 ```
 
@@ -356,10 +438,12 @@ type IWikiDocumentBackupRepository interface {
 ### Topics
 
 ```go
-TopicWikiDocumentCreated Topic = "wiki.document.created"
-TopicWikiDocumentUpdated Topic = "wiki.document.updated"
-TopicWikiDocumentDeleted Topic = "wiki.document.deleted"
-TopicWikiDocumentMoved   Topic = "wiki.document.moved"
+TopicWikiDocumentCreated     Topic = "wiki.document.created"
+TopicWikiDocumentUpdated     Topic = "wiki.document.updated"
+TopicWikiDocumentSoftDeleted Topic = "wiki.document.soft_deleted"
+TopicWikiDocumentRestored    Topic = "wiki.document.restored"
+TopicWikiDocumentMoved       Topic = "wiki.document.moved"
+TopicWikiDocumentHardDeleted Topic = "wiki.document.hard_deleted"
 ```
 
 ### Payload
@@ -368,8 +452,9 @@ TopicWikiDocumentMoved   Topic = "wiki.document.moved"
 type WikiDocumentEventPayload struct {
     DocumentID       string
     OperationID      string
-    ParentDocumentID string  // empty if root
+    ParentDocumentID string     // empty if root
     Title            string
+    DeletedAt        string     // empty if active, ISO timestamp if soft-deleted
 }
 ```
 
@@ -379,48 +464,89 @@ type WikiDocumentEventPayload struct {
 
 A background goroutine runs on a configurable interval (default: 30 minutes). On each tick:
 
-1. Find all documents where `updatedAt > lastBackupAt` (or `lastBackupAt` is nil)
+1. Call `FindChangedSinceLastBackup` to find documents where `updateAt > lastBackupAt` (or `lastBackupAt` is nil), limited to a batch size (default: 100)
 2. For each changed document, create a `WikiDocumentBackup` with `trigger: auto`
 3. Update the document's `lastBackupAt` timestamp
+4. If any individual backup fails, log the error and continue with the next document
+
+**Design constraints:**
+- Uses the `{last_backup_at: 1, updateAt: 1}` index for efficient polling
+- Processes in batches to prevent long-running ticks
+- Each tick has a context timeout to prevent overlap with the next tick
+- Uses `ActorSystem()` for event bus events
 
 The interval is configurable via environment variable (e.g., `WIKI_AUTO_BACKUP_INTERVAL=30m`).
+
+### Safety Backups
+
+Auto-created before destructive operations:
+- **Pre-delete:** Before `deleteWikiDocument` soft-deletes a document, create a backup with `trigger: auto` and `description: "Pre-delete snapshot"`. Applied to each document being moved to trash (parent + descendants).
+- **Pre-restore:** Before `restoreWikiDocumentBackup` overwrites document content, create a backup with `trigger: auto` and `description: "Pre-restore snapshot"`.
 
 ### Manual Backups
 
 Any operator can call `createWikiDocumentBackup(documentId, description)` to snapshot the current state. Manual backups always succeed regardless of whether content changed — the user explicitly wants a checkpoint.
 
-### Restore
+### Restore from Backup
 
-`restoreWikiDocumentBackup` replaces the document's `title` and `content` with the backup's values. This is a regular edit — it triggers a new auto-backup on the next cycle if the interval has elapsed.
+`restoreWikiDocumentBackup` replaces the document's `title` and `content` with the backup's values. A pre-restore safety backup is created first. The restore increments the document's `version` (it's a regular update). This triggers a new auto-backup on the next cycle if the interval has elapsed.
 
-### Retention (Phase 2+)
+### Retention
 
-MVP keeps all backups. Future retention policy options:
+MVP keeps all backups. Manual empty-trash purges backups for permanently deleted documents. Future retention policy options:
 - Keep all manual backups indefinitely (user intentionally created them)
 - Auto-backups: keep last N per document (e.g., 50) or time-based pruning
 - Configurable per operation or globally
 
 ## 9. Search Strategy
 
-| Phase | Approach | Details |
-|-------|----------|---------|
-| Phase 1 | Regex on title | Same pattern as `buildOperationSearchFilter` — case-insensitive, escaped |
-| Phase 2 | MongoDB text index | `$text` with `$search` on `{title, content}` — word-level full-text with stemming |
-| Phase 3 | External engine (optional) | Meilisearch/Elasticsearch synced via EventBus subscribers |
+Full-text search is available from day one via MongoDB text index on `{operation_id, title, content}`.
+
+| Feature | Details |
+|---------|---------|
+| Title regex | Same pattern as `buildOperationSearchFilter` — case-insensitive, escaped. Used when `search` param is short or for prefix matching. |
+| MongoDB text index | `$text` with `$search` on `{title, content}` — word-level full-text with stemming. Used for longer search queries. |
+| Future: external engine | Meilisearch/Elasticsearch synced via EventBus subscribers (if needed for advanced ranking/highlighting). |
 
 ## 10. Cascade Deletion
 
-### Operation deleted → delete all wiki data
+### Operation deleted → hard delete all wiki data
 
-In `OperationResolver.DeleteOperation`, call `DeleteByOperationID` on both wiki repositories (documents + backups). Same pattern as SchemeNetworkPoint cascade.
+In `OperationResolver.DeleteOperation`, call `HardDeleteByOperationID` on both wiki repositories (documents + backups). This deletes everything including trashed documents. Same pattern as SchemeNetworkPoint cascade.
 
-### Document deleted → reparent children + delete backups
+### Document soft-deleted → cascade to children
 
-1. Reparent child documents to the deleted document's parent (or `nil` for root-level) via `ReparentChildren`
-2. Delete all backups for the document via `DeleteByDocumentID`
-3. Delete the document
+1. Find all descendant documents via `FindDescendants`
+2. Create pre-delete safety backups for each document (parent + descendants)
+3. Soft-delete all descendants via `SoftDeleteBatch`
+4. Soft-delete the document itself
+
+### Document permanently deleted (from trash) → delete backups
+
+1. Delete all backups for the document via `DeleteByDocumentID`
+2. Hard-delete the document
+3. Note: children were already soft-deleted with the parent; they remain in trash independently
+
+### Empty trash → purge all trashed docs + their backups
+
+1. Find all trashed documents in operation
+2. Delete all backups for each trashed document
+3. Hard-delete all trashed documents via `HardDeleteTrashed`
 
 ## 11. App Wiring
+
+### New shared authorization package
+
+```
+core/pkg/authorization/operation_auth.go
+```
+
+Extract `authorizeOperationRole` from `operationResolver` into:
+```go
+func AuthorizeOperationRole(ctx context.Context, op *models.Operation, minRole models.OperationRole) error
+```
+
+Both `operationResolver` and `wikiDocumentResolver` import and call this function. The existing `operationResolver.authorizeOperationRole` private method is replaced with a call to the shared function.
 
 ### New fields in `app.go` Repositories struct
 
@@ -446,53 +572,65 @@ WikiDocumentResolver resolver.IWikiDocumentResolver
 
 ### gqlgen.yml additions
 
-Map `WikiDocument`, `WikiDocumentBackup`, and `WikiDocumentBackupTrigger` to Go models with field resolvers for computed/formatted fields (id, timestamps, parentDocument, childDocuments, createdBy, lastEditedBy, childCount).
+Map `WikiDocument`, `WikiDocumentBackup`, and `WikiDocumentBackupTrigger` to Go models with field resolvers for computed/formatted fields (id, timestamps, version, parentDocument, childDocuments, createdBy, lastEditedBy, deletedBy, childCount).
 
 ### Auto-backup background job
 
-Started in `NewApp()` or `Run()` — a goroutine with a ticker that calls the backup logic. Accepts a `context.Context` for graceful shutdown.
+Started in `NewApp()` or `Run()` — a goroutine with a ticker that calls the backup logic. Accepts a `context.Context` for graceful shutdown. Uses batched processing with per-tick timeouts.
 
-## 12. Phased Implementation
+## 12. Implementation
 
-### Phase 1 — MVP: Document Tree + Backups
+### New files
 
-**New files:**
 | File | Purpose |
 |------|---------|
+| `core/pkg/authorization/operation_auth.go` | Shared operation authorization helper |
 | `core/pkg/models/wiki_document.go` | WikiDocument model |
 | `core/pkg/models/wiki_document_backup.go` | WikiDocumentBackup + trigger enum |
-| `core/pkg/repository/wiki_document_repository.go` | Document data access + filter + tree ops |
+| `core/pkg/repository/wiki_document_repository.go` | Document data access + filter + tree ops + soft delete |
 | `core/pkg/repository/wiki_backup_repository.go` | Backup data access |
-| `core/pkg/resolver/wiki_document_resolver.go` | Document + backup business logic |
+| `core/pkg/resolver/wiki_document_resolver.go` | Document + backup + trash business logic |
 | `core/pkg/graphql/schema/wiki.graphql` | GraphQL schema |
 
-**Modified files:**
+### Modified files
+
 | File | Change |
 |------|--------|
+| `core/pkg/resolver/operation_resolver.go` | Replace private `authorizeOperationRole` with shared `authorization.AuthorizeOperationRole` |
 | `core/pkg/eventbus/eventbus.go` | Wiki topic constants |
-| `core/pkg/eventbus/payloads.go` | Wiki payload struct |
+| `core/pkg/eventbus/payloads.go` | Wiki payload struct + typed constructors |
 | `core/pkg/app/app.go` | Wiki repos in Repositories + NewApp + auto-backup goroutine |
 | `core/pkg/app/router.go` | Create wiki resolver, pass to NewHandler |
 | `core/pkg/graphql/handler.go` | Accept wiki resolver |
 | `core/pkg/graphql/resolver/resolver.go` | Wiki resolver field |
+| `core/pkg/graphql/resolver/subscriptions.resolvers.go` | Wiki subscription resolver |
 | `core/pkg/graphql/gqlgen.yml` | Wiki model mappings |
-| `core/pkg/resolver/operation_resolver.go` | Cascade delete wiki data |
+| `core/pkg/resolver/operation_resolver.go` | Cascade delete wiki data in DeleteOperation |
 
-**Deliverables:** Create documents at any level, nest documents in a tree, edit documents in Markdown, automatic periodic backups, manual backups with descriptions, restore from backup, move/reparent via drag-and-drop.
+### Deliverables
 
-### Phase 2 — Search + Real-Time Notifications + Backup Retention
+- Create documents at any level with fractional index ordering
+- Nest documents in a tree (max 10 levels)
+- Edit documents in Markdown with optimistic locking (version field)
+- Content limits (1MB content, 200-char title)
+- Soft delete with trash can (browse, restore, permanently delete, empty trash)
+- Automatic periodic backups with batched processing
+- Manual backups with descriptions
+- Safety backups before delete and restore operations
+- Restore from backup
+- Move/reparent via `updateWikiDocument`
+- Full-text search via MongoDB text index
+- Real-time subscriptions with operation membership filtering
+- Cascade deletion on operation delete
 
-- MongoDB text index on `wiki_documents`
-- Full-text search via `$text` query
-- GraphQL subscription for `wikiDocumentChanged`
-- Subscription resolver wired to EventBus
-- Backup retention policy (prune old auto-backups)
+## 13. Future Work
 
-### Phase 3 — Real-Time Collaboration + Advanced
+These features are explicitly out of scope for this implementation:
 
-- WebSocket endpoint for Y.js CRDT sync
-- `contentState` field (Y.js state) alongside Markdown
-- Presence indicators (who is viewing/editing)
-- Per-document permission overrides (optional ACL)
-- Public sharing links (token-based read access)
-- Document export (Markdown, PDF)
+- **Real-time co-editing:** WebSocket endpoint for Y.js CRDT sync, `contentState` field alongside Markdown
+- **Presence indicators:** Who is viewing/editing a document
+- **Per-document permissions:** Optional ACL overrides beyond operation roles
+- **Public sharing links:** Token-based read access for external viewers
+- **Document export:** Markdown, PDF export
+- **Backup retention policies:** Auto-prune old backups (keep last N, time-based)
+- **Trash auto-purge:** Configurable auto-purge period for trashed documents
