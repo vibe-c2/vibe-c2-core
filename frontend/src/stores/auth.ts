@@ -68,6 +68,9 @@ export const useAuthStore = create<AuthState>((set, get) => ({
 
   hasPermission: (permission) => {
     const user = get().user
-    return user?.permissions.includes(permission) ?? false
+    if (!user) return false
+    // The "admin" permission acts as a wildcard — grants all permissions,
+    // matching the backend behavior in permissions.HasPermission().
+    return user.permissions.includes("admin") || user.permissions.includes(permission)
   },
 }))

@@ -133,6 +133,11 @@ func (r *queryResolver) Users(ctx context.Context, search *string, first *int, a
 	return r.UserResolver.Users(ctx, search, first, after, last, before)
 }
 
+// UserSuggestions is the resolver for the userSuggestions field.
+func (r *queryResolver) UserSuggestions(ctx context.Context, search string, first *int) ([]*model.UserSuggestion, error) {
+	return r.UserResolver.UserSuggestions(ctx, search, first)
+}
+
 // Operation returns a single operation by its ID.
 func (r *queryResolver) Operation(ctx context.Context, id string) (*models.Operation, error) {
 	return r.OperationResolver.Operation(ctx, id)

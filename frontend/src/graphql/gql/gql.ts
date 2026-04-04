@@ -14,6 +14,20 @@ import type { TypedDocumentNode as DocumentNode } from '@graphql-typed-document-
  * Learn more about it here: https://the-guild.dev/graphql/codegen/plugins/presets/preset-client#reducing-bundle-size
  */
 type Documents = {
+    "\n  fragment OperationMemberFields on OperationMember {\n    user {\n      id\n      username\n      roles\n      active\n      createdAt\n      updatedAt\n    }\n    role\n  }\n": typeof types.OperationMemberFieldsFragmentDoc,
+    "\n  fragment OperationFields on Operation {\n    id\n    name\n    description\n    members {\n      ...OperationMemberFields\n    }\n    createdAt\n    updatedAt\n  }\n": typeof types.OperationFieldsFragmentDoc,
+    "\n  query Operation($id: ID!) {\n    operation(id: $id) {\n      ...OperationFields\n    }\n  }\n": typeof types.OperationDocument,
+    "\n  query Operations($search: String, $first: Int, $after: String) {\n    operations(search: $search, first: $first, after: $after) {\n      edges {\n        node {\n          ...OperationFields\n        }\n        cursor\n      }\n      pageInfo {\n        hasNextPage\n        hasPreviousPage\n        startCursor\n        endCursor\n      }\n      totalCount\n    }\n  }\n": typeof types.OperationsDocument,
+    "\n  query MyOperationRole($operationId: ID!) {\n    myOperationRole(operationId: $operationId)\n  }\n": typeof types.MyOperationRoleDocument,
+    "\n  mutation CreateOperation($input: CreateOperationInput!) {\n    createOperation(input: $input) {\n      ...OperationFields\n    }\n  }\n": typeof types.CreateOperationDocument,
+    "\n  mutation UpdateOperation($id: ID!, $input: UpdateOperationInput!) {\n    updateOperation(id: $id, input: $input) {\n      ...OperationFields\n    }\n  }\n": typeof types.UpdateOperationDocument,
+    "\n  mutation DeleteOperation($id: ID!) {\n    deleteOperation(id: $id)\n  }\n": typeof types.DeleteOperationDocument,
+    "\n  mutation AddOperationMember($operationId: ID!, $userId: ID!, $role: OperationRole!) {\n    addOperationMember(operationId: $operationId, userId: $userId, role: $role) {\n      ...OperationFields\n    }\n  }\n": typeof types.AddOperationMemberDocument,
+    "\n  mutation RemoveOperationMember($operationId: ID!, $userId: ID!) {\n    removeOperationMember(operationId: $operationId, userId: $userId) {\n      ...OperationFields\n    }\n  }\n": typeof types.RemoveOperationMemberDocument,
+    "\n  mutation UpdateOperationMemberRole($operationId: ID!, $userId: ID!, $role: OperationRole!) {\n    updateOperationMemberRole(operationId: $operationId, userId: $userId, role: $role) {\n      ...OperationFields\n    }\n  }\n": typeof types.UpdateOperationMemberRoleDocument,
+    "\n  query UserSuggestions($search: String!, $first: Int) {\n    userSuggestions(search: $search, first: $first) {\n      id\n      username\n    }\n  }\n": typeof types.UserSuggestionsDocument,
+    "\n  subscription OperationChanged($operationId: ID) {\n    operationChanged(operationId: $operationId) {\n      action\n      operationId\n      name\n      operation {\n        ...OperationFields\n      }\n    }\n  }\n": typeof types.OperationChangedDocument,
+    "\n  subscription OperationMemberChanged($operationId: ID) {\n    operationMemberChanged(operationId: $operationId) {\n      action\n      operationId\n      userId\n    }\n  }\n": typeof types.OperationMemberChangedDocument,
     "\n  fragment SessionFields on Session {\n    id\n    userId\n    user {\n      id\n      username\n    }\n    ipAddress\n    userAgent\n    browser\n    os\n    device\n    status\n    terminationReason\n    lastActivityAt\n    expiresAt\n    terminatedAt\n    isCurrent\n    createdAt\n    updatedAt\n  }\n": typeof types.SessionFieldsFragmentDoc,
     "\n  query MySessions($activeOnly: Boolean, $first: Int, $after: String) {\n    mySessions(activeOnly: $activeOnly, first: $first, after: $after) {\n      edges {\n        node {\n          ...SessionFields\n        }\n        cursor\n      }\n      pageInfo {\n        hasNextPage\n        hasPreviousPage\n        startCursor\n        endCursor\n      }\n      totalCount\n    }\n  }\n": typeof types.MySessionsDocument,
     "\n  query Sessions($userId: ID, $search: String, $activeOnly: Boolean, $first: Int, $after: String) {\n    sessions(userId: $userId, search: $search, activeOnly: $activeOnly, first: $first, after: $after) {\n      edges {\n        node {\n          ...SessionFields\n        }\n        cursor\n      }\n      pageInfo {\n        hasNextPage\n        hasPreviousPage\n        startCursor\n        endCursor\n      }\n      totalCount\n    }\n  }\n": typeof types.SessionsDocument,
@@ -35,6 +49,20 @@ type Documents = {
     "\n  subscription UserChanged {\n    userChanged {\n      action\n      userId\n      username\n      user {\n        ...UserFields\n      }\n    }\n  }\n": typeof types.UserChangedDocument,
 };
 const documents: Documents = {
+    "\n  fragment OperationMemberFields on OperationMember {\n    user {\n      id\n      username\n      roles\n      active\n      createdAt\n      updatedAt\n    }\n    role\n  }\n": types.OperationMemberFieldsFragmentDoc,
+    "\n  fragment OperationFields on Operation {\n    id\n    name\n    description\n    members {\n      ...OperationMemberFields\n    }\n    createdAt\n    updatedAt\n  }\n": types.OperationFieldsFragmentDoc,
+    "\n  query Operation($id: ID!) {\n    operation(id: $id) {\n      ...OperationFields\n    }\n  }\n": types.OperationDocument,
+    "\n  query Operations($search: String, $first: Int, $after: String) {\n    operations(search: $search, first: $first, after: $after) {\n      edges {\n        node {\n          ...OperationFields\n        }\n        cursor\n      }\n      pageInfo {\n        hasNextPage\n        hasPreviousPage\n        startCursor\n        endCursor\n      }\n      totalCount\n    }\n  }\n": types.OperationsDocument,
+    "\n  query MyOperationRole($operationId: ID!) {\n    myOperationRole(operationId: $operationId)\n  }\n": types.MyOperationRoleDocument,
+    "\n  mutation CreateOperation($input: CreateOperationInput!) {\n    createOperation(input: $input) {\n      ...OperationFields\n    }\n  }\n": types.CreateOperationDocument,
+    "\n  mutation UpdateOperation($id: ID!, $input: UpdateOperationInput!) {\n    updateOperation(id: $id, input: $input) {\n      ...OperationFields\n    }\n  }\n": types.UpdateOperationDocument,
+    "\n  mutation DeleteOperation($id: ID!) {\n    deleteOperation(id: $id)\n  }\n": types.DeleteOperationDocument,
+    "\n  mutation AddOperationMember($operationId: ID!, $userId: ID!, $role: OperationRole!) {\n    addOperationMember(operationId: $operationId, userId: $userId, role: $role) {\n      ...OperationFields\n    }\n  }\n": types.AddOperationMemberDocument,
+    "\n  mutation RemoveOperationMember($operationId: ID!, $userId: ID!) {\n    removeOperationMember(operationId: $operationId, userId: $userId) {\n      ...OperationFields\n    }\n  }\n": types.RemoveOperationMemberDocument,
+    "\n  mutation UpdateOperationMemberRole($operationId: ID!, $userId: ID!, $role: OperationRole!) {\n    updateOperationMemberRole(operationId: $operationId, userId: $userId, role: $role) {\n      ...OperationFields\n    }\n  }\n": types.UpdateOperationMemberRoleDocument,
+    "\n  query UserSuggestions($search: String!, $first: Int) {\n    userSuggestions(search: $search, first: $first) {\n      id\n      username\n    }\n  }\n": types.UserSuggestionsDocument,
+    "\n  subscription OperationChanged($operationId: ID) {\n    operationChanged(operationId: $operationId) {\n      action\n      operationId\n      name\n      operation {\n        ...OperationFields\n      }\n    }\n  }\n": types.OperationChangedDocument,
+    "\n  subscription OperationMemberChanged($operationId: ID) {\n    operationMemberChanged(operationId: $operationId) {\n      action\n      operationId\n      userId\n    }\n  }\n": types.OperationMemberChangedDocument,
     "\n  fragment SessionFields on Session {\n    id\n    userId\n    user {\n      id\n      username\n    }\n    ipAddress\n    userAgent\n    browser\n    os\n    device\n    status\n    terminationReason\n    lastActivityAt\n    expiresAt\n    terminatedAt\n    isCurrent\n    createdAt\n    updatedAt\n  }\n": types.SessionFieldsFragmentDoc,
     "\n  query MySessions($activeOnly: Boolean, $first: Int, $after: String) {\n    mySessions(activeOnly: $activeOnly, first: $first, after: $after) {\n      edges {\n        node {\n          ...SessionFields\n        }\n        cursor\n      }\n      pageInfo {\n        hasNextPage\n        hasPreviousPage\n        startCursor\n        endCursor\n      }\n      totalCount\n    }\n  }\n": types.MySessionsDocument,
     "\n  query Sessions($userId: ID, $search: String, $activeOnly: Boolean, $first: Int, $after: String) {\n    sessions(userId: $userId, search: $search, activeOnly: $activeOnly, first: $first, after: $after) {\n      edges {\n        node {\n          ...SessionFields\n        }\n        cursor\n      }\n      pageInfo {\n        hasNextPage\n        hasPreviousPage\n        startCursor\n        endCursor\n      }\n      totalCount\n    }\n  }\n": types.SessionsDocument,
@@ -70,6 +98,62 @@ const documents: Documents = {
  */
 export function graphql(source: string): unknown;
 
+/**
+ * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
+ */
+export function graphql(source: "\n  fragment OperationMemberFields on OperationMember {\n    user {\n      id\n      username\n      roles\n      active\n      createdAt\n      updatedAt\n    }\n    role\n  }\n"): (typeof documents)["\n  fragment OperationMemberFields on OperationMember {\n    user {\n      id\n      username\n      roles\n      active\n      createdAt\n      updatedAt\n    }\n    role\n  }\n"];
+/**
+ * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
+ */
+export function graphql(source: "\n  fragment OperationFields on Operation {\n    id\n    name\n    description\n    members {\n      ...OperationMemberFields\n    }\n    createdAt\n    updatedAt\n  }\n"): (typeof documents)["\n  fragment OperationFields on Operation {\n    id\n    name\n    description\n    members {\n      ...OperationMemberFields\n    }\n    createdAt\n    updatedAt\n  }\n"];
+/**
+ * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
+ */
+export function graphql(source: "\n  query Operation($id: ID!) {\n    operation(id: $id) {\n      ...OperationFields\n    }\n  }\n"): (typeof documents)["\n  query Operation($id: ID!) {\n    operation(id: $id) {\n      ...OperationFields\n    }\n  }\n"];
+/**
+ * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
+ */
+export function graphql(source: "\n  query Operations($search: String, $first: Int, $after: String) {\n    operations(search: $search, first: $first, after: $after) {\n      edges {\n        node {\n          ...OperationFields\n        }\n        cursor\n      }\n      pageInfo {\n        hasNextPage\n        hasPreviousPage\n        startCursor\n        endCursor\n      }\n      totalCount\n    }\n  }\n"): (typeof documents)["\n  query Operations($search: String, $first: Int, $after: String) {\n    operations(search: $search, first: $first, after: $after) {\n      edges {\n        node {\n          ...OperationFields\n        }\n        cursor\n      }\n      pageInfo {\n        hasNextPage\n        hasPreviousPage\n        startCursor\n        endCursor\n      }\n      totalCount\n    }\n  }\n"];
+/**
+ * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
+ */
+export function graphql(source: "\n  query MyOperationRole($operationId: ID!) {\n    myOperationRole(operationId: $operationId)\n  }\n"): (typeof documents)["\n  query MyOperationRole($operationId: ID!) {\n    myOperationRole(operationId: $operationId)\n  }\n"];
+/**
+ * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
+ */
+export function graphql(source: "\n  mutation CreateOperation($input: CreateOperationInput!) {\n    createOperation(input: $input) {\n      ...OperationFields\n    }\n  }\n"): (typeof documents)["\n  mutation CreateOperation($input: CreateOperationInput!) {\n    createOperation(input: $input) {\n      ...OperationFields\n    }\n  }\n"];
+/**
+ * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
+ */
+export function graphql(source: "\n  mutation UpdateOperation($id: ID!, $input: UpdateOperationInput!) {\n    updateOperation(id: $id, input: $input) {\n      ...OperationFields\n    }\n  }\n"): (typeof documents)["\n  mutation UpdateOperation($id: ID!, $input: UpdateOperationInput!) {\n    updateOperation(id: $id, input: $input) {\n      ...OperationFields\n    }\n  }\n"];
+/**
+ * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
+ */
+export function graphql(source: "\n  mutation DeleteOperation($id: ID!) {\n    deleteOperation(id: $id)\n  }\n"): (typeof documents)["\n  mutation DeleteOperation($id: ID!) {\n    deleteOperation(id: $id)\n  }\n"];
+/**
+ * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
+ */
+export function graphql(source: "\n  mutation AddOperationMember($operationId: ID!, $userId: ID!, $role: OperationRole!) {\n    addOperationMember(operationId: $operationId, userId: $userId, role: $role) {\n      ...OperationFields\n    }\n  }\n"): (typeof documents)["\n  mutation AddOperationMember($operationId: ID!, $userId: ID!, $role: OperationRole!) {\n    addOperationMember(operationId: $operationId, userId: $userId, role: $role) {\n      ...OperationFields\n    }\n  }\n"];
+/**
+ * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
+ */
+export function graphql(source: "\n  mutation RemoveOperationMember($operationId: ID!, $userId: ID!) {\n    removeOperationMember(operationId: $operationId, userId: $userId) {\n      ...OperationFields\n    }\n  }\n"): (typeof documents)["\n  mutation RemoveOperationMember($operationId: ID!, $userId: ID!) {\n    removeOperationMember(operationId: $operationId, userId: $userId) {\n      ...OperationFields\n    }\n  }\n"];
+/**
+ * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
+ */
+export function graphql(source: "\n  mutation UpdateOperationMemberRole($operationId: ID!, $userId: ID!, $role: OperationRole!) {\n    updateOperationMemberRole(operationId: $operationId, userId: $userId, role: $role) {\n      ...OperationFields\n    }\n  }\n"): (typeof documents)["\n  mutation UpdateOperationMemberRole($operationId: ID!, $userId: ID!, $role: OperationRole!) {\n    updateOperationMemberRole(operationId: $operationId, userId: $userId, role: $role) {\n      ...OperationFields\n    }\n  }\n"];
+/**
+ * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
+ */
+export function graphql(source: "\n  query UserSuggestions($search: String!, $first: Int) {\n    userSuggestions(search: $search, first: $first) {\n      id\n      username\n    }\n  }\n"): (typeof documents)["\n  query UserSuggestions($search: String!, $first: Int) {\n    userSuggestions(search: $search, first: $first) {\n      id\n      username\n    }\n  }\n"];
+/**
+ * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
+ */
+export function graphql(source: "\n  subscription OperationChanged($operationId: ID) {\n    operationChanged(operationId: $operationId) {\n      action\n      operationId\n      name\n      operation {\n        ...OperationFields\n      }\n    }\n  }\n"): (typeof documents)["\n  subscription OperationChanged($operationId: ID) {\n    operationChanged(operationId: $operationId) {\n      action\n      operationId\n      name\n      operation {\n        ...OperationFields\n      }\n    }\n  }\n"];
+/**
+ * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
+ */
+export function graphql(source: "\n  subscription OperationMemberChanged($operationId: ID) {\n    operationMemberChanged(operationId: $operationId) {\n      action\n      operationId\n      userId\n    }\n  }\n"): (typeof documents)["\n  subscription OperationMemberChanged($operationId: ID) {\n    operationMemberChanged(operationId: $operationId) {\n      action\n      operationId\n      userId\n    }\n  }\n"];
 /**
  * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
  */

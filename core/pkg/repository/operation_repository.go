@@ -18,9 +18,9 @@ const operationCollection = "operations"
 type IOperationRepository interface {
 	Create(ctx context.Context, op *models.Operation) error
 	FindByID(ctx context.Context, id uuid.UUID) (models.Operation, error)
-	FindAll(ctx context.Context, search string, offset, limit int64) ([]models.Operation, error)
-	FindWithCursor(ctx context.Context, search string, cursor *pagination.Cursor, limit int64, forward bool) ([]models.Operation, error)
-	Count(ctx context.Context, search string) (int64, error)
+	FindAll(ctx context.Context, search string, offset, limit int64, memberID *uuid.UUID) ([]models.Operation, error)
+	FindWithCursor(ctx context.Context, search string, cursor *pagination.Cursor, limit int64, forward bool, memberID *uuid.UUID) ([]models.Operation, error)
+	Count(ctx context.Context, search string, memberID *uuid.UUID) (int64, error)
 	Update(ctx context.Context, op *models.Operation, updates map[string]interface{}) error
 	Delete(ctx context.Context, op *models.Operation) error
 
@@ -59,9 +59,14 @@ func (r *operationRepository) FindByID(ctx context.Context, id uuid.UUID) (model
 	return op, err
 }
 
-func (r *operationRepository) FindAll(ctx context.Context, search string, offset, limit int64) ([]models.Operation, error) {
+func (r *operationRepository) FindAll(ctx context.Context, search string, offset, limit int64, memberID *uuid.UUID) ([]models.Operation, error) {
+	filter := buildOperationSearchFilter(search)
+	if memberID != nil {
+		filter["members.user_id"] = *memberID
+	}
+
 	var ops []models.Operation
-	err := r.coll.Find(ctx, buildOperationSearchFilter(search)).
+	err := r.coll.Find(ctx, filter).
 		Sort("-createAt").
 		Skip(offset).
 		Limit(limit).
@@ -70,8 +75,11 @@ func (r *operationRepository) FindAll(ctx context.Context, search string, offset
 	return ops, err
 }
 
-func (r *operationRepository) FindWithCursor(ctx context.Context, search string, cursor *pagination.Cursor, limit int64, forward bool) ([]models.Operation, error) {
+func (r *operationRepository) FindWithCursor(ctx context.Context, search string, cursor *pagination.Cursor, limit int64, forward bool, memberID *uuid.UUID) ([]models.Operation, error) {
 	filter := buildOperationSearchFilter(search)
+	if memberID != nil {
+		filter["members.user_id"] = *memberID
+	}
 
 	if cursorFilter := pagination.BuildCursorFilter(cursor, forward); len(cursorFilter) > 0 {
 		for k, v := range cursorFilter {
@@ -94,8 +102,12 @@ func (r *operationRepository) FindWithCursor(ctx context.Context, search string,
 	return ops, err
 }
 
-func (r *operationRepository) Count(ctx context.Context, search string) (int64, error) {
-	return r.coll.Count(ctx, buildOperationSearchFilter(search))
+func (r *operationRepository) Count(ctx context.Context, search string, memberID *uuid.UUID) (int64, error) {
+	filter := buildOperationSearchFilter(search)
+	if memberID != nil {
+		filter["members.user_id"] = *memberID
+	}
+	return r.coll.Count(ctx, filter)
 }
 
 func (r *operationRepository) Update(ctx context.Context, op *models.Operation, updates map[string]interface{}) error {

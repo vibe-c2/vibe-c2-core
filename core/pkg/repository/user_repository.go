@@ -25,6 +25,7 @@ type IUserRepository interface {
 	FindWithCursor(ctx context.Context, search string, cursor *pagination.Cursor, limit int64, forward bool) ([]models.User, error)
 
 	FindByID(ctx context.Context, id uuid.UUID) (models.User, error)
+	FindSuggestions(ctx context.Context, search string, limit int64) ([]models.User, error)
 	Update(ctx context.Context, user *models.User, updates map[string]interface{}) error
 	Delete(ctx context.Context, user *models.User) error
 }
@@ -106,6 +107,15 @@ func (r *userRepository) FindByID(ctx context.Context, id uuid.UUID) (models.Use
 	var user models.User
 	err := r.coll.FindOne(ctx, bson.M{"user_id": id}).One(&user)
 	return user, err
+}
+
+func (r *userRepository) FindSuggestions(ctx context.Context, search string, limit int64) ([]models.User, error) {
+	var users []models.User
+	err := r.coll.Find(ctx, buildSearchFilter(search)).
+		Sort("-createAt").
+		Limit(limit).
+		All(&users)
+	return users, err
 }
 
 func (r *userRepository) Update(ctx context.Context, user *models.User, updates map[string]interface{}) error {

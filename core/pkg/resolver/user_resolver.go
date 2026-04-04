@@ -28,6 +28,7 @@ type IUserResolver interface {
 	Me(ctx context.Context) (*models.User, error)
 	User(ctx context.Context, id string) (*models.User, error)
 	Users(ctx context.Context, search *string, first *int, after *string, last *int, before *string) (*model.UserConnection, error)
+	UserSuggestions(ctx context.Context, search string, first *int) ([]*model.UserSuggestion, error)
 
 	// Field resolvers — these handle fields where the Go model doesn't
 	// map directly to the GraphQL type (e.g. UUID → String, time.Time → String).
@@ -325,6 +326,33 @@ func (r *userResolver) Users(ctx context.Context, search *string, first *int, af
 		PageInfo:   &pageInfo,
 		TotalCount: int(total),
 	}, nil
+}
+
+// UserSuggestions returns a lightweight list of users matching a search string.
+// Designed for autocomplete pickers — returns only id and username.
+func (r *userResolver) UserSuggestions(ctx context.Context, search string, first *int) ([]*model.UserSuggestion, error) {
+	limit := int64(10)
+	if first != nil {
+		limit = int64(*first)
+	}
+	if limit > 50 {
+		limit = 50
+	}
+
+	users, err := r.userRepo.FindSuggestions(ctx, search, limit)
+	if err != nil {
+		return nil, fmt.Errorf("failed to search users: %w", err)
+	}
+
+	suggestions := make([]*model.UserSuggestion, len(users))
+	for i := range users {
+		suggestions[i] = &model.UserSuggestion{
+			ID:       users[i].UserID.String(),
+			Username: users[i].Username,
+		}
+	}
+
+	return suggestions, nil
 }
 
 // ID converts the User's UUID to a GraphQL ID string.

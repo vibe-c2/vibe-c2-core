@@ -37,9 +37,10 @@ func (r OperationRole) HasAtLeast(required OperationRole) bool {
 	return operationRoleLevel[r] >= operationRoleLevel[required]
 }
 
-// MarshalGQL writes the role as an uppercase GraphQL enum value (e.g. "admin" -> ADMIN).
+// MarshalGQL writes the role as a quoted uppercase GraphQL enum value (e.g. "admin" -> "ADMIN").
+// The value must be quoted because gqlgen embeds it as a JSON token in the response.
 func (r OperationRole) MarshalGQL(w io.Writer) {
-	fmt.Fprint(w, strings.ToUpper(string(r)))
+	fmt.Fprintf(w, "%q", strings.ToUpper(string(r)))
 }
 
 // UnmarshalGQL reads a GraphQL enum value and converts to lowercase (e.g. ADMIN -> "admin").

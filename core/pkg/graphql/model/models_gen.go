@@ -142,6 +142,11 @@ type UserEvent struct {
 	User     *models.User `json:"user,omitempty"`
 }
 
+type UserSuggestion struct {
+	ID       string `json:"id"`
+	Username string `json:"username"`
+}
+
 type EventAction string
 
 const (

@@ -124,6 +124,7 @@ type ComplexityRoot struct {
 		Session             func(childComplexity int, id string) int
 		Sessions            func(childComplexity int, userID *string, search *string, activeOnly *bool, first *int, after *string, last *int, before *string) int
 		User                func(childComplexity int, id string) int
+		UserSuggestions     func(childComplexity int, search string, first *int) int
 		Users               func(childComplexity int, search *string, first *int, after *string, last *int, before *string) int
 	}
 
@@ -228,6 +229,11 @@ type ComplexityRoot struct {
 		UserID   func(childComplexity int) int
 		Username func(childComplexity int) int
 	}
+
+	UserSuggestion struct {
+		ID       func(childComplexity int) int
+		Username func(childComplexity int) int
+	}
 }
 
 type MutationResolver interface {
@@ -266,6 +272,7 @@ type QueryResolver interface {
 	Me(ctx context.Context) (*models.User, error)
 	User(ctx context.Context, id string) (*models.User, error)
 	Users(ctx context.Context, search *string, first *int, after *string, last *int, before *string) (*model.UserConnection, error)
+	UserSuggestions(ctx context.Context, search string, first *int) ([]*model.UserSuggestion, error)
 	Operation(ctx context.Context, id string) (*models.Operation, error)
 	Operations(ctx context.Context, search *string, first *int, after *string, last *int, before *string) (*model.OperationConnection, error)
 	MyOperationRole(ctx context.Context, operationID string) (*models.OperationRole, error)
@@ -800,6 +807,17 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.Query.User(childComplexity, args["id"].(string)), true
+	case "Query.userSuggestions":
+		if e.ComplexityRoot.Query.UserSuggestions == nil {
+			break
+		}
+
+		args, err := ec.field_Query_userSuggestions_args(ctx, rawArgs)
+		if err != nil {
+			return 0, false
+		}
+
+		return e.ComplexityRoot.Query.UserSuggestions(childComplexity, args["search"].(string), args["first"].(*int)), true
 	case "Query.users":
 		if e.ComplexityRoot.Query.Users == nil {
 			break
@@ -1218,6 +1236,19 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 
 		return e.ComplexityRoot.UserEvent.Username(childComplexity), true
 
+	case "UserSuggestion.id":
+		if e.ComplexityRoot.UserSuggestion.ID == nil {
+			break
+		}
+
+		return e.ComplexityRoot.UserSuggestion.ID(childComplexity), true
+	case "UserSuggestion.username":
+		if e.ComplexityRoot.UserSuggestion.Username == nil {
+			break
+		}
+
+		return e.ComplexityRoot.UserSuggestion.Username(childComplexity), true
+
 	}
 	return 0, false
 }
@@ -1387,6 +1418,13 @@ type User {
   updatedAt: String!       # ISO 8601 timestamp
 }
 
+# Minimal user info for autocomplete pickers (e.g., adding operation members).
+# Intentionally lightweight — no roles, status, or timestamps.
+type UserSuggestion {
+  id: ID!
+  username: String!
+}
+
 # -----------------------------------------------------------------------------
 # Relay Connection Types
 # -----------------------------------------------------------------------------
@@ -1528,6 +1566,13 @@ type Query {
     last: Int
     before: String
   ): UserConnection! @hasPermission(permission: "user:read")
+
+  # userSuggestions returns a lightweight list of users matching a search string.
+  # Designed for autocomplete pickers (e.g., adding operation members).
+  # Returns only id and username — no sensitive data like roles or status.
+  # Requires operation:member permission (available to all authenticated users).
+  userSuggestions(search: String!, first: Int = 10): [UserSuggestion!]!
+    @hasPermission(permission: "operation:member")
 
   # operation returns a single operation by its ID.
   operation(id: ID!): Operation! @hasPermission(permission: "operation:read")
@@ -2414,6 +2459,22 @@ func (ec *executionContext) field_Query_sessions_args(ctx context.Context, rawAr
 		return nil, err
 	}
 	args["before"] = arg6
+	return args, nil
+}
+
+func (ec *executionContext) field_Query_userSuggestions_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
+	var err error
+	args := map[string]any{}
+	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "search", ec.unmarshalNString2string)
+	if err != nil {
+		return nil, err
+	}
+	args["search"] = arg0
+	arg1, err := graphql.ProcessArgField(ctx, rawArgs, "first", ec.unmarshalOInt2ᚖint)
+	if err != nil {
+		return nil, err
+	}
+	args["first"] = arg1
 	return args, nil
 }
 
@@ -4869,6 +4930,71 @@ func (ec *executionContext) fieldContext_Query_users(ctx context.Context, field 
 	}()
 	ctx = graphql.WithFieldContext(ctx, fc)
 	if fc.Args, err = ec.field_Query_users_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
+		ec.Error(ctx, err)
+		return fc, err
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Query_userSuggestions(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Query_userSuggestions,
+		func(ctx context.Context) (any, error) {
+			fc := graphql.GetFieldContext(ctx)
+			return ec.Resolvers.Query().UserSuggestions(ctx, fc.Args["search"].(string), fc.Args["first"].(*int))
+		},
+		func(ctx context.Context, next graphql.Resolver) graphql.Resolver {
+			directive0 := next
+
+			directive1 := func(ctx context.Context) (any, error) {
+				permission, err := ec.unmarshalNString2string(ctx, "operation:member")
+				if err != nil {
+					var zeroVal []*model.UserSuggestion
+					return zeroVal, err
+				}
+				if ec.Directives.HasPermission == nil {
+					var zeroVal []*model.UserSuggestion
+					return zeroVal, errors.New("directive hasPermission is not implemented")
+				}
+				return ec.Directives.HasPermission(ctx, nil, directive0, permission)
+			}
+
+			next = directive1
+			return next
+		},
+		ec.marshalNUserSuggestion2ᚕᚖgithubᚗcomᚋvibeᚑc2ᚋvibeᚑc2ᚑcoreᚋcoreᚋpkgᚋgraphqlᚋmodelᚐUserSuggestionᚄ,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_Query_userSuggestions(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Query",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "id":
+				return ec.fieldContext_UserSuggestion_id(ctx, field)
+			case "username":
+				return ec.fieldContext_UserSuggestion_username(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type UserSuggestion", field.Name)
+		},
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			err = ec.Recover(ctx, r)
+			ec.Error(ctx, err)
+		}
+	}()
+	ctx = graphql.WithFieldContext(ctx, fc)
+	if fc.Args, err = ec.field_Query_userSuggestions_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
 		ec.Error(ctx, err)
 		return fc, err
 	}
@@ -7742,6 +7868,64 @@ func (ec *executionContext) fieldContext_UserEvent_user(_ context.Context, field
 	return fc, nil
 }
 
+func (ec *executionContext) _UserSuggestion_id(ctx context.Context, field graphql.CollectedField, obj *model.UserSuggestion) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_UserSuggestion_id,
+		func(ctx context.Context) (any, error) {
+			return obj.ID, nil
+		},
+		nil,
+		ec.marshalNID2string,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_UserSuggestion_id(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "UserSuggestion",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type ID does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _UserSuggestion_username(ctx context.Context, field graphql.CollectedField, obj *model.UserSuggestion) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_UserSuggestion_username,
+		func(ctx context.Context) (any, error) {
+			return obj.Username, nil
+		},
+		nil,
+		ec.marshalNString2string,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_UserSuggestion_username(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "UserSuggestion",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
 func (ec *executionContext) ___Directive_name(ctx context.Context, field graphql.CollectedField, obj *introspection.Directive) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
@@ -10334,6 +10518,28 @@ func (ec *executionContext) _Query(ctx context.Context, sel ast.SelectionSet) gr
 			}
 
 			out.Concurrently(i, func(ctx context.Context) graphql.Marshaler { return rrm(innerCtx) })
+		case "userSuggestions":
+			field := field
+
+			innerFunc := func(ctx context.Context, fs *graphql.FieldSet) (res graphql.Marshaler) {
+				defer func() {
+					if r := recover(); r != nil {
+						ec.Error(ctx, ec.Recover(ctx, r))
+					}
+				}()
+				res = ec._Query_userSuggestions(ctx, field)
+				if res == graphql.Null {
+					atomic.AddUint32(&fs.Invalids, 1)
+				}
+				return res
+			}
+
+			rrm := func(ctx context.Context) graphql.Marshaler {
+				return ec.OperationContext.RootResolverMiddleware(ctx,
+					func(ctx context.Context) graphql.Marshaler { return innerFunc(ctx, out) })
+			}
+
+			out.Concurrently(i, func(ctx context.Context) graphql.Marshaler { return rrm(innerCtx) })
 		case "operation":
 			field := field
 
@@ -11869,6 +12075,50 @@ func (ec *executionContext) _UserEvent(ctx context.Context, sel ast.SelectionSet
 	return out
 }
 
+var userSuggestionImplementors = []string{"UserSuggestion"}
+
+func (ec *executionContext) _UserSuggestion(ctx context.Context, sel ast.SelectionSet, obj *model.UserSuggestion) graphql.Marshaler {
+	fields := graphql.CollectFields(ec.OperationContext, sel, userSuggestionImplementors)
+
+	out := graphql.NewFieldSet(fields)
+	deferred := make(map[string]*graphql.FieldSet)
+	for i, field := range fields {
+		switch field.Name {
+		case "__typename":
+			out.Values[i] = graphql.MarshalString("UserSuggestion")
+		case "id":
+			out.Values[i] = ec._UserSuggestion_id(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "username":
+			out.Values[i] = ec._UserSuggestion_username(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		default:
+			panic("unknown field " + strconv.Quote(field.Name))
+		}
+	}
+	out.Dispatch(ctx)
+	if out.Invalids > 0 {
+		return graphql.Null
+	}
+
+	atomic.AddInt32(&ec.Deferred, int32(len(deferred)))
+
+	for label, dfs := range deferred {
+		ec.ProcessDeferredGroup(graphql.DeferredGroup{
+			Label:    label,
+			Path:     graphql.GetPath(ctx),
+			FieldSet: dfs,
+			Context:  ctx,
+		})
+	}
+
+	return out
+}
+
 var __DirectiveImplementors = []string{"__Directive"}
 
 func (ec *executionContext) ___Directive(ctx context.Context, sel ast.SelectionSet, obj *introspection.Directive) graphql.Marshaler {
@@ -12700,6 +12950,32 @@ func (ec *executionContext) marshalNUserEvent2ᚖgithubᚗcomᚋvibeᚑc2ᚋvibe
 		return graphql.Null
 	}
 	return ec._UserEvent(ctx, sel, v)
+}
+
+func (ec *executionContext) marshalNUserSuggestion2ᚕᚖgithubᚗcomᚋvibeᚑc2ᚋvibeᚑc2ᚑcoreᚋcoreᚋpkgᚋgraphqlᚋmodelᚐUserSuggestionᚄ(ctx context.Context, sel ast.SelectionSet, v []*model.UserSuggestion) graphql.Marshaler {
+	ret := graphql.MarshalSliceConcurrently(ctx, len(v), 0, false, func(ctx context.Context, i int) graphql.Marshaler {
+		fc := graphql.GetFieldContext(ctx)
+		fc.Result = &v[i]
+		return ec.marshalNUserSuggestion2ᚖgithubᚗcomᚋvibeᚑc2ᚋvibeᚑc2ᚑcoreᚋcoreᚋpkgᚋgraphqlᚋmodelᚐUserSuggestion(ctx, sel, v[i])
+	})
+
+	for _, e := range ret {
+		if e == graphql.Null {
+			return graphql.Null
+		}
+	}
+
+	return ret
+}
+
+func (ec *executionContext) marshalNUserSuggestion2ᚖgithubᚗcomᚋvibeᚑc2ᚋvibeᚑc2ᚑcoreᚋcoreᚋpkgᚋgraphqlᚋmodelᚐUserSuggestion(ctx context.Context, sel ast.SelectionSet, v *model.UserSuggestion) graphql.Marshaler {
+	if v == nil {
+		if !graphql.HasFieldError(ctx, graphql.GetFieldContext(ctx)) {
+			graphql.AddErrorf(ctx, "the requested element is null which the schema does not allow")
+		}
+		return graphql.Null
+	}
+	return ec._UserSuggestion(ctx, sel, v)
 }
 
 func (ec *executionContext) marshalN__Directive2githubᚗcomᚋ99designsᚋgqlgenᚋgraphqlᚋintrospectionᚐDirective(ctx context.Context, sel ast.SelectionSet, v introspection.Directive) graphql.Marshaler {

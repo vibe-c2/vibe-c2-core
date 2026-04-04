@@ -59,6 +59,13 @@ type User {
   updatedAt: String!       # ISO 8601 timestamp
 }
 
+# Minimal user info for autocomplete pickers (e.g., adding operation members).
+# Intentionally lightweight — no roles, status, or timestamps.
+type UserSuggestion {
+  id: ID!
+  username: String!
+}
+
 # -----------------------------------------------------------------------------
 # Relay Connection Types
 # -----------------------------------------------------------------------------
@@ -200,6 +207,13 @@ type Query {
     last: Int
     before: String
   ): UserConnection! @hasPermission(permission: "user:read")
+
+  # userSuggestions returns a lightweight list of users matching a search string.
+  # Designed for autocomplete pickers (e.g., adding operation members).
+  # Returns only id and username — no sensitive data like roles or status.
+  # Requires operation:member permission (available to all authenticated users).
+  userSuggestions(search: String!, first: Int = 10): [UserSuggestion!]!
+    @hasPermission(permission: "operation:member")
 
   # operation returns a single operation by its ID.
   operation(id: ID!): Operation! @hasPermission(permission: "operation:read")

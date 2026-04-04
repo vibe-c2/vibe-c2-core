@@ -1,6 +1,6 @@
 import {
   LayoutDashboardIcon,
-  NetworkIcon,
+  SwordsIcon,
   UsersIcon,
 } from 'lucide-react';
 import { type Permission, Permissions } from '@/constants/permissions';
@@ -26,7 +26,7 @@ export const navigationAdminItems: NavigationItem[] = [
     title: 'Operations',
     url: '/operations',
     permission: Permissions.OPERATION_READ,
-    icon: NetworkIcon,
+    icon: SwordsIcon,
   },
   {
     title: 'Users',

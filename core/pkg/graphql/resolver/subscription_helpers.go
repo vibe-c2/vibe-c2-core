@@ -45,6 +45,25 @@ func (r *subscriptionResolver) buildOperationFilter(ctx context.Context, auth gq
 	}
 
 	return func(event eventbus.Event) bool {
+		// Always deliver events triggered by the subscriber themselves
+		// (e.g., they just created an operation that isn't in the snapshot yet).
+		if event.Actor.Type == eventbus.ActorUser && event.Actor.ID == auth.UserID {
+			return true
+		}
+
+		// If this is a member event targeting the subscriber (someone added/removed them),
+		// pass it through and update the membership snapshot so future events for that
+		// operation are also delivered (or stopped). Safe to mutate opSet here — the filter
+		// is only called from the single dispatch() goroutine.
+		if p, ok := event.Payload.(eventbus.OperationMemberPayload); ok && p.MemberID == auth.UserID {
+			if event.Topic == eventbus.TopicOperationMemberAdded {
+				opSet[p.OperationID] = struct{}{}
+			} else if event.Topic == eventbus.TopicOperationMemberRemoved {
+				delete(opSet, p.OperationID)
+			}
+			return true
+		}
+
 		_, ok := opSet[extractOperationID(event)]
 		return ok
 	}, nil

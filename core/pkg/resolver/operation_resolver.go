@@ -81,6 +81,16 @@ func WithEventBus(bus eventbus.IEventBus) OperationResolverOption {
 	}
 }
 
+// isAppAdmin returns true if the caller has the app-level "admin" role.
+func isAppAdmin(auth gqlctx.AuthInfo) bool {
+	for _, role := range auth.Roles {
+		if role == "admin" {
+			return true
+		}
+	}
+	return false
+}
+
 // authorizeOperationRole checks if the caller is an app-level admin OR has
 // at least the required role in the given operation. Returns nil if authorized.
 func (r *operationResolver) authorizeOperationRole(ctx context.Context, op *models.Operation, minRole models.OperationRole) error {
@@ -410,6 +420,7 @@ func (r *operationResolver) UpdateOperationMemberRole(ctx context.Context, opera
 }
 
 // Operation returns a single operation by its ID.
+// Non-admin users can only view operations they are a member of.
 func (r *operationResolver) Operation(ctx context.Context, id string) (*models.Operation, error) {
 	uid, err := uuid.Parse(id)
 	if err != nil {
@@ -420,6 +431,11 @@ func (r *operationResolver) Operation(ctx context.Context, id string) (*models.O
 	if err != nil {
 		return nil, fmt.Errorf("operation not found: %w", err)
 	}
+
+	if err := r.authorizeOperationRole(ctx, &op, models.OperationRoleViewer); err != nil {
+		return nil, err
+	}
+
 	return &op, nil
 }
 
@@ -435,6 +451,7 @@ func (r *operationResolver) Operation(ctx context.Context, id string) (*models.O
 //	    }
 //	}
 func (r *operationResolver) Operations(ctx context.Context, search *string, first *int, after *string, last *int, before *string) (*model.OperationConnection, error) {
+	auth := gqlctx.AuthFromContext(ctx)
 	args, err := pagination.ParseArgs(first, after, last, before)
 	if err != nil {
 		return nil, fmt.Errorf("invalid pagination args: %w", err)
@@ -445,12 +462,22 @@ func (r *operationResolver) Operations(ctx context.Context, search *string, firs
 		s = *search
 	}
 
-	total, err := r.operationRepo.Count(ctx, s)
+	// App admins see all operations; regular users only see operations they belong to.
+	var memberID *uuid.UUID
+	if !isAppAdmin(auth) {
+		uid, err := uuid.Parse(auth.UserID)
+		if err != nil {
+			return nil, fmt.Errorf("invalid caller ID")
+		}
+		memberID = &uid
+	}
+
+	total, err := r.operationRepo.Count(ctx, s, memberID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to count operations: %w", err)
 	}
 
-	ops, err := r.operationRepo.FindWithCursor(ctx, s, args.Cursor, args.Limit+1, args.Forward)
+	ops, err := r.operationRepo.FindWithCursor(ctx, s, args.Cursor, args.Limit+1, args.Forward, memberID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to list operations: %w", err)
 	}
