@@ -57,7 +57,7 @@ function WikiPageInner({
   const setSidebarWidth = useWikiStore((s) => s.setSidebarWidth)
 
   return (
-    <div className="flex flex-1 overflow-hidden">
+    <div className="flex flex-1 gap-2 p-2 overflow-hidden">
       <WikiTreeSidebar
         operationId={operationId}
         isEditor={isEditor}

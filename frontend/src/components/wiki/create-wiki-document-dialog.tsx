@@ -25,7 +25,7 @@ export function CreateWikiDocumentDialog({ operationId }: CreateWikiDocumentDial
   const navigate = useNavigate()
 
   const [error, setError] = useState<string | null>(null)
-  const [emoji, setEmoji] = useState("")
+  const [emoji, setEmoji] = useState("📂")
 
   async function handleSubmit(e: FormEvent<HTMLFormElement>) {
     e.preventDefault()

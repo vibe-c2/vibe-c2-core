@@ -320,11 +320,11 @@ export function WikiTreeSidebar({
   return (
     <div
       style={{ width: sidebarWidth }}
-      className="flex shrink-0 flex-col border-r bg-background"
+      className="flex shrink-0 flex-col rounded-lg border bg-card overflow-hidden"
     >
       {/* Header */}
       <div className="flex items-center gap-1 border-b px-2 py-1.5">
-        <span className="flex-1 truncate px-1 text-sm font-medium">Documents</span>
+        <span className="flex-1 truncate px-1 text-sm font-medium">Wiki</span>
         <Tooltip>
           <TooltipTrigger
             render={

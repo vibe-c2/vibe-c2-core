@@ -64,6 +64,7 @@ export function WikiTreeNode({
   const [renaming, setRenaming] = useState(false)
   const [renameValue, setRenameValue] = useState(node.title)
   const [emojiPickerOpen, setEmojiPickerOpen] = useState(false)
+  const [menuOpen, setMenuOpen] = useState(false)
 
   const updateDocument = useUpdateWikiDocument()
 
@@ -116,7 +117,7 @@ export function WikiTreeNode({
         ref={setDropRef}
         style={{ paddingLeft: indent }}
         className={cn(
-          "group flex items-center gap-0.5 rounded-md px-1 py-0.5 text-sm",
+          "group flex h-7 items-center gap-0.5 rounded-md px-1 text-sm",
           isDropInside && "bg-primary/10 ring-1 ring-primary",
           !isDropInside && isSelected && "bg-accent text-accent-foreground",
           !isDropInside && !isSelected && "hover:bg-muted",
@@ -194,7 +195,7 @@ export function WikiTreeNode({
               <Button
                 variant="ghost"
                 size="icon-xs"
-                className="shrink-0 opacity-0 group-hover:opacity-100"
+                className="shrink-0 hidden group-hover:inline-flex"
                 onClick={() => openContentSearch(node.id, node.title)}
               />
             }
@@ -210,7 +211,7 @@ export function WikiTreeNode({
                 <Button
                   variant="ghost"
                   size="icon-xs"
-                  className="shrink-0 opacity-0 group-hover:opacity-100"
+                  className="shrink-0 hidden group-hover:inline-flex"
                   onClick={() => openCreateDialog(node.id)}
                 />
               }
@@ -222,13 +223,13 @@ export function WikiTreeNode({
         )}
 
         {/* Context menu */}
-        <DropdownMenu>
+        <DropdownMenu open={menuOpen} onOpenChange={setMenuOpen}>
           <DropdownMenuTrigger
             render={
               <Button
                 variant="ghost"
                 size="icon-xs"
-                className="shrink-0 opacity-0 group-hover:opacity-100"
+                className={cn("shrink-0", menuOpen ? "inline-flex" : "hidden group-hover:inline-flex")}
               />
             }
           >
