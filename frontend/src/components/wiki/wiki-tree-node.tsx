@@ -67,15 +67,15 @@ export function WikiTreeNode({
 
   const updateDocument = useUpdateWikiDocument()
 
-  // Skip filtered-out nodes.
-  if (visibleIds && !visibleIds.has(node.id)) return null
-
   const isExpanded = expandedNodes.has(node.id)
   const hasChildren = node.children.length > 0
 
   // DnD: each node is both draggable (via handle) and a drop target.
   const { attributes, listeners, setNodeRef: setDragRef } = useDraggable({ id: node.id })
   const { setNodeRef: setDropRef } = useDroppable({ id: node.id })
+
+  // Skip filtered-out nodes (after all hooks).
+  if (visibleIds && !visibleIds.has(node.id)) return null
 
   const isDragging = activeId === node.id
   const isDropInside = dropTarget?.id === node.id && dropTarget.position === "inside"

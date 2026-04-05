@@ -12,7 +12,7 @@ import {
   type DragStartEvent,
 } from "@dnd-kit/core"
 import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
+import { SearchInput } from "@/components/ui/search-input"
 import { Badge } from "@/components/ui/badge"
 import { Skeleton } from "@/components/ui/skeleton"
 import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip"
@@ -382,11 +382,13 @@ export function WikiTreeSidebar({
 
       {/* Filter input */}
       <div className="border-b px-2 py-1.5">
-        <Input
+        <SearchInput
           value={filter}
-          onChange={(e) => setFilter(e.target.value)}
+          onValueChange={setFilter}
           placeholder="Filter by title..."
-          className="h-7 text-xs"
+          className="relative w-full"
+          inputClassName="h-7 pl-9 text-xs"
+          debounceMs={200}
         />
       </div>
 

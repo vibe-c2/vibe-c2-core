@@ -2,19 +2,23 @@ import { useEffect, useState } from "react"
 import { SearchIcon, XIcon } from "lucide-react"
 import { Input } from "@/components/ui/input"
 
-interface TableSearchInputProps {
+interface SearchInputProps {
   value: string
   onValueChange: (value: string) => void
   placeholder?: string
   debounceMs?: number
+  className?: string
+  inputClassName?: string
 }
 
-export function TableSearchInput({
+export function SearchInput({
   value,
   onValueChange,
   placeholder = "Search...",
   debounceMs = 300,
-}: TableSearchInputProps) {
+  className,
+  inputClassName,
+}: SearchInputProps) {
   // Debounce search input — local state syncs to caller after delay
   const [inputValue, setInputValue] = useState(value)
 
@@ -29,13 +33,13 @@ export function TableSearchInput({
   }, [value])
 
   return (
-    <div className="relative w-full max-w-md">
+    <div className={className ?? "relative w-full max-w-md"}>
       <SearchIcon className="absolute left-2.5 top-1/2 -translate-y-1/2 size-4 text-muted-foreground" />
       <Input
         placeholder={placeholder}
         value={inputValue}
         onChange={(e) => setInputValue(e.target.value)}
-        className={inputValue ? "pl-9 pr-8" : "pl-9"}
+        className={inputClassName ?? (inputValue ? "pl-9 pr-8" : "pl-9")}
       />
       {inputValue && (
         <button

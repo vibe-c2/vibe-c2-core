@@ -1,6 +1,6 @@
 import { Switch } from "@/components/ui/switch"
 import { Label } from "@/components/ui/label"
-import { TableSearchInput } from "@/components/ui/table-search-input"
+import { SearchInput } from "@/components/ui/search-input"
 
 interface AdminSessionsToolbarProps {
   search: string
@@ -17,7 +17,7 @@ export function AdminSessionsToolbar({
 }: AdminSessionsToolbarProps) {
   return (
     <div className="flex items-center gap-2">
-      <TableSearchInput
+      <SearchInput
         value={search}
         onValueChange={onSearchChange}
         placeholder="Search by username..."

@@ -1,6 +1,6 @@
 import { PlusIcon } from "lucide-react"
 import { Button } from "@/components/ui/button"
-import { TableSearchInput } from "@/components/ui/table-search-input"
+import { SearchInput } from "@/components/ui/search-input"
 import { useAuthStore } from "@/stores/auth"
 import { useOperationStore } from "@/stores/operations"
 import { Permissions } from "@/constants/permissions"
@@ -11,7 +11,7 @@ export function OperationsToolbar() {
 
   return (
     <div className="flex items-center justify-between gap-3">
-      <TableSearchInput
+      <SearchInput
         value={search}
         onValueChange={setSearch}
         placeholder="Search operations..."
