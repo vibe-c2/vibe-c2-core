@@ -87,27 +87,46 @@ Y.js CRDT replaces optimistic locking for content edits. The `updateWikiDocument
 
 Real-time collaborative editing is handled by a **Hocuspocus sidecar** — a Node.js service running alongside the Go backend. Hocuspocus is TipTap's Y.js collaboration backend: it manages WebSocket connections, syncs Y.js CRDT state between clients, relays awareness (cursors/presence), and persists document content to MongoDB.
 
-**Why Hocuspocus instead of a pure Go relay?** A pure Go relay cannot parse Y.js state — it must treat CRDT binary as an opaque blob. This creates three problems: (1) clients must send derived Markdown alongside Y.js updates (dual content send), (2) CRDT state compaction must be coordinated with clients (fragile), and (3) the server accumulates raw Y.js updates without the ability to merge or garbage-collect them. Hocuspocus eliminates all three by understanding Y.js natively. The operational cost of one additional container is justified by the massive reduction in application complexity.
+**Why Hocuspocus instead of a pure Go implementation?** A pure Go server could integrate Y.js via WASM bindings, but Hocuspocus is the pragmatic choice: it's battle-tested, maintained by the TipTap team, and provides a rich extension ecosystem (database persistence, webhook notifications, auth hooks) with the standard Y.js sync protocol out of the box. Building an equivalent from scratch — WASM integration, sync protocol, awareness relay, ProseMirror-to-Markdown transformation — is not worth the effort for a small-team tool. Concretely, Hocuspocus solves three problems that a custom implementation would need to reimplement: (1) server-side Markdown derivation from Y.js state, (2) automatic CRDT compaction and garbage collection, and (3) a standard wire protocol with no custom message types. The operational cost of one additional container is justified by the massive reduction in application complexity.
 
 **Separation of concerns:**
-- **Hocuspocus** (Node.js sidecar): WebSocket server, Y.js sync protocol, awareness relay, content persistence (`content_state` + derived `content`), JWT validation
-- **Go backend**: Metadata CRUD, permissions, backups, search, GraphQL API, role enforcement, presence tracking for GraphQL subscriptions
-- **Shared**: MongoDB (Hocuspocus writes content fields, Go writes everything else), JWT secret (environment variable)
+- **Hocuspocus** (Node.js sidecar): WebSocket server, Y.js sync protocol, awareness relay, content persistence (`content_state` + derived `content`), collab ticket verification
+- **Go backend**: Authentication, authorization, collab ticket issuance, metadata CRUD, permissions, backups, search, GraphQL API, role enforcement, presence tracking for GraphQL subscriptions
+- **Shared**: MongoDB (Hocuspocus writes content fields, Go writes everything else), collab ticket secret (environment variable)
 
 **Communication between services:**
 - **Go -> Hocuspocus**: HTTP calls for force-disconnect on role demotion/removal (internal Docker network only)
 - **Hocuspocus -> Go**: Webhooks for content change notifications (`onChange`) and connection events (`onConnect`, `onDisconnect`)
 - **Shared state**: Both services read/write the same `wiki_documents` MongoDB collection, but to non-overlapping fields
 
+**Webhook reliability:** Hocuspocus webhook calls use retry with exponential backoff (3 attempts: 1s, 2s, 4s delays). This is implemented in the custom Database extension's `store()` callback — the `@hocuspocus/extension-webhook` does not natively support retries, so webhook calls are made manually with retry logic alongside content persistence. If all retries fail, the failure is logged and the event is lost. Presence tracker and GraphQL subscriptions are best-effort — the presence tracker rebuilds from subsequent events, and missed document update notifications are acceptable for small teams.
+
 ### 2.8 WebSocket Authentication
 
-JWT validation is handled by Hocuspocus's `onAuthenticate` hook. The frontend passes the JWT as the `token` parameter in the HocuspocusProvider connection options. Hocuspocus validates the JWT using the shared `JWT_SECRET_KEY` environment variable (same secret as the Go backend), then queries MongoDB directly to verify operation membership with `role >= operator`.
+Authentication uses a **collab ticket pattern** — all auth logic stays in Go, Hocuspocus only verifies a pre-signed ticket. This avoids duplicating membership checks across two services.
 
-**Why not cookies?** Hocuspocus uses its own WebSocket provider protocol where the token is sent as a connection parameter — not in cookies or query strings. The frontend reads the access token and passes it to HocuspocusProvider. Query string tokens are never used (they appear in logs and browser history).
+**Flow:**
+1. Client calls Go REST endpoint: `POST /api/v1/wiki/collab-ticket` (behind `JWTAuth` middleware) with `{ documentId }` in the body
+2. Go validates the JWT, loads the document, checks operation membership (`role >= operator`)
+3. Go returns a short-lived **collab ticket** — a signed JWT (separate `HOCUSPOCUS_TICKET_SECRET`, ~30s expiry) scoped to `{ userId, username, operationId, documentId }`
+4. Client passes the collab ticket to HocuspocusProvider as the `token` parameter
+5. Hocuspocus `onAuthenticate` hook verifies the ticket signature and expiry using `HOCUSPOCUS_TICKET_SECRET` — no MongoDB query, no membership logic
 
-**Long-lived connections:** JWT is validated only at connection time. If the token expires during an active session, the connection stays open (standard WebSocket behavior, same as every major collab tool). Forced disconnect is triggered by:
+**Why a collab ticket instead of passing the main JWT?** A collab ticket keeps all authorization logic in Go — there is exactly one implementation of membership checking. If the membership model changes (new roles, new conditions), only Go needs updating. Hocuspocus is a dumb verifier: valid signature + not expired = allow.
+
+**Why not cookies or query strings?** Hocuspocus uses its own WebSocket provider protocol where the token is sent as a connection parameter. Query string tokens appear in logs and browser history.
+
+**Long-lived connections:** The collab ticket is validated only at connection time. Once the WebSocket is established, the connection stays open regardless of ticket expiry (standard WebSocket behavior, same as every major collab tool). Forced disconnect is triggered by:
 - Operation membership revocation — Go backend calls Hocuspocus disconnect API
 - Role demotion to `viewer` — Go backend calls Hocuspocus disconnect API (see §2.9)
+
+**Reconnect and token refresh:** HocuspocusProvider is configured with a `token` callback (not a static string) that fetches a fresh collab ticket before each connection attempt. On reconnect (e.g., after network interruption or Hocuspocus restart):
+1. HocuspocusProvider calls the `token` callback
+2. Callback calls `POST /api/v1/wiki/collab-ticket` with the current access token
+3. If the access token has expired (401 response), the callback refreshes it via `/api/v1/login/refresh` first, then retries the ticket request
+4. Fresh collab ticket is returned to the provider, connection proceeds
+
+This means reconnects after access token expiry work transparently — the provider always gets a fresh ticket.
 
 ### 2.9 Role Enforcement on Active Connections
 
@@ -150,6 +169,31 @@ Conservative limits are enforced at the resolver and Hocuspocus hook levels:
 **Limit rejection behavior:** When max clients per room or max active rooms is reached, Hocuspocus rejects the connection. The frontend does **not** auto-retry (avoids thundering herd). The user manually retries.
 
 **CRDT state size:** Y.js performs internal struct merging and tombstone garbage collection when Hocuspocus loads and manages the Y.Doc server-side. No custom compaction logic is needed. If state size becomes a concern in the future, Hocuspocus can call `Y.encodeStateAsUpdate(doc)` periodically in `onStoreDocument` to produce a compacted snapshot — a one-liner requiring no client involvement.
+
+### 2.12 Nginx Reverse Proxy
+
+All app services (frontend, Go backend, Hocuspocus) are unified behind a single **nginx reverse proxy** on port `8080`. No service exposes its own port to the host — all traffic flows through nginx.
+
+**Why:** A single entry point eliminates CORS (frontend and API share the same origin), simplifies frontend configuration (`/api/v1` instead of `http://localhost:8002/api/v1`), and matches production topology where a reverse proxy is always present.
+
+**Routing table:**
+
+| Path | Upstream | Notes |
+|------|----------|-------|
+| `/api/v1/ws/wiki/` | `hocuspocus:1234` | WebSocket upgrade for Y.js collab |
+| `/api/` | `core-dev:8002` | REST + GraphQL + internal webhooks |
+| `/swagger/` | `core-dev:8002` | Swagger UI (dev only) |
+| `/` | `frontend-dev:5173` | Vite dev server + HMR WebSocket |
+
+Route order matters — `/api/v1/ws/wiki/` must match before the general `/api/` block, otherwise WebSocket upgrade requests hit the Go backend instead of Hocuspocus.
+
+**WebSocket handling:** Two locations require WebSocket upgrade headers:
+- `/api/v1/ws/wiki/` — Hocuspocus Y.js sync protocol. `proxy_read_timeout` set to 24h to keep long-lived collab connections alive.
+- `/` — Vite dev server uses WebSocket for Hot Module Replacement (`/__vite_hmr`). Passing `Upgrade` headers on the catch-all location covers this transparently.
+
+**Frontend environment:** With nginx, the frontend `VITE_API_URL` changes from `http://localhost:8002/api/v1` (cross-origin) to `/api/v1` (same origin, relative). This eliminates all CORS configuration for browser requests.
+
+**Dev vs production:** In development, the `/` location proxies to the Vite dev server (with HMR). In production, nginx serves pre-built static files directly from disk instead. The API and WebSocket routes remain the same.
 
 ## 3. Data Models
 
@@ -205,8 +249,9 @@ type WikiDocumentBackup struct {
     OperationID        uuid.UUID                 `bson:"operation_id" json:"operationId"`
     Title              string                    `bson:"title" json:"title"`
     Content            string                    `bson:"content" json:"content"`
+    ContentState       []byte                    `bson:"content_state,omitempty" json:"-"`  // Y.js binary state snapshot — enables lossless restore
     Trigger            WikiDocumentBackupTrigger `bson:"trigger" json:"trigger"`
-    Description        string                    `bson:"description" json:"description"` // user-provided label for manual, system label for safety backups
+    Description        string                    `bson:"description" json:"description"`    // user-provided label for manual, system label for safety backups
     CreatedByID        uuid.UUID                 `bson:"created_by_id" json:"createdById"`
 }
 ```
@@ -460,53 +505,67 @@ extend type Subscription {
 
 ### 5.1 Endpoint
 
-The reverse proxy routes WebSocket traffic to the Hocuspocus sidecar:
+The nginx reverse proxy (see §2.12) routes WebSocket traffic to the Hocuspocus sidecar:
 
 ```
-wss://host/api/v1/ws/wiki/:documentId  ->  ws://hocuspocus:1234
+Client -> nginx:8080/api/v1/ws/wiki/:documentId -> hocuspocus:1234
 ```
 
-Hocuspocus uses the document ID as the room name. Authentication and membership are validated in the `onAuthenticate` hook (see §2.8). Requires `operator` role or higher in the document's operation.
+Hocuspocus uses the document ID as the room name. The collab ticket (obtained from Go beforehand, see §2.8) is verified in the `onAuthenticate` hook. The ticket already proves `operator` role or higher in the document's operation.
 
 ### 5.2 Connection Flow
 
 ```
-Client (HocuspocusProvider)           Hocuspocus Sidecar              Go Backend
-  |                                         |                              |
-  |  WebSocket connect                      |                              |
-  |  token: <JWT>                           |                              |
-  |  documentName: wiki/{docId}             |                              |
-  |---------------------------------------->|                              |
-  |                                         |                              |
-  |              1. onAuthenticate:         |                              |
-  |                 validate JWT            |                              |
-  |                 query MongoDB for       |                              |
-  |                 membership (>= operator)|                              |
-  |              2. onConnect:              |                              |
-  |                 check room/server       |                              |
-  |                 capacity limits         |                              |
-  |              3. onLoadDocument:         |                              |
-  |                 fetch content_state     |                              |
-  |                 from MongoDB            |                              |
-  |              4. WebSocket upgrade       |                              |
-  |                                         |                              |
-  |<======= Y.js sync step 1 =============>|                              |
-  |<======= Y.js sync step 2 =============>|                              |
-  |                                         |                              |
-  |      [ real-time editing session ]      |                              |
-  |                                         |                              |
-  |--- Y.js update (typing) -------------->|--- relay to other clients     |
-  |<-- Y.js update (from others) ----------|                              |
-  |--- awareness (cursor) ---------------->|--- relay to other clients     |
-  |<-- awareness (from others) ------------|                              |
-  |                                         |                              |
-  |              onStoreDocument (debounced, ~2s):                         |
-  |              - persist content_state to MongoDB                        |
-  |              - derive markdown via transformer                         |
-  |              - persist content to MongoDB                              |
-  |                                         |-- webhook: onChange -------->|
-  |                                         |                   publish EventBus
-  |                                         |                              |
+Client (Browser)                     Go Backend                     Hocuspocus Sidecar
+  |                                      |                              |
+  |  POST /api/v1/wiki/collab-ticket     |                              |
+  |  Authorization: Bearer <JWT>         |                              |
+  |  { documentId }                      |                              |
+  |------------------------------------->|                              |
+  |                                      |                              |
+  |              1. JWTAuth middleware    |                              |
+  |              2. Load document         |                              |
+  |              3. Check membership     |                              |
+  |                 (role >= operator)    |                              |
+  |              4. Sign collab ticket    |                              |
+  |                 (~30s expiry)         |                              |
+  |                                      |                              |
+  |  { ticket: "<signed-ticket>" }       |                              |
+  |<-------------------------------------|                              |
+  |                                      |                              |
+  |  WebSocket connect (HocuspocusProvider)                             |
+  |  token: <collab-ticket>              |                              |
+  |  documentName: wiki/{docId}          |                              |
+  |------------------------------------------------------------>       |
+  |                                         |                           |
+  |              1. onAuthenticate:         |                           |
+  |                 verify ticket signature |                           |
+  |                 + expiry (no DB query)  |                           |
+  |              2. onConnect:              |                           |
+  |                 check room/server       |                           |
+  |                 capacity limits         |                           |
+  |              3. onLoadDocument:         |                           |
+  |                 fetch content_state     |                           |
+  |                 from MongoDB            |                           |
+  |              4. WebSocket upgrade       |                           |
+  |                                         |                           |
+  |<======= Y.js sync step 1 =============>|                           |
+  |<======= Y.js sync step 2 =============>|                           |
+  |                                         |                           |
+  |      [ real-time editing session ]      |                           |
+  |                                         |                           |
+  |--- Y.js update (typing) -------------->|--- relay to other clients  |
+  |<-- Y.js update (from others) ----------|                           |
+  |--- awareness (cursor) ---------------->|--- relay to other clients  |
+  |<-- awareness (from others) ------------|                           |
+  |                                         |                           |
+  |              onStoreDocument (debounced, ~2s):                      |
+  |              - persist content_state to MongoDB                     |
+  |              - derive markdown via transformer                      |
+  |              - persist content to MongoDB                           |
+  |                                         |-- webhook: onChange ----->|
+  |                                         |                publish EventBus
+  |                                         |                           |
 ```
 
 ### 5.3 Protocol
@@ -545,7 +604,7 @@ All wiki GraphQL fields use `@hasPermission(permission: "operation:member")` as 
 | Delete backup | `admin` | |
 | View presence (who is editing) | `viewer` | Via GraphQL query/subscription |
 
-**Role enforcement on active connections:** Role is checked by Hocuspocus at WebSocket connection time (`onAuthenticate`) AND enforced by the Go backend on role change via Hocuspocus disconnect API. Demotion to `viewer` mid-session triggers immediate disconnect from collab (see §2.9).
+**Role enforcement on active connections:** Role is checked by Go at collab ticket issuance time (before WebSocket connect) AND enforced by the Go backend on role change via Hocuspocus disconnect API. Demotion to `viewer` mid-session triggers immediate disconnect from collab (see §2.9).
 
 ## 7. Wiki Integration Package (Go Side)
 
@@ -636,7 +695,11 @@ Hocuspocus owns persistence of content fields using the **Database extension** w
 
 The Go backend reads `content` (Markdown) from MongoDB for backups, search, and GraphQL. It never reads or writes `content_state` during normal operation.
 
-**Backup restore** is the one exception: when `restoreWikiDocumentBackup` restores a document, the Go backend writes the backup's `content` to the `content` field and sets `content_state` to nil. On the next client open, Hocuspocus's `onLoadDocument` sees nil `content_state`, and the frontend initializes a fresh Y.Doc from the Markdown content (Markdown -> ProseMirror -> Y.Doc, all client-side). The first `onStoreDocument` writes the new `content_state`.
+**Backup restore:** When `restoreWikiDocumentBackup` restores a document, the Go backend writes both the backup's `content` and `content_state` back to the document. On the next client open, Hocuspocus's `onLoadDocument` loads the restored `content_state` and the Y.Doc is fully reconstructed — lossless, no client-side conversion needed.
+
+**Fallback for legacy backups:** If a backup has no `content_state` (created before this field existed, or edge case), the Go backend writes the backup's `content` and sets `content_state` to nil. On the next client open, Hocuspocus's `onLoadDocument` sees nil `content_state`, and the frontend initializes a fresh Y.Doc from the Markdown content (Markdown -> ProseMirror -> Y.Doc, client-side). This round-trip may be slightly lossy for rich content but is acceptable as a fallback.
+
+**Storage note:** Backups with `content_state` are larger (~2-5x the Markdown size due to CRDT overhead), but lossless restore is worth the storage cost.
 
 ### 8.3 New Document Initialization
 
@@ -704,7 +767,7 @@ type IWikiDocumentRepository interface {
     HardDeleteByOperationID(ctx context.Context, opID uuid.UUID) error                          // cascade on operation delete
     HardDeleteTrashed(ctx context.Context, opID uuid.UUID) error                                // empty trash
     FindChangedSinceLastBackup(ctx context.Context, batchSize int64) ([]models.WikiDocument, error)  // for auto-backup job
-    ClearContentState(ctx context.Context, docID uuid.UUID, markdownContent string) error            // for backup restore: sets content, clears content_state so Hocuspocus reinitializes
+    RestoreFromBackup(ctx context.Context, docID uuid.UUID, content string, contentState []byte) error  // for backup restore: writes content + content_state (nil content_state triggers client-side re-init as fallback)
 }
 ```
 
@@ -805,7 +868,7 @@ Any operator can call `createWikiDocumentBackup(documentId, description)` to sna
 
 ### Restore from Backup
 
-`restoreWikiDocumentBackup` replaces the document's `title` and `content` with the backup's values, and sets `content_state` to nil so Hocuspocus reinitializes the Y.Doc from the restored Markdown on the next client connection (see §8.2). A pre-restore safety backup is created first. This triggers a new auto-backup on the next cycle if the interval has elapsed.
+`restoreWikiDocumentBackup` replaces the document's `title`, `content`, and `content_state` with the backup's values (see §8.2). If the backup has `content_state`, the restore is lossless. If not (legacy backups), `content_state` is set to nil so Hocuspocus reinitializes from Markdown on the next client connection. A pre-restore safety backup is created first. This triggers a new auto-backup on the next cycle if the interval has elapsed.
 
 ### Retention
 
@@ -923,6 +986,16 @@ wikiDocRes := resolver.NewWikiDocumentResolver(
 )
 ```
 
+### Collab ticket route in `router.go`
+
+Protected by JWTAuth (same as GraphQL):
+
+```go
+wikiGroup := v1.Group("/wiki")
+wikiGroup.Use(middleware.JWTAuth(authProvider))
+wikiGroup.POST("/collab-ticket", controller.NewWikiController(repos.WikiDocument, repos.Operation, ticketSecret, logger))
+```
+
 ### Webhook route in `router.go`
 
 Internal webhook endpoint (not behind JWTAuth, behind HMAC validation):
@@ -932,22 +1005,60 @@ internal := v1.Group("/internal")
 internal.POST("/wiki/webhook", wiki.NewWebhookHandler(presenceTracker, eventBus, webhookSecret, logger))
 ```
 
-### Reverse proxy config
+### Nginx reverse proxy config (`nginx/default.conf`)
 
-WebSocket traffic routes to Hocuspocus, REST traffic routes to Go:
+Full nginx configuration unifying all app services behind port 8080 (see §2.12):
 
 ```nginx
-# WebSocket collaboration -> Hocuspocus sidecar
-location /api/v1/ws/wiki/ {
-    proxy_pass http://hocuspocus:1234;
-    proxy_http_version 1.1;
-    proxy_set_header Upgrade $http_upgrade;
-    proxy_set_header Connection "upgrade";
+upstream backend {
+    server core-dev:8002;
 }
 
-# REST/GraphQL -> Go backend (unchanged)
-location /api/ {
-    proxy_pass http://core-dev:8002;
+upstream hocuspocus {
+    server hocuspocus:1234;
+}
+
+upstream frontend {
+    server frontend-dev:5173;
+}
+
+server {
+    listen 80;
+
+    # Hocuspocus WebSocket — MUST come before /api/ to match first
+    location /api/v1/ws/wiki/ {
+        proxy_pass http://hocuspocus;
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection "upgrade";
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_read_timeout 86400s;
+    }
+
+    # Go backend REST + GraphQL
+    location /api/ {
+        proxy_pass http://backend;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+
+    # Swagger UI
+    location /swagger/ {
+        proxy_pass http://backend;
+        proxy_set_header Host $host;
+    }
+
+    # Frontend (Vite dev server + HMR WebSocket)
+    location / {
+        proxy_pass http://frontend;
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection "upgrade";
+        proxy_set_header Host $host;
+    }
 }
 ```
 
@@ -987,14 +1098,15 @@ No new direct dependencies for collaborative editing. The Go backend uses only t
 |------------|---------|
 | `@hocuspocus/server` | Y.js collaboration server |
 | `@hocuspocus/extension-database` | Generic database persistence driver |
-| `@hocuspocus/extension-webhook` | Webhook notifications to Go backend |
 | `@hocuspocus/transformer` | Y.Doc -> ProseMirror JSON -> Markdown conversion |
 | `mongodb` | MongoDB driver for persistence |
-| `jsonwebtoken` | JWT validation with shared secret |
+| `jsonwebtoken` | Collab ticket signature verification |
 
 ### Infrastructure
 
-**New service: Hocuspocus sidecar.** Node.js container on the internal Docker network. Shares MongoDB connection and JWT secret with the Go backend. Reverse proxy routes WebSocket traffic (`/api/v1/ws/wiki/`) to Hocuspocus. See Docker Compose addition in §18.
+**New service: Hocuspocus sidecar.** Node.js container on the internal Docker network. Shares MongoDB connection and collab ticket secret with the Go backend. See Docker Compose addition in §18.
+
+**New service: Nginx reverse proxy.** All app traffic flows through nginx on port 8080 (see §2.12). Routes `/api/v1/ws/wiki/` to Hocuspocus, `/api/` to Go backend, `/` to frontend. No app service exposes its own host port. See Docker Compose addition and nginx config in §18.
 
 ## 18. Implementation
 
@@ -1012,6 +1124,7 @@ No new direct dependencies for collaborative editing. The Go backend uses only t
 | `core/pkg/wiki/presence.go` | PresenceTracker: in-memory presence map, queried by GraphQL |
 | `core/pkg/wiki/webhook.go` | Gin handler for Hocuspocus webhook callbacks |
 | `core/pkg/wiki/hocuspocus_client.go` | HTTP client for Hocuspocus disconnect API |
+| `core/pkg/controller/wiki_controller.go` | REST handler for `POST /api/v1/wiki/collab-ticket` (auth ticket issuance) |
 
 ### New Hocuspocus files
 
@@ -1020,11 +1133,17 @@ No new direct dependencies for collaborative editing. The Go backend uses only t
 | `hocuspocus/package.json` | Node.js dependencies |
 | `hocuspocus/tsconfig.json` | TypeScript config |
 | `hocuspocus/src/index.ts` | Server entry point: wires extensions, hooks, internal HTTP endpoint |
-| `hocuspocus/src/auth.ts` | `onAuthenticate`: JWT decode + MongoDB membership query |
-| `hocuspocus/src/persistence.ts` | Database extension: `fetch()` reads `content_state`, `store()` writes `content_state` + derived markdown |
+| `hocuspocus/src/auth.ts` | `onAuthenticate`: collab ticket signature + expiry verification (no MongoDB query) |
+| `hocuspocus/src/persistence.ts` | Database extension: `fetch()` reads `content_state`, `store()` writes `content_state` + derived markdown + sends webhook to Go with retry |
 | `hocuspocus/src/disconnect.ts` | Internal `POST /api/disconnect` handler (called by Go for role enforcement) |
 | `hocuspocus/Dockerfile` | Production image |
 | `hocuspocus/dev.Dockerfile` | Development image with hot reload |
+
+### New nginx files
+
+| File | Purpose |
+|------|---------|
+| `nginx/default.conf` | Reverse proxy config — routes to frontend, Go backend, and Hocuspocus (see §16) |
 
 ### Modified files
 
@@ -1034,14 +1153,14 @@ No new direct dependencies for collaborative editing. The Go backend uses only t
 | `core/pkg/eventbus/eventbus.go` | Wiki document + presence topic constants |
 | `core/pkg/eventbus/payloads.go` | Wiki document + presence payload structs + typed constructors |
 | `core/pkg/app/app.go` | Wiki repos in Repositories + PresenceTracker + HocuspocusClient fields + init + EventBus subscribers for role enforcement + auto-backup goroutine |
-| `core/pkg/app/router.go` | Create wiki resolver, pass to NewHandler; add internal webhook route |
+| `core/pkg/app/router.go` | Create wiki resolver, pass to NewHandler; add internal webhook route; add collab ticket REST route |
 | `core/pkg/graphql/handler.go` | Accept wiki resolver |
 | `core/pkg/graphql/resolver/resolver.go` | Wiki resolver field |
 | `core/pkg/graphql/resolver/subscriptions.resolvers.go` | Wiki + presence subscription resolvers |
 | `core/pkg/graphql/gqlgen.yml` | Wiki model mappings |
 | `docker-compose.yml` | Add hocuspocus service |
 
-### Docker Compose addition
+### Docker Compose additions
 
 ```yaml
 hocuspocus:
@@ -1055,7 +1174,7 @@ hocuspocus:
   environment:
     MONGO_URI: mongodb://${MONGO_INITDB_ROOT_USERNAME}:${MONGO_INITDB_ROOT_PASSWORD}@mongodb:27017
     MONGO_DATABASE: ${MONGO_DATABASE}
-    JWT_SECRET_KEY: ${JWT_SECRET_KEY}
+    HOCUSPOCUS_TICKET_SECRET: ${HOCUSPOCUS_TICKET_SECRET}
     HOCUSPOCUS_WEBHOOK_SECRET: ${HOCUSPOCUS_WEBHOOK_SECRET}
     HOCUSPOCUS_WEBHOOK_URL: http://core-dev:8002/api/v1/internal/wiki/webhook
     HOCUSPOCUS_DEBOUNCE_MS: 2000
@@ -1065,7 +1184,37 @@ hocuspocus:
       condition: service_healthy
   networks:
     - vibec2
+
+nginx:
+  image: nginx:alpine
+  container_name: vibec2-nginx
+  restart: unless-stopped
+  profiles:
+    - development
+  ports:
+    - "8080:80"
+  volumes:
+    - ./nginx/default.conf:/etc/nginx/conf.d/default.conf:ro
+  depends_on:
+    - core-dev
+    - frontend-dev
+    - hocuspocus
+  networks:
+    - vibec2
 ```
+
+### Docker Compose modifications
+
+The following existing services lose their host port mappings — all app traffic goes through nginx:
+
+- **core-dev**: remove `ports: ["8002:8002"]`
+- **frontend-dev**: remove `ports: ["5173:5173"]`
+- **seaweedfs-master**: remove `ports: ["9333:9333"]` (internal only)
+- **seaweedfs-volume**: remove `ports: ["8080:8080"]` (internal only)
+- **seaweedfs-filer**: remove `ports: ["8888:8888"]` (internal only)
+- **seaweedfs-s3**: remove `ports: ["8333:8333"]` (internal only)
+
+Frontend environment change: `VITE_API_URL` changes from `http://localhost:8002/api/v1` to `/api/v1` (same-origin through nginx, no CORS needed).
 
 ### Deliverables
 
@@ -1088,6 +1237,7 @@ hocuspocus:
 - Presence query and subscription for sidebar "who is editing" (Go PresenceTracker via webhooks)
 - Force-disconnect on operation membership revocation or role demotion (Go -> Hocuspocus API)
 - Connection and room limits enforced in Hocuspocus hooks
+- Nginx reverse proxy unifying frontend, backend, and Hocuspocus on port 8080
 
 ## 19. Future Work
 
