@@ -12,6 +12,7 @@ import { ResizeHandle } from "@/components/wiki/resize-handle"
 import { WikiContentArea } from "@/components/wiki/wiki-content-area"
 import { CreateWikiDocumentDialog } from "@/components/wiki/create-wiki-document-dialog"
 import { DeleteWikiDocumentDialog } from "@/components/wiki/delete-wiki-document-dialog"
+import { MoveWikiDocumentDialog } from "@/components/wiki/move-wiki-document-dialog"
 import { PermanentDeleteWikiDocumentDialog } from "@/components/wiki/permanent-delete-wiki-document-dialog"
 import { WikiTrashPanel } from "@/components/wiki/wiki-trash-panel"
 import { WikiBackupPanel } from "@/components/wiki/wiki-backup-panel"
@@ -75,6 +76,7 @@ function WikiPageInner({
 
       {/* Dialogs + panels — mounted once, controlled by store */}
       <CreateWikiDocumentDialog operationId={operationId} />
+      <MoveWikiDocumentDialog documents={treeDocuments} />
       <DeleteWikiDocumentDialog documentId={documentId} />
       <PermanentDeleteWikiDocumentDialog />
       <WikiTrashPanel operationId={operationId} />

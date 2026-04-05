@@ -1,11 +1,12 @@
 import { useState } from "react"
 import { useNavigate, useParams } from "react-router"
-import { useSortable } from "@dnd-kit/sortable"
-import { CSS } from "@dnd-kit/utilities"
+import { useDraggable, useDroppable } from "@dnd-kit/core"
 import {
+  ArrowDownAZIcon,
   ChevronRightIcon,
   EllipsisIcon,
   FilePlusIcon,
+  FolderInputIcon,
   GripVerticalIcon,
   PencilIcon,
   SearchIcon,
@@ -26,7 +27,7 @@ import { useWikiStore } from "@/stores/wiki"
 import { useUpdateWikiDocument } from "@/graphql/hooks/wiki"
 import { EmojiPicker } from "@/components/wiki/emoji-picker"
 import { cn } from "@/lib/utils"
-import type { TreeNode } from "@/components/wiki/wiki-tree-sidebar"
+import type { DropTarget, TreeNode } from "@/components/wiki/wiki-tree-sidebar"
 
 interface WikiTreeNodeProps {
   node: TreeNode
@@ -34,6 +35,8 @@ interface WikiTreeNodeProps {
   isEditor: boolean
   visibleIds: Set<string> | null
   operationId: string
+  activeId: string | null
+  dropTarget: DropTarget | null
 }
 
 export function WikiTreeNode({
@@ -42,6 +45,8 @@ export function WikiTreeNode({
   isEditor,
   visibleIds,
   operationId,
+  activeId,
+  dropTarget,
 }: WikiTreeNodeProps) {
   const navigate = useNavigate()
   const { documentId: selectedDocumentId } = useParams<{ documentId: string }>()
@@ -50,6 +55,7 @@ export function WikiTreeNode({
   const expandedNodes = useWikiStore((s) => s.expandedNodes)
   const toggleNode = useWikiStore((s) => s.toggleNode)
   const openCreateDialog = useWikiStore((s) => s.openCreateDialog)
+  const openMoveDialog = useWikiStore((s) => s.openMoveDialog)
   const openDeleteDialog = useWikiStore((s) => s.openDeleteDialog)
   const openContentSearch = useWikiStore((s) => s.openContentSearch)
 
@@ -65,21 +71,14 @@ export function WikiTreeNode({
   const isExpanded = expandedNodes.has(node.id)
   const hasChildren = node.children.length > 0
 
-  // DnD sortable hook.
-  const {
-    attributes,
-    listeners,
-    setNodeRef,
-    transform,
-    transition,
-    isDragging,
-  } = useSortable({ id: node.id })
+  // DnD: each node is both draggable (via handle) and a drop target.
+  const { attributes, listeners, setNodeRef: setDragRef } = useDraggable({ id: node.id })
+  const { setNodeRef: setDropRef } = useDroppable({ id: node.id })
 
-  const style = {
-    transform: CSS.Transform.toString(transform),
-    transition,
-    opacity: isDragging ? 0.5 : undefined,
-  }
+  const isDragging = activeId === node.id
+  const isDropInside = dropTarget?.id === node.id && dropTarget.position === "inside"
+  const isDropBefore = dropTarget?.id === node.id && dropTarget.position === "before"
+  const isDropAfter = dropTarget?.id === node.id && dropTarget.position === "after"
 
   function handleRenameSubmit() {
     const trimmed = renameValue.trim()
@@ -96,20 +95,35 @@ export function WikiTreeNode({
     setEmojiPickerOpen(false)
   }
 
+  const indent = depth * 16 + 4 + (hasChildren ? 0 : 22)
+
   return (
-    <Collapsible open={isExpanded} onOpenChange={() => toggleNode(node.id)}>
+    <Collapsible
+      open={isExpanded}
+      onOpenChange={() => toggleNode(node.id)}
+      className={cn(isDragging && "opacity-50")}
+    >
+      {/* Drop-before divider */}
+      {isDropBefore && (
+        <div style={{ paddingLeft: indent }} className="px-1">
+          <div className="h-0.5 rounded-full bg-primary" />
+        </div>
+      )}
+
       <div
-        ref={setNodeRef}
-        style={{ ...style, paddingLeft: depth * 16 + 4 }}
+        ref={setDropRef}
+        style={{ paddingLeft: indent }}
         className={cn(
           "group flex items-center gap-0.5 rounded-md px-1 py-0.5 text-sm",
-          isSelected && "bg-accent text-accent-foreground",
-          !isSelected && "hover:bg-muted",
+          isDropInside && "bg-primary/10 ring-1 ring-primary",
+          !isDropInside && isSelected && "bg-accent text-accent-foreground",
+          !isDropInside && !isSelected && "hover:bg-muted",
         )}
       >
         {/* Drag handle */}
         {isEditor && (
           <span
+            ref={setDragRef}
             {...attributes}
             {...listeners}
             className="cursor-grab opacity-0 group-hover:opacity-60"
@@ -119,22 +133,20 @@ export function WikiTreeNode({
         )}
 
         {/* Expand/collapse chevron */}
-        <CollapsibleTrigger
-          render={
-            <button className="flex size-5 items-center justify-center rounded hover:bg-muted-foreground/10" />
-          }
-        >
-          {hasChildren ? (
+        {hasChildren && (
+          <CollapsibleTrigger
+            render={
+              <button className="flex size-5 items-center justify-center rounded hover:bg-muted-foreground/10" />
+            }
+          >
             <ChevronRightIcon
               className={cn(
                 "size-3.5 transition-transform",
                 isExpanded && "rotate-90",
               )}
             />
-          ) : (
-            <span className="size-3.5" />
-          )}
-        </CollapsibleTrigger>
+          </CollapsibleTrigger>
+        )}
 
         {/* Emoji */}
         {emojiPickerOpen ? (
@@ -186,7 +198,7 @@ export function WikiTreeNode({
           >
             <EllipsisIcon className="size-3.5" />
           </DropdownMenuTrigger>
-          <DropdownMenuContent align="start">
+          <DropdownMenuContent align="start" className="min-w-48">
             {isEditor && (
               <DropdownMenuItem onClick={() => openCreateDialog(node.id)}>
                 <FilePlusIcon className="mr-2 size-4" />
@@ -208,6 +220,35 @@ export function WikiTreeNode({
               <DropdownMenuItem onClick={() => setEmojiPickerOpen(true)}>
                 <SmileIcon className="mr-2 size-4" />
                 Change emoji
+              </DropdownMenuItem>
+            )}
+            {isEditor && (
+              <DropdownMenuItem
+                onClick={() =>
+                  openMoveDialog({ id: node.id, title: node.title })
+                }
+              >
+                <FolderInputIcon className="mr-2 size-4" />
+                Move to
+              </DropdownMenuItem>
+            )}
+            {isEditor && hasChildren && (
+              <DropdownMenuItem
+                onClick={() => {
+                  const sorted = [...node.children].sort((a, b) =>
+                    a.title.localeCompare(b.title, undefined, { sensitivity: "base" }),
+                  )
+                  const count = sorted.length
+                  for (let i = 0; i < count; i++) {
+                    const newSort = String.fromCharCode(65 + Math.floor(((i + 1) / (count + 1)) * 57))
+                    if (sorted[i].sortOrder !== newSort) {
+                      updateDocument.mutate({ id: sorted[i].id, input: { sortOrder: newSort } })
+                    }
+                  }
+                }}
+              >
+                <ArrowDownAZIcon className="mr-2 size-4" />
+                Sort
               </DropdownMenuItem>
             )}
             <DropdownMenuSeparator />
@@ -235,6 +276,13 @@ export function WikiTreeNode({
         </DropdownMenu>
       </div>
 
+      {/* Drop-after divider */}
+      {isDropAfter && (
+        <div style={{ paddingLeft: indent }} className="px-1">
+          <div className="h-0.5 rounded-full bg-primary" />
+        </div>
+      )}
+
       {/* Children */}
       {hasChildren && (
         <CollapsibleContent>
@@ -246,6 +294,8 @@ export function WikiTreeNode({
               isEditor={isEditor}
               visibleIds={visibleIds}
               operationId={operationId}
+              activeId={activeId}
+              dropTarget={dropTarget}
             />
           ))}
         </CollapsibleContent>

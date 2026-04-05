@@ -38,6 +38,12 @@ interface WikiStoreState {
   openCreateDialog: (parentId?: string | null) => void
   closeCreateDialog: () => void
 
+  // Move dialog
+  moveDialogOpen: boolean
+  moveTarget: { id: string; title: string } | null
+  openMoveDialog: (target: { id: string; title: string }) => void
+  closeMoveDialog: () => void
+
   // Delete dialog (soft delete)
   deleteDialogOpen: boolean
   deleteTarget: { id: string; title: string } | null
@@ -95,6 +101,14 @@ export const useWikiStore = create<WikiStoreState>((set, get) => ({
     set({ createDialogOpen: true, createParentId: parentId ?? null }),
   closeCreateDialog: () =>
     set({ createDialogOpen: false, createParentId: null }),
+
+  // Move dialog
+  moveDialogOpen: false,
+  moveTarget: null,
+  openMoveDialog: (target) =>
+    set({ moveDialogOpen: true, moveTarget: target }),
+  closeMoveDialog: () =>
+    set({ moveDialogOpen: false, moveTarget: null }),
 
   // Delete dialog
   deleteDialogOpen: false,
