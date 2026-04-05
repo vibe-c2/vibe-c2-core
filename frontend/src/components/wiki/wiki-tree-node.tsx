@@ -9,6 +9,7 @@ import {
   FolderInputIcon,
   GripVerticalIcon,
   PencilIcon,
+  PlusIcon,
   SearchIcon,
   SmileIcon,
   Trash2Icon,
@@ -22,6 +23,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 import { Button } from "@/components/ui/button"
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
 import { Input } from "@/components/ui/input"
 import { useWikiStore } from "@/stores/wiki"
 import { useUpdateWikiDocument } from "@/graphql/hooks/wiki"
@@ -183,6 +185,40 @@ export function WikiTreeNode({
           >
             {node.title}
           </button>
+        )}
+
+        {/* Quick actions */}
+        <Tooltip>
+          <TooltipTrigger
+            render={
+              <Button
+                variant="ghost"
+                size="icon-xs"
+                className="shrink-0 opacity-0 group-hover:opacity-100"
+                onClick={() => openContentSearch(node.id, node.title)}
+              />
+            }
+          >
+            <SearchIcon className="size-3.5" />
+          </TooltipTrigger>
+          <TooltipContent>Search in {node.title}</TooltipContent>
+        </Tooltip>
+        {isEditor && (
+          <Tooltip>
+            <TooltipTrigger
+              render={
+                <Button
+                  variant="ghost"
+                  size="icon-xs"
+                  className="shrink-0 opacity-0 group-hover:opacity-100"
+                  onClick={() => openCreateDialog(node.id)}
+                />
+              }
+            >
+              <PlusIcon className="size-3.5" />
+            </TooltipTrigger>
+            <TooltipContent>New child document</TooltipContent>
+          </Tooltip>
         )}
 
         {/* Context menu */}
