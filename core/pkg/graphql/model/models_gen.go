@@ -37,6 +37,16 @@ type CreateUserInput struct {
 	Active   *bool    `json:"active,omitempty"`
 }
 
+type CreateWikiDocumentInput struct {
+	ParentDocumentID *string `json:"parentDocumentId,omitempty"`
+	Title            string  `json:"title"`
+	Content          *string `json:"content,omitempty"`
+	Emoji            *string `json:"emoji,omitempty"`
+	Color            *string `json:"color,omitempty"`
+	Icon             *string `json:"icon,omitempty"`
+	SortOrder        *string `json:"sortOrder,omitempty"`
+}
+
 type Mutation struct {
 }
 
@@ -124,6 +134,15 @@ type UpdateUserInput struct {
 	Active   *bool     `json:"active,omitempty"`
 }
 
+type UpdateWikiDocumentInput struct {
+	Title            *string `json:"title,omitempty"`
+	Emoji            *string `json:"emoji,omitempty"`
+	Color            *string `json:"color,omitempty"`
+	Icon             *string `json:"icon,omitempty"`
+	ParentDocumentID *string `json:"parentDocumentId,omitempty"`
+	SortOrder        *string `json:"sortOrder,omitempty"`
+}
+
 type UserConnection struct {
 	Edges      []*UserEdge          `json:"edges"`
 	PageInfo   *pagination.PageInfo `json:"pageInfo"`
@@ -145,6 +164,55 @@ type UserEvent struct {
 type UserSuggestion struct {
 	ID       string `json:"id"`
 	Username string `json:"username"`
+}
+
+type WikiDocumentBackupConnection struct {
+	Edges      []*WikiDocumentBackupEdge `json:"edges"`
+	PageInfo   *pagination.PageInfo      `json:"pageInfo"`
+	TotalCount int                       `json:"totalCount"`
+}
+
+type WikiDocumentBackupEdge struct {
+	Node   *models.WikiDocumentBackup `json:"node"`
+	Cursor string                     `json:"cursor"`
+}
+
+type WikiDocumentConnection struct {
+	Edges      []*WikiDocumentEdge  `json:"edges"`
+	PageInfo   *pagination.PageInfo `json:"pageInfo"`
+	TotalCount int                  `json:"totalCount"`
+}
+
+type WikiDocumentEdge struct {
+	Node   *models.WikiDocument `json:"node"`
+	Cursor string               `json:"cursor"`
+}
+
+type WikiDocumentEditor struct {
+	UserID      string `json:"userId"`
+	Username    string `json:"username"`
+	ConnectedAt string `json:"connectedAt"`
+}
+
+type WikiDocumentEvent struct {
+	Action           EventAction          `json:"action"`
+	DocumentID       string               `json:"documentId"`
+	OperationID      string               `json:"operationId"`
+	ParentDocumentID *string              `json:"parentDocumentId,omitempty"`
+	Document         *models.WikiDocument `json:"document,omitempty"`
+}
+
+type WikiDocumentPresence struct {
+	DocumentID    string                `json:"documentId"`
+	ActiveEditors []*WikiDocumentEditor `json:"activeEditors"`
+}
+
+type WikiDocumentPresenceEvent struct {
+	DocumentID  string         `json:"documentId"`
+	OperationID string         `json:"operationId"`
+	UserID      string         `json:"userId"`
+	Username    string         `json:"username"`
+	Action      PresenceAction `json:"action"`
 }
 
 type EventAction string
@@ -199,6 +267,61 @@ func (e *EventAction) UnmarshalJSON(b []byte) error {
 }
 
 func (e EventAction) MarshalJSON() ([]byte, error) {
+	var buf bytes.Buffer
+	e.MarshalGQL(&buf)
+	return buf.Bytes(), nil
+}
+
+type PresenceAction string
+
+const (
+	PresenceActionJoined PresenceAction = "JOINED"
+	PresenceActionLeft   PresenceAction = "LEFT"
+)
+
+var AllPresenceAction = []PresenceAction{
+	PresenceActionJoined,
+	PresenceActionLeft,
+}
+
+func (e PresenceAction) IsValid() bool {
+	switch e {
+	case PresenceActionJoined, PresenceActionLeft:
+		return true
+	}
+	return false
+}
+
+func (e PresenceAction) String() string {
+	return string(e)
+}
+
+func (e *PresenceAction) UnmarshalGQL(v any) error {
+	str, ok := v.(string)
+	if !ok {
+		return fmt.Errorf("enums must be strings")
+	}
+
+	*e = PresenceAction(str)
+	if !e.IsValid() {
+		return fmt.Errorf("%s is not a valid PresenceAction", str)
+	}
+	return nil
+}
+
+func (e PresenceAction) MarshalGQL(w io.Writer) {
+	fmt.Fprint(w, strconv.Quote(e.String()))
+}
+
+func (e *PresenceAction) UnmarshalJSON(b []byte) error {
+	s, err := strconv.Unquote(string(b))
+	if err != nil {
+		return err
+	}
+	return e.UnmarshalGQL(s)
+}
+
+func (e PresenceAction) MarshalJSON() ([]byte, error) {
 	var buf bytes.Buffer
 	e.MarshalGQL(&buf)
 	return buf.Bytes(), nil

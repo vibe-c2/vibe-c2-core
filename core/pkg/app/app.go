@@ -9,14 +9,17 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/vibe-c2/vibe-c2-core/core/pkg/auth"
 	"github.com/vibe-c2/vibe-c2-core/core/pkg/cache"
 	"github.com/vibe-c2/vibe-c2-core/core/pkg/database"
 	"github.com/vibe-c2/vibe-c2-core/core/pkg/environment"
 	"github.com/vibe-c2/vibe-c2-core/core/pkg/eventbus"
 	"github.com/vibe-c2/vibe-c2-core/core/pkg/logger"
+	"github.com/vibe-c2/vibe-c2-core/core/pkg/models"
 	"github.com/vibe-c2/vibe-c2-core/core/pkg/repository"
 	"github.com/vibe-c2/vibe-c2-core/core/pkg/session"
+	"github.com/vibe-c2/vibe-c2-core/core/pkg/wiki"
 
 	"go.uber.org/zap"
 )
@@ -26,6 +29,8 @@ type Repositories struct {
 	Operation          repository.IOperationRepository
 	SchemeNetworkPoint repository.ISchemeNetworkPointRepository
 	Session            repository.ISessionRepository
+	WikiDocument       repository.IWikiDocumentRepository
+	WikiDocumentBackup repository.IWikiDocumentBackupRepository
 }
 
 type App struct {
@@ -39,6 +44,11 @@ type App struct {
 	eventBus     eventbus.IEventBus
 
 	sessionCleaner *session.Cleaner
+
+	// Wiki integration
+	presenceTracker *wiki.PresenceTracker
+	hpClient        *wiki.HocuspocusClient
+	backupScheduler *wiki.BackupScheduler
 
 	// Future integration points:
 	// rabbitmq         rabbitmq.IRabbitMQ
@@ -69,6 +79,8 @@ func NewApp() (*App, error) {
 		Operation:          repository.NewOperationRepository(db),
 		SchemeNetworkPoint: repository.NewSchemeNetworkPointRepository(db),
 		Session:            repository.NewSessionRepository(db),
+		WikiDocument:       repository.NewWikiDocumentRepository(db),
+		WikiDocumentBackup: repository.NewWikiDocumentBackupRepository(db),
 	}
 
 	// Initialize cache (noop fallback is acceptable for caching)
@@ -112,6 +124,18 @@ func NewApp() (*App, error) {
 	// MongoDB record was not updated)
 	sessionCleaner := session.NewCleaner(repos.Session, tokenStore, l, 1*time.Hour)
 
+	// Initialize wiki integration
+	presenceTracker := wiki.NewPresenceTracker(l)
+	hpClient := wiki.NewHocuspocusClient(e.HocuspocusURL, l)
+
+	// Parse auto-backup interval
+	backupInterval, err := time.ParseDuration(e.WikiAutoBackupInterval)
+	if err != nil {
+		l.Warn("Invalid WIKI_AUTO_BACKUP_INTERVAL, using default 30m", zap.Error(err))
+		backupInterval = 30 * time.Minute
+	}
+	backupScheduler := wiki.NewBackupScheduler(repos.WikiDocument, repos.WikiDocumentBackup, l, backupInterval)
+
 	// --- Future integration patterns ---
 	//
 	// RabbitMQ:
@@ -135,16 +159,60 @@ func NewApp() (*App, error) {
 	//   cc := setupmanager.NewConditionChecker(repos..., sm, bus, l)
 	// ------------------------------------
 
+	// Subscribe to operation membership changes for wiki role enforcement.
+	// When a user is removed from an operation or demoted below operator,
+	// disconnect their active Hocuspocus WebSocket connections.
+	bus.Subscribe(
+		[]eventbus.Topic{eventbus.TopicOperationMemberRemoved},
+		func(_ context.Context, event eventbus.Event) {
+			if p, ok := event.Payload.(eventbus.OperationMemberPayload); ok {
+				_ = hpClient.DisconnectUser(context.Background(), p.MemberID, p.OperationID)
+			}
+		},
+	)
+	bus.Subscribe(
+		[]eventbus.Topic{eventbus.TopicOperationMemberUpdated},
+		func(_ context.Context, event eventbus.Event) {
+			if p, ok := event.Payload.(eventbus.OperationMemberPayload); ok {
+				// Check if the user's new role is below operator
+				opRepo := repos.Operation
+				opUID, err := uuid.Parse(p.OperationID)
+				if err != nil {
+					return
+				}
+				op, err := opRepo.FindByID(context.Background(), opUID)
+				if err != nil {
+					return
+				}
+				memberUID, err := uuid.Parse(p.MemberID)
+				if err != nil {
+					return
+				}
+				for _, m := range op.Members {
+					if m.UserID == memberUID {
+						if !m.Role.HasAtLeast(models.OperationRoleOperator) {
+							_ = hpClient.DisconnectUser(context.Background(), p.MemberID, p.OperationID)
+						}
+						break
+					}
+				}
+			}
+		},
+	)
+
 	app := &App{
-		logger:         l,
-		db:             db,
-		env:            e,
-		repos:          repos,
-		authProvider:   authProvider,
-		cache:          c,
-		tokenStore:     tokenStore,
-		eventBus:       bus,
-		sessionCleaner: sessionCleaner,
+		logger:          l,
+		db:              db,
+		env:             e,
+		repos:           repos,
+		authProvider:    authProvider,
+		cache:           c,
+		tokenStore:      tokenStore,
+		eventBus:        bus,
+		sessionCleaner:  sessionCleaner,
+		presenceTracker: presenceTracker,
+		hpClient:        hpClient,
+		backupScheduler: backupScheduler,
 	}
 
 	return app, nil
@@ -160,11 +228,7 @@ func (a *App) StartServer() {
 
 	a.eventBus.Start()
 	a.sessionCleaner.Start()
-
-	// Future: start background workers
-	// p.Start()        // pinger
-	// sm.Start()       // setup manager
-	// cc.Start()       // condition checker
+	a.backupScheduler.Start()
 
 	a.logger.Info("Starting server...", zap.String("address", srv.Addr))
 	if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
@@ -182,11 +246,7 @@ func (a *App) StartServerWithGracefulShutdown() {
 
 	a.eventBus.Start()
 	a.sessionCleaner.Start()
-
-	// Future: start background workers
-	// p.Start()
-	// sm.Start()
-	// cc.Start()
+	a.backupScheduler.Start()
 
 	idleConnsClosed := make(chan struct{})
 
@@ -198,11 +258,7 @@ func (a *App) StartServerWithGracefulShutdown() {
 		a.logger.Info("Shutting down server...")
 
 		a.sessionCleaner.Stop()
-
-		// Future: stop background workers
-		// p.Stop()
-		// cc.Stop()
-		// sm.Stop()
+		a.backupScheduler.Stop()
 
 		ctxTimeout, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()

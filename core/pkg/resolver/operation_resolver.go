@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/vibe-c2/vibe-c2-core/core/pkg/authorization"
 	"github.com/vibe-c2/vibe-c2-core/core/pkg/eventbus"
 	"github.com/vibe-c2/vibe-c2-core/core/pkg/graphql/gqlctx"
 	"github.com/vibe-c2/vibe-c2-core/core/pkg/graphql/model"
@@ -42,10 +43,12 @@ type IOperationResolver interface {
 }
 
 type operationResolver struct {
-	operationRepo repository.IOperationRepository
-	userRepo      repository.IUserRepository               // needed for Members field resolver
-	snpRepo       repository.ISchemeNetworkPointRepository  // needed for cascade delete
-	eventBus      eventbus.IEventBus                        // async event publishing
+	operationRepo  repository.IOperationRepository
+	userRepo       repository.IUserRepository               // needed for Members field resolver
+	snpRepo        repository.ISchemeNetworkPointRepository  // needed for cascade delete
+	wikiDocRepo    repository.IWikiDocumentRepository        // needed for cascade delete
+	wikiBackupRepo repository.IWikiDocumentBackupRepository  // needed for cascade delete
+	eventBus       eventbus.IEventBus                        // async event publishing
 }
 
 // NewOperationResolver creates a new operation resolver with the given dependencies.
@@ -75,6 +78,20 @@ func WithSchemeNetworkPointRepo(repo repository.ISchemeNetworkPointRepository) O
 	}
 }
 
+// WithWikiDocumentRepo adds the WikiDocument repository for cascade delete.
+func WithWikiDocumentRepo(repo repository.IWikiDocumentRepository) OperationResolverOption {
+	return func(r *operationResolver) {
+		r.wikiDocRepo = repo
+	}
+}
+
+// WithWikiDocumentBackupRepo adds the WikiDocumentBackup repository for cascade delete.
+func WithWikiDocumentBackupRepo(repo repository.IWikiDocumentBackupRepository) OperationResolverOption {
+	return func(r *operationResolver) {
+		r.wikiBackupRepo = repo
+	}
+}
+
 // WithEventBus adds the event bus for publishing domain events.
 func WithEventBus(bus eventbus.IEventBus) OperationResolverOption {
 	return func(r *operationResolver) {
@@ -84,42 +101,7 @@ func WithEventBus(bus eventbus.IEventBus) OperationResolverOption {
 
 // isAppAdmin returns true if the caller has the app-level "admin" role.
 func isAppAdmin(auth gqlctx.AuthInfo) bool {
-	for _, role := range auth.Roles {
-		if role == "admin" {
-			return true
-		}
-	}
-	return false
-}
-
-// authorizeOperationRole checks if the caller is an app-level admin OR has
-// at least the required role in the given operation. Returns nil if authorized.
-func (r *operationResolver) authorizeOperationRole(ctx context.Context, op *models.Operation, minRole models.OperationRole) error {
-	auth := gqlctx.AuthFromContext(ctx)
-
-	// App-level admins always have full access
-	for _, role := range auth.Roles {
-		if role == "admin" {
-			return nil
-		}
-	}
-
-	// Check operation-level role
-	callerUID, err := uuid.Parse(auth.UserID)
-	if err != nil {
-		return fmt.Errorf("forbidden: invalid caller ID")
-	}
-
-	for _, m := range op.Members {
-		if m.UserID == callerUID {
-			if m.Role.HasAtLeast(minRole) {
-				return nil
-			}
-			return fmt.Errorf("forbidden: requires at least '%s' role in this operation", minRole)
-		}
-	}
-
-	return fmt.Errorf("forbidden: not a member of this operation")
+	return authorization.IsAppAdmin(auth)
 }
 
 // CreateOperation creates a new operation.
@@ -177,7 +159,7 @@ func (r *operationResolver) UpdateOperation(ctx context.Context, id string, inpu
 		return nil, fmt.Errorf("operation not found: %w", err)
 	}
 
-	if err := r.authorizeOperationRole(ctx, &op, models.OperationRoleAdmin); err != nil {
+	if err := authorization.AuthorizeOperationRole(ctx, &op, models.OperationRoleAdmin); err != nil {
 		return nil, err
 	}
 
@@ -230,6 +212,18 @@ func (r *operationResolver) DeleteOperation(ctx context.Context, id string) (boo
 		}
 	}
 
+	// Cascade delete: remove all wiki backups then documents belonging to this operation
+	if r.wikiBackupRepo != nil {
+		if err := r.wikiBackupRepo.DeleteByOperationID(ctx, op.OperationID); err != nil {
+			return false, fmt.Errorf("failed to delete operation's wiki backups: %w", err)
+		}
+	}
+	if r.wikiDocRepo != nil {
+		if err := r.wikiDocRepo.HardDeleteByOperationID(ctx, op.OperationID); err != nil {
+			return false, fmt.Errorf("failed to delete operation's wiki documents: %w", err)
+		}
+	}
+
 	if err := r.operationRepo.Delete(ctx, &op); err != nil {
 		return false, fmt.Errorf("failed to delete operation: %w", err)
 	}
@@ -265,7 +259,7 @@ func (r *operationResolver) AddOperationMember(ctx context.Context, operationID 
 		return nil, fmt.Errorf("operation not found: %w", err)
 	}
 
-	if err := r.authorizeOperationRole(ctx, &op, models.OperationRoleAdmin); err != nil {
+	if err := authorization.AuthorizeOperationRole(ctx, &op, models.OperationRoleAdmin); err != nil {
 		return nil, err
 	}
 
@@ -317,7 +311,7 @@ func (r *operationResolver) RemoveOperationMember(ctx context.Context, operation
 		return nil, fmt.Errorf("operation not found: %w", err)
 	}
 
-	if err := r.authorizeOperationRole(ctx, &op, models.OperationRoleAdmin); err != nil {
+	if err := authorization.AuthorizeOperationRole(ctx, &op, models.OperationRoleAdmin); err != nil {
 		return nil, err
 	}
 
@@ -365,7 +359,7 @@ func (r *operationResolver) UpdateOperationMemberRole(ctx context.Context, opera
 		return nil, fmt.Errorf("operation not found: %w", err)
 	}
 
-	if err := r.authorizeOperationRole(ctx, &op, models.OperationRoleAdmin); err != nil {
+	if err := authorization.AuthorizeOperationRole(ctx, &op, models.OperationRoleAdmin); err != nil {
 		return nil, err
 	}
 
@@ -403,7 +397,7 @@ func (r *operationResolver) Operation(ctx context.Context, id string) (*models.O
 		return nil, fmt.Errorf("operation not found: %w", err)
 	}
 
-	if err := r.authorizeOperationRole(ctx, &op, models.OperationRoleViewer); err != nil {
+	if err := authorization.AuthorizeOperationRole(ctx, &op, models.OperationRoleViewer); err != nil {
 		return nil, err
 	}
 

@@ -163,3 +163,51 @@ models:
   SessionTerminationReason:
     model:
       - github.com/vibe-c2/vibe-c2-core/core/pkg/models.SessionTerminationReason
+
+  # Map the GraphQL "WikiDocument" type to our existing WikiDocument model.
+  # Field resolvers bridge UUID->string, timestamp->RFC3339, and relation lookups.
+  WikiDocument:
+    model:
+      - github.com/vibe-c2/vibe-c2-core/core/pkg/models.WikiDocument
+    fields:
+      id:
+        resolver: true
+      operationId:
+        resolver: true
+      parentDocument:
+        resolver: true
+      childDocuments:
+        resolver: true
+      childCount:
+        resolver: true
+      createdBy:
+        resolver: true
+      deletedBy:
+        resolver: true
+      lastBackupAt:
+        resolver: true
+      deletedAt:
+        resolver: true
+      createdAt:
+        resolver: true
+      updatedAt:
+        resolver: true
+
+  # Map the GraphQL "WikiDocumentBackup" type to our existing model.
+  WikiDocumentBackup:
+    model:
+      - github.com/vibe-c2/vibe-c2-core/core/pkg/models.WikiDocumentBackup
+    fields:
+      id:
+        resolver: true
+      documentId:
+        resolver: true
+      createdBy:
+        resolver: true
+      createdAt:
+        resolver: true
+
+  # Map the backup trigger enum to our existing Go type.
+  WikiDocumentBackupTrigger:
+    model:
+      - github.com/vibe-c2/vibe-c2-core/core/pkg/models.WikiDocumentBackupTrigger

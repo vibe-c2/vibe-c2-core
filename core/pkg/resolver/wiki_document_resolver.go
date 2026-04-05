@@ -1,0 +1,1054 @@
+package resolver
+
+import (
+	"context"
+	"fmt"
+	"time"
+
+	"github.com/google/uuid"
+	"github.com/vibe-c2/vibe-c2-core/core/pkg/authorization"
+	"github.com/vibe-c2/vibe-c2-core/core/pkg/eventbus"
+	"github.com/vibe-c2/vibe-c2-core/core/pkg/graphql/gqlctx"
+	"github.com/vibe-c2/vibe-c2-core/core/pkg/graphql/model"
+	"github.com/vibe-c2/vibe-c2-core/core/pkg/models"
+	"github.com/vibe-c2/vibe-c2-core/core/pkg/pagination"
+	"github.com/vibe-c2/vibe-c2-core/core/pkg/repository"
+	"github.com/vibe-c2/vibe-c2-core/core/pkg/wiki"
+)
+
+const (
+	maxTitleLength  = 200
+	maxContentSize  = 1 * 1024 * 1024 // 1 MB
+	maxNestingDepth = 10
+)
+
+// IWikiDocumentResolver defines the business logic methods for wiki documents and backups.
+type IWikiDocumentResolver interface {
+	// Document mutations
+	CreateWikiDocument(ctx context.Context, operationID string, input model.CreateWikiDocumentInput) (*models.WikiDocument, error)
+	UpdateWikiDocument(ctx context.Context, id string, input model.UpdateWikiDocumentInput) (*models.WikiDocument, error)
+	DeleteWikiDocument(ctx context.Context, id string) (bool, error)
+	RestoreWikiDocument(ctx context.Context, id string) (*models.WikiDocument, error)
+	PermanentlyDeleteWikiDocument(ctx context.Context, id string) (bool, error)
+	EmptyWikiDocumentTrash(ctx context.Context, operationID string) (bool, error)
+
+	// Backup mutations
+	CreateWikiDocumentBackup(ctx context.Context, documentID string, description *string) (*models.WikiDocumentBackup, error)
+	RestoreWikiDocumentBackup(ctx context.Context, documentID string, backupID string) (*models.WikiDocument, error)
+	DeleteWikiDocumentBackup(ctx context.Context, id string) (bool, error)
+
+	// Document queries
+	WikiDocument(ctx context.Context, id string) (*models.WikiDocument, error)
+	WikiDocuments(ctx context.Context, operationID string, parentDocumentID *string, search *string, first *int, after *string, last *int, before *string) (*model.WikiDocumentConnection, error)
+	WikiDocumentTree(ctx context.Context, operationID string) ([]*models.WikiDocument, error)
+	WikiDocumentTrash(ctx context.Context, operationID string, first *int, after *string, last *int, before *string) (*model.WikiDocumentConnection, error)
+
+	// Backup queries
+	WikiDocumentBackups(ctx context.Context, documentID string, trigger *models.WikiDocumentBackupTrigger, first *int, after *string, last *int, before *string) (*model.WikiDocumentBackupConnection, error)
+	WikiDocumentBackup(ctx context.Context, id string) (*models.WikiDocumentBackup, error)
+
+	// Presence query
+	WikiDocumentPresence(ctx context.Context, documentID string) (*model.WikiDocumentPresence, error)
+
+	// WikiDocument field resolvers
+	WikiDocumentID(ctx context.Context, obj *models.WikiDocument) (string, error)
+	WikiDocumentOperationID(ctx context.Context, obj *models.WikiDocument) (string, error)
+	WikiDocumentParentDocument(ctx context.Context, obj *models.WikiDocument) (*models.WikiDocument, error)
+	WikiDocumentChildDocuments(ctx context.Context, obj *models.WikiDocument) ([]*models.WikiDocument, error)
+	WikiDocumentChildCount(ctx context.Context, obj *models.WikiDocument) (int, error)
+	WikiDocumentCreatedBy(ctx context.Context, obj *models.WikiDocument) (*models.User, error)
+	WikiDocumentDeletedBy(ctx context.Context, obj *models.WikiDocument) (*models.User, error)
+	WikiDocumentLastBackupAt(ctx context.Context, obj *models.WikiDocument) (*string, error)
+	WikiDocumentDeletedAt(ctx context.Context, obj *models.WikiDocument) (*string, error)
+	WikiDocumentCreatedAt(ctx context.Context, obj *models.WikiDocument) (string, error)
+	WikiDocumentUpdatedAt(ctx context.Context, obj *models.WikiDocument) (string, error)
+
+	// WikiDocumentBackup field resolvers
+	WikiDocumentBackupID(ctx context.Context, obj *models.WikiDocumentBackup) (string, error)
+	WikiDocumentBackupDocumentID(ctx context.Context, obj *models.WikiDocumentBackup) (string, error)
+	WikiDocumentBackupCreatedBy(ctx context.Context, obj *models.WikiDocumentBackup) (*models.User, error)
+	WikiDocumentBackupCreatedAt(ctx context.Context, obj *models.WikiDocumentBackup) (string, error)
+}
+
+type wikiDocumentResolver struct {
+	docRepo       repository.IWikiDocumentRepository
+	backupRepo    repository.IWikiDocumentBackupRepository
+	operationRepo repository.IOperationRepository
+	userRepo      repository.IUserRepository
+	eventBus      eventbus.IEventBus
+	presence      *wiki.PresenceTracker
+}
+
+// NewWikiDocumentResolver creates a new wiki document resolver with the given dependencies.
+func NewWikiDocumentResolver(
+	docRepo repository.IWikiDocumentRepository,
+	backupRepo repository.IWikiDocumentBackupRepository,
+	operationRepo repository.IOperationRepository,
+	userRepo repository.IUserRepository,
+	eventBus eventbus.IEventBus,
+	presence *wiki.PresenceTracker,
+) IWikiDocumentResolver {
+	return &wikiDocumentResolver{
+		docRepo:       docRepo,
+		backupRepo:    backupRepo,
+		operationRepo: operationRepo,
+		userRepo:      userRepo,
+		eventBus:      eventBus,
+		presence:      presence,
+	}
+}
+
+// authorizeForOperation loads the operation and checks the caller's role.
+func (r *wikiDocumentResolver) authorizeForOperation(ctx context.Context, operationID uuid.UUID, minRole models.OperationRole) error {
+	op, err := r.operationRepo.FindByID(ctx, operationID)
+	if err != nil {
+		return fmt.Errorf("operation not found: %w", err)
+	}
+	return authorization.AuthorizeOperationRole(ctx, &op, minRole)
+}
+
+func (r *wikiDocumentResolver) wikiDocPayload(doc *models.WikiDocument) eventbus.WikiDocumentEventPayload {
+	p := eventbus.WikiDocumentEventPayload{
+		DocumentID:  doc.DocumentID.String(),
+		OperationID: doc.OperationID.String(),
+		Title:       doc.Title,
+	}
+	if doc.ParentDocumentID != nil {
+		p.ParentDocumentID = doc.ParentDocumentID.String()
+	}
+	if doc.DeletedAt != nil {
+		p.DeletedAt = doc.DeletedAt.Format(time.RFC3339)
+	}
+	return p
+}
+
+// --- Document mutations ---
+
+func (r *wikiDocumentResolver) CreateWikiDocument(ctx context.Context, operationID string, input model.CreateWikiDocumentInput) (*models.WikiDocument, error) {
+	auth := gqlctx.AuthFromContext(ctx)
+
+	opUID, err := uuid.Parse(operationID)
+	if err != nil {
+		return nil, fmt.Errorf("invalid operation ID: %w", err)
+	}
+
+	if err := r.authorizeForOperation(ctx, opUID, models.OperationRoleOperator); err != nil {
+		return nil, err
+	}
+
+	// Validate title length
+	if len(input.Title) > maxTitleLength {
+		return nil, fmt.Errorf("title exceeds maximum length of %d characters", maxTitleLength)
+	}
+
+	// Validate content size
+	content := ""
+	if input.Content != nil {
+		content = *input.Content
+		if len(content) > maxContentSize {
+			return nil, fmt.Errorf("content exceeds maximum size of 1 MB")
+		}
+	}
+
+	// Validate nesting depth
+	var parentDocID *uuid.UUID
+	if input.ParentDocumentID != nil {
+		pid, err := uuid.Parse(*input.ParentDocumentID)
+		if err != nil {
+			return nil, fmt.Errorf("invalid parent document ID: %w", err)
+		}
+		parentDocID = &pid
+
+		// Verify parent exists and is in the same operation
+		parent, err := r.docRepo.FindByID(ctx, pid)
+		if err != nil {
+			return nil, fmt.Errorf("parent document not found: %w", err)
+		}
+		if parent.OperationID != opUID {
+			return nil, fmt.Errorf("parent document belongs to a different operation")
+		}
+		if parent.DeletedAt != nil {
+			return nil, fmt.Errorf("cannot create child under a deleted document")
+		}
+
+		// Check nesting depth
+		depth, err := r.docRepo.NestingDepth(ctx, pid)
+		if err != nil {
+			return nil, fmt.Errorf("failed to check nesting depth: %w", err)
+		}
+		if depth >= maxNestingDepth {
+			return nil, fmt.Errorf("maximum nesting depth of %d levels exceeded", maxNestingDepth)
+		}
+	}
+
+	callerUID, err := uuid.Parse(auth.UserID)
+	if err != nil {
+		return nil, fmt.Errorf("invalid caller ID: %w", err)
+	}
+
+	sortOrder := ""
+	if input.SortOrder != nil {
+		sortOrder = *input.SortOrder
+	}
+
+	emoji := ""
+	if input.Emoji != nil {
+		emoji = *input.Emoji
+	}
+
+	color := ""
+	if input.Color != nil {
+		color = *input.Color
+	}
+
+	icon := ""
+	if input.Icon != nil {
+		icon = *input.Icon
+	}
+
+	doc := &models.WikiDocument{
+		DocumentID:       uuid.New(),
+		OperationID:      opUID,
+		ParentDocumentID: parentDocID,
+		Title:            input.Title,
+		Content:          content,
+		Emoji:            emoji,
+		Color:            color,
+		Icon:             icon,
+		SortOrder:        sortOrder,
+		CreatedByID:      callerUID,
+	}
+
+	if err := r.docRepo.Create(ctx, doc); err != nil {
+		return nil, fmt.Errorf("failed to create wiki document: %w", err)
+	}
+
+	r.eventBus.Publish(eventbus.NewWikiDocumentCreatedEvent(
+		eventbus.UserActor(auth.UserID), r.wikiDocPayload(doc),
+	))
+
+	return doc, nil
+}
+
+func (r *wikiDocumentResolver) UpdateWikiDocument(ctx context.Context, id string, input model.UpdateWikiDocumentInput) (*models.WikiDocument, error) {
+	auth := gqlctx.AuthFromContext(ctx)
+
+	uid, err := uuid.Parse(id)
+	if err != nil {
+		return nil, fmt.Errorf("invalid document ID: %w", err)
+	}
+
+	doc, err := r.docRepo.FindByID(ctx, uid)
+	if err != nil {
+		return nil, fmt.Errorf("document not found: %w", err)
+	}
+
+	if err := r.authorizeForOperation(ctx, doc.OperationID, models.OperationRoleOperator); err != nil {
+		return nil, err
+	}
+
+	updates := make(map[string]interface{})
+	moved := false
+
+	if input.Title != nil {
+		if len(*input.Title) > maxTitleLength {
+			return nil, fmt.Errorf("title exceeds maximum length of %d characters", maxTitleLength)
+		}
+		updates["title"] = *input.Title
+	}
+	if input.Emoji != nil {
+		updates["emoji"] = *input.Emoji
+	}
+	if input.Color != nil {
+		updates["color"] = *input.Color
+	}
+	if input.Icon != nil {
+		updates["icon"] = *input.Icon
+	}
+	if input.SortOrder != nil {
+		updates["sort_order"] = *input.SortOrder
+	}
+
+	// Reparent
+	if input.ParentDocumentID != nil {
+		newParentStr := *input.ParentDocumentID
+		if newParentStr == "" {
+			// Move to root
+			updates["parent_document_id"] = nil
+			moved = true
+		} else {
+			newParentUID, err := uuid.Parse(newParentStr)
+			if err != nil {
+				return nil, fmt.Errorf("invalid parent document ID: %w", err)
+			}
+			// Verify parent exists and is in the same operation
+			parent, err := r.docRepo.FindByID(ctx, newParentUID)
+			if err != nil {
+				return nil, fmt.Errorf("parent document not found: %w", err)
+			}
+			if parent.OperationID != doc.OperationID {
+				return nil, fmt.Errorf("parent document belongs to a different operation")
+			}
+			if parent.DeletedAt != nil {
+				return nil, fmt.Errorf("cannot move under a deleted document")
+			}
+			// Prevent circular reference
+			if newParentUID == doc.DocumentID {
+				return nil, fmt.Errorf("cannot make a document its own parent")
+			}
+			// Check nesting depth
+			depth, err := r.docRepo.NestingDepth(ctx, newParentUID)
+			if err != nil {
+				return nil, fmt.Errorf("failed to check nesting depth: %w", err)
+			}
+			if depth >= maxNestingDepth {
+				return nil, fmt.Errorf("maximum nesting depth of %d levels exceeded", maxNestingDepth)
+			}
+			updates["parent_document_id"] = newParentUID
+			moved = true
+		}
+	}
+
+	if len(updates) == 0 {
+		return &doc, nil
+	}
+
+	if err := r.docRepo.Update(ctx, &doc, updates); err != nil {
+		return nil, fmt.Errorf("failed to update wiki document: %w", err)
+	}
+
+	updated, err := r.docRepo.FindByID(ctx, uid)
+	if err != nil {
+		return nil, fmt.Errorf("failed to fetch updated document: %w", err)
+	}
+
+	payload := r.wikiDocPayload(&updated)
+	if moved {
+		r.eventBus.Publish(eventbus.NewWikiDocumentMovedEvent(eventbus.UserActor(auth.UserID), payload))
+	}
+	r.eventBus.Publish(eventbus.NewWikiDocumentUpdatedEvent(eventbus.UserActor(auth.UserID), payload))
+
+	return &updated, nil
+}
+
+func (r *wikiDocumentResolver) DeleteWikiDocument(ctx context.Context, id string) (bool, error) {
+	auth := gqlctx.AuthFromContext(ctx)
+
+	uid, err := uuid.Parse(id)
+	if err != nil {
+		return false, fmt.Errorf("invalid document ID: %w", err)
+	}
+
+	doc, err := r.docRepo.FindByID(ctx, uid)
+	if err != nil {
+		return false, fmt.Errorf("document not found: %w", err)
+	}
+	if doc.DeletedAt != nil {
+		return false, fmt.Errorf("document is already in trash")
+	}
+
+	if err := r.authorizeForOperation(ctx, doc.OperationID, models.OperationRoleOperator); err != nil {
+		return false, err
+	}
+
+	callerUID, err := uuid.Parse(auth.UserID)
+	if err != nil {
+		return false, fmt.Errorf("invalid caller ID: %w", err)
+	}
+
+	// Find all descendants for cascading soft-delete
+	descendants, err := r.docRepo.FindDescendants(ctx, uid)
+	if err != nil {
+		return false, fmt.Errorf("failed to find descendants: %w", err)
+	}
+
+	// Create pre-delete safety backups for the document and all descendants
+	allDocs := append([]models.WikiDocument{doc}, descendants...)
+	for i := range allDocs {
+		r.createSafetyBackup(ctx, &allDocs[i], callerUID, "Pre-delete snapshot")
+	}
+
+	// Soft-delete descendants
+	if len(descendants) > 0 {
+		descendantIDs := make([]uuid.UUID, len(descendants))
+		for i, d := range descendants {
+			descendantIDs[i] = d.DocumentID
+		}
+		if err := r.docRepo.SoftDeleteBatch(ctx, descendantIDs, callerUID); err != nil {
+			return false, fmt.Errorf("failed to soft-delete descendants: %w", err)
+		}
+	}
+
+	// Soft-delete the document itself
+	if err := r.docRepo.SoftDelete(ctx, &doc, callerUID); err != nil {
+		return false, fmt.Errorf("failed to soft-delete document: %w", err)
+	}
+
+	r.eventBus.Publish(eventbus.NewWikiDocumentSoftDeletedEvent(
+		eventbus.UserActor(auth.UserID), r.wikiDocPayload(&doc),
+	))
+
+	return true, nil
+}
+
+func (r *wikiDocumentResolver) RestoreWikiDocument(ctx context.Context, id string) (*models.WikiDocument, error) {
+	auth := gqlctx.AuthFromContext(ctx)
+
+	uid, err := uuid.Parse(id)
+	if err != nil {
+		return nil, fmt.Errorf("invalid document ID: %w", err)
+	}
+
+	doc, err := r.docRepo.FindByID(ctx, uid)
+	if err != nil {
+		return nil, fmt.Errorf("document not found: %w", err)
+	}
+	if doc.DeletedAt == nil {
+		return nil, fmt.Errorf("document is not in trash")
+	}
+
+	if err := r.authorizeForOperation(ctx, doc.OperationID, models.OperationRoleOperator); err != nil {
+		return nil, err
+	}
+
+	// If original parent was permanently deleted, restore to root
+	if doc.ParentDocumentID != nil {
+		_, err := r.docRepo.FindByID(ctx, *doc.ParentDocumentID)
+		if err != nil {
+			// Parent no longer exists — restore to root
+			if err := r.docRepo.Update(ctx, &doc, map[string]interface{}{
+				"parent_document_id": nil,
+			}); err != nil {
+				return nil, fmt.Errorf("failed to clear parent for restore: %w", err)
+			}
+		}
+	}
+
+	if err := r.docRepo.Restore(ctx, &doc); err != nil {
+		return nil, fmt.Errorf("failed to restore document: %w", err)
+	}
+
+	restored, err := r.docRepo.FindByID(ctx, uid)
+	if err != nil {
+		return nil, fmt.Errorf("failed to fetch restored document: %w", err)
+	}
+
+	r.eventBus.Publish(eventbus.NewWikiDocumentRestoredEvent(
+		eventbus.UserActor(auth.UserID), r.wikiDocPayload(&restored),
+	))
+
+	return &restored, nil
+}
+
+func (r *wikiDocumentResolver) PermanentlyDeleteWikiDocument(ctx context.Context, id string) (bool, error) {
+	auth := gqlctx.AuthFromContext(ctx)
+
+	uid, err := uuid.Parse(id)
+	if err != nil {
+		return false, fmt.Errorf("invalid document ID: %w", err)
+	}
+
+	doc, err := r.docRepo.FindByID(ctx, uid)
+	if err != nil {
+		return false, fmt.Errorf("document not found: %w", err)
+	}
+	if doc.DeletedAt == nil {
+		return false, fmt.Errorf("document must be in trash before permanent deletion")
+	}
+
+	if err := r.authorizeForOperation(ctx, doc.OperationID, models.OperationRoleAdmin); err != nil {
+		return false, err
+	}
+
+	// Delete all backups for this document
+	if err := r.backupRepo.DeleteByDocumentID(ctx, uid); err != nil {
+		return false, fmt.Errorf("failed to delete backups: %w", err)
+	}
+
+	if err := r.docRepo.HardDelete(ctx, &doc); err != nil {
+		return false, fmt.Errorf("failed to permanently delete document: %w", err)
+	}
+
+	r.eventBus.Publish(eventbus.NewWikiDocumentHardDeletedEvent(
+		eventbus.UserActor(auth.UserID), r.wikiDocPayload(&doc),
+	))
+
+	return true, nil
+}
+
+func (r *wikiDocumentResolver) EmptyWikiDocumentTrash(ctx context.Context, operationID string) (bool, error) {
+	auth := gqlctx.AuthFromContext(ctx)
+
+	opUID, err := uuid.Parse(operationID)
+	if err != nil {
+		return false, fmt.Errorf("invalid operation ID: %w", err)
+	}
+
+	if err := r.authorizeForOperation(ctx, opUID, models.OperationRoleAdmin); err != nil {
+		return false, err
+	}
+
+	// Find all trashed documents to delete their backups
+	trashed, err := r.docRepo.FindByOperationIDWithCursor(ctx, opUID,
+		repository.WikiDocumentFilter{Trashed: true}, nil, 10000, true)
+	if err != nil {
+		return false, fmt.Errorf("failed to find trashed documents: %w", err)
+	}
+
+	// Delete backups for each trashed document
+	for _, doc := range trashed {
+		if err := r.backupRepo.DeleteByDocumentID(ctx, doc.DocumentID); err != nil {
+			return false, fmt.Errorf("failed to delete backups for document %s: %w", doc.DocumentID, err)
+		}
+	}
+
+	// Hard-delete all trashed documents
+	if err := r.docRepo.HardDeleteTrashed(ctx, opUID); err != nil {
+		return false, fmt.Errorf("failed to empty trash: %w", err)
+	}
+
+	r.eventBus.Publish(eventbus.NewWikiDocumentHardDeletedEvent(
+		eventbus.UserActor(auth.UserID), eventbus.WikiDocumentEventPayload{
+			OperationID: operationID,
+		},
+	))
+
+	return true, nil
+}
+
+// --- Backup mutations ---
+
+func (r *wikiDocumentResolver) CreateWikiDocumentBackup(ctx context.Context, documentID string, description *string) (*models.WikiDocumentBackup, error) {
+	auth := gqlctx.AuthFromContext(ctx)
+
+	docUID, err := uuid.Parse(documentID)
+	if err != nil {
+		return nil, fmt.Errorf("invalid document ID: %w", err)
+	}
+
+	doc, err := r.docRepo.FindByID(ctx, docUID)
+	if err != nil {
+		return nil, fmt.Errorf("document not found: %w", err)
+	}
+
+	if err := r.authorizeForOperation(ctx, doc.OperationID, models.OperationRoleOperator); err != nil {
+		return nil, err
+	}
+
+	callerUID, err := uuid.Parse(auth.UserID)
+	if err != nil {
+		return nil, fmt.Errorf("invalid caller ID: %w", err)
+	}
+
+	desc := ""
+	if description != nil {
+		desc = *description
+	}
+
+	backup := &models.WikiDocumentBackup{
+		BackupID:     uuid.New(),
+		DocumentID:   doc.DocumentID,
+		OperationID:  doc.OperationID,
+		Title:        doc.Title,
+		Content:      doc.Content,
+		ContentState: doc.ContentState,
+		Trigger:      models.WikiDocumentBackupTriggerManual,
+		Description:  desc,
+		CreatedByID:  callerUID,
+	}
+
+	if err := r.backupRepo.Create(ctx, backup); err != nil {
+		return nil, fmt.Errorf("failed to create backup: %w", err)
+	}
+
+	// Update lastBackupAt
+	now := time.Now().UTC()
+	_ = r.docRepo.Update(ctx, &doc, map[string]interface{}{"last_backup_at": now})
+
+	return backup, nil
+}
+
+func (r *wikiDocumentResolver) RestoreWikiDocumentBackup(ctx context.Context, documentID string, backupID string) (*models.WikiDocument, error) {
+	auth := gqlctx.AuthFromContext(ctx)
+
+	docUID, err := uuid.Parse(documentID)
+	if err != nil {
+		return nil, fmt.Errorf("invalid document ID: %w", err)
+	}
+
+	backupUID, err := uuid.Parse(backupID)
+	if err != nil {
+		return nil, fmt.Errorf("invalid backup ID: %w", err)
+	}
+
+	doc, err := r.docRepo.FindByID(ctx, docUID)
+	if err != nil {
+		return nil, fmt.Errorf("document not found: %w", err)
+	}
+
+	if err := r.authorizeForOperation(ctx, doc.OperationID, models.OperationRoleOperator); err != nil {
+		return nil, err
+	}
+
+	backup, err := r.backupRepo.FindByID(ctx, backupUID)
+	if err != nil {
+		return nil, fmt.Errorf("backup not found: %w", err)
+	}
+	if backup.DocumentID != docUID {
+		return nil, fmt.Errorf("backup does not belong to this document")
+	}
+
+	callerUID, err := uuid.Parse(auth.UserID)
+	if err != nil {
+		return nil, fmt.Errorf("invalid caller ID: %w", err)
+	}
+
+	// Create pre-restore safety backup
+	r.createSafetyBackup(ctx, &doc, callerUID, "Pre-restore snapshot")
+
+	// Restore content from backup (writes both content and content_state)
+	if err := r.docRepo.RestoreFromBackup(ctx, docUID, backup.Content, backup.ContentState); err != nil {
+		return nil, fmt.Errorf("failed to restore from backup: %w", err)
+	}
+
+	// Also restore the title
+	_ = r.docRepo.Update(ctx, &doc, map[string]interface{}{"title": backup.Title})
+
+	restored, err := r.docRepo.FindByID(ctx, docUID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to fetch restored document: %w", err)
+	}
+
+	r.eventBus.Publish(eventbus.NewWikiDocumentUpdatedEvent(
+		eventbus.UserActor(auth.UserID), r.wikiDocPayload(&restored),
+	))
+
+	return &restored, nil
+}
+
+func (r *wikiDocumentResolver) DeleteWikiDocumentBackup(ctx context.Context, id string) (bool, error) {
+	uid, err := uuid.Parse(id)
+	if err != nil {
+		return false, fmt.Errorf("invalid backup ID: %w", err)
+	}
+
+	backup, err := r.backupRepo.FindByID(ctx, uid)
+	if err != nil {
+		return false, fmt.Errorf("backup not found: %w", err)
+	}
+
+	if err := r.authorizeForOperation(ctx, backup.OperationID, models.OperationRoleAdmin); err != nil {
+		return false, err
+	}
+
+	if err := r.backupRepo.Delete(ctx, &backup); err != nil {
+		return false, fmt.Errorf("failed to delete backup: %w", err)
+	}
+
+	return true, nil
+}
+
+// --- Document queries ---
+
+func (r *wikiDocumentResolver) WikiDocument(ctx context.Context, id string) (*models.WikiDocument, error) {
+	uid, err := uuid.Parse(id)
+	if err != nil {
+		return nil, fmt.Errorf("invalid document ID: %w", err)
+	}
+
+	doc, err := r.docRepo.FindByID(ctx, uid)
+	if err != nil {
+		return nil, fmt.Errorf("document not found: %w", err)
+	}
+
+	if err := r.authorizeForOperation(ctx, doc.OperationID, models.OperationRoleViewer); err != nil {
+		return nil, err
+	}
+
+	return &doc, nil
+}
+
+func (r *wikiDocumentResolver) WikiDocuments(ctx context.Context, operationID string, parentDocumentID *string, search *string, first *int, after *string, last *int, before *string) (*model.WikiDocumentConnection, error) {
+	opUID, err := uuid.Parse(operationID)
+	if err != nil {
+		return nil, fmt.Errorf("invalid operation ID: %w", err)
+	}
+
+	if err := r.authorizeForOperation(ctx, opUID, models.OperationRoleViewer); err != nil {
+		return nil, err
+	}
+
+	args, err := pagination.ParseArgs(first, after, last, before)
+	if err != nil {
+		return nil, fmt.Errorf("invalid pagination args: %w", err)
+	}
+
+	filter := repository.WikiDocumentFilter{Trashed: false}
+	if parentDocumentID != nil {
+		pid, err := uuid.Parse(*parentDocumentID)
+		if err != nil {
+			return nil, fmt.Errorf("invalid parent document ID: %w", err)
+		}
+		filter.ParentDocumentID = &pid
+	}
+	if search != nil {
+		filter.Search = *search
+	}
+
+	total, err := r.docRepo.CountByOperationID(ctx, opUID, filter)
+	if err != nil {
+		return nil, fmt.Errorf("failed to count documents: %w", err)
+	}
+
+	docs, err := r.docRepo.FindByOperationIDWithCursor(ctx, opUID, filter, args.Cursor, args.Limit+1, args.Forward)
+	if err != nil {
+		return nil, fmt.Errorf("failed to list documents: %w", err)
+	}
+
+	hasMore := int64(len(docs)) > args.Limit
+	if hasMore {
+		docs = docs[:args.Limit]
+	}
+
+	edges := make([]*model.WikiDocumentEdge, len(docs))
+	for i := range docs {
+		cursor := pagination.EncodeCursor(docs[i].CreateAt, docs[i].Id)
+		edges[i] = &model.WikiDocumentEdge{
+			Node:   &docs[i],
+			Cursor: cursor,
+		}
+	}
+
+	pageInfo := pagination.PageInfo{
+		HasNextPage:     args.Forward && hasMore,
+		HasPreviousPage: (!args.Forward && hasMore) || (args.Forward && args.Cursor != nil),
+	}
+	if len(edges) > 0 {
+		pageInfo.StartCursor = &edges[0].Cursor
+		pageInfo.EndCursor = &edges[len(edges)-1].Cursor
+	}
+
+	return &model.WikiDocumentConnection{
+		Edges:      edges,
+		PageInfo:   &pageInfo,
+		TotalCount: int(total),
+	}, nil
+}
+
+func (r *wikiDocumentResolver) WikiDocumentTree(ctx context.Context, operationID string) ([]*models.WikiDocument, error) {
+	opUID, err := uuid.Parse(operationID)
+	if err != nil {
+		return nil, fmt.Errorf("invalid operation ID: %w", err)
+	}
+
+	if err := r.authorizeForOperation(ctx, opUID, models.OperationRoleViewer); err != nil {
+		return nil, err
+	}
+
+	docs, err := r.docRepo.FindAllByOperationID(ctx, opUID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to fetch document tree: %w", err)
+	}
+
+	ptrs := make([]*models.WikiDocument, len(docs))
+	for i := range docs {
+		ptrs[i] = &docs[i]
+	}
+
+	return ptrs, nil
+}
+
+func (r *wikiDocumentResolver) WikiDocumentTrash(ctx context.Context, operationID string, first *int, after *string, last *int, before *string) (*model.WikiDocumentConnection, error) {
+	opUID, err := uuid.Parse(operationID)
+	if err != nil {
+		return nil, fmt.Errorf("invalid operation ID: %w", err)
+	}
+
+	if err := r.authorizeForOperation(ctx, opUID, models.OperationRoleViewer); err != nil {
+		return nil, err
+	}
+
+	args, err := pagination.ParseArgs(first, after, last, before)
+	if err != nil {
+		return nil, fmt.Errorf("invalid pagination args: %w", err)
+	}
+
+	filter := repository.WikiDocumentFilter{Trashed: true}
+
+	total, err := r.docRepo.CountByOperationID(ctx, opUID, filter)
+	if err != nil {
+		return nil, fmt.Errorf("failed to count trashed documents: %w", err)
+	}
+
+	docs, err := r.docRepo.FindByOperationIDWithCursor(ctx, opUID, filter, args.Cursor, args.Limit+1, args.Forward)
+	if err != nil {
+		return nil, fmt.Errorf("failed to list trashed documents: %w", err)
+	}
+
+	hasMore := int64(len(docs)) > args.Limit
+	if hasMore {
+		docs = docs[:args.Limit]
+	}
+
+	edges := make([]*model.WikiDocumentEdge, len(docs))
+	for i := range docs {
+		cursor := pagination.EncodeCursor(docs[i].CreateAt, docs[i].Id)
+		edges[i] = &model.WikiDocumentEdge{
+			Node:   &docs[i],
+			Cursor: cursor,
+		}
+	}
+
+	pageInfo := pagination.PageInfo{
+		HasNextPage:     args.Forward && hasMore,
+		HasPreviousPage: (!args.Forward && hasMore) || (args.Forward && args.Cursor != nil),
+	}
+	if len(edges) > 0 {
+		pageInfo.StartCursor = &edges[0].Cursor
+		pageInfo.EndCursor = &edges[len(edges)-1].Cursor
+	}
+
+	return &model.WikiDocumentConnection{
+		Edges:      edges,
+		PageInfo:   &pageInfo,
+		TotalCount: int(total),
+	}, nil
+}
+
+// --- Backup queries ---
+
+func (r *wikiDocumentResolver) WikiDocumentBackups(ctx context.Context, documentID string, trigger *models.WikiDocumentBackupTrigger, first *int, after *string, last *int, before *string) (*model.WikiDocumentBackupConnection, error) {
+	docUID, err := uuid.Parse(documentID)
+	if err != nil {
+		return nil, fmt.Errorf("invalid document ID: %w", err)
+	}
+
+	doc, err := r.docRepo.FindByID(ctx, docUID)
+	if err != nil {
+		return nil, fmt.Errorf("document not found: %w", err)
+	}
+
+	if err := r.authorizeForOperation(ctx, doc.OperationID, models.OperationRoleViewer); err != nil {
+		return nil, err
+	}
+
+	args, err := pagination.ParseArgs(first, after, last, before)
+	if err != nil {
+		return nil, fmt.Errorf("invalid pagination args: %w", err)
+	}
+
+	total, err := r.backupRepo.CountByDocumentID(ctx, docUID, trigger)
+	if err != nil {
+		return nil, fmt.Errorf("failed to count backups: %w", err)
+	}
+
+	backups, err := r.backupRepo.FindByDocumentIDWithCursor(ctx, docUID, trigger, args.Cursor, args.Limit+1, args.Forward)
+	if err != nil {
+		return nil, fmt.Errorf("failed to list backups: %w", err)
+	}
+
+	hasMore := int64(len(backups)) > args.Limit
+	if hasMore {
+		backups = backups[:args.Limit]
+	}
+
+	edges := make([]*model.WikiDocumentBackupEdge, len(backups))
+	for i := range backups {
+		cursor := pagination.EncodeCursor(backups[i].CreateAt, backups[i].Id)
+		edges[i] = &model.WikiDocumentBackupEdge{
+			Node:   &backups[i],
+			Cursor: cursor,
+		}
+	}
+
+	pageInfo := pagination.PageInfo{
+		HasNextPage:     args.Forward && hasMore,
+		HasPreviousPage: (!args.Forward && hasMore) || (args.Forward && args.Cursor != nil),
+	}
+	if len(edges) > 0 {
+		pageInfo.StartCursor = &edges[0].Cursor
+		pageInfo.EndCursor = &edges[len(edges)-1].Cursor
+	}
+
+	return &model.WikiDocumentBackupConnection{
+		Edges:      edges,
+		PageInfo:   &pageInfo,
+		TotalCount: int(total),
+	}, nil
+}
+
+func (r *wikiDocumentResolver) WikiDocumentBackup(ctx context.Context, id string) (*models.WikiDocumentBackup, error) {
+	uid, err := uuid.Parse(id)
+	if err != nil {
+		return nil, fmt.Errorf("invalid backup ID: %w", err)
+	}
+
+	backup, err := r.backupRepo.FindByID(ctx, uid)
+	if err != nil {
+		return nil, fmt.Errorf("backup not found: %w", err)
+	}
+
+	if err := r.authorizeForOperation(ctx, backup.OperationID, models.OperationRoleViewer); err != nil {
+		return nil, err
+	}
+
+	return &backup, nil
+}
+
+// --- Presence query ---
+
+func (r *wikiDocumentResolver) WikiDocumentPresence(ctx context.Context, documentID string) (*model.WikiDocumentPresence, error) {
+	docUID, err := uuid.Parse(documentID)
+	if err != nil {
+		return nil, fmt.Errorf("invalid document ID: %w", err)
+	}
+
+	doc, err := r.docRepo.FindByID(ctx, docUID)
+	if err != nil {
+		return nil, fmt.Errorf("document not found: %w", err)
+	}
+
+	if err := r.authorizeForOperation(ctx, doc.OperationID, models.OperationRoleViewer); err != nil {
+		return nil, err
+	}
+
+	editors := r.presence.GetPresence(docUID)
+	gqlEditors := make([]*model.WikiDocumentEditor, len(editors))
+	for i, e := range editors {
+		gqlEditors[i] = &model.WikiDocumentEditor{
+			UserID:      e.UserID.String(),
+			Username:    e.Username,
+			ConnectedAt: e.ConnectedAt.Format(time.RFC3339),
+		}
+	}
+
+	return &model.WikiDocumentPresence{
+		DocumentID:    documentID,
+		ActiveEditors: gqlEditors,
+	}, nil
+}
+
+// --- WikiDocument field resolvers ---
+
+func (r *wikiDocumentResolver) WikiDocumentID(ctx context.Context, obj *models.WikiDocument) (string, error) {
+	return obj.DocumentID.String(), nil
+}
+
+func (r *wikiDocumentResolver) WikiDocumentOperationID(ctx context.Context, obj *models.WikiDocument) (string, error) {
+	return obj.OperationID.String(), nil
+}
+
+func (r *wikiDocumentResolver) WikiDocumentParentDocument(ctx context.Context, obj *models.WikiDocument) (*models.WikiDocument, error) {
+	if obj.ParentDocumentID == nil {
+		return nil, nil
+	}
+	parent, err := r.docRepo.FindByID(ctx, *obj.ParentDocumentID)
+	if err != nil {
+		return nil, nil // parent may have been deleted
+	}
+	return &parent, nil
+}
+
+func (r *wikiDocumentResolver) WikiDocumentChildDocuments(ctx context.Context, obj *models.WikiDocument) ([]*models.WikiDocument, error) {
+	children, err := r.docRepo.FindChildDocuments(ctx, obj.DocumentID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to fetch child documents: %w", err)
+	}
+	ptrs := make([]*models.WikiDocument, len(children))
+	for i := range children {
+		ptrs[i] = &children[i]
+	}
+	return ptrs, nil
+}
+
+func (r *wikiDocumentResolver) WikiDocumentChildCount(ctx context.Context, obj *models.WikiDocument) (int, error) {
+	count, err := r.docRepo.CountChildDocuments(ctx, obj.DocumentID)
+	if err != nil {
+		return 0, fmt.Errorf("failed to count children: %w", err)
+	}
+	return int(count), nil
+}
+
+func (r *wikiDocumentResolver) WikiDocumentCreatedBy(ctx context.Context, obj *models.WikiDocument) (*models.User, error) {
+	user, err := r.userRepo.FindByID(ctx, obj.CreatedByID)
+	if err != nil {
+		return nil, nil
+	}
+	return &user, nil
+}
+
+func (r *wikiDocumentResolver) WikiDocumentDeletedBy(ctx context.Context, obj *models.WikiDocument) (*models.User, error) {
+	if obj.DeletedByID == nil {
+		return nil, nil
+	}
+	user, err := r.userRepo.FindByID(ctx, *obj.DeletedByID)
+	if err != nil {
+		return nil, nil
+	}
+	return &user, nil
+}
+
+func (r *wikiDocumentResolver) WikiDocumentLastBackupAt(ctx context.Context, obj *models.WikiDocument) (*string, error) {
+	if obj.LastBackupAt == nil {
+		return nil, nil
+	}
+	s := obj.LastBackupAt.Format(time.RFC3339)
+	return &s, nil
+}
+
+func (r *wikiDocumentResolver) WikiDocumentDeletedAt(ctx context.Context, obj *models.WikiDocument) (*string, error) {
+	if obj.DeletedAt == nil {
+		return nil, nil
+	}
+	s := obj.DeletedAt.Format(time.RFC3339)
+	return &s, nil
+}
+
+func (r *wikiDocumentResolver) WikiDocumentCreatedAt(ctx context.Context, obj *models.WikiDocument) (string, error) {
+	return obj.CreateAt.Format(time.RFC3339), nil
+}
+
+func (r *wikiDocumentResolver) WikiDocumentUpdatedAt(ctx context.Context, obj *models.WikiDocument) (string, error) {
+	return obj.UpdateAt.Format(time.RFC3339), nil
+}
+
+// --- WikiDocumentBackup field resolvers ---
+
+func (r *wikiDocumentResolver) WikiDocumentBackupID(ctx context.Context, obj *models.WikiDocumentBackup) (string, error) {
+	return obj.BackupID.String(), nil
+}
+
+func (r *wikiDocumentResolver) WikiDocumentBackupDocumentID(ctx context.Context, obj *models.WikiDocumentBackup) (string, error) {
+	return obj.DocumentID.String(), nil
+}
+
+func (r *wikiDocumentResolver) WikiDocumentBackupCreatedBy(ctx context.Context, obj *models.WikiDocumentBackup) (*models.User, error) {
+	user, err := r.userRepo.FindByID(ctx, obj.CreatedByID)
+	if err != nil {
+		return nil, nil
+	}
+	return &user, nil
+}
+
+func (r *wikiDocumentResolver) WikiDocumentBackupCreatedAt(ctx context.Context, obj *models.WikiDocumentBackup) (string, error) {
+	return obj.CreateAt.Format(time.RFC3339), nil
+}
+
+// --- Internal helpers ---
+
+// createSafetyBackup creates an automatic safety backup before destructive operations.
+func (r *wikiDocumentResolver) createSafetyBackup(ctx context.Context, doc *models.WikiDocument, createdByID uuid.UUID, description string) {
+	backup := &models.WikiDocumentBackup{
+		BackupID:     uuid.New(),
+		DocumentID:   doc.DocumentID,
+		OperationID:  doc.OperationID,
+		Title:        doc.Title,
+		Content:      doc.Content,
+		ContentState: doc.ContentState,
+		Trigger:      models.WikiDocumentBackupTriggerAuto,
+		Description:  description,
+		CreatedByID:  createdByID,
+	}
+	// Best-effort — don't fail the parent operation if backup creation fails
+	_ = r.backupRepo.Create(ctx, backup)
+}

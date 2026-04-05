@@ -1,0 +1,36 @@
+package models
+
+import (
+	"time"
+
+	"github.com/google/uuid"
+	"github.com/qiniu/qmgo/field"
+)
+
+// WikiDocument represents a wiki document in an operation's knowledge base.
+// Documents form a recursive tree via ParentDocumentID — any document can
+// have content and children simultaneously. Root-level documents have nil
+// ParentDocumentID.
+//
+// Content is stored as Y.js CRDT binary state (ContentState) and derived
+// Markdown (Content). The Go backend reads Content for search, backups, and
+// GraphQL. ContentState is written by the Hocuspocus sidecar and never
+// exposed via GraphQL.
+type WikiDocument struct {
+	field.DefaultField `bson:",inline"`
+	DocumentID         uuid.UUID  `bson:"document_id" json:"documentId"`
+	OperationID        uuid.UUID  `bson:"operation_id" json:"operationId"`
+	ParentDocumentID   *uuid.UUID `bson:"parent_document_id,omitempty" json:"parentDocumentId,omitempty"`
+	Title              string     `bson:"title" json:"title"`
+	Content            string     `bson:"content" json:"content"`                        // Markdown — derived by Hocuspocus from Y.js state
+	ContentState       []byte     `bson:"content_state,omitempty" json:"-"`              // Y.js binary state — written by Hocuspocus
+	ContentStateAt     *time.Time `bson:"content_state_at,omitempty" json:"-"`           // when Hocuspocus last persisted
+	Emoji              string     `bson:"emoji" json:"emoji"`
+	Color              string     `bson:"color" json:"color"`                            // hex color for UI
+	Icon               string     `bson:"icon" json:"icon"`                              // icon identifier
+	SortOrder          string     `bson:"sort_order" json:"sortOrder"`                   // fractional index string
+	CreatedByID        uuid.UUID  `bson:"created_by_id" json:"createdById"`
+	LastBackupAt       *time.Time `bson:"last_backup_at,omitempty" json:"lastBackupAt,omitempty"`
+	DeletedAt          *time.Time `bson:"deleted_at,omitempty" json:"deletedAt,omitempty"`
+	DeletedByID        *uuid.UUID `bson:"deleted_by_id,omitempty" json:"deletedById,omitempty"`
+}

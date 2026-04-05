@@ -125,3 +125,54 @@ func NewSessionRefreshedEvent(actor Actor, p SessionEventPayload) Event {
 func NewSessionTerminatedEvent(actor Actor, p SessionEventPayload) Event {
 	return NewEvent(TopicSessionTerminated, actor, p)
 }
+
+// --- Wiki document event payloads ---
+
+// WikiDocumentEventPayload is the payload for wiki document events.
+type WikiDocumentEventPayload struct {
+	DocumentID       string
+	OperationID      string
+	ParentDocumentID string // empty if root
+	Title            string
+	DeletedAt        string // empty if active, ISO timestamp if soft-deleted
+}
+
+// WikiPresencePayload is the payload for wiki presence events.
+type WikiPresencePayload struct {
+	DocumentID  string
+	OperationID string
+	UserID      string
+	Username    string
+}
+
+func NewWikiDocumentCreatedEvent(actor Actor, p WikiDocumentEventPayload) Event {
+	return NewEvent(TopicWikiDocumentCreated, actor, p)
+}
+
+func NewWikiDocumentUpdatedEvent(actor Actor, p WikiDocumentEventPayload) Event {
+	return NewEvent(TopicWikiDocumentUpdated, actor, p)
+}
+
+func NewWikiDocumentSoftDeletedEvent(actor Actor, p WikiDocumentEventPayload) Event {
+	return NewEvent(TopicWikiDocumentSoftDeleted, actor, p)
+}
+
+func NewWikiDocumentRestoredEvent(actor Actor, p WikiDocumentEventPayload) Event {
+	return NewEvent(TopicWikiDocumentRestored, actor, p)
+}
+
+func NewWikiDocumentMovedEvent(actor Actor, p WikiDocumentEventPayload) Event {
+	return NewEvent(TopicWikiDocumentMoved, actor, p)
+}
+
+func NewWikiDocumentHardDeletedEvent(actor Actor, p WikiDocumentEventPayload) Event {
+	return NewEvent(TopicWikiDocumentHardDeleted, actor, p)
+}
+
+func NewWikiPresenceJoinedEvent(actor Actor, p WikiPresencePayload) Event {
+	return NewEvent(TopicWikiPresenceJoined, actor, p)
+}
+
+func NewWikiPresenceLeftEvent(actor Actor, p WikiPresencePayload) Event {
+	return NewEvent(TopicWikiPresenceLeft, actor, p)
+}

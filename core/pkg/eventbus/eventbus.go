@@ -35,6 +35,18 @@ const (
 	TopicSessionCreated    Topic = "session.created"
 	TopicSessionRefreshed  Topic = "session.refreshed"
 	TopicSessionTerminated Topic = "session.terminated"
+
+	// Wiki document events — emitted by WikiDocumentResolver.
+	TopicWikiDocumentCreated     Topic = "wiki.document.created"
+	TopicWikiDocumentUpdated     Topic = "wiki.document.updated"
+	TopicWikiDocumentSoftDeleted Topic = "wiki.document.soft_deleted"
+	TopicWikiDocumentRestored    Topic = "wiki.document.restored"
+	TopicWikiDocumentMoved       Topic = "wiki.document.moved"
+	TopicWikiDocumentHardDeleted Topic = "wiki.document.hard_deleted"
+
+	// Wiki presence events — emitted by Hocuspocus webhook handler.
+	TopicWikiPresenceJoined Topic = "wiki.presence.joined"
+	TopicWikiPresenceLeft   Topic = "wiki.presence.left"
 )
 
 // ActorType identifies who originated an event.

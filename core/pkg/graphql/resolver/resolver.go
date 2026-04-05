@@ -21,6 +21,7 @@ import (
 	"github.com/vibe-c2/vibe-c2-core/core/pkg/eventbus"
 	"github.com/vibe-c2/vibe-c2-core/core/pkg/repository"
 	"github.com/vibe-c2/vibe-c2-core/core/pkg/resolver"
+	"github.com/vibe-c2/vibe-c2-core/core/pkg/wiki"
 )
 
 // Resolver is the root resolver. It delegates to domain-specific entity
@@ -35,11 +36,14 @@ type Resolver struct {
 	OperationResolver          resolver.IOperationResolver
 	SchemeNetworkPointResolver resolver.ISchemeNetworkPointResolver
 	SessionResolver            resolver.ISessionResolver
+	WikiDocumentResolver       resolver.IWikiDocumentResolver
 
 	// Subscription dependencies — event bus for real-time events,
 	// repos for fetching full entities to include in event payloads.
-	EventBus      eventbus.IEventBus
-	UserRepo      repository.IUserRepository
-	OperationRepo repository.IOperationRepository
-	SessionRepo   repository.ISessionRepository
+	EventBus        eventbus.IEventBus
+	UserRepo        repository.IUserRepository
+	OperationRepo   repository.IOperationRepository
+	SessionRepo     repository.ISessionRepository
+	WikiDocumentRepo repository.IWikiDocumentRepository
+	PresenceTracker *wiki.PresenceTracker
 }

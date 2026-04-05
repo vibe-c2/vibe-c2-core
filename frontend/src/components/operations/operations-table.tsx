@@ -24,9 +24,8 @@ interface OperationsTableProps {
   fetchNextPage: () => void
 }
 
-const COLUMNS_BASE = "40px_2fr_3fr_80px_1fr"
-const GRID_COLS = `grid-cols-[${COLUMNS_BASE}_48px]`
-const GRID_COLS_NO_ACTIONS = `grid-cols-[${COLUMNS_BASE}]`
+const GRID_COLS = "grid-cols-[40px_2fr_3fr_80px_1fr_48px]"
+const GRID_COLS_NO_ACTIONS = "grid-cols-[40px_2fr_3fr_80px_1fr]"
 
 export function OperationsTable({
   operations,

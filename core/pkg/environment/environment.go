@@ -38,6 +38,12 @@ type EnvironmentSettings struct {
 	RedisPort     string
 	RedisPassword string
 	CacheEnabled  bool
+
+	// Hocuspocus (collab editing sidecar)
+	HocuspocusURL           string
+	HocuspocusTicketSecret  string
+	HocuspocusWebhookSecret string
+	WikiAutoBackupInterval  string
 }
 
 func init() {
@@ -58,6 +64,9 @@ func init() {
 	viper.SetDefault("REDIS_HOST", "localhost")
 	viper.SetDefault("REDIS_PORT", "6379")
 	viper.SetDefault("CACHE_ENABLED", true)
+	viper.SetDefault("HOCUSPOCUS_URL", "http://hocuspocus:1234")
+	viper.SetDefault("HOCUSPOCUS_WEBHOOK_SECRET", "")
+	viper.SetDefault("WIKI_AUTO_BACKUP_INTERVAL", "30m")
 
 	env = &EnvironmentSettings{
 		StageStatus: viper.GetString("APP_STAGE_STATUS"),
@@ -86,6 +95,12 @@ func init() {
 		RedisPort:     viper.GetString("REDIS_PORT"),
 		RedisPassword: viper.GetString("REDIS_PASSWORD"),
 		CacheEnabled:  viper.GetBool("CACHE_ENABLED"),
+
+		// Hocuspocus
+		HocuspocusURL:           viper.GetString("HOCUSPOCUS_URL"),
+		HocuspocusTicketSecret:  viper.GetString("HOCUSPOCUS_TICKET_SECRET"),
+		HocuspocusWebhookSecret: viper.GetString("HOCUSPOCUS_WEBHOOK_SECRET"),
+		WikiAutoBackupInterval:  viper.GetString("WIKI_AUTO_BACKUP_INTERVAL"),
 	}
 
 	// Validate required configuration — fail fast on missing critical values.

@@ -1,0 +1,213 @@
+# =============================================================================
+# Wiki — Operation-Scoped Knowledge Base with Real-Time Collaborative Editing
+# =============================================================================
+#
+# Documents form a recursive tree: any document can have content AND children.
+# Root-level documents have no parentDocument; nested documents appear under
+# their parent. Sort order uses fractional indexing (lexicographic strings).
+#
+# Content edits flow through Y.js CRDT via the Hocuspocus WebSocket — the
+# content field here is a read-only derived Markdown string. The GraphQL API
+# handles metadata CRUD, backups, search, trash, and presence.
+
+# --- Enums ---
+
+enum WikiDocumentBackupTrigger {
+  AUTO
+  MANUAL
+}
+
+enum PresenceAction {
+  JOINED
+  LEFT
+}
+
+# --- Types ---
+
+type WikiDocument {
+  id: ID!
+  operationId: ID!
+  parentDocument: WikiDocument
+  childDocuments: [WikiDocument!]!
+  title: String!
+  content: String!
+  emoji: String!
+  color: String!
+  icon: String!
+  sortOrder: String!
+  childCount: Int!
+  createdBy: User!
+  lastBackupAt: String
+  deletedAt: String
+  deletedBy: User
+  createdAt: String!
+  updatedAt: String!
+}
+
+type WikiDocumentEdge {
+  node: WikiDocument!
+  cursor: String!
+}
+
+type WikiDocumentConnection {
+  edges: [WikiDocumentEdge!]!
+  pageInfo: PageInfo!
+  totalCount: Int!
+}
+
+type WikiDocumentBackup {
+  id: ID!
+  documentId: ID!
+  title: String!
+  content: String!
+  trigger: WikiDocumentBackupTrigger!
+  description: String!
+  createdBy: User!
+  createdAt: String!
+}
+
+type WikiDocumentBackupEdge {
+  node: WikiDocumentBackup!
+  cursor: String!
+}
+
+type WikiDocumentBackupConnection {
+  edges: [WikiDocumentBackupEdge!]!
+  pageInfo: PageInfo!
+  totalCount: Int!
+}
+
+type WikiDocumentPresence {
+  documentId: ID!
+  activeEditors: [WikiDocumentEditor!]!
+}
+
+type WikiDocumentEditor {
+  userId: ID!
+  username: String!
+  connectedAt: String!
+}
+
+type WikiDocumentPresenceEvent {
+  documentId: ID!
+  operationId: ID!
+  userId: ID!
+  username: String!
+  action: PresenceAction!
+}
+
+type WikiDocumentEvent {
+  action: EventAction!
+  documentId: ID!
+  operationId: ID!
+  parentDocumentId: ID
+  document: WikiDocument
+}
+
+# --- Inputs ---
+
+input CreateWikiDocumentInput {
+  parentDocumentId: ID
+  title: String!
+  content: String
+  emoji: String
+  color: String
+  icon: String
+  sortOrder: String
+}
+
+input UpdateWikiDocumentInput {
+  title: String
+  emoji: String
+  color: String
+  icon: String
+  parentDocumentId: ID
+  sortOrder: String
+}
+
+# --- Queries ---
+
+extend type Query {
+  wikiDocument(id: ID!): WikiDocument!
+    @hasPermission(permission: "operation:member")
+
+  wikiDocuments(
+    operationId: ID!
+    parentDocumentId: ID
+    search: String
+    first: Int = 20
+    after: String
+    last: Int
+    before: String
+  ): WikiDocumentConnection!
+    @hasPermission(permission: "operation:member")
+
+  wikiDocumentTree(operationId: ID!): [WikiDocument!]!
+    @hasPermission(permission: "operation:member")
+
+  wikiDocumentTrash(
+    operationId: ID!
+    first: Int = 20
+    after: String
+    last: Int
+    before: String
+  ): WikiDocumentConnection!
+    @hasPermission(permission: "operation:member")
+
+  wikiDocumentBackups(
+    documentId: ID!
+    trigger: WikiDocumentBackupTrigger
+    first: Int = 20
+    after: String
+    last: Int
+    before: String
+  ): WikiDocumentBackupConnection!
+    @hasPermission(permission: "operation:member")
+
+  wikiDocumentBackup(id: ID!): WikiDocumentBackup!
+    @hasPermission(permission: "operation:member")
+
+  wikiDocumentPresence(documentId: ID!): WikiDocumentPresence!
+    @hasPermission(permission: "operation:member")
+}
+
+# --- Mutations ---
+
+extend type Mutation {
+  createWikiDocument(operationId: ID!, input: CreateWikiDocumentInput!): WikiDocument!
+    @hasPermission(permission: "operation:member")
+
+  updateWikiDocument(id: ID!, input: UpdateWikiDocumentInput!): WikiDocument!
+    @hasPermission(permission: "operation:member")
+
+  deleteWikiDocument(id: ID!): Boolean!
+    @hasPermission(permission: "operation:member")
+
+  restoreWikiDocument(id: ID!): WikiDocument!
+    @hasPermission(permission: "operation:member")
+
+  permanentlyDeleteWikiDocument(id: ID!): Boolean!
+    @hasPermission(permission: "operation:member")
+
+  emptyWikiDocumentTrash(operationId: ID!): Boolean!
+    @hasPermission(permission: "operation:member")
+
+  createWikiDocumentBackup(documentId: ID!, description: String): WikiDocumentBackup!
+    @hasPermission(permission: "operation:member")
+
+  restoreWikiDocumentBackup(documentId: ID!, backupId: ID!): WikiDocument!
+    @hasPermission(permission: "operation:member")
+
+  deleteWikiDocumentBackup(id: ID!): Boolean!
+    @hasPermission(permission: "operation:member")
+}
+
+# --- Subscriptions ---
+
+extend type Subscription {
+  wikiDocumentChanged(operationId: ID!): WikiDocumentEvent!
+    @hasPermission(permission: "operation:member")
+
+  wikiDocumentPresenceChanged(operationId: ID!): WikiDocumentPresenceEvent!
+    @hasPermission(permission: "operation:member")
+}

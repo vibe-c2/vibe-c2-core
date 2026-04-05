@@ -7,7 +7,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/vibe-c2/vibe-c2-core/core/pkg/graphql/gqlctx"
+	"github.com/vibe-c2/vibe-c2-core/core/pkg/authorization"
 	"github.com/vibe-c2/vibe-c2-core/core/pkg/graphql/model"
 	"github.com/vibe-c2/vibe-c2-core/core/pkg/models"
 	"github.com/vibe-c2/vibe-c2-core/core/pkg/pagination"
@@ -59,38 +59,13 @@ func NewSchemeNetworkPointResolver(
 }
 
 // authorizeForOperation checks if the caller has at least the required role in the operation.
-// Follows the same pattern as operationResolver.authorizeOperationRole.
+// Delegates to the shared authorization package.
 func (r *schemeNetworkPointResolver) authorizeForOperation(ctx context.Context, operationID uuid.UUID, minRole models.OperationRole) error {
-	auth := gqlctx.AuthFromContext(ctx)
-
-	// App-level admins always have full access
-	for _, role := range auth.Roles {
-		if role == "admin" {
-			return nil
-		}
-	}
-
-	// Fetch the operation to check membership
 	op, err := r.operationRepo.FindByID(ctx, operationID)
 	if err != nil {
 		return fmt.Errorf("operation not found: %w", err)
 	}
-
-	callerUID, err := uuid.Parse(auth.UserID)
-	if err != nil {
-		return fmt.Errorf("forbidden: invalid caller ID")
-	}
-
-	for _, m := range op.Members {
-		if m.UserID == callerUID {
-			if m.Role.HasAtLeast(minRole) {
-				return nil
-			}
-			return fmt.Errorf("forbidden: requires at least '%s' role in this operation", minRole)
-		}
-	}
-
-	return fmt.Errorf("forbidden: not a member of this operation")
+	return authorization.AuthorizeOperationRole(ctx, &op, minRole)
 }
 
 // CreateSchemeNetworkPoint creates a new network point in an operation.

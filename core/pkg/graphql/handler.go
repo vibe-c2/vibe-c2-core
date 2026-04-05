@@ -26,6 +26,7 @@ import (
 	gqlresolver "github.com/vibe-c2/vibe-c2-core/core/pkg/graphql/resolver"
 	"github.com/vibe-c2/vibe-c2-core/core/pkg/repository"
 	"github.com/vibe-c2/vibe-c2-core/core/pkg/resolver"
+	"github.com/vibe-c2/vibe-c2-core/core/pkg/wiki"
 )
 
 // NewHandler creates a Gin handler that serves GraphQL requests.
@@ -49,10 +50,13 @@ func NewHandler(
 	operations resolver.IOperationResolver,
 	schemeNetworkPoints resolver.ISchemeNetworkPointResolver,
 	sessions resolver.ISessionResolver,
+	wikiDocuments resolver.IWikiDocumentResolver,
 	bus eventbus.IEventBus,
 	userRepo repository.IUserRepository,
 	operationRepo repository.IOperationRepository,
 	sessionRepo repository.ISessionRepository,
+	wikiDocumentRepo repository.IWikiDocumentRepository,
+	presenceTracker *wiki.PresenceTracker,
 ) gin.HandlerFunc {
 	// Create the resolver root with entity resolvers and subscription dependencies.
 	// The root resolver delegates to domain-specific resolvers for business logic.
@@ -62,10 +66,13 @@ func NewHandler(
 		OperationResolver:          operations,
 		SchemeNetworkPointResolver: schemeNetworkPoints,
 		SessionResolver:            sessions,
+		WikiDocumentResolver:       wikiDocuments,
 		EventBus:                   bus,
 		UserRepo:                   userRepo,
 		OperationRepo:              operationRepo,
 		SessionRepo:                sessionRepo,
+		WikiDocumentRepo:           wikiDocumentRepo,
+		PresenceTracker:            presenceTracker,
 	}
 
 	// Build the gqlgen server with our schema, resolvers, and directive.

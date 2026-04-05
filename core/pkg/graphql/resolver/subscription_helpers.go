@@ -127,6 +127,10 @@ func extractOperationID(event eventbus.Event) string {
 		return p.OperationID
 	case eventbus.OperationMemberPayload:
 		return p.OperationID
+	case eventbus.WikiDocumentEventPayload:
+		return p.OperationID
+	case eventbus.WikiPresencePayload:
+		return p.OperationID
 	}
 	return ""
 }
@@ -179,6 +183,145 @@ func toOperationMemberEvent(event eventbus.Event) *model.OperationMemberEvent {
 		evt.UserID = p.MemberID
 	}
 	return evt
+}
+
+// toWikiDocumentEvent converts an event bus Event to a GraphQL WikiDocumentEvent.
+func toWikiDocumentEvent(event eventbus.Event) *model.WikiDocumentEvent {
+	evt := &model.WikiDocumentEvent{Action: topicToAction(event.Topic)}
+
+	// Map soft_deleted and restored to appropriate actions
+	switch event.Topic {
+	case eventbus.TopicWikiDocumentSoftDeleted:
+		evt.Action = model.EventActionDeleted
+	case eventbus.TopicWikiDocumentRestored:
+		evt.Action = model.EventActionCreated
+	case eventbus.TopicWikiDocumentMoved:
+		evt.Action = model.EventActionUpdated
+	}
+
+	if p, ok := event.Payload.(eventbus.WikiDocumentEventPayload); ok {
+		evt.DocumentID = p.DocumentID
+		evt.OperationID = p.OperationID
+		if p.ParentDocumentID != "" {
+			evt.ParentDocumentID = &p.ParentDocumentID
+		}
+	}
+	return evt
+}
+
+// toWikiDocumentPresenceEvent converts an event bus Event to a GraphQL WikiDocumentPresenceEvent.
+func toWikiDocumentPresenceEvent(event eventbus.Event) *model.WikiDocumentPresenceEvent {
+	action := model.PresenceActionJoined
+	if event.Topic == eventbus.TopicWikiPresenceLeft {
+		action = model.PresenceActionLeft
+	}
+
+	evt := &model.WikiDocumentPresenceEvent{Action: action}
+	if p, ok := event.Payload.(eventbus.WikiPresencePayload); ok {
+		evt.DocumentID = p.DocumentID
+		evt.OperationID = p.OperationID
+		evt.UserID = p.UserID
+		evt.Username = p.Username
+	}
+	return evt
+}
+
+// wikiDocumentTopics is the list of wiki document event bus topics for subscriptions.
+var wikiDocumentTopics = []eventbus.Topic{
+	eventbus.TopicWikiDocumentCreated,
+	eventbus.TopicWikiDocumentUpdated,
+	eventbus.TopicWikiDocumentSoftDeleted,
+	eventbus.TopicWikiDocumentRestored,
+	eventbus.TopicWikiDocumentMoved,
+	eventbus.TopicWikiDocumentHardDeleted,
+}
+
+// wikiPresenceTopics is the list of wiki presence event bus topics for subscriptions.
+var wikiPresenceTopics = []eventbus.Topic{
+	eventbus.TopicWikiPresenceJoined,
+	eventbus.TopicWikiPresenceLeft,
+}
+
+// wikiDocumentChanged implements the wikiDocumentChanged subscription.
+// Same operation-scoping pattern as OperationChanged.
+func (r *subscriptionResolver) wikiDocumentChanged(ctx context.Context, operationID string) (<-chan *model.WikiDocumentEvent, error) {
+	auth := gqlctx.AuthFromContext(ctx)
+	if auth.UserID == "" {
+		return nil, fmt.Errorf("unauthorized")
+	}
+
+	filter, err := r.buildOperationFilter(ctx, auth, &operationID)
+	if err != nil {
+		return nil, err
+	}
+
+	ch := make(chan *model.WikiDocumentEvent, 1)
+
+	unsubscribe := r.EventBus.Subscribe(
+		wikiDocumentTopics,
+		func(_ context.Context, event eventbus.Event) {
+			evt := toWikiDocumentEvent(event)
+
+			// For non-DELETE events, fetch the full document
+			if evt.Action != model.EventActionDeleted {
+				if docID, err := uuid.Parse(evt.DocumentID); err == nil {
+					if doc, err := r.WikiDocumentRepo.FindByID(ctx, docID); err == nil {
+						evt.Document = &doc
+					}
+				}
+			}
+
+			select {
+			case ch <- evt:
+			case <-ctx.Done():
+			}
+		},
+		filter,
+	)
+
+	go func() {
+		<-ctx.Done()
+		unsubscribe()
+		close(ch)
+	}()
+
+	return ch, nil
+}
+
+// wikiDocumentPresenceChanged implements the wikiDocumentPresenceChanged subscription.
+func (r *subscriptionResolver) wikiDocumentPresenceChanged(ctx context.Context, operationID string) (<-chan *model.WikiDocumentPresenceEvent, error) {
+	auth := gqlctx.AuthFromContext(ctx)
+	if auth.UserID == "" {
+		return nil, fmt.Errorf("unauthorized")
+	}
+
+	filter, err := r.buildOperationFilter(ctx, auth, &operationID)
+	if err != nil {
+		return nil, err
+	}
+
+	ch := make(chan *model.WikiDocumentPresenceEvent, 1)
+
+	unsubscribe := r.EventBus.Subscribe(
+		wikiPresenceTopics,
+		func(_ context.Context, event eventbus.Event) {
+			evt := toWikiDocumentPresenceEvent(event)
+
+			select {
+			case ch <- evt:
+			case <-ctx.Done():
+			}
+		},
+		filter,
+	)
+
+	go func() {
+		<-ctx.Done()
+		unsubscribe()
+		close(ch)
+	}()
+
+	return ch, nil
 }
 
 // sessionTopics is the list of session event bus topics for subscriptions.
