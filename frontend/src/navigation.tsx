@@ -1,4 +1,5 @@
 import {
+  BookOpenIcon,
   LayoutDashboardIcon,
   SwordsIcon,
   UsersIcon,
@@ -18,6 +19,12 @@ export const navigationItems: NavigationItem[] = [
     url: '/',
     permission: null,
     icon: LayoutDashboardIcon,
+  },
+  {
+    title: 'Wiki',
+    url: '/wiki',
+    permission: null,
+    icon: BookOpenIcon,
   },
 ];
 

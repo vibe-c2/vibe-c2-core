@@ -1,4 +1,4 @@
-import { useEffect } from "react"
+import { useEffect, useState } from "react"
 import { Navigate, Outlet } from "react-router"
 import { useAuthStore } from "@/stores/auth"
 import { useSessionGuard } from "@/hooks/use-session-guard"
@@ -17,9 +17,16 @@ export function ProtectedRoute({ permission }: { permission?: string }) {
   useSessionGuard()
 
   // Hydrate the scoped operation from localStorage once the user is known.
+  // Track whether hydration has run so we don't render child routes
+  // before localStorage has been checked (prevents a flash redirect
+  // on pages like /wiki/:documentId that require a scoped operation).
   const hydrate = useScopedOperationStore((s) => s.hydrate)
+  const [hydrated, setHydrated] = useState(false)
   useEffect(() => {
-    if (userId) hydrate(userId)
+    if (userId) {
+      hydrate(userId)
+      setHydrated(true)
+    }
   }, [userId, hydrate])
 
   // Validate the restored scope and subscribe to real-time changes.
@@ -44,10 +51,10 @@ export function ProtectedRoute({ permission }: { permission?: string }) {
     return <Navigate to="/" replace />
   }
 
-  // Block rendering while the scoped operation is being validated (e.g. after
-  // hydrate from localStorage or tab re-focus). Prevents briefly showing stale
-  // scoped pages before a redirect if validation fails.
-  if (isValidating) {
+  // Block rendering until hydration has run and validation completes.
+  // Prevents flash redirects on scoped pages (e.g. /wiki/:documentId)
+  // before localStorage has been checked.
+  if (!hydrated || isValidating) {
     return (
       <div className="flex min-h-svh items-center justify-center">
         <div className="text-muted-foreground">Loading...</div>

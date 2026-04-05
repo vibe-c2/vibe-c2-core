@@ -10,6 +10,7 @@ import { EnrollPage } from "@/pages/enroll"
 import { DashboardPage } from "@/pages/dashboard"
 import { OperationsPage } from "@/pages/operations"
 import { UsersPage } from "@/pages/users"
+import { WikiPage } from "@/pages/wiki"
 import { useAuthStore } from "@/stores/auth"
 
 function App() {
@@ -33,6 +34,8 @@ function App() {
               <Route index element={<DashboardPage />} />
               <Route path="operations" element={<OperationsPage />} />
               <Route path="users" element={<UsersPage />} />
+              <Route path="wiki" element={<WikiPage />} />
+              <Route path="wiki/:documentId" element={<WikiPage />} />
             </Route>
           </Route>
         </Routes>

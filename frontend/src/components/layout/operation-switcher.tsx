@@ -19,7 +19,7 @@ export function OperationSwitcher() {
   const scopedOperation = useScopedOperationStore((s) => s.scopedOperation)
   const scopeOperation = useScopedOperationStore((s) => s.scopeOperation)
   const unscopeOperation = useScopedOperationStore((s) => s.unscopeOperation)
-  const { toggleSidebar, isMobile } = useSidebar()
+  const { toggleSidebar } = useSidebar()
 
   const [open, setOpen] = useState(false)
   const [search, setSearch] = useState("")
@@ -123,15 +123,24 @@ export function OperationSwitcher() {
                 {scopedOperation.description || "Active operation"}
               </span>
             </div>
-            <button
+            <div
+              role="button"
+              tabIndex={0}
               onClick={(e) => {
                 e.stopPropagation()
                 unscopeOperation()
               }}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" || e.key === " ") {
+                  e.preventDefault()
+                  e.stopPropagation()
+                  unscopeOperation()
+                }
+              }}
               className="ml-auto flex size-6 items-center justify-center rounded-md text-sidebar-foreground/70 hover:text-sidebar-foreground hover:bg-sidebar-accent transition-colors"
             >
               <XIcon className="size-3.5" />
-            </button>
+            </div>
           </>
         ) : (
           <>
