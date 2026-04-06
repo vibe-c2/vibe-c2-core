@@ -323,7 +323,7 @@ export function WikiTreeSidebar({
       className="flex shrink-0 flex-col rounded-lg border bg-card overflow-hidden"
     >
       {/* Header */}
-      <div className="flex items-center gap-1 border-b px-2 py-1.5">
+      <div className="flex h-10 items-center gap-1 border-b px-2">
         <span className="flex-1 truncate px-1 text-sm font-medium">Wiki</span>
         <Tooltip>
           <TooltipTrigger
@@ -381,7 +381,7 @@ export function WikiTreeSidebar({
       </div>
 
       {/* Filter input */}
-      <div className="border-b px-2 py-1.5">
+      <div className="flex h-10 items-center border-b px-2">
         <SearchInput
           value={filter}
           onValueChange={setFilter}

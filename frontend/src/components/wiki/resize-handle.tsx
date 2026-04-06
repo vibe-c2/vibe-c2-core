@@ -43,7 +43,7 @@ export function ResizeHandle({
 
   return (
     <div
-      className="w-1 shrink-0 cursor-col-resize bg-border transition-colors hover:bg-primary/30 active:bg-primary/50"
+      className="relative z-10 w-px shrink-0 cursor-col-resize bg-border transition-colors hover:bg-primary/30 active:bg-primary/50 before:absolute before:inset-y-0 before:-left-1.5 before:w-3 before:content-['']"
       onMouseDown={handleMouseDown}
       role="separator"
       aria-orientation="vertical"

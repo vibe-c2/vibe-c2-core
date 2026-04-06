@@ -37,6 +37,7 @@ export function WikiContentArea({
         key={documentId}
         documentId={documentId}
         isEditor={isEditor}
+        treeDocuments={treeDocuments}
       />
     )
   }

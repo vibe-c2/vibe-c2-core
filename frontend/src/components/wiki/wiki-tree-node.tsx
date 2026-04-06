@@ -229,7 +229,7 @@ export function WikiTreeNode({
               <Button
                 variant="ghost"
                 size="icon-xs"
-                className={cn("shrink-0", menuOpen ? "inline-flex" : "hidden group-hover:inline-flex")}
+                className={cn("shrink-0 inline-flex", !menuOpen && "invisible group-hover:visible")}
               />
             }
           >

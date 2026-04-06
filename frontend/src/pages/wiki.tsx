@@ -1,4 +1,5 @@
-import { Navigate, useParams } from "react-router"
+import { useEffect, useRef } from "react"
+import { Navigate, useNavigate, useParams } from "react-router"
 import { useScopedOperation } from "@/hooks/use-scoped-operation"
 import { useMyOperationRole } from "@/graphql/hooks/operations"
 import {
@@ -41,6 +42,20 @@ function WikiPageInner({
   operationId: string
   documentId: string | null
 }) {
+  const navigate = useNavigate()
+  const prevOperationId = useRef(operationId)
+
+  // When the scoped operation changes while viewing a document, navigate to
+  // /wiki so we don't keep the previous operation's document open.
+  useEffect(() => {
+    if (prevOperationId.current !== operationId) {
+      prevOperationId.current = operationId
+      if (documentId) {
+        navigate("/wiki", { replace: true })
+      }
+    }
+  }, [operationId, documentId, navigate])
+
   const { data: roleData, isLoading: isRoleLoading } = useMyOperationRole(operationId)
   // Default to false while loading to avoid premature WebSocket connections.
   const isEditor = !isRoleLoading && roleData?.myOperationRole !== "VIEWER"
@@ -57,7 +72,7 @@ function WikiPageInner({
   const setSidebarWidth = useWikiStore((s) => s.setSidebarWidth)
 
   return (
-    <div className="flex flex-1 gap-2 p-2 overflow-hidden">
+    <div className="flex flex-1 gap-1 p-2 overflow-hidden">
       <WikiTreeSidebar
         operationId={operationId}
         isEditor={isEditor}

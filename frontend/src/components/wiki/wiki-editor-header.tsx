@@ -1,23 +1,34 @@
-import { useRef, useState } from "react"
-import { ClockIcon } from "lucide-react"
+import { useMemo, useRef, useState } from "react"
+import { useNavigate } from "react-router"
+import { ChevronRightIcon, ClockIcon, EllipsisIcon } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
+import { Popover, PopoverTrigger, PopoverContent } from "@/components/ui/popover"
 import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import { useUpdateWikiDocument, useWikiDocumentPresence } from "@/graphql/hooks/wiki"
 import { useWikiStore } from "@/stores/wiki"
 import { EmojiPicker } from "@/components/wiki/emoji-picker"
-import type { WikiDocumentFieldsFragment } from "@/graphql/gql/graphql"
+import type { WikiDocumentFieldsFragment, WikiDocumentTreeFieldsFragment } from "@/graphql/gql/graphql"
 
 interface WikiEditorHeaderProps {
   document: WikiDocumentFieldsFragment
   isEditor: boolean
+  treeDocuments: WikiDocumentTreeFieldsFragment[]
+}
+
+interface AncestorNode {
+  id: string
+  title: string
+  emoji: string
 }
 
 export function WikiEditorHeader({
   document: doc,
   isEditor,
+  treeDocuments,
 }: WikiEditorHeaderProps) {
+  const navigate = useNavigate()
   const updateDocument = useUpdateWikiDocument()
   const openBackupPanel = useWikiStore((s) => s.openBackupPanel)
 
@@ -28,6 +39,27 @@ export function WikiEditorHeader({
   const [title, setTitle] = useState(doc.title)
   const [isEditingTitle, setIsEditingTitle] = useState(false)
   const titleRef = useRef<HTMLInputElement>(null)
+
+  // Build ancestor path from treeDocuments.
+  const ancestors = useMemo(() => {
+    const map = new Map<string, { title: string; emoji: string; parentId: string | null }>()
+    for (const d of treeDocuments) {
+      map.set(d.id, {
+        title: d.title,
+        emoji: d.emoji,
+        parentId: d.parentDocument?.id ?? null,
+      })
+    }
+    const path: AncestorNode[] = []
+    let currentId: string | null = doc.parentDocument?.id ?? null
+    while (currentId) {
+      const node = map.get(currentId)
+      if (!node) break
+      path.unshift({ id: currentId, title: node.title, emoji: node.emoji })
+      currentId = node.parentId
+    }
+    return path
+  }, [treeDocuments, doc.parentDocument?.id])
 
   function handleTitleBlur() {
     const trimmed = title.trim()
@@ -43,8 +75,13 @@ export function WikiEditorHeader({
     updateDocument.mutate({ id: doc.id, input: { emoji } })
   }
 
+  // Split ancestors: first, middle (collapsible), last is the current doc.
+  const firstAncestor = ancestors.length > 0 ? ancestors[0] : null
+  const middleAncestors = ancestors.length > 2 ? ancestors.slice(1) : []
+  const directParent = ancestors.length === 2 ? ancestors[1] : null
+
   return (
-    <div className="flex items-center gap-2 border-b px-4 py-2">
+    <div className="flex h-10 items-center gap-1 border-b px-3">
       {/* Emoji */}
       <EmojiPicker
         emoji={doc.emoji}
@@ -52,7 +89,54 @@ export function WikiEditorHeader({
         disabled={!isEditor}
       />
 
-      {/* Title */}
+      {/* Breadcrumb: first ancestor */}
+      {firstAncestor && (
+        <>
+          <BreadcrumbSep />
+          <BreadcrumbLink node={firstAncestor} onClick={() => navigate(`/wiki/${firstAncestor.id}`)} />
+        </>
+      )}
+
+      {/* Breadcrumb: direct parent (when exactly 2 ancestors) */}
+      {directParent && (
+        <>
+          <BreadcrumbSep />
+          <BreadcrumbLink node={directParent} onClick={() => navigate(`/wiki/${directParent.id}`)} />
+        </>
+      )}
+
+      {/* Breadcrumb: ellipsis popover (when 3+ ancestors) */}
+      {middleAncestors.length > 0 && (
+        <>
+          <BreadcrumbSep />
+          <Popover>
+            <PopoverTrigger
+              render={
+                <Button variant="ghost" size="icon-xs" className="text-muted-foreground" />
+              }
+            >
+              <EllipsisIcon className="size-3.5" />
+            </PopoverTrigger>
+            <PopoverContent align="start" className="w-auto min-w-40 max-w-64 p-1">
+              {middleAncestors.map((node) => (
+                <button
+                  key={node.id}
+                  className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-sm hover:bg-accent"
+                  onClick={() => navigate(`/wiki/${node.id}`)}
+                >
+                  <span className="shrink-0">{node.emoji || "📄"}</span>
+                  <span className="truncate">{node.title}</span>
+                </button>
+              ))}
+            </PopoverContent>
+          </Popover>
+        </>
+      )}
+
+      {/* Breadcrumb separator before title (when has ancestors) */}
+      {ancestors.length > 0 && <BreadcrumbSep />}
+
+      {/* Title (editable) */}
       {isEditingTitle ? (
         <input
           ref={titleRef}
@@ -69,11 +153,11 @@ export function WikiEditorHeader({
           autoFocus
           onFocus={(e) => e.target.select()}
           maxLength={200}
-          className="flex-1 border-none bg-transparent text-lg font-semibold outline-none"
+          className="min-w-0 flex-1 border-none bg-transparent text-sm font-medium outline-none"
         />
       ) : (
         <button
-          className="flex-1 truncate text-left text-lg font-semibold"
+          className="min-w-0 flex-1 truncate text-left text-sm font-medium"
           onClick={() => {
             if (!isEditor) return
             setTitle(doc.title)
@@ -86,7 +170,7 @@ export function WikiEditorHeader({
       )}
 
       {/* Spacer + right side actions */}
-      <div className="ml-auto flex items-center gap-2">
+      <div className="ml-auto flex shrink-0 items-center gap-2">
         {/* Presence avatars */}
         {activeEditors.length > 0 && (
           <div className="flex -space-x-2">
@@ -134,5 +218,20 @@ export function WikiEditorHeader({
         {!isEditor && <Badge variant="secondary">Read-only</Badge>}
       </div>
     </div>
+  )
+}
+
+function BreadcrumbSep() {
+  return <ChevronRightIcon className="size-3.5 shrink-0 text-muted-foreground" />
+}
+
+function BreadcrumbLink({ node, onClick }: { node: AncestorNode; onClick: () => void }) {
+  return (
+    <button
+      className="shrink-0 truncate text-sm text-muted-foreground hover:text-foreground"
+      onClick={onClick}
+    >
+      {node.title}
+    </button>
   )
 }

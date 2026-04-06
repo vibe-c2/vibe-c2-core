@@ -28,7 +28,7 @@ export function WikiEditorToolbar({ editor }: WikiEditorToolbarProps) {
 
   return (
     <div
-      className="flex flex-wrap items-center gap-0.5 border-b px-2 py-1"
+      className="flex h-10 flex-wrap items-center gap-0.5 border-b px-2"
       role="toolbar"
       aria-label="Formatting"
     >

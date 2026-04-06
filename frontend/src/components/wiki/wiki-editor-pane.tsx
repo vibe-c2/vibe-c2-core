@@ -4,22 +4,25 @@ import { Button } from "@/components/ui/button"
 import { useWikiDocument } from "@/graphql/hooks/wiki"
 import { WikiEditorHeader } from "@/components/wiki/wiki-editor-header"
 import { WikiEditor } from "@/components/wiki/wiki-editor"
+import type { WikiDocumentTreeFieldsFragment } from "@/graphql/gql/graphql"
 
 interface WikiEditorPaneProps {
   documentId: string
   isEditor: boolean
+  treeDocuments: WikiDocumentTreeFieldsFragment[]
 }
 
 export function WikiEditorPane({
   documentId,
   isEditor,
+  treeDocuments,
 }: WikiEditorPaneProps) {
   const { data, isLoading, error } = useWikiDocument(documentId)
   const document = data?.wikiDocument
 
   if (isLoading) {
     return (
-      <div className="flex flex-1 flex-col gap-4 p-4">
+      <div className="flex flex-1 flex-col gap-4 rounded-lg border bg-card p-4">
         <div className="flex items-center gap-3">
           <Skeleton className="size-8 rounded" />
           <Skeleton className="h-7 w-64" />
@@ -33,17 +36,18 @@ export function WikiEditorPane({
 
   if (error || !document) {
     return (
-      <div className="flex flex-1 flex-col items-center justify-center gap-2 text-muted-foreground">
+      <div className="flex flex-1 flex-col items-center justify-center gap-2 rounded-lg border bg-card text-muted-foreground">
         <p className="text-sm">Document not found</p>
       </div>
     )
   }
 
   return (
-    <div className="flex flex-1 flex-col overflow-hidden">
+    <div className="flex flex-1 flex-col overflow-hidden rounded-lg border bg-card">
       <WikiEditorHeader
         document={document}
         isEditor={isEditor}
+        treeDocuments={treeDocuments}
       />
       <EditorErrorBoundary key={documentId}>
         <WikiEditor
