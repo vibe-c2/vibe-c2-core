@@ -1,7 +1,21 @@
 import { Database } from "@hocuspocus/extension-database";
-import { TiptapTransformer } from "@hocuspocus/transformer";
-import { MongoClient, type Db } from "mongodb";
+import { Binary, MongoClient, type Db } from "mongodb";
 import * as Y from "yjs";
+
+/**
+ * Convert a UUID string to a BSON Binary subtype 4, matching how the Go
+ * backend (qmgo) serializes `uuid.UUID` fields. Without this, Mongo filters
+ * keyed on a JS string never match documents written by Go.
+ */
+function docIdToBinary(docId: string): Binary {
+  const hex = docId.replace(/-/g, "");
+  if (hex.length !== 32) {
+    throw new Error(`invalid uuid: ${docId}`);
+  }
+  // qmgo (Go backend) serializes uuid.UUID via MarshalBinary, which the
+  // mongo-go-driver writes as Binary subtype 0 (generic), NOT subtype 4.
+  return new Binary(Buffer.from(hex, "hex"), Binary.SUBTYPE_DEFAULT);
+}
 
 const mongoUri = process.env.MONGO_URI || "mongodb://localhost:27017";
 const mongoDatabase = process.env.MONGO_DATABASE || "vibec2";
@@ -104,7 +118,7 @@ export function createDatabaseExtension(): Database {
       const collection = database.collection("wiki_documents");
 
       const doc = await collection.findOne(
-        { document_id: docId },
+        { document_id: docIdToBinary(docId) },
         { projection: { content_state: 1 } }
       );
 
@@ -120,38 +134,16 @@ export function createDatabaseExtension(): Database {
       const database = await getDb();
       const collection = database.collection("wiki_documents");
 
-      // Derive Markdown from Y.js state
+      // Extract plain text from the Y.Text named "content" — matches the
+      // key used by the current (temporary) plain-textarea editor in the
+      // frontend. When the rich editor returns, revisit this.
       const ydoc = new Y.Doc();
       Y.applyUpdate(ydoc, state);
-
-      let markdown = "";
-      try {
-        // TiptapTransformer converts Y.Doc -> ProseMirror JSON -> Markdown
-        const json = TiptapTransformer.fromYdoc(ydoc);
-        // Simple fallback: extract text content from the Y.Doc
-        // The transformer may need extensions configured for full Markdown
-        markdown = ydoc.getText("default")?.toString() || "";
-
-        // Try to get content from the prosemirror XML fragment
-        const xmlFragment = ydoc.getXmlFragment("default");
-        if (xmlFragment && xmlFragment.length > 0) {
-          // Use the transformer if available
-          try {
-            const node = TiptapTransformer.fromYdoc(ydoc, "default");
-            if (node) {
-              markdown = JSON.stringify(node);
-            }
-          } catch {
-            // Fall back to text content
-          }
-        }
-      } catch (err) {
-        console.warn("Markdown derivation failed, storing raw text:", err);
-      }
+      const markdown = ydoc.getText("content").toString();
 
       // Write content_state, content, and content_state_at to MongoDB
       await collection.updateOne(
-        { document_id: docId },
+        { document_id: docIdToBinary(docId) },
         {
           $set: {
             content_state: Buffer.from(state),

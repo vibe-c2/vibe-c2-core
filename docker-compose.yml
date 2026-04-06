@@ -19,7 +19,7 @@ services:
       REDIS_PORT: 6379
       REDIS_PASSWORD: ${REDIS_PASSWORD}
       CACHE_ENABLED: ${CACHE_ENABLED}
-      HOCUSPOCUS_URL: http://hocuspocus:1234
+      HOCUSPOCUS_URL: http://hocuspocus:1235
       HOCUSPOCUS_TICKET_SECRET: ${HOCUSPOCUS_TICKET_SECRET}
       HOCUSPOCUS_WEBHOOK_SECRET: ${HOCUSPOCUS_WEBHOOK_SECRET}
       WIKI_AUTO_BACKUP_INTERVAL: ${WIKI_AUTO_BACKUP_INTERVAL:-30m}
@@ -169,6 +169,8 @@ services:
       HOCUSPOCUS_WEBHOOK_URL: http://core-dev:8002/api/v1/internal/wiki/webhook
       HOCUSPOCUS_DEBOUNCE_MS: ${HOCUSPOCUS_DEBOUNCE_MS:-2000}
       PORT: 1234
+    volumes:
+      - ./hocuspocus/src:/app/src
     depends_on:
       mongodb:
         condition: service_healthy

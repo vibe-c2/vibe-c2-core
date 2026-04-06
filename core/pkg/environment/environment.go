@@ -64,7 +64,9 @@ func init() {
 	viper.SetDefault("REDIS_HOST", "localhost")
 	viper.SetDefault("REDIS_PORT", "6379")
 	viper.SetDefault("CACHE_ENABLED", true)
-	viper.SetDefault("HOCUSPOCUS_URL", "http://hocuspocus:1234")
+	// Port 1235 = Hocuspocus internal HTTP API (disconnect endpoint).
+	// Port 1234 is the WebSocket server and does not route HTTP paths.
+	viper.SetDefault("HOCUSPOCUS_URL", "http://hocuspocus:1235")
 	viper.SetDefault("HOCUSPOCUS_WEBHOOK_SECRET", "")
 	viper.SetDefault("WIKI_AUTO_BACKUP_INTERVAL", "30m")
 

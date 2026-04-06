@@ -9,14 +9,12 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/google/uuid"
 	"github.com/vibe-c2/vibe-c2-core/core/pkg/auth"
 	"github.com/vibe-c2/vibe-c2-core/core/pkg/cache"
 	"github.com/vibe-c2/vibe-c2-core/core/pkg/database"
 	"github.com/vibe-c2/vibe-c2-core/core/pkg/environment"
 	"github.com/vibe-c2/vibe-c2-core/core/pkg/eventbus"
 	"github.com/vibe-c2/vibe-c2-core/core/pkg/logger"
-	"github.com/vibe-c2/vibe-c2-core/core/pkg/models"
 	"github.com/vibe-c2/vibe-c2-core/core/pkg/repository"
 	"github.com/vibe-c2/vibe-c2-core/core/pkg/session"
 	"github.com/vibe-c2/vibe-c2-core/core/pkg/wiki"
@@ -170,32 +168,15 @@ func NewApp() (*App, error) {
 			}
 		},
 	)
+	// Any role change: force-disconnect the affected user so their next
+	// Hocuspocus connection re-fetches a fresh collab ticket with the
+	// up-to-date readOnly flag. Cheaper and more correct than trying to
+	// mutate the live connection's readOnly state in place.
 	bus.Subscribe(
 		[]eventbus.Topic{eventbus.TopicOperationMemberUpdated},
 		func(_ context.Context, event eventbus.Event) {
 			if p, ok := event.Payload.(eventbus.OperationMemberPayload); ok {
-				// Check if the user's new role is below operator
-				opRepo := repos.Operation
-				opUID, err := uuid.Parse(p.OperationID)
-				if err != nil {
-					return
-				}
-				op, err := opRepo.FindByID(context.Background(), opUID)
-				if err != nil {
-					return
-				}
-				memberUID, err := uuid.Parse(p.MemberID)
-				if err != nil {
-					return
-				}
-				for _, m := range op.Members {
-					if m.UserID == memberUID {
-						if !m.Role.HasAtLeast(models.OperationRoleOperator) {
-							_ = hpClient.DisconnectUser(context.Background(), p.MemberID, p.OperationID)
-						}
-						break
-					}
-				}
+				_ = hpClient.DisconnectUser(context.Background(), p.MemberID, p.OperationID)
 			}
 		},
 	)

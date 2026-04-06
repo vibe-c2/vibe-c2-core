@@ -50,11 +50,7 @@ export function WikiEditorPane({
         treeDocuments={treeDocuments}
       />
       <EditorErrorBoundary key={documentId}>
-        <WikiEditor
-          documentId={documentId}
-          isEditor={isEditor}
-          content={document.content}
-        />
+        <WikiEditor documentId={documentId} isEditor={isEditor} />
       </EditorErrorBoundary>
     </div>
   )

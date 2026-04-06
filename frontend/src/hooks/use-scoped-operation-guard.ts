@@ -4,6 +4,7 @@
 
 import { useEffect, useRef } from "react"
 import { toast } from "sonner"
+import { useQueryClient } from "@tanstack/react-query"
 import { useSubscription } from "@/hooks/use-subscription"
 import { graphqlClient } from "@/lib/graphql-client"
 import {
@@ -12,6 +13,7 @@ import {
   OperationChangedDocument,
   OperationMemberChangedDocument,
 } from "@/graphql/gql/graphql"
+import { operationKeys } from "@/graphql/hooks/operations"
 import { useAuthStore } from "@/stores/auth"
 import { useScopedOperationStore } from "@/stores/scoped-operation"
 
@@ -24,6 +26,7 @@ export function useScopedOperationGuard() {
 
   const currentUserId = useAuthStore((s) => s.user?.userId)
   const hasPermission = useAuthStore((s) => s.hasPermission)
+  const queryClient = useQueryClient()
 
   // Track the scoped name in a ref so subscription callbacks always see the latest.
   const scopedNameRef = useRef(scopedOperation?.name ?? null)
@@ -137,7 +140,20 @@ export function useScopedOperationGuard() {
         if (action === "DELETED" && userId === currentUserId) {
           const name = scopedNameRef.current
           unscopeOperation()
+          // Drop all cached operation data so the /operations list refetches
+          // without the now-inaccessible operation on next mount.
+          queryClient.invalidateQueries({ queryKey: operationKeys.all })
           toast.warning(`You were removed from operation "${name}". Scope cleared.`)
+          return
+        }
+
+        // Role change targeting the current user: refetch myRole so any
+        // page that gates UI on it (e.g. wiki editor's isEditor) flips
+        // to the new permission level without a reload.
+        if (action === "UPDATED" && userId === currentUserId && scopedId) {
+          queryClient.invalidateQueries({ queryKey: operationKeys.myRole(scopedId) })
+          queryClient.invalidateQueries({ queryKey: operationKeys.detail(scopedId) })
+          toast.info(`Your role in operation "${scopedNameRef.current}" changed.`)
         }
       },
     },

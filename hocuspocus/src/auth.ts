@@ -8,6 +8,7 @@ export interface CollabTicketClaims {
   username: string;
   operationId: string;
   documentId: string;
+  readOnly?: boolean;
 }
 
 /**
@@ -18,6 +19,7 @@ export interface CollabTicketClaims {
 export function onAuthenticate({
   token,
   context,
+  connection,
 }: onAuthenticatePayload): Promise<CollabTicketClaims> {
   return new Promise((resolve, reject) => {
     if (!token) {
@@ -36,6 +38,13 @@ export function onAuthenticate({
       context.username = decoded.username;
       context.operationId = decoded.operationId;
       context.documentId = decoded.documentId;
+      context.readOnly = decoded.readOnly === true;
+
+      // Server-authoritative write enforcement: viewers get live updates
+      // but Hocuspocus rejects any Y.js updates they try to send.
+      if (decoded.readOnly === true) {
+        connection.readOnly = true;
+      }
 
       resolve(decoded);
     } catch (err) {

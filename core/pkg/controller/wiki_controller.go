@@ -99,18 +99,46 @@ func (wc *WikiController) CollabTicket(c *gin.Context) {
 		Roles:    rolesSlice,
 	})
 
-	if err := authorization.AuthorizeOperationRole(ctx, &op, models.OperationRoleOperator); err != nil {
-		c.JSON(http.StatusForbidden, responses.ErrorResponse{Error: "requires at least operator role"})
+	// Viewers are allowed to connect (they see live updates) but their
+	// connection is flagged read-only via the ticket claim below.
+	if err := authorization.AuthorizeOperationRole(ctx, &op, models.OperationRoleViewer); err != nil {
+		c.JSON(http.StatusForbidden, responses.ErrorResponse{Error: "not a member of this operation"})
 		return
 	}
 
-	// Sign a short-lived collab ticket
+	// Determine write capability: operator+ in the operation, or app-admin.
+	// App-admins always get write access regardless of membership.
+	canWrite := false
+	for _, r := range rolesSlice {
+		if r == "admin" {
+			canWrite = true
+			break
+		}
+	}
+	if !canWrite {
+		callerUID, err := uuid.Parse(c.GetString("userID"))
+		if err == nil {
+			for _, m := range op.Members {
+				if m.UserID == callerUID {
+					if m.Role.HasAtLeast(models.OperationRoleOperator) {
+						canWrite = true
+					}
+					break
+				}
+			}
+		}
+	}
+
+	// Sign a short-lived collab ticket. The readOnly claim is read by
+	// Hocuspocus onAuthenticate to set connection.readOnly, so even a
+	// tampered client cannot produce Y.js updates when not authorized.
 	now := time.Now().UTC()
 	claims := jwt.MapClaims{
 		"userId":      c.GetString("userID"),
 		"username":    c.GetString("username"),
 		"operationId": doc.OperationID.String(),
 		"documentId":  doc.DocumentID.String(),
+		"readOnly":    !canWrite,
 		"iat":         now.Unix(),
 		"exp":         now.Add(30 * time.Second).Unix(),
 	}
