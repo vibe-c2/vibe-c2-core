@@ -128,6 +128,9 @@ models:
         resolver: true         # PortID (uuid.UUID) -> ID (string)
 
   # Map the GraphQL "Session" type to our existing Session model.
+  # `status` and `lastActivityAt` are decorated from Redis at query time;
+  # `isCurrent` is computed from the request context. Everything else is
+  # a field on the underlying Mongo row.
   Session:
     model:
       - github.com/vibe-c2/vibe-c2-core/core/pkg/models.Session
@@ -139,15 +142,9 @@ models:
       user:
         resolver: true         # UserID (uuid.UUID) -> User (fetched from DB)
       status:
-        resolver: true         # SessionStatus type mapping
-      terminationReason:
-        resolver: true         # Nullable enum mapping
+        resolver: true         # Decorated from Redis presence
       lastActivityAt:
-        resolver: true         # time.Time -> string (RFC3339)
-      expiresAt:
-        resolver: true         # time.Time -> string (RFC3339)
-      terminatedAt:
-        resolver: true         # *time.Time -> *string (RFC3339, nullable)
+        resolver: true         # Decorated from Redis value, nullable
       isCurrent:
         resolver: true         # Computed field — not stored in model
       createdAt:
@@ -155,14 +152,11 @@ models:
       updatedAt:
         resolver: true         # field.DefaultField.UpdateAt -> string
 
-  # Map session enums to our existing Go types.
+  # SessionStatus is a derived enum (ACTIVE/INACTIVE), still mapped to a
+  # Go type for marshalling to GraphQL.
   SessionStatus:
     model:
       - github.com/vibe-c2/vibe-c2-core/core/pkg/models.SessionStatus
-
-  SessionTerminationReason:
-    model:
-      - github.com/vibe-c2/vibe-c2-core/core/pkg/models.SessionTerminationReason
 
   # Map the GraphQL "WikiDocument" type to our existing WikiDocument model.
   # Field resolvers bridge UUID->string, timestamp->RFC3339, and relation lookups.

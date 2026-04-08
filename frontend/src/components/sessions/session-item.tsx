@@ -45,15 +45,6 @@ function formatRelativeTime(dateStr: string): string {
   return new Date(dateStr).toLocaleDateString()
 }
 
-const terminationLabels: Record<string, string> = {
-  LOGOUT: "Logged out",
-  EXPIRED: "Expired",
-  EVICTED: "Evicted",
-  REPLAY_DETECTED: "Security revoke",
-  ADMIN_REVOKED: "Admin revoked",
-  USER_REVOKED: "User revoked",
-}
-
 export function SessionItem({ session, onRevoke, showUser, username }: SessionItemProps) {
   const isActive = session.status === "ACTIVE"
   const canRevoke = isActive && !session.isCurrent && !!onRevoke
@@ -81,9 +72,7 @@ export function SessionItem({ session, onRevoke, showUser, username }: SessionIt
           ) : (
             <span className="inline-flex items-center gap-1 text-xs text-muted-foreground">
               <span className="size-1.5 rounded-full bg-muted-foreground/50" />
-              {session.terminationReason
-                ? terminationLabels[session.terminationReason] ?? session.terminationReason
-                : "Inactive"}
+              Inactive
             </span>
           )}
         </div>
@@ -95,8 +84,9 @@ export function SessionItem({ session, onRevoke, showUser, username }: SessionIt
             {session.os} &middot; {session.device} &middot; {session.ipAddress}
           </div>
           <div>
-            Last active: {formatRelativeTime(session.lastActivityAt)}
-            {" "}&middot;{" "}
+            {session.lastActivityAt && (
+              <>Last active: {formatRelativeTime(session.lastActivityAt)} &middot; </>
+            )}
             Created: <FormattedDateTimeText date={session.createdAt} />
           </div>
         </div>

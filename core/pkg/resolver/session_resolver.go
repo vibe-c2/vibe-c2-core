@@ -2,6 +2,7 @@ package resolver
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"time"
 
@@ -16,6 +17,10 @@ import (
 )
 
 // ISessionResolver defines the business logic methods for the Session entity.
+//
+// Mongo holds the immutable creation log; Redis holds the live active set.
+// The resolver loads rows from Mongo and decorates each one with `Status`
+// and `LastActivityAt` from Redis at query time.
 type ISessionResolver interface {
 	// Queries
 	MySessions(ctx context.Context, activeOnly *bool, first *int, after *string, last *int, before *string) (*model.SessionConnection, error)
@@ -33,36 +38,30 @@ type ISessionResolver interface {
 	UserID(ctx context.Context, obj *models.Session) (string, error)
 	User(ctx context.Context, obj *models.Session) (*models.User, error)
 	Status(ctx context.Context, obj *models.Session) (models.SessionStatus, error)
-	TerminationReason(ctx context.Context, obj *models.Session) (*models.SessionTerminationReason, error)
-	LastActivityAt(ctx context.Context, obj *models.Session) (string, error)
-	ExpiresAt(ctx context.Context, obj *models.Session) (string, error)
-	TerminatedAt(ctx context.Context, obj *models.Session) (*string, error)
+	LastActivityAt(ctx context.Context, obj *models.Session) (*string, error)
 	IsCurrent(ctx context.Context, obj *models.Session) (bool, error)
 	CreatedAt(ctx context.Context, obj *models.Session) (string, error)
 	UpdatedAt(ctx context.Context, obj *models.Session) (string, error)
 }
 
 type sessionResolver struct {
-	sessionRepo  repository.ISessionRepository
-	userRepo     repository.IUserRepository
-	tokenStore   auth.TokenStore
-	authProvider auth.IAuthProvider
-	eventBus     eventbus.IEventBus
+	sessionRepo repository.ISessionRepository // Mongo creation log
+	userRepo    repository.IUserRepository
+	tokenStore  auth.TokenStore // Redis active set
+	bus         eventbus.IEventBus
 }
 
 func NewSessionResolver(
 	sessionRepo repository.ISessionRepository,
 	userRepo repository.IUserRepository,
 	tokenStore auth.TokenStore,
-	authProvider auth.IAuthProvider,
-	eventBus eventbus.IEventBus,
+	bus eventbus.IEventBus,
 ) ISessionResolver {
 	return &sessionResolver{
-		sessionRepo:  sessionRepo,
-		userRepo:     userRepo,
-		tokenStore:   tokenStore,
-		authProvider: authProvider,
-		eventBus:     eventBus,
+		sessionRepo: sessionRepo,
+		userRepo:    userRepo,
+		tokenStore:  tokenStore,
+		bus:         bus,
 	}
 }
 
@@ -74,13 +73,7 @@ func (r *sessionResolver) MySessions(ctx context.Context, activeOnly *bool, firs
 	if err != nil {
 		return nil, fmt.Errorf("invalid user ID in token: %w", err)
 	}
-
-	active := false
-	if activeOnly != nil {
-		active = *activeOnly
-	}
-
-	return r.listSessions(ctx, &userUUID, active, first, after, last, before)
+	return r.listSessions(ctx, []uuid.UUID{userUUID}, boolOr(activeOnly, false), first, after, last, before)
 }
 
 func (r *sessionResolver) Sessions(ctx context.Context, userID *string, search *string, activeOnly *bool, first *int, after *string, last *int, before *string) (*model.SessionConnection, error) {
@@ -90,7 +83,6 @@ func (r *sessionResolver) Sessions(ctx context.Context, userID *string, search *
 
 	var userIDs []uuid.UUID
 
-	// If a specific userId is provided, use it directly.
 	if userID != nil && *userID != "" {
 		uid, err := uuid.Parse(*userID)
 		if err != nil {
@@ -99,15 +91,12 @@ func (r *sessionResolver) Sessions(ctx context.Context, userID *string, search *
 		userIDs = []uuid.UUID{uid}
 	}
 
-	// If a search string is provided, find matching users by username
-	// and filter sessions to those users.
 	if search != nil && *search != "" {
 		users, err := r.userRepo.FindAll(ctx, *search, 0, 100)
 		if err != nil {
 			return nil, fmt.Errorf("failed to search users: %w", err)
 		}
 		if len(users) == 0 {
-			// No matching users — return empty result
 			return &model.SessionConnection{
 				Edges:      []*model.SessionEdge{},
 				PageInfo:   &pagination.PageInfo{},
@@ -120,12 +109,7 @@ func (r *sessionResolver) Sessions(ctx context.Context, userID *string, search *
 		}
 	}
 
-	active := false
-	if activeOnly != nil {
-		active = *activeOnly
-	}
-
-	return r.listSessionsByUserIDs(ctx, userIDs, active, first, after, last, before)
+	return r.listSessions(ctx, userIDs, boolOr(activeOnly, false), first, after, last, before)
 }
 
 func (r *sessionResolver) Session(ctx context.Context, id string) (*models.Session, error) {
@@ -138,66 +122,166 @@ func (r *sessionResolver) Session(ctx context.Context, id string) (*models.Sessi
 	if err != nil {
 		return nil, fmt.Errorf("session not found: %w", err)
 	}
+
+	// Decorate with active state. We need to know the owning user_id —
+	// luckily it's right there on the row.
+	r.decorate(ctx, []*models.Session{&sess})
 	return &sess, nil
 }
 
-// listSessions is a helper for MySessions (single user).
-func (r *sessionResolver) listSessions(ctx context.Context, userID *uuid.UUID, activeOnly bool, first *int, after *string, last *int, before *string) (*model.SessionConnection, error) {
-	var userIDs []uuid.UUID
-	if userID != nil {
-		userIDs = []uuid.UUID{*userID}
-	}
-	return r.listSessionsByUserIDs(ctx, userIDs, activeOnly, first, after, last, before)
-}
+// listSessions returns paginated session rows with `is_active` and
+// `last_activity_at` decorated from Redis.
+//
+//   - activeOnly=false (default): Mongo paginated find scoped to userIDs,
+//     each row decorated.
+//   - activeOnly=true: pull live session_ids from Redis (bounded by the
+//     active set), Mongo find by session_id $in, decorate. Pagination is a
+//     no-op since the active set is small; we just respect `first` as a cap.
+//   - userIDs empty: admin global view. Mongo paginated find unscoped,
+//     decoration falls back to per-row Redis lookups (small N).
+func (r *sessionResolver) listSessions(ctx context.Context, userIDs []uuid.UUID, activeOnly bool,
+	first *int, after *string, last *int, before *string) (*model.SessionConnection, error) {
 
-// listSessionsByUserIDs is the shared pagination helper.
-// If userIDs is empty, returns sessions for all users.
-// If userIDs has one element, filters to that user.
-// If userIDs has multiple elements, filters to those users (search result).
-func (r *sessionResolver) listSessionsByUserIDs(ctx context.Context, userIDs []uuid.UUID, activeOnly bool, first *int, after *string, last *int, before *string) (*model.SessionConnection, error) {
 	args, err := pagination.ParseArgs(first, after, last, before)
 	if err != nil {
 		return nil, fmt.Errorf("invalid pagination args: %w", err)
 	}
 
-	total, err := r.sessionRepo.Count(ctx, userIDs, activeOnly)
-	if err != nil {
-		return nil, fmt.Errorf("failed to count sessions: %w", err)
-	}
-
-	sessions, err := r.sessionRepo.FindWithCursor(ctx, userIDs, activeOnly, args.Cursor, args.Limit+1, args.Forward)
-	if err != nil {
-		return nil, fmt.Errorf("failed to list sessions: %w", err)
-	}
-
-	hasMore := int64(len(sessions)) > args.Limit
-	if hasMore {
-		sessions = sessions[:args.Limit]
-	}
-
-	edges := make([]*model.SessionEdge, len(sessions))
-	for i := range sessions {
-		cursor := pagination.EncodeCursor(sessions[i].CreateAt, sessions[i].Id)
-		edges[i] = &model.SessionEdge{
-			Node:   &sessions[i],
-			Cursor: cursor,
+	if activeOnly {
+		// Redis-first: collect live session_ids from each user, then Mongo
+		// find by session_id. Bounded by total live sessions (small).
+		if len(userIDs) == 0 {
+			// Unscoped admin global active view. We could SCAN every
+			// user index, but that's expensive and rarely needed —
+			// require a user filter.
+			return nil, fmt.Errorf("activeOnly requires a user filter")
 		}
+		var ids []uuid.UUID
+		for _, uid := range userIDs {
+			actives, err := r.tokenStore.ListByUser(ctx, uid)
+			if err != nil {
+				return nil, fmt.Errorf("list active: %w", err)
+			}
+			for _, a := range actives {
+				ids = append(ids, a.SessionID)
+			}
+		}
+		if len(ids) == 0 {
+			return &model.SessionConnection{
+				Edges:      []*model.SessionEdge{},
+				PageInfo:   &pagination.PageInfo{},
+				TotalCount: 0,
+			}, nil
+		}
+		rows, err := r.sessionRepo.FindBySessionIDs(ctx, ids)
+		if err != nil {
+			return nil, fmt.Errorf("find by session ids: %w", err)
+		}
+		// Cap to first if provided.
+		if int64(len(rows)) > args.Limit {
+			rows = rows[:args.Limit]
+		}
+		ptrs := toPtrs(rows)
+		r.decorate(ctx, ptrs)
+		return r.buildConnection(ptrs, len(ptrs), false), nil
 	}
 
-	pageInfo := pagination.PageInfo{
-		HasNextPage:     args.Forward && hasMore,
-		HasPreviousPage: (!args.Forward && hasMore) || (args.Forward && args.Cursor != nil),
+	// History path: Mongo paginated find scoped to userIDs.
+	total, err := r.sessionRepo.Count(ctx, userIDs)
+	if err != nil {
+		return nil, fmt.Errorf("count: %w", err)
 	}
+	rows, err := r.sessionRepo.FindWithCursor(ctx, userIDs, args.Cursor, args.Limit+1, args.Forward)
+	if err != nil {
+		return nil, fmt.Errorf("find: %w", err)
+	}
+	hasMore := int64(len(rows)) > args.Limit
+	if hasMore {
+		rows = rows[:args.Limit]
+	}
+	ptrs := toPtrs(rows)
+	r.decorate(ctx, ptrs)
+
+	conn := r.buildConnection(ptrs, int(total), hasMore)
+	conn.PageInfo.HasNextPage = args.Forward && hasMore
+	conn.PageInfo.HasPreviousPage = (!args.Forward && hasMore) || (args.Forward && args.Cursor != nil)
+	return conn, nil
+}
+
+// buildConnection wraps a row slice into a SessionConnection with cursors.
+func (r *sessionResolver) buildConnection(rows []*models.Session, total int, _ bool) *model.SessionConnection {
+	edges := make([]*model.SessionEdge, len(rows))
+	for i, row := range rows {
+		cursor := pagination.EncodeCursor(row.CreateAt, row.Id)
+		edges[i] = &model.SessionEdge{Node: row, Cursor: cursor}
+	}
+	pi := &pagination.PageInfo{}
 	if len(edges) > 0 {
-		pageInfo.StartCursor = &edges[0].Cursor
-		pageInfo.EndCursor = &edges[len(edges)-1].Cursor
+		pi.StartCursor = &edges[0].Cursor
+		pi.EndCursor = &edges[len(edges)-1].Cursor
 	}
-
 	return &model.SessionConnection{
 		Edges:      edges,
-		PageInfo:   &pageInfo,
-		TotalCount: int(total),
-	}, nil
+		PageInfo:   pi,
+		TotalCount: total,
+	}
+}
+
+// decorate populates Status + LastActivityAt on each row from Redis.
+//
+// Strategy: group rows by user_id, then for each user fetch their full
+// active set in one ListByUser call (one Redis SMEMBERS+MGET round-trip
+// per user). Match each row's session_id against the active set.
+//
+// For typical pages (one or a few users) this is O(pages) Redis calls
+// regardless of page size.
+func (r *sessionResolver) decorate(ctx context.Context, rows []*models.Session) {
+	if len(rows) == 0 {
+		return
+	}
+	cache := make(map[uuid.UUID]map[uuid.UUID]time.Time)
+	for _, row := range rows {
+		set, ok := cache[row.UserID]
+		if !ok {
+			actives, err := r.tokenStore.ListByUser(ctx, row.UserID)
+			if err != nil {
+				// Best-effort: leave rows un-decorated (status zero-value).
+				cache[row.UserID] = nil
+				continue
+			}
+			set = make(map[uuid.UUID]time.Time, len(actives))
+			for _, a := range actives {
+				set[a.SessionID] = a.LastActivityAt
+			}
+			cache[row.UserID] = set
+		}
+		if set == nil {
+			row.Status = models.SessionStatusInactive
+			continue
+		}
+		if last, live := set[row.SessionID]; live {
+			row.Status = models.SessionStatusActive
+			unix := last.Unix()
+			row.LastActivityAt = &unix
+		} else {
+			row.Status = models.SessionStatusInactive
+		}
+	}
+}
+
+func toPtrs(rows []models.Session) []*models.Session {
+	out := make([]*models.Session, len(rows))
+	for i := range rows {
+		out[i] = &rows[i]
+	}
+	return out
+}
+
+func boolOr(p *bool, def bool) bool {
+	if p == nil {
+		return def
+	}
+	return *p
 }
 
 // --- Mutations ---
@@ -214,39 +298,20 @@ func (r *sessionResolver) RevokeSession(ctx context.Context, id string) (bool, e
 		return false, fmt.Errorf("invalid session ID: %w", err)
 	}
 
-	sess, err := r.sessionRepo.FindByID(ctx, sid)
-	if err != nil {
-		return false, fmt.Errorf("session not found: %w", err)
-	}
-
-	// Verify ownership
-	if sess.UserID != userUUID {
-		return false, fmt.Errorf("forbidden: session does not belong to you")
-	}
-
-	// Cannot revoke the current session (use logout for that)
-	if authInfo.CurrentSessionID != "" && sess.SessionID.String() == authInfo.CurrentSessionID {
+	if authInfo.CurrentSessionID != "" && sid.String() == authInfo.CurrentSessionID {
 		return false, fmt.Errorf("cannot revoke current session — use logout instead")
 	}
 
-	if sess.Status != models.SessionStatusActive {
-		return false, fmt.Errorf("session is already inactive")
+	if _, err := r.tokenStore.DeleteBySessionID(ctx, userUUID, sid); err != nil {
+		if errors.Is(err, auth.ErrTokenInvalid) {
+			return false, fmt.Errorf("session not found or already inactive")
+		}
+		return false, fmt.Errorf("failed to revoke: %w", err)
 	}
 
-	// Revoke the refresh token in Redis
-	if err := r.tokenStore.DeleteByTokenHash(ctx, authInfo.UserID, sess.TokenHash); err != nil {
-		return false, fmt.Errorf("failed to revoke token: %w", err)
-	}
-
-	// Mark session as terminated in MongoDB
-	if err := r.sessionRepo.Terminate(ctx, sid, models.TerminationUserRevoked); err != nil {
-		return false, fmt.Errorf("failed to terminate session: %w", err)
-	}
-
-	r.eventBus.Publish(eventbus.NewSessionTerminatedEvent(eventbus.UserActor(authInfo.UserID), eventbus.SessionEventPayload{
-		SessionID: id, UserID: authInfo.UserID, Reason: string(models.TerminationUserRevoked),
+	r.bus.Publish(eventbus.NewSessionTerminatedEvent(eventbus.UserActor(authInfo.UserID), eventbus.SessionEventPayload{
+		SessionID: id, UserID: authInfo.UserID, Reason: "user_revoked",
 	}))
-
 	return true, nil
 }
 
@@ -256,43 +321,7 @@ func (r *sessionResolver) RevokeAllMySessions(ctx context.Context) (int, error) 
 	if err != nil {
 		return 0, fmt.Errorf("invalid user ID in token: %w", err)
 	}
-
-	// Fetch all active sessions for this user.
-	sessions, err := r.sessionRepo.FindWithCursor(ctx, []uuid.UUID{userUUID}, true, nil, 1000, true)
-	if err != nil {
-		return 0, fmt.Errorf("failed to find sessions: %w", err)
-	}
-
-	var revoked, failed int
-	for _, sess := range sessions {
-		// Skip the current session — it must stay active.
-		if authInfo.CurrentSessionID != "" && sess.SessionID.String() == authInfo.CurrentSessionID {
-			continue
-		}
-
-		// Revoke token in Redis
-		if err := r.tokenStore.DeleteByTokenHash(ctx, authInfo.UserID, sess.TokenHash); err != nil {
-			failed++
-			continue
-		}
-
-		// Terminate in MongoDB
-		if err := r.sessionRepo.Terminate(ctx, sess.SessionID, models.TerminationUserRevoked); err != nil {
-			failed++
-			continue
-		}
-
-		r.eventBus.Publish(eventbus.NewSessionTerminatedEvent(eventbus.UserActor(authInfo.UserID), eventbus.SessionEventPayload{
-			SessionID: sess.SessionID.String(), UserID: authInfo.UserID, Reason: string(models.TerminationUserRevoked),
-		}))
-
-		revoked++
-	}
-
-	if failed > 0 {
-		return revoked, fmt.Errorf("revoked %d sessions but %d failed", revoked, failed)
-	}
-	return revoked, nil
+	return r.bulkRevoke(ctx, userUUID, authInfo.CurrentSessionID, "user_revoked", authInfo.UserID)
 }
 
 func (r *sessionResolver) AdminRevokeSession(ctx context.Context, id string) (bool, error) {
@@ -302,36 +331,27 @@ func (r *sessionResolver) AdminRevokeSession(ctx context.Context, id string) (bo
 	if err != nil {
 		return false, fmt.Errorf("invalid session ID: %w", err)
 	}
+	if authInfo.CurrentSessionID != "" && sid.String() == authInfo.CurrentSessionID {
+		return false, fmt.Errorf("cannot revoke your own current session — use logout instead")
+	}
 
-	sess, err := r.sessionRepo.FindByID(ctx, sid)
+	// Look up the session in the Mongo creation log to learn the owning
+	// user_id, then delete the Redis entry by session_id.
+	row, err := r.sessionRepo.FindByID(ctx, sid)
 	if err != nil {
 		return false, fmt.Errorf("session not found: %w", err)
 	}
 
-	// Prevent admin from accidentally revoking their own current session
-	if authInfo.CurrentSessionID != "" && sess.SessionID.String() == authInfo.CurrentSessionID {
-		return false, fmt.Errorf("cannot revoke your own current session — use logout instead")
+	if _, err := r.tokenStore.DeleteBySessionID(ctx, row.UserID, sid); err != nil {
+		if errors.Is(err, auth.ErrTokenInvalid) {
+			return false, fmt.Errorf("session is already inactive")
+		}
+		return false, fmt.Errorf("failed to revoke: %w", err)
 	}
 
-	if sess.Status != models.SessionStatusActive {
-		return false, fmt.Errorf("session is already inactive")
-	}
-
-	// Revoke the refresh token in Redis
-	sessionOwnerID := sess.UserID.String()
-	if err := r.tokenStore.DeleteByTokenHash(ctx, sessionOwnerID, sess.TokenHash); err != nil {
-		return false, fmt.Errorf("failed to revoke token: %w", err)
-	}
-
-	// Mark session as terminated in MongoDB
-	if err := r.sessionRepo.Terminate(ctx, sid, models.TerminationAdminRevoked); err != nil {
-		return false, fmt.Errorf("failed to terminate session: %w", err)
-	}
-
-	r.eventBus.Publish(eventbus.NewSessionTerminatedEvent(eventbus.UserActor(authInfo.UserID), eventbus.SessionEventPayload{
-		SessionID: id, UserID: sessionOwnerID, Reason: string(models.TerminationAdminRevoked),
+	r.bus.Publish(eventbus.NewSessionTerminatedEvent(eventbus.UserActor(authInfo.UserID), eventbus.SessionEventPayload{
+		SessionID: id, UserID: row.UserID.String(), Reason: "admin_revoked",
 	}))
-
 	return true, nil
 }
 
@@ -341,32 +361,32 @@ func (r *sessionResolver) AdminRevokeAllUserSessions(ctx context.Context, userID
 	if err != nil {
 		return 0, fmt.Errorf("invalid user ID: %w", err)
 	}
+	return r.bulkRevoke(ctx, targetUUID, "", "admin_revoked", authInfo.UserID)
+}
 
-	// Fetch active sessions before terminating so we can publish per-session events.
-	activeSessions, err := r.sessionRepo.FindWithCursor(ctx, []uuid.UUID{targetUUID}, true, nil, 1000, true)
+// bulkRevoke removes all live sessions for a user (skipping the optional
+// excludeSessionID), then publishes one terminated event per session.
+func (r *sessionResolver) bulkRevoke(ctx context.Context, userID uuid.UUID, excludeSessionID string,
+	reason string, actorUserID string) (int, error) {
+
+	actives, err := r.tokenStore.ListByUser(ctx, userID)
 	if err != nil {
-		return 0, fmt.Errorf("failed to find active sessions: %w", err)
+		return 0, fmt.Errorf("list active: %w", err)
 	}
-
-	// Invalidate all refresh tokens in Redis
-	if err := r.authProvider.InvalidateAllRefreshTokens(ctx, userID); err != nil {
-		return 0, fmt.Errorf("failed to invalidate tokens: %w", err)
-	}
-
-	// Mark all sessions as terminated in MongoDB
-	count, err := r.sessionRepo.TerminateAllForUser(ctx, targetUUID, models.TerminationAdminRevoked)
-	if err != nil {
-		return 0, fmt.Errorf("failed to terminate sessions: %w", err)
-	}
-
-	// Publish per-session events so each subscriber can detect their session was revoked
-	for _, sess := range activeSessions {
-		r.eventBus.Publish(eventbus.NewSessionTerminatedEvent(eventbus.UserActor(authInfo.UserID), eventbus.SessionEventPayload{
-			SessionID: sess.SessionID.String(), UserID: userID, Reason: string(models.TerminationAdminRevoked),
+	var revoked int
+	for _, a := range actives {
+		if excludeSessionID != "" && a.SessionID.String() == excludeSessionID {
+			continue
+		}
+		if _, err := r.tokenStore.DeleteBySessionID(ctx, userID, a.SessionID); err != nil {
+			continue
+		}
+		r.bus.Publish(eventbus.NewSessionTerminatedEvent(eventbus.UserActor(actorUserID), eventbus.SessionEventPayload{
+			SessionID: a.SessionID.String(), UserID: userID.String(), Reason: reason,
 		}))
+		revoked++
 	}
-
-	return int(count), nil
+	return revoked, nil
 }
 
 // --- Field Resolvers ---
@@ -379,7 +399,6 @@ func (r *sessionResolver) UserID(_ context.Context, obj *models.Session) (string
 	return obj.UserID.String(), nil
 }
 
-// User resolves the owning User object from the session's UserID.
 func (r *sessionResolver) User(ctx context.Context, obj *models.Session) (*models.User, error) {
 	user, err := r.userRepo.FindByID(ctx, obj.UserID)
 	if err != nil {
@@ -389,29 +408,17 @@ func (r *sessionResolver) User(ctx context.Context, obj *models.Session) (*model
 }
 
 func (r *sessionResolver) Status(_ context.Context, obj *models.Session) (models.SessionStatus, error) {
+	if obj.Status == "" {
+		return models.SessionStatusInactive, nil
+	}
 	return obj.Status, nil
 }
 
-func (r *sessionResolver) TerminationReason(_ context.Context, obj *models.Session) (*models.SessionTerminationReason, error) {
-	if obj.TerminationReason == "" {
+func (r *sessionResolver) LastActivityAt(_ context.Context, obj *models.Session) (*string, error) {
+	if obj.LastActivityAt == nil {
 		return nil, nil
 	}
-	return &obj.TerminationReason, nil
-}
-
-func (r *sessionResolver) LastActivityAt(_ context.Context, obj *models.Session) (string, error) {
-	return obj.LastActivityAt.Format(time.RFC3339), nil
-}
-
-func (r *sessionResolver) ExpiresAt(_ context.Context, obj *models.Session) (string, error) {
-	return obj.ExpiresAt.Format(time.RFC3339), nil
-}
-
-func (r *sessionResolver) TerminatedAt(_ context.Context, obj *models.Session) (*string, error) {
-	if obj.TerminatedAt == nil {
-		return nil, nil
-	}
-	s := obj.TerminatedAt.Format(time.RFC3339)
+	s := time.Unix(*obj.LastActivityAt, 0).UTC().Format(time.RFC3339)
 	return &s, nil
 }
 
@@ -430,3 +437,4 @@ func (r *sessionResolver) CreatedAt(_ context.Context, obj *models.Session) (str
 func (r *sessionResolver) UpdatedAt(_ context.Context, obj *models.Session) (string, error) {
 	return obj.UpdateAt.Format(time.RFC3339), nil
 }
+

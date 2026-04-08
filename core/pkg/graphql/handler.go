@@ -39,11 +39,10 @@ import (
 //  5. The response (JSON) is written back through Gin
 //
 //	@Summary		GraphQL endpoint
-//	@Description	Execute GraphQL queries and mutations. See the GraphQL schema for available operations. Use the Altair playground (GET /graphql) to explore the API interactively.
+//	@Description	Execute GraphQL queries and mutations. Authentication via httpOnly cookies; state-changing operations require an X-CSRF-Token header matching the csrf_token cookie.
 //	@Tags			GraphQL
 //	@Accept			json
 //	@Produce		json
-//	@Security		BearerAuth
 //	@Router			/graphql [post]
 func NewHandler(
 	users resolver.IUserResolver,
@@ -170,11 +169,7 @@ func NewPlaygroundHandler(endpoint string) gin.HandlerFunc {
 	//
 	// The options map is passed to AltairGraphQL.init() on the client side.
 	// "initialHeaders" pre-populates the headers editor in the UI.
-	h := playground.AltairHandler("Vibe C2 — GraphQL", endpoint, map[string]any{
-		"initialHeaders": map[string]string{
-			"Authorization": "Bearer <your-jwt-token>",
-		},
-	})
+	h := playground.AltairHandler("Vibe C2 — GraphQL", endpoint, map[string]any{})
 
 	return func(c *gin.Context) {
 		h.ServeHTTP(c.Writer, c.Request)

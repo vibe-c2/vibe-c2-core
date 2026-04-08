@@ -104,13 +104,20 @@ export function useScopedOperationGuard() {
   // renders as React nodes (not raw HTML) so this is not XSS, but crafted
   // names could produce misleading toast text. Accepted risk — names are
   // already visible throughout the UI.
+  //
+  // Subscribe without operationId filter (receives all ops the user belongs
+  // to) and filter client-side. This lets subscription-registry dedup this
+  // hook with the page-level useOperationChangedSubscription on /operations,
+  // collapsing two SSE connections into one.
   useSubscription(
     OperationChangedDocument,
-    scopedId ? { operationId: scopedId } : undefined,
+    undefined,
     {
       enabled: scopedId !== null,
       onData: (data) => {
-        const { action, operation } = data.operationChanged
+        const { action, operationId, operation } = data.operationChanged
+        // Filter: only react to events for the scoped op.
+        if (operationId !== scopedId) return
 
         if (action === "DELETED") {
           const name = scopedNameRef.current
@@ -128,13 +135,16 @@ export function useScopedOperationGuard() {
   )
 
   // --- Real-time: membership changes (user kicked) ---
+  // Same dedup rationale as operationChanged above: unfiltered subscription
+  // + client-side filter lets the registry share one SSE with the page sub.
   useSubscription(
     OperationMemberChangedDocument,
-    scopedId ? { operationId: scopedId } : undefined,
+    undefined,
     {
       enabled: scopedId !== null,
       onData: (data) => {
-        const { action, userId } = data.operationMemberChanged
+        const { action, operationId, userId } = data.operationMemberChanged
+        if (operationId !== scopedId) return
 
         // If the current user was removed from the scoped operation, clear scope.
         if (action === "DELETED" && userId === currentUserId) {

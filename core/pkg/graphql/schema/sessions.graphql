@@ -2,49 +2,46 @@
 # Session Management
 # =============================================================================
 #
-# Sessions represent authenticated user sessions with metadata about the
-# client that created them (IP address, browser, OS, device type).
+# Sessions are an insert-once log of authentications. Every successful login
+# writes one row to the Mongo `sessions` collection (creation log) and one
+# entry to Redis (the live, authoritative authorization record). The Mongo
+# row is never updated and never deleted by the app — it is the historical
+# trail of who logged in from where.
 #
-# Each login creates a new session. Sessions persist even after they end,
-# providing an audit trail. Active sessions have a corresponding refresh
-# token in Redis; historical sessions show how and when they were terminated.
+# A session is "active" if it still has a corresponding entry in Redis. The
+# `status` and `lastActivityAt` fields below are decorated by the resolver
+# from the Redis side; the underlying Mongo row knows nothing about them.
+# When a session ends (logout, refresh failure, native Redis TTL expiry,
+# user/admin revoke), the Redis entry vanishes and `status` flips to
+# INACTIVE — but the Mongo creation row stays.
 #
 # Users can view and manage their own sessions.
 # Admins can view and manage all users' sessions.
 
-# SessionStatus indicates whether a session is currently active.
+# SessionStatus is a derived field: ACTIVE if the session has a live Redis
+# entry, INACTIVE otherwise. Not stored in Mongo.
 enum SessionStatus {
   ACTIVE
   INACTIVE
 }
 
-# SessionTerminationReason describes why a session ended.
-enum SessionTerminationReason {
-  LOGOUT              # User logged out normally
-  EXPIRED             # Refresh token TTL expired (7 days)
-  REPLAY_DETECTED     # Possible token theft — all sessions invalidated
-  ADMIN_REVOKED       # An admin terminated this session
-  USER_REVOKED        # The user terminated this session from another device
-}
-
 # Session represents an authenticated user session with request metadata.
+# All fields except `status`, `lastActivityAt`, and `isCurrent` come from
+# the Mongo creation row; the rest are decorated from Redis at query time.
 type Session {
-  id: ID!                                      # Session UUID
-  userId: ID!                                  # Owning user's UUID
-  user: User!                                  # The owning user (resolved from userId)
-  ipAddress: String!                           # IP address at login time
-  userAgent: String!                           # Raw User-Agent header
-  browser: String!                             # Parsed browser name + version (e.g. "Chrome 120")
-  os: String!                                  # Parsed OS (e.g. "macOS 14.2")
-  device: String!                              # "Desktop", "Mobile", "Bot", etc.
-  status: SessionStatus!                       # Active or inactive
-  terminationReason: SessionTerminationReason  # Why the session ended (null if active)
-  lastActivityAt: String!                      # ISO 8601 — updated on each token refresh
-  expiresAt: String!                           # ISO 8601 — when the refresh token expires
-  terminatedAt: String                         # ISO 8601 — null if still active
-  isCurrent: Boolean!                          # True if this is the caller's current session
-  createdAt: String!                           # ISO 8601
-  updatedAt: String!                           # ISO 8601
+  id: ID!                # Session UUID
+  userId: ID!            # Owning user's UUID
+  user: User!            # The owning user (resolved from userId)
+  ipAddress: String!     # IP address at login time
+  userAgent: String!     # Raw User-Agent header
+  browser: String!       # Parsed browser name + version (e.g. "Chrome 120")
+  os: String!            # Parsed OS (e.g. "macOS 14.2")
+  device: String!        # "Desktop", "Mobile", "Bot", etc.
+  status: SessionStatus! # Derived: ACTIVE if the Redis entry still exists
+  lastActivityAt: String # ISO 8601 — last refresh time. Null for inactive sessions.
+  isCurrent: Boolean!    # True if this is the caller's current session
+  createdAt: String!     # ISO 8601 — login time
+  updatedAt: String!     # ISO 8601 — login time (creation log; never updated)
 }
 
 type SessionEdge {

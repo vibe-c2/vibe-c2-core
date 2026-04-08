@@ -1,3 +1,5 @@
+import { apiGet } from "@/services/api-client"
+
 const API_URL = import.meta.env.VITE_API_URL
 
 // Response types — match backend responses.SessionResponse / responses.StatusResponse.
@@ -56,6 +58,9 @@ export const authService = {
   },
 
   getMe(): Promise<SessionResponse> {
-    return authFetch("/login/me")
+    // Route through apiGet (not authFetch) so that a bootstrap /login/me
+    // hitting an expired access token transparently triggers a refresh and
+    // retries, instead of logging the user out on reload.
+    return apiGet<SessionResponse>("/login/me")
   },
 }

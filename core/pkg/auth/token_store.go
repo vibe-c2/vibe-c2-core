@@ -3,34 +3,69 @@ package auth
 import (
 	"context"
 	"time"
+
+	"github.com/google/uuid"
 )
 
-// TokenStore manages durable refresh token state.
-// This is NOT a cache — data stored here must persist until
-// explicitly deleted or expired. Implementations must not evict.
+// ActiveSession is everything Redis stores about an authorized session: its
+// stable session ID and the timestamp of the most recent refresh. The full
+// device metadata (IP, UA, browser, OS, device) lives in the Mongo
+// creation log, not here.
+type ActiveSession struct {
+	SessionID      uuid.UUID
+	LastActivityAt time.Time
+}
+
+// TokenStore is the single source of truth for *active* refresh tokens.
+// Implementations are backed by Redis. The store maintains two structures:
 //
-// Atomicity guarantees: StoreWithIndex and DeleteAndUnindex execute
-// their respective operations in a single Redis pipeline. Callers
-// can rely on all-or-nothing semantics within each method.
+//   - refresh:<user_id>:<token_hash>  STRING — "<session_id>|<last_activity_unix>"
+//   - session_index:<user_id>         SET    — all live token keys for a user
+//
+// Both expire via native Redis TTL. There is no sweeper, no expiry queue,
+// no audit-on-termination side effect — terminations just delete the key.
+// All multi-key operations go through Lua scripts so concurrent rotations
+// across multiple API pods are linearizable on the Redis side.
+//
+// Mongo plays no role in token validation. Authorization touches only Redis.
 type TokenStore interface {
-	// StoreWithIndex persists token metadata and adds the key to the
-	// user's session index atomically in a single pipeline.
-	StoreWithIndex(ctx context.Context, key string, meta RefreshTokenMeta, userID string, ttl time.Duration) error
+	// Create persists a new active session under (userID, tokenHash) with
+	// the given session_id and TTL. The Redis key TTL equals ttl.
+	Create(ctx context.Context, userID, sessionID uuid.UUID, tokenHash string, ttl time.Duration) error
 
-	// Lookup retrieves token metadata. Returns ErrTokenNotFound if absent.
-	Lookup(ctx context.Context, key string) (*RefreshTokenMeta, error)
+	// Rotate atomically swaps the current refresh token hash for a session.
+	// The Lua script:
+	//   1. GETs refresh:<user>:<oldHash>. If absent → returns ErrTokenInvalid
+	//      (loser-of-race / replay signal).
+	//   2. Parses out the existing session_id (SessionID is stable across
+	//      rotations).
+	//   3. Writes refresh:<user>:<newHash> with "<session_id>|<now_unix>"
+	//      and the same ttl.
+	//   4. SADD new key, SREM old key on session_index, EXPIRE the index.
+	//   5. DEL old key.
+	//
+	// Returns the session_id parsed from the old value so the caller can
+	// mint a new access JWT carrying the unchanged session_id.
+	Rotate(ctx context.Context, userID uuid.UUID, oldHash, newHash string, ttl time.Duration) (uuid.UUID, error)
 
-	// DeleteAndUnindex removes a token and its entry from the user's
-	// session index atomically in a single pipeline.
-	DeleteAndUnindex(ctx context.Context, key string, userID string) error
+	// Lookup fetches the active session record for (userID, tokenHash).
+	// Returns ErrTokenInvalid if the key is missing.
+	Lookup(ctx context.Context, userID uuid.UUID, tokenHash string) (*ActiveSession, error)
 
-	// DeleteAllUserSessions removes all tokens and the index for a user.
-	DeleteAllUserSessions(ctx context.Context, userID string) error
+	// DeleteBySessionID scans the user's index, finds the token key whose
+	// value carries the given session_id, deletes it, and returns the
+	// removed record. Returns ErrTokenInvalid if no live session matches.
+	// Used by /logout and revokeSession.
+	DeleteBySessionID(ctx context.Context, userID, sessionID uuid.UUID) (*ActiveSession, error)
 
-	// DeleteByTokenHash removes a token by its hash and user ID.
-	// Constructs the Redis key from the hash and calls DeleteAndUnindex.
-	// Used when revoking a session where only the hash (from MongoDB) is known.
-	DeleteByTokenHash(ctx context.Context, userID, tokenHash string) error
+	// ListByUser returns all live active sessions for a user. The returned
+	// slice is unordered. Stale index entries (where the underlying token
+	// key has expired) are cleaned as a side effect.
+	ListByUser(ctx context.Context, userID uuid.UUID) ([]ActiveSession, error)
+
+	// DeleteAllForUser removes every live session for a user. Used by
+	// AdminRevokeAllUserSessions and RevokeAllMySessions.
+	DeleteAllForUser(ctx context.Context, userID uuid.UUID) error
 
 	// Close releases resources.
 	Close() error

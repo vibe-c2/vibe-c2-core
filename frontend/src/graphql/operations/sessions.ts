@@ -14,10 +14,7 @@ export const SessionFields = graphql(`
     os
     device
     status
-    terminationReason
     lastActivityAt
-    expiresAt
-    terminatedAt
     isCurrent
     createdAt
     updatedAt

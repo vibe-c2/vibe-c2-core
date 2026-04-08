@@ -14,8 +14,17 @@ import { MySessionsDocument } from "@/graphql/gql/graphql"
 export function LoginPage() {
   const navigate = useNavigate()
   const setSession = useAuthStore((s) => s.setSession)
+  const isAuthenticated = useAuthStore((s) => s.isAuthenticated)
+  const isLoading = useAuthStore((s) => s.isLoading)
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
+
+  // Already authenticated (e.g. opened /login in a second tab) — bounce home.
+  useEffect(() => {
+    if (!isLoading && isAuthenticated) {
+      navigate("/", { replace: true })
+    }
+  }, [isAuthenticated, isLoading, navigate])
 
   // Redirect to enroll if the system hasn't been set up yet
   useEffect(() => {

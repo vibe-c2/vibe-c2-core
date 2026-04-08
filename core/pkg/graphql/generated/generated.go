@@ -177,22 +177,19 @@ type ComplexityRoot struct {
 	}
 
 	Session struct {
-		Browser           func(childComplexity int) int
-		CreatedAt         func(childComplexity int) int
-		Device            func(childComplexity int) int
-		ExpiresAt         func(childComplexity int) int
-		ID                func(childComplexity int) int
-		IPAddress         func(childComplexity int) int
-		IsCurrent         func(childComplexity int) int
-		LastActivityAt    func(childComplexity int) int
-		OS                func(childComplexity int) int
-		Status            func(childComplexity int) int
-		TerminatedAt      func(childComplexity int) int
-		TerminationReason func(childComplexity int) int
-		UpdatedAt         func(childComplexity int) int
-		User              func(childComplexity int) int
-		UserAgent         func(childComplexity int) int
-		UserID            func(childComplexity int) int
+		Browser        func(childComplexity int) int
+		CreatedAt      func(childComplexity int) int
+		Device         func(childComplexity int) int
+		ID             func(childComplexity int) int
+		IPAddress      func(childComplexity int) int
+		IsCurrent      func(childComplexity int) int
+		LastActivityAt func(childComplexity int) int
+		OS             func(childComplexity int) int
+		Status         func(childComplexity int) int
+		UpdatedAt      func(childComplexity int) int
+		User           func(childComplexity int) int
+		UserAgent      func(childComplexity int) int
+		UserID         func(childComplexity int) int
 	}
 
 	SessionConnection struct {
@@ -415,10 +412,7 @@ type SessionResolver interface {
 	User(ctx context.Context, obj *models.Session) (*models.User, error)
 
 	Status(ctx context.Context, obj *models.Session) (models.SessionStatus, error)
-	TerminationReason(ctx context.Context, obj *models.Session) (*models.SessionTerminationReason, error)
-	LastActivityAt(ctx context.Context, obj *models.Session) (string, error)
-	ExpiresAt(ctx context.Context, obj *models.Session) (string, error)
-	TerminatedAt(ctx context.Context, obj *models.Session) (*string, error)
+	LastActivityAt(ctx context.Context, obj *models.Session) (*string, error)
 	IsCurrent(ctx context.Context, obj *models.Session) (bool, error)
 	CreatedAt(ctx context.Context, obj *models.Session) (string, error)
 	UpdatedAt(ctx context.Context, obj *models.Session) (string, error)
@@ -1275,12 +1269,6 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.Session.Device(childComplexity), true
-	case "Session.expiresAt":
-		if e.ComplexityRoot.Session.ExpiresAt == nil {
-			break
-		}
-
-		return e.ComplexityRoot.Session.ExpiresAt(childComplexity), true
 	case "Session.id":
 		if e.ComplexityRoot.Session.ID == nil {
 			break
@@ -1317,18 +1305,6 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.Session.Status(childComplexity), true
-	case "Session.terminatedAt":
-		if e.ComplexityRoot.Session.TerminatedAt == nil {
-			break
-		}
-
-		return e.ComplexityRoot.Session.TerminatedAt(childComplexity), true
-	case "Session.terminationReason":
-		if e.ComplexityRoot.Session.TerminationReason == nil {
-			break
-		}
-
-		return e.ComplexityRoot.Session.TerminationReason(childComplexity), true
 	case "Session.updatedAt":
 		if e.ComplexityRoot.Session.UpdatedAt == nil {
 			break
@@ -2428,49 +2404,46 @@ type Mutation {
 # Session Management
 # =============================================================================
 #
-# Sessions represent authenticated user sessions with metadata about the
-# client that created them (IP address, browser, OS, device type).
+# Sessions are an insert-once log of authentications. Every successful login
+# writes one row to the Mongo ` + "`" + `sessions` + "`" + ` collection (creation log) and one
+# entry to Redis (the live, authoritative authorization record). The Mongo
+# row is never updated and never deleted by the app — it is the historical
+# trail of who logged in from where.
 #
-# Each login creates a new session. Sessions persist even after they end,
-# providing an audit trail. Active sessions have a corresponding refresh
-# token in Redis; historical sessions show how and when they were terminated.
+# A session is "active" if it still has a corresponding entry in Redis. The
+# ` + "`" + `status` + "`" + ` and ` + "`" + `lastActivityAt` + "`" + ` fields below are decorated by the resolver
+# from the Redis side; the underlying Mongo row knows nothing about them.
+# When a session ends (logout, refresh failure, native Redis TTL expiry,
+# user/admin revoke), the Redis entry vanishes and ` + "`" + `status` + "`" + ` flips to
+# INACTIVE — but the Mongo creation row stays.
 #
 # Users can view and manage their own sessions.
 # Admins can view and manage all users' sessions.
 
-# SessionStatus indicates whether a session is currently active.
+# SessionStatus is a derived field: ACTIVE if the session has a live Redis
+# entry, INACTIVE otherwise. Not stored in Mongo.
 enum SessionStatus {
   ACTIVE
   INACTIVE
 }
 
-# SessionTerminationReason describes why a session ended.
-enum SessionTerminationReason {
-  LOGOUT              # User logged out normally
-  EXPIRED             # Refresh token TTL expired (7 days)
-  REPLAY_DETECTED     # Possible token theft — all sessions invalidated
-  ADMIN_REVOKED       # An admin terminated this session
-  USER_REVOKED        # The user terminated this session from another device
-}
-
 # Session represents an authenticated user session with request metadata.
+# All fields except ` + "`" + `status` + "`" + `, ` + "`" + `lastActivityAt` + "`" + `, and ` + "`" + `isCurrent` + "`" + ` come from
+# the Mongo creation row; the rest are decorated from Redis at query time.
 type Session {
-  id: ID!                                      # Session UUID
-  userId: ID!                                  # Owning user's UUID
-  user: User!                                  # The owning user (resolved from userId)
-  ipAddress: String!                           # IP address at login time
-  userAgent: String!                           # Raw User-Agent header
-  browser: String!                             # Parsed browser name + version (e.g. "Chrome 120")
-  os: String!                                  # Parsed OS (e.g. "macOS 14.2")
-  device: String!                              # "Desktop", "Mobile", "Bot", etc.
-  status: SessionStatus!                       # Active or inactive
-  terminationReason: SessionTerminationReason  # Why the session ended (null if active)
-  lastActivityAt: String!                      # ISO 8601 — updated on each token refresh
-  expiresAt: String!                           # ISO 8601 — when the refresh token expires
-  terminatedAt: String                         # ISO 8601 — null if still active
-  isCurrent: Boolean!                          # True if this is the caller's current session
-  createdAt: String!                           # ISO 8601
-  updatedAt: String!                           # ISO 8601
+  id: ID!                # Session UUID
+  userId: ID!            # Owning user's UUID
+  user: User!            # The owning user (resolved from userId)
+  ipAddress: String!     # IP address at login time
+  userAgent: String!     # Raw User-Agent header
+  browser: String!       # Parsed browser name + version (e.g. "Chrome 120")
+  os: String!            # Parsed OS (e.g. "macOS 14.2")
+  device: String!        # "Desktop", "Mobile", "Bot", etc.
+  status: SessionStatus! # Derived: ACTIVE if the Redis entry still exists
+  lastActivityAt: String # ISO 8601 — last refresh time. Null for inactive sessions.
+  isCurrent: Boolean!    # True if this is the caller's current session
+  createdAt: String!     # ISO 8601 — login time
+  updatedAt: String!     # ISO 8601 — login time (creation log; never updated)
 }
 
 type SessionEdge {
@@ -7388,14 +7361,8 @@ func (ec *executionContext) fieldContext_Query_session(ctx context.Context, fiel
 				return ec.fieldContext_Session_device(ctx, field)
 			case "status":
 				return ec.fieldContext_Session_status(ctx, field)
-			case "terminationReason":
-				return ec.fieldContext_Session_terminationReason(ctx, field)
 			case "lastActivityAt":
 				return ec.fieldContext_Session_lastActivityAt(ctx, field)
-			case "expiresAt":
-				return ec.fieldContext_Session_expiresAt(ctx, field)
-			case "terminatedAt":
-				return ec.fieldContext_Session_terminatedAt(ctx, field)
 			case "isCurrent":
 				return ec.fieldContext_Session_isCurrent(ctx, field)
 			case "createdAt":
@@ -8904,35 +8871,6 @@ func (ec *executionContext) fieldContext_Session_status(_ context.Context, field
 	return fc, nil
 }
 
-func (ec *executionContext) _Session_terminationReason(ctx context.Context, field graphql.CollectedField, obj *models.Session) (ret graphql.Marshaler) {
-	return graphql.ResolveField(
-		ctx,
-		ec.OperationContext,
-		field,
-		ec.fieldContext_Session_terminationReason,
-		func(ctx context.Context) (any, error) {
-			return ec.Resolvers.Session().TerminationReason(ctx, obj)
-		},
-		nil,
-		ec.marshalOSessionTerminationReason2ᚖgithubᚗcomᚋvibeᚑc2ᚋvibeᚑc2ᚑcoreᚋcoreᚋpkgᚋmodelsᚐSessionTerminationReason,
-		true,
-		false,
-	)
-}
-
-func (ec *executionContext) fieldContext_Session_terminationReason(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
-	fc = &graphql.FieldContext{
-		Object:     "Session",
-		Field:      field,
-		IsMethod:   true,
-		IsResolver: true,
-		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
-			return nil, errors.New("field of type SessionTerminationReason does not have child fields")
-		},
-	}
-	return fc, nil
-}
-
 func (ec *executionContext) _Session_lastActivityAt(ctx context.Context, field graphql.CollectedField, obj *models.Session) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
@@ -8943,71 +8881,13 @@ func (ec *executionContext) _Session_lastActivityAt(ctx context.Context, field g
 			return ec.Resolvers.Session().LastActivityAt(ctx, obj)
 		},
 		nil,
-		ec.marshalNString2string,
-		true,
-		true,
-	)
-}
-
-func (ec *executionContext) fieldContext_Session_lastActivityAt(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
-	fc = &graphql.FieldContext{
-		Object:     "Session",
-		Field:      field,
-		IsMethod:   true,
-		IsResolver: true,
-		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
-			return nil, errors.New("field of type String does not have child fields")
-		},
-	}
-	return fc, nil
-}
-
-func (ec *executionContext) _Session_expiresAt(ctx context.Context, field graphql.CollectedField, obj *models.Session) (ret graphql.Marshaler) {
-	return graphql.ResolveField(
-		ctx,
-		ec.OperationContext,
-		field,
-		ec.fieldContext_Session_expiresAt,
-		func(ctx context.Context) (any, error) {
-			return ec.Resolvers.Session().ExpiresAt(ctx, obj)
-		},
-		nil,
-		ec.marshalNString2string,
-		true,
-		true,
-	)
-}
-
-func (ec *executionContext) fieldContext_Session_expiresAt(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
-	fc = &graphql.FieldContext{
-		Object:     "Session",
-		Field:      field,
-		IsMethod:   true,
-		IsResolver: true,
-		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
-			return nil, errors.New("field of type String does not have child fields")
-		},
-	}
-	return fc, nil
-}
-
-func (ec *executionContext) _Session_terminatedAt(ctx context.Context, field graphql.CollectedField, obj *models.Session) (ret graphql.Marshaler) {
-	return graphql.ResolveField(
-		ctx,
-		ec.OperationContext,
-		field,
-		ec.fieldContext_Session_terminatedAt,
-		func(ctx context.Context) (any, error) {
-			return ec.Resolvers.Session().TerminatedAt(ctx, obj)
-		},
-		nil,
 		ec.marshalOString2ᚖstring,
 		true,
 		false,
 	)
 }
 
-func (ec *executionContext) fieldContext_Session_terminatedAt(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+func (ec *executionContext) fieldContext_Session_lastActivityAt(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
 	fc = &graphql.FieldContext{
 		Object:     "Session",
 		Field:      field,
@@ -9252,14 +9132,8 @@ func (ec *executionContext) fieldContext_SessionEdge_node(_ context.Context, fie
 				return ec.fieldContext_Session_device(ctx, field)
 			case "status":
 				return ec.fieldContext_Session_status(ctx, field)
-			case "terminationReason":
-				return ec.fieldContext_Session_terminationReason(ctx, field)
 			case "lastActivityAt":
 				return ec.fieldContext_Session_lastActivityAt(ctx, field)
-			case "expiresAt":
-				return ec.fieldContext_Session_expiresAt(ctx, field)
-			case "terminatedAt":
-				return ec.fieldContext_Session_terminatedAt(ctx, field)
 			case "isCurrent":
 				return ec.fieldContext_Session_isCurrent(ctx, field)
 			case "createdAt":
@@ -9431,14 +9305,8 @@ func (ec *executionContext) fieldContext_SessionEvent_session(_ context.Context,
 				return ec.fieldContext_Session_device(ctx, field)
 			case "status":
 				return ec.fieldContext_Session_status(ctx, field)
-			case "terminationReason":
-				return ec.fieldContext_Session_terminationReason(ctx, field)
 			case "lastActivityAt":
 				return ec.fieldContext_Session_lastActivityAt(ctx, field)
-			case "expiresAt":
-				return ec.fieldContext_Session_expiresAt(ctx, field)
-			case "terminatedAt":
-				return ec.fieldContext_Session_terminatedAt(ctx, field)
 			case "isCurrent":
 				return ec.fieldContext_Session_isCurrent(ctx, field)
 			case "createdAt":
@@ -15908,121 +15776,16 @@ func (ec *executionContext) _Session(ctx context.Context, sel ast.SelectionSet, 
 			}
 
 			out.Concurrently(i, func(ctx context.Context) graphql.Marshaler { return innerFunc(ctx, out) })
-		case "terminationReason":
-			field := field
-
-			innerFunc := func(ctx context.Context, _ *graphql.FieldSet) (res graphql.Marshaler) {
-				defer func() {
-					if r := recover(); r != nil {
-						ec.Error(ctx, ec.Recover(ctx, r))
-					}
-				}()
-				res = ec._Session_terminationReason(ctx, field, obj)
-				return res
-			}
-
-			if field.Deferrable != nil {
-				dfs, ok := deferred[field.Deferrable.Label]
-				di := 0
-				if ok {
-					dfs.AddField(field)
-					di = len(dfs.Values) - 1
-				} else {
-					dfs = graphql.NewFieldSet([]graphql.CollectedField{field})
-					deferred[field.Deferrable.Label] = dfs
-				}
-				dfs.Concurrently(di, func(ctx context.Context) graphql.Marshaler {
-					return innerFunc(ctx, dfs)
-				})
-
-				// don't run the out.Concurrently() call below
-				out.Values[i] = graphql.Null
-				continue
-			}
-
-			out.Concurrently(i, func(ctx context.Context) graphql.Marshaler { return innerFunc(ctx, out) })
 		case "lastActivityAt":
 			field := field
 
-			innerFunc := func(ctx context.Context, fs *graphql.FieldSet) (res graphql.Marshaler) {
+			innerFunc := func(ctx context.Context, _ *graphql.FieldSet) (res graphql.Marshaler) {
 				defer func() {
 					if r := recover(); r != nil {
 						ec.Error(ctx, ec.Recover(ctx, r))
 					}
 				}()
 				res = ec._Session_lastActivityAt(ctx, field, obj)
-				if res == graphql.Null {
-					atomic.AddUint32(&fs.Invalids, 1)
-				}
-				return res
-			}
-
-			if field.Deferrable != nil {
-				dfs, ok := deferred[field.Deferrable.Label]
-				di := 0
-				if ok {
-					dfs.AddField(field)
-					di = len(dfs.Values) - 1
-				} else {
-					dfs = graphql.NewFieldSet([]graphql.CollectedField{field})
-					deferred[field.Deferrable.Label] = dfs
-				}
-				dfs.Concurrently(di, func(ctx context.Context) graphql.Marshaler {
-					return innerFunc(ctx, dfs)
-				})
-
-				// don't run the out.Concurrently() call below
-				out.Values[i] = graphql.Null
-				continue
-			}
-
-			out.Concurrently(i, func(ctx context.Context) graphql.Marshaler { return innerFunc(ctx, out) })
-		case "expiresAt":
-			field := field
-
-			innerFunc := func(ctx context.Context, fs *graphql.FieldSet) (res graphql.Marshaler) {
-				defer func() {
-					if r := recover(); r != nil {
-						ec.Error(ctx, ec.Recover(ctx, r))
-					}
-				}()
-				res = ec._Session_expiresAt(ctx, field, obj)
-				if res == graphql.Null {
-					atomic.AddUint32(&fs.Invalids, 1)
-				}
-				return res
-			}
-
-			if field.Deferrable != nil {
-				dfs, ok := deferred[field.Deferrable.Label]
-				di := 0
-				if ok {
-					dfs.AddField(field)
-					di = len(dfs.Values) - 1
-				} else {
-					dfs = graphql.NewFieldSet([]graphql.CollectedField{field})
-					deferred[field.Deferrable.Label] = dfs
-				}
-				dfs.Concurrently(di, func(ctx context.Context) graphql.Marshaler {
-					return innerFunc(ctx, dfs)
-				})
-
-				// don't run the out.Concurrently() call below
-				out.Values[i] = graphql.Null
-				continue
-			}
-
-			out.Concurrently(i, func(ctx context.Context) graphql.Marshaler { return innerFunc(ctx, out) })
-		case "terminatedAt":
-			field := field
-
-			innerFunc := func(ctx context.Context, _ *graphql.FieldSet) (res graphql.Marshaler) {
-				defer func() {
-					if r := recover(); r != nil {
-						ec.Error(ctx, ec.Recover(ctx, r))
-					}
-				}()
-				res = ec._Session_terminatedAt(ctx, field, obj)
 				return res
 			}
 
@@ -19048,22 +18811,6 @@ func (ec *executionContext) marshalOSession2ᚖgithubᚗcomᚋvibeᚑc2ᚋvibe�
 		return graphql.Null
 	}
 	return ec._Session(ctx, sel, v)
-}
-
-func (ec *executionContext) unmarshalOSessionTerminationReason2ᚖgithubᚗcomᚋvibeᚑc2ᚋvibeᚑc2ᚑcoreᚋcoreᚋpkgᚋmodelsᚐSessionTerminationReason(ctx context.Context, v any) (*models.SessionTerminationReason, error) {
-	if v == nil {
-		return nil, nil
-	}
-	var res = new(models.SessionTerminationReason)
-	err := res.UnmarshalGQL(v)
-	return res, graphql.ErrorOnPath(ctx, err)
-}
-
-func (ec *executionContext) marshalOSessionTerminationReason2ᚖgithubᚗcomᚋvibeᚑc2ᚋvibeᚑc2ᚑcoreᚋcoreᚋpkgᚋmodelsᚐSessionTerminationReason(ctx context.Context, sel ast.SelectionSet, v *models.SessionTerminationReason) graphql.Marshaler {
-	if v == nil {
-		return graphql.Null
-	}
-	return v
 }
 
 func (ec *executionContext) unmarshalOString2ᚕstringᚄ(ctx context.Context, v any) ([]string, error) {

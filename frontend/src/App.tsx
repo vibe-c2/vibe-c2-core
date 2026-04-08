@@ -4,6 +4,7 @@ import { QueryProvider } from "@/providers/query-provider"
 import { ThemeProvider } from "@/components/theme-provider"
 import { Toaster } from "@/components/ui/sonner"
 import { ProtectedRoute } from "@/components/protected-route"
+import { ConnectivityBanner } from "@/components/connectivity-banner"
 import { AppLayout } from "@/components/layout/app-layout"
 import { LoginPage } from "@/pages/login"
 import { EnrollPage } from "@/pages/enroll"
@@ -25,6 +26,7 @@ function App() {
     <QueryProvider>
       <ThemeProvider>
         <Toaster />
+        <ConnectivityBanner />
         <BrowserRouter>
         <Routes>
           <Route path="/login" element={<LoginPage />} />

@@ -1,10 +1,9 @@
 package controller
 
 import (
+	"errors"
 	"net/http"
 	"time"
-
-	"errors"
 
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
@@ -29,14 +28,21 @@ type IAuthController interface {
 	Me(c *gin.Context)
 }
 
+// AuthControllerConfig groups the durations and flags the auth controller
+// needs. Mirrors the relevant subset of environment.AuthConfig.
+type AuthControllerConfig struct {
+	RefreshTTL time.Duration
+	IsDev      bool
+}
+
 type authController struct {
-	userRepo    repository.IUserRepository
-	sessionRepo repository.ISessionRepository
+	userRepo     repository.IUserRepository
+	sessionRepo  repository.ISessionRepository
 	authProvider auth.IAuthProvider
-	tokenStore  auth.TokenStore
-	eventBus    eventbus.IEventBus
-	log         *zap.Logger
-	isDev       bool
+	tokenStore   auth.TokenStore
+	eventBus     eventbus.IEventBus
+	log          *zap.Logger
+	cfg          AuthControllerConfig
 }
 
 func NewAuthController(
@@ -46,7 +52,7 @@ func NewAuthController(
 	tokenStore auth.TokenStore,
 	eventBus eventbus.IEventBus,
 	log *zap.Logger,
-	isDev bool,
+	cfg AuthControllerConfig,
 ) IAuthController {
 	return &authController{
 		userRepo:     userRepo,
@@ -55,14 +61,14 @@ func NewAuthController(
 		tokenStore:   tokenStore,
 		eventBus:     eventBus,
 		log:          log,
-		isDev:        isDev,
+		cfg:          cfg,
 	}
 }
 
 // Login authenticates a user with username/password and sets auth cookies.
 //
 //	@Summary		Login
-//	@Description	Authenticate with username and password. Tokens are set as httpOnly cookies.
+//	@Description	Authenticate with username and password. Tokens are set as httpOnly cookies; CSRF token in a non-httpOnly cookie.
 //	@Tags			Auth
 //	@Accept			json
 //	@Produce		json
@@ -99,69 +105,28 @@ func (ctrl *authController) Login(c *gin.Context) {
 		return
 	}
 
-	userID := user.UserID.String()
-	sessionID := uuid.New()
-
-	authToken, err := ctrl.authProvider.GenerateAuthToken(userID, user.Username, user.Roles, sessionID.String())
+	resp, err := IssueSession(
+		c, ctrl.authProvider, ctrl.tokenStore, ctrl.sessionRepo, ctrl.eventBus,
+		&user, ctrl.cfg,
+	)
 	if err != nil {
-		log.Error("login: failed to generate auth token", zap.Error(err))
+		log.Error("login: failed to issue session", zap.Error(err))
 		c.JSON(http.StatusInternalServerError, responses.ErrInternalError)
 		return
 	}
 
-	refreshToken, err := ctrl.authProvider.GenerateRefreshToken(c.Request.Context(), userID, user.Username, user.Roles)
-	if err != nil {
-		log.Error("login: failed to generate refresh token", zap.Error(err))
-		c.JSON(http.StatusInternalServerError, responses.ErrInternalError)
-		return
-	}
-
-	// Create persistent session record in MongoDB
-	meta := session.Extract(c)
-	now := time.Now().UTC()
-	sess := &models.Session{
-		SessionID:      sessionID,
-		UserID:         user.UserID,
-		TokenHash:      auth.HashToken(refreshToken),
-		IPAddress:      meta.IPAddress,
-		UserAgent:      meta.UserAgent,
-		Browser:        meta.Browser,
-		OS:             meta.OS,
-		Device:         meta.Device,
-		Status:         models.SessionStatusActive,
-		LastActivityAt: now,
-		ExpiresAt:      now.Add(auth.TTLRefreshToken),
-	}
-	if err := ctrl.sessionRepo.Create(c.Request.Context(), sess); err != nil {
-		log.Error("login: failed to create session record", zap.Error(err))
-		// Non-fatal: auth tokens were already issued. Log and continue.
-	} else {
-		ctrl.eventBus.Publish(eventbus.NewSessionCreatedEvent(eventbus.UserActor(userID), eventbus.SessionEventPayload{
-			SessionID: sess.SessionID.String(), UserID: userID,
-		}))
-	}
-
-	perms := permissions.GetPermissionsForRoles(user.Roles)
-
-	log.Info("login: success", zap.String("user_id", userID))
-	ctrl.eventBus.Publish(eventbus.NewAuthLoginEvent(eventbus.UserActor(userID), eventbus.AuthEventPayload{
-		UserID: userID, Username: user.Username,
+	log.Info("login: success", zap.String("user_id", user.UserID.String()))
+	ctrl.eventBus.Publish(eventbus.NewAuthLoginEvent(eventbus.UserActor(user.UserID.String()), eventbus.AuthEventPayload{
+		UserID: user.UserID.String(), Username: user.Username,
 	}))
 
-	cookies.SetAuthCookies(c, authToken, refreshToken, ctrl.authProvider.AuthTokenTTL(), ctrl.isDev)
-	c.JSON(http.StatusOK, responses.SessionResponse{
-		UserID:      userID,
-		Roles:       user.Roles,
-		Username:    user.Username,
-		Permissions: perms,
-	})
+	c.JSON(http.StatusOK, resp)
 }
 
 // Refresh rotates the refresh token and issues new auth cookies.
-// Both the access token (possibly expired) and refresh token are read from cookies.
 //
 //	@Summary		Refresh tokens
-//	@Description	Rotate the refresh token. Reads tokens from httpOnly cookies.
+//	@Description	Rotate the refresh token. Reads tokens from httpOnly cookies. Requires X-CSRF-Token header matching the csrf_token cookie.
 //	@Tags			Auth
 //	@Produce		json
 //	@Success		200	{object}	responses.SessionResponse
@@ -171,110 +136,99 @@ func (ctrl *authController) Login(c *gin.Context) {
 func (ctrl *authController) Refresh(c *gin.Context) {
 	log := logger.From(c.Request.Context())
 
-	// Read the expired access token to extract the userID.
-	accessTokenStr, err := c.Cookie(cookies.AccessTokenCookie)
-	if err != nil || accessTokenStr == "" {
+	rawRefresh, err := c.Cookie(cookies.RefreshTokenCookie)
+	if err != nil || rawRefresh == "" {
 		c.JSON(http.StatusUnauthorized, responses.ErrUnauthorized)
 		return
 	}
 
-	claims, err := ctrl.authProvider.ParseAuthTokenUnvalidated(accessTokenStr)
-	if err != nil {
-		log.Warn("refresh: failed to parse access token", zap.Error(err))
-		c.JSON(http.StatusUnauthorized, responses.ErrUnauthorized)
-		return
-	}
-	userID := claims.Subject
-
-	// Read the refresh token from its dedicated cookie.
-	refreshTokenStr, err := c.Cookie(cookies.RefreshTokenCookie)
-	if err != nil || refreshTokenStr == "" {
+	// The user_id is baked into the refresh token itself (see
+	// auth.MintRefreshToken), so /login/refresh does not need the access
+	// JWT to know which Redis key to CAS.
+	userID, oldHash, ok := auth.ParseRefreshToken(rawRefresh)
+	if !ok {
 		c.JSON(http.StatusUnauthorized, responses.ErrUnauthorized)
 		return
 	}
 
-	// Compute old token hash before rotation so we can update the MongoDB session.
-	oldTokenHash := auth.HashToken(refreshTokenStr)
-
-	// Look up the session ID to embed in the new JWT.
-	var currentSessionID string
-	if sess, err := ctrl.sessionRepo.FindByTokenHash(c.Request.Context(), oldTokenHash); err == nil {
-		currentSessionID = sess.SessionID.String()
-	} else if claims.SessionID != "" {
-		// Fallback: use the session ID from the expired JWT if token hash lookup
-		// fails. This handles the case where a previous UpdateOnRefresh failed,
-		// leaving MongoDB with a stale token hash.
-		currentSessionID = claims.SessionID
-	}
-
-	// RotateRefreshToken validates the old token, deletes it, and generates a new
-	// pair. If the old token is invalid (possible replay attack), it invalidates
-	// ALL sessions for the user. Infrastructure errors are returned separately.
-	newAuthToken, newRefreshToken, err := ctrl.authProvider.RotateRefreshToken(c.Request.Context(), userID, refreshTokenStr, currentSessionID)
+	// Mint the new refresh token first so we can pass its hash into the CAS.
+	newRaw, newHash, err := auth.MintRefreshToken(userID)
 	if err != nil {
-		if errors.Is(err, auth.ErrTokenInvalid) {
-			// Replay attack detected — all Redis tokens already invalidated by RotateRefreshToken.
-			// Mark all MongoDB sessions as terminated.
-			log.Warn("refresh: replay detected", zap.String("user_id", userID), zap.Error(err))
-			ctrl.eventBus.Publish(eventbus.NewAuthReplayDetectedEvent(eventbus.UserActor(userID)))
-			if userUUID, parseErr := uuid.Parse(userID); parseErr == nil {
-				if _, termErr := ctrl.sessionRepo.TerminateAllForUser(c.Request.Context(), userUUID, models.TerminationReplayDetected); termErr != nil {
-					log.Warn("refresh: failed to terminate sessions on replay", zap.Error(termErr))
-				}
-			}
-			cookies.ClearAuthCookies(c, ctrl.isDev)
-			c.JSON(http.StatusUnauthorized, responses.ErrUnauthorized)
-		} else {
-			// Infrastructure error (Redis blip, JWT signing failure, etc.)
-			// Do NOT terminate sessions — this is not a replay attack.
-			log.Error("refresh: rotation failed", zap.String("user_id", userID), zap.Error(err))
-			c.JSON(http.StatusInternalServerError, responses.ErrInternalError)
-		}
-		return
-	}
-
-	// Update the MongoDB session: swap token hash and bump activity/expiry
-	newTokenHash := auth.HashToken(newRefreshToken)
-	if err := ctrl.sessionRepo.UpdateOnRefresh(c.Request.Context(), oldTokenHash, newTokenHash, time.Now().UTC().Add(auth.TTLRefreshToken)); err != nil {
-		log.Error("refresh: failed to update session record — session may become orphaned", zap.Error(err))
-	} else {
-		ctrl.eventBus.Publish(eventbus.NewSessionRefreshedEvent(eventbus.UserActor(userID), eventbus.SessionEventPayload{
-			SessionID: currentSessionID, UserID: userID,
-		}))
-	}
-
-	// Look up user for current roles/permissions (may have changed since last login).
-	userUUID, err := uuid.Parse(userID)
-	if err != nil {
-		c.JSON(http.StatusBadRequest, responses.NewErrorResponse("invalid user_id format"))
-		return
-	}
-
-	user, err := ctrl.userRepo.FindByID(c.Request.Context(), userUUID)
-	if err != nil {
-		log.Error("refresh: user not found after token rotation", zap.String("user_id", userID))
+		log.Error("refresh: mint refresh token", zap.Error(err))
 		c.JSON(http.StatusInternalServerError, responses.ErrInternalError)
 		return
 	}
 
-	perms := permissions.GetPermissionsForRoles(user.Roles)
+	// Atomic Redis CAS. The script preserves the embedded session_id and
+	// returns it. NOTFOUND is the loser-of-race / replay signal — clear
+	// cookies and return 401 with no audit write.
+	sessionID, err := ctrl.tokenStore.Rotate(c.Request.Context(), userID, oldHash, newHash, ctrl.cfg.RefreshTTL)
+	if err != nil {
+		if errors.Is(err, auth.ErrTokenInvalid) {
+			log.Warn("refresh: token rejected", zap.Stringer("user_id", userID))
+			cookies.ClearAuthCookies(c, ctrl.cfg.IsDev)
+			c.JSON(http.StatusUnauthorized, responses.ErrUnauthorized)
+			return
+		}
+		log.Error("refresh: rotate failed", zap.Error(err))
+		c.JSON(http.StatusInternalServerError, responses.ErrInternalError)
+		return
+	}
 
-	log.Info("refresh: success", zap.String("user_id", userID))
-	ctrl.eventBus.Publish(eventbus.NewAuthRefreshEvent(eventbus.UserActor(userID)))
+	// Re-read the user from Mongo so role/username changes propagate within
+	// one access-TTL window. The Mongo lookup is cheap and refresh is not
+	// the hot path.
+	user, err := ctrl.userRepo.FindByID(c.Request.Context(), userID)
+	if err != nil {
+		log.Error("refresh: user not found after rotation", zap.Stringer("user_id", userID))
+		cookies.ClearAuthCookies(c, ctrl.cfg.IsDev)
+		c.JSON(http.StatusUnauthorized, responses.ErrUnauthorized)
+		return
+	}
+	if !user.Active {
+		log.Warn("refresh: user inactive", zap.Stringer("user_id", userID))
+		cookies.ClearAuthCookies(c, ctrl.cfg.IsDev)
+		c.JSON(http.StatusUnauthorized, responses.ErrUnauthorized)
+		return
+	}
 
-	cookies.SetAuthCookies(c, newAuthToken, newRefreshToken, ctrl.authProvider.AuthTokenTTL(), ctrl.isDev)
+	newAccess, err := ctrl.authProvider.GenerateAuthToken(userID.String(), user.Username, user.Roles, sessionID.String())
+	if err != nil {
+		log.Error("refresh: generate access token", zap.Error(err))
+		c.JSON(http.StatusInternalServerError, responses.ErrInternalError)
+		return
+	}
+
+	csrfToken, err := auth.GenerateCSRFToken()
+	if err != nil {
+		log.Error("refresh: csrf gen", zap.Error(err))
+		c.JSON(http.StatusInternalServerError, responses.ErrInternalError)
+		return
+	}
+
+	cookies.SetAuthCookies(c, newAccess, newRaw, ctrl.cfg.RefreshTTL, ctrl.cfg.IsDev)
+	cookies.SetCSRFCookie(c, csrfToken, ctrl.cfg.RefreshTTL, ctrl.cfg.IsDev)
+
+	log.Info("refresh: success",
+		zap.Stringer("user_id", userID),
+		zap.Stringer("session_id", sessionID))
+	ctrl.eventBus.Publish(eventbus.NewAuthRefreshEvent(eventbus.UserActor(userID.String())))
+	ctrl.eventBus.Publish(eventbus.NewSessionRefreshedEvent(eventbus.UserActor(userID.String()), eventbus.SessionEventPayload{
+		SessionID: sessionID.String(), UserID: userID.String(),
+	}))
+
 	c.JSON(http.StatusOK, responses.SessionResponse{
-		UserID:      userID,
+		UserID:      userID.String(),
 		Roles:       user.Roles,
 		Username:    user.Username,
-		Permissions: perms,
+		Permissions: permissions.GetPermissionsForRoles(user.Roles),
 	})
 }
 
 // Logout terminates the current session and clears auth cookies.
 //
 //	@Summary		Logout
-//	@Description	Terminate the current session and clear auth cookies.
+//	@Description	Terminate the current session and clear auth cookies. Requires X-CSRF-Token header.
 //	@Tags			Auth
 //	@Produce		json
 //	@Success		200	{object}	responses.SuccessResponse
@@ -282,53 +236,27 @@ func (ctrl *authController) Refresh(c *gin.Context) {
 //	@Router			/logout [post]
 func (ctrl *authController) Logout(c *gin.Context) {
 	log := logger.From(c.Request.Context())
-	userID := c.GetString("userID")
-	currentSessionID := c.GetString("sessionID")
+	userIDStr := c.GetString("userID")
+	sessionIDStr := c.GetString("sessionID")
 
-	if currentSessionID != "" {
-		// Use the session ID from the JWT to identify and terminate the current session.
-		sessionUUID, err := uuid.Parse(currentSessionID)
-		if err != nil {
-			log.Warn("logout: invalid session ID in token", zap.String("session_id", currentSessionID), zap.Error(err))
-		} else {
-			sess, err := ctrl.sessionRepo.FindByID(c.Request.Context(), sessionUUID)
-			if err != nil {
-				log.Warn("logout: session not found", zap.String("session_id", currentSessionID), zap.Error(err))
-			} else if sess.Status == models.SessionStatusActive {
-				// Delete refresh token from Redis by hash
-				if err := ctrl.tokenStore.DeleteByTokenHash(c.Request.Context(), userID, sess.TokenHash); err != nil {
-					log.Warn("logout: failed to delete refresh token", zap.Error(err))
-				}
-				// Mark session as terminated in MongoDB
-				if err := ctrl.sessionRepo.Terminate(c.Request.Context(), sessionUUID, models.TerminationLogout); err != nil {
-					log.Warn("logout: failed to terminate session", zap.Error(err))
-				}
-				ctrl.eventBus.Publish(eventbus.NewSessionTerminatedEvent(eventbus.UserActor(userID), eventbus.SessionEventPayload{
-					SessionID: currentSessionID, UserID: userID, Reason: string(models.TerminationLogout),
-				}))
-			}
+	userID, _ := uuid.Parse(userIDStr)
+	sessionID, _ := uuid.Parse(sessionIDStr)
+
+	if userID != uuid.Nil && sessionID != uuid.Nil {
+		_, err := ctrl.tokenStore.DeleteBySessionID(c.Request.Context(), userID, sessionID)
+		if err != nil && !errors.Is(err, auth.ErrTokenInvalid) {
+			log.Warn("logout: delete redis session", zap.Error(err))
 		}
-	} else {
-		// No session ID in JWT (legacy token before session support) — invalidate all.
-		if err := ctrl.authProvider.InvalidateAllRefreshTokens(c.Request.Context(), userID); err != nil {
-			log.Error("logout: failed to invalidate tokens", zap.String("user_id", userID), zap.Error(err))
-			c.JSON(http.StatusInternalServerError, responses.ErrInternalError)
-			return
-		}
-		if userUUID, parseErr := uuid.Parse(userID); parseErr == nil {
-			if _, err := ctrl.sessionRepo.TerminateAllForUser(c.Request.Context(), userUUID, models.TerminationLogout); err != nil {
-				log.Warn("logout: failed to terminate all session records", zap.Error(err))
-			}
-		}
+		ctrl.eventBus.Publish(eventbus.NewSessionTerminatedEvent(eventbus.UserActor(userIDStr), eventbus.SessionEventPayload{
+			SessionID: sessionIDStr, UserID: userIDStr, Reason: "logout",
+		}))
 	}
 
-	log.Info("logout: success", zap.String("user_id", userID))
-	ctrl.eventBus.Publish(eventbus.NewAuthLogoutEvent(eventbus.UserActor(userID)))
+	log.Info("logout: success", zap.String("user_id", userIDStr))
+	ctrl.eventBus.Publish(eventbus.NewAuthLogoutEvent(eventbus.UserActor(userIDStr)))
 
-	cookies.ClearAuthCookies(c, ctrl.isDev)
-	c.JSON(http.StatusOK, responses.SuccessResponse{
-		Message: "Logout successful.",
-	})
+	cookies.ClearAuthCookies(c, ctrl.cfg.IsDev)
+	c.JSON(http.StatusOK, responses.SuccessResponse{Message: "Logout successful."})
 }
 
 // Me returns the current user's session info.
@@ -347,12 +275,87 @@ func (ctrl *authController) Me(c *gin.Context) {
 	val, _ := c.Get("roles")
 	roles, _ := val.([]string)
 
-	perms := permissions.GetPermissionsForRoles(roles)
-
 	c.JSON(http.StatusOK, responses.SessionResponse{
 		UserID:      userID,
 		Roles:       roles,
 		Username:    username,
-		Permissions: perms,
+		Permissions: permissions.GetPermissionsForRoles(roles),
 	})
+}
+
+// IssueSession is the shared session-creation flow used by Login and
+// Enroll. It writes the Mongo creation row, mints an access JWT and an
+// opaque refresh token, persists the active session in Redis, sets the
+// auth + CSRF cookies, and returns the response payload. The caller is
+// still responsible for publishing the per-flow auth event (LoginEvent /
+// EnrollEvent).
+//
+// Mongo is written *first* — if it fails the login fails and no Redis
+// state is created, so we never end up with a live Redis session that
+// has no audit row.
+func IssueSession(
+	c *gin.Context,
+	provider auth.IAuthProvider,
+	store auth.TokenStore,
+	sessionRepo repository.ISessionRepository,
+	bus eventbus.IEventBus,
+	user *models.User,
+	cfg AuthControllerConfig,
+) (responses.SessionResponse, error) {
+	ctx := c.Request.Context()
+	userID := user.UserID
+	sessionID := uuid.New()
+	meta := session.Extract(c)
+
+	// Insert-once Mongo creation row.
+	row := &models.Session{
+		SessionID: sessionID,
+		UserID:    userID,
+		IPAddress: meta.IPAddress,
+		UserAgent: meta.UserAgent,
+		Browser:   meta.Browser,
+		OS:        meta.OS,
+		Device:    meta.Device,
+	}
+	if err := sessionRepo.Insert(ctx, row); err != nil {
+		return responses.SessionResponse{}, err
+	}
+
+	rawRefresh, tokenHash, err := auth.MintRefreshToken(userID)
+	if err != nil {
+		return responses.SessionResponse{}, err
+	}
+
+	if err := store.Create(ctx, userID, sessionID, tokenHash, cfg.RefreshTTL); err != nil {
+		return responses.SessionResponse{}, err
+	}
+
+	accessToken, err := provider.GenerateAuthToken(userID.String(), user.Username, user.Roles, sessionID.String())
+	if err != nil {
+		// Roll back the Redis entry so we don't leave a session the
+		// caller can never use. The Mongo row stays — it's a creation
+		// log and the session did get created.
+		_, _ = store.DeleteBySessionID(ctx, userID, sessionID)
+		return responses.SessionResponse{}, err
+	}
+
+	csrfToken, err := auth.GenerateCSRFToken()
+	if err != nil {
+		_, _ = store.DeleteBySessionID(ctx, userID, sessionID)
+		return responses.SessionResponse{}, err
+	}
+
+	cookies.SetAuthCookies(c, accessToken, rawRefresh, cfg.RefreshTTL, cfg.IsDev)
+	cookies.SetCSRFCookie(c, csrfToken, cfg.RefreshTTL, cfg.IsDev)
+
+	bus.Publish(eventbus.NewSessionCreatedEvent(eventbus.UserActor(userID.String()), eventbus.SessionEventPayload{
+		SessionID: sessionID.String(), UserID: userID.String(),
+	}))
+
+	return responses.SessionResponse{
+		UserID:      userID.String(),
+		Roles:       user.Roles,
+		Username:    user.Username,
+		Permissions: permissions.GetPermissionsForRoles(user.Roles),
+	}, nil
 }

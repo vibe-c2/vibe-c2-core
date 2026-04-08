@@ -31,8 +31,12 @@ func (a *App) NewRouter() *gin.Engine {
 
 	// Controllers
 	isDev := a.env.StageStatus == "development"
-	authCtrl := controller.NewAuthController(a.repos.User, a.repos.Session, a.authProvider, a.tokenStore, a.eventBus, a.logger, isDev)
-	enrollCtrl := controller.NewEnrollController(a.repos.User, a.repos.Session, a.authProvider, a.eventBus, a.logger, isDev)
+	ctrlCfg := controller.AuthControllerConfig{
+		RefreshTTL: a.authCfg.refreshTTL,
+		IsDev:      isDev,
+	}
+	authCtrl := controller.NewAuthController(a.repos.User, a.repos.Session, a.authProvider, a.tokenStore, a.eventBus, a.logger, ctrlCfg)
+	enrollCtrl := controller.NewEnrollController(a.repos.User, a.repos.Session, a.authProvider, a.tokenStore, a.eventBus, a.logger, ctrlCfg)
 	statusCtrl := controller.NewStatusController(a.repos.User, a.logger)
 
 	// Resolvers (GraphQL business logic, same pattern as controllers)
@@ -43,7 +47,7 @@ func (a *App) NewRouter() *gin.Engine {
 		resolver.WithWikiDocumentBackupRepo(a.repos.WikiDocumentBackup),
 		resolver.WithEventBus(a.eventBus))
 	snpRes := resolver.NewSchemeNetworkPointResolver(a.repos.SchemeNetworkPoint, a.repos.Operation)
-	sessRes := resolver.NewSessionResolver(a.repos.Session, a.repos.User, a.tokenStore, a.authProvider, a.eventBus)
+	sessRes := resolver.NewSessionResolver(a.repos.Session, a.repos.User, a.tokenStore, a.eventBus)
 	wikiDocRes := resolver.NewWikiDocumentResolver(
 		a.repos.WikiDocument, a.repos.WikiDocumentBackup,
 		a.repos.Operation, a.repos.User,
@@ -63,11 +67,15 @@ func (a *App) NewRouter() *gin.Engine {
 	{
 		v1.GET("/", healthcheck)
 
-		// Public routes
+		// Public routes (no JWT, no CSRF — these initiate the cookie set).
 		v1.GET("/status", statusCtrl.Status)
 		v1.POST("/enroll", enrollCtrl.Enroll)
 		v1.POST("/login", authCtrl.Login)
-		v1.POST("/login/refresh", authCtrl.Refresh)
+
+		// /login/refresh requires the CSRF double-submit cookie (set on
+		// the previous login/refresh) but no JWT — the access cookie may
+		// be expired by the time refresh is called.
+		v1.POST("/login/refresh", middleware.CSRF(a.authCfg.csrfEnabled), authCtrl.Refresh)
 
 		// Internal webhook endpoint (not behind JWTAuth, behind HMAC validation)
 		internal := v1.Group("/internal")
@@ -80,7 +88,10 @@ func (a *App) NewRouter() *gin.Engine {
 			v1.GET("/graphql", gql.NewPlaygroundHandler("/api/v1/graphql"))
 		}
 
-		// Protected routes (JWT required)
+		// Protected routes (JWT + CSRF required for state-changing methods).
+		// CSRF middleware no-ops on GET/HEAD/OPTIONS, so listing endpoints
+		// are unaffected.
+		v1.Use(middleware.CSRF(a.authCfg.csrfEnabled))
 		v1.Use(middleware.JWTAuth(a.authProvider))
 
 		v1.GET("/login/me", middleware.RBAC(permissions.BasicPermission), authCtrl.Me)

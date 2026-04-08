@@ -9,6 +9,7 @@
 
 import type { TypedDocumentNode } from "@graphql-typed-document-node/core"
 import { print } from "graphql"
+import { useConnectivityStore } from "@/stores/connectivity"
 
 const API_URL = import.meta.env.VITE_API_URL
 
@@ -16,6 +17,21 @@ export interface SubscribeCallbacks<TResult> {
   onNext: (data: TResult) => void
   onError?: (error: Error) => void
   onComplete?: () => void
+}
+
+/**
+ * Thrown when the initial SSE handshake returns a non-2xx HTTP status.
+ * Exposes the status code so callers (e.g. useSubscription) can distinguish
+ * auth errors (401) from transport/server errors and react accordingly.
+ */
+export class SubscriptionHttpError extends Error {
+  status: number
+
+  constructor(status: number, body: string) {
+    super(`Subscription failed (${status}): ${body}`)
+    this.name = "SubscriptionHttpError"
+    this.status = status
+  }
 }
 
 /**
@@ -48,12 +64,26 @@ async function connect<TResult, TVariables>(
   controller: AbortController,
 ): Promise<void> {
   try {
+    // Subscriptions are POST requests, so the CSRF middleware enforces the
+    // double-submit check. Read the csrf_token cookie inline instead of
+    // pulling in api-client (which carries the auth-store dependency we
+    // don't need here). globalThis.document avoids shadowing the
+    // GraphQL `document` parameter.
+    const csrfMatch =
+      typeof globalThis.document !== "undefined"
+        ? globalThis.document.cookie.match(/(?:^|;\s*)csrf_token=([^;]*)/)
+        : null
+    const csrfToken = csrfMatch ? decodeURIComponent(csrfMatch[1]) : null
+
+    const headers: Record<string, string> = {
+      "Content-Type": "application/json",
+      Accept: "text/event-stream",
+    }
+    if (csrfToken) headers["X-CSRF-Token"] = csrfToken
+
     const res = await fetch(`${API_URL}/graphql`, {
       method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Accept: "text/event-stream",
-      },
+      headers,
       body: JSON.stringify({
         query: print(document),
         variables,
@@ -64,9 +94,15 @@ async function connect<TResult, TVariables>(
 
     if (!res.ok) {
       const text = await res.text().catch(() => res.statusText)
-      onError?.(new Error(`Subscription failed (${res.status}): ${text}`))
+      if (res.status >= 500) {
+        useConnectivityStore.getState().markUnreachable()
+      }
+      onError?.(new SubscriptionHttpError(res.status, text))
       return
     }
+
+    // Handshake succeeded — backend is definitely reachable.
+    useConnectivityStore.getState().markReachable()
 
     if (!res.body) {
       onError?.(new Error("Response body is null — streaming not supported"))
@@ -124,6 +160,8 @@ async function connect<TResult, TVariables>(
     if (err instanceof DOMException && err.name === "AbortError") {
       return
     }
+    // A thrown fetch means the backend is unreachable (TCP reset, DNS, offline).
+    useConnectivityStore.getState().markUnreachable()
     onError?.(err instanceof Error ? err : new Error(String(err)))
   }
 }

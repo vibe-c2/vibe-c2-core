@@ -2,7 +2,6 @@ package repository
 
 import (
 	"context"
-	"time"
 
 	"github.com/google/uuid"
 	opts "github.com/qiniu/qmgo/options"
@@ -15,62 +14,54 @@ import (
 
 const sessionCollection = "sessions"
 
-// ISessionRepository defines the interface for session database operations.
-// Sessions are persisted in MongoDB for metadata storage and audit history,
-// while the corresponding refresh tokens live in Redis for fast validation.
+// ISessionRepository is the insert-once creation log for sessions. Every
+// successful login writes one row; nothing else is ever written, updated,
+// or deleted by application code. Active state lives in Redis (TokenStore);
+// this repository is never consulted during authorization.
+//
+// The resolver reads from this collection to display historical sessions
+// in the UI, and decorates each row with `is_active` and `last_activity_at`
+// from Redis at query time.
 type ISessionRepository interface {
-	Create(ctx context.Context, session *models.Session) error
+	// Insert persists a new session creation row. Called once on login.
+	Insert(ctx context.Context, session *models.Session) error
+
+	// FindByID looks up a session row by its session UUID. Used by
+	// AdminRevokeSession to learn the owning user_id from a session_id.
 	FindByID(ctx context.Context, id uuid.UUID) (models.Session, error)
-	FindByTokenHash(ctx context.Context, tokenHash string) (models.Session, error)
 
-	// UpdateOnRefresh atomically swaps the token hash during rotation and
-	// bumps last_activity_at and expires_at.
-	UpdateOnRefresh(ctx context.Context, oldTokenHash, newTokenHash string, newExpiresAt time.Time) error
+	// FindBySessionIDs returns the rows whose session_id is in the given
+	// set. Used by the resolver's `activeOnly=true` path: it pulls live
+	// session_ids from Redis and then loads their corresponding rows.
+	// Sorted by createAt descending. Empty input returns nil.
+	FindBySessionIDs(ctx context.Context, ids []uuid.UUID) ([]models.Session, error)
 
-	// Terminate marks a single session as inactive with the given reason.
-	Terminate(ctx context.Context, sessionID uuid.UUID, reason models.SessionTerminationReason) error
+	// Count returns the number of rows matching the user filter.
+	Count(ctx context.Context, userIDs []uuid.UUID) (int64, error)
 
-	// TerminateAllForUser marks all active sessions for a user as inactive.
-	// Used during replay detection and admin bulk-revoke.
-	TerminateAllForUser(ctx context.Context, userID uuid.UUID, reason models.SessionTerminationReason) (int64, error)
-
-	// Count returns total sessions matching the filter.
-	// If userIDs is non-empty, scopes to those users. If activeOnly, only active sessions.
-	Count(ctx context.Context, userIDs []uuid.UUID, activeOnly bool) (int64, error)
-
-	// FindWithCursor returns paginated sessions.
-	// If userIDs is non-empty, scopes to those users. If activeOnly, only active sessions.
-	FindWithCursor(ctx context.Context, userIDs []uuid.UUID, activeOnly bool,
+	// FindWithCursor returns paginated rows scoped to the given users.
+	FindWithCursor(ctx context.Context, userIDs []uuid.UUID,
 		cursor *pagination.Cursor, limit int64, forward bool) ([]models.Session, error)
-
-	// FindActiveSessions returns a batch of active sessions (up to limit).
-	// Used by the session cleaner for reconciliation against Redis.
-	FindActiveSessions(ctx context.Context, limit int64) ([]models.Session, error)
-
-	// MarkExpiredSessions bulk-updates active sessions past their expires_at
-	// to inactive with reason "expired". Returns the count of sessions marked.
-	MarkExpiredSessions(ctx context.Context) (int64, error)
 }
 
 type sessionRepository struct {
 	coll database.Collection
 }
 
+// NewSessionRepository creates the session creation-log repository.
 func NewSessionRepository(db database.Database) ISessionRepository {
 	coll := db.Collection(sessionCollection)
 
 	coll.CreateIndexes(context.Background(), []opts.IndexModel{
 		{Key: []string{"session_id"}, IndexOptions: new(options.IndexOptions).SetUnique(true)},
-		{Key: []string{"token_hash"}, IndexOptions: new(options.IndexOptions).SetUnique(true).SetSparse(true)},
-		{Key: []string{"user_id", "status", "-createAt"}},
-		{Key: []string{"status", "expires_at"}},
-		{Key: []string{"-createAt", "-_id"}}, // cursor-based pagination
+		{Key: []string{"user_id", "-createAt"}},
+		{Key: []string{"-createAt", "-_id"}}, // cursor pagination
 	})
 
 	return &sessionRepository{coll: coll}
 }
 
-func (r *sessionRepository) Create(ctx context.Context, session *models.Session) error {
+func (r *sessionRepository) Insert(ctx context.Context, session *models.Session) error {
 	_, err := r.coll.InsertOne(ctx, session)
 	return err
 }
@@ -81,64 +72,25 @@ func (r *sessionRepository) FindByID(ctx context.Context, id uuid.UUID) (models.
 	return session, err
 }
 
-func (r *sessionRepository) FindByTokenHash(ctx context.Context, tokenHash string) (models.Session, error) {
-	var session models.Session
-	err := r.coll.FindOne(ctx, bson.M{"token_hash": tokenHash, "status": string(models.SessionStatusActive)}).One(&session)
-	return session, err
-}
-
-func (r *sessionRepository) UpdateOnRefresh(ctx context.Context, oldTokenHash, newTokenHash string, newExpiresAt time.Time) error {
-	now := time.Now().UTC()
-	return r.coll.UpdateOne(ctx,
-		bson.M{"token_hash": oldTokenHash, "status": string(models.SessionStatusActive)},
-		bson.M{"$set": bson.M{
-			"token_hash":      newTokenHash,
-			"last_activity_at": now,
-			"expires_at":      newExpiresAt,
-		}},
-	)
-}
-
-func (r *sessionRepository) Terminate(ctx context.Context, sessionID uuid.UUID, reason models.SessionTerminationReason) error {
-	now := time.Now().UTC()
-	return r.coll.UpdateOne(ctx,
-		bson.M{"session_id": sessionID, "status": string(models.SessionStatusActive)},
-		bson.M{"$set": bson.M{
-			"status":             string(models.SessionStatusInactive),
-			"termination_reason": string(reason),
-			"terminated_at":      now,
-		}},
-	)
-}
-
-func (r *sessionRepository) TerminateAllForUser(ctx context.Context, userID uuid.UUID, reason models.SessionTerminationReason) (int64, error) {
-	now := time.Now().UTC()
-	result, err := r.coll.UpdateAll(ctx,
-		bson.M{"user_id": userID, "status": string(models.SessionStatusActive)},
-		bson.M{"$set": bson.M{
-			"status":             string(models.SessionStatusInactive),
-			"termination_reason": string(reason),
-			"terminated_at":      now,
-		}},
-	)
-	if err != nil {
-		return 0, err
+func (r *sessionRepository) FindBySessionIDs(ctx context.Context, ids []uuid.UUID) ([]models.Session, error) {
+	if len(ids) == 0 {
+		return nil, nil
 	}
-	if result != nil {
-		return result.ModifiedCount, nil
-	}
-	return 0, nil
+	var sessions []models.Session
+	err := r.coll.Find(ctx, bson.M{"session_id": bson.M{"$in": ids}}).
+		Sort("-createAt", "-_id").
+		All(&sessions)
+	return sessions, err
 }
 
-func (r *sessionRepository) Count(ctx context.Context, userIDs []uuid.UUID, activeOnly bool) (int64, error) {
-	filter := buildSessionFilter(userIDs, activeOnly)
-	return r.coll.Count(ctx, filter)
+func (r *sessionRepository) Count(ctx context.Context, userIDs []uuid.UUID) (int64, error) {
+	return r.coll.Count(ctx, buildSessionFilter(userIDs))
 }
 
-func (r *sessionRepository) FindWithCursor(ctx context.Context, userIDs []uuid.UUID, activeOnly bool,
+func (r *sessionRepository) FindWithCursor(ctx context.Context, userIDs []uuid.UUID,
 	cursor *pagination.Cursor, limit int64, forward bool) ([]models.Session, error) {
 
-	filter := buildSessionFilter(userIDs, activeOnly)
+	filter := buildSessionFilter(userIDs)
 
 	if cursorFilter := pagination.BuildCursorFilter(cursor, forward); len(cursorFilter) > 0 {
 		for k, v := range cursorFilter {
@@ -161,45 +113,12 @@ func (r *sessionRepository) FindWithCursor(ctx context.Context, userIDs []uuid.U
 	return sessions, err
 }
 
-func (r *sessionRepository) FindActiveSessions(ctx context.Context, limit int64) ([]models.Session, error) {
-	var sessions []models.Session
-	err := r.coll.Find(ctx, bson.M{"status": string(models.SessionStatusActive)}).
-		Limit(limit).
-		All(&sessions)
-	return sessions, err
-}
-
-func (r *sessionRepository) MarkExpiredSessions(ctx context.Context) (int64, error) {
-	now := time.Now().UTC()
-	result, err := r.coll.UpdateAll(ctx,
-		bson.M{
-			"status":     string(models.SessionStatusActive),
-			"expires_at": bson.M{"$lt": now},
-		},
-		bson.M{"$set": bson.M{
-			"status":             string(models.SessionStatusInactive),
-			"termination_reason": string(models.TerminationExpired),
-			"terminated_at":      now,
-		}},
-	)
-	if err != nil {
-		return 0, err
-	}
-	if result != nil {
-		return result.ModifiedCount, nil
-	}
-	return 0, nil
-}
-
-func buildSessionFilter(userIDs []uuid.UUID, activeOnly bool) bson.M {
+func buildSessionFilter(userIDs []uuid.UUID) bson.M {
 	filter := bson.M{}
 	if len(userIDs) == 1 {
 		filter["user_id"] = userIDs[0]
 	} else if len(userIDs) > 1 {
 		filter["user_id"] = bson.M{"$in": userIDs}
-	}
-	if activeOnly {
-		filter["status"] = string(models.SessionStatusActive)
 	}
 	return filter
 }

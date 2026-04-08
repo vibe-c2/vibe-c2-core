@@ -3,6 +3,7 @@ package environment
 import (
 	"log"
 	"os"
+	"time"
 
 	"github.com/spf13/viper"
 )
@@ -44,6 +45,11 @@ type EnvironmentSettings struct {
 	HocuspocusTicketSecret  string
 	HocuspocusWebhookSecret string
 	WikiAutoBackupInterval  string
+
+	// Auth — durations parsed from Go duration strings (e.g. "15m", "168h").
+	AuthAccessTTL   time.Duration
+	AuthRefreshTTL  time.Duration
+	AuthCSRFEnabled bool
 }
 
 func init() {
@@ -69,6 +75,9 @@ func init() {
 	viper.SetDefault("HOCUSPOCUS_URL", "http://hocuspocus:1235")
 	viper.SetDefault("HOCUSPOCUS_WEBHOOK_SECRET", "")
 	viper.SetDefault("WIKI_AUTO_BACKUP_INTERVAL", "30m")
+	viper.SetDefault("AUTH_ACCESS_TTL", "15m")
+	viper.SetDefault("AUTH_REFRESH_TTL", "168h")
+	viper.SetDefault("AUTH_CSRF_ENABLED", true)
 
 	env = &EnvironmentSettings{
 		StageStatus: viper.GetString("APP_STAGE_STATUS"),
@@ -103,6 +112,11 @@ func init() {
 		HocuspocusTicketSecret:  viper.GetString("HOCUSPOCUS_TICKET_SECRET"),
 		HocuspocusWebhookSecret: viper.GetString("HOCUSPOCUS_WEBHOOK_SECRET"),
 		WikiAutoBackupInterval:  viper.GetString("WIKI_AUTO_BACKUP_INTERVAL"),
+
+		// Auth
+		AuthAccessTTL:   parseDurationOrFatal("AUTH_ACCESS_TTL", viper.GetString("AUTH_ACCESS_TTL")),
+		AuthRefreshTTL:  parseDurationOrFatal("AUTH_REFRESH_TTL", viper.GetString("AUTH_REFRESH_TTL")),
+		AuthCSRFEnabled: viper.GetBool("AUTH_CSRF_ENABLED"),
 	}
 
 	// Validate required configuration — fail fast on missing critical values.
@@ -120,4 +134,12 @@ func init() {
 
 func GetEnvironmentSettings() *EnvironmentSettings {
 	return env
+}
+
+func parseDurationOrFatal(name, value string) time.Duration {
+	d, err := time.ParseDuration(value)
+	if err != nil {
+		log.Fatalf("Invalid duration for %s (%q): %v", name, value, err)
+	}
+	return d
 }

@@ -16,11 +16,18 @@ import (
 	"github.com/vibe-c2/vibe-c2-core/core/pkg/eventbus"
 	"github.com/vibe-c2/vibe-c2-core/core/pkg/logger"
 	"github.com/vibe-c2/vibe-c2-core/core/pkg/repository"
-	"github.com/vibe-c2/vibe-c2-core/core/pkg/session"
 	"github.com/vibe-c2/vibe-c2-core/core/pkg/wiki"
 
 	"go.uber.org/zap"
 )
+
+// authConfig holds the runtime auth configuration. Mirrors the env-driven
+// values so the router can pass the relevant subset to controllers.
+type authConfig struct {
+	accessTTL   time.Duration
+	refreshTTL  time.Duration
+	csrfEnabled bool
+}
 
 type Repositories struct {
 	User               repository.IUserRepository
@@ -40,8 +47,7 @@ type App struct {
 	cache        cache.Cache
 	tokenStore   auth.TokenStore
 	eventBus     eventbus.IEventBus
-
-	sessionCleaner *session.Cleaner
+	authCfg      authConfig
 
 	// Wiki integration
 	presenceTracker *wiki.PresenceTracker
@@ -107,20 +113,18 @@ func NewApp() (*App, error) {
 		return nil, fmt.Errorf("failed to initialize token store (required): %w", err)
 	}
 
-	// Initialize auth provider
-	authTokenTTL := 15 * time.Minute
-	if e.StageStatus == "development" {
-		authTokenTTL = 24 * time.Hour
+	// Auth configuration — all values come from environment. Dev devs who
+	// want short TTLs to exercise refresh paths set AUTH_ACCESS_TTL in
+	// their compose.
+	authCfg := authConfig{
+		accessTTL:   e.AuthAccessTTL,
+		refreshTTL:  e.AuthRefreshTTL,
+		csrfEnabled: e.AuthCSRFEnabled,
 	}
-	authProvider := auth.NewAuthProvider(tokenStore, e.JWTSecretKey, authTokenTTL)
+	authProvider := auth.NewAuthProvider(e.JWTSecretKey, authCfg.accessTTL)
 
 	// Initialize event bus
 	bus := eventbus.NewEventBus(l)
-
-	// Initialize session cleaner (marks expired sessions as inactive and
-	// reconciles orphaned sessions where Redis token was deleted but
-	// MongoDB record was not updated)
-	sessionCleaner := session.NewCleaner(repos.Session, tokenStore, l, 1*time.Hour)
 
 	// Initialize wiki integration
 	presenceTracker := wiki.NewPresenceTracker(l)
@@ -190,7 +194,7 @@ func NewApp() (*App, error) {
 		cache:           c,
 		tokenStore:      tokenStore,
 		eventBus:        bus,
-		sessionCleaner:  sessionCleaner,
+		authCfg:         authCfg,
 		presenceTracker: presenceTracker,
 		hpClient:        hpClient,
 		backupScheduler: backupScheduler,
@@ -208,7 +212,6 @@ func (a *App) StartServer() {
 	}
 
 	a.eventBus.Start()
-	a.sessionCleaner.Start()
 	a.backupScheduler.Start()
 
 	a.logger.Info("Starting server...", zap.String("address", srv.Addr))
@@ -226,7 +229,6 @@ func (a *App) StartServerWithGracefulShutdown() {
 	}
 
 	a.eventBus.Start()
-	a.sessionCleaner.Start()
 	a.backupScheduler.Start()
 
 	idleConnsClosed := make(chan struct{})
@@ -238,7 +240,6 @@ func (a *App) StartServerWithGracefulShutdown() {
 
 		a.logger.Info("Shutting down server...")
 
-		a.sessionCleaner.Stop()
 		a.backupScheduler.Stop()
 
 		ctxTimeout, cancel := context.WithTimeout(context.Background(), 5*time.Second)
