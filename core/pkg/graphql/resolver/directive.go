@@ -21,12 +21,20 @@ package resolver
 
 import (
 	"context"
-	"fmt"
+	"errors"
 
 	"github.com/99designs/gqlgen/graphql"
 	"github.com/vibe-c2/vibe-c2-core/core/pkg/auth/permissions"
 	"github.com/vibe-c2/vibe-c2-core/core/pkg/graphql/gqlctx"
+	"github.com/vibe-c2/vibe-c2-core/core/pkg/logger"
+	"go.uber.org/zap"
 )
+
+// errForbidden is returned whenever the @hasPermission check fails. It is
+// intentionally generic: we must not leak the specific permission name to the
+// client, since that would reveal internal RBAC structure to any authenticated
+// caller probing the API. The specific permission is logged server-side.
+var errForbidden = errors.New("forbidden")
 
 // HasPermission is the directive handler for @hasPermission.
 //
@@ -48,7 +56,12 @@ func HasPermission(ctx context.Context, obj interface{}, next graphql.Resolver, 
 	// For example, the "admin" role has "user:read", but the "user" role does not.
 	// The AdminPermission ("admin") acts as a wildcard — it grants everything.
 	if !permissions.HasPermissionForRoles(auth.Roles, permission) {
-		return nil, fmt.Errorf("forbidden: missing permission '%s'", permission)
+		logger.From(ctx).Warn("graphql permission denied",
+			zap.String("user_id", auth.UserID),
+			zap.Strings("roles", auth.Roles),
+			zap.String("permission", permission),
+		)
+		return nil, errForbidden
 	}
 
 	// Permission granted — call the actual resolver and return its result.

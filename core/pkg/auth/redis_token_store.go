@@ -2,13 +2,40 @@ package auth
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
+	"strconv"
+	"strings"
 	"time"
 
 	"github.com/go-redis/redis/v8"
+	"github.com/google/uuid"
 	"go.uber.org/zap"
+)
+
+// Redis layout for active sessions.
+//
+//   refresh:<user_id>:<token_hash>   STRING — "<session_id>|<last_activity_unix>"
+//   session_index:<user_id>          SET    — all live token keys for one user
+//
+// Both expire via native Redis TTL. There is no expiry queue, no sweeper,
+// no full meta — the device fields (IP, UA, browser, OS) live exclusively
+// in the Mongo creation log.
+//
+// All multi-key writes go through Lua scripts so concurrent rotations from
+// multiple API pods are linearizable on the Redis side.
+
+const (
+	refreshKeyPrefix   = "refresh"
+	userIndexKeyPrefix = "session_index"
+
+	// rotateSweepLimit caps how many index members the rotate Lua script
+	// will check-and-prune per call. Stale members (index entries whose
+	// token key has TTL'd out) are cleaned opportunistically during every
+	// rotation. The cap keeps worst-case script runtime predictable even
+	// for pathological users with many abandoned devices — anything not
+	// swept in one rotate is picked up by the next one.
+	rotateSweepLimit = 64
 )
 
 type RedisTokenStoreConfig struct {
@@ -22,7 +49,94 @@ type RedisTokenStoreConfig struct {
 type redisTokenStore struct {
 	client *redis.Client
 	logger *zap.Logger
+
+	createScript *redis.Script
+	rotateScript *redis.Script
+	deleteScript *redis.Script
 }
+
+// createScriptSrc atomically writes a new active session.
+//
+//	KEYS[1] — token key  refresh:<uid>:<hash>
+//	KEYS[2] — user index session_index:<uid>
+//	ARGV[1] — value      "<session_id>|<last_activity_unix>"
+//	ARGV[2] — TTL seconds
+const createScriptSrc = `
+redis.call('SET', KEYS[1], ARGV[1], 'EX', ARGV[2])
+redis.call('SADD', KEYS[2], KEYS[1])
+redis.call('EXPIRE', KEYS[2], ARGV[2])
+return 1
+`
+
+// rotateScriptSrc atomically swaps the token key for a session, preserving
+// the embedded session_id.
+//
+//	KEYS[1] — old token key  refresh:<uid>:<oldHash>
+//	KEYS[2] — new token key  refresh:<uid>:<newHash>
+//	KEYS[3] — user index     session_index:<uid>
+//	ARGV[1] — new last_activity_unix
+//	ARGV[2] — TTL seconds
+//	ARGV[3] — sweep limit (max stale index members to check-and-prune)
+//
+// Returns the old value (so the Go side can parse out the session_id), or
+// the NOTFOUND error if the old key is gone (replay or loser-of-race).
+//
+// After the core rotation completes, the script opportunistically sweeps
+// stale members from the user's index SET. A member is "stale" when it
+// names a token key that no longer exists (TTL'd out without being rotated
+// or explicitly deleted — i.e. an abandoned device). Sweep is bounded by
+// ARGV[3] so worst-case script runtime stays predictable; anything not
+// cleaned here is caught by the next rotate.
+const rotateScriptSrc = `
+local old = redis.call('GET', KEYS[1])
+if not old then
+  return redis.error_reply('NOTFOUND')
+end
+local sep = string.find(old, '|', 1, true)
+if not sep then
+  return redis.error_reply('CORRUPT')
+end
+local sid = string.sub(old, 1, sep - 1)
+local newval = sid .. '|' .. ARGV[1]
+redis.call('SET', KEYS[2], newval, 'EX', ARGV[2])
+redis.call('SADD', KEYS[3], KEYS[2])
+redis.call('SREM', KEYS[3], KEYS[1])
+redis.call('EXPIRE', KEYS[3], ARGV[2])
+redis.call('DEL', KEYS[1])
+
+local sweepLimit = tonumber(ARGV[3])
+if sweepLimit and sweepLimit > 0 then
+  local members = redis.call('SMEMBERS', KEYS[3])
+  local checked = 0
+  for i = 1, #members do
+    if checked >= sweepLimit then break end
+    if members[i] ~= KEYS[2] then
+      if redis.call('EXISTS', members[i]) == 0 then
+        redis.call('SREM', KEYS[3], members[i])
+      end
+      checked = checked + 1
+    end
+  end
+end
+
+return old
+`
+
+// deleteScriptSrc atomically removes a single session and returns its old
+// value. Returns NOTFOUND if the key is gone.
+//
+//	KEYS[1] — token key   refresh:<uid>:<hash>
+//	KEYS[2] — user index  session_index:<uid>
+const deleteScriptSrc = `
+local v = redis.call('GET', KEYS[1])
+if not v then
+  redis.call('SREM', KEYS[2], KEYS[1])
+  return redis.error_reply('NOTFOUND')
+end
+redis.call('DEL', KEYS[1])
+redis.call('SREM', KEYS[2], KEYS[1])
+return v
+`
 
 func NewRedisTokenStore(ctx context.Context, cfg RedisTokenStoreConfig) (TokenStore, error) {
 	addr := fmt.Sprintf("%s:%s", cfg.Host, cfg.Port)
@@ -47,7 +161,6 @@ func NewRedisTokenStore(ctx context.Context, cfg RedisTokenStoreConfig) (TokenSt
 			time.Sleep(3 * time.Second)
 		}
 	}
-
 	if err != nil {
 		client.Close()
 		return nil, fmt.Errorf("failed to connect to Redis token store after 3 attempts: %w", err)
@@ -56,89 +169,239 @@ func NewRedisTokenStore(ctx context.Context, cfg RedisTokenStoreConfig) (TokenSt
 	cfg.Logger.Info("Redis token store connection established", zap.Int("db", cfg.DB))
 
 	return &redisTokenStore{
-		client: client,
-		logger: cfg.Logger,
+		client:       client,
+		logger:       cfg.Logger,
+		createScript: redis.NewScript(createScriptSrc),
+		rotateScript: redis.NewScript(rotateScriptSrc),
+		deleteScript: redis.NewScript(deleteScriptSrc),
 	}, nil
 }
 
-// StoreWithIndex persists token metadata and adds the key to the user's
-// session index in a single pipeline.
-func (s *redisTokenStore) StoreWithIndex(ctx context.Context, key string, meta RefreshTokenMeta, userID string, ttl time.Duration) error {
-	data, err := json.Marshal(meta)
-	if err != nil {
-		return fmt.Errorf("failed to marshal token metadata: %w", err)
-	}
-
-	indexKey := s.userIndexKey(userID)
-	pipe := s.client.Pipeline()
-	pipe.Set(ctx, key, data, ttl)
-	pipe.SAdd(ctx, indexKey, key)
-	// Reset index TTL on each new token. The index may outlive individual
-	// tokens since it's bumped relative to each creation, not the earliest
-	// token's expiry. This is acceptable — stale entries are cleaned during
-	// reconciliation.
-	pipe.Expire(ctx, indexKey, ttl+time.Minute)
-	_, err = pipe.Exec(ctx)
-	return err
+func tokenKey(userID uuid.UUID, tokenHash string) string {
+	return fmt.Sprintf("%s:%s:%s", refreshKeyPrefix, userID.String(), tokenHash)
 }
 
-func (s *redisTokenStore) Lookup(ctx context.Context, key string) (*RefreshTokenMeta, error) {
-	data, err := s.client.Get(ctx, key).Result()
+func indexKey(userID uuid.UUID) string {
+	return fmt.Sprintf("%s:%s", userIndexKeyPrefix, userID.String())
+}
+
+// encodeValue produces the canonical Redis value: "<session_id>|<unix>".
+func encodeValue(sessionID uuid.UUID, lastActivity time.Time) string {
+	return sessionID.String() + "|" + strconv.FormatInt(lastActivity.Unix(), 10)
+}
+
+// parseValue is the inverse: extract session_id + last_activity from the
+// stored string. Returns ErrTokenCorrupted on malformed input.
+func parseValue(raw string) (uuid.UUID, time.Time, error) {
+	idx := strings.IndexByte(raw, '|')
+	if idx <= 0 || idx == len(raw)-1 {
+		return uuid.Nil, time.Time{}, fmt.Errorf("%w: missing separator", ErrTokenCorrupted)
+	}
+	sid, err := uuid.Parse(raw[:idx])
+	if err != nil {
+		return uuid.Nil, time.Time{}, fmt.Errorf("%w: bad session id: %v", ErrTokenCorrupted, err)
+	}
+	unix, err := strconv.ParseInt(raw[idx+1:], 10, 64)
+	if err != nil {
+		return uuid.Nil, time.Time{}, fmt.Errorf("%w: bad last_activity: %v", ErrTokenCorrupted, err)
+	}
+	return sid, time.Unix(unix, 0).UTC(), nil
+}
+
+func (s *redisTokenStore) Create(ctx context.Context, userID, sessionID uuid.UUID, tokenHash string, ttl time.Duration) error {
+	if tokenHash == "" {
+		return fmt.Errorf("missing token hash")
+	}
+	key := tokenKey(userID, tokenHash)
+	idx := indexKey(userID)
+	value := encodeValue(sessionID, time.Now().UTC())
+	ttlSec := int64(ttl.Seconds())
+
+	_, err := s.createScript.Run(
+		ctx, s.client,
+		[]string{key, idx},
+		value, ttlSec,
+	).Result()
+	if err != nil && !errors.Is(err, redis.Nil) {
+		return fmt.Errorf("create session: %w", err)
+	}
+	return nil
+}
+
+func (s *redisTokenStore) Rotate(ctx context.Context, userID uuid.UUID, oldHash, newHash string, ttl time.Duration) (uuid.UUID, error) {
+	if oldHash == "" || newHash == "" {
+		return uuid.Nil, fmt.Errorf("missing token hash")
+	}
+	oldKey := tokenKey(userID, oldHash)
+	newKey := tokenKey(userID, newHash)
+	idx := indexKey(userID)
+	now := strconv.FormatInt(time.Now().UTC().Unix(), 10)
+	ttlSec := int64(ttl.Seconds())
+
+	res, err := s.rotateScript.Run(
+		ctx, s.client,
+		[]string{oldKey, newKey, idx},
+		now, ttlSec, rotateSweepLimit,
+	).Result()
+	if err != nil {
+		if isLuaError(err, "NOTFOUND") {
+			return uuid.Nil, ErrTokenInvalid
+		}
+		if isLuaError(err, "CORRUPT") {
+			return uuid.Nil, ErrTokenCorrupted
+		}
+		return uuid.Nil, fmt.Errorf("rotate session: %w", err)
+	}
+
+	raw, ok := res.(string)
+	if !ok {
+		return uuid.Nil, fmt.Errorf("rotate: unexpected redis return type %T", res)
+	}
+	sid, _, err := parseValue(raw)
+	if err != nil {
+		return uuid.Nil, err
+	}
+	return sid, nil
+}
+
+func (s *redisTokenStore) Lookup(ctx context.Context, userID uuid.UUID, tokenHash string) (*ActiveSession, error) {
+	raw, err := s.client.Get(ctx, tokenKey(userID, tokenHash)).Result()
 	if err != nil {
 		if errors.Is(err, redis.Nil) {
-			return nil, ErrTokenNotFound
+			return nil, ErrTokenInvalid
 		}
-		return nil, fmt.Errorf("redis lookup failed: %w", err)
+		return nil, fmt.Errorf("lookup session: %w", err)
 	}
-
-	var meta RefreshTokenMeta
-	if err := json.Unmarshal([]byte(data), &meta); err != nil {
-		return nil, fmt.Errorf("%w: %v", ErrTokenCorrupted, err)
-	}
-
-	return &meta, nil
-}
-
-// DeleteAndUnindex removes a token and its entry from the user's session
-// index in a single pipeline.
-func (s *redisTokenStore) DeleteAndUnindex(ctx context.Context, key string, userID string) error {
-	indexKey := s.userIndexKey(userID)
-	pipe := s.client.Pipeline()
-	pipe.Del(ctx, key)
-	pipe.SRem(ctx, indexKey, key)
-	_, err := pipe.Exec(ctx)
-	return err
-}
-
-func (s *redisTokenStore) userIndexKey(userID string) string {
-	return fmt.Sprintf("session_index:%s", userID)
-}
-
-func (s *redisTokenStore) DeleteAllUserSessions(ctx context.Context, userID string) error {
-	indexKey := s.userIndexKey(userID)
-
-	keys, err := s.client.SMembers(ctx, indexKey).Result()
+	sid, last, err := parseValue(raw)
 	if err != nil {
-		return err
+		return nil, err
 	}
-
-	if len(keys) == 0 {
-		return nil
-	}
-
-	// Delete all token keys and the index in one pipeline
-	pipe := s.client.Pipeline()
-	pipe.Del(ctx, keys...)
-	pipe.Del(ctx, indexKey)
-	_, err = pipe.Exec(ctx)
-	return err
+	return &ActiveSession{SessionID: sid, LastActivityAt: last}, nil
 }
 
-func (s *redisTokenStore) DeleteByTokenHash(ctx context.Context, userID, tokenHash string) error {
-	key := fmt.Sprintf("%s:%s:%s", RefreshTokenPrefix, userID, tokenHash)
-	return s.DeleteAndUnindex(ctx, key, userID)
+func (s *redisTokenStore) DeleteBySessionID(ctx context.Context, userID, sessionID uuid.UUID) (*ActiveSession, error) {
+	idx := indexKey(userID)
+	keys, err := s.client.SMembers(ctx, idx).Result()
+	if err != nil {
+		return nil, fmt.Errorf("delete by session id: index: %w", err)
+	}
+	if len(keys) == 0 {
+		return nil, ErrTokenInvalid
+	}
+	values, err := s.client.MGet(ctx, keys...).Result()
+	if err != nil {
+		return nil, fmt.Errorf("delete by session id: mget: %w", err)
+	}
+
+	var matchedKey string
+	var matchedSession ActiveSession
+	staleKeys := make([]interface{}, 0)
+	for i, v := range values {
+		if v == nil {
+			staleKeys = append(staleKeys, keys[i])
+			continue
+		}
+		raw, ok := v.(string)
+		if !ok {
+			continue
+		}
+		sid, last, perr := parseValue(raw)
+		if perr != nil {
+			continue
+		}
+		if sid == sessionID {
+			matchedKey = keys[i]
+			matchedSession = ActiveSession{SessionID: sid, LastActivityAt: last}
+			break
+		}
+	}
+	if len(staleKeys) > 0 {
+		_ = s.client.SRem(ctx, idx, staleKeys...).Err()
+	}
+	if matchedKey == "" {
+		return nil, ErrTokenInvalid
+	}
+
+	_, err = s.deleteScript.Run(
+		ctx, s.client,
+		[]string{matchedKey, idx},
+	).Result()
+	if err != nil {
+		if isLuaError(err, "NOTFOUND") {
+			return nil, ErrTokenInvalid
+		}
+		return nil, fmt.Errorf("delete by session id: delete: %w", err)
+	}
+	return &matchedSession, nil
+}
+
+func (s *redisTokenStore) ListByUser(ctx context.Context, userID uuid.UUID) ([]ActiveSession, error) {
+	idx := indexKey(userID)
+	keys, err := s.client.SMembers(ctx, idx).Result()
+	if err != nil {
+		return nil, fmt.Errorf("list user sessions: %w", err)
+	}
+	if len(keys) == 0 {
+		return nil, nil
+	}
+	values, err := s.client.MGet(ctx, keys...).Result()
+	if err != nil {
+		return nil, fmt.Errorf("list user sessions: mget: %w", err)
+	}
+
+	out := make([]ActiveSession, 0, len(values))
+	staleKeys := make([]interface{}, 0)
+	for i, v := range values {
+		if v == nil {
+			// Stale index entry — the underlying key TTL'd out but the
+			// index member wasn't cleaned. Schedule cleanup below.
+			staleKeys = append(staleKeys, keys[i])
+			continue
+		}
+		raw, ok := v.(string)
+		if !ok {
+			continue
+		}
+		sid, last, perr := parseValue(raw)
+		if perr != nil {
+			s.logger.Warn("list: corrupted session value", zap.String("key", keys[i]), zap.Error(perr))
+			continue
+		}
+		out = append(out, ActiveSession{SessionID: sid, LastActivityAt: last})
+	}
+	if len(staleKeys) > 0 {
+		_ = s.client.SRem(ctx, idx, staleKeys...).Err()
+	}
+	return out, nil
+}
+
+func (s *redisTokenStore) DeleteAllForUser(ctx context.Context, userID uuid.UUID) error {
+	idx := indexKey(userID)
+	keys, err := s.client.SMembers(ctx, idx).Result()
+	if err != nil {
+		return fmt.Errorf("delete all for user: index: %w", err)
+	}
+	pipe := s.client.Pipeline()
+	if len(keys) > 0 {
+		pipe.Del(ctx, keys...)
+	}
+	pipe.Del(ctx, idx)
+	if _, err := pipe.Exec(ctx); err != nil {
+		return fmt.Errorf("delete all for user: %w", err)
+	}
+	return nil
 }
 
 func (s *redisTokenStore) Close() error {
 	return s.client.Close()
+}
+
+// isLuaError matches the named error returned via redis.error_reply from
+// our Lua scripts. The go-redis client surfaces them as plain errors whose
+// string is exactly the reply text.
+func isLuaError(err error, name string) bool {
+	if err == nil {
+		return false
+	}
+	return err.Error() == name
 }
