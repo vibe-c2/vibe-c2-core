@@ -115,6 +115,10 @@ func (r *subscriptionResolver) MySessionChanged(ctx context.Context) (<-chan *mo
 			if evt.SessionID != "" {
 				if sid, err := uuid.Parse(evt.SessionID); err == nil {
 					if sess, err := r.SessionRepo.FindByID(ctx, sid); err == nil {
+						// Status is bson:"-" so FindByID leaves it empty,
+						// which the field resolver would turn into INACTIVE.
+						// Derive it from the event topic instead.
+						applySessionStatusFromTopic(&sess, event.Topic)
 						evt.Session = &sess
 					}
 				}
@@ -160,6 +164,9 @@ func (r *subscriptionResolver) SessionChanged(ctx context.Context, userID *strin
 			if evt.SessionID != "" {
 				if sid, err := uuid.Parse(evt.SessionID); err == nil {
 					if sess, err := r.SessionRepo.FindByID(ctx, sid); err == nil {
+						// Same rationale as MySessionChanged: FindByID leaves
+						// the derived Status empty, so we set it from the topic.
+						applySessionStatusFromTopic(&sess, event.Topic)
 						evt.Session = &sess
 					}
 				}

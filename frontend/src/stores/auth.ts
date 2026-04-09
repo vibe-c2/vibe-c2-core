@@ -1,6 +1,7 @@
 import { create } from "zustand"
 import type { SessionResponse } from "@/services/auth"
 import { authService } from "@/services/auth"
+import { apiFetch } from "@/services/api-client"
 
 interface User {
   userId: string
@@ -19,8 +20,6 @@ interface AuthState {
   checkAuth: () => Promise<void>
   hasPermission: (permission: string) => boolean
 }
-
-const API_URL = import.meta.env.VITE_API_URL
 
 export const useAuthStore = create<AuthState>((set, get) => ({
   user: null,
@@ -44,16 +43,21 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   logout: async () => {
     // Clear local state immediately so the UI redirects to login.
     set({ user: null, isAuthenticated: false, isLoading: false })
-    // Then attempt backend session revocation.
+    // Then attempt backend session revocation. Must go through apiFetch so the
+    // X-CSRF-Token header is attached — /logout sits behind the CSRF middleware
+    // and a raw fetch() would be rejected with 403, leaving the server-side
+    // session (and its cookies) intact while the UI thinks logout succeeded.
     try {
-      await fetch(`${API_URL}/logout`, {
-        method: "POST",
-        credentials: "include",
-      })
+      const res = await apiFetch("/logout", { method: "POST" })
+      if (!res.ok) {
+        console.warn(
+          `Backend logout failed (${res.status}) — session may persist until token expiry`,
+        )
+      }
     } catch {
-      // Backend logout failed — session may remain active until token expires.
-      // This is acceptable: cookies are cleared by the response, and if the
-      // request never reached the server, the token expires via TTL.
+      // Network error (backend unreachable, offline, timeout). Cookies are
+      // not cleared server-side, but the session will expire via TTL and the
+      // local UI is already in a logged-out state.
       console.warn("Backend logout failed — session may persist until token expiry")
     }
   },
@@ -77,6 +81,13 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   hasPermission: (permission) => {
     const user = get().user
     if (!user) return false
+    // NOTE: This is a client-side check only, used to gate UI elements
+    // (hide menu items, disable buttons, etc.) for UX purposes. It reads
+    // from the Zustand store, which a user can tamper with via devtools.
+    // The server is the source of truth — every API/GraphQL call is
+    // re-authorized on the backend. Risk is low (UX bypass only, no data
+    // access), and we accept it.
+    //
     // The "admin" permission acts as a wildcard — grants all permissions,
     // matching the backend behavior in permissions.HasPermission().
     return user.permissions.includes("admin") || user.permissions.includes(permission)

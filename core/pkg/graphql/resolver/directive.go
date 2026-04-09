@@ -21,20 +21,33 @@ package resolver
 
 import (
 	"context"
-	"errors"
 
 	"github.com/99designs/gqlgen/graphql"
+	"github.com/vektah/gqlparser/v2/gqlerror"
 	"github.com/vibe-c2/vibe-c2-core/core/pkg/auth/permissions"
 	"github.com/vibe-c2/vibe-c2-core/core/pkg/graphql/gqlctx"
 	"github.com/vibe-c2/vibe-c2-core/core/pkg/logger"
 	"go.uber.org/zap"
 )
 
-// errForbidden is returned whenever the @hasPermission check fails. It is
-// intentionally generic: we must not leak the specific permission name to the
-// client, since that would reveal internal RBAC structure to any authenticated
-// caller probing the API. The specific permission is logged server-side.
-var errForbidden = errors.New("forbidden")
+// newForbiddenError returns the error surfaced to clients whenever
+// @hasPermission fails. The message is intentionally generic — we must not
+// leak the specific permission name, since that would reveal internal RBAC
+// structure to any authenticated caller probing the API. The specific
+// permission is logged server-side.
+//
+// We attach extensions.code = "FORBIDDEN" so the frontend GraphQL client can
+// classify this as a hard failure (and throw) rather than treating it as a
+// partial-data warning.
+func newForbiddenError(ctx context.Context) error {
+	return &gqlerror.Error{
+		Message: "forbidden",
+		Path:    graphql.GetPath(ctx),
+		Extensions: map[string]interface{}{
+			"code": "FORBIDDEN",
+		},
+	}
+}
 
 // HasPermission is the directive handler for @hasPermission.
 //
@@ -61,7 +74,7 @@ func HasPermission(ctx context.Context, obj interface{}, next graphql.Resolver, 
 			zap.Strings("roles", auth.Roles),
 			zap.String("permission", permission),
 		)
-		return nil, errForbidden
+		return nil, newForbiddenError(ctx)
 	}
 
 	// Permission granted — call the actual resolver and return its result.

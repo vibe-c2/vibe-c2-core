@@ -15,11 +15,22 @@ export function useSessionGuard() {
 
   useSubscription(MySessionChangedDocument, undefined, {
     onData: (data) => {
-      const { session } = data.mySessionChanged
+      const { action, session } = data.mySessionChanged
 
       // If the current session was terminated, clear auth and redirect to login.
       // No backend logout needed — the session is already revoked server-side.
-      if (session?.isCurrent && session.status === "INACTIVE") {
+      //
+      // We key the decision off `action === "DELETED"` (which the backend
+      // maps exclusively from the session.terminated topic — see
+      // toSessionEvent in core/pkg/graphql/resolver/subscription_helpers.go)
+      // rather than the derived `status` field. The status field can
+      // legitimately arrive as INACTIVE on a session.refreshed event if the
+      // backend ever regresses and forgets to decorate Status from the topic
+      // (see docs/frontend-auth-review.md for the original incident). The
+      // action-based check is immune to that class of bug because action is
+      // set directly from the topic, with no dependence on whether Mongo
+      // rows happen to be decorated with Redis-side state.
+      if (action === "DELETED" && session?.isCurrent) {
         useAuthStore.getState().clearSession()
         return
       }

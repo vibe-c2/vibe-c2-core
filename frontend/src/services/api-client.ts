@@ -1,7 +1,58 @@
 import { useAuthStore } from "@/stores/auth"
 import { useConnectivityStore } from "@/stores/connectivity"
 
+// ─────────────────────────────────────────────────────────────────────────────
+// CSRF rotation contract (keep backend and frontend in sync!)
+//
+// The backend rotates the `csrf_token` cookie on every response that sets or
+// refreshes auth cookies — i.e. `/login`, `/enroll`, and `/login/refresh`.
+// See core/pkg/controller/auth_controller.go (GenerateCSRFToken +
+// cookies.SetCSRFCookie in the login / enroll / refresh handlers).
+//
+// Rules this file must obey because of that contract:
+//
+//   1. `applyCsrfHeader()` always re-reads `csrf_token` from `document.cookie`
+//      at call time. Never cache the value across requests.
+//   2. Any code path that retries a request after a successful refresh MUST
+//      call `applyCsrfHeader()` again before the retry (see apiFetch below).
+//      The old token is no longer valid — the retry will 403 if stale.
+//   3. New reconnect paths (SSE, WebSocket, background retry) must follow
+//      the same pattern. If you add one, re-read CSRF on every (re)attempt.
+//
+// If backend changes: if `/login/refresh` ever stops rotating the cookie, or
+// if a new auth endpoint sets new auth cookies, update this comment and audit
+// every retry site here. The double-submit check depends on this invariant.
+// ─────────────────────────────────────────────────────────────────────────────
+
 const API_URL = import.meta.env.VITE_API_URL
+
+// Default request timeout for apiFetch. Aborts the request (and any post-
+// refresh retry gets its own fresh window). Subscriptions (SSE) do NOT go
+// through apiFetch and are unaffected.
+const DEFAULT_TIMEOUT_MS = 30_000
+
+// Refresh has a tighter timeout — a hung refresh blocks every 401-retry path
+// in the app, so we want it to fail fast and fall through to transient-error
+// handling rather than leaving the UI stuck.
+const REFRESH_TIMEOUT_MS = 10_000
+
+// Compose a caller-supplied AbortSignal with a timeout signal. If the runtime
+// does not expose AbortSignal.any (older Safari / Firefox), fall back to the
+// timeout signal alone — the caller's explicit aborts just won't propagate,
+// which degrades gracefully (no hang, slightly worse cancellation UX).
+function withTimeout(
+  callerSignal: AbortSignal | null | undefined,
+  timeoutMs: number,
+): AbortSignal | undefined {
+  if (timeoutMs <= 0) return callerSignal ?? undefined
+  const timeoutSignal = AbortSignal.timeout(timeoutMs)
+  if (!callerSignal) return timeoutSignal
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const any = (AbortSignal as any).any as
+    | ((signals: AbortSignal[]) => AbortSignal)
+    | undefined
+  return any ? any([callerSignal, timeoutSignal]) : timeoutSignal
+}
 
 // Read the (non-httpOnly) csrf_token cookie set by the backend on login /
 // refresh. Returned as-is — the caller echoes it back in the X-CSRF-Token
@@ -22,97 +73,22 @@ function applyCsrfHeader(headers: Headers, method: string | undefined): void {
   if (token) headers.set("X-CSRF-Token", token)
 }
 
-// Refresh coordination — ensures only one refresh call happens at a time,
-// both within a single tab AND across tabs of the same origin. Without
-// cross-tab coordination, two tabs of the same user would each rotate the
-// refresh token concurrently; whichever loses the race trips the backend's
-// replay detection (the rotated-out token is no longer in Redis) and the
-// session is terminated.
+// Refresh coordination — single-tab only.
 //
-// Three layers of dedup:
-//   1. In-memory `refreshPromise` — shares an in-flight call within this tab.
-//   2. In-memory `lastRefreshAt` grace window — collapses a burst of 401s
-//      that arrive within REFRESH_GRACE_MS of a successful refresh.
-//   3. Cross-tab `navigator.locks` + a localStorage stamp/session payload —
-//      a tab acquiring the lock can see that a peer tab just refreshed and
-//      adopt its result without making any network call.
+// Two in-memory primitives:
+//   1. `refreshPromise` — concurrent 401s in the same tab share one
+//      in-flight /login/refresh call.
+//   2. `lastRefreshAt` + REFRESH_GRACE_MS — a burst of 401s that arrive
+//      immediately after a successful refresh skip the network entirely.
+//
+// Multi-tab scenario is intentionally NOT handled here. Two tabs hitting
+// 401 at the same moment will each call /login/refresh; the loser of the
+// backend rotation race is replayed out and logged out. Users working in
+// one tab at a time are unaffected. A proper multi-tab solution will be
+// designed as a separate feature.
 let refreshPromise: Promise<boolean> | null = null
 let lastRefreshAt = 0
 const REFRESH_GRACE_MS = 3_000
-
-const SHARED_STAMP_KEY = "vibec2.auth.lastRefreshAt"
-const SHARED_SESSION_KEY = "vibec2.auth.session"
-const REFRESH_LOCK_NAME = "vibec2-auth-refresh"
-
-function readSharedStamp(): number {
-  try {
-    return Number(localStorage.getItem(SHARED_STAMP_KEY) ?? 0) || 0
-  } catch {
-    return 0
-  }
-}
-
-function readSharedSession(): unknown {
-  try {
-    const raw = localStorage.getItem(SHARED_SESSION_KEY)
-    return raw ? JSON.parse(raw) : null
-  } catch {
-    return null
-  }
-}
-
-function writeSharedRefresh(stamp: number, session: unknown): void {
-  try {
-    localStorage.setItem(SHARED_STAMP_KEY, String(stamp))
-    if (session !== null && session !== undefined) {
-      localStorage.setItem(SHARED_SESSION_KEY, JSON.stringify(session))
-    }
-  } catch {
-    // Storage may be disabled (private mode, quota). Cross-tab coordination
-    // degrades gracefully — we still have the in-memory dedup and Web Lock.
-  }
-}
-
-function adoptPeerRefresh(stamp: number): boolean {
-  lastRefreshAt = stamp
-  const peerSession = readSharedSession()
-  if (peerSession) {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    useAuthStore.getState().setSession(peerSession as any)
-  }
-  return true
-}
-
-async function withRefreshLock<T>(fn: () => Promise<T>): Promise<T> {
-  if (typeof navigator !== "undefined" && navigator.locks?.request) {
-    return navigator.locks.request(
-      REFRESH_LOCK_NAME,
-      { mode: "exclusive" },
-      fn,
-    )
-  }
-  // Web Locks unavailable — fall back to plain execution. The in-memory
-  // dedup still prevents within-tab races; cross-tab races may slip through.
-  return fn()
-}
-
-// React to peers updating shared auth state (cross-tab session sync).
-if (typeof window !== "undefined") {
-  window.addEventListener("storage", (e) => {
-    if (e.key === SHARED_STAMP_KEY && e.newValue) {
-      const stamp = Number(e.newValue) || 0
-      if (stamp > lastRefreshAt) lastRefreshAt = stamp
-    } else if (e.key === SHARED_SESSION_KEY && e.newValue) {
-      try {
-        const session = JSON.parse(e.newValue)
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        useAuthStore.getState().setSession(session as any)
-      } catch {
-        // ignore malformed payload
-      }
-    }
-  })
-}
 
 async function refreshSession(): Promise<boolean> {
   try {
@@ -122,15 +98,13 @@ async function refreshSession(): Promise<boolean> {
       method: "POST",
       headers,
       credentials: "include",
+      signal: withTimeout(null, REFRESH_TIMEOUT_MS),
     })
 
     if (res.ok) {
       const session = await res.json()
       useAuthStore.getState().setSession(session)
       lastRefreshAt = Date.now()
-      // Publish to peer tabs so they can adopt this result instead of
-      // racing the backend with an already-rotated token.
-      writeSharedRefresh(lastRefreshAt, session)
       useConnectivityStore.getState().markReachable()
       return true
     }
@@ -155,59 +129,59 @@ async function refreshSession(): Promise<boolean> {
 }
 
 /**
- * Attempt a cookie-based token refresh, coordinated so concurrent callers
- * share a single request. Used by apiFetch (on 401) and SSE reconnect.
+ * Attempt a cookie-based token refresh. Concurrent callers in the same tab
+ * share a single in-flight request. Used by apiFetch (on 401) and SSE
+ * reconnect.
  *
- * Coordination layers (cheapest first):
- *   1. In-flight in-tab promise — concurrent callers share it.
- *   2. In-tab grace window — burst of 401s after a recent refresh skip.
- *   3. Cross-tab grace window via localStorage — peer tab refreshed recently.
- *   4. Web Lock — exclusive cross-tab section that re-checks (3) and only
- *      then talks to the network.
+ * Dedup layers (single-tab only):
+ *   1. In-flight promise — concurrent callers share it.
+ *   2. Grace window — a burst of 401s within REFRESH_GRACE_MS of a
+ *      successful refresh short-circuits to success without a network call.
  */
 export function tryRefresh(): Promise<boolean> {
   if (refreshPromise) return refreshPromise
   if (lastRefreshAt > 0 && Date.now() - lastRefreshAt < REFRESH_GRACE_MS) {
     return Promise.resolve(true)
   }
-  // Cheap pre-check before acquiring the cross-tab lock — if a peer tab
-  // wrote a stamp in the last grace window, just adopt their session.
-  const peerStamp = readSharedStamp()
-  if (peerStamp > 0 && Date.now() - peerStamp < REFRESH_GRACE_MS) {
-    return Promise.resolve(adoptPeerRefresh(peerStamp))
-  }
-  refreshPromise = withRefreshLock(async () => {
-    // Re-check after acquiring the lock — another tab may have refreshed
-    // while we were queued behind it.
-    const stamp = readSharedStamp()
-    if (stamp > 0 && Date.now() - stamp < REFRESH_GRACE_MS) {
-      return adoptPeerRefresh(stamp)
-    }
-    return refreshSession()
-  }).finally(() => {
+  refreshPromise = refreshSession().finally(() => {
     refreshPromise = null
   })
   return refreshPromise
 }
 
+export interface ApiFetchOptions extends RequestInit {
+  /**
+   * Override the default request timeout (ms). Set to 0 to disable the
+   * timeout entirely (e.g. intentionally long-running uploads). Each attempt
+   * — including the post-refresh retry — gets its own fresh timeout window.
+   */
+  timeoutMs?: number
+}
+
 export async function apiFetch(
   path: string,
-  options: RequestInit = {},
+  options: ApiFetchOptions = {},
 ): Promise<Response> {
-  const headers = new Headers(options.headers)
-  if (!headers.has("Content-Type") && options.body) {
+  const { timeoutMs = DEFAULT_TIMEOUT_MS, signal: callerSignal, ...rest } = options
+  const headers = new Headers(rest.headers)
+  if (!headers.has("Content-Type") && rest.body) {
     headers.set("Content-Type", "application/json")
   }
-  applyCsrfHeader(headers, options.method)
+  applyCsrfHeader(headers, rest.method)
 
   let res: Response
   try {
     res = await fetch(`${API_URL}${path}`, {
-      ...options,
+      ...rest,
       headers,
       credentials: "include",
+      signal: withTimeout(callerSignal, timeoutMs),
     })
   } catch (err) {
+    // Network error, offline, or timeout (AbortError/TimeoutError from the
+    // timeout signal). All transient from the UI's perspective — mark the
+    // backend unreachable and propagate. Callers relying on React Query get
+    // automatic retry / error state; direct callers see the raw error.
     useConnectivityStore.getState().markUnreachable()
     throw err
   }
@@ -230,12 +204,21 @@ export async function apiFetch(
 
   // Retry the original request. The browser sends the new auth cookie
   // automatically; we must re-read csrf_token because it rotated too.
-  applyCsrfHeader(headers, options.method)
-  res = await fetch(`${API_URL}${path}`, {
-    ...options,
-    headers,
-    credentials: "include",
-  })
+  // Fresh timeout signal for the retry — if the first attempt timed out on
+  // a slow backend, the retry should get its own full window, not the
+  // already-expired one.
+  applyCsrfHeader(headers, rest.method)
+  try {
+    res = await fetch(`${API_URL}${path}`, {
+      ...rest,
+      headers,
+      credentials: "include",
+      signal: withTimeout(callerSignal, timeoutMs),
+    })
+  } catch (err) {
+    useConnectivityStore.getState().markUnreachable()
+    throw err
+  }
   return res
 }
 

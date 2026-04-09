@@ -13,6 +13,7 @@ import (
 	"github.com/vibe-c2/vibe-c2-core/core/pkg/eventbus"
 	"github.com/vibe-c2/vibe-c2-core/core/pkg/graphql/gqlctx"
 	"github.com/vibe-c2/vibe-c2-core/core/pkg/graphql/model"
+	"github.com/vibe-c2/vibe-c2-core/core/pkg/models"
 )
 
 // buildOperationFilter creates an event bus filter for operation-scoped subscriptions.
@@ -332,12 +333,31 @@ var sessionTopics = []eventbus.Topic{
 }
 
 // toSessionEvent converts an event bus Event to a GraphQL SessionEvent.
+//
+// Action mapping is deliberate — the frontend session guard uses `action` as
+// the authoritative "what happened" signal:
+//
+//	session.created    → CREATED
+//	session.refreshed  → UPDATED (the session stays active; activity advanced)
+//	session.terminated → DELETED (the session's auth record is gone; the
+//	                     historical Mongo row survives, but semantically the
+//	                     *session* ended, so DELETED is the right action for
+//	                     GraphQL consumers that care about liveness)
+//
+// Do not "fix" the terminated → DELETED mapping back to UPDATED without first
+// updating frontend/src/hooks/use-session-guard.ts, which relies on it to
+// decide whether to force a local logout.
 func toSessionEvent(event eventbus.Event) *model.SessionEvent {
-	action := topicToAction(event.Topic)
-	// Session terminated maps to UPDATED (session still exists, just inactive),
-	// not DELETED (session record is never removed).
-	if event.Topic == eventbus.TopicSessionTerminated {
+	var action model.EventAction
+	switch event.Topic {
+	case eventbus.TopicSessionCreated:
+		action = model.EventActionCreated
+	case eventbus.TopicSessionRefreshed:
 		action = model.EventActionUpdated
+	case eventbus.TopicSessionTerminated:
+		action = model.EventActionDeleted
+	default:
+		action = topicToAction(event.Topic)
 	}
 
 	evt := &model.SessionEvent{Action: action}
@@ -346,4 +366,24 @@ func toSessionEvent(event eventbus.Event) *model.SessionEvent {
 		evt.UserID = p.UserID
 	}
 	return evt
+}
+
+// applySessionStatusFromTopic sets the derived Status field on a session
+// loaded directly from Mongo. Status is not persisted (bson:"-"), so a raw
+// FindByID always produces an empty string, which the Session.status field
+// resolver converts to INACTIVE — wrong for created/refreshed events and
+// the cause of spurious client-side logouts after token refresh.
+//
+// The topic is authoritative here: session.created and session.refreshed
+// both mean the session is currently active; session.terminated means it
+// is not. We do not consult Redis — the topic is published by the code
+// path that just finished mutating the active-session state, so it is
+// strictly more up to date than any subsequent Redis read would be.
+func applySessionStatusFromTopic(sess *models.Session, topic eventbus.Topic) {
+	switch topic {
+	case eventbus.TopicSessionCreated, eventbus.TopicSessionRefreshed:
+		sess.Status = models.SessionStatusActive
+	case eventbus.TopicSessionTerminated:
+		sess.Status = models.SessionStatusInactive
+	}
 }

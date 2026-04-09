@@ -41,10 +41,30 @@ export async function graphqlClient<TResult, TVariables>(
     throw new GraphQLRequestError(json.errors)
   }
 
-  // Partial errors: data is usable but some fields may be null due to
-  // authorization failures or resolver errors. Always log so they don't
-  // go unnoticed.
+  // Partial errors (data + errors): some fields are null because a resolver
+  // or directive failed. We classify these:
+  //
+  //   - FORBIDDEN / UNAUTHENTICATED → hard failure. Throw so React Query sees
+  //     it as an error, error boundaries fire, and toasts trigger. These are
+  //     from the @hasPermission directive and should never be silently
+  //     swallowed: a user seeing a partially-blank page with no feedback is
+  //     a worse UX than a clear "forbidden" error.
+  //
+  //   - Anything else → log and return partial data. Resolver-level errors
+  //     on optional fields can legitimately leave nulls in the response.
+  //
+  // If you have a query that genuinely expects some fields to be null for
+  // lower-privilege users (e.g. admin-only fields on a shared query), split
+  // it into separate queries or gate the field with @include(if: $isAdmin)
+  // instead of relying on partial-data fallthrough.
   if (json.errors && json.data) {
+    const isHardFailure = json.errors.some((e: GraphQLError) => {
+      const code = e.extensions?.code
+      return code === "FORBIDDEN" || code === "UNAUTHENTICATED"
+    })
+    if (isHardFailure) {
+      throw new GraphQLRequestError(json.errors)
+    }
     console.warn("[GraphQL] Partial errors:", json.errors)
   }
 
