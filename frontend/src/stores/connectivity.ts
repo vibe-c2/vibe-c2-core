@@ -23,21 +23,26 @@ import { create } from "zustand"
 const API_URL = import.meta.env.VITE_API_URL
 
 const BANNER_SHOW_DELAY_MS = 800
-const HEALTH_POLL_MIN_INTERVAL_MS = 1_000
-const HEALTH_POLL_MAX_INTERVAL_MS = 5_000
+const HEALTH_POLL_MIN_INTERVAL_MS = 2_000
+const HEALTH_POLL_MAX_INTERVAL_MS = 30_000
 const HEALTH_POLL_GROWTH = 1.5
 
 interface ConnectivityState {
   reachable: boolean
   showBanner: boolean
+  /** Epoch ms when the next health poll will fire. null when not polling. */
+  nextRetryAt: number | null
   markReachable: () => void
   markUnreachable: () => void
   /** Resolves immediately if reachable, otherwise when reachability flips. */
   waitUntilReachable: () => Promise<void>
+  /** Cancel the current poll timer and retry immediately. */
+  retryNow: () => void
 }
 
 let bannerShowTimer: ReturnType<typeof setTimeout> | null = null
 let pollTimer: ReturnType<typeof setTimeout> | null = null
+let pollInFlight = false
 let pollInterval = HEALTH_POLL_MIN_INTERVAL_MS
 let waiters: Array<() => void> = []
 
@@ -53,7 +58,9 @@ function stopHealthPoll() {
     clearTimeout(pollTimer)
     pollTimer = null
   }
+  pollInFlight = false
   pollInterval = HEALTH_POLL_MIN_INTERVAL_MS
+  useConnectivityStore.setState({ nextRetryAt: null })
 }
 
 function notifyWaiters() {
@@ -64,29 +71,38 @@ function notifyWaiters() {
 
 async function runHealthPoll() {
   pollTimer = null
+  pollInFlight = true
+  useConnectivityStore.setState({ nextRetryAt: null })
   try {
     const res = await fetch(`${API_URL}/status`, { method: "GET" })
     if (res.ok) {
-      // markReachable will stop the poll and notify waiters.
+      // markReachable will stop the poll (and clear pollInFlight) and notify waiters.
       useConnectivityStore.getState().markReachable()
       return
     }
   } catch {
     // fall through to reschedule
   }
+  pollInFlight = false
   pollInterval = Math.min(pollInterval * HEALTH_POLL_GROWTH, HEALTH_POLL_MAX_INTERVAL_MS)
+  scheduleNextPoll()
+}
+
+function scheduleNextPoll() {
   pollTimer = setTimeout(runHealthPoll, pollInterval)
+  useConnectivityStore.setState({ nextRetryAt: Date.now() + pollInterval })
 }
 
 function startHealthPoll() {
-  if (pollTimer) return
+  if (pollTimer || pollInFlight) return
   pollInterval = HEALTH_POLL_MIN_INTERVAL_MS
-  pollTimer = setTimeout(runHealthPoll, pollInterval)
+  scheduleNextPoll()
 }
 
 export const useConnectivityStore = create<ConnectivityState>((set, get) => ({
   reachable: true,
   showBanner: false,
+  nextRetryAt: null,
 
   markReachable: () => {
     clearBannerTimer()
@@ -120,5 +136,15 @@ export const useConnectivityStore = create<ConnectivityState>((set, get) => ({
     return new Promise<void>((resolve) => {
       waiters.push(resolve)
     })
+  },
+
+  retryNow: () => {
+    if (pollTimer) {
+      clearTimeout(pollTimer)
+      pollTimer = null
+    }
+    pollInFlight = false
+    pollInterval = HEALTH_POLL_MIN_INTERVAL_MS
+    runHealthPoll()
   },
 }))

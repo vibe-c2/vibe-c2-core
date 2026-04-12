@@ -63,6 +63,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   },
 
   checkAuth: async () => {
+    set({ isLoading: true })
     try {
       const response = await authService.getMe()
       get().setSession(response)

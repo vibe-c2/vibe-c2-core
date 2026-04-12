@@ -1,4 +1,4 @@
-import { useEffect } from "react"
+import { useEffect, useRef } from "react"
 import { BrowserRouter, Route, Routes } from "react-router"
 import { QueryProvider } from "@/providers/query-provider"
 import { ThemeProvider } from "@/components/theme-provider"
@@ -13,14 +13,28 @@ import { OperationsPage } from "@/pages/operations"
 import { UsersPage } from "@/pages/users"
 import { WikiPage } from "@/pages/wiki"
 import { useAuthStore } from "@/stores/auth"
+import { useConnectivityStore } from "@/stores/connectivity"
 
 function App() {
   const checkAuth = useAuthStore((s) => s.checkAuth)
+  const reachable = useConnectivityStore((s) => s.reachable)
+  const wasUnreachable = useRef(false)
 
   // Validate stored token on app load (handles page refresh)
   useEffect(() => {
     checkAuth()
   }, [checkAuth])
+
+  // Retry auth check when backend recovers from an outage.
+  // Only fires on false→true transition of reachable (skips initial mount).
+  useEffect(() => {
+    if (!reachable) {
+      wasUnreachable.current = true
+    } else if (wasUnreachable.current) {
+      wasUnreachable.current = false
+      checkAuth()
+    }
+  }, [reachable, checkAuth])
 
   return (
     <QueryProvider>
