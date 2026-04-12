@@ -73,6 +73,13 @@ type TokenStore interface {
 	// key has expired) are cleaned as a side effect.
 	ListByUser(ctx context.Context, userID uuid.UUID) ([]ActiveSession, error)
 
+	// ListAllActive returns all live active sessions across all users by
+	// scanning Redis session_index:* keys. This is an O(N) operation over
+	// the entire Redis keyspace — acceptable for admin-only, infrequent
+	// queries but not suitable for high-frequency polling. Consider
+	// replacing with a global active-users set if this becomes a bottleneck.
+	ListAllActive(ctx context.Context) ([]ActiveSession, error)
+
 	// DeleteAllForUser removes every live session for a user. Used by
 	// AdminRevokeAllUserSessions and RevokeAllMySessions.
 	DeleteAllForUser(ctx context.Context, userID uuid.UUID) error

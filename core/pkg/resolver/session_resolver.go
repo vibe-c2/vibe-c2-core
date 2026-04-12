@@ -148,22 +148,28 @@ func (r *sessionResolver) listSessions(ctx context.Context, userIDs []uuid.UUID,
 	}
 
 	if activeOnly {
-		// Redis-first: collect live session_ids from each user, then Mongo
-		// find by session_id. Bounded by total live sessions (small).
-		if len(userIDs) == 0 {
-			// Unscoped admin global active view. We could SCAN every
-			// user index, but that's expensive and rarely needed —
-			// require a user filter.
-			return nil, fmt.Errorf("activeOnly requires a user filter")
-		}
+		// Redis-first: collect live session_ids, then Mongo find by
+		// session_id. Two paths depending on whether a user scope exists.
 		var ids []uuid.UUID
-		for _, uid := range userIDs {
-			actives, err := r.tokenStore.ListByUser(ctx, uid)
+		if len(userIDs) == 0 {
+			// Global active view: SCAN all session_index:* keys.
+			// O(total Redis keys) — acceptable for admin-only queries.
+			allActive, err := r.tokenStore.ListAllActive(ctx)
 			if err != nil {
-				return nil, fmt.Errorf("list active: %w", err)
+				return nil, fmt.Errorf("list all active: %w", err)
 			}
-			for _, a := range actives {
+			for _, a := range allActive {
 				ids = append(ids, a.SessionID)
+			}
+		} else {
+			for _, uid := range userIDs {
+				actives, err := r.tokenStore.ListByUser(ctx, uid)
+				if err != nil {
+					return nil, fmt.Errorf("list active: %w", err)
+				}
+				for _, a := range actives {
+					ids = append(ids, a.SessionID)
+				}
 			}
 		}
 		if len(ids) == 0 {

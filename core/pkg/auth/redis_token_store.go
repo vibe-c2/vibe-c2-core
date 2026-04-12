@@ -379,6 +379,80 @@ func (s *redisTokenStore) ListByUser(ctx context.Context, userID uuid.UUID) ([]A
 	return out, nil
 }
 
+// ListAllActive returns all live sessions across every user by SCANning
+// for session_index:* keys, then pipelining SMEMBERS + MGET to collect
+// session IDs. This is O(total Redis keys) for the SCAN phase — fine for
+// infrequent admin queries, but not suited for high-frequency polling.
+// If this becomes a bottleneck, replace with a global active-users SET
+// maintained on login/logout.
+func (s *redisTokenStore) ListAllActive(ctx context.Context) ([]ActiveSession, error) {
+	// Phase 1: SCAN for all session_index:* keys.
+	pattern := userIndexKeyPrefix + ":*"
+	var indexKeys []string
+	var cursor uint64
+	for {
+		keys, next, err := s.client.Scan(ctx, cursor, pattern, 100).Result()
+		if err != nil {
+			return nil, fmt.Errorf("list all active: scan: %w", err)
+		}
+		indexKeys = append(indexKeys, keys...)
+		cursor = next
+		if cursor == 0 {
+			break
+		}
+	}
+	if len(indexKeys) == 0 {
+		return nil, nil
+	}
+
+	// Phase 2: pipeline SMEMBERS for each index key to get all token keys.
+	pipe := s.client.Pipeline()
+	smembersCmds := make([]*redis.StringSliceCmd, len(indexKeys))
+	for i, ik := range indexKeys {
+		smembersCmds[i] = pipe.SMembers(ctx, ik)
+	}
+	if _, err := pipe.Exec(ctx); err != nil {
+		return nil, fmt.Errorf("list all active: smembers pipeline: %w", err)
+	}
+
+	var allTokenKeys []string
+	for _, cmd := range smembersCmds {
+		tokenKeys, err := cmd.Result()
+		if err != nil {
+			continue // best-effort: skip users whose index read failed
+		}
+		allTokenKeys = append(allTokenKeys, tokenKeys...)
+	}
+	if len(allTokenKeys) == 0 {
+		return nil, nil
+	}
+
+	// Phase 3: MGET all token values in one round-trip.
+	values, err := s.client.MGet(ctx, allTokenKeys...).Result()
+	if err != nil {
+		return nil, fmt.Errorf("list all active: mget: %w", err)
+	}
+
+	out := make([]ActiveSession, 0, len(values))
+	for i, v := range values {
+		if v == nil {
+			continue // TTL'd out between SMEMBERS and MGET — stale, skip
+		}
+		raw, ok := v.(string)
+		if !ok {
+			continue
+		}
+		sid, last, perr := parseValue(raw)
+		if perr != nil {
+			s.logger.Warn("listAllActive: corrupted session value",
+				zap.String("key", allTokenKeys[i]), zap.Error(perr))
+			continue
+		}
+		out = append(out, ActiveSession{SessionID: sid, LastActivityAt: last})
+	}
+	return out, nil
+}
+
 func (s *redisTokenStore) DeleteAllForUser(ctx context.Context, userID uuid.UUID) error {
 	idx := indexKey(userID)
 	keys, err := s.client.SMembers(ctx, idx).Result()
