@@ -32,8 +32,10 @@ func (a *App) NewRouter() *gin.Engine {
 	// Controllers
 	isDev := a.env.StageStatus == "development"
 	ctrlCfg := controller.AuthControllerConfig{
-		RefreshTTL: a.authCfg.refreshTTL,
-		IsDev:      isDev,
+		RefreshTTL:         a.authCfg.refreshTTL,
+		RefreshGraceTTL:    a.authCfg.refreshGraceTTL,
+		GraceEncryptionKey: a.authCfg.graceKey,
+		IsDev:              isDev,
 	}
 	authCtrl := controller.NewAuthController(a.repos.User, a.repos.Session, a.authProvider, a.tokenStore, a.eventBus, a.logger, ctrlCfg)
 	enrollCtrl := controller.NewEnrollController(a.repos.User, a.repos.Session, a.authProvider, a.tokenStore, a.eventBus, a.logger, ctrlCfg)

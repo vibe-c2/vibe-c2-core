@@ -24,9 +24,11 @@ import (
 // authConfig holds the runtime auth configuration. Mirrors the env-driven
 // values so the router can pass the relevant subset to controllers.
 type authConfig struct {
-	accessTTL   time.Duration
-	refreshTTL  time.Duration
-	csrfEnabled bool
+	accessTTL       time.Duration
+	refreshTTL      time.Duration
+	refreshGraceTTL time.Duration
+	graceKey        []byte // AES-256 key for grace shadow encryption
+	csrfEnabled     bool
 }
 
 type Repositories struct {
@@ -101,13 +103,18 @@ func NewApp() (*App, error) {
 		c = cache.NewNoopCache()
 	}
 
+	// Derive the AES-256 key for encrypting grace shadow payloads (used by
+	// both the token store and the auth controller).
+	graceKey := auth.DeriveGraceKey(e.JWTSecretKey)
+
 	// Initialize token store (failure is fatal — auth requires durable session storage)
 	tokenStore, err := auth.NewRedisTokenStore(ctx, auth.RedisTokenStoreConfig{
-		Host:     e.RedisHost,
-		Port:     e.RedisPort,
-		Password: e.RedisPassword,
-		DB:       1,
-		Logger:   l,
+		Host:               e.RedisHost,
+		Port:               e.RedisPort,
+		Password:           e.RedisPassword,
+		DB:                 1,
+		Logger:             l,
+		GraceEncryptionKey: graceKey,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("failed to initialize token store (required): %w", err)
@@ -117,9 +124,11 @@ func NewApp() (*App, error) {
 	// want short TTLs to exercise refresh paths set AUTH_ACCESS_TTL in
 	// their compose.
 	authCfg := authConfig{
-		accessTTL:   e.AuthAccessTTL,
-		refreshTTL:  e.AuthRefreshTTL,
-		csrfEnabled: e.AuthCSRFEnabled,
+		accessTTL:       e.AuthAccessTTL,
+		refreshTTL:      e.AuthRefreshTTL,
+		refreshGraceTTL: e.AuthRefreshGraceTTL,
+		graceKey:        graceKey,
+		csrfEnabled:     e.AuthCSRFEnabled,
 	}
 	authProvider := auth.NewAuthProvider(e.JWTSecretKey, authCfg.accessTTL)
 

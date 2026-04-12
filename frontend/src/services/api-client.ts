@@ -73,22 +73,59 @@ function applyCsrfHeader(headers: Headers, method: string | undefined): void {
   if (token) headers.set("X-CSRF-Token", token)
 }
 
-// Refresh coordination — single-tab only.
+// ─────────────────────────────────────────────────────────────────────────────
+// Refresh coordination — multi-tab safe.
 //
-// Two in-memory primitives:
-//   1. `refreshPromise` — concurrent 401s in the same tab share one
-//      in-flight /login/refresh call.
-//   2. `lastRefreshAt` + REFRESH_GRACE_MS — a burst of 401s that arrive
-//      immediately after a successful refresh skip the network entirely.
+// Three dedup layers, from innermost to outermost:
 //
-// Multi-tab scenario is intentionally NOT handled here. Two tabs hitting
-// 401 at the same moment will each call /login/refresh; the loser of the
-// backend rotation race is replayed out and logged out. Users working in
-// one tab at a time are unaffected. A proper multi-tab solution will be
-// designed as a separate feature.
+//   1. In-flight promise (`refreshPromise`) — concurrent 401s in the same
+//      tab share one in-flight /login/refresh call.
+//
+//   2. Grace window (`lastRefreshAt` + REFRESH_GRACE_MS) — a burst of 401s
+//      that arrive immediately after a successful refresh skip the network
+//      entirely. Updated both locally and cross-tab via BroadcastChannel.
+//
+//   3. Web Locks API (`navigator.locks`) — ensures only one tab across the
+//      origin performs the actual /login/refresh call. Other tabs queue on
+//      the lock, then re-check the grace window before calling.
+//
+// If Web Locks or BroadcastChannel are unavailable (old browser, SSR), the
+// code falls back gracefully: each tab calls /login/refresh independently.
+// The backend grace period (refresh_grace:<uid>:<old_hash> shadow key in
+// Redis, default 10s TTL) catches the multi-tab race server-side, returning
+// the same new token to the loser so all tabs converge.
+// ─────────────────────────────────────────────────────────────────────────────
+
 let refreshPromise: Promise<boolean> | null = null
 let lastRefreshAt = 0
 const REFRESH_GRACE_MS = 3_000
+
+// --- Cross-tab coordination via Web Locks + BroadcastChannel ---
+
+const REFRESH_LOCK = "vibe-c2:auth-refresh"
+const REFRESH_CHANNEL = "vibe-c2:auth-refresh"
+
+let refreshChannel: BroadcastChannel | null = null
+
+function getRefreshChannel(): BroadcastChannel | null {
+  if (refreshChannel) return refreshChannel
+  if (typeof BroadcastChannel === "undefined") return null
+  refreshChannel = new BroadcastChannel(REFRESH_CHANNEL)
+  return refreshChannel
+}
+
+// Listen for cross-tab refresh completions. When another tab succeeds,
+// update our local grace timestamp so any pending tryRefresh() calls
+// short-circuit without a network call.
+;(function initCrossTabListener() {
+  const ch = getRefreshChannel()
+  if (!ch) return
+  ch.addEventListener("message", (ev: MessageEvent) => {
+    if (ev.data?.type === "refresh-ok" && typeof ev.data.ts === "number") {
+      lastRefreshAt = ev.data.ts
+    }
+  })
+})()
 
 async function refreshSession(): Promise<boolean> {
   try {
@@ -129,21 +166,56 @@ async function refreshSession(): Promise<boolean> {
 }
 
 /**
- * Attempt a cookie-based token refresh. Concurrent callers in the same tab
- * share a single in-flight request. Used by apiFetch (on 401) and SSE
- * reconnect.
+ * Acquire a cross-tab exclusive lock, then refresh. Other tabs queue on
+ * the lock and re-check the grace window before calling /login/refresh.
+ * Falls back to a direct refreshSession() if the lock times out or the
+ * holding tab crashes — the backend grace period handles duplicates.
+ */
+async function lockedRefresh(): Promise<boolean> {
+  try {
+    return await navigator.locks.request(
+      REFRESH_LOCK,
+      { mode: "exclusive", signal: AbortSignal.timeout(REFRESH_TIMEOUT_MS) },
+      async (lock) => {
+        if (!lock) return false
+        // Another tab may have completed while we were queued.
+        if (lastRefreshAt > 0 && Date.now() - lastRefreshAt < REFRESH_GRACE_MS) {
+          return true
+        }
+        const ok = await refreshSession()
+        if (ok) {
+          getRefreshChannel()?.postMessage({ type: "refresh-ok", ts: Date.now() })
+        }
+        return ok
+      },
+    )
+  } catch {
+    // Lock timeout or AbortError (holder tab crashed / timed out).
+    // Fall back to direct call — backend grace period handles duplicates.
+    return refreshSession()
+  }
+}
+
+/**
+ * Attempt a cookie-based token refresh. Multi-tab safe via three dedup
+ * layers: in-flight promise (same-tab), grace window (cross-tab via
+ * BroadcastChannel), and Web Locks (cross-tab mutual exclusion).
  *
- * Dedup layers (single-tab only):
- *   1. In-flight promise — concurrent callers share it.
- *   2. Grace window — a burst of 401s within REFRESH_GRACE_MS of a
- *      successful refresh short-circuits to success without a network call.
+ * Used by apiFetch (on 401) and SSE reconnect.
  */
 export function tryRefresh(): Promise<boolean> {
+  // Layer 1: same-tab in-flight dedup.
   if (refreshPromise) return refreshPromise
+  // Layer 2: grace window (updated both locally and by BroadcastChannel).
   if (lastRefreshAt > 0 && Date.now() - lastRefreshAt < REFRESH_GRACE_MS) {
     return Promise.resolve(true)
   }
-  refreshPromise = refreshSession().finally(() => {
+  // Layer 3: cross-tab lock (graceful fallback if unavailable).
+  refreshPromise = (
+    typeof navigator !== "undefined" && navigator.locks
+      ? lockedRefresh()
+      : refreshSession()
+  ).finally(() => {
     refreshPromise = null
   })
   return refreshPromise

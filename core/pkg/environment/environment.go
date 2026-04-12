@@ -47,9 +47,10 @@ type EnvironmentSettings struct {
 	WikiAutoBackupInterval  string
 
 	// Auth — durations parsed from Go duration strings (e.g. "15m", "168h").
-	AuthAccessTTL   time.Duration
-	AuthRefreshTTL  time.Duration
-	AuthCSRFEnabled bool
+	AuthAccessTTL       time.Duration
+	AuthRefreshTTL      time.Duration
+	AuthRefreshGraceTTL time.Duration
+	AuthCSRFEnabled     bool
 }
 
 func init() {
@@ -77,6 +78,7 @@ func init() {
 	viper.SetDefault("WIKI_AUTO_BACKUP_INTERVAL", "30m")
 	viper.SetDefault("AUTH_ACCESS_TTL", "15m")
 	viper.SetDefault("AUTH_REFRESH_TTL", "168h")
+	viper.SetDefault("AUTH_REFRESH_GRACE_TTL", "10s")
 	viper.SetDefault("AUTH_CSRF_ENABLED", true)
 
 	env = &EnvironmentSettings{
@@ -114,9 +116,10 @@ func init() {
 		WikiAutoBackupInterval:  viper.GetString("WIKI_AUTO_BACKUP_INTERVAL"),
 
 		// Auth
-		AuthAccessTTL:   parseDurationOrFatal("AUTH_ACCESS_TTL", viper.GetString("AUTH_ACCESS_TTL")),
-		AuthRefreshTTL:  parseDurationOrFatal("AUTH_REFRESH_TTL", viper.GetString("AUTH_REFRESH_TTL")),
-		AuthCSRFEnabled: viper.GetBool("AUTH_CSRF_ENABLED"),
+		AuthAccessTTL:       parseDurationOrFatal("AUTH_ACCESS_TTL", viper.GetString("AUTH_ACCESS_TTL")),
+		AuthRefreshTTL:      parseDurationOrFatal("AUTH_REFRESH_TTL", viper.GetString("AUTH_REFRESH_TTL")),
+		AuthRefreshGraceTTL: parseDurationOrFatal("AUTH_REFRESH_GRACE_TTL", viper.GetString("AUTH_REFRESH_GRACE_TTL")),
+		AuthCSRFEnabled:     viper.GetBool("AUTH_CSRF_ENABLED"),
 	}
 
 	// Validate required configuration — fail fast on missing critical values.

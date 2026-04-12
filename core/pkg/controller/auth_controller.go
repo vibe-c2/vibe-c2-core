@@ -31,8 +31,10 @@ type IAuthController interface {
 // AuthControllerConfig groups the durations and flags the auth controller
 // needs. Mirrors the relevant subset of environment.AuthConfig.
 type AuthControllerConfig struct {
-	RefreshTTL time.Duration
-	IsDev      bool
+	RefreshTTL         time.Duration
+	RefreshGraceTTL    time.Duration
+	GraceEncryptionKey []byte // 32-byte AES-256 key for grace shadow payloads
+	IsDev              bool
 }
 
 type authController struct {
@@ -151,33 +153,114 @@ func (ctrl *authController) Refresh(c *gin.Context) {
 		return
 	}
 
-	// Mint the new refresh token first so we can pass its hash into the CAS.
+	// Phase 1: attempt normal rotation.
+	newRaw, sessionID, rotated := ctrl.tryRotate(c, log, userID, oldHash)
+
+	// Phase 2: if rotation failed because the old hash is gone (loser of a
+	// multi-tab race), check the grace shadow written by the winner.
+	if !rotated {
+		newRaw, sessionID, ok = ctrl.tryGraceLookup(c, log, userID, oldHash)
+		if !ok {
+			return // response already written
+		}
+	}
+
+	ctrl.completeRefresh(c, log, userID, sessionID, newRaw)
+}
+
+// tryRotate performs the normal atomic CAS rotation. On success it also
+// writes a short-lived grace shadow so that other tabs presenting the same
+// old hash within the grace window receive the same new token.
+// Returns ("", uuid.Nil, false) if the old hash is already gone.
+func (ctrl *authController) tryRotate(c *gin.Context, log *zap.Logger, userID uuid.UUID, oldHash string) (newRaw string, sessionID uuid.UUID, ok bool) {
 	newRaw, newHash, err := auth.MintRefreshToken(userID)
 	if err != nil {
 		log.Error("refresh: mint refresh token", zap.Error(err))
 		c.JSON(http.StatusInternalServerError, responses.ErrInternalError)
-		return
+		return "", uuid.Nil, false
 	}
 
-	// Atomic Redis CAS. The script preserves the embedded session_id and
-	// returns it. NOTFOUND is the loser-of-race / replay signal — clear
-	// cookies and return 401 with no audit write.
-	sessionID, err := ctrl.tokenStore.Rotate(c.Request.Context(), userID, oldHash, newHash, ctrl.cfg.RefreshTTL)
+	sessionID, err = ctrl.tokenStore.Rotate(c.Request.Context(), userID, oldHash, newHash, ctrl.cfg.RefreshTTL)
 	if err != nil {
 		if errors.Is(err, auth.ErrTokenInvalid) {
-			log.Warn("refresh: token rejected", zap.Stringer("user_id", userID))
-			cookies.ClearAuthCookies(c, ctrl.cfg.IsDev)
-			c.JSON(http.StatusUnauthorized, responses.ErrUnauthorized)
-			return
+			// Old hash gone — caller should fall through to grace lookup.
+			return "", uuid.Nil, false
 		}
 		log.Error("refresh: rotate failed", zap.Error(err))
 		c.JSON(http.StatusInternalServerError, responses.ErrInternalError)
-		return
+		return "", uuid.Nil, false
 	}
 
-	// Re-read the user from Mongo so role/username changes propagate within
-	// one access-TTL window. The Mongo lookup is cheap and refresh is not
-	// the hot path.
+	// Best-effort: write a grace shadow so the loser of the race can
+	// retrieve the same new token. Failures are logged but do not
+	// block the primary refresh response.
+	if ctrl.cfg.RefreshGraceTTL > 0 {
+		encrypted, encErr := auth.EncryptGrace(ctrl.cfg.GraceEncryptionKey, []byte(newRaw))
+		if encErr != nil {
+			log.Warn("refresh: grace encrypt failed", zap.Error(encErr))
+		} else {
+			payload := auth.GracePayload{
+				NewRawEncrypted: encrypted,
+				NewHash:         newHash,
+				SessionID:       sessionID,
+			}
+			if saveErr := ctrl.tokenStore.SaveGrace(c.Request.Context(), userID, oldHash, payload, ctrl.cfg.RefreshGraceTTL); saveErr != nil {
+				log.Warn("refresh: save grace failed", zap.Error(saveErr))
+			}
+		}
+	}
+
+	return newRaw, sessionID, true
+}
+
+// tryGraceLookup checks the grace shadow written by the rotation winner.
+// Returns the new raw token and session ID on success, or writes the error
+// response and returns ("", uuid.Nil, false).
+func (ctrl *authController) tryGraceLookup(c *gin.Context, log *zap.Logger, userID uuid.UUID, oldHash string) (string, uuid.UUID, bool) {
+	if ctrl.cfg.RefreshGraceTTL <= 0 {
+		log.Warn("refresh: token rejected (no grace period)", zap.Stringer("user_id", userID))
+		cookies.ClearAuthCookies(c, ctrl.cfg.IsDev)
+		c.JSON(http.StatusUnauthorized, responses.ErrUnauthorized)
+		return "", uuid.Nil, false
+	}
+
+	payload, err := ctrl.tokenStore.LookupGrace(c.Request.Context(), userID, oldHash)
+	if err != nil {
+		log.Warn("refresh: token rejected (grace miss)", zap.Stringer("user_id", userID), zap.Error(err))
+		cookies.ClearAuthCookies(c, ctrl.cfg.IsDev)
+		c.JSON(http.StatusUnauthorized, responses.ErrUnauthorized)
+		return "", uuid.Nil, false
+	}
+
+	// Decrypt the raw refresh token from the grace payload.
+	decrypted, err := auth.DecryptGrace(ctrl.cfg.GraceEncryptionKey, payload.NewRawEncrypted)
+	if err != nil {
+		log.Error("refresh: grace decrypt failed", zap.Error(err))
+		cookies.ClearAuthCookies(c, ctrl.cfg.IsDev)
+		c.JSON(http.StatusUnauthorized, responses.ErrUnauthorized)
+		return "", uuid.Nil, false
+	}
+
+	// Integrity check: the decrypted raw token must hash to the stored hash.
+	newRaw := string(decrypted)
+	if auth.HashToken(newRaw) != payload.NewHash {
+		log.Error("refresh: grace hash mismatch", zap.Stringer("user_id", userID))
+		cookies.ClearAuthCookies(c, ctrl.cfg.IsDev)
+		c.JSON(http.StatusUnauthorized, responses.ErrUnauthorized)
+		return "", uuid.Nil, false
+	}
+
+	log.Info("refresh: grace hit (multi-tab race resolved)",
+		zap.Stringer("user_id", userID),
+		zap.Stringer("session_id", payload.SessionID))
+
+	return newRaw, payload.SessionID, true
+}
+
+// completeRefresh is the shared tail of a successful refresh — re-reads the
+// user, mints a new access JWT, sets cookies, publishes events, and writes
+// the JSON response.
+func (ctrl *authController) completeRefresh(c *gin.Context, log *zap.Logger, userID, sessionID uuid.UUID, newRaw string) {
 	user, err := ctrl.userRepo.FindByID(c.Request.Context(), userID)
 	if err != nil {
 		log.Error("refresh: user not found after rotation", zap.Stringer("user_id", userID))

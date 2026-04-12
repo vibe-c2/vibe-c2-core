@@ -16,6 +16,16 @@ type ActiveSession struct {
 	LastActivityAt time.Time
 }
 
+// GracePayload is the shadow record written after a successful token rotation.
+// It allows a second tab presenting the old (now-deleted) refresh token hash
+// to receive the same new token that the first tab got, preventing a spurious
+// logout in multi-tab scenarios. The raw refresh token is encrypted at rest.
+type GracePayload struct {
+	NewRawEncrypted string    // AES-256-GCM ciphertext of the new raw refresh token
+	NewHash         string    // SHA-256 hex of the new raw token (for verification)
+	SessionID       uuid.UUID // stable session ID (preserved across rotations)
+}
+
 // TokenStore is the single source of truth for *active* refresh tokens.
 // Implementations are backed by Redis. The store maintains two structures:
 //
@@ -66,6 +76,18 @@ type TokenStore interface {
 	// DeleteAllForUser removes every live session for a user. Used by
 	// AdminRevokeAllUserSessions and RevokeAllMySessions.
 	DeleteAllForUser(ctx context.Context, userID uuid.UUID) error
+
+	// SaveGrace stores a short-lived shadow record mapping oldHash to the
+	// new token data produced by the most recent Rotate. Within the grace
+	// TTL, a second tab presenting the same old hash can retrieve this
+	// record and receive the same new refresh token — preventing a spurious
+	// logout caused by the multi-tab rotation race. Best-effort: callers
+	// should log failures but not fail the primary refresh response.
+	SaveGrace(ctx context.Context, userID uuid.UUID, oldHash string, payload GracePayload, ttl time.Duration) error
+
+	// LookupGrace retrieves the shadow record written by SaveGrace.
+	// Returns ErrTokenInvalid if the key is absent or expired.
+	LookupGrace(ctx context.Context, userID uuid.UUID, oldHash string) (*GracePayload, error)
 
 	// Close releases resources.
 	Close() error

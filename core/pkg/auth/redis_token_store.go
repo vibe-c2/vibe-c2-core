@@ -28,6 +28,7 @@ import (
 const (
 	refreshKeyPrefix   = "refresh"
 	userIndexKeyPrefix = "session_index"
+	graceKeyPrefix     = "refresh_grace"
 
 	// rotateSweepLimit caps how many index members the rotate Lua script
 	// will check-and-prune per call. Stale members (index entries whose
@@ -39,16 +40,18 @@ const (
 )
 
 type RedisTokenStoreConfig struct {
-	Host     string
-	Port     string
-	Password string
-	DB       int
-	Logger   *zap.Logger
+	Host               string
+	Port               string
+	Password           string
+	DB                 int
+	Logger             *zap.Logger
+	GraceEncryptionKey []byte // 32-byte AES-256 key from DeriveGraceKey
 }
 
 type redisTokenStore struct {
-	client *redis.Client
-	logger *zap.Logger
+	client   *redis.Client
+	logger   *zap.Logger
+	graceKey []byte // AES-256 key for grace shadow encryption
 
 	createScript *redis.Script
 	rotateScript *redis.Script
@@ -171,6 +174,7 @@ func NewRedisTokenStore(ctx context.Context, cfg RedisTokenStoreConfig) (TokenSt
 	return &redisTokenStore{
 		client:       client,
 		logger:       cfg.Logger,
+		graceKey:     cfg.GraceEncryptionKey,
 		createScript: redis.NewScript(createScriptSrc),
 		rotateScript: redis.NewScript(rotateScriptSrc),
 		deleteScript: redis.NewScript(deleteScriptSrc),
@@ -394,6 +398,50 @@ func (s *redisTokenStore) DeleteAllForUser(ctx context.Context, userID uuid.UUID
 
 func (s *redisTokenStore) Close() error {
 	return s.client.Close()
+}
+
+func graceKey(userID uuid.UUID, oldHash string) string {
+	return fmt.Sprintf("%s:%s:%s", graceKeyPrefix, userID.String(), oldHash)
+}
+
+// encodeGracePayload serialises a GracePayload into the pipe-delimited
+// format stored in Redis: "<encrypted_new_raw>|<new_hash>|<session_id>".
+func encodeGracePayload(p GracePayload) string {
+	return p.NewRawEncrypted + "|" + p.NewHash + "|" + p.SessionID.String()
+}
+
+// parseGracePayload is the inverse of encodeGracePayload.
+func parseGracePayload(raw string) (*GracePayload, error) {
+	parts := strings.SplitN(raw, "|", 3)
+	if len(parts) != 3 {
+		return nil, fmt.Errorf("%w: grace payload: wrong field count", ErrTokenCorrupted)
+	}
+	sid, err := uuid.Parse(parts[2])
+	if err != nil {
+		return nil, fmt.Errorf("%w: grace payload: bad session id: %v", ErrTokenCorrupted, err)
+	}
+	return &GracePayload{
+		NewRawEncrypted: parts[0],
+		NewHash:         parts[1],
+		SessionID:       sid,
+	}, nil
+}
+
+func (s *redisTokenStore) SaveGrace(ctx context.Context, userID uuid.UUID, oldHash string, payload GracePayload, ttl time.Duration) error {
+	key := graceKey(userID, oldHash)
+	value := encodeGracePayload(payload)
+	return s.client.Set(ctx, key, value, ttl).Err()
+}
+
+func (s *redisTokenStore) LookupGrace(ctx context.Context, userID uuid.UUID, oldHash string) (*GracePayload, error) {
+	raw, err := s.client.Get(ctx, graceKey(userID, oldHash)).Result()
+	if err != nil {
+		if errors.Is(err, redis.Nil) {
+			return nil, ErrTokenInvalid
+		}
+		return nil, fmt.Errorf("lookup grace: %w", err)
+	}
+	return parseGracePayload(raw)
 }
 
 // isLuaError matches the named error returned via redis.error_reply from
