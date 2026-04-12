@@ -1,12 +1,15 @@
 import { LoaderIcon } from "lucide-react"
+import type { ConnectionStatus } from "@/hooks/use-hocuspocus"
 
 interface ConnectionBannerProps {
-  isConnected: boolean
+  connectionStatus: ConnectionStatus
   isSynced: boolean
+  isReady: boolean
 }
 
-export function ConnectionBanner({ isConnected, isSynced }: ConnectionBannerProps) {
-  if (isConnected && isSynced) return null
+export function ConnectionBanner({ connectionStatus, isSynced, isReady }: ConnectionBannerProps) {
+  if (!isReady) return null
+  if (connectionStatus === "connected" && isSynced) return null
 
   return (
     <div
@@ -14,7 +17,7 @@ export function ConnectionBanner({ isConnected, isSynced }: ConnectionBannerProp
       role="status"
     >
       <LoaderIcon className="size-4 animate-spin" />
-      {!isConnected
+      {connectionStatus === "disconnected"
         ? "Reconnecting\u2026 your edits are saved locally."
         : "Syncing\u2026"}
     </div>

@@ -9,10 +9,13 @@ function getWsUrl(): string {
   return `${proto}//${window.location.host}`
 }
 
+export type ConnectionStatus = "connecting" | "connected" | "disconnected"
+
 interface UseHocuspocusReturn {
   ydoc: YDoc
-  isConnected: boolean
+  connectionStatus: ConnectionStatus
   isSynced: boolean
+  isReady: boolean
 }
 
 /**
@@ -24,8 +27,14 @@ interface UseHocuspocusReturn {
  * use `key={documentId}` to remount when switching documents.
  */
 export function useHocuspocus(documentId: string): UseHocuspocusReturn {
-  const [isConnected, setIsConnected] = useState(false)
+  const [connectionStatus, setConnectionStatus] = useState<ConnectionStatus>("connecting")
   const [isSynced, setIsSynced] = useState(false)
+  const [isReady, setIsReady] = useState(false)
+
+  // Tracks whether the provider has ever reached "connected" during this
+  // mount. Lets us distinguish "initial connect in progress" (connecting)
+  // from "lost an established connection" (disconnected).
+  const hasConnectedRef = useRef(false)
 
   // Stable Y.Doc — created once per hook instance. TipTap reads this
   // synchronously during render via Collaboration.configure({ document }).
@@ -35,6 +44,8 @@ export function useHocuspocus(documentId: string): UseHocuspocusReturn {
   // on cleanup. StrictMode safe: each effect invocation gets its own
   // provider instance.
   useEffect(() => {
+    hasConnectedRef.current = false
+
     const provider = new HocuspocusProvider({
       url: `${getWsUrl()}/api/v1/ws/wiki/`,
       name: `wiki/${documentId}`,
@@ -44,11 +55,19 @@ export function useHocuspocus(documentId: string): UseHocuspocusReturn {
     })
 
     function onStatus({ status }: { status: string }) {
-      setIsConnected(status === "connected")
+      if (status === "connected") {
+        hasConnectedRef.current = true
+        setConnectionStatus("connected")
+      } else {
+        setConnectionStatus(hasConnectedRef.current ? "disconnected" : "connecting")
+      }
     }
 
     function onSynced({ state }: { state: boolean }) {
       setIsSynced(state)
+      if (state && hasConnectedRef.current) {
+        setIsReady(true)
+      }
     }
 
     provider.on("status", onStatus)
@@ -63,7 +82,8 @@ export function useHocuspocus(documentId: string): UseHocuspocusReturn {
 
   return {
     ydoc: ydocRef.current,
-    isConnected,
+    connectionStatus,
     isSynced,
+    isReady,
   }
 }

@@ -19,7 +19,7 @@ interface WikiEditorProps {
 // Existing documents authored with the old editor will therefore appear
 // empty here until the rich editor returns and reads from "default".
 export function WikiEditor({ documentId, isEditor }: WikiEditorProps) {
-  const { ydoc, isConnected, isSynced } = useHocuspocus(documentId)
+  const { ydoc, connectionStatus, isSynced, isReady } = useHocuspocus(documentId)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const applyingRemoteRef = useRef(false)
 
@@ -67,7 +67,7 @@ export function WikiEditor({ documentId, isEditor }: WikiEditorProps) {
 
   return (
     <>
-      <ConnectionBanner isConnected={isConnected} isSynced={isSynced} />
+      <ConnectionBanner connectionStatus={connectionStatus} isSynced={isSynced} isReady={isReady} />
       <textarea
         ref={textareaRef}
         readOnly={!isEditor}
