@@ -2,7 +2,7 @@
 // subscribes to real-time changes so the scope is cleared when the user loses
 // access (operation deleted, user kicked) and updated when metadata changes.
 
-import { useEffect, useRef } from "react"
+import { useCallback, useEffect, useRef } from "react"
 import { toast } from "sonner"
 import { useQueryClient } from "@tanstack/react-query"
 import { useSubscription } from "@/hooks/use-subscription"
@@ -34,70 +34,72 @@ export function useScopedOperationGuard() {
 
   const scopedId = scopedOperation?.id ?? null
 
-  // --- Validation on mount / hydrate ---
+  // Track last successful validation to avoid redundant requests on rapid tab switching.
+  const lastValidatedAtRef = useRef(0)
+  const REVALIDATION_COOLDOWN_MS = 30_000
+
+  // Shared validation logic.
+  // silent=false (default): clears isValidating on success — used by the initial hydration gate.
+  // silent=true: never touches isValidating — used by tab-focus background re-validation.
+  const doValidate = useCallback(async (silent: boolean, signal?: AbortSignal) => {
+    try {
+      const result = await graphqlClient(MyOperationRoleDocument, { operationId: scopedId! })
+      if (signal?.aborted) return
+
+      if (result.myOperationRole) {
+        lastValidatedAtRef.current = Date.now()
+        if (!silent) setValidating(false)
+        return
+      }
+
+      if (hasPermission("admin")) {
+        try {
+          await graphqlClient(OperationDocument, { id: scopedId! })
+          if (signal?.aborted) return
+          lastValidatedAtRef.current = Date.now()
+          if (!silent) setValidating(false)
+          return
+        } catch {
+          // Operation doesn't exist or other error — fall through to clear.
+        }
+      }
+
+      if (signal?.aborted) return
+      const name = scopedNameRef.current
+      unscopeOperation()
+      toast.info(`Operation "${name}" is no longer accessible. Scope cleared.`)
+    } catch {
+      if (signal?.aborted) return
+      const name = scopedNameRef.current
+      unscopeOperation()
+      toast.info(`Operation "${name}" is no longer accessible. Scope cleared.`)
+    }
+  }, [scopedId, hasPermission, setValidating, unscopeOperation])
+
+  // --- Validation on mount / hydrate (blocking — shows loading gate) ---
   useEffect(() => {
     if (!scopedId || !isValidating) return
+    const ac = new AbortController()
+    doValidate(false, ac.signal)
+    return () => ac.abort()
+  }, [scopedId, isValidating, doValidate])
 
-    let cancelled = false
-
-    async function validate() {
-      try {
-        // Check if user is a member of the operation.
-        const result = await graphqlClient(MyOperationRoleDocument, { operationId: scopedId! })
-        if (cancelled) return
-
-        if (result.myOperationRole) {
-          // Still a member — scope is valid.
-          setValidating(false)
-          return
-        }
-
-        // myOperationRole returned null — not a member.
-        // App admins can access any operation without membership.
-        if (hasPermission("admin")) {
-          try {
-            await graphqlClient(OperationDocument, { id: scopedId! })
-            if (cancelled) return
-            setValidating(false)
-            return
-          } catch {
-            // Operation doesn't exist or other error — fall through to clear.
-          }
-        }
-
-        if (cancelled) return
-        const name = scopedNameRef.current
-        unscopeOperation()
-        toast.info(`Operation "${name}" is no longer accessible. Scope cleared.`)
-      } catch {
-        if (cancelled) return
-        // Query failed (network error, operation deleted, etc.) — clear scope.
-        const name = scopedNameRef.current
-        unscopeOperation()
-        toast.info(`Operation "${name}" is no longer accessible. Scope cleared.`)
-      }
-    }
-
-    validate()
-    return () => { cancelled = true }
-  }, [scopedId, isValidating, hasPermission, setValidating, unscopeOperation])
-
-  // --- Re-validate scope when tab regains focus ---
+  // --- Re-validate scope when tab regains focus (non-blocking) ---
   // SSE subscriptions disconnect when the tab is backgrounded. Membership or
   // deletion changes during that window are missed, leaving a stale scope.
-  // Triggering validation on visibility change catches those cases.
+  // Validate in the background so the page content stays visible.
   useEffect(() => {
     if (!scopedId) return
 
     function handleVisibilityChange() {
-      if (document.visibilityState === "visible") {
-        setValidating(true)
-      }
+      if (document.visibilityState !== "visible") return
+      if (Date.now() - lastValidatedAtRef.current < REVALIDATION_COOLDOWN_MS) return
+      doValidate(true)
     }
 
     document.addEventListener("visibilitychange", handleVisibilityChange)
     return () => document.removeEventListener("visibilitychange", handleVisibilityChange)
-  }, [scopedId, setValidating])
+  }, [scopedId, doValidate])
 
   // --- Real-time: operation changes (rename, delete) ---
   // Note: operation names shown in toasts are user-controlled content. Sonner
