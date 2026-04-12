@@ -4,6 +4,7 @@ import (
 	"crypto/hmac"
 	"crypto/sha256"
 	"encoding/hex"
+	"encoding/json"
 	"io"
 	"net/http"
 
@@ -66,11 +67,10 @@ func (h *WebhookHandler) Handle(c *gin.Context) {
 		}
 	}
 
-	// Parse payload
+	// Parse from the already-read body bytes (not c.ShouldBindJSON, which
+	// would try to re-read the exhausted request body stream).
 	var payload webhookPayload
-	if err := c.ShouldBindJSON(&payload); err != nil {
-		// Re-bind from the raw body since we already consumed the reader
-		// Use gin's built-in binding which reads from the body buffer
+	if err := json.Unmarshal(body, &payload); err != nil {
 		c.JSON(http.StatusBadRequest, responses.ErrorResponse{Error: "invalid payload"})
 		return
 	}
