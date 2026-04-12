@@ -18,6 +18,8 @@ interface CreateWikiDocumentDialogProps {
   operationId: string
 }
 
+const DEFAULT_EMOJI = "📂"
+
 export function CreateWikiDocumentDialog({ operationId }: CreateWikiDocumentDialogProps) {
   const { createDialogOpen, createParentId, closeCreateDialog } = useWikiStore()
   const expandNode = useWikiStore((s) => s.expandNode)
@@ -25,7 +27,7 @@ export function CreateWikiDocumentDialog({ operationId }: CreateWikiDocumentDial
   const navigate = useNavigate()
 
   const [error, setError] = useState<string | null>(null)
-  const [emoji, setEmoji] = useState("📂")
+  const [emoji, setEmoji] = useState(DEFAULT_EMOJI)
 
   async function handleSubmit(e: FormEvent<HTMLFormElement>) {
     e.preventDefault()
@@ -48,7 +50,7 @@ export function CreateWikiDocumentDialog({ operationId }: CreateWikiDocumentDial
       // Expand parent so the new child is visible in the tree.
       if (createParentId) expandNode(createParentId)
       closeCreateDialog()
-      setEmoji("")
+      setEmoji(DEFAULT_EMOJI)
       navigate(`/wiki/${result.createWikiDocument.id}`)
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to create document")
@@ -62,7 +64,7 @@ export function CreateWikiDocumentDialog({ operationId }: CreateWikiDocumentDial
         if (!open) {
           closeCreateDialog()
           setError(null)
-          setEmoji("")
+          setEmoji(DEFAULT_EMOJI)
         }
       }}
     >
