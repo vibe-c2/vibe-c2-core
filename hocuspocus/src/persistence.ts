@@ -134,12 +134,19 @@ export function createDatabaseExtension(): Database {
       const database = await getDb();
       const collection = database.collection("wiki_documents");
 
-      // Extract plain text from the Y.Text named "content" — matches the
-      // key used by the current (temporary) plain-textarea editor in the
-      // frontend. When the rich editor returns, revisit this.
+      // Extract plain text for the searchable `content` field.
+      // TipTap stores rich content in a Y.XmlFragment on key "default".
+      // Legacy documents from the textarea era use Y.Text on key "content".
       const ydoc = new Y.Doc();
       Y.applyUpdate(ydoc, state);
-      const markdown = ydoc.getText("content").toString();
+
+      const xmlFragment = ydoc.getXmlFragment("default");
+      let markdown: string;
+      if (xmlFragment.length > 0) {
+        markdown = extractTextFromFragment(xmlFragment);
+      } else {
+        markdown = ydoc.getText("content").toString();
+      }
 
       // Write content_state, content, and content_state_at to MongoDB
       await collection.updateOne(
@@ -158,6 +165,22 @@ export function createDatabaseExtension(): Database {
       await sendWebhook("onChange", docId, operationId);
     },
   });
+}
+
+/**
+ * Recursively extract plain text from a Y.XmlFragment (TipTap document).
+ * Block-level elements are separated by newlines.
+ */
+function extractTextFromFragment(node: Y.XmlFragment | Y.XmlElement): string {
+  const parts: string[] = [];
+  for (const child of node.toArray()) {
+    if (child instanceof Y.XmlText) {
+      parts.push(child.toString());
+    } else if (child instanceof Y.XmlElement) {
+      parts.push(extractTextFromFragment(child));
+    }
+  }
+  return parts.join("\n").trim();
 }
 
 export { debounceMs };

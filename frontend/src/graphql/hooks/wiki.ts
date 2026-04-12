@@ -10,6 +10,7 @@ import {
   WikiDocumentBackupsDocument,
   WikiDocumentBackupDetailDocument,
   WikiDocumentPresenceDocument,
+  WikiOperationPresenceDocument,
   CreateWikiDocumentDocument,
   UpdateWikiDocumentDocument,
   DeleteWikiDocumentDocument,
@@ -37,6 +38,7 @@ export const wikiKeys = {
   backups: (documentId: string) => [...wikiKeys.all, "backups", documentId] as const,
   backup: (id: string) => [...wikiKeys.all, "backup", id] as const,
   presence: (documentId: string) => [...wikiKeys.all, "presence", documentId] as const,
+  operationPresence: (operationId: string) => [...wikiKeys.all, "operationPresence", operationId] as const,
 }
 
 // --- Queries ---
@@ -131,6 +133,14 @@ export function useWikiDocumentPresence(documentId: string) {
     queryKey: wikiKeys.presence(documentId),
     queryFn: () => graphqlClient(WikiDocumentPresenceDocument, { documentId }),
     enabled: !!documentId,
+  })
+}
+
+export function useWikiOperationPresence(operationId: string) {
+  return useQuery({
+    queryKey: wikiKeys.operationPresence(operationId),
+    queryFn: () => graphqlClient(WikiOperationPresenceDocument, { operationId }),
+    enabled: !!operationId,
   })
 }
 
@@ -277,6 +287,7 @@ export function useWikiDocumentPresenceChangedSubscription(operationId: string) 
     onData: (data) => {
       const { documentId } = data.wikiDocumentPresenceChanged
       queryClient.invalidateQueries({ queryKey: wikiKeys.presence(documentId) })
+      queryClient.invalidateQueries({ queryKey: wikiKeys.operationPresence(operationId) })
     },
     enabled: !!operationId,
   })

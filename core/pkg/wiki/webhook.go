@@ -104,12 +104,16 @@ func (h *WebhookHandler) handleOnConnect(p webhookPayload) {
 	if err != nil {
 		return
 	}
+	opUID, err := uuid.Parse(p.OperationID)
+	if err != nil {
+		return
+	}
 	userUID, err := uuid.Parse(p.UserID)
 	if err != nil {
 		return
 	}
 
-	h.presenceTracker.AddEditor(docUID, userUID, p.Username)
+	h.presenceTracker.AddEditor(docUID, opUID, userUID, p.Username)
 
 	h.eventBus.Publish(eventbus.NewWikiPresenceJoinedEvent(
 		eventbus.ServiceActor("hocuspocus"),

@@ -7,6 +7,7 @@ import { Popover, PopoverTrigger, PopoverContent } from "@/components/ui/popover
 import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import { useUpdateWikiDocument, useWikiDocumentPresence } from "@/graphql/hooks/wiki"
+import { getCursorColor } from "@/lib/cursor-colors"
 import { useWikiStore } from "@/stores/wiki"
 import { EmojiPicker } from "@/components/wiki/emoji-picker"
 import type { WikiDocumentFieldsFragment, WikiDocumentTreeFieldsFragment } from "@/graphql/gql/graphql"
@@ -178,7 +179,10 @@ export function WikiEditorHeader({
               <Tooltip key={editor.userId}>
                 <TooltipTrigger
                   render={
-                    <Avatar className="size-6 border-2 border-background" />
+                    <Avatar
+                      className="size-6 border-2"
+                      style={{ borderColor: getCursorColor(editor.userId) }}
+                    />
                   }
                 >
                   <AvatarFallback className="text-[10px]">

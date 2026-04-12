@@ -93,6 +93,11 @@ func (r *queryResolver) WikiDocumentPresence(ctx context.Context, documentID str
 	return r.WikiDocumentResolver.WikiDocumentPresence(ctx, documentID)
 }
 
+// WikiOperationPresence is the resolver for the wikiOperationPresence field.
+func (r *queryResolver) WikiOperationPresence(ctx context.Context, operationID string) ([]*model.WikiDocumentPresence, error) {
+	return r.WikiDocumentResolver.WikiOperationPresence(ctx, operationID)
+}
+
 // WikiDocumentChanged is the resolver for the wikiDocumentChanged field.
 func (r *subscriptionResolver) WikiDocumentChanged(ctx context.Context, operationID string) (<-chan *model.WikiDocumentEvent, error) {
 	return r.wikiDocumentChanged(ctx, operationID)

@@ -169,6 +169,9 @@ extend type Query {
 
   wikiDocumentPresence(documentId: ID!): WikiDocumentPresence!
     @hasPermission(permission: "operation:member")
+
+  wikiOperationPresence(operationId: ID!): [WikiDocumentPresence!]!
+    @hasPermission(permission: "operation:member")
 }
 
 # --- Mutations ---

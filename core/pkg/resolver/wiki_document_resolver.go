@@ -47,8 +47,9 @@ type IWikiDocumentResolver interface {
 	WikiDocumentBackups(ctx context.Context, documentID string, trigger *models.WikiDocumentBackupTrigger, first *int, after *string, last *int, before *string) (*model.WikiDocumentBackupConnection, error)
 	WikiDocumentBackup(ctx context.Context, id string) (*models.WikiDocumentBackup, error)
 
-	// Presence query
+	// Presence queries
 	WikiDocumentPresence(ctx context.Context, documentID string) (*model.WikiDocumentPresence, error)
+	WikiOperationPresence(ctx context.Context, operationID string) ([]*model.WikiDocumentPresence, error)
 
 	// WikiDocument field resolvers
 	WikiDocumentID(ctx context.Context, obj *models.WikiDocument) (string, error)
@@ -926,6 +927,35 @@ func (r *wikiDocumentResolver) WikiDocumentPresence(ctx context.Context, documen
 		DocumentID:    documentID,
 		ActiveEditors: gqlEditors,
 	}, nil
+}
+
+func (r *wikiDocumentResolver) WikiOperationPresence(ctx context.Context, operationID string) ([]*model.WikiDocumentPresence, error) {
+	opUID, err := uuid.Parse(operationID)
+	if err != nil {
+		return nil, fmt.Errorf("invalid operation ID: %w", err)
+	}
+
+	if err := r.authorizeForOperation(ctx, opUID, models.OperationRoleViewer); err != nil {
+		return nil, err
+	}
+
+	byDoc := r.presence.GetPresenceByOperation(opUID)
+	result := make([]*model.WikiDocumentPresence, 0, len(byDoc))
+	for docID, editors := range byDoc {
+		gqlEditors := make([]*model.WikiDocumentEditor, len(editors))
+		for i, e := range editors {
+			gqlEditors[i] = &model.WikiDocumentEditor{
+				UserID:      e.UserID.String(),
+				Username:    e.Username,
+				ConnectedAt: e.ConnectedAt.Format(time.RFC3339),
+			}
+		}
+		result = append(result, &model.WikiDocumentPresence{
+			DocumentID:    docID.String(),
+			ActiveEditors: gqlEditors,
+		})
+	}
+	return result, nil
 }
 
 // --- WikiDocument field resolvers ---

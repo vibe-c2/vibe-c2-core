@@ -13,6 +13,7 @@ export type ConnectionStatus = "connecting" | "connected" | "disconnected"
 
 interface UseHocuspocusReturn {
   ydoc: YDoc
+  provider: HocuspocusProvider | null
   connectionStatus: ConnectionStatus
   isSynced: boolean
   isReady: boolean
@@ -27,6 +28,7 @@ interface UseHocuspocusReturn {
  */
 export function useHocuspocus(documentId: string): UseHocuspocusReturn {
   const [ydoc, setYdoc] = useState<YDoc>(() => new YDoc())
+  const [provider, setProvider] = useState<HocuspocusProvider | null>(null)
   const [connectionStatus, setConnectionStatus] = useState<ConnectionStatus>("connecting")
   const [isSynced, setIsSynced] = useState(false)
   const [isReady, setIsReady] = useState(false)
@@ -48,13 +50,14 @@ export function useHocuspocus(documentId: string): UseHocuspocusReturn {
     const doc = new YDoc()
     setYdoc(doc)
 
-    const provider = new HocuspocusProvider({
+    const hpProvider = new HocuspocusProvider({
       url: `${getWsUrl()}/api/v1/ws/wiki/`,
       name: `wiki/${documentId}`,
       document: doc,
       preserveTrailingSlash: true,
       token: () => fetchCollabTicket(documentId),
     })
+    setProvider(hpProvider)
 
     function onStatus({ status }: { status: string }) {
       if (status === "connected") {
@@ -72,19 +75,21 @@ export function useHocuspocus(documentId: string): UseHocuspocusReturn {
       }
     }
 
-    provider.on("status", onStatus)
-    provider.on("synced", onSynced)
+    hpProvider.on("status", onStatus)
+    hpProvider.on("synced", onSynced)
 
     return () => {
-      provider.off("status", onStatus)
-      provider.off("synced", onSynced)
-      provider.destroy()
+      setProvider(null)
+      hpProvider.off("status", onStatus)
+      hpProvider.off("synced", onSynced)
+      hpProvider.destroy()
       doc.destroy()
     }
   }, [documentId])
 
   return {
     ydoc,
+    provider,
     connectionStatus,
     isSynced,
     isReady,

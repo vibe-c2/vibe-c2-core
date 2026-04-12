@@ -11,6 +11,7 @@ import (
 // Editor represents a user actively editing a document via the Hocuspocus WebSocket.
 type Editor struct {
 	UserID      uuid.UUID
+	OperationID uuid.UUID
 	Username    string
 	ConnectedAt time.Time
 }
@@ -33,7 +34,7 @@ func NewPresenceTracker(logger *zap.Logger) *PresenceTracker {
 }
 
 // AddEditor registers a user as actively editing a document.
-func (t *PresenceTracker) AddEditor(documentID, userID uuid.UUID, username string) {
+func (t *PresenceTracker) AddEditor(documentID, operationID, userID uuid.UUID, username string) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 
@@ -46,6 +47,7 @@ func (t *PresenceTracker) AddEditor(documentID, userID uuid.UUID, username strin
 
 	t.editors[documentID] = append(t.editors[documentID], Editor{
 		UserID:      userID,
+		OperationID: operationID,
 		Username:    username,
 		ConnectedAt: time.Now().UTC(),
 	})
@@ -83,5 +85,27 @@ func (t *PresenceTracker) GetPresence(documentID uuid.UUID) []Editor {
 	// Return a copy to avoid callers mutating the internal slice
 	result := make([]Editor, len(editors))
 	copy(result, editors)
+	return result
+}
+
+// GetPresenceByOperation returns all active editors grouped by document for
+// the given operation. Used by the tree sidebar to show presence indicators
+// without N per-document queries.
+func (t *PresenceTracker) GetPresenceByOperation(operationID uuid.UUID) map[uuid.UUID][]Editor {
+	t.mu.RLock()
+	defer t.mu.RUnlock()
+
+	result := make(map[uuid.UUID][]Editor)
+	for docID, editors := range t.editors {
+		var matched []Editor
+		for _, e := range editors {
+			if e.OperationID == operationID {
+				matched = append(matched, e)
+			}
+		}
+		if len(matched) > 0 {
+			result[docID] = matched
+		}
+	}
 	return result
 }

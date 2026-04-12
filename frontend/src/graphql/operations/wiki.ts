@@ -157,6 +157,15 @@ export const WikiDocumentPresenceQuery = graphql(`
   }
 `)
 
+export const WikiOperationPresenceQuery = graphql(`
+  query WikiOperationPresence($operationId: ID!) {
+    wikiOperationPresence(operationId: $operationId) {
+      documentId
+      activeEditors { userId username connectedAt }
+    }
+  }
+`)
+
 // --- Mutations ---
 
 export const CreateWikiDocumentMutation = graphql(`

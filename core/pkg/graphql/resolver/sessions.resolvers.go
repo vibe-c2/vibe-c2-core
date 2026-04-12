@@ -192,21 +192,3 @@ func (r *subscriptionResolver) SessionChanged(ctx context.Context, userID *strin
 func (r *Resolver) Session() generated.SessionResolver { return &sessionResolver{r} }
 
 type sessionResolver struct{ *Resolver }
-
-// !!! WARNING !!!
-// The code below was going to be deleted when updating resolvers. It has been copied here so you have
-// one last chance to move it out of harms way if you want. There are two reasons this happens:
-//  - When renaming or deleting a resolver the old code will be put in here. You can safely delete
-//    it when you're done.
-//  - You have helper methods in this file. Move them out to keep these resolver files clean.
-/*
-	func (r *sessionResolver) TerminationReason(ctx context.Context, obj *models.Session) (*models.SessionTerminationReason, error) {
-	return r.SessionResolver.TerminationReason(ctx, obj)
-}
-func (r *sessionResolver) ExpiresAt(ctx context.Context, obj *models.Session) (string, error) {
-	return r.SessionResolver.ExpiresAt(ctx, obj)
-}
-func (r *sessionResolver) TerminatedAt(ctx context.Context, obj *models.Session) (*string, error) {
-	return r.SessionResolver.TerminatedAt(ctx, obj)
-}
-*/

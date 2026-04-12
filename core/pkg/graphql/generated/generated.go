@@ -125,25 +125,26 @@ type ComplexityRoot struct {
 	}
 
 	Query struct {
-		Me                   func(childComplexity int) int
-		MyOperationRole      func(childComplexity int, operationID string) int
-		MySessions           func(childComplexity int, activeOnly *bool, first *int, after *string, last *int, before *string) int
-		Operation            func(childComplexity int, id string) int
-		Operations           func(childComplexity int, search *string, first *int, after *string, last *int, before *string) int
-		SchemeNetworkPoint   func(childComplexity int, id string) int
-		SchemeNetworkPoints  func(childComplexity int, operationID string, search *string, first *int, after *string, last *int, before *string) int
-		Session              func(childComplexity int, id string) int
-		Sessions             func(childComplexity int, userID *string, search *string, activeOnly *bool, first *int, after *string, last *int, before *string) int
-		User                 func(childComplexity int, id string) int
-		UserSuggestions      func(childComplexity int, search string, first *int) int
-		Users                func(childComplexity int, search *string, first *int, after *string, last *int, before *string) int
-		WikiDocument         func(childComplexity int, id string) int
-		WikiDocumentBackup   func(childComplexity int, id string) int
-		WikiDocumentBackups  func(childComplexity int, documentID string, trigger *models.WikiDocumentBackupTrigger, first *int, after *string, last *int, before *string) int
-		WikiDocumentPresence func(childComplexity int, documentID string) int
-		WikiDocumentTrash    func(childComplexity int, operationID string, first *int, after *string, last *int, before *string) int
-		WikiDocumentTree     func(childComplexity int, operationID string) int
-		WikiDocuments        func(childComplexity int, operationID string, parentDocumentID *string, search *string, first *int, after *string, last *int, before *string) int
+		Me                    func(childComplexity int) int
+		MyOperationRole       func(childComplexity int, operationID string) int
+		MySessions            func(childComplexity int, activeOnly *bool, first *int, after *string, last *int, before *string) int
+		Operation             func(childComplexity int, id string) int
+		Operations            func(childComplexity int, search *string, first *int, after *string, last *int, before *string) int
+		SchemeNetworkPoint    func(childComplexity int, id string) int
+		SchemeNetworkPoints   func(childComplexity int, operationID string, search *string, first *int, after *string, last *int, before *string) int
+		Session               func(childComplexity int, id string) int
+		Sessions              func(childComplexity int, userID *string, search *string, activeOnly *bool, first *int, after *string, last *int, before *string) int
+		User                  func(childComplexity int, id string) int
+		UserSuggestions       func(childComplexity int, search string, first *int) int
+		Users                 func(childComplexity int, search *string, first *int, after *string, last *int, before *string) int
+		WikiDocument          func(childComplexity int, id string) int
+		WikiDocumentBackup    func(childComplexity int, id string) int
+		WikiDocumentBackups   func(childComplexity int, documentID string, trigger *models.WikiDocumentBackupTrigger, first *int, after *string, last *int, before *string) int
+		WikiDocumentPresence  func(childComplexity int, documentID string) int
+		WikiDocumentTrash     func(childComplexity int, operationID string, first *int, after *string, last *int, before *string) int
+		WikiDocumentTree      func(childComplexity int, operationID string) int
+		WikiDocuments         func(childComplexity int, operationID string, parentDocumentID *string, search *string, first *int, after *string, last *int, before *string) int
+		WikiOperationPresence func(childComplexity int, operationID string) int
 	}
 
 	SchemeNetworkPoint struct {
@@ -394,6 +395,7 @@ type QueryResolver interface {
 	WikiDocumentBackups(ctx context.Context, documentID string, trigger *models.WikiDocumentBackupTrigger, first *int, after *string, last *int, before *string) (*model.WikiDocumentBackupConnection, error)
 	WikiDocumentBackup(ctx context.Context, id string) (*models.WikiDocumentBackup, error)
 	WikiDocumentPresence(ctx context.Context, documentID string) (*model.WikiDocumentPresence, error)
+	WikiOperationPresence(ctx context.Context, operationID string) ([]*model.WikiDocumentPresence, error)
 }
 type SchemeNetworkPointResolver interface {
 	ID(ctx context.Context, obj *models.SchemeNetworkPoint) (string, error)
@@ -1138,6 +1140,17 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.Query.WikiDocuments(childComplexity, args["operationId"].(string), args["parentDocumentId"].(*string), args["search"].(*string), args["first"].(*int), args["after"].(*string), args["last"].(*int), args["before"].(*string)), true
+	case "Query.wikiOperationPresence":
+		if e.ComplexityRoot.Query.WikiOperationPresence == nil {
+			break
+		}
+
+		args, err := ec.field_Query_wikiOperationPresence_args(ctx, rawArgs)
+		if err != nil {
+			return 0, false
+		}
+
+		return e.ComplexityRoot.Query.WikiOperationPresence(childComplexity, args["operationId"].(string)), true
 
 	case "SchemeNetworkPoint.createdAt":
 		if e.ComplexityRoot.SchemeNetworkPoint.CreatedAt == nil {
@@ -2769,6 +2782,9 @@ extend type Query {
 
   wikiDocumentPresence(documentId: ID!): WikiDocumentPresence!
     @hasPermission(permission: "operation:member")
+
+  wikiOperationPresence(operationId: ID!): [WikiDocumentPresence!]!
+    @hasPermission(permission: "operation:member")
 }
 
 # --- Mutations ---
@@ -3624,6 +3640,17 @@ func (ec *executionContext) field_Query_wikiDocuments_args(ctx context.Context, 
 		return nil, err
 	}
 	args["before"] = arg6
+	return args, nil
+}
+
+func (ec *executionContext) field_Query_wikiOperationPresence_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
+	var err error
+	args := map[string]any{}
+	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "operationId", ec.unmarshalNID2string)
+	if err != nil {
+		return nil, err
+	}
+	args["operationId"] = arg0
 	return args, nil
 }
 
@@ -7914,6 +7941,71 @@ func (ec *executionContext) fieldContext_Query_wikiDocumentPresence(ctx context.
 	}()
 	ctx = graphql.WithFieldContext(ctx, fc)
 	if fc.Args, err = ec.field_Query_wikiDocumentPresence_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
+		ec.Error(ctx, err)
+		return fc, err
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Query_wikiOperationPresence(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Query_wikiOperationPresence,
+		func(ctx context.Context) (any, error) {
+			fc := graphql.GetFieldContext(ctx)
+			return ec.Resolvers.Query().WikiOperationPresence(ctx, fc.Args["operationId"].(string))
+		},
+		func(ctx context.Context, next graphql.Resolver) graphql.Resolver {
+			directive0 := next
+
+			directive1 := func(ctx context.Context) (any, error) {
+				permission, err := ec.unmarshalNString2string(ctx, "operation:member")
+				if err != nil {
+					var zeroVal []*model.WikiDocumentPresence
+					return zeroVal, err
+				}
+				if ec.Directives.HasPermission == nil {
+					var zeroVal []*model.WikiDocumentPresence
+					return zeroVal, errors.New("directive hasPermission is not implemented")
+				}
+				return ec.Directives.HasPermission(ctx, nil, directive0, permission)
+			}
+
+			next = directive1
+			return next
+		},
+		ec.marshalNWikiDocumentPresence2ᚕᚖgithubᚗcomᚋvibeᚑc2ᚋvibeᚑc2ᚑcoreᚋcoreᚋpkgᚋgraphqlᚋmodelᚐWikiDocumentPresenceᚄ,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_Query_wikiOperationPresence(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Query",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "documentId":
+				return ec.fieldContext_WikiDocumentPresence_documentId(ctx, field)
+			case "activeEditors":
+				return ec.fieldContext_WikiDocumentPresence_activeEditors(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type WikiDocumentPresence", field.Name)
+		},
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			err = ec.Recover(ctx, r)
+			ec.Error(ctx, err)
+		}
+	}()
+	ctx = graphql.WithFieldContext(ctx, fc)
+	if fc.Args, err = ec.field_Query_wikiOperationPresence_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
 		ec.Error(ctx, err)
 		return fc, err
 	}
@@ -15153,6 +15245,28 @@ func (ec *executionContext) _Query(ctx context.Context, sel ast.SelectionSet) gr
 			}
 
 			out.Concurrently(i, func(ctx context.Context) graphql.Marshaler { return rrm(innerCtx) })
+		case "wikiOperationPresence":
+			field := field
+
+			innerFunc := func(ctx context.Context, fs *graphql.FieldSet) (res graphql.Marshaler) {
+				defer func() {
+					if r := recover(); r != nil {
+						ec.Error(ctx, ec.Recover(ctx, r))
+					}
+				}()
+				res = ec._Query_wikiOperationPresence(ctx, field)
+				if res == graphql.Null {
+					atomic.AddUint32(&fs.Invalids, 1)
+				}
+				return res
+			}
+
+			rrm := func(ctx context.Context) graphql.Marshaler {
+				return ec.OperationContext.RootResolverMiddleware(ctx,
+					func(ctx context.Context) graphql.Marshaler { return innerFunc(ctx, out) })
+			}
+
+			out.Concurrently(i, func(ctx context.Context) graphql.Marshaler { return rrm(innerCtx) })
 		case "__type":
 			out.Values[i] = ec.OperationContext.RootResolverMiddleware(innerCtx, func(ctx context.Context) (res graphql.Marshaler) {
 				return ec._Query___type(ctx, field)
@@ -18550,6 +18664,22 @@ func (ec *executionContext) marshalNWikiDocumentEvent2ᚖgithubᚗcomᚋvibeᚑc
 
 func (ec *executionContext) marshalNWikiDocumentPresence2githubᚗcomᚋvibeᚑc2ᚋvibeᚑc2ᚑcoreᚋcoreᚋpkgᚋgraphqlᚋmodelᚐWikiDocumentPresence(ctx context.Context, sel ast.SelectionSet, v model.WikiDocumentPresence) graphql.Marshaler {
 	return ec._WikiDocumentPresence(ctx, sel, &v)
+}
+
+func (ec *executionContext) marshalNWikiDocumentPresence2ᚕᚖgithubᚗcomᚋvibeᚑc2ᚋvibeᚑc2ᚑcoreᚋcoreᚋpkgᚋgraphqlᚋmodelᚐWikiDocumentPresenceᚄ(ctx context.Context, sel ast.SelectionSet, v []*model.WikiDocumentPresence) graphql.Marshaler {
+	ret := graphql.MarshalSliceConcurrently(ctx, len(v), 0, false, func(ctx context.Context, i int) graphql.Marshaler {
+		fc := graphql.GetFieldContext(ctx)
+		fc.Result = &v[i]
+		return ec.marshalNWikiDocumentPresence2ᚖgithubᚗcomᚋvibeᚑc2ᚋvibeᚑc2ᚑcoreᚋcoreᚋpkgᚋgraphqlᚋmodelᚐWikiDocumentPresence(ctx, sel, v[i])
+	})
+
+	for _, e := range ret {
+		if e == graphql.Null {
+			return graphql.Null
+		}
+	}
+
+	return ret
 }
 
 func (ec *executionContext) marshalNWikiDocumentPresence2ᚖgithubᚗcomᚋvibeᚑc2ᚋvibeᚑc2ᚑcoreᚋcoreᚋpkgᚋgraphqlᚋmodelᚐWikiDocumentPresence(ctx context.Context, sel ast.SelectionSet, v *model.WikiDocumentPresence) graphql.Marshaler {
