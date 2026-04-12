@@ -34,7 +34,6 @@ export function WikiContentArea({
   if (documentId) {
     return (
       <WikiEditorPane
-        key={documentId}
         documentId={documentId}
         isEditor={isEditor}
         treeDocuments={treeDocuments}

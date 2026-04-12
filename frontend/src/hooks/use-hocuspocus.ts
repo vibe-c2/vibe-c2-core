@@ -21,35 +21,37 @@ interface UseHocuspocusReturn {
 /**
  * Manages a Hocuspocus WebSocket connection for a single wiki document.
  *
- * The Y.Doc is created synchronously (TipTap needs it during render).
- * The HocuspocusProvider lives entirely inside useEffect for proper
- * lifecycle management (StrictMode safe). The parent component should
- * use `key={documentId}` to remount when switching documents.
+ * Handles document switching internally — when `documentId` changes the
+ * old Y.Doc and provider are destroyed and fresh ones are created. The
+ * parent component does **not** need to use `key={documentId}`.
  */
 export function useHocuspocus(documentId: string): UseHocuspocusReturn {
+  const [ydoc, setYdoc] = useState<YDoc>(() => new YDoc())
   const [connectionStatus, setConnectionStatus] = useState<ConnectionStatus>("connecting")
   const [isSynced, setIsSynced] = useState(false)
   const [isReady, setIsReady] = useState(false)
 
   // Tracks whether the provider has ever reached "connected" during this
-  // mount. Lets us distinguish "initial connect in progress" (connecting)
-  // from "lost an established connection" (disconnected).
+  // document's session. Lets us distinguish "initial connect in progress"
+  // (connecting) from "lost an established connection" (disconnected).
   const hasConnectedRef = useRef(false)
 
-  // Stable Y.Doc — created once per hook instance. TipTap reads this
-  // synchronously during render via Collaboration.configure({ document }).
-  const ydocRef = useRef<YDoc>(new YDoc())
-
-  // Provider lives entirely in useEffect — created on mount, destroyed
-  // on cleanup. StrictMode safe: each effect invocation gets its own
-  // provider instance.
+  // Provider + Y.Doc lifecycle: when documentId changes, tear down the
+  // old provider and doc, then create fresh ones. The ydoc is stored in
+  // state so consumers (WikiEditor) re-render and rebind automatically.
   useEffect(() => {
     hasConnectedRef.current = false
+    setConnectionStatus("connecting")
+    setIsSynced(false)
+    setIsReady(false)
+
+    const doc = new YDoc()
+    setYdoc(doc)
 
     const provider = new HocuspocusProvider({
       url: `${getWsUrl()}/api/v1/ws/wiki/`,
       name: `wiki/${documentId}`,
-      document: ydocRef.current,
+      document: doc,
       preserveTrailingSlash: true,
       token: () => fetchCollabTicket(documentId),
     })
@@ -77,11 +79,12 @@ export function useHocuspocus(documentId: string): UseHocuspocusReturn {
       provider.off("status", onStatus)
       provider.off("synced", onSynced)
       provider.destroy()
+      doc.destroy()
     }
   }, [documentId])
 
   return {
-    ydoc: ydocRef.current,
+    ydoc,
     connectionStatus,
     isSynced,
     isReady,

@@ -49,7 +49,7 @@ export function WikiEditorPane({
         isEditor={isEditor}
         treeDocuments={treeDocuments}
       />
-      <EditorErrorBoundary key={documentId}>
+      <EditorErrorBoundary documentId={documentId}>
         <WikiEditor documentId={documentId} isEditor={isEditor} />
       </EditorErrorBoundary>
     </div>
@@ -60,17 +60,29 @@ export function WikiEditorPane({
 // instead of white-screening the entire wiki page.
 
 interface ErrorBoundaryProps {
+  documentId: string
   children: ReactNode
 }
 
 interface ErrorBoundaryState {
   error: Error | null
+  documentId: string
 }
 
 class EditorErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundaryState> {
-  state: ErrorBoundaryState = { error: null }
+  state: ErrorBoundaryState = { error: null, documentId: this.props.documentId }
 
-  static getDerivedStateFromError(error: Error): ErrorBoundaryState {
+  static getDerivedStateFromProps(
+    props: ErrorBoundaryProps,
+    state: ErrorBoundaryState,
+  ): Partial<ErrorBoundaryState> | null {
+    if (props.documentId !== state.documentId) {
+      return { error: null, documentId: props.documentId }
+    }
+    return null
+  }
+
+  static getDerivedStateFromError(error: Error): Partial<ErrorBoundaryState> {
     return { error }
   }
 
