@@ -86,3 +86,28 @@ useAuthStore.subscribe((state, prevState) => {
     useScopedOperationStore.getState().reset()
   }
 })
+
+// --- Cross-tab sync via storage event ---
+// When another tab writes/removes the scoped_operation key, mirror the change
+// into this tab's Zustand state. The storage event fires only in *other* tabs,
+// never in the tab that performed the write — exactly the semantic we need.
+if (typeof window !== "undefined") {
+  window.addEventListener("storage", (e: StorageEvent) => {
+    if (!activeUserId || e.key !== storageKey(activeUserId)) return
+
+    const store = useScopedOperationStore.getState()
+
+    if (e.newValue) {
+      try {
+        const op: ScopedOperation = JSON.parse(e.newValue)
+        store.scopeOperation(op)
+        // Mark as validating so the guard re-checks access for this operation.
+        useScopedOperationStore.setState({ isValidating: true })
+      } catch {
+        // Corrupt value from another tab — ignore.
+      }
+    } else {
+      store.unscopeOperation()
+    }
+  })
+}
