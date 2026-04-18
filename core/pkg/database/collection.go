@@ -5,6 +5,7 @@ import (
 
 	"github.com/qiniu/qmgo"
 	opts "github.com/qiniu/qmgo/options"
+	"go.mongodb.org/mongo-driver/mongo"
 )
 
 // Collection is a proxy interface over a qmgo MongoDB collection.
@@ -24,6 +25,9 @@ type Collection interface {
 	Aggregate(ctx context.Context, pipeline interface{}) qmgo.AggregateI
 	CreateIndexes(ctx context.Context, indexes []opts.IndexModel) error
 	DropCollection(ctx context.Context) error
+	// RawCollection returns the underlying mongo-driver collection for the handful
+	// of operations qmgo does not wrap (e.g. text indexes with weights/language).
+	RawCollection() (*mongo.Collection, error)
 }
 
 // QmgoCollection implements Collection by delegating to a qmgo.Collection.
@@ -89,4 +93,13 @@ func (c *QmgoCollection) CreateIndexes(ctx context.Context, indexes []opts.Index
 
 func (c *QmgoCollection) DropCollection(ctx context.Context) error {
 	return c.coll.DropCollection(ctx)
+}
+
+// RawCollection returns the underlying mongo-driver collection.
+// qmgo's CloneCollection clones the driver handle with a fresh session; the
+// returned *mongo.Collection points at the same namespace and is safe to use
+// for operations qmgo doesn't expose (e.g. text indexes with custom weights
+// or language overrides).
+func (c *QmgoCollection) RawCollection() (*mongo.Collection, error) {
+	return c.coll.CloneCollection()
 }

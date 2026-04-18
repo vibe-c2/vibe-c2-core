@@ -2,6 +2,7 @@ package repository
 
 import (
 	"context"
+	"regexp"
 	"time"
 
 	"github.com/google/uuid"
@@ -43,6 +44,7 @@ type IWikiDocumentRepository interface {
 	HardDeleteTrashed(ctx context.Context, opID uuid.UUID) error
 	FindChangedSinceLastBackup(ctx context.Context, batchSize int64) ([]models.WikiDocument, error)
 	RestoreFromBackup(ctx context.Context, docID uuid.UUID, content string, contentState []byte) error
+	SearchByOperationID(ctx context.Context, opID uuid.UUID, scopeParentID *uuid.UUID, query string, offset, limit int64) (hits []WikiDocumentSearchHit, total int64, err error)
 }
 
 type wikiDocumentRepository struct {
@@ -58,13 +60,14 @@ func NewWikiDocumentRepository(db database.Database) IWikiDocumentRepository {
 		{Key: []string{"operation_id", "parent_document_id", "deleted_at"}},
 		{Key: []string{"-createAt", "-_id"}},
 		{Key: []string{"last_backup_at", "updateAt"}},
+		// Anchored prefix search on title ("find doc by name" palette UX).
+		// $text can't do prefix; regex on a pre-lowercased field uses the
+		// index as long as the pattern is anchored and does NOT use $options:"i".
+		{Key: []string{"operation_id", "title_lower"}},
+		{Key: []string{"operation_id", "parent_document_id", "title_lower"}},
 	})
 
-	// Text index for full-text search on title and content within an operation.
-	// Note: MongoDB allows only one text index per collection.
-	coll.CreateIndexes(context.Background(), []opts.IndexModel{
-		{Key: []string{"operation_id", "$text:title", "$text:content"}},
-	})
+	setupWikiSearchIndexes(coll)
 
 	return &wikiDocumentRepository{coll: coll}
 }
@@ -290,7 +293,9 @@ func buildWikiDocumentFilter(opID uuid.UUID, filter WikiDocumentFilter) bson.M {
 	}
 
 	if filter.Search != "" {
-		regex := bson.M{"$regex": filter.Search, "$options": "i"}
+		// Escape user input so regex metacharacters are treated literally.
+		// Protects against ReDoS (e.g. `(a+)+$`) and unintended broad matches (`.*`).
+		regex := bson.M{"$regex": regexp.QuoteMeta(filter.Search), "$options": "i"}
 		f["$or"] = bson.A{
 			bson.M{"title": regex},
 			bson.M{"content": regex},

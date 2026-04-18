@@ -55,6 +55,35 @@ type WikiDocumentConnection {
   totalCount: Int!
 }
 
+# --- Search ---
+# wikiSearch uses a different shape than wikiDocuments because search ranks by
+# relevance (MongoDB text score) and cannot share the createdAt-cursor pagination
+# that the list path uses. Offset-based pagination fits the "user finds what they
+# want in the first page or two" pattern of search UIs.
+
+type WikiSearchMatchRange {
+  start: Int!  # rune offset in snippet
+  end: Int!    # rune offset in snippet (exclusive)
+}
+
+type WikiSearchHit {
+  document: WikiDocument!
+  # A short excerpt of the document's content around the first match, or the
+  # document's leading content if the match is title-only. Always rune-safe.
+  snippet: String!
+  # Rune-offset ranges within snippet where matches occur — frontend wraps
+  # these in <mark> for highlighting.
+  matchRanges: [WikiSearchMatchRange!]!
+  # MongoDB text score. Null for short-query prefix matches (no $text involved).
+  score: Float
+}
+
+type WikiSearchConnection {
+  hits: [WikiSearchHit!]!
+  total: Int!
+  hasMore: Boolean!
+}
+
 type WikiDocumentBackup {
   id: ID!
   documentId: ID!
@@ -143,6 +172,20 @@ extend type Query {
     @hasPermission(permission: "operation:member")
 
   wikiDocumentTree(operationId: ID!): [WikiDocument!]!
+    @hasPermission(permission: "operation:member")
+
+  # Ranked, snippet-returning search over wiki documents within an operation.
+  # Offset is capped server-side at 500; past that, hasMore stays false and
+  # users must refine the query. Short queries (<2 chars) use anchored prefix
+  # matching on title for palette-style autocomplete; longer queries use the
+  # MongoDB text index on title+content.
+  wikiSearch(
+    operationId: ID!
+    scope: ID            # optional subtree scope: limit to this parent's descendants
+    query: String!
+    offset: Int = 0
+    limit: Int = 20
+  ): WikiSearchConnection!
     @hasPermission(permission: "operation:member")
 
   wikiDocumentTrash(

@@ -22,6 +22,11 @@ type WikiDocument struct {
 	OperationID        uuid.UUID  `bson:"operation_id" json:"operationId"`
 	ParentDocumentID   *uuid.UUID `bson:"parent_document_id,omitempty" json:"parentDocumentId,omitempty"`
 	Title              string     `bson:"title" json:"title"`
+	// TitleLower is an ASCII-lowercased mirror of Title, indexed for anchored
+	// prefix search without the `$options:"i"` caveat (case-insensitive regex
+	// only uses an index for anchored, non-i patterns). Populated on Create
+	// and on every title update — never exposed via GraphQL.
+	TitleLower         string     `bson:"title_lower" json:"-"`
 	Content            string     `bson:"content" json:"content"`                        // Markdown — derived by Hocuspocus from Y.js state
 	ContentState       []byte     `bson:"content_state,omitempty" json:"-"`              // Y.js binary state — written by Hocuspocus
 	ContentStateAt     *time.Time `bson:"content_state_at,omitempty" json:"-"`           // when Hocuspocus last persisted

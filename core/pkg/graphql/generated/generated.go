@@ -145,6 +145,7 @@ type ComplexityRoot struct {
 		WikiDocumentTree      func(childComplexity int, operationID string) int
 		WikiDocuments         func(childComplexity int, operationID string, parentDocumentID *string, search *string, first *int, after *string, last *int, before *string) int
 		WikiOperationPresence func(childComplexity int, operationID string) int
+		WikiSearch            func(childComplexity int, operationID string, scope *string, query string, offset *int, limit *int) int
 	}
 
 	SchemeNetworkPoint struct {
@@ -332,6 +333,24 @@ type ComplexityRoot struct {
 		UserID      func(childComplexity int) int
 		Username    func(childComplexity int) int
 	}
+
+	WikiSearchConnection struct {
+		HasMore func(childComplexity int) int
+		Hits    func(childComplexity int) int
+		Total   func(childComplexity int) int
+	}
+
+	WikiSearchHit struct {
+		Document    func(childComplexity int) int
+		MatchRanges func(childComplexity int) int
+		Score       func(childComplexity int) int
+		Snippet     func(childComplexity int) int
+	}
+
+	WikiSearchMatchRange struct {
+		End   func(childComplexity int) int
+		Start func(childComplexity int) int
+	}
 }
 
 type MutationResolver interface {
@@ -391,6 +410,7 @@ type QueryResolver interface {
 	WikiDocument(ctx context.Context, id string) (*models.WikiDocument, error)
 	WikiDocuments(ctx context.Context, operationID string, parentDocumentID *string, search *string, first *int, after *string, last *int, before *string) (*model.WikiDocumentConnection, error)
 	WikiDocumentTree(ctx context.Context, operationID string) ([]*models.WikiDocument, error)
+	WikiSearch(ctx context.Context, operationID string, scope *string, query string, offset *int, limit *int) (*model.WikiSearchConnection, error)
 	WikiDocumentTrash(ctx context.Context, operationID string, first *int, after *string, last *int, before *string) (*model.WikiDocumentConnection, error)
 	WikiDocumentBackups(ctx context.Context, documentID string, trigger *models.WikiDocumentBackupTrigger, first *int, after *string, last *int, before *string) (*model.WikiDocumentBackupConnection, error)
 	WikiDocumentBackup(ctx context.Context, id string) (*models.WikiDocumentBackup, error)
@@ -1151,6 +1171,17 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.Query.WikiOperationPresence(childComplexity, args["operationId"].(string)), true
+	case "Query.wikiSearch":
+		if e.ComplexityRoot.Query.WikiSearch == nil {
+			break
+		}
+
+		args, err := ec.field_Query_wikiSearch_args(ctx, rawArgs)
+		if err != nil {
+			return 0, false
+		}
+
+		return e.ComplexityRoot.Query.WikiSearch(childComplexity, args["operationId"].(string), args["scope"].(*string), args["query"].(string), args["offset"].(*int), args["limit"].(*int)), true
 
 	case "SchemeNetworkPoint.createdAt":
 		if e.ComplexityRoot.SchemeNetworkPoint.CreatedAt == nil {
@@ -1884,6 +1915,63 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.WikiDocumentPresenceEvent.Username(childComplexity), true
+
+	case "WikiSearchConnection.hasMore":
+		if e.ComplexityRoot.WikiSearchConnection.HasMore == nil {
+			break
+		}
+
+		return e.ComplexityRoot.WikiSearchConnection.HasMore(childComplexity), true
+	case "WikiSearchConnection.hits":
+		if e.ComplexityRoot.WikiSearchConnection.Hits == nil {
+			break
+		}
+
+		return e.ComplexityRoot.WikiSearchConnection.Hits(childComplexity), true
+	case "WikiSearchConnection.total":
+		if e.ComplexityRoot.WikiSearchConnection.Total == nil {
+			break
+		}
+
+		return e.ComplexityRoot.WikiSearchConnection.Total(childComplexity), true
+
+	case "WikiSearchHit.document":
+		if e.ComplexityRoot.WikiSearchHit.Document == nil {
+			break
+		}
+
+		return e.ComplexityRoot.WikiSearchHit.Document(childComplexity), true
+	case "WikiSearchHit.matchRanges":
+		if e.ComplexityRoot.WikiSearchHit.MatchRanges == nil {
+			break
+		}
+
+		return e.ComplexityRoot.WikiSearchHit.MatchRanges(childComplexity), true
+	case "WikiSearchHit.score":
+		if e.ComplexityRoot.WikiSearchHit.Score == nil {
+			break
+		}
+
+		return e.ComplexityRoot.WikiSearchHit.Score(childComplexity), true
+	case "WikiSearchHit.snippet":
+		if e.ComplexityRoot.WikiSearchHit.Snippet == nil {
+			break
+		}
+
+		return e.ComplexityRoot.WikiSearchHit.Snippet(childComplexity), true
+
+	case "WikiSearchMatchRange.end":
+		if e.ComplexityRoot.WikiSearchMatchRange.End == nil {
+			break
+		}
+
+		return e.ComplexityRoot.WikiSearchMatchRange.End(childComplexity), true
+	case "WikiSearchMatchRange.start":
+		if e.ComplexityRoot.WikiSearchMatchRange.Start == nil {
+			break
+		}
+
+		return e.ComplexityRoot.WikiSearchMatchRange.Start(childComplexity), true
 
 	}
 	return 0, false
@@ -2668,6 +2756,35 @@ type WikiDocumentConnection {
   totalCount: Int!
 }
 
+# --- Search ---
+# wikiSearch uses a different shape than wikiDocuments because search ranks by
+# relevance (MongoDB text score) and cannot share the createdAt-cursor pagination
+# that the list path uses. Offset-based pagination fits the "user finds what they
+# want in the first page or two" pattern of search UIs.
+
+type WikiSearchMatchRange {
+  start: Int!  # rune offset in snippet
+  end: Int!    # rune offset in snippet (exclusive)
+}
+
+type WikiSearchHit {
+  document: WikiDocument!
+  # A short excerpt of the document's content around the first match, or the
+  # document's leading content if the match is title-only. Always rune-safe.
+  snippet: String!
+  # Rune-offset ranges within snippet where matches occur — frontend wraps
+  # these in <mark> for highlighting.
+  matchRanges: [WikiSearchMatchRange!]!
+  # MongoDB text score. Null for short-query prefix matches (no $text involved).
+  score: Float
+}
+
+type WikiSearchConnection {
+  hits: [WikiSearchHit!]!
+  total: Int!
+  hasMore: Boolean!
+}
+
 type WikiDocumentBackup {
   id: ID!
   documentId: ID!
@@ -2756,6 +2873,20 @@ extend type Query {
     @hasPermission(permission: "operation:member")
 
   wikiDocumentTree(operationId: ID!): [WikiDocument!]!
+    @hasPermission(permission: "operation:member")
+
+  # Ranked, snippet-returning search over wiki documents within an operation.
+  # Offset is capped server-side at 500; past that, hasMore stays false and
+  # users must refine the query. Short queries (<2 chars) use anchored prefix
+  # matching on title for palette-style autocomplete; longer queries use the
+  # MongoDB text index on title+content.
+  wikiSearch(
+    operationId: ID!
+    scope: ID            # optional subtree scope: limit to this parent's descendants
+    query: String!
+    offset: Int = 0
+    limit: Int = 20
+  ): WikiSearchConnection!
     @hasPermission(permission: "operation:member")
 
   wikiDocumentTrash(
@@ -3651,6 +3782,37 @@ func (ec *executionContext) field_Query_wikiOperationPresence_args(ctx context.C
 		return nil, err
 	}
 	args["operationId"] = arg0
+	return args, nil
+}
+
+func (ec *executionContext) field_Query_wikiSearch_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
+	var err error
+	args := map[string]any{}
+	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "operationId", ec.unmarshalNID2string)
+	if err != nil {
+		return nil, err
+	}
+	args["operationId"] = arg0
+	arg1, err := graphql.ProcessArgField(ctx, rawArgs, "scope", ec.unmarshalOID2ᚖstring)
+	if err != nil {
+		return nil, err
+	}
+	args["scope"] = arg1
+	arg2, err := graphql.ProcessArgField(ctx, rawArgs, "query", ec.unmarshalNString2string)
+	if err != nil {
+		return nil, err
+	}
+	args["query"] = arg2
+	arg3, err := graphql.ProcessArgField(ctx, rawArgs, "offset", ec.unmarshalOInt2ᚖint)
+	if err != nil {
+		return nil, err
+	}
+	args["offset"] = arg3
+	arg4, err := graphql.ProcessArgField(ctx, rawArgs, "limit", ec.unmarshalOInt2ᚖint)
+	if err != nil {
+		return nil, err
+	}
+	args["limit"] = arg4
 	return args, nil
 }
 
@@ -7665,6 +7827,73 @@ func (ec *executionContext) fieldContext_Query_wikiDocumentTree(ctx context.Cont
 	}()
 	ctx = graphql.WithFieldContext(ctx, fc)
 	if fc.Args, err = ec.field_Query_wikiDocumentTree_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
+		ec.Error(ctx, err)
+		return fc, err
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Query_wikiSearch(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Query_wikiSearch,
+		func(ctx context.Context) (any, error) {
+			fc := graphql.GetFieldContext(ctx)
+			return ec.Resolvers.Query().WikiSearch(ctx, fc.Args["operationId"].(string), fc.Args["scope"].(*string), fc.Args["query"].(string), fc.Args["offset"].(*int), fc.Args["limit"].(*int))
+		},
+		func(ctx context.Context, next graphql.Resolver) graphql.Resolver {
+			directive0 := next
+
+			directive1 := func(ctx context.Context) (any, error) {
+				permission, err := ec.unmarshalNString2string(ctx, "operation:member")
+				if err != nil {
+					var zeroVal *model.WikiSearchConnection
+					return zeroVal, err
+				}
+				if ec.Directives.HasPermission == nil {
+					var zeroVal *model.WikiSearchConnection
+					return zeroVal, errors.New("directive hasPermission is not implemented")
+				}
+				return ec.Directives.HasPermission(ctx, nil, directive0, permission)
+			}
+
+			next = directive1
+			return next
+		},
+		ec.marshalNWikiSearchConnection2ᚖgithubᚗcomᚋvibeᚑc2ᚋvibeᚑc2ᚑcoreᚋcoreᚋpkgᚋgraphqlᚋmodelᚐWikiSearchConnection,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_Query_wikiSearch(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Query",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "hits":
+				return ec.fieldContext_WikiSearchConnection_hits(ctx, field)
+			case "total":
+				return ec.fieldContext_WikiSearchConnection_total(ctx, field)
+			case "hasMore":
+				return ec.fieldContext_WikiSearchConnection_hasMore(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type WikiSearchConnection", field.Name)
+		},
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			err = ec.Recover(ctx, r)
+			ec.Error(ctx, err)
+		}
+	}()
+	ctx = graphql.WithFieldContext(ctx, fc)
+	if fc.Args, err = ec.field_Query_wikiSearch_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
 		ec.Error(ctx, err)
 		return fc, err
 	}
@@ -12104,6 +12333,319 @@ func (ec *executionContext) fieldContext_WikiDocumentPresenceEvent_action(_ cont
 	return fc, nil
 }
 
+func (ec *executionContext) _WikiSearchConnection_hits(ctx context.Context, field graphql.CollectedField, obj *model.WikiSearchConnection) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_WikiSearchConnection_hits,
+		func(ctx context.Context) (any, error) {
+			return obj.Hits, nil
+		},
+		nil,
+		ec.marshalNWikiSearchHit2ᚕᚖgithubᚗcomᚋvibeᚑc2ᚋvibeᚑc2ᚑcoreᚋcoreᚋpkgᚋgraphqlᚋmodelᚐWikiSearchHitᚄ,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_WikiSearchConnection_hits(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "WikiSearchConnection",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "document":
+				return ec.fieldContext_WikiSearchHit_document(ctx, field)
+			case "snippet":
+				return ec.fieldContext_WikiSearchHit_snippet(ctx, field)
+			case "matchRanges":
+				return ec.fieldContext_WikiSearchHit_matchRanges(ctx, field)
+			case "score":
+				return ec.fieldContext_WikiSearchHit_score(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type WikiSearchHit", field.Name)
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _WikiSearchConnection_total(ctx context.Context, field graphql.CollectedField, obj *model.WikiSearchConnection) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_WikiSearchConnection_total,
+		func(ctx context.Context) (any, error) {
+			return obj.Total, nil
+		},
+		nil,
+		ec.marshalNInt2int,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_WikiSearchConnection_total(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "WikiSearchConnection",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Int does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _WikiSearchConnection_hasMore(ctx context.Context, field graphql.CollectedField, obj *model.WikiSearchConnection) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_WikiSearchConnection_hasMore,
+		func(ctx context.Context) (any, error) {
+			return obj.HasMore, nil
+		},
+		nil,
+		ec.marshalNBoolean2bool,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_WikiSearchConnection_hasMore(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "WikiSearchConnection",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Boolean does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _WikiSearchHit_document(ctx context.Context, field graphql.CollectedField, obj *model.WikiSearchHit) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_WikiSearchHit_document,
+		func(ctx context.Context) (any, error) {
+			return obj.Document, nil
+		},
+		nil,
+		ec.marshalNWikiDocument2ᚖgithubᚗcomᚋvibeᚑc2ᚋvibeᚑc2ᚑcoreᚋcoreᚋpkgᚋmodelsᚐWikiDocument,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_WikiSearchHit_document(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "WikiSearchHit",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "id":
+				return ec.fieldContext_WikiDocument_id(ctx, field)
+			case "operationId":
+				return ec.fieldContext_WikiDocument_operationId(ctx, field)
+			case "parentDocument":
+				return ec.fieldContext_WikiDocument_parentDocument(ctx, field)
+			case "childDocuments":
+				return ec.fieldContext_WikiDocument_childDocuments(ctx, field)
+			case "title":
+				return ec.fieldContext_WikiDocument_title(ctx, field)
+			case "content":
+				return ec.fieldContext_WikiDocument_content(ctx, field)
+			case "emoji":
+				return ec.fieldContext_WikiDocument_emoji(ctx, field)
+			case "color":
+				return ec.fieldContext_WikiDocument_color(ctx, field)
+			case "icon":
+				return ec.fieldContext_WikiDocument_icon(ctx, field)
+			case "sortOrder":
+				return ec.fieldContext_WikiDocument_sortOrder(ctx, field)
+			case "childCount":
+				return ec.fieldContext_WikiDocument_childCount(ctx, field)
+			case "createdBy":
+				return ec.fieldContext_WikiDocument_createdBy(ctx, field)
+			case "lastBackupAt":
+				return ec.fieldContext_WikiDocument_lastBackupAt(ctx, field)
+			case "deletedAt":
+				return ec.fieldContext_WikiDocument_deletedAt(ctx, field)
+			case "deletedBy":
+				return ec.fieldContext_WikiDocument_deletedBy(ctx, field)
+			case "createdAt":
+				return ec.fieldContext_WikiDocument_createdAt(ctx, field)
+			case "updatedAt":
+				return ec.fieldContext_WikiDocument_updatedAt(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type WikiDocument", field.Name)
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _WikiSearchHit_snippet(ctx context.Context, field graphql.CollectedField, obj *model.WikiSearchHit) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_WikiSearchHit_snippet,
+		func(ctx context.Context) (any, error) {
+			return obj.Snippet, nil
+		},
+		nil,
+		ec.marshalNString2string,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_WikiSearchHit_snippet(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "WikiSearchHit",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _WikiSearchHit_matchRanges(ctx context.Context, field graphql.CollectedField, obj *model.WikiSearchHit) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_WikiSearchHit_matchRanges,
+		func(ctx context.Context) (any, error) {
+			return obj.MatchRanges, nil
+		},
+		nil,
+		ec.marshalNWikiSearchMatchRange2ᚕᚖgithubᚗcomᚋvibeᚑc2ᚋvibeᚑc2ᚑcoreᚋcoreᚋpkgᚋgraphqlᚋmodelᚐWikiSearchMatchRangeᚄ,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_WikiSearchHit_matchRanges(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "WikiSearchHit",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "start":
+				return ec.fieldContext_WikiSearchMatchRange_start(ctx, field)
+			case "end":
+				return ec.fieldContext_WikiSearchMatchRange_end(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type WikiSearchMatchRange", field.Name)
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _WikiSearchHit_score(ctx context.Context, field graphql.CollectedField, obj *model.WikiSearchHit) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_WikiSearchHit_score,
+		func(ctx context.Context) (any, error) {
+			return obj.Score, nil
+		},
+		nil,
+		ec.marshalOFloat2ᚖfloat64,
+		true,
+		false,
+	)
+}
+
+func (ec *executionContext) fieldContext_WikiSearchHit_score(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "WikiSearchHit",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Float does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _WikiSearchMatchRange_start(ctx context.Context, field graphql.CollectedField, obj *model.WikiSearchMatchRange) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_WikiSearchMatchRange_start,
+		func(ctx context.Context) (any, error) {
+			return obj.Start, nil
+		},
+		nil,
+		ec.marshalNInt2int,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_WikiSearchMatchRange_start(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "WikiSearchMatchRange",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Int does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _WikiSearchMatchRange_end(ctx context.Context, field graphql.CollectedField, obj *model.WikiSearchMatchRange) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_WikiSearchMatchRange_end,
+		func(ctx context.Context) (any, error) {
+			return obj.End, nil
+		},
+		nil,
+		ec.marshalNInt2int,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_WikiSearchMatchRange_end(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "WikiSearchMatchRange",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Int does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
 func (ec *executionContext) ___Directive_name(ctx context.Context, field graphql.CollectedField, obj *introspection.Directive) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
@@ -15157,6 +15699,28 @@ func (ec *executionContext) _Query(ctx context.Context, sel ast.SelectionSet) gr
 			}
 
 			out.Concurrently(i, func(ctx context.Context) graphql.Marshaler { return rrm(innerCtx) })
+		case "wikiSearch":
+			field := field
+
+			innerFunc := func(ctx context.Context, fs *graphql.FieldSet) (res graphql.Marshaler) {
+				defer func() {
+					if r := recover(); r != nil {
+						ec.Error(ctx, ec.Recover(ctx, r))
+					}
+				}()
+				res = ec._Query_wikiSearch(ctx, field)
+				if res == graphql.Null {
+					atomic.AddUint32(&fs.Invalids, 1)
+				}
+				return res
+			}
+
+			rrm := func(ctx context.Context) graphql.Marshaler {
+				return ec.OperationContext.RootResolverMiddleware(ctx,
+					func(ctx context.Context) graphql.Marshaler { return innerFunc(ctx, out) })
+			}
+
+			out.Concurrently(i, func(ctx context.Context) graphql.Marshaler { return rrm(innerCtx) })
 		case "wikiDocumentTrash":
 			field := field
 
@@ -17609,6 +18173,150 @@ func (ec *executionContext) _WikiDocumentPresenceEvent(ctx context.Context, sel 
 	return out
 }
 
+var wikiSearchConnectionImplementors = []string{"WikiSearchConnection"}
+
+func (ec *executionContext) _WikiSearchConnection(ctx context.Context, sel ast.SelectionSet, obj *model.WikiSearchConnection) graphql.Marshaler {
+	fields := graphql.CollectFields(ec.OperationContext, sel, wikiSearchConnectionImplementors)
+
+	out := graphql.NewFieldSet(fields)
+	deferred := make(map[string]*graphql.FieldSet)
+	for i, field := range fields {
+		switch field.Name {
+		case "__typename":
+			out.Values[i] = graphql.MarshalString("WikiSearchConnection")
+		case "hits":
+			out.Values[i] = ec._WikiSearchConnection_hits(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "total":
+			out.Values[i] = ec._WikiSearchConnection_total(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "hasMore":
+			out.Values[i] = ec._WikiSearchConnection_hasMore(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		default:
+			panic("unknown field " + strconv.Quote(field.Name))
+		}
+	}
+	out.Dispatch(ctx)
+	if out.Invalids > 0 {
+		return graphql.Null
+	}
+
+	atomic.AddInt32(&ec.Deferred, int32(len(deferred)))
+
+	for label, dfs := range deferred {
+		ec.ProcessDeferredGroup(graphql.DeferredGroup{
+			Label:    label,
+			Path:     graphql.GetPath(ctx),
+			FieldSet: dfs,
+			Context:  ctx,
+		})
+	}
+
+	return out
+}
+
+var wikiSearchHitImplementors = []string{"WikiSearchHit"}
+
+func (ec *executionContext) _WikiSearchHit(ctx context.Context, sel ast.SelectionSet, obj *model.WikiSearchHit) graphql.Marshaler {
+	fields := graphql.CollectFields(ec.OperationContext, sel, wikiSearchHitImplementors)
+
+	out := graphql.NewFieldSet(fields)
+	deferred := make(map[string]*graphql.FieldSet)
+	for i, field := range fields {
+		switch field.Name {
+		case "__typename":
+			out.Values[i] = graphql.MarshalString("WikiSearchHit")
+		case "document":
+			out.Values[i] = ec._WikiSearchHit_document(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "snippet":
+			out.Values[i] = ec._WikiSearchHit_snippet(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "matchRanges":
+			out.Values[i] = ec._WikiSearchHit_matchRanges(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "score":
+			out.Values[i] = ec._WikiSearchHit_score(ctx, field, obj)
+		default:
+			panic("unknown field " + strconv.Quote(field.Name))
+		}
+	}
+	out.Dispatch(ctx)
+	if out.Invalids > 0 {
+		return graphql.Null
+	}
+
+	atomic.AddInt32(&ec.Deferred, int32(len(deferred)))
+
+	for label, dfs := range deferred {
+		ec.ProcessDeferredGroup(graphql.DeferredGroup{
+			Label:    label,
+			Path:     graphql.GetPath(ctx),
+			FieldSet: dfs,
+			Context:  ctx,
+		})
+	}
+
+	return out
+}
+
+var wikiSearchMatchRangeImplementors = []string{"WikiSearchMatchRange"}
+
+func (ec *executionContext) _WikiSearchMatchRange(ctx context.Context, sel ast.SelectionSet, obj *model.WikiSearchMatchRange) graphql.Marshaler {
+	fields := graphql.CollectFields(ec.OperationContext, sel, wikiSearchMatchRangeImplementors)
+
+	out := graphql.NewFieldSet(fields)
+	deferred := make(map[string]*graphql.FieldSet)
+	for i, field := range fields {
+		switch field.Name {
+		case "__typename":
+			out.Values[i] = graphql.MarshalString("WikiSearchMatchRange")
+		case "start":
+			out.Values[i] = ec._WikiSearchMatchRange_start(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "end":
+			out.Values[i] = ec._WikiSearchMatchRange_end(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		default:
+			panic("unknown field " + strconv.Quote(field.Name))
+		}
+	}
+	out.Dispatch(ctx)
+	if out.Invalids > 0 {
+		return graphql.Null
+	}
+
+	atomic.AddInt32(&ec.Deferred, int32(len(deferred)))
+
+	for label, dfs := range deferred {
+		ec.ProcessDeferredGroup(graphql.DeferredGroup{
+			Label:    label,
+			Path:     graphql.GetPath(ctx),
+			FieldSet: dfs,
+			Context:  ctx,
+		})
+	}
+
+	return out
+}
+
 var __DirectiveImplementors = []string{"__Directive"}
 
 func (ec *executionContext) ___Directive(ctx context.Context, sel ast.SelectionSet, obj *introspection.Directive) graphql.Marshaler {
@@ -18706,6 +19414,72 @@ func (ec *executionContext) marshalNWikiDocumentPresenceEvent2ᚖgithubᚗcomᚋ
 	return ec._WikiDocumentPresenceEvent(ctx, sel, v)
 }
 
+func (ec *executionContext) marshalNWikiSearchConnection2githubᚗcomᚋvibeᚑc2ᚋvibeᚑc2ᚑcoreᚋcoreᚋpkgᚋgraphqlᚋmodelᚐWikiSearchConnection(ctx context.Context, sel ast.SelectionSet, v model.WikiSearchConnection) graphql.Marshaler {
+	return ec._WikiSearchConnection(ctx, sel, &v)
+}
+
+func (ec *executionContext) marshalNWikiSearchConnection2ᚖgithubᚗcomᚋvibeᚑc2ᚋvibeᚑc2ᚑcoreᚋcoreᚋpkgᚋgraphqlᚋmodelᚐWikiSearchConnection(ctx context.Context, sel ast.SelectionSet, v *model.WikiSearchConnection) graphql.Marshaler {
+	if v == nil {
+		if !graphql.HasFieldError(ctx, graphql.GetFieldContext(ctx)) {
+			graphql.AddErrorf(ctx, "the requested element is null which the schema does not allow")
+		}
+		return graphql.Null
+	}
+	return ec._WikiSearchConnection(ctx, sel, v)
+}
+
+func (ec *executionContext) marshalNWikiSearchHit2ᚕᚖgithubᚗcomᚋvibeᚑc2ᚋvibeᚑc2ᚑcoreᚋcoreᚋpkgᚋgraphqlᚋmodelᚐWikiSearchHitᚄ(ctx context.Context, sel ast.SelectionSet, v []*model.WikiSearchHit) graphql.Marshaler {
+	ret := graphql.MarshalSliceConcurrently(ctx, len(v), 0, false, func(ctx context.Context, i int) graphql.Marshaler {
+		fc := graphql.GetFieldContext(ctx)
+		fc.Result = &v[i]
+		return ec.marshalNWikiSearchHit2ᚖgithubᚗcomᚋvibeᚑc2ᚋvibeᚑc2ᚑcoreᚋcoreᚋpkgᚋgraphqlᚋmodelᚐWikiSearchHit(ctx, sel, v[i])
+	})
+
+	for _, e := range ret {
+		if e == graphql.Null {
+			return graphql.Null
+		}
+	}
+
+	return ret
+}
+
+func (ec *executionContext) marshalNWikiSearchHit2ᚖgithubᚗcomᚋvibeᚑc2ᚋvibeᚑc2ᚑcoreᚋcoreᚋpkgᚋgraphqlᚋmodelᚐWikiSearchHit(ctx context.Context, sel ast.SelectionSet, v *model.WikiSearchHit) graphql.Marshaler {
+	if v == nil {
+		if !graphql.HasFieldError(ctx, graphql.GetFieldContext(ctx)) {
+			graphql.AddErrorf(ctx, "the requested element is null which the schema does not allow")
+		}
+		return graphql.Null
+	}
+	return ec._WikiSearchHit(ctx, sel, v)
+}
+
+func (ec *executionContext) marshalNWikiSearchMatchRange2ᚕᚖgithubᚗcomᚋvibeᚑc2ᚋvibeᚑc2ᚑcoreᚋcoreᚋpkgᚋgraphqlᚋmodelᚐWikiSearchMatchRangeᚄ(ctx context.Context, sel ast.SelectionSet, v []*model.WikiSearchMatchRange) graphql.Marshaler {
+	ret := graphql.MarshalSliceConcurrently(ctx, len(v), 0, false, func(ctx context.Context, i int) graphql.Marshaler {
+		fc := graphql.GetFieldContext(ctx)
+		fc.Result = &v[i]
+		return ec.marshalNWikiSearchMatchRange2ᚖgithubᚗcomᚋvibeᚑc2ᚋvibeᚑc2ᚑcoreᚋcoreᚋpkgᚋgraphqlᚋmodelᚐWikiSearchMatchRange(ctx, sel, v[i])
+	})
+
+	for _, e := range ret {
+		if e == graphql.Null {
+			return graphql.Null
+		}
+	}
+
+	return ret
+}
+
+func (ec *executionContext) marshalNWikiSearchMatchRange2ᚖgithubᚗcomᚋvibeᚑc2ᚋvibeᚑc2ᚑcoreᚋcoreᚋpkgᚋgraphqlᚋmodelᚐWikiSearchMatchRange(ctx context.Context, sel ast.SelectionSet, v *model.WikiSearchMatchRange) graphql.Marshaler {
+	if v == nil {
+		if !graphql.HasFieldError(ctx, graphql.GetFieldContext(ctx)) {
+			graphql.AddErrorf(ctx, "the requested element is null which the schema does not allow")
+		}
+		return graphql.Null
+	}
+	return ec._WikiSearchMatchRange(ctx, sel, v)
+}
+
 func (ec *executionContext) marshalN__Directive2githubᚗcomᚋ99designsᚋgqlgenᚋgraphqlᚋintrospectionᚐDirective(ctx context.Context, sel ast.SelectionSet, v introspection.Directive) graphql.Marshaler {
 	return ec.___Directive(ctx, sel, &v)
 }
@@ -18875,6 +19649,23 @@ func (ec *executionContext) marshalOBoolean2ᚖbool(ctx context.Context, sel ast
 	_ = ctx
 	res := graphql.MarshalBoolean(*v)
 	return res
+}
+
+func (ec *executionContext) unmarshalOFloat2ᚖfloat64(ctx context.Context, v any) (*float64, error) {
+	if v == nil {
+		return nil, nil
+	}
+	res, err := graphql.UnmarshalFloatContext(ctx, v)
+	return &res, graphql.ErrorOnPath(ctx, err)
+}
+
+func (ec *executionContext) marshalOFloat2ᚖfloat64(ctx context.Context, sel ast.SelectionSet, v *float64) graphql.Marshaler {
+	if v == nil {
+		return graphql.Null
+	}
+	_ = sel
+	res := graphql.MarshalFloatContext(*v)
+	return graphql.WrapContextMarshaler(ctx, res)
 }
 
 func (ec *executionContext) unmarshalOID2ᚖstring(ctx context.Context, v any) (*string, error) {

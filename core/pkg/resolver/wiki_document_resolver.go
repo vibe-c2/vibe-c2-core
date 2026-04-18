@@ -3,6 +3,7 @@ package resolver
 import (
 	"context"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -20,6 +21,7 @@ const (
 	maxTitleLength  = 200
 	maxContentSize  = 1 * 1024 * 1024 // 1 MB
 	maxNestingDepth = 10
+	maxSearchLength = 200
 )
 
 // IWikiDocumentResolver defines the business logic methods for wiki documents and backups.
@@ -42,6 +44,7 @@ type IWikiDocumentResolver interface {
 	WikiDocuments(ctx context.Context, operationID string, parentDocumentID *string, search *string, first *int, after *string, last *int, before *string) (*model.WikiDocumentConnection, error)
 	WikiDocumentTree(ctx context.Context, operationID string) ([]*models.WikiDocument, error)
 	WikiDocumentTrash(ctx context.Context, operationID string, first *int, after *string, last *int, before *string) (*model.WikiDocumentConnection, error)
+	WikiSearch(ctx context.Context, operationID string, scope *string, query string, offset *int, limit *int) (*model.WikiSearchConnection, error)
 
 	// Backup queries
 	WikiDocumentBackups(ctx context.Context, documentID string, trigger *models.WikiDocumentBackupTrigger, first *int, after *string, last *int, before *string) (*model.WikiDocumentBackupConnection, error)
@@ -212,6 +215,7 @@ func (r *wikiDocumentResolver) CreateWikiDocument(ctx context.Context, operation
 		OperationID:      opUID,
 		ParentDocumentID: parentDocID,
 		Title:            input.Title,
+		TitleLower:       strings.ToLower(input.Title),
 		Content:          content,
 		Emoji:            emoji,
 		Color:            color,
@@ -256,6 +260,7 @@ func (r *wikiDocumentResolver) UpdateWikiDocument(ctx context.Context, id string
 			return nil, fmt.Errorf("title exceeds maximum length of %d characters", maxTitleLength)
 		}
 		updates["title"] = *input.Title
+		updates["title_lower"] = strings.ToLower(*input.Title)
 	}
 	if input.Emoji != nil {
 		updates["emoji"] = *input.Emoji
@@ -613,7 +618,10 @@ func (r *wikiDocumentResolver) RestoreWikiDocumentBackup(ctx context.Context, do
 	}
 
 	// Also restore the title
-	_ = r.docRepo.Update(ctx, &doc, map[string]interface{}{"title": backup.Title})
+	_ = r.docRepo.Update(ctx, &doc, map[string]interface{}{
+		"title":       backup.Title,
+		"title_lower": strings.ToLower(backup.Title),
+	})
 
 	restored, err := r.docRepo.FindByID(ctx, docUID)
 	if err != nil {
@@ -693,7 +701,11 @@ func (r *wikiDocumentResolver) WikiDocuments(ctx context.Context, operationID st
 		filter.ParentDocumentID = &pid
 	}
 	if search != nil {
-		filter.Search = *search
+		trimmed := strings.TrimSpace(*search)
+		if len(trimmed) > maxSearchLength {
+			return nil, fmt.Errorf("search query exceeds %d characters", maxSearchLength)
+		}
+		filter.Search = trimmed
 	}
 
 	total, err := r.docRepo.CountByOperationID(ctx, opUID, filter)
@@ -733,6 +745,78 @@ func (r *wikiDocumentResolver) WikiDocuments(ctx context.Context, operationID st
 		Edges:      edges,
 		PageInfo:   &pageInfo,
 		TotalCount: int(total),
+	}, nil
+}
+
+// WikiSearch runs a ranked text search over wiki documents within an operation.
+// Short queries (<2 chars) use the title_lower prefix index for instant-feedback
+// palette UX; longer queries hit the MongoDB text index with score-based ranking.
+// Offset is clamped to MaxSearchOffset at the repository layer.
+func (r *wikiDocumentResolver) WikiSearch(
+	ctx context.Context,
+	operationID string,
+	scope *string,
+	query string,
+	offset *int,
+	limit *int,
+) (*model.WikiSearchConnection, error) {
+	opUID, err := uuid.Parse(operationID)
+	if err != nil {
+		return nil, fmt.Errorf("invalid operation ID: %w", err)
+	}
+
+	if err := r.authorizeForOperation(ctx, opUID, models.OperationRoleViewer); err != nil {
+		return nil, err
+	}
+
+	trimmed := strings.TrimSpace(query)
+	if len(trimmed) > maxSearchLength {
+		return nil, fmt.Errorf("search query exceeds %d characters", maxSearchLength)
+	}
+
+	var scopeUID *uuid.UUID
+	if scope != nil && *scope != "" {
+		p, err := uuid.Parse(*scope)
+		if err != nil {
+			return nil, fmt.Errorf("invalid scope document ID: %w", err)
+		}
+		scopeUID = &p
+	}
+
+	var off, lim int64 = 0, 20
+	if offset != nil && *offset > 0 {
+		off = int64(*offset)
+	}
+	if limit != nil && *limit > 0 {
+		lim = int64(*limit)
+	}
+
+	hits, total, err := r.docRepo.SearchByOperationID(ctx, opUID, scopeUID, trimmed, off, lim)
+	if err != nil {
+		return nil, fmt.Errorf("failed to search wiki documents: %w", err)
+	}
+
+	out := make([]*model.WikiSearchHit, len(hits))
+	for i := range hits {
+		doc := hits[i].Doc
+		ranges := make([]*model.WikiSearchMatchRange, len(hits[i].MatchRanges))
+		for j, rg := range hits[i].MatchRanges {
+			ranges[j] = &model.WikiSearchMatchRange{Start: rg[0], End: rg[1]}
+		}
+		out[i] = &model.WikiSearchHit{
+			Document:     &doc,
+			Snippet:      hits[i].Snippet,
+			MatchRanges:  ranges,
+			Score:        hits[i].Score,
+		}
+	}
+
+	hasMore := off+int64(len(hits)) < total
+
+	return &model.WikiSearchConnection{
+		Hits:    out,
+		Total:   int(total),
+		HasMore: hasMore,
 	}, nil
 }
 

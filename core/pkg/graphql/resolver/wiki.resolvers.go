@@ -73,6 +73,11 @@ func (r *queryResolver) WikiDocumentTree(ctx context.Context, operationID string
 	return r.WikiDocumentResolver.WikiDocumentTree(ctx, operationID)
 }
 
+// WikiSearch is the resolver for the wikiSearch field.
+func (r *queryResolver) WikiSearch(ctx context.Context, operationID string, scope *string, query string, offset *int, limit *int) (*model.WikiSearchConnection, error) {
+	return r.WikiDocumentResolver.WikiSearch(ctx, operationID, scope, query, offset, limit)
+}
+
 // WikiDocumentTrash is the resolver for the wikiDocumentTrash field.
 func (r *queryResolver) WikiDocumentTrash(ctx context.Context, operationID string, first *int, after *string, last *int, before *string) (*model.WikiDocumentConnection, error) {
 	return r.WikiDocumentResolver.WikiDocumentTrash(ctx, operationID, first, after, last, before)

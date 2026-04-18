@@ -215,6 +215,24 @@ type WikiDocumentPresenceEvent struct {
 	Action      PresenceAction `json:"action"`
 }
 
+type WikiSearchConnection struct {
+	Hits    []*WikiSearchHit `json:"hits"`
+	Total   int              `json:"total"`
+	HasMore bool             `json:"hasMore"`
+}
+
+type WikiSearchHit struct {
+	Document    *models.WikiDocument    `json:"document"`
+	Snippet     string                  `json:"snippet"`
+	MatchRanges []*WikiSearchMatchRange `json:"matchRanges"`
+	Score       *float64                `json:"score,omitempty"`
+}
+
+type WikiSearchMatchRange struct {
+	Start int `json:"start"`
+	End   int `json:"end"`
+}
+
 type EventAction string
 
 const (

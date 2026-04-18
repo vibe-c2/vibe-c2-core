@@ -10,6 +10,7 @@ import { yCursorPlugin } from "@tiptap/y-tiptap"
 import { useHocuspocus } from "@/hooks/use-hocuspocus"
 import { useAuthStore } from "@/stores/auth"
 import { getCursorColor, renderCursor } from "@/lib/cursor-colors"
+import { Skeleton } from "@/components/ui/skeleton"
 import { ConnectionBanner } from "@/components/wiki/connection-banner"
 import { WikiEditorToolbar } from "@/components/wiki/wiki-editor-toolbar"
 import "./wiki-editor.css"
@@ -106,10 +107,19 @@ export function WikiEditor({ documentId, isEditor }: WikiEditorProps) {
       <ConnectionBanner connectionStatus={connectionStatus} isSynced={isSynced} isReady={isReady} />
       {isEditor && <WikiEditorToolbar editor={editor} />}
       <div className="flex-1 overflow-y-auto px-4 py-2">
-        <EditorContent
-          editor={editor}
-          className="prose prose-sm dark:prose-invert max-w-none focus:outline-none"
-        />
+        {isReady ? (
+          <EditorContent
+            editor={editor}
+            className="prose prose-sm dark:prose-invert max-w-none focus:outline-none"
+          />
+        ) : (
+          <div aria-busy="true" aria-live="polite" className="flex flex-col gap-3">
+            <Skeleton className="h-4 w-3/5" />
+            <Skeleton className="h-4 w-5/6" />
+            <Skeleton className="h-4 w-4/6" />
+            <Skeleton className="h-4 w-2/3" />
+          </div>
+        )}
       </div>
     </>
   )

@@ -35,7 +35,6 @@ interface WikiTreeNodeProps {
   node: TreeNode
   depth: number
   isEditor: boolean
-  visibleIds: Set<string> | null
   operationId: string
   activeId: string | null
   dropTarget: DropTarget | null
@@ -45,7 +44,6 @@ export function WikiTreeNode({
   node,
   depth,
   isEditor,
-  visibleIds,
   operationId,
   activeId,
   dropTarget,
@@ -74,9 +72,6 @@ export function WikiTreeNode({
   // DnD: each node is both draggable (via handle) and a drop target.
   const { attributes, listeners, setNodeRef: setDragRef } = useDraggable({ id: node.id })
   const { setNodeRef: setDropRef } = useDroppable({ id: node.id })
-
-  // Skip filtered-out nodes (after all hooks).
-  if (visibleIds && !visibleIds.has(node.id)) return null
 
   const isDragging = activeId === node.id
   const isDropInside = dropTarget?.id === node.id && dropTarget.position === "inside"
@@ -181,7 +176,7 @@ export function WikiTreeNode({
           />
         ) : (
           <button
-            className="flex-1 truncate px-1 text-left text-sm"
+            className="flex h-full flex-1 items-center truncate px-1 text-left text-sm"
             onClick={() => navigate(`/wiki/${node.id}`)}
           >
             {node.title}
@@ -329,7 +324,6 @@ export function WikiTreeNode({
               node={child}
               depth={depth + 1}
               isEditor={isEditor}
-              visibleIds={visibleIds}
               operationId={operationId}
               activeId={activeId}
               dropTarget={dropTarget}

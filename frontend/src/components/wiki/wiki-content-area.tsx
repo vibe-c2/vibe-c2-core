@@ -1,36 +1,21 @@
 import { FileTextIcon } from "lucide-react"
-import { useWikiStore } from "@/stores/wiki"
 import { WikiEditorPane } from "@/components/wiki/wiki-editor-pane"
-import { WikiSearchResults } from "@/components/wiki/wiki-search-results"
 import type { WikiDocumentTreeFieldsFragment } from "@/graphql/gql/graphql"
 
 interface WikiContentAreaProps {
-  operationId: string
   documentId: string | null
   isEditor: boolean
   treeDocuments: WikiDocumentTreeFieldsFragment[]
 }
 
+// Content area for the wiki page. Search used to live here inline; it's now
+// a floating command palette (see WikiCommandPalette) that doesn't cover the
+// editor while typing.
 export function WikiContentArea({
-  operationId,
   documentId,
   isEditor,
   treeDocuments,
 }: WikiContentAreaProps) {
-  const searchScope = useWikiStore((s) => s.searchScope)
-
-  // Content search replaces the editor when active.
-  if (searchScope) {
-    return (
-      <WikiSearchResults
-        operationId={operationId}
-        scope={searchScope}
-        treeDocuments={treeDocuments}
-      />
-    )
-  }
-
-  // Document selected — show editor.
   if (documentId) {
     return (
       <WikiEditorPane
@@ -41,7 +26,6 @@ export function WikiContentArea({
     )
   }
 
-  // No document selected — empty state.
   return (
     <div className="flex flex-1 flex-col items-center justify-center gap-3 text-muted-foreground">
       <FileTextIcon className="size-10 opacity-40" />

@@ -11,6 +11,7 @@ import { useWikiStore } from "@/stores/wiki"
 import { WikiTreeSidebar } from "@/components/wiki/wiki-tree-sidebar"
 import { ResizeHandle } from "@/components/wiki/resize-handle"
 import { WikiContentArea } from "@/components/wiki/wiki-content-area"
+import { WikiCommandPalette } from "@/components/wiki/wiki-command-palette"
 import { CreateWikiDocumentDialog } from "@/components/wiki/create-wiki-document-dialog"
 import { DeleteWikiDocumentDialog } from "@/components/wiki/delete-wiki-document-dialog"
 import { MoveWikiDocumentDialog } from "@/components/wiki/move-wiki-document-dialog"
@@ -70,9 +71,26 @@ function WikiPageInner({
 
   const sidebarWidth = useWikiStore((s) => s.sidebarWidth)
   const setSidebarWidth = useWikiStore((s) => s.setSidebarWidth)
+  const openContentSearch = useWikiStore((s) => s.openContentSearch)
+
+  // Global Cmd/Ctrl+K opens the command palette with the "All Documents"
+  // scope. Bound at the page level so any focus state inside the wiki
+  // surface gets the shortcut. Explicitly skips fires while a text field
+  // already has focus *in another modal* by matching on event target — but
+  // honored even inside the editor, because search is the whole point.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k") {
+        e.preventDefault()
+        openContentSearch(null, "All Documents")
+      }
+    }
+    window.addEventListener("keydown", onKey)
+    return () => window.removeEventListener("keydown", onKey)
+  }, [openContentSearch])
 
   return (
-    <div className="flex flex-1 gap-1 p-2 overflow-hidden">
+    <div className="flex h-svh min-h-0 gap-1 overflow-hidden p-2">
       <WikiTreeSidebar
         operationId={operationId}
         isEditor={isEditor}
@@ -83,7 +101,6 @@ function WikiPageInner({
         onResize={setSidebarWidth}
       />
       <WikiContentArea
-        operationId={operationId}
         documentId={documentId}
         isEditor={isEditor}
         treeDocuments={treeDocuments}
@@ -96,6 +113,7 @@ function WikiPageInner({
       <PermanentDeleteWikiDocumentDialog />
       <WikiTrashPanel operationId={operationId} />
       <WikiBackupPanel />
+      <WikiCommandPalette operationId={operationId} />
     </div>
   )
 }

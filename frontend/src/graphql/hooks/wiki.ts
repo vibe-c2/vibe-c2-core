@@ -6,6 +6,7 @@ import {
   WikiDocumentTreeDocument,
   WikiDocumentDocument,
   WikiDocumentsDocument,
+  WikiSearchDocument,
   WikiDocumentTrashDocument,
   WikiDocumentBackupsDocument,
   WikiDocumentBackupDetailDocument,
@@ -34,6 +35,8 @@ export const wikiKeys = {
   lists: () => [...wikiKeys.all, "list"] as const,
   infiniteList: (params: { operationId: string; parentDocumentId?: string | null; search?: string | null }) =>
     [...wikiKeys.lists(), "infinite", params] as const,
+  search: (params: { operationId: string; scope?: string | null; query: string }) =>
+    [...wikiKeys.all, "search", params] as const,
   trash: (operationId: string) => [...wikiKeys.all, "trash", operationId] as const,
   backups: (documentId: string) => [...wikiKeys.all, "backups", documentId] as const,
   backup: (id: string) => [...wikiKeys.all, "backup", id] as const,
@@ -81,6 +84,42 @@ export function useWikiDocuments(params: {
         ? lastPage.wikiDocuments.pageInfo.endCursor ?? undefined
         : undefined,
     enabled: !!params.operationId,
+  })
+}
+
+// useWikiSearch drives the Cmd+K command palette. Offset-based pagination
+// because ranking by text score cannot use the cursor scheme (createdAt) that
+// the list query uses. Caller passes the debounced query; the query key
+// intentionally includes only the debounced value so typing doesn't thrash
+// the cache — `keepPreviousData` keeps the last page visible during re-queries.
+//
+// Disabled when query is empty so no call fires on an empty palette.
+export function useWikiSearch(params: {
+  operationId: string
+  scope?: string | null
+  query: string
+  limit?: number
+}) {
+  const limit = params.limit ?? 20
+  return useInfiniteQuery({
+    queryKey: wikiKeys.search({
+      operationId: params.operationId,
+      scope: params.scope ?? null,
+      query: params.query,
+    }),
+    queryFn: ({ pageParam }) =>
+      graphqlClient(WikiSearchDocument, {
+        operationId: params.operationId,
+        scope: params.scope ?? null,
+        query: params.query,
+        offset: pageParam,
+        limit,
+      }),
+    initialPageParam: 0 as number,
+    getNextPageParam: (lastPage, allPages) =>
+      lastPage.wikiSearch.hasMore ? allPages.length * limit : undefined,
+    enabled: !!params.operationId && params.query.trim().length > 0,
+    staleTime: 15_000,
   })
 }
 

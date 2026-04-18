@@ -105,6 +105,39 @@ export const WikiDocumentsQuery = graphql(`
   }
 `)
 
+export const WikiSearchQuery = graphql(`
+  query WikiSearch(
+    $operationId: ID!
+    $scope: ID
+    $query: String!
+    $offset: Int
+    $limit: Int
+  ) {
+    wikiSearch(
+      operationId: $operationId
+      scope: $scope
+      query: $query
+      offset: $offset
+      limit: $limit
+    ) {
+      hits {
+        document {
+          id
+          title
+          emoji
+          parentDocument { id }
+          createdBy { id username }
+        }
+        snippet
+        matchRanges { start end }
+        score
+      }
+      total
+      hasMore
+    }
+  }
+`)
+
 export const WikiDocumentTrashQuery = graphql(`
   query WikiDocumentTrash($operationId: ID!, $first: Int, $after: String) {
     wikiDocumentTrash(operationId: $operationId, first: $first, after: $after) {

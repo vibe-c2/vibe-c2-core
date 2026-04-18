@@ -12,7 +12,6 @@ import {
   type DragStartEvent,
 } from "@dnd-kit/core"
 import { Button } from "@/components/ui/button"
-import { SearchInput } from "@/components/ui/search-input"
 import { Badge } from "@/components/ui/badge"
 import { Skeleton } from "@/components/ui/skeleton"
 import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip"
@@ -64,25 +63,6 @@ function buildTree(docs: readonly WikiDocumentTreeFieldsFragment[]): TreeNode[] 
   }
 
   return build(null)
-}
-
-/** Collect IDs of matching nodes and all their ancestors. */
-function filterTree(tree: TreeNode[], query: string): Set<string> {
-  const visible = new Set<string>()
-  const lower = query.toLowerCase()
-
-  function walk(nodes: TreeNode[], ancestors: string[]) {
-    for (const node of nodes) {
-      const path = [...ancestors, node.id]
-      if (node.title.toLowerCase().includes(lower)) {
-        for (const id of path) visible.add(id)
-      }
-      walk(node.children, path)
-    }
-  }
-
-  walk(tree, [])
-  return visible
 }
 
 /**
@@ -145,18 +125,14 @@ export function WikiTreeSidebar({
   const openTrashPanel = useWikiStore((s) => s.openTrashPanel)
   const openContentSearch = useWikiStore((s) => s.openContentSearch)
 
-  const [filter, setFilter] = useState("")
-
   // Trash count for badge.
   const { data: trashData } = useWikiDocumentTrash(operationId)
   const trashCount = trashData?.pages[0]?.wikiDocumentTrash.totalCount ?? 0
 
-  // Build tree from flat documents.
+  // Build tree from flat documents. Title-substring filtering used to live
+  // here; it's now replaced by the Cmd+K command palette which searches
+  // title + content via the backend text index with ranked snippets.
   const tree = useMemo(() => buildTree(documents), [documents])
-  const visibleIds = useMemo(
-    () => (filter ? filterTree(tree, filter) : null),
-    [tree, filter],
-  )
 
   // DnD sensors with activation distance to distinguish click from drag.
   const sensors = useSensors(
@@ -380,18 +356,6 @@ export function WikiTreeSidebar({
         </Tooltip>
       </div>
 
-      {/* Filter input */}
-      <div className="flex h-10 items-center border-b px-2">
-        <SearchInput
-          value={filter}
-          onValueChange={setFilter}
-          placeholder="Filter by title..."
-          className="relative w-full"
-          inputClassName="h-7 pl-9 text-xs"
-          debounceMs={200}
-        />
-      </div>
-
       {/* Tree body */}
       <div ref={setRootDropRef} className="flex-1 overflow-y-auto px-1 py-1">
         {isLoading ? (
@@ -419,7 +383,6 @@ export function WikiTreeSidebar({
                 node={node}
                 depth={0}
                 isEditor={isEditor}
-                visibleIds={visibleIds}
                 operationId={operationId}
                 activeId={activeId}
                 dropTarget={dropTarget}
