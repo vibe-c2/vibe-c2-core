@@ -1,3 +1,4 @@
 .env
 .mcp.json
 core/tmp/
+node_modules/
