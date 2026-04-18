@@ -275,14 +275,15 @@ type ComplexityRoot struct {
 	}
 
 	WikiDocumentBackup struct {
-		Content     func(childComplexity int) int
-		CreatedAt   func(childComplexity int) int
-		CreatedBy   func(childComplexity int) int
-		Description func(childComplexity int) int
-		DocumentID  func(childComplexity int) int
-		ID          func(childComplexity int) int
-		Title       func(childComplexity int) int
-		Trigger     func(childComplexity int) int
+		Content       func(childComplexity int) int
+		ContentLength func(childComplexity int) int
+		CreatedAt     func(childComplexity int) int
+		CreatedBy     func(childComplexity int) int
+		Description   func(childComplexity int) int
+		DocumentID    func(childComplexity int) int
+		ID            func(childComplexity int) int
+		Title         func(childComplexity int) int
+		Trigger       func(childComplexity int) int
 	}
 
 	WikiDocumentBackupConnection struct {
@@ -472,6 +473,7 @@ type WikiDocumentBackupResolver interface {
 	ID(ctx context.Context, obj *models.WikiDocumentBackup) (string, error)
 	DocumentID(ctx context.Context, obj *models.WikiDocumentBackup) (string, error)
 
+	ContentLength(ctx context.Context, obj *models.WikiDocumentBackup) (int, error)
 	CreatedBy(ctx context.Context, obj *models.WikiDocumentBackup) (*models.User, error)
 	CreatedAt(ctx context.Context, obj *models.WikiDocumentBackup) (string, error)
 }
@@ -1715,6 +1717,12 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.WikiDocumentBackup.Content(childComplexity), true
+	case "WikiDocumentBackup.contentLength":
+		if e.ComplexityRoot.WikiDocumentBackup.ContentLength == nil {
+			break
+		}
+
+		return e.ComplexityRoot.WikiDocumentBackup.ContentLength(childComplexity), true
 	case "WikiDocumentBackup.createdAt":
 		if e.ComplexityRoot.WikiDocumentBackup.CreatedAt == nil {
 			break
@@ -2792,7 +2800,11 @@ type WikiDocumentBackup {
   content: String!
   trigger: WikiDocumentBackupTrigger!
   description: String!
-  createdBy: User!
+  # Byte length of the content at backup time. Server-computed so the list
+  # query can surface size without shipping full content for every row.
+  contentLength: Int!
+  # Null for AUTO (system-created) backups and safety backups whose originating user was deleted.
+  createdBy: User
   createdAt: String!
 }
 
@@ -5810,6 +5822,8 @@ func (ec *executionContext) fieldContext_Mutation_createWikiDocumentBackup(ctx c
 				return ec.fieldContext_WikiDocumentBackup_trigger(ctx, field)
 			case "description":
 				return ec.fieldContext_WikiDocumentBackup_description(ctx, field)
+			case "contentLength":
+				return ec.fieldContext_WikiDocumentBackup_contentLength(ctx, field)
 			case "createdBy":
 				return ec.fieldContext_WikiDocumentBackup_createdBy(ctx, field)
 			case "createdAt":
@@ -8089,6 +8103,8 @@ func (ec *executionContext) fieldContext_Query_wikiDocumentBackup(ctx context.Co
 				return ec.fieldContext_WikiDocumentBackup_trigger(ctx, field)
 			case "description":
 				return ec.fieldContext_WikiDocumentBackup_description(ctx, field)
+			case "contentLength":
+				return ec.fieldContext_WikiDocumentBackup_contentLength(ctx, field)
 			case "createdBy":
 				return ec.fieldContext_WikiDocumentBackup_createdBy(ctx, field)
 			case "createdAt":
@@ -11406,6 +11422,35 @@ func (ec *executionContext) fieldContext_WikiDocumentBackup_description(_ contex
 	return fc, nil
 }
 
+func (ec *executionContext) _WikiDocumentBackup_contentLength(ctx context.Context, field graphql.CollectedField, obj *models.WikiDocumentBackup) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_WikiDocumentBackup_contentLength,
+		func(ctx context.Context) (any, error) {
+			return ec.Resolvers.WikiDocumentBackup().ContentLength(ctx, obj)
+		},
+		nil,
+		ec.marshalNInt2int,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_WikiDocumentBackup_contentLength(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "WikiDocumentBackup",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Int does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
 func (ec *executionContext) _WikiDocumentBackup_createdBy(ctx context.Context, field graphql.CollectedField, obj *models.WikiDocumentBackup) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
@@ -11416,9 +11461,9 @@ func (ec *executionContext) _WikiDocumentBackup_createdBy(ctx context.Context, f
 			return ec.Resolvers.WikiDocumentBackup().CreatedBy(ctx, obj)
 		},
 		nil,
-		ec.marshalNUser2ᚖgithubᚗcomᚋvibeᚑc2ᚋvibeᚑc2ᚑcoreᚋcoreᚋpkgᚋmodelsᚐUser,
+		ec.marshalOUser2ᚖgithubᚗcomᚋvibeᚑc2ᚋvibeᚑc2ᚑcoreᚋcoreᚋpkgᚋmodelsᚐUser,
 		true,
-		true,
+		false,
 	)
 }
 
@@ -11617,6 +11662,8 @@ func (ec *executionContext) fieldContext_WikiDocumentBackupEdge_node(_ context.C
 				return ec.fieldContext_WikiDocumentBackup_trigger(ctx, field)
 			case "description":
 				return ec.fieldContext_WikiDocumentBackup_description(ctx, field)
+			case "contentLength":
+				return ec.fieldContext_WikiDocumentBackup_contentLength(ctx, field)
 			case "createdBy":
 				return ec.fieldContext_WikiDocumentBackup_createdBy(ctx, field)
 			case "createdAt":
@@ -17687,7 +17734,7 @@ func (ec *executionContext) _WikiDocumentBackup(ctx context.Context, sel ast.Sel
 			if out.Values[i] == graphql.Null {
 				atomic.AddUint32(&out.Invalids, 1)
 			}
-		case "createdBy":
+		case "contentLength":
 			field := field
 
 			innerFunc := func(ctx context.Context, fs *graphql.FieldSet) (res graphql.Marshaler) {
@@ -17696,10 +17743,43 @@ func (ec *executionContext) _WikiDocumentBackup(ctx context.Context, sel ast.Sel
 						ec.Error(ctx, ec.Recover(ctx, r))
 					}
 				}()
-				res = ec._WikiDocumentBackup_createdBy(ctx, field, obj)
+				res = ec._WikiDocumentBackup_contentLength(ctx, field, obj)
 				if res == graphql.Null {
 					atomic.AddUint32(&fs.Invalids, 1)
 				}
+				return res
+			}
+
+			if field.Deferrable != nil {
+				dfs, ok := deferred[field.Deferrable.Label]
+				di := 0
+				if ok {
+					dfs.AddField(field)
+					di = len(dfs.Values) - 1
+				} else {
+					dfs = graphql.NewFieldSet([]graphql.CollectedField{field})
+					deferred[field.Deferrable.Label] = dfs
+				}
+				dfs.Concurrently(di, func(ctx context.Context) graphql.Marshaler {
+					return innerFunc(ctx, dfs)
+				})
+
+				// don't run the out.Concurrently() call below
+				out.Values[i] = graphql.Null
+				continue
+			}
+
+			out.Concurrently(i, func(ctx context.Context) graphql.Marshaler { return innerFunc(ctx, out) })
+		case "createdBy":
+			field := field
+
+			innerFunc := func(ctx context.Context, _ *graphql.FieldSet) (res graphql.Marshaler) {
+				defer func() {
+					if r := recover(); r != nil {
+						ec.Error(ctx, ec.Recover(ctx, r))
+					}
+				}()
+				res = ec._WikiDocumentBackup_createdBy(ctx, field, obj)
 				return res
 			}
 

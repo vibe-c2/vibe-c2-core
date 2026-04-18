@@ -196,6 +196,8 @@ models:
         resolver: true
       documentId:
         resolver: true
+      contentLength:
+        resolver: true
       createdBy:
         resolver: true
       createdAt:

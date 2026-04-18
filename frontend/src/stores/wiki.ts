@@ -26,6 +26,17 @@ function loadSidebarWidth(): number {
   }
 }
 
+export interface BackupConfirmTarget {
+  backupId: string
+  documentId: string
+  action: "restore" | "delete"
+  // Meta carried from the list row so the confirm dialog can show a
+  // specific, contextful message without re-fetching.
+  createdAt: string
+  trigger: "AUTO" | "MANUAL"
+  description: string
+}
+
 interface WikiStoreState {
   // Tree expand/collapse
   expandedNodes: Set<string>
@@ -66,6 +77,16 @@ interface WikiStoreState {
   backupDocumentId: string | null
   openBackupPanel: (documentId: string) => void
   closeBackupPanel: () => void
+
+  // Backup preview dialog (row click → side-by-side view)
+  backupPreviewId: string | null
+  openBackupPreview: (backupId: string) => void
+  closeBackupPreview: () => void
+
+  // Backup confirm dialog (restore / delete, with embedded context)
+  backupConfirmTarget: BackupConfirmTarget | null
+  openBackupConfirm: (target: BackupConfirmTarget) => void
+  closeBackupConfirm: () => void
 
   // Content search
   searchScope: { parentDocumentId: string | null; parentTitle: string } | null
@@ -138,6 +159,16 @@ export const useWikiStore = create<WikiStoreState>((set, get) => ({
     set({ backupPanelOpen: true, backupDocumentId: documentId }),
   closeBackupPanel: () =>
     set({ backupPanelOpen: false, backupDocumentId: null }),
+
+  // Backup preview dialog
+  backupPreviewId: null,
+  openBackupPreview: (backupId) => set({ backupPreviewId: backupId }),
+  closeBackupPreview: () => set({ backupPreviewId: null }),
+
+  // Backup confirm dialog
+  backupConfirmTarget: null,
+  openBackupConfirm: (target) => set({ backupConfirmTarget: target }),
+  closeBackupConfirm: () => set({ backupConfirmTarget: null }),
 
   // Content search
   searchScope: null,

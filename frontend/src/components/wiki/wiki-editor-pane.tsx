@@ -43,7 +43,7 @@ export function WikiEditorPane({
   }
 
   return (
-    <div className="flex flex-1 flex-col overflow-hidden rounded-lg border bg-card">
+    <div className="flex min-w-0 flex-1 flex-col overflow-hidden rounded-lg border bg-card">
       <WikiEditorHeader
         document={document}
         isEditor={isEditor}

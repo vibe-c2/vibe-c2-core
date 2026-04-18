@@ -178,6 +178,11 @@ func (r *wikiDocumentBackupResolver) DocumentID(ctx context.Context, obj *models
 	return r.WikiDocumentResolver.WikiDocumentBackupDocumentID(ctx, obj)
 }
 
+// ContentLength is the resolver for the contentLength field.
+func (r *wikiDocumentBackupResolver) ContentLength(ctx context.Context, obj *models.WikiDocumentBackup) (int, error) {
+	return r.WikiDocumentResolver.WikiDocumentBackupContentLength(ctx, obj)
+}
+
 // CreatedBy is the resolver for the createdBy field.
 func (r *wikiDocumentBackupResolver) CreatedBy(ctx context.Context, obj *models.WikiDocumentBackup) (*models.User, error) {
 	return r.WikiDocumentResolver.WikiDocumentBackupCreatedBy(ctx, obj)

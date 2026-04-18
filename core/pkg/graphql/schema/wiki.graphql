@@ -91,7 +91,11 @@ type WikiDocumentBackup {
   content: String!
   trigger: WikiDocumentBackupTrigger!
   description: String!
-  createdBy: User!
+  # Byte length of the content at backup time. Server-computed so the list
+  # query can surface size without shipping full content for every row.
+  contentLength: Int!
+  # Null for AUTO (system-created) backups and safety backups whose originating user was deleted.
+  createdBy: User
   createdAt: String!
 }
 

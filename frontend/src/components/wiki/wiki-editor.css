@@ -30,6 +30,12 @@
   outline: none;
 }
 
+/* Break extremely long tokens (file paths, URLs, code) that would
+   otherwise force the editor wider than its flex allocation. */
+.tiptap {
+  overflow-wrap: anywhere;
+}
+
 /* Placeholder text */
 .tiptap p.is-editor-empty:first-child::before {
   color: var(--color-muted-foreground);

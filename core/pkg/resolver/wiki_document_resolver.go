@@ -70,6 +70,7 @@ type IWikiDocumentResolver interface {
 	// WikiDocumentBackup field resolvers
 	WikiDocumentBackupID(ctx context.Context, obj *models.WikiDocumentBackup) (string, error)
 	WikiDocumentBackupDocumentID(ctx context.Context, obj *models.WikiDocumentBackup) (string, error)
+	WikiDocumentBackupContentLength(ctx context.Context, obj *models.WikiDocumentBackup) (int, error)
 	WikiDocumentBackupCreatedBy(ctx context.Context, obj *models.WikiDocumentBackup) (*models.User, error)
 	WikiDocumentBackupCreatedAt(ctx context.Context, obj *models.WikiDocumentBackup) (string, error)
 }
@@ -1136,7 +1137,14 @@ func (r *wikiDocumentResolver) WikiDocumentBackupDocumentID(ctx context.Context,
 	return obj.DocumentID.String(), nil
 }
 
+func (r *wikiDocumentResolver) WikiDocumentBackupContentLength(ctx context.Context, obj *models.WikiDocumentBackup) (int, error) {
+	return len(obj.Content), nil
+}
+
 func (r *wikiDocumentResolver) WikiDocumentBackupCreatedBy(ctx context.Context, obj *models.WikiDocumentBackup) (*models.User, error) {
+	if obj.CreatedByID == uuid.Nil {
+		return nil, nil
+	}
 	user, err := r.userRepo.FindByID(ctx, obj.CreatedByID)
 	if err != nil {
 		return nil, nil

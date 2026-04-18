@@ -38,13 +38,30 @@ export const WikiDocumentFields = graphql(`
   }
 `)
 
-// Backup fields.
-export const WikiDocumentBackupFields = graphql(`
-  fragment WikiDocumentBackupFields on WikiDocumentBackup {
+// Backup list fields — cheap fragment for the paginated list view.
+// Deliberately excludes `content` so paginated list requests don't ship
+// full document bodies for every row; `contentLength` is server-computed.
+export const WikiDocumentBackupListFields = graphql(`
+  fragment WikiDocumentBackupListFields on WikiDocumentBackup {
+    id
+    documentId
+    title
+    trigger
+    description
+    contentLength
+    createdBy { id username }
+    createdAt
+  }
+`)
+
+// Backup detail fields — includes `content` for the preview dialog.
+export const WikiDocumentBackupDetailFields = graphql(`
+  fragment WikiDocumentBackupDetailFields on WikiDocumentBackup {
     id
     documentId
     title
     content
+    contentLength
     trigger
     description
     createdBy { id username }
@@ -163,7 +180,7 @@ export const WikiDocumentBackupsQuery = graphql(`
     wikiDocumentBackups(documentId: $documentId, first: $first, after: $after) {
       edges {
         node {
-          ...WikiDocumentBackupFields
+          ...WikiDocumentBackupListFields
         }
         cursor
       }
@@ -176,7 +193,7 @@ export const WikiDocumentBackupsQuery = graphql(`
 export const WikiDocumentBackupQuery = graphql(`
   query WikiDocumentBackupDetail($id: ID!) {
     wikiDocumentBackup(id: $id) {
-      ...WikiDocumentBackupFields
+      ...WikiDocumentBackupDetailFields
     }
   }
 `)

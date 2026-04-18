@@ -15,7 +15,7 @@ export function AppLayout() {
     <TooltipProvider>
       <SidebarProvider open={sidebarOpen} onOpenChange={setSidebarOpen}>
         <AppSidebar />
-        <SidebarInset>
+        <SidebarInset className="min-w-0">
           <Outlet />
         </SidebarInset>
       </SidebarProvider>
