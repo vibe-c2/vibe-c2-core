@@ -30,6 +30,7 @@
     "@tiptap/extension-heading": "^3.22.2",
     "@tiptap/extension-ordered-list": "^3.22.2",
     "@tiptap/extension-placeholder": "^3.22.2",
+    "@tiptap/extension-table": "^3.22.4",
     "@tiptap/extension-task-item": "^3.22.2",
     "@tiptap/extension-task-list": "^3.22.2",
     "@tiptap/pm": "^3.22.2",

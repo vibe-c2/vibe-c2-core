@@ -6,6 +6,7 @@ import Collaboration from "@tiptap/extension-collaboration"
 import Placeholder from "@tiptap/extension-placeholder"
 import TaskList from "@tiptap/extension-task-list"
 import TaskItem from "@tiptap/extension-task-item"
+import { Table, TableRow, TableHeader, TableCell } from "@tiptap/extension-table"
 import { yCursorPlugin } from "@tiptap/y-tiptap"
 import { useHocuspocus } from "@/hooks/use-hocuspocus"
 import { useAuthStore } from "@/stores/auth"
@@ -13,6 +14,7 @@ import { getCursorColor, renderCursor } from "@/lib/cursor-colors"
 import { Skeleton } from "@/components/ui/skeleton"
 import { ConnectionBanner } from "@/components/wiki/connection-banner"
 import { WikiEditorBubbleMenu } from "@/components/wiki/wiki-editor-bubble-menu"
+import { WikiEditorTableMenu } from "@/components/wiki/wiki-editor-table-menu"
 import { WikiSlashCommand } from "@/components/wiki/wiki-slash-command/extension"
 import "./wiki-editor.css"
 
@@ -63,6 +65,14 @@ export function WikiEditor({ documentId, isEditor }: WikiEditorProps) {
       }),
       TaskList,
       TaskItem.configure({ nested: true }),
+      Table.configure({
+        resizable: true,
+        allowTableNodeSelection: true,
+        HTMLAttributes: { class: "wiki-table" },
+      }),
+      TableRow,
+      TableHeader,
+      TableCell,
       WikiSlashCommand,
     ],
   }, [ydoc, provider])
@@ -113,6 +123,7 @@ export function WikiEditor({ documentId, isEditor }: WikiEditorProps) {
     <>
       <ConnectionBanner connectionStatus={connectionStatus} isSynced={isSynced} isReady={isReady} />
       {isEditor && <WikiEditorBubbleMenu editor={editor} />}
+      {isEditor && <WikiEditorTableMenu editor={editor} />}
       <div
         className="flex-1 overflow-y-auto px-4 py-2"
         onMouseDown={(e) => {

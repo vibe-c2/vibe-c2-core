@@ -8,6 +8,7 @@ import {
   ListTodoIcon,
   QuoteIcon,
   SquareCodeIcon,
+  TableIcon,
   type LucideIcon,
 } from "lucide-react"
 
@@ -90,6 +91,20 @@ export const SLASH_ITEMS: SlashItem[] = [
     icon: QuoteIcon,
     command: ({ editor, range }) => {
       editor.chain().focus().deleteRange(range).toggleBlockquote().run()
+    },
+  },
+  {
+    title: "Table",
+    description: "3×3 table with header row",
+    keywords: ["table", "grid", "rows", "columns"],
+    icon: TableIcon,
+    command: ({ editor, range }) => {
+      editor
+        .chain()
+        .focus()
+        .deleteRange(range)
+        .insertTable({ rows: 3, cols: 3, withHeaderRow: true })
+        .run()
     },
   },
 ]
