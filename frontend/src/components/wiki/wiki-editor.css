@@ -59,5 +59,18 @@
 
 .tiptap ul[data-type="taskList"] li > label {
   flex-shrink: 0;
-  margin-top: 0.25rem;
+  display: inline-flex;
+  height: 1lh;
+}
+
+.tiptap ul[data-type="taskList"] li > label input[type="checkbox"] {
+  margin: 0;
+  /* Tailwind preflight / typography plugin sets align-self on <input>
+     which overrides the label's align-items. Force-center the checkbox
+     inside its label with !important. */
+  align-self: center !important;
+  /* Empirically calibrated shift to place the checkbox center on the
+     text optical midline at prose-sm. If prose size changes, this
+     value will need to be retuned. */
+  transform: translateY(16px);
 }

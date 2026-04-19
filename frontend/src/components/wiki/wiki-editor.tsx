@@ -12,7 +12,8 @@ import { useAuthStore } from "@/stores/auth"
 import { getCursorColor, renderCursor } from "@/lib/cursor-colors"
 import { Skeleton } from "@/components/ui/skeleton"
 import { ConnectionBanner } from "@/components/wiki/connection-banner"
-import { WikiEditorToolbar } from "@/components/wiki/wiki-editor-toolbar"
+import { WikiEditorBubbleMenu } from "@/components/wiki/wiki-editor-bubble-menu"
+import { WikiSlashCommand } from "@/components/wiki/wiki-slash-command/extension"
 import "./wiki-editor.css"
 
 interface WikiEditorProps {
@@ -26,6 +27,11 @@ export function WikiEditor({ documentId, isEditor }: WikiEditorProps) {
 
   const editor = useEditor({
     editable: isEditor,
+    editorProps: {
+      attributes: {
+        spellcheck: "false",
+      },
+    },
     extensions: [
       StarterKit.configure({
         history: false, // Y.js collaboration handles undo/redo
@@ -57,6 +63,7 @@ export function WikiEditor({ documentId, isEditor }: WikiEditorProps) {
       }),
       TaskList,
       TaskItem.configure({ nested: true }),
+      WikiSlashCommand,
     ],
   }, [ydoc, provider])
 
@@ -105,8 +112,75 @@ export function WikiEditor({ documentId, isEditor }: WikiEditorProps) {
   return (
     <>
       <ConnectionBanner connectionStatus={connectionStatus} isSynced={isSynced} isReady={isReady} />
-      {isEditor && <WikiEditorToolbar editor={editor} />}
-      <div className="flex-1 overflow-y-auto px-4 py-2">
+      {isEditor && <WikiEditorBubbleMenu editor={editor} />}
+      <div
+        className="flex-1 overflow-y-auto px-4 py-2"
+        onMouseDown={(e) => {
+          if (!isEditor || !editor) return
+          if (e.target !== e.currentTarget) return
+          e.preventDefault()
+
+          if (editor.isEmpty) {
+            editor.chain().focus().run()
+            return
+          }
+
+          const view = editor.view
+          const editorRect = (view.dom as HTMLElement).getBoundingClientRect()
+
+          if (e.clientY > editorRect.bottom) {
+            editor.chain().focus("end").run()
+            return
+          }
+          if (e.clientY < editorRect.top) {
+            editor.chain().focus("start").run()
+            return
+          }
+
+          // Gutter click next to a line — resolve position at clamped X so
+          // the caret lands on the clicked line, not at the end of the doc.
+          const clampedX = Math.min(
+            Math.max(e.clientX, editorRect.left + 1),
+            editorRect.right - 1,
+          )
+          const coords = view.posAtCoords({ left: clampedX, top: e.clientY })
+          if (coords) {
+            const targetPos = coords.pos
+            // At a wrap boundary, a single pos can render either at
+            // end-of-previous-line or start-of-next-line. Resolve both
+            // sides via view.coordsAtPos: if their line-Y differs,
+            // we're at a wrap. If the click Y is closer to the forward
+            // side, set the DOM selection directly using the forward
+            // DOM position so the caret renders at line-2 start.
+            const before = view.coordsAtPos(targetPos, -1)
+            const after = view.coordsAtPos(targetPos, 1)
+            const linesDiffer =
+              Math.abs(
+                (before.top + before.bottom) / 2 -
+                  (after.top + after.bottom) / 2,
+              ) > 4
+            const afterIsCloser =
+              Math.abs(e.clientY - (after.top + after.bottom) / 2) <
+              Math.abs(e.clientY - (before.top + before.bottom) / 2)
+
+            editor.chain().focus().setTextSelection(targetPos).run()
+
+            if (linesDiffer && afterIsCloser) {
+              const domPos = view.domAtPos(targetPos, 1)
+              const domSel = window.getSelection()
+              if (domSel) {
+                const range = document.createRange()
+                range.setStart(domPos.node, domPos.offset)
+                range.collapse(true)
+                domSel.removeAllRanges()
+                domSel.addRange(range)
+              }
+            }
+          } else {
+            editor.chain().focus("end").run()
+          }
+        }}
+      >
         {isReady ? (
           <EditorContent
             editor={editor}
