@@ -166,6 +166,7 @@ export const WikiDocumentTrashQuery = graphql(`
           deletedAt
           deletedBy { id username }
           createdAt
+          ancestors { id title emoji isDeleted }
         }
         cursor
       }

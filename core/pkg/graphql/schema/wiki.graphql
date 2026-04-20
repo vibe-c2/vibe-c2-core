@@ -36,12 +36,26 @@ type WikiDocument {
   icon: String!
   sortOrder: String!
   childCount: Int!
+  # Parent chain from root to the document's immediate parent (excludes self).
+  # Walks through trashed ancestors too — each segment carries an isDeleted
+  # flag so the client can render them distinctly. Empty for root documents.
+  ancestors: [WikiDocumentAncestor!]!
   createdBy: User!
   lastBackupAt: String
   deletedAt: String
   deletedBy: User
   createdAt: String!
   updatedAt: String!
+}
+
+# Flattened ancestor segment used for breadcrumb-style rendering. Not a
+# WikiDocument to keep the shape cheap and prevent accidental recursion
+# into full subtrees.
+type WikiDocumentAncestor {
+  id: ID!
+  title: String!
+  emoji: String!
+  isDeleted: Boolean!
 }
 
 type WikiDocumentEdge {

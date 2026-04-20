@@ -166,6 +166,13 @@ type UserSuggestion struct {
 	Username string `json:"username"`
 }
 
+type WikiDocumentAncestor struct {
+	ID        string `json:"id"`
+	Title     string `json:"title"`
+	Emoji     string `json:"emoji"`
+	IsDeleted bool   `json:"isDeleted"`
+}
+
 type WikiDocumentBackupConnection struct {
 	Edges      []*WikiDocumentBackupEdge `json:"edges"`
 	PageInfo   *pagination.PageInfo      `json:"pageInfo"`

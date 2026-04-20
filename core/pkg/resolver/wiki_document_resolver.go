@@ -60,6 +60,7 @@ type IWikiDocumentResolver interface {
 	WikiDocumentParentDocument(ctx context.Context, obj *models.WikiDocument) (*models.WikiDocument, error)
 	WikiDocumentChildDocuments(ctx context.Context, obj *models.WikiDocument) ([]*models.WikiDocument, error)
 	WikiDocumentChildCount(ctx context.Context, obj *models.WikiDocument) (int, error)
+	WikiDocumentAncestors(ctx context.Context, obj *models.WikiDocument) ([]*model.WikiDocumentAncestor, error)
 	WikiDocumentCreatedBy(ctx context.Context, obj *models.WikiDocument) (*models.User, error)
 	WikiDocumentDeletedBy(ctx context.Context, obj *models.WikiDocument) (*models.User, error)
 	WikiDocumentLastBackupAt(ctx context.Context, obj *models.WikiDocument) (*string, error)
@@ -418,15 +419,24 @@ func (r *wikiDocumentResolver) RestoreWikiDocument(ctx context.Context, id strin
 		return nil, err
 	}
 
-	// If original parent was permanently deleted, restore to root
+	// Pick where the restored doc should land. If the original parent is
+	// alive, keep it there. Otherwise walk up and re-home under the nearest
+	// still-alive ancestor — falling back to root when the whole chain is
+	// gone (trashed or hard-deleted). Without this, restoring into a trashed
+	// branch would hide the doc from the tree since trashed ancestors aren't
+	// rendered.
 	if doc.ParentDocumentID != nil {
-		_, err := r.docRepo.FindByID(ctx, *doc.ParentDocumentID)
+		newParent, err := r.resolveRestoreParent(ctx, &doc)
 		if err != nil {
-			// Parent no longer exists — restore to root
-			if err := r.docRepo.Update(ctx, &doc, map[string]interface{}{
-				"parent_document_id": nil,
-			}); err != nil {
-				return nil, fmt.Errorf("failed to clear parent for restore: %w", err)
+			return nil, err
+		}
+		if !sameParent(doc.ParentDocumentID, newParent) {
+			updates := map[string]interface{}{"parent_document_id": nil}
+			if newParent != nil {
+				updates["parent_document_id"] = *newParent
+			}
+			if err := r.docRepo.Update(ctx, &doc, updates); err != nil {
+				return nil, fmt.Errorf("failed to reparent for restore: %w", err)
 			}
 		}
 	}
@@ -445,6 +455,42 @@ func (r *wikiDocumentResolver) RestoreWikiDocument(ctx context.Context, id strin
 	))
 
 	return &restored, nil
+}
+
+// resolveRestoreParent returns the document ID the restored doc should be
+// parented under: the nearest still-alive ancestor (walking from the original
+// parent upward), or nil meaning restore to root. Assumes doc.ParentDocumentID
+// is non-nil; callers skip this for root docs.
+func (r *wikiDocumentResolver) resolveRestoreParent(ctx context.Context, doc *models.WikiDocument) (*uuid.UUID, error) {
+	chain, err := r.docRepo.FindAncestors(ctx, *doc.ParentDocumentID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to resolve restore parent: %w", err)
+	}
+	// Chain is root→leaf and includes the original parent as the last entry.
+	// Walk leaf→root so we prefer the closest live ancestor.
+	for i := len(chain) - 1; i >= 0; i-- {
+		a := chain[i]
+		if a.OperationID != doc.OperationID {
+			break // defensive: parent chain must stay inside the operation
+		}
+		if a.DeletedAt == nil {
+			id := a.DocumentID
+			return &id, nil
+		}
+	}
+	return nil, nil // no live ancestor — restore to root
+}
+
+// sameParent reports whether two nullable parent IDs point at the same doc,
+// so the restore flow can skip an Update when no reparenting is needed.
+func sameParent(a *uuid.UUID, b *uuid.UUID) bool {
+	if a == nil && b == nil {
+		return true
+	}
+	if a == nil || b == nil {
+		return false
+	}
+	return *a == *b
 }
 
 func (r *wikiDocumentResolver) PermanentlyDeleteWikiDocument(ctx context.Context, id string) (bool, error) {
@@ -1062,6 +1108,36 @@ func (r *wikiDocumentResolver) WikiDocumentParentDocument(ctx context.Context, o
 		return nil, nil // parent may have been deleted
 	}
 	return &parent, nil
+}
+
+// WikiDocumentAncestors returns the parent chain root→leaf (excluding obj
+// itself) so the frontend can render a breadcrumb for any document — notably
+// trashed ones, where the tree cache doesn't carry the path. Walks through
+// trashed ancestors and marks each segment's isDeleted accordingly.
+func (r *wikiDocumentResolver) WikiDocumentAncestors(ctx context.Context, obj *models.WikiDocument) ([]*model.WikiDocumentAncestor, error) {
+	if obj.ParentDocumentID == nil {
+		return []*model.WikiDocumentAncestor{}, nil
+	}
+	chain, err := r.docRepo.FindAncestors(ctx, *obj.ParentDocumentID)
+	if err != nil {
+		// Degrade silently — the rest of the row is still useful.
+		return []*model.WikiDocumentAncestor{}, nil
+	}
+	out := make([]*model.WikiDocumentAncestor, 0, len(chain))
+	for _, a := range chain {
+		// Defensive op-boundary check — parent chains must stay inside the
+		// owning operation; if something slips, stop rather than leak.
+		if a.OperationID != obj.OperationID {
+			break
+		}
+		out = append(out, &model.WikiDocumentAncestor{
+			ID:        a.DocumentID.String(),
+			Title:     a.Title,
+			Emoji:     a.Emoji,
+			IsDeleted: a.DeletedAt != nil,
+		})
+	}
+	return out, nil
 }
 
 func (r *wikiDocumentResolver) WikiDocumentChildDocuments(ctx context.Context, obj *models.WikiDocument) ([]*models.WikiDocument, error) {

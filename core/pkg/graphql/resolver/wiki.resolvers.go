@@ -138,6 +138,11 @@ func (r *wikiDocumentResolver) ChildCount(ctx context.Context, obj *models.WikiD
 	return r.WikiDocumentResolver.WikiDocumentChildCount(ctx, obj)
 }
 
+// Ancestors is the resolver for the ancestors field.
+func (r *wikiDocumentResolver) Ancestors(ctx context.Context, obj *models.WikiDocument) ([]*model.WikiDocumentAncestor, error) {
+	return r.WikiDocumentResolver.WikiDocumentAncestors(ctx, obj)
+}
+
 // CreatedBy is the resolver for the createdBy field.
 func (r *wikiDocumentResolver) CreatedBy(ctx context.Context, obj *models.WikiDocument) (*models.User, error) {
 	return r.WikiDocumentResolver.WikiDocumentCreatedBy(ctx, obj)

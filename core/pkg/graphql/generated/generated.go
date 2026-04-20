@@ -255,6 +255,7 @@ type ComplexityRoot struct {
 	}
 
 	WikiDocument struct {
+		Ancestors      func(childComplexity int) int
 		ChildCount     func(childComplexity int) int
 		ChildDocuments func(childComplexity int) int
 		Color          func(childComplexity int) int
@@ -272,6 +273,13 @@ type ComplexityRoot struct {
 		SortOrder      func(childComplexity int) int
 		Title          func(childComplexity int) int
 		UpdatedAt      func(childComplexity int) int
+	}
+
+	WikiDocumentAncestor struct {
+		Emoji     func(childComplexity int) int
+		ID        func(childComplexity int) int
+		IsDeleted func(childComplexity int) int
+		Title     func(childComplexity int) int
 	}
 
 	WikiDocumentBackup struct {
@@ -462,6 +470,7 @@ type WikiDocumentResolver interface {
 	ChildDocuments(ctx context.Context, obj *models.WikiDocument) ([]*models.WikiDocument, error)
 
 	ChildCount(ctx context.Context, obj *models.WikiDocument) (int, error)
+	Ancestors(ctx context.Context, obj *models.WikiDocument) ([]*model.WikiDocumentAncestor, error)
 	CreatedBy(ctx context.Context, obj *models.WikiDocument) (*models.User, error)
 	LastBackupAt(ctx context.Context, obj *models.WikiDocument) (*string, error)
 	DeletedAt(ctx context.Context, obj *models.WikiDocument) (*string, error)
@@ -1608,6 +1617,12 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 
 		return e.ComplexityRoot.UserSuggestion.Username(childComplexity), true
 
+	case "WikiDocument.ancestors":
+		if e.ComplexityRoot.WikiDocument.Ancestors == nil {
+			break
+		}
+
+		return e.ComplexityRoot.WikiDocument.Ancestors(childComplexity), true
 	case "WikiDocument.childCount":
 		if e.ComplexityRoot.WikiDocument.ChildCount == nil {
 			break
@@ -1710,6 +1725,31 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.WikiDocument.UpdatedAt(childComplexity), true
+
+	case "WikiDocumentAncestor.emoji":
+		if e.ComplexityRoot.WikiDocumentAncestor.Emoji == nil {
+			break
+		}
+
+		return e.ComplexityRoot.WikiDocumentAncestor.Emoji(childComplexity), true
+	case "WikiDocumentAncestor.id":
+		if e.ComplexityRoot.WikiDocumentAncestor.ID == nil {
+			break
+		}
+
+		return e.ComplexityRoot.WikiDocumentAncestor.ID(childComplexity), true
+	case "WikiDocumentAncestor.isDeleted":
+		if e.ComplexityRoot.WikiDocumentAncestor.IsDeleted == nil {
+			break
+		}
+
+		return e.ComplexityRoot.WikiDocumentAncestor.IsDeleted(childComplexity), true
+	case "WikiDocumentAncestor.title":
+		if e.ComplexityRoot.WikiDocumentAncestor.Title == nil {
+			break
+		}
+
+		return e.ComplexityRoot.WikiDocumentAncestor.Title(childComplexity), true
 
 	case "WikiDocumentBackup.content":
 		if e.ComplexityRoot.WikiDocumentBackup.Content == nil {
@@ -2745,12 +2785,26 @@ type WikiDocument {
   icon: String!
   sortOrder: String!
   childCount: Int!
+  # Parent chain from root to the document's immediate parent (excludes self).
+  # Walks through trashed ancestors too — each segment carries an isDeleted
+  # flag so the client can render them distinctly. Empty for root documents.
+  ancestors: [WikiDocumentAncestor!]!
   createdBy: User!
   lastBackupAt: String
   deletedAt: String
   deletedBy: User
   createdAt: String!
   updatedAt: String!
+}
+
+# Flattened ancestor segment used for breadcrumb-style rendering. Not a
+# WikiDocument to keep the shape cheap and prevent accidental recursion
+# into full subtrees.
+type WikiDocumentAncestor {
+  id: ID!
+  title: String!
+  emoji: String!
+  isDeleted: Boolean!
 }
 
 type WikiDocumentEdge {
@@ -5370,6 +5424,8 @@ func (ec *executionContext) fieldContext_Mutation_createWikiDocument(ctx context
 				return ec.fieldContext_WikiDocument_sortOrder(ctx, field)
 			case "childCount":
 				return ec.fieldContext_WikiDocument_childCount(ctx, field)
+			case "ancestors":
+				return ec.fieldContext_WikiDocument_ancestors(ctx, field)
 			case "createdBy":
 				return ec.fieldContext_WikiDocument_createdBy(ctx, field)
 			case "lastBackupAt":
@@ -5465,6 +5521,8 @@ func (ec *executionContext) fieldContext_Mutation_updateWikiDocument(ctx context
 				return ec.fieldContext_WikiDocument_sortOrder(ctx, field)
 			case "childCount":
 				return ec.fieldContext_WikiDocument_childCount(ctx, field)
+			case "ancestors":
+				return ec.fieldContext_WikiDocument_ancestors(ctx, field)
 			case "createdBy":
 				return ec.fieldContext_WikiDocument_createdBy(ctx, field)
 			case "lastBackupAt":
@@ -5619,6 +5677,8 @@ func (ec *executionContext) fieldContext_Mutation_restoreWikiDocument(ctx contex
 				return ec.fieldContext_WikiDocument_sortOrder(ctx, field)
 			case "childCount":
 				return ec.fieldContext_WikiDocument_childCount(ctx, field)
+			case "ancestors":
+				return ec.fieldContext_WikiDocument_ancestors(ctx, field)
 			case "createdBy":
 				return ec.fieldContext_WikiDocument_createdBy(ctx, field)
 			case "lastBackupAt":
@@ -5911,6 +5971,8 @@ func (ec *executionContext) fieldContext_Mutation_restoreWikiDocumentBackup(ctx 
 				return ec.fieldContext_WikiDocument_sortOrder(ctx, field)
 			case "childCount":
 				return ec.fieldContext_WikiDocument_childCount(ctx, field)
+			case "ancestors":
+				return ec.fieldContext_WikiDocument_ancestors(ctx, field)
 			case "createdBy":
 				return ec.fieldContext_WikiDocument_createdBy(ctx, field)
 			case "lastBackupAt":
@@ -7655,6 +7717,8 @@ func (ec *executionContext) fieldContext_Query_wikiDocument(ctx context.Context,
 				return ec.fieldContext_WikiDocument_sortOrder(ctx, field)
 			case "childCount":
 				return ec.fieldContext_WikiDocument_childCount(ctx, field)
+			case "ancestors":
+				return ec.fieldContext_WikiDocument_ancestors(ctx, field)
 			case "createdBy":
 				return ec.fieldContext_WikiDocument_createdBy(ctx, field)
 			case "lastBackupAt":
@@ -7817,6 +7881,8 @@ func (ec *executionContext) fieldContext_Query_wikiDocumentTree(ctx context.Cont
 				return ec.fieldContext_WikiDocument_sortOrder(ctx, field)
 			case "childCount":
 				return ec.fieldContext_WikiDocument_childCount(ctx, field)
+			case "ancestors":
+				return ec.fieldContext_WikiDocument_ancestors(ctx, field)
 			case "createdBy":
 				return ec.fieldContext_WikiDocument_createdBy(ctx, field)
 			case "lastBackupAt":
@@ -10759,6 +10825,8 @@ func (ec *executionContext) fieldContext_WikiDocument_parentDocument(_ context.C
 				return ec.fieldContext_WikiDocument_sortOrder(ctx, field)
 			case "childCount":
 				return ec.fieldContext_WikiDocument_childCount(ctx, field)
+			case "ancestors":
+				return ec.fieldContext_WikiDocument_ancestors(ctx, field)
 			case "createdBy":
 				return ec.fieldContext_WikiDocument_createdBy(ctx, field)
 			case "lastBackupAt":
@@ -10824,6 +10892,8 @@ func (ec *executionContext) fieldContext_WikiDocument_childDocuments(_ context.C
 				return ec.fieldContext_WikiDocument_sortOrder(ctx, field)
 			case "childCount":
 				return ec.fieldContext_WikiDocument_childCount(ctx, field)
+			case "ancestors":
+				return ec.fieldContext_WikiDocument_ancestors(ctx, field)
 			case "createdBy":
 				return ec.fieldContext_WikiDocument_createdBy(ctx, field)
 			case "lastBackupAt":
@@ -11046,6 +11116,45 @@ func (ec *executionContext) fieldContext_WikiDocument_childCount(_ context.Conte
 	return fc, nil
 }
 
+func (ec *executionContext) _WikiDocument_ancestors(ctx context.Context, field graphql.CollectedField, obj *models.WikiDocument) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_WikiDocument_ancestors,
+		func(ctx context.Context) (any, error) {
+			return ec.Resolvers.WikiDocument().Ancestors(ctx, obj)
+		},
+		nil,
+		ec.marshalNWikiDocumentAncestor2ᚕᚖgithubᚗcomᚋvibeᚑc2ᚋvibeᚑc2ᚑcoreᚋcoreᚋpkgᚋgraphqlᚋmodelᚐWikiDocumentAncestorᚄ,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_WikiDocument_ancestors(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "WikiDocument",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "id":
+				return ec.fieldContext_WikiDocumentAncestor_id(ctx, field)
+			case "title":
+				return ec.fieldContext_WikiDocumentAncestor_title(ctx, field)
+			case "emoji":
+				return ec.fieldContext_WikiDocumentAncestor_emoji(ctx, field)
+			case "isDeleted":
+				return ec.fieldContext_WikiDocumentAncestor_isDeleted(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type WikiDocumentAncestor", field.Name)
+		},
+	}
+	return fc, nil
+}
+
 func (ec *executionContext) _WikiDocument_createdBy(ctx context.Context, field graphql.CollectedField, obj *models.WikiDocument) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
@@ -11243,6 +11352,122 @@ func (ec *executionContext) fieldContext_WikiDocument_updatedAt(_ context.Contex
 		IsResolver: true,
 		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
 			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _WikiDocumentAncestor_id(ctx context.Context, field graphql.CollectedField, obj *model.WikiDocumentAncestor) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_WikiDocumentAncestor_id,
+		func(ctx context.Context) (any, error) {
+			return obj.ID, nil
+		},
+		nil,
+		ec.marshalNID2string,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_WikiDocumentAncestor_id(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "WikiDocumentAncestor",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type ID does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _WikiDocumentAncestor_title(ctx context.Context, field graphql.CollectedField, obj *model.WikiDocumentAncestor) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_WikiDocumentAncestor_title,
+		func(ctx context.Context) (any, error) {
+			return obj.Title, nil
+		},
+		nil,
+		ec.marshalNString2string,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_WikiDocumentAncestor_title(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "WikiDocumentAncestor",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _WikiDocumentAncestor_emoji(ctx context.Context, field graphql.CollectedField, obj *model.WikiDocumentAncestor) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_WikiDocumentAncestor_emoji,
+		func(ctx context.Context) (any, error) {
+			return obj.Emoji, nil
+		},
+		nil,
+		ec.marshalNString2string,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_WikiDocumentAncestor_emoji(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "WikiDocumentAncestor",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _WikiDocumentAncestor_isDeleted(ctx context.Context, field graphql.CollectedField, obj *model.WikiDocumentAncestor) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_WikiDocumentAncestor_isDeleted,
+		func(ctx context.Context) (any, error) {
+			return obj.IsDeleted, nil
+		},
+		nil,
+		ec.marshalNBoolean2bool,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_WikiDocumentAncestor_isDeleted(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "WikiDocumentAncestor",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Boolean does not have child fields")
 		},
 	}
 	return fc, nil
@@ -11853,6 +12078,8 @@ func (ec *executionContext) fieldContext_WikiDocumentEdge_node(_ context.Context
 				return ec.fieldContext_WikiDocument_sortOrder(ctx, field)
 			case "childCount":
 				return ec.fieldContext_WikiDocument_childCount(ctx, field)
+			case "ancestors":
+				return ec.fieldContext_WikiDocument_ancestors(ctx, field)
 			case "createdBy":
 				return ec.fieldContext_WikiDocument_createdBy(ctx, field)
 			case "lastBackupAt":
@@ -12150,6 +12377,8 @@ func (ec *executionContext) fieldContext_WikiDocumentEvent_document(_ context.Co
 				return ec.fieldContext_WikiDocument_sortOrder(ctx, field)
 			case "childCount":
 				return ec.fieldContext_WikiDocument_childCount(ctx, field)
+			case "ancestors":
+				return ec.fieldContext_WikiDocument_ancestors(ctx, field)
 			case "createdBy":
 				return ec.fieldContext_WikiDocument_createdBy(ctx, field)
 			case "lastBackupAt":
@@ -12523,6 +12752,8 @@ func (ec *executionContext) fieldContext_WikiSearchHit_document(_ context.Contex
 				return ec.fieldContext_WikiDocument_sortOrder(ctx, field)
 			case "childCount":
 				return ec.fieldContext_WikiDocument_childCount(ctx, field)
+			case "ancestors":
+				return ec.fieldContext_WikiDocument_ancestors(ctx, field)
 			case "createdBy":
 				return ec.fieldContext_WikiDocument_createdBy(ctx, field)
 			case "lastBackupAt":
@@ -17401,6 +17632,42 @@ func (ec *executionContext) _WikiDocument(ctx context.Context, sel ast.Selection
 			}
 
 			out.Concurrently(i, func(ctx context.Context) graphql.Marshaler { return innerFunc(ctx, out) })
+		case "ancestors":
+			field := field
+
+			innerFunc := func(ctx context.Context, fs *graphql.FieldSet) (res graphql.Marshaler) {
+				defer func() {
+					if r := recover(); r != nil {
+						ec.Error(ctx, ec.Recover(ctx, r))
+					}
+				}()
+				res = ec._WikiDocument_ancestors(ctx, field, obj)
+				if res == graphql.Null {
+					atomic.AddUint32(&fs.Invalids, 1)
+				}
+				return res
+			}
+
+			if field.Deferrable != nil {
+				dfs, ok := deferred[field.Deferrable.Label]
+				di := 0
+				if ok {
+					dfs.AddField(field)
+					di = len(dfs.Values) - 1
+				} else {
+					dfs = graphql.NewFieldSet([]graphql.CollectedField{field})
+					deferred[field.Deferrable.Label] = dfs
+				}
+				dfs.Concurrently(di, func(ctx context.Context) graphql.Marshaler {
+					return innerFunc(ctx, dfs)
+				})
+
+				// don't run the out.Concurrently() call below
+				out.Values[i] = graphql.Null
+				continue
+			}
+
+			out.Concurrently(i, func(ctx context.Context) graphql.Marshaler { return innerFunc(ctx, out) })
 		case "createdBy":
 			field := field
 
@@ -17608,6 +17875,60 @@ func (ec *executionContext) _WikiDocument(ctx context.Context, sel ast.Selection
 			}
 
 			out.Concurrently(i, func(ctx context.Context) graphql.Marshaler { return innerFunc(ctx, out) })
+		default:
+			panic("unknown field " + strconv.Quote(field.Name))
+		}
+	}
+	out.Dispatch(ctx)
+	if out.Invalids > 0 {
+		return graphql.Null
+	}
+
+	atomic.AddInt32(&ec.Deferred, int32(len(deferred)))
+
+	for label, dfs := range deferred {
+		ec.ProcessDeferredGroup(graphql.DeferredGroup{
+			Label:    label,
+			Path:     graphql.GetPath(ctx),
+			FieldSet: dfs,
+			Context:  ctx,
+		})
+	}
+
+	return out
+}
+
+var wikiDocumentAncestorImplementors = []string{"WikiDocumentAncestor"}
+
+func (ec *executionContext) _WikiDocumentAncestor(ctx context.Context, sel ast.SelectionSet, obj *model.WikiDocumentAncestor) graphql.Marshaler {
+	fields := graphql.CollectFields(ec.OperationContext, sel, wikiDocumentAncestorImplementors)
+
+	out := graphql.NewFieldSet(fields)
+	deferred := make(map[string]*graphql.FieldSet)
+	for i, field := range fields {
+		switch field.Name {
+		case "__typename":
+			out.Values[i] = graphql.MarshalString("WikiDocumentAncestor")
+		case "id":
+			out.Values[i] = ec._WikiDocumentAncestor_id(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "title":
+			out.Values[i] = ec._WikiDocumentAncestor_title(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "emoji":
+			out.Values[i] = ec._WikiDocumentAncestor_emoji(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "isDeleted":
+			out.Values[i] = ec._WikiDocumentAncestor_isDeleted(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
 		default:
 			panic("unknown field " + strconv.Quote(field.Name))
 		}
@@ -19304,6 +19625,32 @@ func (ec *executionContext) marshalNWikiDocument2ᚖgithubᚗcomᚋvibeᚑc2ᚋv
 		return graphql.Null
 	}
 	return ec._WikiDocument(ctx, sel, v)
+}
+
+func (ec *executionContext) marshalNWikiDocumentAncestor2ᚕᚖgithubᚗcomᚋvibeᚑc2ᚋvibeᚑc2ᚑcoreᚋcoreᚋpkgᚋgraphqlᚋmodelᚐWikiDocumentAncestorᚄ(ctx context.Context, sel ast.SelectionSet, v []*model.WikiDocumentAncestor) graphql.Marshaler {
+	ret := graphql.MarshalSliceConcurrently(ctx, len(v), 0, false, func(ctx context.Context, i int) graphql.Marshaler {
+		fc := graphql.GetFieldContext(ctx)
+		fc.Result = &v[i]
+		return ec.marshalNWikiDocumentAncestor2ᚖgithubᚗcomᚋvibeᚑc2ᚋvibeᚑc2ᚑcoreᚋcoreᚋpkgᚋgraphqlᚋmodelᚐWikiDocumentAncestor(ctx, sel, v[i])
+	})
+
+	for _, e := range ret {
+		if e == graphql.Null {
+			return graphql.Null
+		}
+	}
+
+	return ret
+}
+
+func (ec *executionContext) marshalNWikiDocumentAncestor2ᚖgithubᚗcomᚋvibeᚑc2ᚋvibeᚑc2ᚑcoreᚋcoreᚋpkgᚋgraphqlᚋmodelᚐWikiDocumentAncestor(ctx context.Context, sel ast.SelectionSet, v *model.WikiDocumentAncestor) graphql.Marshaler {
+	if v == nil {
+		if !graphql.HasFieldError(ctx, graphql.GetFieldContext(ctx)) {
+			graphql.AddErrorf(ctx, "the requested element is null which the schema does not allow")
+		}
+		return graphql.Null
+	}
+	return ec._WikiDocumentAncestor(ctx, sel, v)
 }
 
 func (ec *executionContext) marshalNWikiDocumentBackup2githubᚗcomᚋvibeᚑc2ᚋvibeᚑc2ᚑcoreᚋcoreᚋpkgᚋmodelsᚐWikiDocumentBackup(ctx context.Context, sel ast.SelectionSet, v models.WikiDocumentBackup) graphql.Marshaler {

@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/vibe-c2/vibe-c2-core/core/pkg/models"
 	"go.mongodb.org/mongo-driver/v2/bson"
 )
 
@@ -114,4 +115,105 @@ func TestBuildWikiDocumentFilter_EscapedPatternMatchesLiteral(t *testing.T) {
 	if re.MatchString("xxxxxxxxxxxxxxxx") {
 		t.Fatalf("escaped pattern %q accidentally matches unrelated input", pattern)
 	}
+}
+
+// TestWalkAncestorChain covers the pure walk logic used by FindAncestors.
+// We don't stand up Mongo here — the lookup closure stands in for FindByID.
+func TestWalkAncestorChain(t *testing.T) {
+	idA, idB, idC := uuid.New(), uuid.New(), uuid.New()
+	mk := func(id uuid.UUID, parent *uuid.UUID, title string, deleted bool) models.WikiDocument {
+		d := models.WikiDocument{
+			DocumentID:       id,
+			ParentDocumentID: parent,
+			Title:            title,
+		}
+		if deleted {
+			now := time.Now().UTC()
+			d.DeletedAt = &now
+		}
+		return d
+	}
+
+	t.Run("three-deep chain returns root→leaf for the parent of the leaf", func(t *testing.T) {
+		store := map[uuid.UUID]models.WikiDocument{
+			idA: mk(idA, nil, "A", false),
+			idB: mk(idB, &idA, "B", false),
+			idC: mk(idC, &idB, "C", false),
+		}
+		// Caller convention: resolver passes obj.ParentDocumentID, i.e. B's
+		// ID when asking for C's ancestors. Expect [A, B].
+		got := walkAncestorChain(idB, lookupStore(store))
+		if !equalTitles(got, []string{"A", "B"}) {
+			t.Fatalf("expected [A, B], got %v", titles(got))
+		}
+	})
+
+	t.Run("includes trashed ancestors with deleted_at preserved", func(t *testing.T) {
+		store := map[uuid.UUID]models.WikiDocument{
+			idA: mk(idA, nil, "A", false),
+			idB: mk(idB, &idA, "B", true),
+			idC: mk(idC, &idB, "C", false),
+		}
+		got := walkAncestorChain(idB, lookupStore(store))
+		if !equalTitles(got, []string{"A", "B"}) {
+			t.Fatalf("expected [A, B], got %v", titles(got))
+		}
+		if got[1].DeletedAt == nil {
+			t.Fatal("B should still carry DeletedAt when walked")
+		}
+		if got[0].DeletedAt != nil {
+			t.Fatal("A should not be flagged as deleted")
+		}
+	})
+
+	t.Run("missing ancestor stops the walk and returns partial path", func(t *testing.T) {
+		// B exists and points at idA, but A is absent from the store —
+		// simulating a hard-deleted root. We expect [B], not a panic.
+		store := map[uuid.UUID]models.WikiDocument{
+			idB: mk(idB, &idA, "B", false),
+		}
+		got := walkAncestorChain(idB, lookupStore(store))
+		if !equalTitles(got, []string{"B"}) {
+			t.Fatalf("expected [B], got %v", titles(got))
+		}
+	})
+
+	t.Run("cycle is bounded by visited guard", func(t *testing.T) {
+		// A -> B -> A. Walking from A visits {A, B} exactly once then stops.
+		store := map[uuid.UUID]models.WikiDocument{
+			idA: mk(idA, &idB, "A", false),
+			idB: mk(idB, &idA, "B", false),
+		}
+		got := walkAncestorChain(idA, lookupStore(store))
+		if len(got) != 2 {
+			t.Fatalf("expected 2 distinct nodes in cycle walk, got %d: %v", len(got), titles(got))
+		}
+	})
+}
+
+func lookupStore(store map[uuid.UUID]models.WikiDocument) func(uuid.UUID) (models.WikiDocument, bool) {
+	return func(id uuid.UUID) (models.WikiDocument, bool) {
+		d, ok := store[id]
+		return d, ok
+	}
+}
+
+func titles(docs []models.WikiDocument) []string {
+	out := make([]string, len(docs))
+	for i, d := range docs {
+		out[i] = d.Title
+	}
+	return out
+}
+
+func equalTitles(got []models.WikiDocument, want []string) bool {
+	if len(got) != len(want) {
+		return false
+	}
+	for i := range got {
+		if got[i].Title != want[i] {
+			return false
+		}
+	}
+	return true
 }

@@ -34,6 +34,7 @@ type IWikiDocumentRepository interface {
 	FindAllByOperationID(ctx context.Context, opID uuid.UUID) ([]models.WikiDocument, error)
 	CountChildDocuments(ctx context.Context, parentID uuid.UUID) (int64, error)
 	FindDescendants(ctx context.Context, docID uuid.UUID) ([]models.WikiDocument, error)
+	FindAncestors(ctx context.Context, id uuid.UUID) ([]models.WikiDocument, error)
 	NestingDepth(ctx context.Context, parentID uuid.UUID) (int, error)
 	SoftDelete(ctx context.Context, doc *models.WikiDocument, deletedByID uuid.UUID) error
 	SoftDeleteBatch(ctx context.Context, docIDs []uuid.UUID, deletedByID uuid.UUID) error
@@ -162,6 +163,59 @@ func (r *wikiDocumentRepository) FindDescendants(ctx context.Context, docID uuid
 	}
 
 	return allDescendants, nil
+}
+
+// maxAncestorDepth caps the walk defensively. Real chains are shallow; this
+// only exists so corrupt data (cycles, unexpectedly deep trees) can't spin
+// the process.
+const maxAncestorDepth = 100
+
+// FindAncestors walks parent_document_id upward from the given document and
+// returns the chain root→leaf, excluding the document itself. Reads through
+// soft-deleted ancestors (FindByID does not filter on deleted_at) so the
+// caller can still render trashed parents. Stops — without error — when an
+// ancestor is missing, when a cycle is detected, or when maxAncestorDepth
+// is reached.
+func (r *wikiDocumentRepository) FindAncestors(ctx context.Context, id uuid.UUID) ([]models.WikiDocument, error) {
+	return walkAncestorChain(id, func(id uuid.UUID) (models.WikiDocument, bool) {
+		doc, err := r.FindByID(ctx, id)
+		if err != nil {
+			return models.WikiDocument{}, false
+		}
+		return doc, true
+	}), nil
+}
+
+// walkAncestorChain is the pure core of FindAncestors — separated from Mongo
+// so the walk semantics (cycle guard, depth cap, ordering) can be unit-tested
+// against an in-memory lookup.
+func walkAncestorChain(startID uuid.UUID, lookup func(uuid.UUID) (models.WikiDocument, bool)) []models.WikiDocument {
+	chain := make([]models.WikiDocument, 0, 4)
+	visited := make(map[uuid.UUID]struct{}, 4)
+	currentID := startID
+
+	for i := 0; i < maxAncestorDepth; i++ {
+		if _, seen := visited[currentID]; seen {
+			break // cycle guard
+		}
+		visited[currentID] = struct{}{}
+
+		doc, ok := lookup(currentID)
+		if !ok {
+			break // broken link — return partial path
+		}
+		chain = append(chain, doc)
+		if doc.ParentDocumentID == nil {
+			break
+		}
+		currentID = *doc.ParentDocumentID
+	}
+
+	// Collected leaf→root; reverse for root→leaf.
+	for i, j := 0, len(chain)-1; i < j; i, j = i+1, j-1 {
+		chain[i], chain[j] = chain[j], chain[i]
+	}
+	return chain
 }
 
 // NestingDepth returns the depth of the given document by walking up the tree.
