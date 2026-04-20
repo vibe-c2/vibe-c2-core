@@ -19,6 +19,7 @@ import { WikiCodeBlock } from "@/components/wiki/wiki-code-block"
 import { WikiEditorBubbleMenu } from "@/components/wiki/wiki-editor-bubble-menu"
 import { WikiEditorTableMenu } from "@/components/wiki/wiki-editor-table-menu"
 import { WikiSlashCommand } from "@/components/wiki/wiki-slash-command/extension"
+import { WikiEscapeEdgeBlock } from "@/components/wiki/wiki-escape-edge-block"
 import "./wiki-editor.css"
 
 interface WikiEditorProps {
@@ -87,6 +88,7 @@ export function WikiEditor({ documentId, isEditor }: WikiEditorProps) {
       TableHeader,
       TableCell,
       WikiSlashCommand,
+      WikiEscapeEdgeBlock,
     ],
   }, [ydoc, provider])
 
