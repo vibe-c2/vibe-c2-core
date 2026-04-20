@@ -1,18 +1,21 @@
 import { useEffect } from "react"
 import { Extension } from "@tiptap/core"
-import { useEditor, EditorContent } from "@tiptap/react"
+import { useEditor, EditorContent, ReactNodeViewRenderer } from "@tiptap/react"
 import StarterKit from "@tiptap/starter-kit"
 import Collaboration from "@tiptap/extension-collaboration"
 import Placeholder from "@tiptap/extension-placeholder"
 import TaskList from "@tiptap/extension-task-list"
 import TaskItem from "@tiptap/extension-task-item"
 import { Table, TableRow, TableHeader, TableCell } from "@tiptap/extension-table"
+import CodeBlockLowlight from "@tiptap/extension-code-block-lowlight"
 import { yCursorPlugin } from "@tiptap/y-tiptap"
 import { useHocuspocus } from "@/hooks/use-hocuspocus"
 import { useAuthStore } from "@/stores/auth"
 import { getCursorColor, renderCursor } from "@/lib/cursor-colors"
+import { lowlight } from "@/lib/wiki-lowlight"
 import { Skeleton } from "@/components/ui/skeleton"
 import { ConnectionBanner } from "@/components/wiki/connection-banner"
+import { WikiCodeBlock } from "@/components/wiki/wiki-code-block"
 import { WikiEditorBubbleMenu } from "@/components/wiki/wiki-editor-bubble-menu"
 import { WikiEditorTableMenu } from "@/components/wiki/wiki-editor-table-menu"
 import { WikiSlashCommand } from "@/components/wiki/wiki-slash-command/extension"
@@ -37,6 +40,16 @@ export function WikiEditor({ documentId, isEditor }: WikiEditorProps) {
     extensions: [
       StarterKit.configure({
         history: false, // Y.js collaboration handles undo/redo
+        codeBlock: false, // Replaced by CodeBlockLowlight below
+      }),
+      CodeBlockLowlight.extend({
+        addNodeView() {
+          return ReactNodeViewRenderer(WikiCodeBlock)
+        },
+      }).configure({
+        lowlight,
+        defaultLanguage: "plaintext",
+        HTMLAttributes: { class: "wiki-code-block" },
       }),
       Collaboration.configure({
         document: ydoc,

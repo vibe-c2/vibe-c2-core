@@ -131,3 +131,204 @@
 .tiptap.resize-cursor {
   cursor: col-resize;
 }
+
+/* Code block — NodeView wrapper around <pre><code>. The hljs token
+   colors below are scoped to :root vs .dark so both themes look right. */
+.tiptap .wiki-code-block {
+  position: relative;
+  margin: 0.75em 0;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border);
+  background: var(--wiki-code-bg);
+  overflow: hidden;
+}
+
+.tiptap .wiki-code-block__toolbar {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  opacity: 0;
+  transition: opacity 120ms ease-out;
+  z-index: 1;
+}
+
+.tiptap .wiki-code-block:hover .wiki-code-block__toolbar,
+.tiptap .wiki-code-block:focus-within .wiki-code-block__toolbar {
+  opacity: 1;
+}
+
+.tiptap .wiki-code-block__select,
+.tiptap .wiki-code-block__language {
+  font-family: var(--font-sans);
+  font-size: 11px;
+  line-height: 1;
+  color: var(--muted-foreground);
+  background: var(--wiki-code-chrome);
+  border: 1px solid var(--border);
+  border-radius: calc(var(--radius-md) - 2px);
+  padding: 3px 6px;
+  cursor: pointer;
+}
+
+.tiptap .wiki-code-block__select {
+  appearance: none;
+  padding-right: 18px;
+  background-image: linear-gradient(45deg, transparent 50%, currentColor 50%),
+    linear-gradient(135deg, currentColor 50%, transparent 50%);
+  background-position: calc(100% - 9px) 50%, calc(100% - 5px) 50%;
+  background-size: 4px 4px;
+  background-repeat: no-repeat;
+}
+
+.tiptap .wiki-code-block__select:focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: 1px;
+}
+
+.tiptap .wiki-code-block__copy {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-family: var(--font-sans);
+  font-size: 11px;
+  line-height: 1;
+  color: var(--muted-foreground);
+  background: var(--wiki-code-chrome);
+  border: 1px solid var(--border);
+  border-radius: calc(var(--radius-md) - 2px);
+  padding: 3px 6px 3px 5px;
+  cursor: pointer;
+  transition: color 120ms ease-out, background 120ms ease-out;
+}
+
+.tiptap .wiki-code-block__copy:hover {
+  color: var(--foreground);
+  background: var(--accent);
+}
+
+.tiptap .wiki-code-block__pre {
+  margin: 0;
+  padding: 12px 14px;
+  background: transparent;
+  overflow-x: auto;
+}
+
+.tiptap .wiki-code-block__pre code,
+.tiptap .wiki-code-block__pre code.hljs {
+  display: block;
+  font-family: var(--font-mono);
+  font-size: 0.8125rem;
+  line-height: 1.55;
+  color: var(--wiki-code-fg);
+  background: transparent;
+  padding: 0;
+  white-space: pre;
+  tab-size: 2;
+}
+
+/* Surface tokens — GitHub light by default, overridden under .dark below. */
+:root {
+  --wiki-code-bg: oklch(0.985 0 0);
+  --wiki-code-chrome: oklch(0.97 0 0);
+  --wiki-code-fg: #24292e;
+  --hljs-comment: #6a737d;
+  --hljs-keyword: #d73a49;
+  --hljs-entity: #6f42c1;
+  --hljs-constant: #005cc5;
+  --hljs-string: #032f62;
+  --hljs-variable: #e36209;
+  --hljs-tag: #22863a;
+  --hljs-addition-fg: #22863a;
+  --hljs-addition-bg: #f0fff4;
+  --hljs-deletion-fg: #b31d28;
+  --hljs-deletion-bg: #ffeef0;
+}
+
+.dark {
+  --wiki-code-bg: oklch(0.2 0 0);
+  --wiki-code-chrome: oklch(0.24 0 0);
+  --wiki-code-fg: #c9d1d9;
+  --hljs-comment: #8b949e;
+  --hljs-keyword: #ff7b72;
+  --hljs-entity: #d2a8ff;
+  --hljs-constant: #79c0ff;
+  --hljs-string: #a5d6ff;
+  --hljs-variable: #ffa657;
+  --hljs-tag: #7ee787;
+  --hljs-addition-fg: #aff5b4;
+  --hljs-addition-bg: #033a16;
+  --hljs-deletion-fg: #ffdcd7;
+  --hljs-deletion-bg: #67060c;
+}
+
+/* highlight.js token classes — applied by lowlight on the <code>. */
+.tiptap .wiki-code-block__pre code.hljs .hljs-comment,
+.tiptap .wiki-code-block__pre code.hljs .hljs-quote {
+  color: var(--hljs-comment);
+  font-style: italic;
+}
+
+.tiptap .wiki-code-block__pre code.hljs .hljs-keyword,
+.tiptap .wiki-code-block__pre code.hljs .hljs-selector-tag,
+.tiptap .wiki-code-block__pre code.hljs .hljs-literal,
+.tiptap .wiki-code-block__pre code.hljs .hljs-doctag,
+.tiptap .wiki-code-block__pre code.hljs .hljs-type {
+  color: var(--hljs-keyword);
+}
+
+.tiptap .wiki-code-block__pre code.hljs .hljs-title,
+.tiptap .wiki-code-block__pre code.hljs .hljs-title.class_,
+.tiptap .wiki-code-block__pre code.hljs .hljs-title.function_,
+.tiptap .wiki-code-block__pre code.hljs .hljs-section,
+.tiptap .wiki-code-block__pre code.hljs .hljs-name {
+  color: var(--hljs-entity);
+}
+
+.tiptap .wiki-code-block__pre code.hljs .hljs-number,
+.tiptap .wiki-code-block__pre code.hljs .hljs-symbol,
+.tiptap .wiki-code-block__pre code.hljs .hljs-bullet,
+.tiptap .wiki-code-block__pre code.hljs .hljs-built_in,
+.tiptap .wiki-code-block__pre code.hljs .hljs-attr,
+.tiptap .wiki-code-block__pre code.hljs .hljs-meta {
+  color: var(--hljs-constant);
+}
+
+.tiptap .wiki-code-block__pre code.hljs .hljs-string,
+.tiptap .wiki-code-block__pre code.hljs .hljs-regexp,
+.tiptap .wiki-code-block__pre code.hljs .hljs-attribute,
+.tiptap .wiki-code-block__pre code.hljs .hljs-template-tag,
+.tiptap .wiki-code-block__pre code.hljs .hljs-template-variable {
+  color: var(--hljs-string);
+}
+
+.tiptap .wiki-code-block__pre code.hljs .hljs-variable,
+.tiptap .wiki-code-block__pre code.hljs .hljs-params {
+  color: var(--hljs-variable);
+}
+
+.tiptap .wiki-code-block__pre code.hljs .hljs-tag,
+.tiptap .wiki-code-block__pre code.hljs .hljs-selector-id,
+.tiptap .wiki-code-block__pre code.hljs .hljs-selector-class {
+  color: var(--hljs-tag);
+}
+
+.tiptap .wiki-code-block__pre code.hljs .hljs-addition {
+  color: var(--hljs-addition-fg);
+  background-color: var(--hljs-addition-bg);
+}
+
+.tiptap .wiki-code-block__pre code.hljs .hljs-deletion {
+  color: var(--hljs-deletion-fg);
+  background-color: var(--hljs-deletion-bg);
+}
+
+.tiptap .wiki-code-block__pre code.hljs .hljs-emphasis {
+  font-style: italic;
+}
+
+.tiptap .wiki-code-block__pre code.hljs .hljs-strong {
+  font-weight: 700;
+}
