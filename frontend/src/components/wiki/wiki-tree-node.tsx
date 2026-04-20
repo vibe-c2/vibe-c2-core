@@ -4,10 +4,11 @@ import { useDraggable, useDroppable } from "@dnd-kit/core"
 import {
   ArrowDownAZIcon,
   ChevronRightIcon,
+  ChevronsDownUpIcon,
+  ChevronsUpDownIcon,
   EllipsisIcon,
   FilePlusIcon,
   FolderInputIcon,
-  GripVerticalIcon,
   PencilIcon,
   PlusIcon,
   SearchIcon,
@@ -29,6 +30,7 @@ import { useWikiStore } from "@/stores/wiki"
 import { useUpdateWikiDocument } from "@/graphql/hooks/wiki"
 import { EmojiPicker } from "@/components/wiki/emoji-picker"
 import { cn } from "@/lib/utils"
+import { collectBranchIdsWithChildren } from "@/components/wiki/wiki-tree-helpers"
 import type { DropTarget, TreeNode } from "@/components/wiki/wiki-tree-sidebar"
 
 interface WikiTreeNodeProps {
@@ -54,6 +56,8 @@ export function WikiTreeNode({
 
   const expandedNodes = useWikiStore((s) => s.expandedNodes)
   const toggleNode = useWikiStore((s) => s.toggleNode)
+  const expandMany = useWikiStore((s) => s.expandMany)
+  const collapseMany = useWikiStore((s) => s.collapseMany)
   const openCreateDialog = useWikiStore((s) => s.openCreateDialog)
   const openMoveDialog = useWikiStore((s) => s.openMoveDialog)
   const openDeleteDialog = useWikiStore((s) => s.openDeleteDialog)
@@ -93,7 +97,7 @@ export function WikiTreeNode({
     setEmojiPickerOpen(false)
   }
 
-  const indent = depth * 16 + 4 + (hasChildren ? 0 : 22)
+  const indent = depth * 16 + 4
 
   return (
     <Collapsible
@@ -109,53 +113,56 @@ export function WikiTreeNode({
       )}
 
       <div
-        ref={setDropRef}
+        ref={(el) => {
+          setDropRef(el)
+          if (isEditor) setDragRef(el)
+        }}
+        {...(isEditor ? attributes : {})}
+        {...(isEditor ? listeners : {})}
         style={{ paddingLeft: indent }}
         className={cn(
           "group flex h-7 items-center gap-0.5 rounded-md px-1 text-sm",
+          isEditor && "cursor-grab active:cursor-grabbing",
           isDropInside && "bg-primary/10 ring-1 ring-primary",
           !isDropInside && isSelected && "bg-accent text-accent-foreground",
           !isDropInside && !isSelected && "hover:bg-muted",
         )}
       >
-        {/* Drag handle */}
-        {isEditor && (
-          <span
-            ref={setDragRef}
-            {...attributes}
-            {...listeners}
-            className="cursor-grab opacity-0 group-hover:opacity-60"
-          >
-            <GripVerticalIcon className="size-3.5" />
-          </span>
-        )}
-
-        {/* Expand/collapse chevron */}
-        {hasChildren && (
+        {/* Chevron/emoji shared slot: emoji by default, chevron on hover.
+            Leaves render just the emoji (no trigger). */}
+        {hasChildren ? (
           <CollapsibleTrigger
             render={
-              <button className="flex size-5 items-center justify-center rounded hover:bg-muted-foreground/10" />
+              <button
+                className="flex size-5 shrink-0 items-center justify-center rounded hover:bg-muted-foreground/10"
+                aria-label={isExpanded ? "Collapse" : "Expand"}
+              />
             }
           >
+            <span className="text-sm group-hover:hidden">
+              {node.emoji || "\u{1F4C4}"}
+            </span>
             <ChevronRightIcon
               className={cn(
-                "size-3.5 transition-transform",
+                "hidden size-3.5 transition-transform group-hover:block",
                 isExpanded && "rotate-90",
               )}
             />
           </CollapsibleTrigger>
+        ) : (
+          <span className="flex size-5 shrink-0 items-center justify-center text-sm">
+            {node.emoji || "\u{1F4C4}"}
+          </span>
         )}
 
-        {/* Emoji */}
-        {emojiPickerOpen ? (
+        {/* Emoji picker: opened via context menu, anchored to the row */}
+        {emojiPickerOpen && (
           <EmojiPicker
             emoji={node.emoji}
             onSelect={handleEmojiSelect}
             open={emojiPickerOpen}
             onOpenChange={setEmojiPickerOpen}
           />
-        ) : (
-          <span className="shrink-0 text-sm">{node.emoji || "\u{1F4C4}"}</span>
         )}
 
         {/* Title */}
@@ -184,6 +191,46 @@ export function WikiTreeNode({
         )}
 
         {/* Quick actions */}
+        {hasChildren && (
+          <>
+            <Tooltip>
+              <TooltipTrigger
+                render={
+                  <Button
+                    variant="ghost"
+                    size="icon-xs"
+                    className="shrink-0 hidden group-hover:inline-flex"
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      expandMany(collectBranchIdsWithChildren([node], true))
+                    }}
+                  />
+                }
+              >
+                <ChevronsUpDownIcon className="size-3.5" />
+              </TooltipTrigger>
+              <TooltipContent>Expand subtree</TooltipContent>
+            </Tooltip>
+            <Tooltip>
+              <TooltipTrigger
+                render={
+                  <Button
+                    variant="ghost"
+                    size="icon-xs"
+                    className="shrink-0 hidden group-hover:inline-flex"
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      collapseMany(collectBranchIdsWithChildren([node], true))
+                    }}
+                  />
+                }
+              >
+                <ChevronsDownUpIcon className="size-3.5" />
+              </TooltipTrigger>
+              <TooltipContent>Collapse subtree</TooltipContent>
+            </Tooltip>
+          </>
+        )}
         <Tooltip>
           <TooltipTrigger
             render={

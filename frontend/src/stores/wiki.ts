@@ -42,6 +42,8 @@ interface WikiStoreState {
   expandedNodes: Set<string>
   toggleNode: (id: string) => void
   expandNode: (id: string) => void
+  expandMany: (ids: readonly string[]) => void
+  collapseMany: (ids: readonly string[]) => void
 
   // Create dialog
   createDialogOpen: boolean
@@ -111,6 +113,18 @@ export const useWikiStore = create<WikiStoreState>((set, get) => ({
   expandNode: (id) => {
     const next = new Set(get().expandedNodes)
     next.add(id)
+    saveExpandedNodes(next)
+    set({ expandedNodes: next })
+  },
+  expandMany: (ids) => {
+    const next = new Set(get().expandedNodes)
+    for (const id of ids) next.add(id)
+    saveExpandedNodes(next)
+    set({ expandedNodes: next })
+  },
+  collapseMany: (ids) => {
+    const next = new Set(get().expandedNodes)
+    for (const id of ids) next.delete(id)
     saveExpandedNodes(next)
     set({ expandedNodes: next })
   },

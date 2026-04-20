@@ -1,5 +1,11 @@
 import { useMemo, useRef, useState } from "react"
-import { PlusIcon, SearchIcon, Trash2Icon } from "lucide-react"
+import {
+  ChevronsDownUpIcon,
+  ChevronsUpDownIcon,
+  PlusIcon,
+  SearchIcon,
+  Trash2Icon,
+} from "lucide-react"
 import {
   DndContext,
   DragOverlay,
@@ -18,6 +24,7 @@ import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip
 import { useWikiStore } from "@/stores/wiki"
 import { useWikiDocumentTrash, useUpdateWikiDocument } from "@/graphql/hooks/wiki"
 import { WikiTreeNode } from "@/components/wiki/wiki-tree-node"
+import { collectBranchIdsWithChildren } from "@/components/wiki/wiki-tree-helpers"
 import type { WikiDocumentTreeFieldsFragment } from "@/graphql/gql/graphql"
 
 export type DropPosition = "before" | "inside" | "after"
@@ -124,6 +131,9 @@ export function WikiTreeSidebar({
   const openCreateDialog = useWikiStore((s) => s.openCreateDialog)
   const openTrashPanel = useWikiStore((s) => s.openTrashPanel)
   const openContentSearch = useWikiStore((s) => s.openContentSearch)
+  const expandedNodes = useWikiStore((s) => s.expandedNodes)
+  const expandMany = useWikiStore((s) => s.expandMany)
+  const collapseMany = useWikiStore((s) => s.collapseMany)
 
   // Trash count for badge.
   const { data: trashData } = useWikiDocumentTrash(operationId)
@@ -301,6 +311,36 @@ export function WikiTreeSidebar({
       {/* Header */}
       <div className="flex h-10 items-center gap-1 border-b px-2">
         <span className="flex-1 truncate px-1 text-sm font-medium">Wiki</span>
+        <Tooltip>
+          <TooltipTrigger
+            render={
+              <Button
+                variant="ghost"
+                size="icon-xs"
+                onClick={() =>
+                  expandMany(collectBranchIdsWithChildren(tree, true))
+                }
+              />
+            }
+          >
+            <ChevronsUpDownIcon className="size-3.5" />
+          </TooltipTrigger>
+          <TooltipContent>Expand all</TooltipContent>
+        </Tooltip>
+        <Tooltip>
+          <TooltipTrigger
+            render={
+              <Button
+                variant="ghost"
+                size="icon-xs"
+                onClick={() => collapseMany([...expandedNodes])}
+              />
+            }
+          >
+            <ChevronsDownUpIcon className="size-3.5" />
+          </TooltipTrigger>
+          <TooltipContent>Collapse all</TooltipContent>
+        </Tooltip>
         <Tooltip>
           <TooltipTrigger
             render={
