@@ -332,3 +332,87 @@
 .tiptap .wiki-code-block__pre code.hljs .hljs-strong {
   font-weight: 700;
 }
+
+/* Wiki-embedded images. The NodeView wraps the raw <img> in a figure +
+   frame so we can overlay an on-hover preview button. */
+.tiptap figure.wiki-image-wrapper {
+  margin: 1rem 0;
+  padding: 0;
+}
+
+.tiptap .wiki-image-frame {
+  position: relative;
+  display: inline-block;
+  max-width: 100%;
+  border-radius: 6px;
+  overflow: hidden;
+  /* Collapse the font-based inline strut so the frame hugs the image pixel-
+     tight — otherwise the ~4px baseline descent leaks through inline-block. */
+  font-size: 0;
+  line-height: 0;
+}
+
+.tiptap .wiki-image-frame .wiki-image {
+  display: block;
+  max-width: 100%;
+  height: auto;
+  /* Override the prose plugin's default `img { margin: 2em 0 }`. The outer
+     <figure> already owns vertical rhythm; without this, the image drops
+     below the frame's top and the preview button lands in empty space. */
+  margin: 0;
+  border-radius: 6px;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.06), 0 1px 1px rgba(0, 0, 0, 0.04);
+  cursor: zoom-in;
+}
+
+.tiptap figure.wiki-image-wrapper.ProseMirror-selectednode .wiki-image-frame {
+  outline: 2px solid var(--color-ring);
+  outline-offset: 2px;
+}
+
+/* Action cluster overlay: preview + delete, anchored to the image's top-right
+   corner. Hidden until the frame is hovered or a button receives focus. */
+.tiptap .wiki-image-actions {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  display: inline-flex;
+  gap: 4px;
+  opacity: 0;
+  transform: translateY(-2px);
+  transition: opacity 120ms ease, transform 120ms ease;
+  pointer-events: none;
+}
+
+.tiptap .wiki-image-frame:hover .wiki-image-actions,
+.tiptap .wiki-image-actions:focus-within {
+  opacity: 1;
+  transform: translateY(0);
+  pointer-events: auto;
+}
+
+.tiptap .wiki-image-action-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: none;
+  border-radius: 6px;
+  background: rgba(17, 24, 39, 0.72);
+  color: #fff;
+  cursor: pointer;
+  backdrop-filter: blur(4px);
+  transition: background-color 120ms ease;
+}
+
+.tiptap .wiki-image-action-button:hover {
+  background: rgba(17, 24, 39, 0.88);
+}
+
+.tiptap .wiki-image-action-button--danger:hover {
+  /* Cue the destructive action with red, but only on hover — ambient red
+     would compete with the preview affordance next to it. */
+  background: rgb(185, 28, 28);
+}

@@ -54,6 +54,22 @@ function withTimeout(
   return any ? any([callerSignal, timeoutSignal]) : timeoutSignal
 }
 
+// Body types the browser must set Content-Type for itself, because the
+// boundary/encoding metadata is only known to the runtime. Overriding it
+// here would corrupt the multipart frame or binary stream.
+function isFormLikeBody(body: BodyInit | null | undefined): boolean {
+  if (!body) return false
+  if (typeof FormData !== "undefined" && body instanceof FormData) return true
+  if (typeof Blob !== "undefined" && body instanceof Blob) return true
+  if (
+    typeof URLSearchParams !== "undefined" &&
+    body instanceof URLSearchParams
+  ) {
+    return true
+  }
+  return false
+}
+
 // Read the (non-httpOnly) csrf_token cookie set by the backend on login /
 // refresh. Returned as-is — the caller echoes it back in the X-CSRF-Token
 // header on state-changing requests for the double-submit CSRF check.
@@ -236,7 +252,7 @@ export async function apiFetch(
 ): Promise<Response> {
   const { timeoutMs = DEFAULT_TIMEOUT_MS, signal: callerSignal, ...rest } = options
   const headers = new Headers(rest.headers)
-  if (!headers.has("Content-Type") && rest.body) {
+  if (!headers.has("Content-Type") && rest.body && !isFormLikeBody(rest.body)) {
     headers.set("Content-Type", "application/json")
   }
   applyCsrfHeader(headers, rest.method)

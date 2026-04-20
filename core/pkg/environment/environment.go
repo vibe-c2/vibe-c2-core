@@ -46,6 +46,13 @@ type EnvironmentSettings struct {
 	HocuspocusWebhookSecret string
 	WikiAutoBackupInterval  string
 
+	// Wiki images (uploads stored in SeaweedFS S3)
+	WikiImageBucket          string
+	WikiImageMaxSize         int64         // bytes
+	WikiImageMaxDimension    int           // pixels on the long edge
+	WikiImageSweeperInterval time.Duration // how often the GC pass runs
+	WikiImageSweeperGrace    time.Duration // minimum age before an unreferenced image is deleted
+
 	// Auth — durations parsed from Go duration strings (e.g. "15m", "168h").
 	AuthAccessTTL       time.Duration
 	AuthRefreshTTL      time.Duration
@@ -76,6 +83,11 @@ func init() {
 	viper.SetDefault("HOCUSPOCUS_URL", "http://hocuspocus:1235")
 	viper.SetDefault("HOCUSPOCUS_WEBHOOK_SECRET", "")
 	viper.SetDefault("WIKI_AUTO_BACKUP_INTERVAL", "30m")
+	viper.SetDefault("WIKI_IMAGE_BUCKET", "wiki-images")
+	viper.SetDefault("WIKI_IMAGE_MAX_SIZE", int64(10*1024*1024))
+	viper.SetDefault("WIKI_IMAGE_MAX_DIMENSION", 2560)
+	viper.SetDefault("WIKI_IMAGE_SWEEPER_INTERVAL", "24h")
+	viper.SetDefault("WIKI_IMAGE_SWEEPER_GRACE", "168h")
 	viper.SetDefault("AUTH_ACCESS_TTL", "15m")
 	viper.SetDefault("AUTH_REFRESH_TTL", "168h")
 	viper.SetDefault("AUTH_REFRESH_GRACE_TTL", "10s")
@@ -114,6 +126,13 @@ func init() {
 		HocuspocusTicketSecret:  viper.GetString("HOCUSPOCUS_TICKET_SECRET"),
 		HocuspocusWebhookSecret: viper.GetString("HOCUSPOCUS_WEBHOOK_SECRET"),
 		WikiAutoBackupInterval:  viper.GetString("WIKI_AUTO_BACKUP_INTERVAL"),
+
+		// Wiki images
+		WikiImageBucket:          viper.GetString("WIKI_IMAGE_BUCKET"),
+		WikiImageMaxSize:         viper.GetInt64("WIKI_IMAGE_MAX_SIZE"),
+		WikiImageMaxDimension:    viper.GetInt("WIKI_IMAGE_MAX_DIMENSION"),
+		WikiImageSweeperInterval: parseDurationOrFatal("WIKI_IMAGE_SWEEPER_INTERVAL", viper.GetString("WIKI_IMAGE_SWEEPER_INTERVAL")),
+		WikiImageSweeperGrace:    parseDurationOrFatal("WIKI_IMAGE_SWEEPER_GRACE", viper.GetString("WIKI_IMAGE_SWEEPER_GRACE")),
 
 		// Auth
 		AuthAccessTTL:       parseDurationOrFatal("AUTH_ACCESS_TTL", viper.GetString("AUTH_ACCESS_TTL")),

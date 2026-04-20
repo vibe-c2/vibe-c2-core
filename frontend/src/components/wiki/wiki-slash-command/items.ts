@@ -3,6 +3,7 @@ import {
   Heading1Icon,
   Heading2Icon,
   Heading3Icon,
+  ImageIcon,
   ListIcon,
   ListOrderedIcon,
   ListTodoIcon,
@@ -11,13 +12,25 @@ import {
   TableIcon,
   type LucideIcon,
 } from "lucide-react"
+import { pickAndUploadWikiImage } from "@/components/wiki/wiki-image-upload"
+
+/** Context the slash command plugin passes through to every item's command.
+ *  Extensions forward this via their `options.context` so items that need
+ *  document-scoped resources (uploads, presence) can reach them. */
+export interface SlashItemContext {
+  documentId: string
+}
 
 export interface SlashItem {
   title: string
   description: string
   keywords: string[]
   icon: LucideIcon
-  command: (props: { editor: Editor; range: Range }) => void
+  command: (props: {
+    editor: Editor
+    range: Range
+    context: SlashItemContext
+  }) => void
 }
 
 export const SLASH_ITEMS: SlashItem[] = [
@@ -105,6 +118,19 @@ export const SLASH_ITEMS: SlashItem[] = [
         .deleteRange(range)
         .insertTable({ rows: 3, cols: 3, withHeaderRow: true })
         .run()
+    },
+  },
+  {
+    title: "Image",
+    description: "Upload from your computer",
+    keywords: ["image", "picture", "photo", "img", "upload"],
+    icon: ImageIcon,
+    command: ({ editor, range, context }) => {
+      // Delete the slash range first; capture the caret position *after*
+      // the deletion so the uploaded image lands where the trigger was.
+      editor.chain().focus().deleteRange(range).run()
+      const pos = editor.state.selection.from
+      pickAndUploadWikiImage(editor, context.documentId, { pos })
     },
   },
 ]

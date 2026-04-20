@@ -58,6 +58,11 @@ func (a *App) NewRouter() *gin.Engine {
 
 	// Wiki controller (REST endpoints)
 	wikiCtrl := controller.NewWikiController(a.repos.WikiDocument, a.repos.Operation, a.env.HocuspocusTicketSecret, a.logger)
+	wikiImageCtrl := controller.NewWikiImageController(
+		a.repos.WikiDocument, a.repos.WikiImage, a.repos.Operation,
+		a.imageStore, a.imageProcessor, a.logger,
+		controller.WikiImageControllerConfig{MaxSize: a.env.WikiImageMaxSize},
+	)
 
 	// Wiki webhook handler (Hocuspocus callbacks — internal, HMAC-validated, not behind JWTAuth)
 	webhookHandler := wiki.NewWebhookHandler(a.presenceTracker, a.eventBus, a.env.HocuspocusWebhookSecret, a.logger)
@@ -102,6 +107,12 @@ func (a *App) NewRouter() *gin.Engine {
 		// Wiki collab ticket (protected by JWT, issues short-lived ticket for Hocuspocus)
 		wikiGroup := v1.Group("/wiki")
 		wikiGroup.POST("/collab-ticket", wikiCtrl.CollabTicket)
+
+		// Wiki image uploads & proxy reads. GET bypasses CSRF (safe method)
+		// and authenticates via the httpOnly access_token cookie so `<img>`
+		// tags resolve natively without custom headers.
+		wikiGroup.POST("/images", wikiImageCtrl.Upload)
+		wikiGroup.GET("/images/:id", wikiImageCtrl.Download)
 
 		// GraphQL endpoint — all queries, mutations, and subscriptions.
 		// Authentication is handled by the JWTAuth middleware above (same as REST).

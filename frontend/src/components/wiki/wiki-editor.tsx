@@ -1,4 +1,4 @@
-import { useEffect } from "react"
+import { useEffect, useRef } from "react"
 import { Extension } from "@tiptap/core"
 import { useEditor, EditorContent, ReactNodeViewRenderer } from "@tiptap/react"
 import StarterKit from "@tiptap/starter-kit"
@@ -7,6 +7,7 @@ import Placeholder from "@tiptap/extension-placeholder"
 import TaskList from "@tiptap/extension-task-list"
 import TaskItem from "@tiptap/extension-task-item"
 import { Table, TableRow, TableHeader, TableCell } from "@tiptap/extension-table"
+import Image from "@tiptap/extension-image"
 import CodeBlockLowlight from "@tiptap/extension-code-block-lowlight"
 import { yCursorPlugin } from "@tiptap/y-tiptap"
 import { useHocuspocus } from "@/hooks/use-hocuspocus"
@@ -16,10 +17,16 @@ import { lowlight } from "@/lib/wiki-lowlight"
 import { Skeleton } from "@/components/ui/skeleton"
 import { ConnectionBanner } from "@/components/wiki/connection-banner"
 import { WikiCodeBlock } from "@/components/wiki/wiki-code-block"
+import { WikiImageNode } from "@/components/wiki/wiki-image-node"
 import { WikiEditorBubbleMenu } from "@/components/wiki/wiki-editor-bubble-menu"
 import { WikiEditorTableMenu } from "@/components/wiki/wiki-editor-table-menu"
 import { WikiSlashCommand } from "@/components/wiki/wiki-slash-command/extension"
 import { WikiEscapeEdgeBlock } from "@/components/wiki/wiki-escape-edge-block"
+import {
+  extractClipboardImages,
+  extractDropImages,
+  uploadAndInsertWikiImages,
+} from "@/components/wiki/wiki-image-upload"
 import "./wiki-editor.css"
 
 interface WikiEditorProps {
@@ -31,11 +38,44 @@ export function WikiEditor({ documentId, isEditor }: WikiEditorProps) {
   const { ydoc, provider, connectionStatus, isSynced, isReady } = useHocuspocus(documentId)
   const user = useAuthStore((s) => s.user)
 
+  // Paste/drop handlers run long after the editor config is captured; route
+  // through a ref so they always observe the current editor (not a stale
+  // reference from the render in which the config was built).
+  const editorRef = useRef<ReturnType<typeof useEditor> | null>(null)
+
   const editor = useEditor({
     editable: isEditor,
     editorProps: {
       attributes: {
         spellcheck: "false",
+      },
+      handlePaste: (view, event) => {
+        if (!isEditor) return false
+        const files = extractClipboardImages(event.clipboardData)
+        if (files.length === 0) return false
+        const currentEditor = editorRef.current
+        if (!currentEditor) return false
+        event.preventDefault()
+        const pos = view.state.selection.from
+        void uploadAndInsertWikiImages(currentEditor, documentId, files, { pos })
+        return true
+      },
+      handleDrop: (view, event) => {
+        if (!isEditor) return false
+        const files = extractDropImages(
+          event instanceof DragEvent ? event.dataTransfer : null,
+        )
+        if (files.length === 0) return false
+        const currentEditor = editorRef.current
+        if (!currentEditor) return false
+        event.preventDefault()
+        const coords =
+          event instanceof DragEvent
+            ? view.posAtCoords({ left: event.clientX, top: event.clientY })
+            : null
+        const pos = coords?.pos ?? view.state.selection.from
+        void uploadAndInsertWikiImages(currentEditor, documentId, files, { pos })
+        return true
       },
     },
     extensions: [
@@ -87,10 +127,29 @@ export function WikiEditor({ documentId, isEditor }: WikiEditorProps) {
       TableRow,
       TableHeader,
       TableCell,
-      WikiSlashCommand,
+      Image.extend({
+        addNodeView() {
+          return ReactNodeViewRenderer(WikiImageNode)
+        },
+      }).configure({
+        // Images render as block-level nodes so they break the paragraph
+        // flow rather than wedging inline — matches how paste/drop are used.
+        inline: false,
+        allowBase64: false,
+        HTMLAttributes: { class: "wiki-image" },
+      }),
+      WikiSlashCommand.configure({
+        context: { documentId },
+      }),
       WikiEscapeEdgeBlock,
     ],
-  }, [ydoc, provider])
+  }, [ydoc, provider, documentId, isEditor])
+
+  // Keep the paste/drop ref pointed at the live editor so those handlers
+  // never fire against a stale/destroyed instance after a deps-driven rebuild.
+  useEffect(() => {
+    editorRef.current = editor
+  }, [editor])
 
   // Keep editable in sync with role changes without remounting.
   useEffect(() => {

@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/vibe-c2/vibe-c2-core/core/pkg/auth"
+	"github.com/vibe-c2/vibe-c2-core/core/pkg/blob"
 	"github.com/vibe-c2/vibe-c2-core/core/pkg/cache"
 	"github.com/vibe-c2/vibe-c2-core/core/pkg/database"
 	"github.com/vibe-c2/vibe-c2-core/core/pkg/environment"
@@ -38,6 +39,7 @@ type Repositories struct {
 	Session            repository.ISessionRepository
 	WikiDocument       repository.IWikiDocumentRepository
 	WikiDocumentBackup repository.IWikiDocumentBackupRepository
+	WikiImage          repository.IWikiImageRepository
 }
 
 type App struct {
@@ -55,6 +57,9 @@ type App struct {
 	presenceTracker *wiki.PresenceTracker
 	hpClient        *wiki.HocuspocusClient
 	backupScheduler *wiki.BackupScheduler
+	imageStore      blob.ObjectStore
+	imageProcessor  *wiki.ImageProcessor
+	imageSweeper    *wiki.ImageSweeper
 
 	// Future integration points:
 	// rabbitmq         rabbitmq.IRabbitMQ
@@ -87,6 +92,7 @@ func NewApp() (*App, error) {
 		Session:            repository.NewSessionRepository(db),
 		WikiDocument:       repository.NewWikiDocumentRepository(db),
 		WikiDocumentBackup: repository.NewWikiDocumentBackupRepository(db),
+		WikiImage:          repository.NewWikiImageRepository(db),
 	}
 
 	// Initialize cache (noop fallback is acceptable for caching)
@@ -146,6 +152,22 @@ func NewApp() (*App, error) {
 		backupInterval = 30 * time.Minute
 	}
 	backupScheduler := wiki.NewBackupScheduler(repos.WikiDocument, repos.WikiDocumentBackup, l, backupInterval)
+
+	// Image storage: SeaweedFS S3 gateway. Bucket is created on first run.
+	imageStore, err := blob.NewS3Store(ctx, blob.S3Config{
+		Endpoint:  e.SeaweedFSS3Endpoint,
+		AccessKey: e.SeaweedFSS3AccessKey,
+		SecretKey: e.SeaweedFSS3SecretKey,
+		Bucket:    e.WikiImageBucket,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("failed to initialize wiki image store: %w", err)
+	}
+	imageProcessor := wiki.NewImageProcessor(e.WikiImageMaxDimension)
+	imageSweeper := wiki.NewImageSweeper(
+		repos.WikiDocument, repos.WikiImage, imageStore, l,
+		e.WikiImageSweeperInterval, e.WikiImageSweeperGrace,
+	)
 
 	// --- Future integration patterns ---
 	//
@@ -207,6 +229,9 @@ func NewApp() (*App, error) {
 		presenceTracker: presenceTracker,
 		hpClient:        hpClient,
 		backupScheduler: backupScheduler,
+		imageStore:      imageStore,
+		imageProcessor:  imageProcessor,
+		imageSweeper:    imageSweeper,
 	}
 
 	return app, nil
@@ -222,6 +247,7 @@ func (a *App) StartServer() {
 
 	a.eventBus.Start()
 	a.backupScheduler.Start()
+	a.imageSweeper.Start()
 
 	a.logger.Info("Starting server...", zap.String("address", srv.Addr))
 	if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
@@ -239,6 +265,7 @@ func (a *App) StartServerWithGracefulShutdown() {
 
 	a.eventBus.Start()
 	a.backupScheduler.Start()
+	a.imageSweeper.Start()
 
 	idleConnsClosed := make(chan struct{})
 
@@ -250,6 +277,7 @@ func (a *App) StartServerWithGracefulShutdown() {
 		a.logger.Info("Shutting down server...")
 
 		a.backupScheduler.Stop()
+		a.imageSweeper.Stop()
 
 		ctxTimeout, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()

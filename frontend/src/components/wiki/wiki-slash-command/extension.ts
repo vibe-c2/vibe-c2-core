@@ -3,9 +3,12 @@ import { Extension } from "@tiptap/core"
 import Suggestion, { type SuggestionOptions } from "@tiptap/suggestion"
 import { createElement } from "react"
 import { SlashMenu, type SlashMenuHandle } from "./slash-menu"
-import { filterItems, type SlashItem } from "./items"
+import { filterItems, type SlashItem, type SlashItemContext } from "./items"
 
 interface SlashCommandOptions {
+  /** Runtime context exposed to slash-item commands (e.g. the current
+   *  documentId for the /image upload flow). */
+  context: SlashItemContext
   suggestion: Omit<SuggestionOptions<SlashItem, SlashItem>, "editor">
 }
 
@@ -14,14 +17,16 @@ export const WikiSlashCommand = Extension.create<SlashCommandOptions>({
 
   addOptions() {
     return {
+      context: { documentId: "" },
       suggestion: {
         char: "/",
         startOfLine: false,
         allowSpaces: false,
         items: ({ query }) => filterItems(query),
-        command: ({ editor, range, props }) => {
-          props.command({ editor, range })
-        },
+        // Default no-op; the real command is installed in
+        // addProseMirrorPlugins below, which can close over this.options to
+        // forward the per-editor context.
+        command: () => {},
         allow: ({ editor }) => editor.isEditable,
         render: renderSlashMenu,
       },
@@ -29,10 +34,14 @@ export const WikiSlashCommand = Extension.create<SlashCommandOptions>({
   },
 
   addProseMirrorPlugins() {
+    const context = this.options.context
     return [
       Suggestion({
         editor: this.editor,
         ...this.options.suggestion,
+        command: ({ editor, range, props }) => {
+          props.command({ editor, range, context })
+        },
       }),
     ]
   },
