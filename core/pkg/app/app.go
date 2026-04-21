@@ -40,6 +40,7 @@ type Repositories struct {
 	WikiDocument       repository.IWikiDocumentRepository
 	WikiDocumentBackup repository.IWikiDocumentBackupRepository
 	WikiImage          repository.IWikiImageRepository
+	WikiFile           repository.IWikiFileRepository
 }
 
 type App struct {
@@ -60,6 +61,8 @@ type App struct {
 	imageStore      blob.ObjectStore
 	imageProcessor  *wiki.ImageProcessor
 	imageSweeper    *wiki.ImageSweeper
+	fileStore       blob.ObjectStore
+	fileSweeper     *wiki.FileSweeper
 
 	// Future integration points:
 	// rabbitmq         rabbitmq.IRabbitMQ
@@ -93,6 +96,7 @@ func NewApp() (*App, error) {
 		WikiDocument:       repository.NewWikiDocumentRepository(db),
 		WikiDocumentBackup: repository.NewWikiDocumentBackupRepository(db),
 		WikiImage:          repository.NewWikiImageRepository(db),
+		WikiFile:           repository.NewWikiFileRepository(db),
 	}
 
 	// Initialize cache (noop fallback is acceptable for caching)
@@ -169,6 +173,22 @@ func NewApp() (*App, error) {
 		e.WikiImageSweeperInterval, e.WikiImageSweeperGrace,
 	)
 
+	// File storage: same SeaweedFS S3 gateway, separate bucket so lifecycle
+	// policies and retention can be tuned independently from images.
+	fileStore, err := blob.NewS3Store(ctx, blob.S3Config{
+		Endpoint:  e.SeaweedFSS3Endpoint,
+		AccessKey: e.SeaweedFSS3AccessKey,
+		SecretKey: e.SeaweedFSS3SecretKey,
+		Bucket:    e.WikiFileBucket,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("failed to initialize wiki file store: %w", err)
+	}
+	fileSweeper := wiki.NewFileSweeper(
+		repos.WikiDocument, repos.WikiFile, fileStore, l,
+		e.WikiFileSweeperInterval, e.WikiFileSweeperGrace,
+	)
+
 	// --- Future integration patterns ---
 	//
 	// RabbitMQ:
@@ -232,6 +252,8 @@ func NewApp() (*App, error) {
 		imageStore:      imageStore,
 		imageProcessor:  imageProcessor,
 		imageSweeper:    imageSweeper,
+		fileStore:       fileStore,
+		fileSweeper:     fileSweeper,
 	}
 
 	return app, nil
@@ -248,6 +270,7 @@ func (a *App) StartServer() {
 	a.eventBus.Start()
 	a.backupScheduler.Start()
 	a.imageSweeper.Start()
+	a.fileSweeper.Start()
 
 	a.logger.Info("Starting server...", zap.String("address", srv.Addr))
 	if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
@@ -266,6 +289,7 @@ func (a *App) StartServerWithGracefulShutdown() {
 	a.eventBus.Start()
 	a.backupScheduler.Start()
 	a.imageSweeper.Start()
+	a.fileSweeper.Start()
 
 	idleConnsClosed := make(chan struct{})
 
@@ -278,6 +302,7 @@ func (a *App) StartServerWithGracefulShutdown() {
 
 		a.backupScheduler.Stop()
 		a.imageSweeper.Stop()
+		a.fileSweeper.Stop()
 
 		ctxTimeout, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()

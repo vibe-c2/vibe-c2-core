@@ -7,12 +7,14 @@ import {
   ListIcon,
   ListOrderedIcon,
   ListTodoIcon,
+  PaperclipIcon,
   QuoteIcon,
   SquareCodeIcon,
   TableIcon,
   type LucideIcon,
 } from "lucide-react"
 import { pickAndUploadWikiImage } from "@/components/wiki/wiki-image-upload"
+import { pickAndUploadWikiFile } from "@/components/wiki/wiki-file-upload"
 
 /** Context the slash command plugin passes through to every item's command.
  *  Extensions forward this via their `options.context` so items that need
@@ -131,6 +133,17 @@ export const SLASH_ITEMS: SlashItem[] = [
       editor.chain().focus().deleteRange(range).run()
       const pos = editor.state.selection.from
       pickAndUploadWikiImage(editor, context.documentId, { pos })
+    },
+  },
+  {
+    title: "File",
+    description: "Attach a file (up to 50 MB)",
+    keywords: ["file", "attachment", "upload", "pdf", "doc", "zip"],
+    icon: PaperclipIcon,
+    command: ({ editor, range, context }) => {
+      editor.chain().focus().deleteRange(range).run()
+      const pos = editor.state.selection.from
+      pickAndUploadWikiFile(editor, context.documentId, { pos })
     },
   },
 ]

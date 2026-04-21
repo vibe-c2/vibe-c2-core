@@ -18,6 +18,7 @@ import { Skeleton } from "@/components/ui/skeleton"
 import { ConnectionBanner } from "@/components/wiki/connection-banner"
 import { WikiCodeBlock } from "@/components/wiki/wiki-code-block"
 import { WikiImageNode } from "@/components/wiki/wiki-image-node"
+import { WikiFileExtension } from "@/components/wiki/wiki-file-node"
 import { WikiEditorBubbleMenu } from "@/components/wiki/wiki-editor-bubble-menu"
 import { WikiEditorTableMenu } from "@/components/wiki/wiki-editor-table-menu"
 import { WikiSlashCommand } from "@/components/wiki/wiki-slash-command/extension"
@@ -27,6 +28,11 @@ import {
   extractDropImages,
   uploadAndInsertWikiImages,
 } from "@/components/wiki/wiki-image-upload"
+import {
+  extractClipboardFiles,
+  extractDropFiles,
+  uploadAndInsertWikiFiles,
+} from "@/components/wiki/wiki-file-upload"
 import "./wiki-editor.css"
 
 interface WikiEditorProps {
@@ -51,21 +57,28 @@ export function WikiEditor({ documentId, isEditor }: WikiEditorProps) {
       },
       handlePaste: (view, event) => {
         if (!isEditor) return false
-        const files = extractClipboardImages(event.clipboardData)
-        if (files.length === 0) return false
+        const images = extractClipboardImages(event.clipboardData)
+        const attachments = extractClipboardFiles(event.clipboardData)
+        if (images.length === 0 && attachments.length === 0) return false
         const currentEditor = editorRef.current
         if (!currentEditor) return false
         event.preventDefault()
         const pos = view.state.selection.from
-        void uploadAndInsertWikiImages(currentEditor, documentId, files, { pos })
+        if (images.length > 0) {
+          void uploadAndInsertWikiImages(currentEditor, documentId, images, { pos })
+        }
+        if (attachments.length > 0) {
+          void uploadAndInsertWikiFiles(currentEditor, documentId, attachments, { pos })
+        }
         return true
       },
       handleDrop: (view, event) => {
         if (!isEditor) return false
-        const files = extractDropImages(
-          event instanceof DragEvent ? event.dataTransfer : null,
-        )
-        if (files.length === 0) return false
+        const dt =
+          event instanceof DragEvent ? event.dataTransfer : null
+        const images = extractDropImages(dt)
+        const attachments = extractDropFiles(dt)
+        if (images.length === 0 && attachments.length === 0) return false
         const currentEditor = editorRef.current
         if (!currentEditor) return false
         event.preventDefault()
@@ -74,7 +87,12 @@ export function WikiEditor({ documentId, isEditor }: WikiEditorProps) {
             ? view.posAtCoords({ left: event.clientX, top: event.clientY })
             : null
         const pos = coords?.pos ?? view.state.selection.from
-        void uploadAndInsertWikiImages(currentEditor, documentId, files, { pos })
+        if (images.length > 0) {
+          void uploadAndInsertWikiImages(currentEditor, documentId, images, { pos })
+        }
+        if (attachments.length > 0) {
+          void uploadAndInsertWikiFiles(currentEditor, documentId, attachments, { pos })
+        }
         return true
       },
     },
@@ -138,6 +156,7 @@ export function WikiEditor({ documentId, isEditor }: WikiEditorProps) {
         allowBase64: false,
         HTMLAttributes: { class: "wiki-image" },
       }),
+      WikiFileExtension,
       WikiSlashCommand.configure({
         context: { documentId },
       }),

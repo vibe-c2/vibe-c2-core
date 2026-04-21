@@ -416,3 +416,125 @@
      would compete with the preview affordance next to it. */
   background: rgb(185, 28, 28);
 }
+
+/* Wiki file attachments: horizontal download card with icon + filename +
+   size + hover actions. Rendered by WikiFileExtension's NodeView. */
+.tiptap figure.wiki-file-wrapper {
+  margin: 0.5rem 0;
+  padding: 0;
+}
+
+.tiptap .wiki-file-card {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 12px;
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  background: var(--color-muted, rgba(0, 0, 0, 0.03));
+  transition: background-color 120ms ease, border-color 120ms ease;
+  min-width: 0;
+}
+
+.tiptap .wiki-file-card:hover {
+  background: var(--color-accent, rgba(0, 0, 0, 0.05));
+}
+
+.tiptap figure.wiki-file-wrapper.ProseMirror-selectednode .wiki-file-card {
+  outline: 2px solid var(--color-ring);
+  outline-offset: 2px;
+}
+
+.tiptap .wiki-file-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  border-radius: 6px;
+  background: var(--color-background, #fff);
+  border: 1px solid var(--color-border);
+  color: var(--color-foreground, #111);
+  flex-shrink: 0;
+}
+
+.tiptap .wiki-file-meta {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 auto;
+  min-width: 0;
+  line-height: 1.2;
+}
+
+.tiptap .wiki-file-name {
+  /* Rendered as a <button> so click events stay idempotent under
+     ProseMirror + StrictMode — reset the user-agent button styling. */
+  appearance: none;
+  background: transparent;
+  border: none;
+  padding: 0;
+  margin: 0;
+  text-align: left;
+  font-weight: 500;
+  font-size: inherit;
+  font-family: inherit;
+  color: var(--color-foreground, #111);
+  text-decoration: none;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.tiptap .wiki-file-name:hover {
+  text-decoration: underline;
+}
+
+.tiptap .wiki-file-size {
+  font-size: 0.75rem;
+  color: var(--color-muted-foreground, #6b7280);
+  margin-top: 2px;
+}
+
+.tiptap .wiki-file-actions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  opacity: 0;
+  transform: translateY(-2px);
+  transition: opacity 120ms ease, transform 120ms ease;
+  pointer-events: none;
+  flex-shrink: 0;
+}
+
+.tiptap .wiki-file-card:hover .wiki-file-actions,
+.tiptap .wiki-file-actions:focus-within {
+  opacity: 1;
+  transform: translateY(0);
+  pointer-events: auto;
+}
+
+.tiptap .wiki-file-action-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: none;
+  border-radius: 6px;
+  background: rgba(17, 24, 39, 0.72);
+  color: #fff;
+  cursor: pointer;
+  text-decoration: none;
+  backdrop-filter: blur(4px);
+  transition: background-color 120ms ease;
+}
+
+.tiptap .wiki-file-action-button:hover {
+  background: rgba(17, 24, 39, 0.88);
+}
+
+.tiptap .wiki-file-action-button--danger:hover {
+  background: rgb(185, 28, 28);
+}

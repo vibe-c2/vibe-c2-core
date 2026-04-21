@@ -3,6 +3,7 @@ package environment
 import (
 	"log"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/spf13/viper"
@@ -53,6 +54,13 @@ type EnvironmentSettings struct {
 	WikiImageSweeperInterval time.Duration // how often the GC pass runs
 	WikiImageSweeperGrace    time.Duration // minimum age before an unreferenced image is deleted
 
+	// Wiki file attachments (non-image uploads stored in SeaweedFS S3)
+	WikiFileBucket              string
+	WikiFileMaxSize             int64         // bytes
+	WikiFileDeniedContentTypes  []string      // blocked MIME types (exact match), empty = allow all
+	WikiFileSweeperInterval     time.Duration // how often the GC pass runs
+	WikiFileSweeperGrace        time.Duration // minimum age before an unreferenced file is deleted
+
 	// Auth — durations parsed from Go duration strings (e.g. "15m", "168h").
 	AuthAccessTTL       time.Duration
 	AuthRefreshTTL      time.Duration
@@ -88,6 +96,11 @@ func init() {
 	viper.SetDefault("WIKI_IMAGE_MAX_DIMENSION", 2560)
 	viper.SetDefault("WIKI_IMAGE_SWEEPER_INTERVAL", "24h")
 	viper.SetDefault("WIKI_IMAGE_SWEEPER_GRACE", "168h")
+	viper.SetDefault("WIKI_FILE_BUCKET", "wiki-files")
+	viper.SetDefault("WIKI_FILE_MAX_SIZE", int64(50*1024*1024))
+	viper.SetDefault("WIKI_FILE_DENIED_CONTENT_TYPES", "")
+	viper.SetDefault("WIKI_FILE_SWEEPER_INTERVAL", "24h")
+	viper.SetDefault("WIKI_FILE_SWEEPER_GRACE", "168h")
 	viper.SetDefault("AUTH_ACCESS_TTL", "15m")
 	viper.SetDefault("AUTH_REFRESH_TTL", "168h")
 	viper.SetDefault("AUTH_REFRESH_GRACE_TTL", "10s")
@@ -134,6 +147,13 @@ func init() {
 		WikiImageSweeperInterval: parseDurationOrFatal("WIKI_IMAGE_SWEEPER_INTERVAL", viper.GetString("WIKI_IMAGE_SWEEPER_INTERVAL")),
 		WikiImageSweeperGrace:    parseDurationOrFatal("WIKI_IMAGE_SWEEPER_GRACE", viper.GetString("WIKI_IMAGE_SWEEPER_GRACE")),
 
+		// Wiki files
+		WikiFileBucket:             viper.GetString("WIKI_FILE_BUCKET"),
+		WikiFileMaxSize:            viper.GetInt64("WIKI_FILE_MAX_SIZE"),
+		WikiFileDeniedContentTypes: parseCSV(viper.GetString("WIKI_FILE_DENIED_CONTENT_TYPES")),
+		WikiFileSweeperInterval:    parseDurationOrFatal("WIKI_FILE_SWEEPER_INTERVAL", viper.GetString("WIKI_FILE_SWEEPER_INTERVAL")),
+		WikiFileSweeperGrace:       parseDurationOrFatal("WIKI_FILE_SWEEPER_GRACE", viper.GetString("WIKI_FILE_SWEEPER_GRACE")),
+
 		// Auth
 		AuthAccessTTL:       parseDurationOrFatal("AUTH_ACCESS_TTL", viper.GetString("AUTH_ACCESS_TTL")),
 		AuthRefreshTTL:      parseDurationOrFatal("AUTH_REFRESH_TTL", viper.GetString("AUTH_REFRESH_TTL")),
@@ -164,4 +184,23 @@ func parseDurationOrFatal(name, value string) time.Duration {
 		log.Fatalf("Invalid duration for %s (%q): %v", name, value, err)
 	}
 	return d
+}
+
+// parseCSV splits a comma-separated string and trims whitespace from each
+// entry. Empty entries (including an entirely empty input) produce a nil
+// slice so callers can treat empty and missing identically.
+func parseCSV(raw string) []string {
+	if strings.TrimSpace(raw) == "" {
+		return nil
+	}
+	parts := strings.Split(raw, ",")
+	out := make([]string, 0, len(parts))
+	for _, p := range parts {
+		trimmed := strings.TrimSpace(p)
+		if trimmed == "" {
+			continue
+		}
+		out = append(out, trimmed)
+	}
+	return out
 }

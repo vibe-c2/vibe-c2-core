@@ -63,6 +63,14 @@ func (a *App) NewRouter() *gin.Engine {
 		a.imageStore, a.imageProcessor, a.logger,
 		controller.WikiImageControllerConfig{MaxSize: a.env.WikiImageMaxSize},
 	)
+	wikiFileCtrl := controller.NewWikiFileController(
+		a.repos.WikiDocument, a.repos.WikiFile, a.repos.Operation,
+		a.fileStore, a.logger,
+		controller.WikiFileControllerConfig{
+			MaxSize:            a.env.WikiFileMaxSize,
+			DeniedContentTypes: a.env.WikiFileDeniedContentTypes,
+		},
+	)
 
 	// Wiki webhook handler (Hocuspocus callbacks — internal, HMAC-validated, not behind JWTAuth)
 	webhookHandler := wiki.NewWebhookHandler(a.presenceTracker, a.eventBus, a.env.HocuspocusWebhookSecret, a.logger)
@@ -113,6 +121,12 @@ func (a *App) NewRouter() *gin.Engine {
 		// tags resolve natively without custom headers.
 		wikiGroup.POST("/images", wikiImageCtrl.Upload)
 		wikiGroup.GET("/images/:id", wikiImageCtrl.Download)
+
+		// Wiki file attachments (non-image files). Same auth/CSRF model as
+		// images; GET authenticates via the httpOnly access_token cookie so
+		// download/preview links work without custom headers.
+		wikiGroup.POST("/files", wikiFileCtrl.Upload)
+		wikiGroup.GET("/files/:id", wikiFileCtrl.Download)
 
 		// GraphQL endpoint — all queries, mutations, and subscriptions.
 		// Authentication is handled by the JWTAuth middleware above (same as REST).
