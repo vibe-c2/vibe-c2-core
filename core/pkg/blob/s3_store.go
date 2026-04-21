@@ -50,20 +50,94 @@ func NewS3Store(ctx context.Context, cfg S3Config) (*S3Store, error) {
 		return nil, fmt.Errorf("blob: new minio client: %w", err)
 	}
 
-	ensureCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
+	ensureCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
 
-	exists, err := client.BucketExists(ensureCtx, cfg.Bucket)
-	if err != nil {
-		return nil, fmt.Errorf("blob: bucket exists check: %w", err)
-	}
-	if !exists {
-		if err := client.MakeBucket(ensureCtx, cfg.Bucket, minio.MakeBucketOptions{}); err != nil {
-			return nil, fmt.Errorf("blob: create bucket %q: %w", cfg.Bucket, err)
-		}
+	if err := ensureBucket(ensureCtx, client, cfg.Bucket); err != nil {
+		return nil, err
 	}
 
 	return &S3Store{client: client, bucket: cfg.Bucket}, nil
+}
+
+// bucketClient is the minimal subset of *minio.Client that ensureBucket
+// touches. Pulled out so tests can simulate the SeaweedFS cold-start race
+// without standing up a real S3 gateway.
+type bucketClient interface {
+	BucketExists(ctx context.Context, bucket string) (bool, error)
+	MakeBucket(ctx context.Context, bucket string, opts minio.MakeBucketOptions) error
+}
+
+// ensureBucket bootstraps the bucket, tolerating a brief startup window
+// where the S3 gateway hasn't rebuilt its state from the filer yet: the
+// BucketExists poll gives it ~10s to warm up before we try to create.
+//
+// Any MakeBucket error is fatal. An "already exists" response here means
+// master and filer state are out of sync (zombie cluster) — recovery
+// requires operator action, not silent retry. The filer is expected to
+// persist its metadata (see docker-compose.yml's seaweedfs_filer_data
+// volume); without that, this zombie state recurs on every restart.
+func ensureBucket(ctx context.Context, c bucketClient, bucket string) error {
+	const (
+		existsAttempts = 10
+		existsBackoff  = 1 * time.Second
+	)
+
+	// Poll BucketExists briefly. A warm gateway answers on the first
+	// attempt; a cold one may need several seconds to rebuild state
+	// from the filer.
+	var lastErr error
+	for i := 0; i < existsAttempts; i++ {
+		if ctx.Err() != nil {
+			return ctx.Err()
+		}
+		exists, err := c.BucketExists(ctx, bucket)
+		if err == nil && exists {
+			return nil
+		}
+		if err == nil {
+			// Definitive "not there" — still retry so the warm-up
+			// window has a chance to convert this into a yes.
+			lastErr = nil
+			if i+1 < existsAttempts {
+				if err := sleepCtx(ctx, existsBackoff); err != nil {
+					return err
+				}
+				continue
+			}
+			break
+		}
+		lastErr = err
+		if i+1 < existsAttempts {
+			if err := sleepCtx(ctx, existsBackoff); err != nil {
+				return err
+			}
+		}
+	}
+	if lastErr != nil {
+		return fmt.Errorf("blob: bucket exists check: %w", lastErr)
+	}
+
+	// BucketExists stayed false across the retry budget — treat as a
+	// real empty install and create the bucket. Any failure here is
+	// fatal, including "collection already exists" responses that
+	// indicate zombie cluster state.
+	if err := c.MakeBucket(ctx, bucket, minio.MakeBucketOptions{}); err != nil {
+		return fmt.Errorf("blob: create bucket %q: %w", bucket, err)
+	}
+	return nil
+}
+
+// sleepCtx sleeps for d, or returns early when ctx is cancelled.
+func sleepCtx(ctx context.Context, d time.Duration) error {
+	timer := time.NewTimer(d)
+	defer timer.Stop()
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case <-timer.C:
+		return nil
+	}
 }
 
 func (s *S3Store) Put(ctx context.Context, key string, body io.Reader, size int64, contentType string) error {

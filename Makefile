@@ -1,4 +1,4 @@
-.PHONY: infra infra-stop infra-reset services services-stop services-reset swag gqlgen gqlcodegen frontend help
+.PHONY: infra infra-stop infra-reset services services-stop services-reset seaweedfs-reset swag gqlgen gqlcodegen frontend help
 
 include .env
 export
@@ -26,6 +26,16 @@ services-stop: ## Stop all services (infra + core dev container)
 services-reset: ## Reset all services and volumes
 	@echo "Resetting all services"
 	docker-compose --profile development down -v
+
+seaweedfs-reset: ## Reset only SeaweedFS volumes (clears bucket state; keeps Mongo/Redis/RabbitMQ)
+	@echo "Stopping SeaweedFS containers and clearing their volumes"
+	docker-compose --profile development stop seaweedfs-s3 seaweedfs-filer seaweedfs-volume seaweedfs-master
+	docker-compose --profile development rm -f seaweedfs-s3 seaweedfs-filer seaweedfs-volume seaweedfs-master
+	@project=$$(basename $$(pwd) | tr '[:upper:].' '[:lower:]-'); \
+	for vol in seaweedfs_master_data seaweedfs_filer_data seaweedfs_volume_data; do \
+		docker volume rm "$${project}_$${vol}" 2>/dev/null || true; \
+	done
+	@echo "Done. Run 'make services' to recreate SeaweedFS with fresh state."
 
 swag: ## swag: Generates or updates the Swagger/OpenAPI documentation files.
 	@echo "Generating API documentation"

@@ -150,6 +150,12 @@ services:
     container_name: vibec2-seaweedfs-filer
     restart: unless-stopped
     command: filer -master=seaweedfs-master:9333 -ip.bind=0.0.0.0
+    # Filer metadata (embedded LevelDB under /data/filerldb2) owns the
+    # S3 bucket registry. Without a persistent volume, every restart
+    # wipes bucket state while the master's collection registry survives,
+    # producing a zombie bucket that rejects MakeBucket and PutObject.
+    volumes:
+      - seaweedfs_filer_data:/data
     depends_on:
       seaweedfs-master:
         condition: service_healthy
@@ -214,6 +220,7 @@ volumes:
   rabbitmq_data:
   mongodb_data:
   seaweedfs_master_data:
+  seaweedfs_filer_data:
   redis_data:
   seaweedfs_volume_data:
 
