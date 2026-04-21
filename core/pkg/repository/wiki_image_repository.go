@@ -24,8 +24,6 @@ type IWikiImageRepository interface {
 	// against document content to decide which are orphaned.
 	FindCandidatesOlderThan(ctx context.Context, cutoff time.Time, limit int64) ([]models.WikiImage, error)
 	HardDelete(ctx context.Context, id uuid.UUID) error
-	HardDeleteByDocumentID(ctx context.Context, docID uuid.UUID) error
-	HardDeleteByOperationID(ctx context.Context, opID uuid.UUID) error
 }
 
 type wikiImageRepository struct {
@@ -72,14 +70,4 @@ func (r *wikiImageRepository) FindCandidatesOlderThan(ctx context.Context, cutof
 
 func (r *wikiImageRepository) HardDelete(ctx context.Context, id uuid.UUID) error {
 	return r.coll.Remove(ctx, bson.M{"image_id": id})
-}
-
-func (r *wikiImageRepository) HardDeleteByDocumentID(ctx context.Context, docID uuid.UUID) error {
-	_, err := r.coll.RemoveAll(ctx, bson.M{"document_id": docID})
-	return err
-}
-
-func (r *wikiImageRepository) HardDeleteByOperationID(ctx context.Context, opID uuid.UUID) error {
-	_, err := r.coll.RemoveAll(ctx, bson.M{"operation_id": opID})
-	return err
 }

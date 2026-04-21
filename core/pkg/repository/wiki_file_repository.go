@@ -24,8 +24,6 @@ type IWikiFileRepository interface {
 	// against document content to decide which are orphaned.
 	FindCandidatesOlderThan(ctx context.Context, cutoff time.Time, limit int64) ([]models.WikiFile, error)
 	HardDelete(ctx context.Context, id uuid.UUID) error
-	HardDeleteByDocumentID(ctx context.Context, docID uuid.UUID) error
-	HardDeleteByOperationID(ctx context.Context, opID uuid.UUID) error
 }
 
 type wikiFileRepository struct {
@@ -72,14 +70,4 @@ func (r *wikiFileRepository) FindCandidatesOlderThan(ctx context.Context, cutoff
 
 func (r *wikiFileRepository) HardDelete(ctx context.Context, id uuid.UUID) error {
 	return r.coll.Remove(ctx, bson.M{"file_id": id})
-}
-
-func (r *wikiFileRepository) HardDeleteByDocumentID(ctx context.Context, docID uuid.UUID) error {
-	_, err := r.coll.RemoveAll(ctx, bson.M{"document_id": docID})
-	return err
-}
-
-func (r *wikiFileRepository) HardDeleteByOperationID(ctx context.Context, opID uuid.UUID) error {
-	_, err := r.coll.RemoveAll(ctx, bson.M{"operation_id": opID})
-	return err
 }
