@@ -3,6 +3,7 @@ import { Skeleton } from "@/components/ui/skeleton"
 import { Button } from "@/components/ui/button"
 import { useWikiDocument } from "@/graphql/hooks/wiki"
 import { WikiEditorHeader } from "@/components/wiki/wiki-editor-header"
+import { WikiDocumentMeta } from "@/components/wiki/wiki-document-meta"
 import { WikiEditor } from "@/components/wiki/wiki-editor"
 import type { WikiDocumentTreeFieldsFragment } from "@/graphql/gql/graphql"
 
@@ -49,6 +50,7 @@ export function WikiEditorPane({
         isEditor={isEditor}
         treeDocuments={treeDocuments}
       />
+      <WikiDocumentMeta document={document} />
       <EditorErrorBoundary documentId={documentId}>
         <WikiEditor documentId={documentId} isEditor={isEditor} />
       </EditorErrorBoundary>

@@ -32,6 +32,8 @@ export const WikiDocumentFields = graphql(`
     icon
     sortOrder
     createdBy { id username }
+    lastUpdatedBy { id username }
+    lastUpdatedAt
     lastBackupAt
     createdAt
     updatedAt

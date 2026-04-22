@@ -35,6 +35,12 @@ type WikiDocument struct {
 	Icon               string     `bson:"icon" json:"icon"`                              // icon identifier
 	SortOrder          string     `bson:"sort_order" json:"sortOrder"`                   // fractional index string
 	CreatedByID        uuid.UUID  `bson:"created_by_id" json:"createdById"`
+	// LastUpdatedByID + LastUpdatedAt attribute the most recent persistence of
+	// the document — metadata edits through the GraphQL resolver and content
+	// edits via the Hocuspocus sidecar. Nullable: legacy rows (pre-feature)
+	// show the creator as the effective author until their next edit.
+	LastUpdatedByID    *uuid.UUID `bson:"last_updated_by_id,omitempty" json:"lastUpdatedById,omitempty"`
+	LastUpdatedAt      *time.Time `bson:"last_updated_at,omitempty" json:"lastUpdatedAt,omitempty"`
 	LastBackupAt       *time.Time `bson:"last_backup_at,omitempty" json:"lastBackupAt,omitempty"`
 	DeletedAt          *time.Time `bson:"deleted_at,omitempty" json:"deletedAt,omitempty"`
 	DeletedByID        *uuid.UUID `bson:"deleted_by_id,omitempty" json:"deletedById,omitempty"`

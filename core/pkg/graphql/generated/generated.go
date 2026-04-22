@@ -268,6 +268,8 @@ type ComplexityRoot struct {
 		ID             func(childComplexity int) int
 		Icon           func(childComplexity int) int
 		LastBackupAt   func(childComplexity int) int
+		LastUpdatedAt  func(childComplexity int) int
+		LastUpdatedBy  func(childComplexity int) int
 		OperationID    func(childComplexity int) int
 		ParentDocument func(childComplexity int) int
 		SortOrder      func(childComplexity int) int
@@ -472,6 +474,8 @@ type WikiDocumentResolver interface {
 	ChildCount(ctx context.Context, obj *models.WikiDocument) (int, error)
 	Ancestors(ctx context.Context, obj *models.WikiDocument) ([]*model.WikiDocumentAncestor, error)
 	CreatedBy(ctx context.Context, obj *models.WikiDocument) (*models.User, error)
+	LastUpdatedBy(ctx context.Context, obj *models.WikiDocument) (*models.User, error)
+	LastUpdatedAt(ctx context.Context, obj *models.WikiDocument) (*string, error)
 	LastBackupAt(ctx context.Context, obj *models.WikiDocument) (*string, error)
 	DeletedAt(ctx context.Context, obj *models.WikiDocument) (*string, error)
 	DeletedBy(ctx context.Context, obj *models.WikiDocument) (*models.User, error)
@@ -1695,6 +1699,18 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.WikiDocument.LastBackupAt(childComplexity), true
+	case "WikiDocument.lastUpdatedAt":
+		if e.ComplexityRoot.WikiDocument.LastUpdatedAt == nil {
+			break
+		}
+
+		return e.ComplexityRoot.WikiDocument.LastUpdatedAt(childComplexity), true
+	case "WikiDocument.lastUpdatedBy":
+		if e.ComplexityRoot.WikiDocument.LastUpdatedBy == nil {
+			break
+		}
+
+		return e.ComplexityRoot.WikiDocument.LastUpdatedBy(childComplexity), true
 	case "WikiDocument.operationId":
 		if e.ComplexityRoot.WikiDocument.OperationID == nil {
 			break
@@ -2790,6 +2806,11 @@ type WikiDocument {
   # flag so the client can render them distinctly. Empty for root documents.
   ancestors: [WikiDocumentAncestor!]!
   createdBy: User!
+  # Who last persisted this document (metadata change via GraphQL, or content
+  # edit via Hocuspocus). Null for legacy documents that predate attribution —
+  # clients fall back to createdBy in that case.
+  lastUpdatedBy: User
+  lastUpdatedAt: String
   lastBackupAt: String
   deletedAt: String
   deletedBy: User
@@ -5428,6 +5449,10 @@ func (ec *executionContext) fieldContext_Mutation_createWikiDocument(ctx context
 				return ec.fieldContext_WikiDocument_ancestors(ctx, field)
 			case "createdBy":
 				return ec.fieldContext_WikiDocument_createdBy(ctx, field)
+			case "lastUpdatedBy":
+				return ec.fieldContext_WikiDocument_lastUpdatedBy(ctx, field)
+			case "lastUpdatedAt":
+				return ec.fieldContext_WikiDocument_lastUpdatedAt(ctx, field)
 			case "lastBackupAt":
 				return ec.fieldContext_WikiDocument_lastBackupAt(ctx, field)
 			case "deletedAt":
@@ -5525,6 +5550,10 @@ func (ec *executionContext) fieldContext_Mutation_updateWikiDocument(ctx context
 				return ec.fieldContext_WikiDocument_ancestors(ctx, field)
 			case "createdBy":
 				return ec.fieldContext_WikiDocument_createdBy(ctx, field)
+			case "lastUpdatedBy":
+				return ec.fieldContext_WikiDocument_lastUpdatedBy(ctx, field)
+			case "lastUpdatedAt":
+				return ec.fieldContext_WikiDocument_lastUpdatedAt(ctx, field)
 			case "lastBackupAt":
 				return ec.fieldContext_WikiDocument_lastBackupAt(ctx, field)
 			case "deletedAt":
@@ -5681,6 +5710,10 @@ func (ec *executionContext) fieldContext_Mutation_restoreWikiDocument(ctx contex
 				return ec.fieldContext_WikiDocument_ancestors(ctx, field)
 			case "createdBy":
 				return ec.fieldContext_WikiDocument_createdBy(ctx, field)
+			case "lastUpdatedBy":
+				return ec.fieldContext_WikiDocument_lastUpdatedBy(ctx, field)
+			case "lastUpdatedAt":
+				return ec.fieldContext_WikiDocument_lastUpdatedAt(ctx, field)
 			case "lastBackupAt":
 				return ec.fieldContext_WikiDocument_lastBackupAt(ctx, field)
 			case "deletedAt":
@@ -5975,6 +6008,10 @@ func (ec *executionContext) fieldContext_Mutation_restoreWikiDocumentBackup(ctx 
 				return ec.fieldContext_WikiDocument_ancestors(ctx, field)
 			case "createdBy":
 				return ec.fieldContext_WikiDocument_createdBy(ctx, field)
+			case "lastUpdatedBy":
+				return ec.fieldContext_WikiDocument_lastUpdatedBy(ctx, field)
+			case "lastUpdatedAt":
+				return ec.fieldContext_WikiDocument_lastUpdatedAt(ctx, field)
 			case "lastBackupAt":
 				return ec.fieldContext_WikiDocument_lastBackupAt(ctx, field)
 			case "deletedAt":
@@ -7721,6 +7758,10 @@ func (ec *executionContext) fieldContext_Query_wikiDocument(ctx context.Context,
 				return ec.fieldContext_WikiDocument_ancestors(ctx, field)
 			case "createdBy":
 				return ec.fieldContext_WikiDocument_createdBy(ctx, field)
+			case "lastUpdatedBy":
+				return ec.fieldContext_WikiDocument_lastUpdatedBy(ctx, field)
+			case "lastUpdatedAt":
+				return ec.fieldContext_WikiDocument_lastUpdatedAt(ctx, field)
 			case "lastBackupAt":
 				return ec.fieldContext_WikiDocument_lastBackupAt(ctx, field)
 			case "deletedAt":
@@ -7885,6 +7926,10 @@ func (ec *executionContext) fieldContext_Query_wikiDocumentTree(ctx context.Cont
 				return ec.fieldContext_WikiDocument_ancestors(ctx, field)
 			case "createdBy":
 				return ec.fieldContext_WikiDocument_createdBy(ctx, field)
+			case "lastUpdatedBy":
+				return ec.fieldContext_WikiDocument_lastUpdatedBy(ctx, field)
+			case "lastUpdatedAt":
+				return ec.fieldContext_WikiDocument_lastUpdatedAt(ctx, field)
 			case "lastBackupAt":
 				return ec.fieldContext_WikiDocument_lastBackupAt(ctx, field)
 			case "deletedAt":
@@ -10829,6 +10874,10 @@ func (ec *executionContext) fieldContext_WikiDocument_parentDocument(_ context.C
 				return ec.fieldContext_WikiDocument_ancestors(ctx, field)
 			case "createdBy":
 				return ec.fieldContext_WikiDocument_createdBy(ctx, field)
+			case "lastUpdatedBy":
+				return ec.fieldContext_WikiDocument_lastUpdatedBy(ctx, field)
+			case "lastUpdatedAt":
+				return ec.fieldContext_WikiDocument_lastUpdatedAt(ctx, field)
 			case "lastBackupAt":
 				return ec.fieldContext_WikiDocument_lastBackupAt(ctx, field)
 			case "deletedAt":
@@ -10896,6 +10945,10 @@ func (ec *executionContext) fieldContext_WikiDocument_childDocuments(_ context.C
 				return ec.fieldContext_WikiDocument_ancestors(ctx, field)
 			case "createdBy":
 				return ec.fieldContext_WikiDocument_createdBy(ctx, field)
+			case "lastUpdatedBy":
+				return ec.fieldContext_WikiDocument_lastUpdatedBy(ctx, field)
+			case "lastUpdatedAt":
+				return ec.fieldContext_WikiDocument_lastUpdatedAt(ctx, field)
 			case "lastBackupAt":
 				return ec.fieldContext_WikiDocument_lastBackupAt(ctx, field)
 			case "deletedAt":
@@ -11193,6 +11246,78 @@ func (ec *executionContext) fieldContext_WikiDocument_createdBy(_ context.Contex
 				return ec.fieldContext_User_updatedAt(ctx, field)
 			}
 			return nil, fmt.Errorf("no field named %q was found under type User", field.Name)
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _WikiDocument_lastUpdatedBy(ctx context.Context, field graphql.CollectedField, obj *models.WikiDocument) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_WikiDocument_lastUpdatedBy,
+		func(ctx context.Context) (any, error) {
+			return ec.Resolvers.WikiDocument().LastUpdatedBy(ctx, obj)
+		},
+		nil,
+		ec.marshalOUser2ᚖgithubᚗcomᚋvibeᚑc2ᚋvibeᚑc2ᚑcoreᚋcoreᚋpkgᚋmodelsᚐUser,
+		true,
+		false,
+	)
+}
+
+func (ec *executionContext) fieldContext_WikiDocument_lastUpdatedBy(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "WikiDocument",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "id":
+				return ec.fieldContext_User_id(ctx, field)
+			case "username":
+				return ec.fieldContext_User_username(ctx, field)
+			case "roles":
+				return ec.fieldContext_User_roles(ctx, field)
+			case "active":
+				return ec.fieldContext_User_active(ctx, field)
+			case "createdAt":
+				return ec.fieldContext_User_createdAt(ctx, field)
+			case "updatedAt":
+				return ec.fieldContext_User_updatedAt(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type User", field.Name)
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _WikiDocument_lastUpdatedAt(ctx context.Context, field graphql.CollectedField, obj *models.WikiDocument) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_WikiDocument_lastUpdatedAt,
+		func(ctx context.Context) (any, error) {
+			return ec.Resolvers.WikiDocument().LastUpdatedAt(ctx, obj)
+		},
+		nil,
+		ec.marshalOString2ᚖstring,
+		true,
+		false,
+	)
+}
+
+func (ec *executionContext) fieldContext_WikiDocument_lastUpdatedAt(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "WikiDocument",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
 		},
 	}
 	return fc, nil
@@ -12082,6 +12207,10 @@ func (ec *executionContext) fieldContext_WikiDocumentEdge_node(_ context.Context
 				return ec.fieldContext_WikiDocument_ancestors(ctx, field)
 			case "createdBy":
 				return ec.fieldContext_WikiDocument_createdBy(ctx, field)
+			case "lastUpdatedBy":
+				return ec.fieldContext_WikiDocument_lastUpdatedBy(ctx, field)
+			case "lastUpdatedAt":
+				return ec.fieldContext_WikiDocument_lastUpdatedAt(ctx, field)
 			case "lastBackupAt":
 				return ec.fieldContext_WikiDocument_lastBackupAt(ctx, field)
 			case "deletedAt":
@@ -12381,6 +12510,10 @@ func (ec *executionContext) fieldContext_WikiDocumentEvent_document(_ context.Co
 				return ec.fieldContext_WikiDocument_ancestors(ctx, field)
 			case "createdBy":
 				return ec.fieldContext_WikiDocument_createdBy(ctx, field)
+			case "lastUpdatedBy":
+				return ec.fieldContext_WikiDocument_lastUpdatedBy(ctx, field)
+			case "lastUpdatedAt":
+				return ec.fieldContext_WikiDocument_lastUpdatedAt(ctx, field)
 			case "lastBackupAt":
 				return ec.fieldContext_WikiDocument_lastBackupAt(ctx, field)
 			case "deletedAt":
@@ -12756,6 +12889,10 @@ func (ec *executionContext) fieldContext_WikiSearchHit_document(_ context.Contex
 				return ec.fieldContext_WikiDocument_ancestors(ctx, field)
 			case "createdBy":
 				return ec.fieldContext_WikiDocument_createdBy(ctx, field)
+			case "lastUpdatedBy":
+				return ec.fieldContext_WikiDocument_lastUpdatedBy(ctx, field)
+			case "lastUpdatedAt":
+				return ec.fieldContext_WikiDocument_lastUpdatedAt(ctx, field)
 			case "lastBackupAt":
 				return ec.fieldContext_WikiDocument_lastBackupAt(ctx, field)
 			case "deletedAt":
@@ -17681,6 +17818,72 @@ func (ec *executionContext) _WikiDocument(ctx context.Context, sel ast.Selection
 				if res == graphql.Null {
 					atomic.AddUint32(&fs.Invalids, 1)
 				}
+				return res
+			}
+
+			if field.Deferrable != nil {
+				dfs, ok := deferred[field.Deferrable.Label]
+				di := 0
+				if ok {
+					dfs.AddField(field)
+					di = len(dfs.Values) - 1
+				} else {
+					dfs = graphql.NewFieldSet([]graphql.CollectedField{field})
+					deferred[field.Deferrable.Label] = dfs
+				}
+				dfs.Concurrently(di, func(ctx context.Context) graphql.Marshaler {
+					return innerFunc(ctx, dfs)
+				})
+
+				// don't run the out.Concurrently() call below
+				out.Values[i] = graphql.Null
+				continue
+			}
+
+			out.Concurrently(i, func(ctx context.Context) graphql.Marshaler { return innerFunc(ctx, out) })
+		case "lastUpdatedBy":
+			field := field
+
+			innerFunc := func(ctx context.Context, _ *graphql.FieldSet) (res graphql.Marshaler) {
+				defer func() {
+					if r := recover(); r != nil {
+						ec.Error(ctx, ec.Recover(ctx, r))
+					}
+				}()
+				res = ec._WikiDocument_lastUpdatedBy(ctx, field, obj)
+				return res
+			}
+
+			if field.Deferrable != nil {
+				dfs, ok := deferred[field.Deferrable.Label]
+				di := 0
+				if ok {
+					dfs.AddField(field)
+					di = len(dfs.Values) - 1
+				} else {
+					dfs = graphql.NewFieldSet([]graphql.CollectedField{field})
+					deferred[field.Deferrable.Label] = dfs
+				}
+				dfs.Concurrently(di, func(ctx context.Context) graphql.Marshaler {
+					return innerFunc(ctx, dfs)
+				})
+
+				// don't run the out.Concurrently() call below
+				out.Values[i] = graphql.Null
+				continue
+			}
+
+			out.Concurrently(i, func(ctx context.Context) graphql.Marshaler { return innerFunc(ctx, out) })
+		case "lastUpdatedAt":
+			field := field
+
+			innerFunc := func(ctx context.Context, _ *graphql.FieldSet) (res graphql.Marshaler) {
+				defer func() {
+					if r := recover(); r != nil {
+						ec.Error(ctx, ec.Recover(ctx, r))
+					}
+				}()
+				res = ec._WikiDocument_lastUpdatedAt(ctx, field, obj)
 				return res
 			}
 

@@ -148,6 +148,16 @@ func (r *wikiDocumentResolver) CreatedBy(ctx context.Context, obj *models.WikiDo
 	return r.WikiDocumentResolver.WikiDocumentCreatedBy(ctx, obj)
 }
 
+// LastUpdatedBy is the resolver for the lastUpdatedBy field.
+func (r *wikiDocumentResolver) LastUpdatedBy(ctx context.Context, obj *models.WikiDocument) (*models.User, error) {
+	return r.WikiDocumentResolver.WikiDocumentLastUpdatedBy(ctx, obj)
+}
+
+// LastUpdatedAt is the resolver for the lastUpdatedAt field.
+func (r *wikiDocumentResolver) LastUpdatedAt(ctx context.Context, obj *models.WikiDocument) (*string, error) {
+	return r.WikiDocumentResolver.WikiDocumentLastUpdatedAt(ctx, obj)
+}
+
 // LastBackupAt is the resolver for the lastBackupAt field.
 func (r *wikiDocumentResolver) LastBackupAt(ctx context.Context, obj *models.WikiDocument) (*string, error) {
 	return r.WikiDocumentResolver.WikiDocumentLastBackupAt(ctx, obj)

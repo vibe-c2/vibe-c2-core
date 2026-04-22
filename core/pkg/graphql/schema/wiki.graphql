@@ -41,6 +41,11 @@ type WikiDocument {
   # flag so the client can render them distinctly. Empty for root documents.
   ancestors: [WikiDocumentAncestor!]!
   createdBy: User!
+  # Who last persisted this document (metadata change via GraphQL, or content
+  # edit via Hocuspocus). Null for legacy documents that predate attribution —
+  # clients fall back to createdBy in that case.
+  lastUpdatedBy: User
+  lastUpdatedAt: String
   lastBackupAt: String
   deletedAt: String
   deletedBy: User

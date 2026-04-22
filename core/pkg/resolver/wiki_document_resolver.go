@@ -62,6 +62,8 @@ type IWikiDocumentResolver interface {
 	WikiDocumentChildCount(ctx context.Context, obj *models.WikiDocument) (int, error)
 	WikiDocumentAncestors(ctx context.Context, obj *models.WikiDocument) ([]*model.WikiDocumentAncestor, error)
 	WikiDocumentCreatedBy(ctx context.Context, obj *models.WikiDocument) (*models.User, error)
+	WikiDocumentLastUpdatedBy(ctx context.Context, obj *models.WikiDocument) (*models.User, error)
+	WikiDocumentLastUpdatedAt(ctx context.Context, obj *models.WikiDocument) (*string, error)
 	WikiDocumentDeletedBy(ctx context.Context, obj *models.WikiDocument) (*models.User, error)
 	WikiDocumentLastBackupAt(ctx context.Context, obj *models.WikiDocument) (*string, error)
 	WikiDocumentDeletedAt(ctx context.Context, obj *models.WikiDocument) (*string, error)
@@ -102,6 +104,18 @@ func NewWikiDocumentResolver(
 		eventBus:      eventBus,
 		presence:      presence,
 	}
+}
+
+// stampLastUpdated adds last_updated_by_id/last_updated_at to a $set map so
+// every metadata mutation attributes the edit to the caller. Callers that use
+// this inside an update path get "lastUpdatedBy" semantics matching the
+// content-edit path written by Hocuspocus. Safe to call even if the caller's
+// UserID is empty (in which case attribution is skipped and caller gets only
+// the timestamp) — but that path only triggers when JWTAuth middleware was
+// bypassed, which should not happen in protected routes.
+func stampLastUpdated(updates map[string]interface{}, callerID uuid.UUID) {
+	updates["last_updated_by_id"] = callerID
+	updates["last_updated_at"] = time.Now().UTC()
 }
 
 // authorizeForOperation loads the operation and checks the caller's role.
@@ -212,6 +226,7 @@ func (r *wikiDocumentResolver) CreateWikiDocument(ctx context.Context, operation
 		icon = *input.Icon
 	}
 
+	now := time.Now().UTC()
 	doc := &models.WikiDocument{
 		DocumentID:       uuid.New(),
 		OperationID:      opUID,
@@ -224,6 +239,11 @@ func (r *wikiDocumentResolver) CreateWikiDocument(ctx context.Context, operation
 		Icon:             icon,
 		SortOrder:        sortOrder,
 		CreatedByID:      callerUID,
+		// Seed the attribution pair with the creator/now so a freshly created
+		// doc renders "You created just now" instead of falling back to the
+		// creator-only path reserved for legacy rows.
+		LastUpdatedByID: &callerUID,
+		LastUpdatedAt:   &now,
 	}
 
 	if err := r.docRepo.Create(ctx, doc); err != nil {
@@ -320,6 +340,12 @@ func (r *wikiDocumentResolver) UpdateWikiDocument(ctx context.Context, id string
 	if len(updates) == 0 {
 		return &doc, nil
 	}
+
+	callerUID, err := uuid.Parse(auth.UserID)
+	if err != nil {
+		return nil, fmt.Errorf("invalid caller ID: %w", err)
+	}
+	stampLastUpdated(updates, callerUID)
 
 	if err := r.docRepo.Update(ctx, &doc, updates); err != nil {
 		return nil, fmt.Errorf("failed to update wiki document: %w", err)
@@ -425,6 +451,11 @@ func (r *wikiDocumentResolver) RestoreWikiDocument(ctx context.Context, id strin
 	// gone (trashed or hard-deleted). Without this, restoring into a trashed
 	// branch would hide the doc from the tree since trashed ancestors aren't
 	// rendered.
+	callerUID, err := uuid.Parse(auth.UserID)
+	if err != nil {
+		return nil, fmt.Errorf("invalid caller ID: %w", err)
+	}
+
 	if doc.ParentDocumentID != nil {
 		newParent, err := r.resolveRestoreParent(ctx, &doc)
 		if err != nil {
@@ -435,6 +466,7 @@ func (r *wikiDocumentResolver) RestoreWikiDocument(ctx context.Context, id strin
 			if newParent != nil {
 				updates["parent_document_id"] = *newParent
 			}
+			stampLastUpdated(updates, callerUID)
 			if err := r.docRepo.Update(ctx, &doc, updates); err != nil {
 				return nil, fmt.Errorf("failed to reparent for restore: %w", err)
 			}
@@ -443,6 +475,13 @@ func (r *wikiDocumentResolver) RestoreWikiDocument(ctx context.Context, id strin
 
 	if err := r.docRepo.Restore(ctx, &doc); err != nil {
 		return nil, fmt.Errorf("failed to restore document: %w", err)
+	}
+	// Restore() writes only deleted_at/deleted_by_id — also touch the
+	// attribution pair so the restorer is credited with the update.
+	stamp := map[string]interface{}{}
+	stampLastUpdated(stamp, callerUID)
+	if err := r.docRepo.Update(ctx, &doc, stamp); err != nil {
+		return nil, fmt.Errorf("failed to stamp last updated on restore: %w", err)
 	}
 
 	restored, err := r.docRepo.FindByID(ctx, uid)
@@ -664,11 +703,13 @@ func (r *wikiDocumentResolver) RestoreWikiDocumentBackup(ctx context.Context, do
 		return nil, fmt.Errorf("failed to restore from backup: %w", err)
 	}
 
-	// Also restore the title
-	_ = r.docRepo.Update(ctx, &doc, map[string]interface{}{
+	// Also restore the title and attribute the restore to the caller.
+	titleUpdates := map[string]interface{}{
 		"title":       backup.Title,
 		"title_lower": strings.ToLower(backup.Title),
-	})
+	}
+	stampLastUpdated(titleUpdates, callerUID)
+	_ = r.docRepo.Update(ctx, &doc, titleUpdates)
 
 	restored, err := r.docRepo.FindByID(ctx, docUID)
 	if err != nil {
@@ -1166,6 +1207,25 @@ func (r *wikiDocumentResolver) WikiDocumentCreatedBy(ctx context.Context, obj *m
 		return nil, nil
 	}
 	return &user, nil
+}
+
+func (r *wikiDocumentResolver) WikiDocumentLastUpdatedBy(ctx context.Context, obj *models.WikiDocument) (*models.User, error) {
+	if obj.LastUpdatedByID == nil {
+		return nil, nil
+	}
+	user, err := r.userRepo.FindByID(ctx, *obj.LastUpdatedByID)
+	if err != nil {
+		return nil, nil
+	}
+	return &user, nil
+}
+
+func (r *wikiDocumentResolver) WikiDocumentLastUpdatedAt(ctx context.Context, obj *models.WikiDocument) (*string, error) {
+	if obj.LastUpdatedAt == nil {
+		return nil, nil
+	}
+	s := obj.LastUpdatedAt.Format(time.RFC3339)
+	return &s, nil
 }
 
 func (r *wikiDocumentResolver) WikiDocumentDeletedBy(ctx context.Context, obj *models.WikiDocument) (*models.User, error) {

@@ -3,14 +3,17 @@ import { Binary, MongoClient, type Db } from "mongodb";
 import * as Y from "yjs";
 
 /**
- * Convert a UUID string to a BSON Binary subtype 4, matching how the Go
- * backend (qmgo) serializes `uuid.UUID` fields. Without this, Mongo filters
- * keyed on a JS string never match documents written by Go.
+ * Convert a UUID string to a BSON Binary matching how the Go backend (qmgo)
+ * serializes `uuid.UUID` fields. Without this, Mongo filters keyed on a JS
+ * string never match documents written by Go.
+ *
+ * Used for both document IDs (in the query filter) and user IDs (persisted
+ * into last_updated_by_id).
  */
-function docIdToBinary(docId: string): Binary {
-  const hex = docId.replace(/-/g, "");
+function uuidToBinary(value: string): Binary {
+  const hex = value.replace(/-/g, "");
   if (hex.length !== 32) {
-    throw new Error(`invalid uuid: ${docId}`);
+    throw new Error(`invalid uuid: ${value}`);
   }
   // qmgo (Go backend) serializes uuid.UUID via MarshalBinary, which the
   // mongo-go-driver writes as Binary subtype 0 (generic), NOT subtype 4.
@@ -118,7 +121,7 @@ export function createDatabaseExtension(): Database {
       const collection = database.collection("wiki_documents");
 
       const doc = await collection.findOne(
-        { document_id: docIdToBinary(docId) },
+        { document_id: uuidToBinary(docId) },
         { projection: { content_state: 1 } }
       );
 
@@ -148,21 +151,43 @@ export function createDatabaseExtension(): Database {
         markdown = ydoc.getText("content").toString();
       }
 
-      // Write content_state, content, and content_state_at to MongoDB
-      await collection.updateOne(
-        { document_id: docIdToBinary(docId) },
-        {
-          $set: {
-            content_state: Buffer.from(state),
-            content: markdown,
-            content_state_at: new Date(),
-          },
+      // context is populated by onAuthenticate (auth.ts). userId is the
+      // typist that ended the debounce window — attribute the save to them.
+      const ctx = context as
+        | { userId?: string; operationId?: string }
+        | undefined;
+
+      const now = new Date();
+      const updates: Record<string, unknown> = {
+        content_state: Buffer.from(state),
+        content: markdown,
+        content_state_at: now,
+        // The Go backend's qmgo DefaultField auto-manages `updateAt` on
+        // qmgo writes, but this path uses the raw mongo driver, so qmgo's
+        // hook never fires. Set it explicitly so GraphQL `updatedAt`
+        // reflects content edits, not just metadata ones.
+        updateAt: now,
+      };
+
+      if (ctx?.userId) {
+        try {
+          updates.last_updated_by_id = uuidToBinary(ctx.userId);
+          updates.last_updated_at = now;
+        } catch (err) {
+          // Malformed userId — persist the save without attribution rather
+          // than dropping the content edit.
+          console.warn(`Skipping attribution for ${docId}:`, err);
         }
+      }
+
+      await collection.updateOne(
+        { document_id: uuidToBinary(docId) },
+        { $set: updates }
       );
 
       // Send webhook to Go backend
-      const operationId = context?.operationId || "";
-      await sendWebhook("onChange", docId, operationId);
+      const operationId = ctx?.operationId || "";
+      await sendWebhook("onChange", docId, operationId, ctx?.userId);
     },
   });
 }
