@@ -102,6 +102,16 @@ export function WikiEditor({ documentId, isEditor }: WikiEditorProps) {
         codeBlock: false, // Replaced by CodeBlockLowlight below
       }),
       CodeBlockLowlight.extend({
+        addAttributes() {
+          return {
+            ...this.parent?.(),
+            wrap: {
+              default: false,
+              parseHTML: (el) => el.classList.contains("is-wrapped"),
+              renderHTML: (attrs) => (attrs.wrap ? { class: "is-wrapped" } : {}),
+            },
+          }
+        },
         addNodeView() {
           return ReactNodeViewRenderer(WikiCodeBlock)
         },

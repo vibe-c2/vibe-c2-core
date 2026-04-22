@@ -140,24 +140,57 @@
   border-radius: var(--radius-md);
   border: 1px solid var(--border);
   background: var(--wiki-code-bg);
-  overflow: hidden;
+  /* overflow:visible (not hidden) so the toolbar can float above the block's
+     top edge and overlay the paragraph preceding it. The inner <pre> owns its
+     own horizontal scroll; the wrapper's background+radius still clip cleanly
+     because children have transparent backgrounds. */
+  overflow: visible;
+}
+
+/* When a code block is the first element on the page, the floating toolbar
+   has nothing above it to overlay and would collide with the surrounding
+   page chrome (avatar, header). Reserve clearance here.
+   Note: ReactNodeViewRenderer wraps WikiCodeBlock in an outer
+   `<div class="react-renderer node-codeBlock">` — THAT wrapper is the real
+   first child of `.tiptap`, not `.wiki-code-block`. Selecting on
+   `.wiki-code-block:first-child` silently never matches. */
+.tiptap > .node-codeBlock:first-child {
+  padding-top: 2.5rem;
 }
 
 .tiptap .wiki-code-block__toolbar {
   position: absolute;
-  top: 6px;
-  right: 6px;
+  /* Sit just above the block's top edge. A 4px gap keeps it visually detached
+     so it reads as a contextual control, not part of the code chrome. */
+  bottom: calc(100% + 4px);
+  right: 0;
   display: flex;
   align-items: center;
   gap: 4px;
   opacity: 0;
+  pointer-events: none;
   transition: opacity 120ms ease-out;
-  z-index: 1;
+  /* Above ordinary prose so it overlays (rather than hides behind) the
+     preceding paragraph text. */
+  z-index: 5;
 }
 
-.tiptap .wiki-code-block:hover .wiki-code-block__toolbar,
-.tiptap .wiki-code-block:focus-within .wiki-code-block__toolbar {
+/* Editable mode: reveal while the cursor is inside THIS code block OR while
+   a toolbar control holds focus (e.g. the language <select> dropdown is open).
+   Without the focus-within rule the select would hide itself mid-click because
+   focusing it pulls the ProseMirror cursor out of the node. */
+.tiptap .wiki-code-block[data-cursor-inside="true"] > .wiki-code-block__toolbar,
+.tiptap .wiki-code-block[data-editable="true"] > .wiki-code-block__toolbar:focus-within {
   opacity: 1;
+  pointer-events: auto;
+}
+
+/* Read-only mode: cursor-driven visibility doesn't apply (no cursor), so fall
+   back to hover/focus so viewers can still reach the copy button. */
+.tiptap .wiki-code-block[data-editable="false"]:hover > .wiki-code-block__toolbar,
+.tiptap .wiki-code-block[data-editable="false"]:focus-within > .wiki-code-block__toolbar {
+  opacity: 1;
+  pointer-events: auto;
 }
 
 .tiptap .wiki-code-block__select,
@@ -209,6 +242,28 @@
   background: var(--accent);
 }
 
+.tiptap .wiki-code-block__wrap {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  font-family: var(--font-sans);
+  color: var(--muted-foreground);
+  background: var(--wiki-code-chrome);
+  border: 1px solid var(--border);
+  border-radius: calc(var(--radius-md) - 2px);
+  cursor: pointer;
+  transition: color 120ms ease-out, background 120ms ease-out;
+}
+
+.tiptap .wiki-code-block__wrap:hover,
+.tiptap .wiki-code-block__wrap[aria-pressed="true"] {
+  color: var(--foreground);
+  background: var(--accent);
+}
+
 .tiptap .wiki-code-block__pre {
   margin: 0;
   padding: 12px 14px;
@@ -226,7 +281,20 @@
   background: transparent;
   padding: 0;
   white-space: pre;
+  /* The editor root sets `overflow-wrap: anywhere` so long prose tokens
+     don't widen the column. That rule also breaks long code lines unless
+     we reset it here — we want horizontal scroll, not a forced wrap. */
+  overflow-wrap: normal;
+  word-break: normal;
   tab-size: 2;
+}
+
+/* Soft-wrap toggle — driven by node attr mirrored onto the wrapper. */
+.tiptap .wiki-code-block[data-wrap="true"] .wiki-code-block__pre code,
+.tiptap .wiki-code-block[data-wrap="true"] .wiki-code-block__pre code.hljs {
+  white-space: pre-wrap;
+  word-break: break-word;
+  overflow-wrap: anywhere;
 }
 
 /* Surface tokens — GitHub light by default, overridden under .dark below. */
