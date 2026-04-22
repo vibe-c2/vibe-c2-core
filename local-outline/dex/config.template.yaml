@@ -1,0 +1,27 @@
+issuer: http://outline-dex:5556/dex
+
+storage:
+  type: sqlite3
+  config:
+    file: /tmp/dex.db
+
+web:
+  http: 0.0.0.0:5556
+
+oauth2:
+  skipApprovalScreen: true
+
+staticClients:
+  - id: outline
+    secret: __OIDC_SECRET__
+    redirectURIs:
+      - http://localhost:3001/auth/oidc.callback
+    name: Outline
+
+enablePasswordDB: true
+
+staticPasswords:
+  - email: admin@local.test
+    hash: __ADMIN_HASH__
+    username: admin
+    userID: 00000000-0000-0000-0000-000000000001

@@ -1,0 +1,105 @@
+name: local-outline
+
+services:
+  outline-postgres:
+    image: postgres:15-alpine
+    container_name: local-outline-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: outline
+      POSTGRES_USER: outline
+      POSTGRES_PASSWORD: ${OUTLINE_POSTGRES_PASSWORD}
+    volumes:
+      - outline_postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U outline -d outline"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - local-outline
+
+  outline-redis:
+    image: redis:7-alpine
+    container_name: local-outline-redis
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - local-outline
+
+  outline-dex:
+    image: ghcr.io/dexidp/dex:v2.41.1
+    container_name: local-outline-dex
+    restart: unless-stopped
+    # Dex v2.41.x does NOT interpolate env vars in its config file, so we
+    # render the template at container start with sed (using placeholders
+    # that don't conflict with bcrypt's "$" characters) and then exec dex.
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - |
+        set -e
+        sed -e "s|__OIDC_SECRET__|$$OUTLINE_OIDC_CLIENT_SECRET|" \
+            -e "s|__ADMIN_HASH__|$$OUTLINE_DEX_ADMIN_HASH|" \
+            /etc/dex/config.template.yaml > /tmp/dex.yaml
+        exec dex serve /tmp/dex.yaml
+    environment:
+      OUTLINE_OIDC_CLIENT_SECRET: ${OUTLINE_OIDC_CLIENT_SECRET}
+      OUTLINE_DEX_ADMIN_HASH: ${OUTLINE_DEX_ADMIN_HASH}
+    volumes:
+      - ./dex/config.template.yaml:/etc/dex/config.template.yaml:ro
+    ports:
+      - "5556:5556"
+    networks:
+      - local-outline
+
+  outline:
+    image: outlinewiki/outline:latest
+    container_name: local-outline-app
+    restart: unless-stopped
+    environment:
+      SECRET_KEY: ${OUTLINE_SECRET_KEY}
+      UTILS_SECRET: ${OUTLINE_UTILS_SECRET}
+      DATABASE_URL: postgres://outline:${OUTLINE_POSTGRES_PASSWORD}@outline-postgres:5432/outline
+      PGSSLMODE: disable
+      REDIS_URL: redis://outline-redis:6379
+      URL: http://localhost:3001
+      PORT: 3000
+      FORCE_HTTPS: "false"
+      OIDC_CLIENT_ID: outline
+      OIDC_CLIENT_SECRET: ${OUTLINE_OIDC_CLIENT_SECRET}
+      OIDC_AUTH_URI: http://outline-dex:5556/dex/auth
+      OIDC_TOKEN_URI: http://outline-dex:5556/dex/token
+      OIDC_USERINFO_URI: http://outline-dex:5556/dex/userinfo
+      OIDC_LOGOUT_URI: ""
+      OIDC_DISPLAY_NAME: Local
+      OIDC_USERNAME_CLAIM: name
+      OIDC_SCOPES: openid profile email
+      FILE_STORAGE: local
+      FILE_STORAGE_LOCAL_ROOT_DIR: /var/lib/outline/data
+      FILE_STORAGE_UPLOAD_MAX_SIZE: "26214400"
+      DEFAULT_LANGUAGE: en_US
+    volumes:
+      - outline_data:/var/lib/outline/data
+    ports:
+      - "3001:3000"
+    depends_on:
+      outline-postgres:
+        condition: service_healthy
+      outline-redis:
+        condition: service_healthy
+      outline-dex:
+        condition: service_started
+    networks:
+      - local-outline
+
+volumes:
+  outline_postgres_data:
+  outline_data:
+
+networks:
+  local-outline:
+    driver: bridge

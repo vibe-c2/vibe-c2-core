@@ -1,0 +1,4 @@
+.env
+dex/dex.db
+fixtures/*
+!fixtures/.gitkeep
