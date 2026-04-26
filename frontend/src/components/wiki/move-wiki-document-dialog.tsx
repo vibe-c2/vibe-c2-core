@@ -54,10 +54,13 @@ export function MoveWikiDocumentDialog({
     [moveTarget, documents],
   )
 
-  const allOptions = useMemo(() => {
-    const opts: SuggestionOption[] = [
-      { value: "", label: "\u{1F4C1} Root (top level)" },
-    ]
+  const rootOption: SuggestionOption = useMemo(
+    () => ({ value: "", label: "\u{1F4C1} / Root (top level)" }),
+    [],
+  )
+
+  const docOptions = useMemo(() => {
+    const opts: SuggestionOption[] = []
     for (const doc of documents) {
       if (!excludedIds.has(doc.id)) {
         opts.push({
@@ -69,11 +72,16 @@ export function MoveWikiDocumentDialog({
     return opts
   }, [documents, excludedIds])
 
+  // Root is always present in the suggestion list. Without this, the
+  // moment a user types anything that doesn't appear in the literal label
+  // (notably "/", which they reach for as a path shortcut) the root
+  // option disappears, leaving "Move to root" undiscoverable.
   const filteredOptions = useMemo(() => {
-    if (!search) return allOptions
+    if (!search) return [rootOption, ...docOptions]
     const lower = search.toLowerCase()
-    return allOptions.filter((o) => o.label.toLowerCase().includes(lower))
-  }, [allOptions, search])
+    const docs = docOptions.filter((o) => o.label.toLowerCase().includes(lower))
+    return [rootOption, ...docs]
+  }, [rootOption, docOptions, search])
 
   function handleClose() {
     closeMoveDialog()
