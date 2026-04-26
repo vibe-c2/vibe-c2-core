@@ -3,8 +3,12 @@ package wiki
 import (
 	"bytes"
 	"context"
+	"crypto/hmac"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"time"
 
@@ -13,19 +17,28 @@ import (
 
 // HocuspocusClient is an HTTP client for the Hocuspocus sidecar's internal API.
 // Used to force-disconnect users when their operation membership is revoked
-// or their role is demoted below operator.
+// or their role is demoted below operator, and to convert markdown into Y.js
+// document updates during the Outline import flow.
 type HocuspocusClient struct {
-	baseURL    string
-	httpClient *http.Client
-	logger     *zap.Logger
+	baseURL      string
+	internalSecret string
+	httpClient   *http.Client
+	logger       *zap.Logger
 }
 
 // NewHocuspocusClient creates a new client for the Hocuspocus internal API.
-func NewHocuspocusClient(baseURL string, logger *zap.Logger) *HocuspocusClient {
+//
+// internalSecret is shared with the sidecar's HOCUSPOCUS_WEBHOOK_SECRET (the
+// same secret signs both the sidecar→backend webhook and the backend→sidecar
+// internal route; the header name disambiguates direction). Pass an empty
+// string when only the disconnect API is needed — markdown-to-yjs requests
+// will then fail with a clear error.
+func NewHocuspocusClient(baseURL, internalSecret string, logger *zap.Logger) *HocuspocusClient {
 	return &HocuspocusClient{
-		baseURL: baseURL,
+		baseURL:        baseURL,
+		internalSecret: internalSecret,
 		httpClient: &http.Client{
-			Timeout: 5 * time.Second,
+			Timeout: 30 * time.Second,
 		},
 		logger: logger,
 	}
@@ -72,4 +85,62 @@ func (c *HocuspocusClient) DisconnectUser(ctx context.Context, userID, operation
 	}
 
 	return nil
+}
+
+// markdownToYjsRequest is the body shape the sidecar's
+// /internal/markdown-to-yjs route consumes.
+type markdownToYjsRequest struct {
+	Markdown string `json:"markdown"`
+}
+
+// MarkdownToYjs sends the markdown body to the Hocuspocus sidecar and
+// returns the encoded Y.js document update bytes. The bytes are suitable
+// for direct insertion into wiki_documents.content_state; the editor's
+// collab extension reads them back via the same Y.XmlFragment field name
+// ("default") that the sidecar's persistence layer uses.
+//
+// Used by the Outline importer to seed every imported document with a
+// fully-populated content_state so the first user edit doesn't overwrite
+// the imported body with an empty Y.Doc.
+func (c *HocuspocusClient) MarkdownToYjs(ctx context.Context, markdown string) ([]byte, error) {
+	if c.internalSecret == "" {
+		return nil, fmt.Errorf("markdown-to-yjs: no internal secret configured")
+	}
+
+	body, err := json.Marshal(markdownToYjsRequest{Markdown: markdown})
+	if err != nil {
+		return nil, fmt.Errorf("marshal markdown payload: %w", err)
+	}
+
+	mac := hmac.New(sha256.New, []byte(c.internalSecret))
+	mac.Write(body)
+	signature := "sha256=" + hex.EncodeToString(mac.Sum(nil))
+
+	url := c.baseURL + "/internal/markdown-to-yjs"
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewReader(body))
+	if err != nil {
+		return nil, fmt.Errorf("build markdown-to-yjs request: %w", err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("X-Internal-Signature-256", signature)
+
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("call hocuspocus markdown-to-yjs: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		// Surface the sidecar's error body so callers can log a useful
+		// reason without re-parsing the response.
+		errBody, _ := io.ReadAll(io.LimitReader(resp.Body, 4096))
+		return nil, fmt.Errorf("markdown-to-yjs returned %d: %s",
+			resp.StatusCode, string(errBody))
+	}
+
+	bytesOut, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("read markdown-to-yjs response: %w", err)
+	}
+	return bytesOut, nil
 }

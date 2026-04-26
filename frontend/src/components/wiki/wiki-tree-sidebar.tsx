@@ -2,6 +2,7 @@ import { useMemo, useRef, useState } from "react"
 import {
   ChevronsDownUpIcon,
   ChevronsUpDownIcon,
+  DownloadIcon,
   PlusIcon,
   SearchIcon,
   Trash2Icon,
@@ -129,6 +130,7 @@ export function WikiTreeSidebar({
 }: WikiTreeSidebarProps) {
   const sidebarWidth = useWikiStore((s) => s.sidebarWidth)
   const openCreateDialog = useWikiStore((s) => s.openCreateDialog)
+  const openImportOutlineDialog = useWikiStore((s) => s.openImportOutlineDialog)
   const openTrashPanel = useWikiStore((s) => s.openTrashPanel)
   const openContentSearch = useWikiStore((s) => s.openContentSearch)
   const expandedNodes = useWikiStore((s) => s.expandedNodes)
@@ -369,6 +371,22 @@ export function WikiTreeSidebar({
               <PlusIcon className="size-3.5" />
             </TooltipTrigger>
             <TooltipContent>New document</TooltipContent>
+          </Tooltip>
+        )}
+        {isEditor && (
+          <Tooltip>
+            <TooltipTrigger
+              render={
+                <Button
+                  variant="ghost"
+                  size="icon-xs"
+                  onClick={openImportOutlineDialog}
+                />
+              }
+            >
+              <DownloadIcon className="size-3.5" />
+            </TooltipTrigger>
+            <TooltipContent>Import markdown</TooltipContent>
           </Tooltip>
         )}
         <Tooltip>

@@ -160,43 +160,80 @@ func (wfc *WikiFileController) Upload(c *gin.Context) {
 	}
 	defer src.Close()
 
-	raw, err := wiki.ReadAllLimited(src, wfc.cfg.MaxSize)
+	uploaderID, err := uuid.Parse(c.GetString("userID"))
 	if err != nil {
-		c.JSON(http.StatusRequestEntityTooLarge, responses.NewErrorResponse("%v", err))
+		c.JSON(http.StatusUnauthorized, responses.ErrUnauthorized)
 		return
 	}
 
-	// Content-type detection: trust the browser's declared type by default,
-	// but sniff the bytes when none is given. Sniffing also hardens the
-	// denylist against clients that just lie.
-	contentType := strings.TrimSpace(fileHeader.Header.Get("Content-Type"))
+	declaredCT := strings.TrimSpace(fileHeader.Header.Get("Content-Type"))
+
+	file, ierr := wfc.IngestFile(c.Request.Context(), &doc, uploaderID, src, filename, declaredCT)
+	if ierr != nil {
+		c.JSON(ierr.Status, responses.NewErrorResponse("%s", ierr.Message))
+		return
+	}
+
+	c.JSON(http.StatusCreated, WikiFileUploadResponse{
+		ID:          file.FileID.String(),
+		URL:         "/api/v1/wiki/files/" + file.FileID.String(),
+		Filename:    file.Filename,
+		Size:        file.SizeBytes,
+		ContentType: file.ContentType,
+	})
+}
+
+// IngestFile uploads raw bytes as a wiki file attachment: enforces the size
+// cap, sniffs/normalises the content type, applies the deny-list, persists
+// the bytes via the object store, and creates the WikiFile metadata record.
+//
+// Designed to be called from both the multipart Upload handler above and
+// the bulk Outline-import orchestrator. Returns a structured *IngestError
+// so callers can map failures to HTTP statuses (413/415/400/500) without
+// rebuilding them from sentinel checks.
+//
+// `declaredContentType` is the type the client labelled the upload with
+// (e.g. multipart `Content-Type:` header). Empty string forces sniffing.
+// `filename` MUST already be sanitized — callers are expected to run it
+// through sanitizeUploadFilename before invoking this helper.
+func (wfc *WikiFileController) IngestFile(
+	ctx context.Context,
+	doc *models.WikiDocument,
+	uploaderID uuid.UUID,
+	body io.Reader,
+	filename string,
+	declaredContentType string,
+) (*models.WikiFile, *wiki.IngestError) {
+	if filename == "" {
+		return nil, &wiki.IngestError{Status: http.StatusBadRequest, Message: "filename is required"}
+	}
+
+	raw, err := wiki.ReadAllLimited(body, wfc.cfg.MaxSize)
+	if err != nil {
+		return nil, &wiki.IngestError{Status: http.StatusRequestEntityTooLarge, Message: err.Error(), Cause: err}
+	}
+
+	contentType := strings.TrimSpace(declaredContentType)
 	if contentType == "" {
 		contentType = mimetype.Detect(raw).String()
 	}
 	contentType = canonicalContentType(contentType)
 
 	if isDeniedContentType(contentType, wfc.cfg.DeniedContentTypes) {
-		c.JSON(http.StatusUnsupportedMediaType, responses.NewErrorResponse(
-			"content type %q is not allowed", contentType))
-		return
+		return nil, &wiki.IngestError{
+			Status:  http.StatusUnsupportedMediaType,
+			Message: "content type " + contentType + " is not allowed",
+		}
 	}
 
 	fileID := uuid.New()
 	key := fileObjectKeyFor(doc.OperationID, doc.DocumentID, fileID, filename)
 
-	// Detached timeout so a client disconnect doesn't abort the write.
 	putCtx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()
 	if err := wfc.store.Put(putCtx, key, bytes.NewReader(raw), int64(len(raw)), contentType); err != nil {
 		wfc.logger.Error("Object store put failed", zap.Error(err), zap.String("key", key))
-		c.JSON(http.StatusInternalServerError, responses.ErrInternalError)
-		return
-	}
-
-	uploaderID, err := uuid.Parse(c.GetString("userID"))
-	if err != nil {
-		c.JSON(http.StatusUnauthorized, responses.ErrUnauthorized)
-		return
+		return nil, &wiki.IngestError{Status: http.StatusInternalServerError, Message: "object store write failed", Cause: err}
 	}
 
 	sum := sha256.Sum256(raw)
@@ -211,12 +248,10 @@ func (wfc *WikiFileController) Upload(c *gin.Context) {
 		SizeBytes:    int64(len(raw)),
 		Checksum:     hex.EncodeToString(sum[:]),
 	}
-	if err := wfc.fileRepo.Create(c.Request.Context(), file); err != nil {
-		// Best-effort cleanup; sweeper will get it if this fails.
+	if err := wfc.fileRepo.Create(ctx, file); err != nil {
 		_ = wfc.store.Delete(context.Background(), key)
 		wfc.logger.Error("Failed to persist file metadata", zap.Error(err))
-		c.JSON(http.StatusInternalServerError, responses.ErrInternalError)
-		return
+		return nil, &wiki.IngestError{Status: http.StatusInternalServerError, Message: "failed to persist file metadata", Cause: err}
 	}
 
 	wfc.logger.Info("Wiki file uploaded",
@@ -229,13 +264,7 @@ func (wfc *WikiFileController) Upload(c *gin.Context) {
 		zap.Int64("size_bytes", file.SizeBytes),
 	)
 
-	c.JSON(http.StatusCreated, WikiFileUploadResponse{
-		ID:          fileID.String(),
-		URL:         "/api/v1/wiki/files/" + fileID.String(),
-		Filename:    filename,
-		Size:        file.SizeBytes,
-		ContentType: contentType,
-	})
+	return file, nil
 }
 
 // Download handles GET /api/v1/wiki/files/:id. Default disposition is

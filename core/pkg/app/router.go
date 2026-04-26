@@ -13,6 +13,7 @@ import (
 	"github.com/vibe-c2/vibe-c2-core/core/pkg/resolver"
 	"github.com/vibe-c2/vibe-c2-core/core/pkg/responses"
 	"github.com/vibe-c2/vibe-c2-core/core/pkg/wiki"
+	"github.com/vibe-c2/vibe-c2-core/core/pkg/wikiimport"
 
 	_ "github.com/vibe-c2/vibe-c2-core/core/docs"
 )
@@ -72,6 +73,21 @@ func (a *App) NewRouter() *gin.Engine {
 		},
 	)
 
+	// Outline-export importer. Reuses the image/file ingest helpers from
+	// the controllers above and delegates markdown→Y.js conversion to the
+	// Hocuspocus sidecar via the existing HocuspocusClient.
+	wikiImportOrch := wikiimport.NewOrchestrator(
+		a.repos.WikiDocument,
+		wikiImageCtrl,
+		wikiFileCtrl,
+		a.hpClient,
+		a.logger,
+	)
+	wikiImportCtrl := controller.NewWikiImportController(
+		wikiImportOrch, a.repos.Operation, a.logger,
+		controller.WikiImportControllerConfig{MaxZipSize: a.env.WikiImportZipMaxSize},
+	)
+
 	// Wiki webhook handler (Hocuspocus callbacks — internal, HMAC-validated, not behind JWTAuth)
 	webhookHandler := wiki.NewWebhookHandler(a.presenceTracker, a.eventBus, a.env.HocuspocusWebhookSecret, a.logger)
 
@@ -127,6 +143,10 @@ func (a *App) NewRouter() *gin.Engine {
 		// download/preview links work without custom headers.
 		wikiGroup.POST("/files", wikiFileCtrl.Upload)
 		wikiGroup.GET("/files/:id", wikiFileCtrl.Download)
+
+		// Outline-export importer (operator+ only; auth check is inside
+		// the handler since it depends on the operationId query param).
+		wikiGroup.POST("/import/outline", wikiImportCtrl.UploadOutlineExport)
 
 		// GraphQL endpoint — all queries, mutations, and subscriptions.
 		// Authentication is handled by the JWTAuth middleware above (same as REST).

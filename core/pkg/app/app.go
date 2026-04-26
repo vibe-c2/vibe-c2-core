@@ -147,7 +147,7 @@ func NewApp() (*App, error) {
 
 	// Initialize wiki integration
 	presenceTracker := wiki.NewPresenceTracker(l)
-	hpClient := wiki.NewHocuspocusClient(e.HocuspocusURL, l)
+	hpClient := wiki.NewHocuspocusClient(e.HocuspocusURL, e.HocuspocusWebhookSecret, l)
 
 	// Parse auto-backup interval
 	backupInterval, err := time.ParseDuration(e.WikiAutoBackupInterval)

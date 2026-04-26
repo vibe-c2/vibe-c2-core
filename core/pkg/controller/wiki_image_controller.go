@@ -131,44 +131,72 @@ func (wic *WikiImageController) Upload(c *gin.Context) {
 	}
 	defer src.Close()
 
-	raw, err := wiki.ReadAllLimited(src, wic.cfg.MaxSize)
+	uploaderID, err := uuid.Parse(c.GetString("userID"))
 	if err != nil {
-		c.JSON(http.StatusRequestEntityTooLarge, responses.NewErrorResponse("%v", err))
+		c.JSON(http.StatusUnauthorized, responses.ErrUnauthorized)
 		return
+	}
+
+	img, ierr := wic.IngestImage(c.Request.Context(), &doc, uploaderID, src)
+	if ierr != nil {
+		c.JSON(ierr.Status, responses.NewErrorResponse("%s", ierr.Message))
+		return
+	}
+
+	c.JSON(http.StatusCreated, WikiImageUploadResponse{
+		ID:     img.ImageID.String(),
+		URL:    "/api/v1/wiki/images/" + img.ImageID.String(),
+		Width:  img.Width,
+		Height: img.Height,
+	})
+}
+
+// IngestImage uploads raw bytes as a wiki image: limits the size, runs the
+// image processor (sanitize/EXIF-strip/downscale), persists the bytes via
+// the object store, and creates the WikiImage metadata record.
+//
+// Designed to be called from both the multipart Upload handler above and
+// the bulk Outline-import orchestrator. Returns a structured *IngestError
+// so callers can map failures to HTTP statuses (413/415/400/500) without
+// re-deriving them from sentinel error checks.
+func (wic *WikiImageController) IngestImage(
+	ctx context.Context,
+	doc *models.WikiDocument,
+	uploaderID uuid.UUID,
+	body io.Reader,
+) (*models.WikiImage, *wiki.IngestError) {
+	raw, err := wiki.ReadAllLimited(body, wic.cfg.MaxSize)
+	if err != nil {
+		return nil, &wiki.IngestError{
+			Status:  http.StatusRequestEntityTooLarge,
+			Message: err.Error(),
+			Cause:   err,
+		}
 	}
 
 	processed, err := wic.processor.ProcessImage(raw)
 	if err != nil {
-		if errors.Is(err, wiki.ErrUnsupportedImageType) {
-			c.JSON(http.StatusUnsupportedMediaType, responses.NewErrorResponse("%v", err))
-			return
+		switch {
+		case errors.Is(err, wiki.ErrUnsupportedImageType):
+			return nil, &wiki.IngestError{Status: http.StatusUnsupportedMediaType, Message: err.Error(), Cause: err}
+		case errors.Is(err, wiki.ErrInvalidImage):
+			return nil, &wiki.IngestError{Status: http.StatusBadRequest, Message: err.Error(), Cause: err}
+		default:
+			wic.logger.Error("Image processing failed", zap.Error(err))
+			return nil, &wiki.IngestError{Status: http.StatusInternalServerError, Message: "image processing failed", Cause: err}
 		}
-		if errors.Is(err, wiki.ErrInvalidImage) {
-			c.JSON(http.StatusBadRequest, responses.NewErrorResponse("%v", err))
-			return
-		}
-		wic.logger.Error("Image processing failed", zap.Error(err))
-		c.JSON(http.StatusInternalServerError, responses.ErrInternalError)
-		return
 	}
 
 	imageID := uuid.New()
 	key := objectKeyFor(doc.OperationID, doc.DocumentID, imageID, processed.ContentType)
 
-	// Use a detached timeout so a client disconnect doesn't abort the write
+	// Detached timeout so a client disconnect doesn't abort the write
 	// mid-object.
 	putCtx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 	if err := wic.store.Put(putCtx, key, bytes.NewReader(processed.Bytes), int64(len(processed.Bytes)), processed.ContentType); err != nil {
 		wic.logger.Error("Object store put failed", zap.Error(err), zap.String("key", key))
-		c.JSON(http.StatusInternalServerError, responses.ErrInternalError)
-		return
-	}
-
-	uploaderID, err := uuid.Parse(c.GetString("userID"))
-	if err != nil {
-		c.JSON(http.StatusUnauthorized, responses.ErrUnauthorized)
-		return
+		return nil, &wiki.IngestError{Status: http.StatusInternalServerError, Message: "object store write failed", Cause: err}
 	}
 
 	img := &models.WikiImage{
@@ -183,13 +211,12 @@ func (wic *WikiImageController) Upload(c *gin.Context) {
 		Height:       processed.Height,
 		Checksum:     processed.Checksum,
 	}
-	if err := wic.imageRepo.Create(c.Request.Context(), img); err != nil {
-		// Try to clean up the orphaned object; if that fails the sweeper
-		// will get it eventually.
+	if err := wic.imageRepo.Create(ctx, img); err != nil {
+		// Best-effort cleanup of the orphaned object; sweeper will catch any
+		// stragglers if the delete also fails.
 		_ = wic.store.Delete(context.Background(), key)
 		wic.logger.Error("Failed to persist image metadata", zap.Error(err))
-		c.JSON(http.StatusInternalServerError, responses.ErrInternalError)
-		return
+		return nil, &wiki.IngestError{Status: http.StatusInternalServerError, Message: "failed to persist image metadata", Cause: err}
 	}
 
 	wic.logger.Info("Wiki image uploaded",
@@ -201,12 +228,7 @@ func (wic *WikiImageController) Upload(c *gin.Context) {
 		zap.Int64("size_bytes", img.SizeBytes),
 	)
 
-	c.JSON(http.StatusCreated, WikiImageUploadResponse{
-		ID:     imageID.String(),
-		URL:    "/api/v1/wiki/images/" + imageID.String(),
-		Width:  processed.Width,
-		Height: processed.Height,
-	})
+	return img, nil
 }
 
 // Download handles GET /api/v1/wiki/images/:id. The response is streamed from

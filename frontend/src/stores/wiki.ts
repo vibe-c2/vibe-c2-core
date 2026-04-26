@@ -51,6 +51,11 @@ interface WikiStoreState {
   openCreateDialog: (parentId?: string | null) => void
   closeCreateDialog: () => void
 
+  // Import-from-Outline dialog
+  importOutlineDialogOpen: boolean
+  openImportOutlineDialog: () => void
+  closeImportOutlineDialog: () => void
+
   // Move dialog
   moveDialogOpen: boolean
   moveTarget: { id: string; title: string } | null
@@ -136,6 +141,11 @@ export const useWikiStore = create<WikiStoreState>((set, get) => ({
     set({ createDialogOpen: true, createParentId: parentId ?? null }),
   closeCreateDialog: () =>
     set({ createDialogOpen: false, createParentId: null }),
+
+  // Import-from-Outline dialog
+  importOutlineDialogOpen: false,
+  openImportOutlineDialog: () => set({ importOutlineDialogOpen: true }),
+  closeImportOutlineDialog: () => set({ importOutlineDialogOpen: false }),
 
   // Move dialog
   moveDialogOpen: false,

@@ -61,6 +61,9 @@ type EnvironmentSettings struct {
 	WikiFileSweeperInterval     time.Duration // how often the GC pass runs
 	WikiFileSweeperGrace        time.Duration // minimum age before an unreferenced file is deleted
 
+	// Wiki Outline-export importer
+	WikiImportZipMaxSize int64 // bytes; total uncompressed zip cap before parsing
+
 	// Auth — durations parsed from Go duration strings (e.g. "15m", "168h").
 	AuthAccessTTL       time.Duration
 	AuthRefreshTTL      time.Duration
@@ -101,6 +104,7 @@ func init() {
 	viper.SetDefault("WIKI_FILE_DENIED_CONTENT_TYPES", "")
 	viper.SetDefault("WIKI_FILE_SWEEPER_INTERVAL", "24h")
 	viper.SetDefault("WIKI_FILE_SWEEPER_GRACE", "168h")
+	viper.SetDefault("WIKI_IMPORT_ZIP_MAX_SIZE", int64(200*1024*1024))
 	viper.SetDefault("AUTH_ACCESS_TTL", "15m")
 	viper.SetDefault("AUTH_REFRESH_TTL", "168h")
 	viper.SetDefault("AUTH_REFRESH_GRACE_TTL", "10s")
@@ -153,6 +157,9 @@ func init() {
 		WikiFileDeniedContentTypes: parseCSV(viper.GetString("WIKI_FILE_DENIED_CONTENT_TYPES")),
 		WikiFileSweeperInterval:    parseDurationOrFatal("WIKI_FILE_SWEEPER_INTERVAL", viper.GetString("WIKI_FILE_SWEEPER_INTERVAL")),
 		WikiFileSweeperGrace:       parseDurationOrFatal("WIKI_FILE_SWEEPER_GRACE", viper.GetString("WIKI_FILE_SWEEPER_GRACE")),
+
+		// Wiki Outline import
+		WikiImportZipMaxSize: viper.GetInt64("WIKI_IMPORT_ZIP_MAX_SIZE"),
 
 		// Auth
 		AuthAccessTTL:       parseDurationOrFatal("AUTH_ACCESS_TTL", viper.GetString("AUTH_ACCESS_TTL")),

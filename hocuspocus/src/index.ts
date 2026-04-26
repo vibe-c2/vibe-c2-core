@@ -3,6 +3,7 @@ import express from "express";
 import { onAuthenticate } from "./auth.js";
 import { createDatabaseExtension, debounceMs } from "./persistence.js";
 import { setupDisconnectApi } from "./disconnect.js";
+import { setupInternalApi } from "./internal-api.js";
 
 const port = parseInt(process.env.PORT || "1234", 10);
 const maxActiveRooms = parseInt(process.env.MAX_ACTIVE_ROOMS || "100", 10);
@@ -104,8 +105,15 @@ const server = new Hocuspocus({
   extensions: [createDatabaseExtension()],
 });
 
-// Set up internal Express HTTP server for the disconnect API
+// Set up internal Express HTTP server for the disconnect API and the
+// markdown→Y.js conversion route used by the Outline importer.
+//
+// IMPORTANT: setupInternalApi mounts before express.json() so the
+// /internal/markdown-to-yjs route can read the raw request body and
+// verify its HMAC over the exact bytes Go signed. Routes registered
+// after express.json() (the disconnect API) keep parsed-body access.
 const app = express();
+setupInternalApi(app);
 app.use(express.json());
 setupDisconnectApi(app, server);
 
