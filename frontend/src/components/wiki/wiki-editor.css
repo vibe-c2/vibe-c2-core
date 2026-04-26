@@ -299,7 +299,7 @@
 
 /* Surface tokens — GitHub light by default, overridden under .dark below. */
 :root {
-  --wiki-code-bg: oklch(0.985 0 0);
+  --wiki-code-bg: oklch(0.94 0 0);
   --wiki-code-chrome: oklch(0.97 0 0);
   --wiki-code-fg: #24292e;
   --hljs-comment: #6a737d;
@@ -316,7 +316,7 @@
 }
 
 .dark {
-  --wiki-code-bg: oklch(0.2 0 0);
+  --wiki-code-bg: oklch(0.22 0 0);
   --wiki-code-chrome: oklch(0.24 0 0);
   --wiki-code-fg: #c9d1d9;
   --hljs-comment: #8b949e;
