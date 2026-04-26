@@ -36,6 +36,24 @@
   overflow-wrap: anywhere;
 }
 
+/* Compact block rhythm — prose-sm's default ~1.14em paragraph margins
+   produce wide gaps between top-level blocks. Outline-style editors keep
+   ~0.5em consistent rhythm; align paragraphs and the wiki block wrappers
+   below (code, file, image) to the same value. */
+.tiptap p {
+  margin-top: 0.5em;
+  margin-bottom: 0.5em;
+}
+
+/* Horizontal rule (page break / divider). prose-sm defaults to ~2.86em
+   top + bottom, which dominates the surrounding rhythm. Match the
+   block-margin baseline so the rule reads as a thin separator, not a
+   structural section break. */
+.tiptap hr {
+  margin-top: 0.75em;
+  margin-bottom: 0.75em;
+}
+
 /* Placeholder text */
 .tiptap p.is-editor-empty:first-child::before {
   color: var(--color-muted-foreground);
@@ -136,7 +154,7 @@
    colors below are scoped to :root vs .dark so both themes look right. */
 .tiptap .wiki-code-block {
   position: relative;
-  margin: 0.75em 0;
+  margin: 0.5em 0;
   border-radius: var(--radius-md);
   border: 1px solid var(--border);
   background: var(--wiki-code-bg);
@@ -155,7 +173,7 @@
    first child of `.tiptap`, not `.wiki-code-block`. Selecting on
    `.wiki-code-block:first-child` silently never matches. */
 .tiptap > .node-codeBlock:first-child {
-  padding-top: 0.5rem;
+  padding-top: 0.6rem;
 }
 
 .tiptap .wiki-code-block__toolbar {
@@ -300,7 +318,7 @@
 /* Surface tokens — GitHub light by default, overridden under .dark below. */
 :root {
   --wiki-code-bg: oklch(0.94 0 0);
-  --wiki-code-chrome: oklch(0.97 0 0);
+  --wiki-code-chrome: oklch(1 0 0);
   --wiki-code-fg: #24292e;
   --hljs-comment: #6a737d;
   --hljs-keyword: #d73a49;
@@ -317,7 +335,7 @@
 
 .dark {
   --wiki-code-bg: oklch(0.22 0 0);
-  --wiki-code-chrome: oklch(0.24 0 0);
+  --wiki-code-chrome: oklch(0.16 0 0);
   --wiki-code-fg: #c9d1d9;
   --hljs-comment: #8b949e;
   --hljs-keyword: #ff7b72;
@@ -404,7 +422,7 @@
 /* Wiki-embedded images. The NodeView wraps the raw <img> in a figure +
    frame so we can overlay an on-hover preview button. */
 .tiptap figure.wiki-image-wrapper {
-  margin: 1rem 0;
+  margin: 0.5em 0;
   padding: 0;
 }
 
@@ -488,7 +506,7 @@
 /* Wiki file attachments: horizontal download card with icon + filename +
    size + hover actions. Rendered by WikiFileExtension's NodeView. */
 .tiptap figure.wiki-file-wrapper {
-  margin: 0.5rem 0;
+  margin: 0.5em 0;
   padding: 0;
 }
 
