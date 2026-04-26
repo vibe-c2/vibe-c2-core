@@ -24,6 +24,7 @@ import { WikiFileExtension } from "@/components/wiki/wiki-file-node"
 import { WikiEditorBubbleMenu } from "@/components/wiki/wiki-editor-bubble-menu"
 import { WikiEditorTableMenu } from "@/components/wiki/wiki-editor-table-menu"
 import { WikiSlashCommand } from "@/components/wiki/wiki-slash-command/extension"
+import { WikiNoticeExtension } from "@/components/wiki/wiki-notice-node"
 import { WikiEscapeEdgeBlock } from "@/components/wiki/wiki-escape-edge-block"
 import {
   extractClipboardImages,
@@ -191,6 +192,7 @@ export function WikiEditor({ documentId, isEditor }: WikiEditorProps) {
         HTMLAttributes: { class: "wiki-image" },
       }),
       WikiFileExtension,
+      WikiNoticeExtension,
       WikiSlashCommand.configure({
         context: { documentId },
       }),

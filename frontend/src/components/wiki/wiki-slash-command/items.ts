@@ -1,20 +1,25 @@
 import type { Editor, Range } from "@tiptap/core"
 import {
+  CircleAlertIcon,
+  CircleCheckIcon,
   Heading1Icon,
   Heading2Icon,
   Heading3Icon,
   ImageIcon,
+  InfoIcon,
   ListIcon,
   ListOrderedIcon,
   ListTodoIcon,
   PaperclipIcon,
   QuoteIcon,
   SquareCodeIcon,
+  StarIcon,
   TableIcon,
   type LucideIcon,
 } from "lucide-react"
 import { pickAndUploadWikiImage } from "@/components/wiki/wiki-image-upload"
 import { pickAndUploadWikiFile } from "@/components/wiki/wiki-file-upload"
+import type { NoticeVariant } from "@/components/wiki/wiki-notice-node"
 
 /** Context the slash command plugin passes through to every item's command.
  *  Extensions forward this via their `options.context` so items that need
@@ -34,6 +39,55 @@ export interface SlashItem {
     context: SlashItemContext
   }) => void
 }
+
+interface NoticeSpec {
+  variant: NoticeVariant
+  title: string
+  description: string
+  keywords: string[]
+  icon: LucideIcon
+}
+
+const NOTICE_SPECS: NoticeSpec[] = [
+  {
+    variant: "info",
+    title: "Info notice",
+    description: "Highlight a piece of information",
+    keywords: ["info", "notice", "callout", "note"],
+    icon: InfoIcon,
+  },
+  {
+    variant: "success",
+    title: "Success notice",
+    description: "Confirm an outcome or completed step",
+    keywords: ["success", "notice", "callout", "ok", "done"],
+    icon: CircleCheckIcon,
+  },
+  {
+    variant: "warning",
+    title: "Warning notice",
+    description: "Call out a risk or caveat",
+    keywords: ["warning", "notice", "callout", "caution", "danger", "alert"],
+    icon: CircleAlertIcon,
+  },
+  {
+    variant: "tip",
+    title: "Tip notice",
+    description: "Share a tip or shortcut",
+    keywords: ["tip", "notice", "callout", "hint", "advice"],
+    icon: StarIcon,
+  },
+]
+
+const NOTICE_ITEMS: SlashItem[] = NOTICE_SPECS.map((spec) => ({
+  title: spec.title,
+  description: spec.description,
+  keywords: spec.keywords,
+  icon: spec.icon,
+  command: ({ editor, range }) => {
+    editor.chain().focus().deleteRange(range).setNotice(spec.variant).run()
+  },
+}))
 
 export const SLASH_ITEMS: SlashItem[] = [
   {
@@ -108,6 +162,7 @@ export const SLASH_ITEMS: SlashItem[] = [
       editor.chain().focus().deleteRange(range).toggleBlockquote().run()
     },
   },
+  ...NOTICE_ITEMS,
   {
     title: "Table",
     description: "3×3 table with header row",

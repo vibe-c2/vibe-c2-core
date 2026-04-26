@@ -713,3 +713,196 @@
 .tiptap .wiki-file-action-button--danger:hover {
   background: rgb(185, 28, 28);
 }
+
+/* Notice / callout block — Outline-style tinted band with a left accent rail,
+   a small leading icon (filled chip with white glyph for info/success/warning,
+   solid star for tip), and a floating variant picker that appears while the
+   cursor is inside the block. The four variants share layout and only differ
+   in the accent and surface tones. */
+.tiptap .wiki-notice {
+  position: relative;
+  display: grid;
+  grid-template-columns: auto 1fr;
+  align-items: start;
+  column-gap: 10px;
+  margin: 0.6em 0;
+  padding: 7px 14px 7px 12px;
+  border-radius: var(--radius-md);
+  border-left: 3px solid var(--wiki-notice-rail);
+  background: var(--wiki-notice-surface);
+  color: var(--wiki-notice-fg);
+  /* Deliberately do NOT pin line-height here. The icon container's
+     `min-height: 1lh` must resolve to the SAME value as the body's first
+     line; the simplest way to guarantee that is to let both sides inherit
+     prose-sm's line-height (1.71) from the surrounding `.prose-sm` editor
+     wrapper. Pinning a different value here decouples the two and the
+     chip ends up shorter than the line. */
+}
+
+.tiptap .wiki-notice__icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  /* Make the icon container exactly one body line-box tall. `1lh` resolves
+     against THIS element's own line-height — so we deliberately let it
+     inherit 1.55 from `.wiki-notice` rather than overriding it to `1`,
+     otherwise `1lh` collapses to the icon font-size (14px) and the chip
+     ends up ~8px shorter than the first line of prose text. */
+  min-height: 1lh;
+  color: var(--wiki-notice-accent);
+  flex-shrink: 0;
+}
+
+/* Filled-icon styling. lucide ships stroke-only paths with `fill="none"` at
+   the SVG root, which we override per-element via JSX (`fill="currentColor"`):
+   - circle  → outer disk, fully filled with the accent color (no halo, so the
+               stroke is forced back to currentColor too)
+   - path/line → inner glyph (i / check / !), drawn as a white stroke against
+               the chip
+   For the tip variant only a single <path> exists (the star) — keep its
+   stroke matching the fill so it reads as one solid filled shape. */
+.tiptap .wiki-notice__icon svg circle {
+  stroke: currentColor;
+}
+
+.tiptap .wiki-notice[data-variant="info"] .wiki-notice__icon svg :is(path, line),
+.tiptap .wiki-notice[data-variant="success"] .wiki-notice__icon svg :is(path, line),
+.tiptap .wiki-notice[data-variant="warning"] .wiki-notice__icon svg :is(path, line) {
+  stroke: var(--wiki-notice-on-accent);
+  fill: none;
+}
+
+.tiptap .wiki-notice[data-variant="tip"] .wiki-notice__icon svg path {
+  stroke: currentColor;
+}
+
+.tiptap .wiki-notice__body {
+  min-width: 0;
+  /* Body inherits prose-sm's line-height (1.71) — see the note on
+     `.wiki-notice` above for why we don't pin this. */
+}
+
+/* Outline-style rhythm: consecutive paragraphs in a notice sit flush so a
+   multi-line notice reads as stacked rows of text rather than as separately-
+   margined paragraphs. Line-height alone (inherited from prose-sm = 1.71)
+   provides the between-row breathing room.
+   IMPORTANT: do NOT use `>` here. ReactNodeViewRenderer wraps node content
+   in an extra `<div data-node-view-content-react>` — so `<p>` is a
+   grandchild of `.wiki-notice__body`, not a direct child. A `> p` selector
+   silently misses every paragraph and the global `.tiptap p` rule wins at
+   0.5em. The descendant-combinator form here matches both the wrapped
+   shape (live editor) and the un-wrapped HTML output (parseHTML on
+   reload). */
+.tiptap .wiki-notice__body p {
+  margin-top: 0 !important;
+  margin-bottom: 0 !important;
+}
+
+/* Variant tokens — accent (rail + chip), surface (band bg), on-accent (glyph
+   color inside the chip). White glyph reads cleanly on every accent. */
+.tiptap .wiki-notice[data-variant="info"] {
+  --wiki-notice-rail: oklch(0.55 0.22 268);
+  --wiki-notice-accent: oklch(0.52 0.24 268);
+  --wiki-notice-surface: oklch(0.965 0.025 268);
+  --wiki-notice-on-accent: oklch(1 0 0);
+  --wiki-notice-fg: var(--foreground);
+}
+
+.tiptap .wiki-notice[data-variant="success"] {
+  --wiki-notice-rail: oklch(0.62 0.16 152);
+  --wiki-notice-accent: oklch(0.58 0.18 152);
+  --wiki-notice-surface: oklch(0.965 0.045 152);
+  --wiki-notice-on-accent: oklch(1 0 0);
+  --wiki-notice-fg: var(--foreground);
+}
+
+.tiptap .wiki-notice[data-variant="warning"] {
+  --wiki-notice-rail: oklch(0.58 0.22 22);
+  --wiki-notice-accent: oklch(0.55 0.24 22);
+  --wiki-notice-surface: oklch(0.965 0.03 22);
+  --wiki-notice-on-accent: oklch(1 0 0);
+  --wiki-notice-fg: var(--foreground);
+}
+
+.tiptap .wiki-notice[data-variant="tip"] {
+  --wiki-notice-rail: oklch(0.78 0.17 85);
+  --wiki-notice-accent: oklch(0.78 0.17 85);
+  --wiki-notice-surface: oklch(0.965 0.06 95);
+  --wiki-notice-on-accent: oklch(1 0 0);
+  --wiki-notice-fg: var(--foreground);
+}
+
+.dark .tiptap .wiki-notice[data-variant="info"] {
+  --wiki-notice-rail: oklch(0.65 0.20 268);
+  --wiki-notice-accent: oklch(0.62 0.22 268);
+  --wiki-notice-surface: oklch(0.27 0.06 268);
+}
+
+.dark .tiptap .wiki-notice[data-variant="success"] {
+  --wiki-notice-rail: oklch(0.68 0.16 152);
+  --wiki-notice-accent: oklch(0.62 0.18 152);
+  --wiki-notice-surface: oklch(0.26 0.05 152);
+}
+
+.dark .tiptap .wiki-notice[data-variant="warning"] {
+  --wiki-notice-rail: oklch(0.65 0.22 22);
+  --wiki-notice-accent: oklch(0.60 0.24 22);
+  --wiki-notice-surface: oklch(0.27 0.07 22);
+}
+
+.dark .tiptap .wiki-notice[data-variant="tip"] {
+  --wiki-notice-rail: oklch(0.78 0.17 85);
+  --wiki-notice-accent: oklch(0.80 0.17 85);
+  --wiki-notice-surface: oklch(0.27 0.06 80);
+}
+
+/* Floating variant picker — same layering pattern as the HR / code-block
+   toolbars. Hidden until the cursor lives inside this notice. */
+.tiptap .wiki-notice__toolbar {
+  position: absolute;
+  bottom: calc(100% + 4px);
+  right: 0;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: 3px;
+  background: var(--popover);
+  color: var(--popover-foreground);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 120ms ease-out;
+  z-index: 5;
+}
+
+.tiptap .wiki-notice[data-cursor-inside="true"] > .wiki-notice__toolbar {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.tiptap .wiki-notice__variant {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  background: transparent;
+  border: none;
+  border-radius: calc(var(--radius-md) - 2px);
+  color: var(--muted-foreground);
+  cursor: pointer;
+  transition: color 120ms ease-out, background 120ms ease-out;
+}
+
+.tiptap .wiki-notice__variant:hover {
+  color: var(--foreground);
+  background: var(--accent);
+}
+
+.tiptap .wiki-notice__variant[aria-pressed="true"] {
+  color: var(--primary-foreground);
+  background: var(--primary);
+}
