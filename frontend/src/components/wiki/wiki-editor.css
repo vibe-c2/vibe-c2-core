@@ -54,6 +54,95 @@
   margin-bottom: 0.75em;
 }
 
+/* Custom HR NodeView wrapper — gives the HR a clickable surface, a
+   selection frame, and a floating toolbar for picking a variant. The
+   prose plugin's <hr> margins live on the inner element below; the
+   wrapper itself uses the same block rhythm as paragraphs. */
+.tiptap .wiki-hr {
+  position: relative;
+  margin: 0.75em 0;
+  padding: 6px 0;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: background-color 120ms ease-out;
+}
+
+.tiptap .wiki-hr__line {
+  margin: 0;
+  border: 0;
+  border-top: 1px solid var(--border);
+}
+
+.tiptap .wiki-hr[data-variant="dashed"] .wiki-hr__line {
+  border-top-style: dashed;
+}
+
+/* Selection cue. ProseMirror's auto-applied `ProseMirror-selectednode` class
+   does not always land on a React-rendered atom NodeView wrapper, so drive
+   the visible state off our own `data-selected` (already wired via
+   useEditorState for the toolbar) — that signal is reliable. Tint the
+   surface, ring it with the focus color, and recolor the rule itself so the
+   divider doesn't visually disappear into the band. Outline-style cue. */
+.tiptap .wiki-hr[data-selected="true"] {
+  background: color-mix(in oklch, var(--primary) 18%, transparent);
+  box-shadow: 0 0 0 2px var(--ring);
+}
+
+.tiptap .wiki-hr[data-selected="true"] .wiki-hr__line {
+  border-top-width: 2px;
+  border-top-color: var(--primary);
+}
+
+.tiptap .wiki-hr__toolbar {
+  position: absolute;
+  bottom: calc(100% + 4px);
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: 3px;
+  background: var(--popover);
+  color: var(--popover-foreground);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 120ms ease-out;
+  z-index: 5;
+}
+
+.tiptap .wiki-hr[data-selected="true"] > .wiki-hr__toolbar {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.tiptap .wiki-hr__variant {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  background: transparent;
+  border: none;
+  border-radius: calc(var(--radius-md) - 2px);
+  color: var(--muted-foreground);
+  cursor: pointer;
+  transition: color 120ms ease-out, background 120ms ease-out;
+}
+
+.tiptap .wiki-hr__variant:hover {
+  color: var(--foreground);
+  background: var(--accent);
+}
+
+.tiptap .wiki-hr__variant[aria-pressed="true"] {
+  color: var(--primary-foreground);
+  background: var(--primary);
+}
+
 /* Placeholder text */
 .tiptap p.is-editor-empty:first-child::before {
   color: var(--color-muted-foreground);

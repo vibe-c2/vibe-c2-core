@@ -8,6 +8,7 @@ import TaskList from "@tiptap/extension-task-list"
 import TaskItem from "@tiptap/extension-task-item"
 import { Table, TableRow, TableHeader, TableCell } from "@tiptap/extension-table"
 import Image from "@tiptap/extension-image"
+import { HorizontalRule } from "@tiptap/extension-horizontal-rule"
 import CodeBlockLowlight from "@tiptap/extension-code-block-lowlight"
 import { yCursorPlugin } from "@tiptap/y-tiptap"
 import { useHocuspocus } from "@/hooks/use-hocuspocus"
@@ -17,6 +18,7 @@ import { lowlight } from "@/lib/wiki-lowlight"
 import { Skeleton } from "@/components/ui/skeleton"
 import { ConnectionBanner } from "@/components/wiki/connection-banner"
 import { WikiCodeBlock } from "@/components/wiki/wiki-code-block"
+import { WikiHorizontalRuleNode } from "@/components/wiki/wiki-horizontal-rule-node"
 import { WikiImageNode } from "@/components/wiki/wiki-image-node"
 import { WikiFileExtension } from "@/components/wiki/wiki-file-node"
 import { WikiEditorBubbleMenu } from "@/components/wiki/wiki-editor-bubble-menu"
@@ -100,6 +102,28 @@ export function WikiEditor({ documentId, isEditor }: WikiEditorProps) {
       StarterKit.configure({
         history: false, // Y.js collaboration handles undo/redo
         codeBlock: false, // Replaced by CodeBlockLowlight below
+        horizontalRule: false, // Replaced by custom NodeView below
+      }),
+      HorizontalRule.extend({
+        addAttributes() {
+          return {
+            ...this.parent?.(),
+            variant: {
+              default: "line",
+              parseHTML: (el) => {
+                const v = el.getAttribute("data-variant")
+                return v === "dashed" ? "dashed" : "line"
+              },
+              renderHTML: (attrs) =>
+                attrs.variant && attrs.variant !== "line"
+                  ? { "data-variant": attrs.variant }
+                  : {},
+            },
+          }
+        },
+        addNodeView() {
+          return ReactNodeViewRenderer(WikiHorizontalRuleNode)
+        },
       }),
       CodeBlockLowlight.extend({
         addAttributes() {
