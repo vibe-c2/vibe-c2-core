@@ -155,7 +155,7 @@
    first child of `.tiptap`, not `.wiki-code-block`. Selecting on
    `.wiki-code-block:first-child` silently never matches. */
 .tiptap > .node-codeBlock:first-child {
-  padding-top: 2.5rem;
+  padding-top: 0.5rem;
 }
 
 .tiptap .wiki-code-block__toolbar {
