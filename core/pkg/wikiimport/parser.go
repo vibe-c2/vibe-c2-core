@@ -137,14 +137,23 @@ func indexZip(zr *zip.Reader) (*indexedZip, error) {
 	for _, f := range zr.File {
 		// Reject path traversal up front — same-mountpoint sandbox isn't a
 		// substitute for never trusting names from a third-party archive.
-		if strings.Contains(f.Name, "..") || strings.HasPrefix(f.Name, "/") {
+		if strings.HasPrefix(f.Name, "/") {
 			return nil, fmt.Errorf("zip contains unsafe path: %s", f.Name)
+		}
+		segments := strings.Split(f.Name, "/")
+		for _, seg := range segments {
+			// Only ".." as a whole path segment is traversal. Two dots
+			// inside a filename (e.g. trailing period + ".md" extension)
+			// are legal — Outline emits them when the source title ended
+			// in punctuation.
+			if seg == ".." {
+				return nil, fmt.Errorf("zip contains unsafe path: %s", f.Name)
+			}
 		}
 		if f.FileInfo().IsDir() {
 			continue
 		}
 
-		segments := strings.Split(f.Name, "/")
 		if len(segments) < 2 {
 			// File at zip root — not a collection member, skip silently.
 			continue

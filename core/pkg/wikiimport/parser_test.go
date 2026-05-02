@@ -114,6 +114,41 @@ func TestParse_RejectsPathTraversal(t *testing.T) {
 	}
 }
 
+func TestParse_AllowsDoubleDotInFilename(t *testing.T) {
+	// Outline preserves trailing punctuation in document titles, so files
+	// like "solutions..md" (title ended in ".", then ".md" extension) reach
+	// us. ".." inside a filename is not a path-traversal attack and must
+	// not crash the import. Regression for the Post-Exploitation export
+	// failure where "WMI Disable. Reasons%2Fsolutions..md" was rejected.
+	zr := buildZip(t, map[string]string{
+		"col/solutions..md":  "# solutions\nbody\n",
+		"col/v1.0..md":       "# v1.0\nbody\n",
+		"col/sub/foo..bar.md": "# foo bar\nbody\n",
+	})
+	got, err := Parse(zr)
+	if err != nil {
+		t.Fatalf("Parse rejected legitimate filenames: %v", err)
+	}
+	if len(got.Collections) != 1 {
+		t.Fatalf("collections: got %d want 1", len(got.Collections))
+	}
+	titles := docTitles(got.Collections[0].Documents)
+	want := []string{"solutions", "v1.0"}
+	if !sliceEq(titles, want) {
+		t.Errorf("root titles: got %v want %v", titles, want)
+	}
+}
+
+func TestParse_RejectsTraversalSegmentMidPath(t *testing.T) {
+	// ".." as an interior path segment is still rejected.
+	zr := buildZip(t, map[string]string{
+		"col/sub/../evil.md": "# pwn",
+	})
+	if _, err := Parse(zr); err == nil {
+		t.Fatal("Parse accepted zip with mid-path traversal segment")
+	}
+}
+
 func TestParse_EmojiVariants(t *testing.T) {
 	cases := []struct {
 		name, h1, wantTitle, wantEmoji string
