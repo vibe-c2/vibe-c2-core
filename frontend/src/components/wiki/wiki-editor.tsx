@@ -60,6 +60,22 @@ export function WikiEditor({ documentId, isEditor }: WikiEditorProps) {
       attributes: {
         spellcheck: "false",
       },
+      handleDOMEvents: {
+        // Suppress the browser's default navigation for <a target="_blank">
+        // when the editor is editable. Without this, clicking a link inside
+        // contentEditable still opens a new tab even though Tiptap's
+        // openOnClick is false — contentEditable does not auto-suppress
+        // anchor activation. Caret placement / mark selection is unaffected
+        // because we don't return true from this handler.
+        click: (view, event) => {
+          if (!view.editable) return false
+          const target = event.target as HTMLElement | null
+          const anchor = target?.closest("a")
+          if (!anchor || !view.dom.contains(anchor)) return false
+          event.preventDefault()
+          return false
+        },
+      },
       handlePaste: (view, event) => {
         if (!isEditor) return false
         const images = extractClipboardImages(event.clipboardData)
@@ -115,10 +131,11 @@ export function WikiEditor({ documentId, isEditor }: WikiEditorProps) {
         link: false,
       }),
       Link.extend({ inclusive: false }).configure({
-        // In edit mode the click handler hijacks caret placement; restrict
-        // open-on-click to the read-only renderer so editors can position
-        // the cursor inside a link to edit it.
-        openOnClick: "whenNotEditable",
+        // Tiptap's "whenNotEditable" string actually resolves to true inside
+        // the click plugin and still calls window.open in edit mode. Disable
+        // outright; the read-only renderer relies on the browser default
+        // (<a target=_blank>) for navigation, not Tiptap's click handler.
+        openOnClick: false,
         // Selecting the full mark range on click makes "click to edit"
         // discoverable and aligns with WikiLinkPopover's shouldShow.
         enableClickSelection: true,
