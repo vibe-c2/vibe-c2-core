@@ -44,7 +44,7 @@ export function WikiHorizontalRuleNode({
 
   return (
     <NodeViewWrapper
-      className="wiki-hr"
+      className="wiki-hr wiki-node--toolbar-top"
       data-variant={variant}
       data-selected={isSelected ? "true" : "false"}
     >

@@ -43,7 +43,7 @@ export function WikiCodeBlock({ node, updateAttributes, editor, getPos }: ReactN
 
   return (
     <NodeViewWrapper
-      className="wiki-code-block"
+      className="wiki-code-block wiki-node--toolbar-top"
       data-editable={isEditable ? "true" : "false"}
       data-cursor-inside={cursorInside ? "true" : "false"}
       data-wrap={wrap ? "true" : "false"}

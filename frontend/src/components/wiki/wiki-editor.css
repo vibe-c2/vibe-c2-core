@@ -302,15 +302,16 @@
   overflow: visible;
 }
 
-/* When a code block is the first element on the page, the floating toolbar
-   has nothing above it to overlay and would collide with the surrounding
-   page chrome (avatar, header). Reserve clearance here.
-   Note: ReactNodeViewRenderer wraps WikiCodeBlock in an outer
-   `<div class="react-renderer node-codeBlock">` — THAT wrapper is the real
-   first child of `.tiptap`, not `.wiki-code-block`. Selecting on
-   `.wiki-code-block:first-child` silently never matches. */
-.tiptap > .node-codeBlock:first-child {
-  padding-top: 0.6rem;
+/* When any node with a top-floating toolbar is the first element on the page,
+   the toolbar has nothing above it to overlay and would collide with the
+   surrounding page chrome (sticky editor header, etc). Reserve clearance.
+   Opt-in: any NodeView that hangs a toolbar above itself adds
+   `wiki-node--toolbar-top` to its NodeViewWrapper.
+   Note: ReactNodeViewRenderer wraps the NodeView in an outer
+   `<div class="react-renderer node-{nodeType}">` — THAT wrapper is the real
+   first child of `.tiptap`, not the inner `.wiki-*` element. Hence `:has()`. */
+.tiptap > .react-renderer:has(> .wiki-node--toolbar-top):first-child {
+  padding-top: 1.6rem;
 }
 
 .tiptap .wiki-code-block__toolbar {
