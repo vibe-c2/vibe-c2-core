@@ -136,9 +136,10 @@ export function WikiEditor({ documentId, isEditor }: WikiEditorProps) {
         // outright; the read-only renderer relies on the browser default
         // (<a target=_blank>) for navigation, not Tiptap's click handler.
         openOnClick: false,
-        // Selecting the full mark range on click makes "click to edit"
-        // discoverable and aligns with WikiLinkPopover's shouldShow.
-        enableClickSelection: true,
+        // A click should just place the caret. The popover keys off
+        // `editor.isActive('link')`, which is true for a collapsed selection
+        // inside the mark, so we don't need to extend to the full mark range.
+        enableClickSelection: false,
         autolink: true,
         linkOnPaste: true,
         defaultProtocol: "https",
