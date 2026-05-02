@@ -29,13 +29,14 @@ const FILE_HREF_PATTERN =
   /^\/api\/v1\/wiki\/files\/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$/i;
 
 // markdown-it core rule: walk the block-level token stream and replace any
-// paragraph that contains exactly one inline image (and nothing else) with
-// a synthetic `image_block` token. The image node in our schema is block-
-// level (matching the editor's `Image.configure({ inline: false })`), so
-// it can't sit inside the paragraph's `inline*` content. Hoisting it to a
-// top-level token lets prosemirror-markdown insert the image at doc level
-// instead of trying — and silently failing — to insert a block node into
-// an inline context.
+// paragraph whose inline children are images and whitespace only with one
+// synthetic `image_block` token per image. The image node in our schema
+// is block-level (matching the editor's `Image.configure({ inline: false })`),
+// so it can't sit inside the paragraph's `inline*` content. Hoisting each
+// image to a top-level token lets prosemirror-markdown insert them at doc
+// level instead of trying — and silently failing — to insert a block node
+// into an inline context. Multi-image paragraphs (e.g. two screenshots
+// side-by-side, common in Outline) become a sequence of image blocks.
 function liftStandaloneImagesRule(state: StateCore): void {
   const tokens = state.tokens;
   const out: Token[] = [];
@@ -51,13 +52,15 @@ function liftStandaloneImagesRule(state: StateCore): void {
       close?.type === "paragraph_close" &&
       Array.isArray(inline.children)
     ) {
-      const onlyImage = isInlineOnlyImage(inline.children);
-      if (onlyImage) {
-        const blockToken = new Token("image_block", "", 0);
-        blockToken.attrs = onlyImage.attrs;
-        blockToken.block = true;
-        blockToken.map = open.map;
-        out.push(blockToken);
+      const images = collectStandaloneImages(inline.children);
+      if (images) {
+        for (const { attrs } of images) {
+          const blockToken = new Token("image_block", "", 0);
+          blockToken.attrs = attrs;
+          blockToken.block = true;
+          blockToken.map = open.map;
+          out.push(blockToken);
+        }
         i += 2; // skip inline and paragraph_close
         continue;
       }
@@ -116,35 +119,36 @@ function wrapTableCellInlineRule(state: StateCore): void {
   state.tokens = out;
 }
 
-// Return the image token if the inline children are exactly one image
-// (with optional whitespace/softbreak/text-only-spaces around it). Returns
-// null otherwise. Outline always emits standalone block images this way.
-function isInlineOnlyImage(children: Token[]): { attrs: [string, string][] } | null {
-  let imageToken: Token | null = null;
+// Return the image tokens if the inline children are images with only
+// whitespace/softbreak/text-only-spaces between them. Returns null when
+// the paragraph contains real text (in which case it must remain a
+// paragraph; the inline `image` tokens inside will be dropped by the
+// `image: { ignore }` token map). Outline emits standalone block images
+// this way, sometimes two side-by-side in a single paragraph.
+function collectStandaloneImages(
+  children: Token[],
+): Array<{ attrs: [string, string][] }> | null {
+  const images: Array<{ attrs: [string, string][] }> = [];
   for (const c of children) {
     if (c.type === "image") {
-      if (imageToken) return null; // more than one image — not a "lone" image
-      imageToken = c;
+      // Markdown-it stores image alt text inside a children array on the
+      // image token; flatten it to a string and stash it as an `alt` attr
+      // so our image_block handler doesn't have to walk children later.
+      const altText = c.children?.map((t) => t.content).join("") ?? "";
+      const attrs: [string, string][] = [...(c.attrs ?? [])];
+      if (altText && !attrs.some(([k]) => k === "alt")) {
+        attrs.push(["alt", altText]);
+      }
+      images.push({ attrs });
     } else if (c.type === "text") {
       if (c.content.trim().length > 0) return null;
     } else if (c.type === "softbreak" || c.type === "hardbreak") {
-      // ignore whitespace breaks around the image
+      // ignore whitespace breaks around the images
     } else {
       return null;
     }
   }
-  if (!imageToken) return null;
-
-  // Markdown-it stores image alt text inside a children array on the image
-  // token; flatten it to a string and stash it as an `alt` attr so our
-  // image_block handler doesn't have to walk children later.
-  const altText =
-    imageToken.children?.map((t) => t.content).join("") ?? "";
-  const attrs: [string, string][] = [...(imageToken.attrs ?? [])];
-  if (altText && !attrs.some(([k]) => k === "alt")) {
-    attrs.push(["alt", altText]);
-  }
-  return { attrs };
+  return images.length > 0 ? images : null;
 }
 
 // Build a markdown-it instance with notice-block containers registered.
@@ -253,9 +257,12 @@ function buildTokenMap() {
     // `image` is the inline-image token type — only emitted when an image
     // appears mid-paragraph alongside other text. Our schema doesn't model
     // an inline image (matches editor exactly), so we tell the parser to
-    // ignore those. They are rare; the common case (standalone image
-    // paragraph) is upgraded to image_block by the core rule above.
-    image: { ignore: true },
+    // ignore those. `noCloseToken: true` is required because markdown-it
+    // emits `image` as a single atomic token; without this flag the
+    // ignore-handler registers under `image_open`/`image_close` instead
+    // and the parser throws "Token type `image` not supported" the moment
+    // an inline image survives the standalone-image lifter rule above.
+    image: { ignore: true, noCloseToken: true },
     image_block: {
       node: "image",
       getAttrs: parseImageAttrs,
