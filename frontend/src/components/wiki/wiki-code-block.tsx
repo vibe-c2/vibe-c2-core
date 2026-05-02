@@ -95,7 +95,18 @@ export function WikiCodeBlock({ node, updateAttributes, editor, getPos }: ReactN
         )}
       </div>
       <pre className="wiki-code-block__pre">
-        <NodeViewContent<"code"> as="code" className={`hljs language-${language}`} />
+        {/* `style.whiteSpace` is set inline because `NodeViewContent` from
+            @tiptap/react hardcodes `whiteSpace: 'pre-wrap'` as an inline
+            style — that beats any class-based CSS rule, so toggling wrap
+            via `data-wrap` alone has no effect on `<code>`. Setting our own
+            `style.whiteSpace` lets the wrap toggle actually do what it
+            says. The companion `word-break` / `overflow-wrap` declarations
+            still come from CSS via the `data-wrap` attribute. */}
+        <NodeViewContent<"code">
+          as="code"
+          className={`hljs language-${language}`}
+          style={{ whiteSpace: wrap ? "pre-wrap" : "pre" }}
+        />
       </pre>
     </NodeViewWrapper>
   )

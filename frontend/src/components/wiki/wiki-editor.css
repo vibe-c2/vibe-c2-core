@@ -387,7 +387,9 @@
   color: var(--wiki-code-fg);
   background: transparent;
   padding: 0;
-  white-space: pre;
+  /* `white-space` is set inline by WikiCodeBlock — @tiptap/react's
+     NodeViewContent hardcodes `whiteSpace: 'pre-wrap'` as an inline style,
+     which would beat any rule we put here. See wiki-code-block.tsx. */
   /* The editor root sets `overflow-wrap: anywhere` so long prose tokens
      don't widen the column. That rule also breaks long code lines unless
      we reset it here — we want horizontal scroll, not a forced wrap. */
@@ -396,10 +398,12 @@
   tab-size: 2;
 }
 
-/* Soft-wrap toggle — driven by node attr mirrored onto the wrapper. */
+/* Soft-wrap toggle — driven by node attr mirrored onto the wrapper.
+   `white-space` itself is bound inline in WikiCodeBlock (see comment above);
+   the rules below cover the companion break behavior, which CSS *can* set
+   because @tiptap/react does not pin those properties inline. */
 .tiptap .wiki-code-block[data-wrap="true"] .wiki-code-block__pre code,
 .tiptap .wiki-code-block[data-wrap="true"] .wiki-code-block__pre code.hljs {
-  white-space: pre-wrap;
   word-break: break-word;
   overflow-wrap: anywhere;
 }
