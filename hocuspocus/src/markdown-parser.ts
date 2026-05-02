@@ -69,6 +69,53 @@ function liftStandaloneImagesRule(state: StateCore): void {
   state.tokens = out;
 }
 
+// Core rule: wrap the `inline` token inside each table cell (`td`/`th`)
+// with `paragraph_open` / `paragraph_close`. Our schema's tableCell and
+// tableHeader content is `block+`, so raw inline text fails ProseMirror's
+// `createAndFill` — the cell is then dropped entirely (you get empty
+// rows on the editor side). Markdown-it always emits exactly one `inline`
+// token between *_open/*_close for pipe-table cells, including empty
+// cells (zero-length inline). We wrap it so the inline children land in
+// a paragraph node that satisfies the schema.
+function wrapTableCellInlineRule(state: StateCore): void {
+  const tokens = state.tokens;
+  const out: Token[] = [];
+
+  for (let i = 0; i < tokens.length; i++) {
+    const open = tokens[i];
+    const isCellOpen = open?.type === "td_open" || open?.type === "th_open";
+    if (!isCellOpen) {
+      out.push(open);
+      continue;
+    }
+
+    out.push(open);
+
+    // Walk forward to the matching close, wrapping any `inline` token in a
+    // paragraph and leaving block-level tokens (rare in pipe tables but
+    // possible in extended table syntaxes) untouched.
+    const closeType = open.type === "td_open" ? "td_close" : "th_close";
+    i += 1;
+    while (i < tokens.length && tokens[i].type !== closeType) {
+      const t = tokens[i];
+      if (t.type === "inline") {
+        const pOpen = new Token("paragraph_open", "p", 1);
+        pOpen.block = true;
+        pOpen.map = t.map;
+        const pClose = new Token("paragraph_close", "p", -1);
+        pClose.block = true;
+        out.push(pOpen, t, pClose);
+      } else {
+        out.push(t);
+      }
+      i += 1;
+    }
+    if (i < tokens.length) out.push(tokens[i]); // the *_close token
+  }
+
+  state.tokens = out;
+}
+
 // Return the image token if the inline children are exactly one image
 // (with optional whitespace/softbreak/text-only-spaces around it). Returns
 // null otherwise. Outline always emits standalone block images this way.
@@ -115,6 +162,7 @@ function buildTokenizer(): MarkdownIt {
   // block → inline → linkify → replacements → smartquotes → text_join.
   // We slot in just before `linkify` to see fully-resolved inline tokens.
   md.core.ruler.before("linkify", "lift_standalone_images", liftStandaloneImagesRule);
+  md.core.ruler.before("linkify", "wrap_table_cell_inline", wrapTableCellInlineRule);
 
   for (const variant of NOTICE_VARIANTS) {
     // Type-cast: @types/markdown-it-container expects the legacy
