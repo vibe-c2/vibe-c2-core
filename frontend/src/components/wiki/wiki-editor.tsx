@@ -8,6 +8,7 @@ import TaskList from "@tiptap/extension-task-list"
 import TaskItem from "@tiptap/extension-task-item"
 import { Table, TableRow, TableHeader, TableCell } from "@tiptap/extension-table"
 import Image from "@tiptap/extension-image"
+import { Link } from "@tiptap/extension-link"
 import { HorizontalRule } from "@tiptap/extension-horizontal-rule"
 import CodeBlockLowlight from "@tiptap/extension-code-block-lowlight"
 import { yCursorPlugin } from "@tiptap/y-tiptap"
@@ -106,22 +107,28 @@ export function WikiEditor({ documentId, isEditor }: WikiEditorProps) {
         codeBlock: false, // Replaced by CodeBlockLowlight below
         horizontalRule: false, // Replaced by custom NodeView below
         code: { HTMLAttributes: { class: "wiki-inline-code" } },
-        link: {
-          // In edit mode the click handler hijacks caret placement; restrict
-          // open-on-click to the read-only renderer so editors can position
-          // the cursor inside a link to edit it.
-          openOnClick: "whenNotEditable",
-          // Selecting the full mark range on click makes "click to edit"
-          // discoverable and aligns with WikiLinkPopover's shouldShow.
-          enableClickSelection: true,
-          autolink: true,
-          linkOnPaste: true,
-          defaultProtocol: "https",
-          HTMLAttributes: {
-            class: "wiki-link",
-            rel: "noopener noreferrer nofollow",
-            target: "_blank",
-          },
+        // The bundled Link mark defaults to inclusive=true, which makes the
+        // mark grow when the user types past its right boundary (e.g. typing
+        // a space after an autolinked URL extends the link onto the space).
+        // Disable here and re-register an extended Link below with
+        // inclusive=false so the boundary is sticky.
+        link: false,
+      }),
+      Link.extend({ inclusive: false }).configure({
+        // In edit mode the click handler hijacks caret placement; restrict
+        // open-on-click to the read-only renderer so editors can position
+        // the cursor inside a link to edit it.
+        openOnClick: "whenNotEditable",
+        // Selecting the full mark range on click makes "click to edit"
+        // discoverable and aligns with WikiLinkPopover's shouldShow.
+        enableClickSelection: true,
+        autolink: true,
+        linkOnPaste: true,
+        defaultProtocol: "https",
+        HTMLAttributes: {
+          class: "wiki-link",
+          rel: "noopener noreferrer nofollow",
+          target: "_blank",
         },
       }),
       Extension.create({
