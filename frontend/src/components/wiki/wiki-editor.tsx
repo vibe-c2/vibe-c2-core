@@ -10,7 +10,7 @@ import { Table, TableRow, TableHeader, TableCell } from "@tiptap/extension-table
 import Image from "@tiptap/extension-image"
 import { Link } from "@tiptap/extension-link"
 import { HorizontalRule } from "@tiptap/extension-horizontal-rule"
-import CodeBlockLowlight from "@tiptap/extension-code-block-lowlight"
+import { CodeBlock } from "@tiptap/extension-code-block"
 import { yCursorPlugin } from "@tiptap/y-tiptap"
 import { useHocuspocus } from "@/hooks/use-hocuspocus"
 import { useAuthStore } from "@/stores/auth"
@@ -19,6 +19,7 @@ import { lowlight } from "@/lib/wiki-lowlight"
 import { Skeleton } from "@/components/ui/skeleton"
 import { ConnectionBanner } from "@/components/wiki/connection-banner"
 import { WikiCodeBlock } from "@/components/wiki/wiki-code-block"
+import { createIncrementalLowlightPlugin } from "@/components/wiki/wiki-code-block-highlight-plugin"
 import { WikiHorizontalRuleNode } from "@/components/wiki/wiki-horizontal-rule-node"
 import { WikiImageNode } from "@/components/wiki/wiki-image-node"
 import { WikiFileExtension } from "@/components/wiki/wiki-file-node"
@@ -181,7 +182,14 @@ export function WikiEditor({ documentId, isEditor }: WikiEditorProps) {
           return ReactNodeViewRenderer(WikiHorizontalRuleNode)
         },
       }),
-      CodeBlockLowlight.extend({
+      // Use the base CodeBlock + our own incremental lowlight plugin instead
+      // of @tiptap/extension-code-block-lowlight: upstream re-tokenizes every
+      // code block on every keystroke (via highlight.js), which makes typing
+      // in large blocks lag by 1-2 seconds per character. The incremental
+      // variant memoizes per-block decorations and only re-runs highlight.js
+      // for the block whose content actually changed. See
+      // wiki-code-block-highlight-plugin.ts.
+      CodeBlock.extend({
         addAttributes() {
           return {
             ...this.parent?.(),
@@ -195,8 +203,17 @@ export function WikiEditor({ documentId, isEditor }: WikiEditorProps) {
         addNodeView() {
           return ReactNodeViewRenderer(WikiCodeBlock)
         },
+        addProseMirrorPlugins() {
+          return [
+            ...(this.parent?.() ?? []),
+            createIncrementalLowlightPlugin({
+              name: this.name,
+              lowlight,
+              defaultLanguage: this.options.defaultLanguage,
+            }),
+          ]
+        },
       }).configure({
-        lowlight,
         defaultLanguage: "plaintext",
         HTMLAttributes: { class: "wiki-code-block" },
       }),
