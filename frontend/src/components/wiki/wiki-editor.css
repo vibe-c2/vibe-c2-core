@@ -263,6 +263,30 @@
   content: none;
 }
 
+/* Link mark — produced by StarterKit's Link extension via HTMLAttributes.class.
+   Styled here so we don't fight `.prose a` defaults from the typography plugin
+   (otherwise the prose underline + foreground color win and links read like
+   plain bold text). Cursor stays text-style in edit mode because `openOnClick`
+   is "whenNotEditable" — the click places the caret instead of navigating. */
+.tiptap .wiki-link {
+  color: var(--primary);
+  text-decoration: underline;
+  text-decoration-thickness: 1px;
+  text-underline-offset: 2px;
+  text-decoration-color: color-mix(in oklch, var(--primary) 45%, transparent);
+  transition: text-decoration-color 120ms ease-out;
+  cursor: text;
+}
+.tiptap .wiki-link:hover {
+  text-decoration-color: var(--primary);
+}
+/* Read-only renderer: the link is clickable, so use the pointer cursor and a
+   slightly stronger underline to signal "this navigates". */
+.tiptap:not([contenteditable="true"]) .wiki-link,
+.tiptap[contenteditable="false"] .wiki-link {
+  cursor: pointer;
+}
+
 /* Code block — NodeView wrapper around <pre><code>. The hljs token
    colors below are scoped to :root vs .dark so both themes look right. */
 .tiptap .wiki-code-block {

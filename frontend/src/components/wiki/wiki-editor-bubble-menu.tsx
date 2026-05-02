@@ -1,9 +1,10 @@
 import type { Editor } from "@tiptap/react"
 import { BubbleMenu } from "@tiptap/react/menus"
 import { NodeSelection } from "@tiptap/pm/state"
-import { BoldIcon, CodeIcon, ItalicIcon, StrikethroughIcon } from "lucide-react"
+import { BoldIcon, CodeIcon, ItalicIcon, LinkIcon, StrikethroughIcon } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip"
+import { startLinkInsert } from "@/components/wiki/wiki-link-popover"
 
 interface WikiEditorBubbleMenuProps {
   editor: Editor | null
@@ -51,6 +52,12 @@ export function WikiEditorBubbleMenu({ editor }: WikiEditorBubbleMenuProps) {
         tooltip="Inline code"
         active={editor.isActive("code")}
         onClick={() => editor.chain().focus().toggleCode().run()}
+      />
+      <BubbleButton
+        icon={LinkIcon}
+        tooltip="Add link (⌘K)"
+        active={editor.isActive("link")}
+        onClick={() => startLinkInsert(editor)}
       />
     </BubbleMenu>
   )

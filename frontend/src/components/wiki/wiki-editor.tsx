@@ -23,6 +23,7 @@ import { WikiImageNode } from "@/components/wiki/wiki-image-node"
 import { WikiFileExtension } from "@/components/wiki/wiki-file-node"
 import { WikiEditorBubbleMenu } from "@/components/wiki/wiki-editor-bubble-menu"
 import { WikiEditorTableMenu } from "@/components/wiki/wiki-editor-table-menu"
+import { WikiLinkPopover, startLinkInsert } from "@/components/wiki/wiki-link-popover"
 import { WikiSlashCommand } from "@/components/wiki/wiki-slash-command/extension"
 import { WikiNoticeExtension } from "@/components/wiki/wiki-notice-node"
 import { WikiEscapeEdgeBlock } from "@/components/wiki/wiki-escape-edge-block"
@@ -105,6 +106,34 @@ export function WikiEditor({ documentId, isEditor }: WikiEditorProps) {
         codeBlock: false, // Replaced by CodeBlockLowlight below
         horizontalRule: false, // Replaced by custom NodeView below
         code: { HTMLAttributes: { class: "wiki-inline-code" } },
+        link: {
+          // In edit mode the click handler hijacks caret placement; restrict
+          // open-on-click to the read-only renderer so editors can position
+          // the cursor inside a link to edit it.
+          openOnClick: "whenNotEditable",
+          // Selecting the full mark range on click makes "click to edit"
+          // discoverable and aligns with WikiLinkPopover's shouldShow.
+          enableClickSelection: true,
+          autolink: true,
+          linkOnPaste: true,
+          defaultProtocol: "https",
+          HTMLAttributes: {
+            class: "wiki-link",
+            rel: "noopener noreferrer nofollow",
+            target: "_blank",
+          },
+        },
+      }),
+      Extension.create({
+        name: "wikiLinkShortcut",
+        addKeyboardShortcuts() {
+          return {
+            "Mod-k": () => {
+              startLinkInsert(this.editor)
+              return true
+            },
+          }
+        },
       }),
       HorizontalRule.extend({
         addAttributes() {
@@ -254,6 +283,7 @@ export function WikiEditor({ documentId, isEditor }: WikiEditorProps) {
       <ConnectionBanner connectionStatus={connectionStatus} isSynced={isSynced} isReady={isReady} />
       {isEditor && <WikiEditorBubbleMenu editor={editor} />}
       {isEditor && <WikiEditorTableMenu editor={editor} />}
+      {isEditor && <WikiLinkPopover editor={editor} />}
       <div
         className="flex-1 overflow-y-auto px-4 py-2"
         onMouseDown={(e) => {

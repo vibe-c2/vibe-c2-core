@@ -7,6 +7,7 @@ import {
   Heading3Icon,
   ImageIcon,
   InfoIcon,
+  LinkIcon,
   ListIcon,
   ListOrderedIcon,
   ListTodoIcon,
@@ -19,6 +20,7 @@ import {
 } from "lucide-react"
 import { pickAndUploadWikiImage } from "@/components/wiki/wiki-image-upload"
 import { pickAndUploadWikiFile } from "@/components/wiki/wiki-file-upload"
+import { startLinkInsert } from "@/components/wiki/wiki-link-popover"
 import type { NoticeVariant } from "@/components/wiki/wiki-notice-node"
 
 /** Context the slash command plugin passes through to every item's command.
@@ -199,6 +201,18 @@ export const SLASH_ITEMS: SlashItem[] = [
       editor.chain().focus().deleteRange(range).run()
       const pos = editor.state.selection.from
       pickAndUploadWikiFile(editor, context.documentId, { pos })
+    },
+  },
+  {
+    title: "Link",
+    description: "Insert a URL with custom text",
+    keywords: ["link", "url", "href", "anchor", "hyperlink"],
+    icon: LinkIcon,
+    command: ({ editor, range }) => {
+      // Drop the slash range first, then hand off to the shared inserter so
+      // the Cmd+K, bubble-menu, and slash entry points all behave the same.
+      editor.chain().focus().deleteRange(range).run()
+      startLinkInsert(editor)
     },
   },
 ]
