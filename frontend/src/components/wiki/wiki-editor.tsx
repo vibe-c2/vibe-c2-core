@@ -104,6 +104,7 @@ export function WikiEditor({ documentId, isEditor }: WikiEditorProps) {
         history: false, // Y.js collaboration handles undo/redo
         codeBlock: false, // Replaced by CodeBlockLowlight below
         horizontalRule: false, // Replaced by custom NodeView below
+        code: { HTMLAttributes: { class: "wiki-inline-code" } },
       }),
       HorizontalRule.extend({
         addAttributes() {

@@ -239,6 +239,30 @@
   cursor: col-resize;
 }
 
+/* Inline code (Code mark from StarterKit) — styled to read as a small
+   inlined slice of the code block: same surface, monospace, keyword-red
+   foreground (matches the hljs keyword color used in blocks). The class
+   is set in wiki-editor.tsx via StarterKit's code.HTMLAttributes so we
+   don't fight prose's default `:where(code)` rule. */
+.tiptap code.wiki-inline-code {
+  background: var(--wiki-code-bg);
+  color: var(--hljs-keyword);
+  font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas,
+    "Liberation Mono", monospace;
+  font-size: 0.875em;
+  font-weight: 500;
+  padding: 0.15em 0.4em;
+  border-radius: 4px;
+  /* Subtle border so the pill separates from the document surface when
+     the page background is similar in luminance to --wiki-code-bg. */
+  border: 1px solid color-mix(in oklch, var(--wiki-code-fg) 18%, transparent);
+  /* Disable the prose plugin's literal backticks around inline code. */
+}
+.tiptap code.wiki-inline-code::before,
+.tiptap code.wiki-inline-code::after {
+  content: none;
+}
+
 /* Code block — NodeView wrapper around <pre><code>. The hljs token
    colors below are scoped to :root vs .dark so both themes look right. */
 .tiptap .wiki-code-block {
