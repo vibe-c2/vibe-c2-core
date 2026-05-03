@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react"
+import { memo, useCallback, useEffect, useRef, useState } from "react"
 import { useNavigate, useParams } from "react-router"
 import { useDraggable, useDroppable } from "@dnd-kit/core"
 import {
@@ -27,50 +27,43 @@ import { Button } from "@/components/ui/button"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
 import { Input } from "@/components/ui/input"
 import { useWikiStore } from "@/stores/wiki"
+import { useWikiDragStore } from "@/stores/wiki-drag"
 import { useUpdateWikiDocument } from "@/graphql/hooks/wiki"
 import { EmojiPicker } from "@/components/wiki/emoji-picker"
 import { cn } from "@/lib/utils"
 import { collectBranchIdsWithChildren } from "@/components/wiki/wiki-tree-helpers"
-import type { DropTarget, TreeNode } from "@/components/wiki/wiki-tree-sidebar"
+import type { TreeNode } from "@/components/wiki/wiki-tree-sidebar"
 
 interface WikiTreeNodeProps {
   node: TreeNode
   depth: number
   isEditor: boolean
   operationId: string
-  activeId: string | null
-  dropTarget: DropTarget | null
 }
 
-export function WikiTreeNode({
+function WikiTreeNodeImpl({
   node,
   depth,
   isEditor,
   operationId,
-  activeId,
-  dropTarget,
 }: WikiTreeNodeProps) {
   const navigate = useNavigate()
   const { documentId: selectedDocumentId } = useParams<{ documentId: string }>()
   const isSelected = selectedDocumentId === node.id
 
-  const expandedNodes = useWikiStore((s) => s.expandedNodes)
+  // Subscribe to a *boolean* (not the Set itself) so this row only
+  // re-renders when its own expansion flips. Reading `s.expandedNodes`
+  // would hand back a new Set reference on every toggle/expandMany call
+  // and re-render every visible row.
+  const isExpanded = useWikiStore((s) => s.expandedNodes.has(node.id))
   const toggleNode = useWikiStore((s) => s.toggleNode)
-  const expandMany = useWikiStore((s) => s.expandMany)
-  const collapseMany = useWikiStore((s) => s.collapseMany)
-  const openCreateDialog = useWikiStore((s) => s.openCreateDialog)
-  const openMoveDialog = useWikiStore((s) => s.openMoveDialog)
-  const openDeleteDialog = useWikiStore((s) => s.openDeleteDialog)
-  const openContentSearch = useWikiStore((s) => s.openContentSearch)
 
   const [renaming, setRenaming] = useState(false)
   const [renameValue, setRenameValue] = useState(node.title)
   const [emojiPickerOpen, setEmojiPickerOpen] = useState(false)
-  const [menuOpen, setMenuOpen] = useState(false)
 
   const updateDocument = useUpdateWikiDocument()
 
-  const isExpanded = expandedNodes.has(node.id)
   const hasChildren = node.children.length > 0
 
   // DnD: each node is both draggable (via handle) and a drop target.
@@ -87,10 +80,17 @@ export function WikiTreeNode({
     }
   }, [isSelected])
 
-  const isDragging = activeId === node.id
-  const isDropInside = dropTarget?.id === node.id && dropTarget.position === "inside"
-  const isDropBefore = dropTarget?.id === node.id && dropTarget.position === "before"
-  const isDropAfter = dropTarget?.id === node.id && dropTarget.position === "after"
+  // Per-row drag subscriptions: each selector returns a primitive (boolean
+  // or string|null), so zustand's default Object.is equality means a row
+  // only re-renders when *its own* drag state flips. Without this, the
+  // sidebar's setState on every hover tick used to re-render every row.
+  const isDragging = useWikiDragStore((s) => s.activeId === node.id)
+  const dropPosition = useWikiDragStore((s) =>
+    s.dropTarget?.id === node.id ? s.dropTarget.position : null,
+  )
+  const isDropInside = dropPosition === "inside"
+  const isDropBefore = dropPosition === "before"
+  const isDropAfter = dropPosition === "after"
 
   function handleRenameSubmit() {
     const trimmed = renameValue.trim()
@@ -106,6 +106,18 @@ export function WikiTreeNode({
     updateDocument.mutate({ id: node.id, input: { emoji } })
     setEmojiPickerOpen(false)
   }
+
+  // Stable callbacks handed to the memoized quick-actions subcomponent.
+  // `useCallback` deps include `node.title` only because the rename UI
+  // needs to seed its input with the current title — title rarely changes,
+  // so the actions block's memo stays valid across drag/expand re-renders.
+  const handleStartRename = useCallback(() => {
+    setRenameValue(node.title)
+    setRenaming(true)
+  }, [node.title])
+  const handleStartEmojiPicker = useCallback(() => {
+    setEmojiPickerOpen(true)
+  }, [])
 
   const indent = depth * 16 + 4
 
@@ -201,172 +213,18 @@ export function WikiTreeNode({
           </button>
         )}
 
-        {/* Quick actions */}
-        {hasChildren && (
-          <>
-            <Tooltip>
-              <TooltipTrigger
-                render={
-                  <Button
-                    variant="ghost"
-                    size="icon-xs"
-                    className="shrink-0 hidden group-hover:inline-flex"
-                    onClick={(e) => {
-                      e.stopPropagation()
-                      expandMany(collectBranchIdsWithChildren([node], true))
-                    }}
-                  />
-                }
-              >
-                <ChevronsUpDownIcon className="size-3.5" />
-              </TooltipTrigger>
-              <TooltipContent>Expand subtree</TooltipContent>
-            </Tooltip>
-            <Tooltip>
-              <TooltipTrigger
-                render={
-                  <Button
-                    variant="ghost"
-                    size="icon-xs"
-                    className="shrink-0 hidden group-hover:inline-flex"
-                    onClick={(e) => {
-                      e.stopPropagation()
-                      collapseMany(collectBranchIdsWithChildren([node], true))
-                    }}
-                  />
-                }
-              >
-                <ChevronsDownUpIcon className="size-3.5" />
-              </TooltipTrigger>
-              <TooltipContent>Collapse subtree</TooltipContent>
-            </Tooltip>
-          </>
-        )}
-        <Tooltip>
-          <TooltipTrigger
-            render={
-              <Button
-                variant="ghost"
-                size="icon-xs"
-                className="shrink-0 hidden group-hover:inline-flex"
-                onClick={() => openContentSearch(node.id, node.title)}
-              />
-            }
-          >
-            <SearchIcon className="size-3.5" />
-          </TooltipTrigger>
-          <TooltipContent>Search in {node.title}</TooltipContent>
-        </Tooltip>
-        {isEditor && (
-          <Tooltip>
-            <TooltipTrigger
-              render={
-                <Button
-                  variant="ghost"
-                  size="icon-xs"
-                  className="shrink-0 hidden group-hover:inline-flex"
-                  onClick={() => openCreateDialog(node.id)}
-                />
-              }
-            >
-              <PlusIcon className="size-3.5" />
-            </TooltipTrigger>
-            <TooltipContent>New child document</TooltipContent>
-          </Tooltip>
-        )}
-
-        {/* Context menu */}
-        <DropdownMenu open={menuOpen} onOpenChange={setMenuOpen}>
-          <DropdownMenuTrigger
-            render={
-              <Button
-                variant="ghost"
-                size="icon-xs"
-                className={cn(
-                  "shrink-0",
-                  menuOpen ? "inline-flex" : "hidden group-hover:inline-flex",
-                )}
-              />
-            }
-          >
-            <EllipsisIcon className="size-3.5" />
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="start" className="min-w-48">
-            {isEditor && (
-              <DropdownMenuItem onClick={() => openCreateDialog(node.id)}>
-                <FilePlusIcon className="mr-2 size-4" />
-                New child document
-              </DropdownMenuItem>
-            )}
-            {isEditor && (
-              <DropdownMenuItem
-                onClick={() => {
-                  setRenameValue(node.title)
-                  setRenaming(true)
-                }}
-              >
-                <PencilIcon className="mr-2 size-4" />
-                Rename
-              </DropdownMenuItem>
-            )}
-            {isEditor && (
-              <DropdownMenuItem onClick={() => setEmojiPickerOpen(true)}>
-                <SmileIcon className="mr-2 size-4" />
-                Change emoji
-              </DropdownMenuItem>
-            )}
-            {isEditor && (
-              <DropdownMenuItem
-                onClick={() =>
-                  openMoveDialog({ id: node.id, title: node.title })
-                }
-              >
-                <FolderInputIcon className="mr-2 size-4" />
-                Move to
-              </DropdownMenuItem>
-            )}
-            {isEditor && hasChildren && (
-              <DropdownMenuItem
-                onClick={() => {
-                  const sorted = [...node.children].sort((a, b) =>
-                    a.title.localeCompare(b.title, undefined, { sensitivity: "base" }),
-                  )
-                  const count = sorted.length
-                  for (let i = 0; i < count; i++) {
-                    const newSort = String.fromCharCode(65 + Math.floor(((i + 1) / (count + 1)) * 57))
-                    if (sorted[i].sortOrder !== newSort) {
-                      updateDocument.mutate({ id: sorted[i].id, input: { sortOrder: newSort } })
-                    }
-                  }
-                }}
-              >
-                <ArrowDownAZIcon className="mr-2 size-4" />
-                Sort
-              </DropdownMenuItem>
-            )}
-            <DropdownMenuSeparator />
-            <DropdownMenuItem
-              onClick={() => openContentSearch(node.id, node.title)}
-            >
-              <SearchIcon className="mr-2 size-4" />
-              Search in {node.title}...
-            </DropdownMenuItem>
-            {isEditor && (
-              <>
-                <DropdownMenuSeparator />
-                <DropdownMenuItem
-                  className="text-destructive"
-                  onClick={() =>
-                    openDeleteDialog({ id: node.id, title: node.title })
-                  }
-                >
-                  <Trash2Icon className="mr-2 size-4" />
-                  Delete
-                </DropdownMenuItem>
-              </>
-            )}
-          </DropdownMenuContent>
-        </DropdownMenu>
+        {/* Quick actions + context menu — extracted so this expensive subtree
+            (5 Tooltips + a DropdownMenu + buttons, ~6–8ms per row render)
+            bails out via memo when the row re-renders for unrelated reasons
+            (drag highlight flips, dnd-kit measurement passes, expansion
+            cascades). The profile showed this block dominated spike-commit
+            time; memoizing it here is the highest-leverage win. */}
+        <WikiTreeRowQuickActions
+          node={node}
+          isEditor={isEditor}
+          onStartRename={handleStartRename}
+          onStartEmojiPicker={handleStartEmojiPicker}
+        />
       </div>
 
       {/* Drop-after divider */}
@@ -386,8 +244,6 @@ export function WikiTreeNode({
               depth={depth + 1}
               isEditor={isEditor}
               operationId={operationId}
-              activeId={activeId}
-              dropTarget={dropTarget}
             />
           ))}
         </CollapsibleContent>
@@ -395,3 +251,204 @@ export function WikiTreeNode({
     </Collapsible>
   )
 }
+
+// Memoized so an unrelated parent re-render (sidebar resize, hover tick on
+// a sibling row) skips this row's render entirely. Drag highlights and
+// expansion are read via store subscriptions, so memo's shallow prop
+// compare is sufficient.
+export const WikiTreeNode = memo(WikiTreeNodeImpl)
+
+interface WikiTreeRowQuickActionsProps {
+  node: TreeNode
+  isEditor: boolean
+  onStartRename: () => void
+  onStartEmojiPicker: () => void
+}
+
+function WikiTreeRowQuickActionsImpl({
+  node,
+  isEditor,
+  onStartRename,
+  onStartEmojiPicker,
+}: WikiTreeRowQuickActionsProps) {
+  const expandMany = useWikiStore((s) => s.expandMany)
+  const collapseMany = useWikiStore((s) => s.collapseMany)
+  const openCreateDialog = useWikiStore((s) => s.openCreateDialog)
+  const openMoveDialog = useWikiStore((s) => s.openMoveDialog)
+  const openDeleteDialog = useWikiStore((s) => s.openDeleteDialog)
+  const openContentSearch = useWikiStore((s) => s.openContentSearch)
+  const updateDocument = useUpdateWikiDocument()
+
+  // Menu-open state is local to this subtree — no reason to live in the
+  // parent row, where it would force the row (and its dnd hooks) to
+  // re-render whenever the menu opens or closes.
+  const [menuOpen, setMenuOpen] = useState(false)
+
+  const hasChildren = node.children.length > 0
+
+  return (
+    <>
+      {hasChildren && (
+        <>
+          <Tooltip>
+            <TooltipTrigger
+              render={
+                <Button
+                  variant="ghost"
+                  size="icon-xs"
+                  className="shrink-0 hidden group-hover:inline-flex"
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    expandMany(collectBranchIdsWithChildren([node], true))
+                  }}
+                />
+              }
+            >
+              <ChevronsUpDownIcon className="size-3.5" />
+            </TooltipTrigger>
+            <TooltipContent>Expand subtree</TooltipContent>
+          </Tooltip>
+          <Tooltip>
+            <TooltipTrigger
+              render={
+                <Button
+                  variant="ghost"
+                  size="icon-xs"
+                  className="shrink-0 hidden group-hover:inline-flex"
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    collapseMany(collectBranchIdsWithChildren([node], true))
+                  }}
+                />
+              }
+            >
+              <ChevronsDownUpIcon className="size-3.5" />
+            </TooltipTrigger>
+            <TooltipContent>Collapse subtree</TooltipContent>
+          </Tooltip>
+        </>
+      )}
+      <Tooltip>
+        <TooltipTrigger
+          render={
+            <Button
+              variant="ghost"
+              size="icon-xs"
+              className="shrink-0 hidden group-hover:inline-flex"
+              onClick={() => openContentSearch(node.id, node.title)}
+            />
+          }
+        >
+          <SearchIcon className="size-3.5" />
+        </TooltipTrigger>
+        <TooltipContent>Search in {node.title}</TooltipContent>
+      </Tooltip>
+      {isEditor && (
+        <Tooltip>
+          <TooltipTrigger
+            render={
+              <Button
+                variant="ghost"
+                size="icon-xs"
+                className="shrink-0 hidden group-hover:inline-flex"
+                onClick={() => openCreateDialog(node.id)}
+              />
+            }
+          >
+            <PlusIcon className="size-3.5" />
+          </TooltipTrigger>
+          <TooltipContent>New child document</TooltipContent>
+        </Tooltip>
+      )}
+
+      <DropdownMenu open={menuOpen} onOpenChange={setMenuOpen}>
+        <DropdownMenuTrigger
+          render={
+            <Button
+              variant="ghost"
+              size="icon-xs"
+              className={cn(
+                "shrink-0",
+                menuOpen ? "inline-flex" : "hidden group-hover:inline-flex",
+              )}
+            />
+          }
+        >
+          <EllipsisIcon className="size-3.5" />
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="start" className="min-w-48">
+          {isEditor && (
+            <DropdownMenuItem onClick={() => openCreateDialog(node.id)}>
+              <FilePlusIcon className="mr-2 size-4" />
+              New child document
+            </DropdownMenuItem>
+          )}
+          {isEditor && (
+            <DropdownMenuItem onClick={onStartRename}>
+              <PencilIcon className="mr-2 size-4" />
+              Rename
+            </DropdownMenuItem>
+          )}
+          {isEditor && (
+            <DropdownMenuItem onClick={onStartEmojiPicker}>
+              <SmileIcon className="mr-2 size-4" />
+              Change emoji
+            </DropdownMenuItem>
+          )}
+          {isEditor && (
+            <DropdownMenuItem
+              onClick={() =>
+                openMoveDialog({ id: node.id, title: node.title })
+              }
+            >
+              <FolderInputIcon className="mr-2 size-4" />
+              Move to
+            </DropdownMenuItem>
+          )}
+          {isEditor && hasChildren && (
+            <DropdownMenuItem
+              onClick={() => {
+                const sorted = [...node.children].sort((a, b) =>
+                  a.title.localeCompare(b.title, undefined, { sensitivity: "base" }),
+                )
+                const count = sorted.length
+                for (let i = 0; i < count; i++) {
+                  const newSort = String.fromCharCode(65 + Math.floor(((i + 1) / (count + 1)) * 57))
+                  if (sorted[i].sortOrder !== newSort) {
+                    updateDocument.mutate({ id: sorted[i].id, input: { sortOrder: newSort } })
+                  }
+                }
+              }}
+            >
+              <ArrowDownAZIcon className="mr-2 size-4" />
+              Sort
+            </DropdownMenuItem>
+          )}
+          <DropdownMenuSeparator />
+          <DropdownMenuItem
+            onClick={() => openContentSearch(node.id, node.title)}
+          >
+            <SearchIcon className="mr-2 size-4" />
+            Search in {node.title}...
+          </DropdownMenuItem>
+          {isEditor && (
+            <>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem
+                className="text-destructive"
+                onClick={() =>
+                  openDeleteDialog({ id: node.id, title: node.title })
+                }
+              >
+                <Trash2Icon className="mr-2 size-4" />
+                Delete
+              </DropdownMenuItem>
+            </>
+          )}
+        </DropdownMenuContent>
+      </DropdownMenu>
+    </>
+  )
+}
+
+const WikiTreeRowQuickActions = memo(WikiTreeRowQuickActionsImpl)

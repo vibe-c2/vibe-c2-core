@@ -105,9 +105,14 @@ function WikiPageInner({
     return () => window.removeEventListener("keydown", onKey)
   }, [openContentSearch])
 
+  // Shared ref so ResizeHandle can mutate the sidebar's `--wiki-sidebar-width`
+  // CSS variable directly during a drag (no React render until mouseup).
+  const sidebarRef = useRef<HTMLDivElement | null>(null)
+
   return (
     <div className="flex h-svh min-h-0 gap-1 overflow-hidden p-2">
       <WikiTreeSidebar
+        ref={sidebarRef}
         operationId={operationId}
         isEditor={isEditor}
         documents={treeDocuments}
@@ -115,6 +120,7 @@ function WikiPageInner({
       <ResizeHandle
         currentWidth={sidebarWidth}
         onResize={setSidebarWidth}
+        sidebarRef={sidebarRef}
       />
       <WikiContentArea
         documentId={documentId}

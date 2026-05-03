@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState } from "react"
+import { useMemo } from "react"
 import {
   ChevronsDownUpIcon,
   ChevronsUpDownIcon,
@@ -23,17 +23,11 @@ import { Badge } from "@/components/ui/badge"
 import { Skeleton } from "@/components/ui/skeleton"
 import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip"
 import { useWikiStore } from "@/stores/wiki"
+import { useWikiDragStore, type DropPosition, type DropTarget } from "@/stores/wiki-drag"
 import { useWikiDocumentTrash, useUpdateWikiDocument } from "@/graphql/hooks/wiki"
 import { WikiTreeNode } from "@/components/wiki/wiki-tree-node"
 import { collectBranchIdsWithChildren } from "@/components/wiki/wiki-tree-helpers"
 import type { WikiDocumentTreeFieldsFragment } from "@/graphql/gql/graphql"
-
-export type DropPosition = "before" | "inside" | "after"
-
-export interface DropTarget {
-  id: string
-  position: DropPosition
-}
 
 export interface TreeNode {
   id: string
@@ -120,6 +114,9 @@ interface WikiTreeSidebarProps {
   isEditor: boolean
   documents: readonly WikiDocumentTreeFieldsFragment[]
   isLoading?: boolean
+  // Forwarded to the wrapper div so ResizeHandle can imperatively mutate
+  // `--wiki-sidebar-width` during a drag without going through React.
+  ref?: React.Ref<HTMLDivElement>
 }
 
 export function WikiTreeSidebar({
@@ -127,13 +124,17 @@ export function WikiTreeSidebar({
   isEditor,
   documents,
   isLoading,
+  ref,
 }: WikiTreeSidebarProps) {
   const sidebarWidth = useWikiStore((s) => s.sidebarWidth)
   const openCreateDialog = useWikiStore((s) => s.openCreateDialog)
   const openImportOutlineDialog = useWikiStore((s) => s.openImportOutlineDialog)
   const openTrashPanel = useWikiStore((s) => s.openTrashPanel)
   const openContentSearch = useWikiStore((s) => s.openContentSearch)
-  const expandedNodes = useWikiStore((s) => s.expandedNodes)
+  // Note: we deliberately do NOT subscribe to `expandedNodes` here. The
+  // header's "Collapse all" button reads it lazily via `getState()` at
+  // click time, so the sidebar doesn't re-render every time someone
+  // expands or collapses a row.
   const expandMany = useWikiStore((s) => s.expandMany)
   const collapseMany = useWikiStore((s) => s.collapseMany)
 
@@ -153,11 +154,13 @@ export function WikiTreeSidebar({
 
   const updateDocument = useUpdateWikiDocument()
 
-  // DnD state for tracking active drag and hovered drop target.
-  const [activeId, setActiveId] = useState<string | null>(null)
-  const activeIdRef = useRef<string | null>(null)
-  const [dropTarget, setDropTarget] = useState<DropTarget | null>(null)
-  const dropTargetRef = useRef<DropTarget | null>(null)
+  // DnD state lives in a separate store (`useWikiDragStore`) so per-row
+  // highlight changes don't re-render the whole sidebar. We subscribe to
+  // `activeId` here only because the overlay + the dragged-node descendant
+  // exclusion both need it (both change once at drag start/end, not per
+  // hover tick). `dropTarget` is intentionally NOT subscribed — handlers
+  // read it via `getState()`.
+  const activeId = useWikiDragStore((s) => s.activeId)
 
   // Descendants of the dragged node — cannot drop onto these.
   const excludedIds = useMemo(
@@ -173,26 +176,20 @@ export function WikiTreeSidebar({
 
   function handleDragStart(event: DragStartEvent) {
     const id = event.active.id as string
-    activeIdRef.current = id
-    setActiveId(id)
+    useWikiDragStore.getState().setActiveId(id)
   }
 
   function handleDragMove(event: DragMoveEvent) {
+    const dragStore = useWikiDragStore.getState()
     const over = event.over
     if (!over) {
-      if (dropTargetRef.current) {
-        dropTargetRef.current = null
-        setDropTarget(null)
-      }
+      if (dragStore.dropTarget) dragStore.setDropTarget(null)
       return
     }
 
     const id = over.id as string
     if (excludedIds.has(id)) {
-      if (dropTargetRef.current) {
-        dropTargetRef.current = null
-        setDropTarget(null)
-      }
+      if (dragStore.dropTarget) dragStore.setDropTarget(null)
       return
     }
 
@@ -209,24 +206,21 @@ export function WikiTreeSidebar({
     }
 
     // Only update state when target actually changes.
-    const prev = dropTargetRef.current
+    const prev = dragStore.dropTarget
     if (!prev || prev.id !== id || prev.position !== position) {
       const next: DropTarget = { id, position }
-      dropTargetRef.current = next
-      setDropTarget(next)
+      dragStore.setDropTarget(next)
     }
   }
 
   function handleDragEnd() {
-    // Read from refs — state may be stale due to batched renders.
-    const draggedId = activeIdRef.current
-    const target = dropTargetRef.current
+    // Read from store directly — avoids capturing stale closures.
+    const dragStore = useWikiDragStore.getState()
+    const draggedId = dragStore.activeId
+    const target = dragStore.dropTarget
 
-    // Reset state.
-    activeIdRef.current = null
-    setActiveId(null)
-    setDropTarget(null)
-    dropTargetRef.current = null
+    // Reset drag state immediately so the overlay disappears.
+    dragStore.reset()
 
     if (!draggedId || !target) return
 
@@ -299,15 +293,24 @@ export function WikiTreeSidebar({
   }
 
   function handleDragCancel() {
-    activeIdRef.current = null
-    setActiveId(null)
-    setDropTarget(null)
-    dropTargetRef.current = null
+    useWikiDragStore.getState().reset()
   }
 
   return (
     <div
-      style={{ width: sidebarWidth }}
+      ref={ref}
+      // Width is driven via a CSS custom property so ResizeHandle can update
+      // it in pure DOM during a drag (no React re-render). React still owns
+      // the value at rest — when `sidebarWidth` changes via the store
+      // (mouseup commit, hydration), the inline style re-applies the
+      // variable. Mid-drag re-renders for unrelated state changes are safe:
+      // React diffs the style prop and skips writing when the prop value
+      // (the store width) hasn't changed, so the imperatively-set value
+      // survives.
+      style={{
+        width: "var(--wiki-sidebar-width)",
+        ["--wiki-sidebar-width" as string]: `${sidebarWidth}px`,
+      } as React.CSSProperties}
       className="flex shrink-0 flex-col rounded-lg border bg-card overflow-hidden"
     >
       {/* Header */}
@@ -335,7 +338,9 @@ export function WikiTreeSidebar({
               <Button
                 variant="ghost"
                 size="icon-xs"
-                onClick={() => collapseMany([...expandedNodes])}
+                onClick={() =>
+                  collapseMany([...useWikiStore.getState().expandedNodes])
+                }
               />
             }
           >
@@ -442,8 +447,6 @@ export function WikiTreeSidebar({
                 depth={0}
                 isEditor={isEditor}
                 operationId={operationId}
-                activeId={activeId}
-                dropTarget={dropTarget}
               />
             ))}
             <DragOverlay dropAnimation={null}>
