@@ -1,5 +1,5 @@
-import { useEffect } from "react"
-import { Navigate, Outlet } from "react-router"
+import { useEffect, useRef } from "react"
+import { Navigate, Outlet, useLocation, useNavigate } from "react-router"
 import { useAuthStore } from "@/stores/auth"
 import { useConnectivityStore } from "@/stores/connectivity"
 import { useSessionGuard } from "@/hooks/use-session-guard"
@@ -32,6 +32,27 @@ export function ProtectedRoute({ permission }: { permission?: string }) {
   useScopedOperationGuard()
 
   const isValidating = useScopedOperationStore((s) => s.isValidating)
+  const scopedId = useScopedOperationStore((s) => s.scopedOperation?.id ?? null)
+
+  // Drop any open wiki document when the scoped operation changes — covers
+  // both same-tab switches and cross-tab sync. Lives at the route-guard level
+  // (not inside WikiPage) because cross-tab sync sets `isValidating: true`,
+  // which unmounts the wiki page during validation; a per-page ref-based
+  // comparison would be reset on remount and miss the change.
+  const navigate = useNavigate()
+  const location = useLocation()
+  const prevScopedIdRef = useRef<string | null>(scopedId)
+  useEffect(() => {
+    const prev = prevScopedIdRef.current
+    prevScopedIdRef.current = scopedId
+    // Only react to a transition between two non-null operations.
+    // Initial hydrate (null → X) keeps the existing URL; unscope (X → null)
+    // is handled by WikiPage's redirect to /operations.
+    if (prev === null || scopedId === null || prev === scopedId) return
+    if (location.pathname.startsWith("/wiki/")) {
+      navigate("/wiki", { replace: true })
+    }
+  }, [scopedId, location.pathname, navigate])
 
   // Still validating the session via /login/me on page reload
   if (isLoading) {

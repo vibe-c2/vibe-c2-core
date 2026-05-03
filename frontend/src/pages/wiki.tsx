@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef } from "react"
-import { Navigate, useNavigate, useParams } from "react-router"
+import { Navigate, useParams } from "react-router"
 import { useScopedOperation } from "@/hooks/use-scoped-operation"
 import { useMyOperationRole } from "@/graphql/hooks/operations"
 import {
@@ -45,19 +45,9 @@ function WikiPageInner({
   operationId: string
   documentId: string | null
 }) {
-  const navigate = useNavigate()
-  const prevOperationId = useRef(operationId)
-
-  // When the scoped operation changes while viewing a document, navigate to
-  // /wiki so we don't keep the previous operation's document open.
-  useEffect(() => {
-    if (prevOperationId.current !== operationId) {
-      prevOperationId.current = operationId
-      if (documentId) {
-        navigate("/wiki", { replace: true })
-      }
-    }
-  }, [operationId, documentId, navigate])
+  // Note: Dropping the open document on scope change is handled at the
+  // route-guard level (ProtectedRoute) so it works across both same-tab and
+  // cross-tab switches — the latter unmounts this page during validation.
 
   const { data: roleData, isLoading: isRoleLoading } = useMyOperationRole(operationId)
   // Default to false while loading to avoid premature WebSocket connections.
