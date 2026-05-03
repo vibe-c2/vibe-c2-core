@@ -103,6 +103,11 @@ interface WikiStoreState {
   // Sidebar width
   sidebarWidth: number
   setSidebarWidth: (width: number) => void
+
+  // Editor zoom (focus mode — overlays the wiki tree and app sidebar)
+  editorZoomed: boolean
+  toggleEditorZoom: () => void
+  setEditorZoom: (zoomed: boolean) => void
 }
 
 export const useWikiStore = create<WikiStoreState>((set, get) => ({
@@ -206,4 +211,9 @@ export const useWikiStore = create<WikiStoreState>((set, get) => ({
     localStorage.setItem(STORAGE_KEY_WIDTH, String(width))
     set({ sidebarWidth: width })
   },
+
+  // Editor zoom — transient view state, not persisted.
+  editorZoomed: false,
+  toggleEditorZoom: () => set((state) => ({ editorZoomed: !state.editorZoomed })),
+  setEditorZoom: (zoomed) => set({ editorZoomed: zoomed }),
 }))

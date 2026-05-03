@@ -5,6 +5,8 @@ import {
   ChevronRightIcon,
   ClockIcon,
   EllipsisIcon,
+  Maximize2Icon,
+  Minimize2Icon,
 } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -38,6 +40,9 @@ export function WikiEditorHeader({
   const navigate = useNavigate()
   const updateDocument = useUpdateWikiDocument()
   const openBackupPanel = useWikiStore((s) => s.openBackupPanel)
+  const editorZoomed = useWikiStore((s) => s.editorZoomed)
+  const toggleEditorZoom = useWikiStore((s) => s.toggleEditorZoom)
+  const zoomLabel = editorZoomed ? "Exit fullscreen" : "Zoom in"
 
   const { data: presenceData } = useWikiDocumentPresence(doc.id)
   const activeEditors = presenceData?.wikiDocumentPresence.activeEditors ?? []
@@ -248,6 +253,29 @@ export function WikiEditorHeader({
             )}
           </div>
         )}
+
+        {/* Zoom toggle — not gated on isEditor (focus reading is useful
+            without edit rights). */}
+        <Tooltip>
+          <TooltipTrigger
+            render={
+              <Button
+                variant="ghost"
+                size="icon-sm"
+                onClick={toggleEditorZoom}
+                aria-label={zoomLabel}
+                aria-pressed={editorZoomed}
+              />
+            }
+          >
+            {editorZoomed ? (
+              <Minimize2Icon className="size-4" />
+            ) : (
+              <Maximize2Icon className="size-4" />
+            )}
+          </TooltipTrigger>
+          <TooltipContent>{zoomLabel}</TooltipContent>
+        </Tooltip>
 
         {/* Backup button */}
         {isEditor && (

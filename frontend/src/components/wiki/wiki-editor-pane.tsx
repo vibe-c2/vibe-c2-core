@@ -1,4 +1,4 @@
-import { Component, type ErrorInfo, type ReactNode } from "react"
+import { Component, useEffect, type ErrorInfo, type ReactNode } from "react"
 import { Skeleton } from "@/components/ui/skeleton"
 import { Button } from "@/components/ui/button"
 import { useWikiDocument } from "@/graphql/hooks/wiki"
@@ -6,6 +6,8 @@ import { WikiEditorHeader } from "@/components/wiki/wiki-editor-header"
 import { WikiDocumentMeta } from "@/components/wiki/wiki-document-meta"
 import { WikiEditor } from "@/components/wiki/wiki-editor"
 import { WikiChildDocumentList } from "@/components/wiki/wiki-child-document-list"
+import { useWikiStore } from "@/stores/wiki"
+import { cn } from "@/lib/utils"
 import type { WikiDocumentTreeFieldsFragment } from "@/graphql/gql/graphql"
 
 interface WikiEditorPaneProps {
@@ -21,6 +23,27 @@ export function WikiEditorPane({
 }: WikiEditorPaneProps) {
   const { data, isLoading, error } = useWikiDocument(documentId)
   const document = data?.wikiDocument
+  const editorZoomed = useWikiStore((s) => s.editorZoomed)
+  const setEditorZoom = useWikiStore((s) => s.setEditorZoom)
+
+  // Drop zoom only on full unmount (leaving the wiki page entirely). Switching
+  // between docs keeps zoom on so child-list navigation doesn't kick the user
+  // out of focus mode.
+  useEffect(() => {
+    return () => setEditorZoom(false)
+  }, [setEditorZoom])
+
+  // Esc to exit zoom. Tiptap-internal popovers (slash menu, bubble menu)
+  // consume Escape first via stopPropagation, so this only fires when nothing
+  // inside the editor is claiming the key.
+  useEffect(() => {
+    if (!editorZoomed) return
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setEditorZoom(false)
+    }
+    window.addEventListener("keydown", onKey)
+    return () => window.removeEventListener("keydown", onKey)
+  }, [editorZoomed, setEditorZoom])
 
   if (isLoading) {
     return (
@@ -45,7 +68,14 @@ export function WikiEditorPane({
   }
 
   return (
-    <div className="flex min-w-0 flex-1 flex-col overflow-hidden rounded-lg border bg-card">
+    <div
+      className={cn(
+        "flex min-w-0 flex-1 flex-col overflow-hidden rounded-lg border bg-card",
+        // z-40 so backup sheet, dialogs, and command palette (z-50) still
+        // stack above when opened from inside the zoomed editor.
+        editorZoomed && "fixed inset-0 z-40 rounded-none border-0",
+      )}
+    >
       <WikiEditorHeader
         document={document}
         isEditor={isEditor}
