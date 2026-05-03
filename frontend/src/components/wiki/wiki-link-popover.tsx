@@ -1,23 +1,32 @@
-import { useEffect, useRef, useState } from "react"
-import type { Editor } from "@tiptap/react"
-import { BubbleMenu } from "@tiptap/react/menus"
-import { getMarkRange } from "@tiptap/core"
-import { CheckIcon, CopyIcon, ExternalLinkIcon, Trash2Icon } from "lucide-react"
-import { Button } from "@/components/ui/button"
-import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip"
-import { cn } from "@/lib/utils"
+import { useEffect, useRef, useState } from "react";
+import type { Editor } from "@tiptap/react";
+import { BubbleMenu } from "@tiptap/react/menus";
+import { getMarkRange } from "@tiptap/core";
+import {
+  CheckIcon,
+  CopyIcon,
+  ExternalLinkIcon,
+  Trash2Icon,
+} from "lucide-react";
+import { Button } from "@/components/ui/button";
+import {
+  Tooltip,
+  TooltipTrigger,
+  TooltipContent,
+} from "@/components/ui/tooltip";
+import { cn } from "@/lib/utils";
 
 interface WikiLinkPopoverProps {
-  editor: Editor | null
+  editor: Editor | null;
 }
 
-const LINK_POPOVER_FOCUS_EVENT = "wiki-link-popover-focus"
+const LINK_POPOVER_FOCUS_EVENT = "wiki-link-popover-focus";
 
 const popoverInputClass = cn(
   "h-7 w-full min-w-0 rounded-md border border-input bg-transparent px-2 text-sm",
   "outline-none transition-colors placeholder:text-muted-foreground",
   "focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/40",
-)
+);
 
 /**
  * Floating link editor. Auto-shows whenever the caret is inside a link mark.
@@ -26,105 +35,101 @@ const popoverInputClass = cn(
  * handler keeps it visible (see @tiptap/extension-bubble-menu blurHandler).
  */
 export function WikiLinkPopover({ editor }: WikiLinkPopoverProps) {
-  const [text, setText] = useState("")
-  const [url, setUrl] = useState("")
-  const urlInputRef = useRef<HTMLInputElement>(null)
+  const [text, setText] = useState("");
+  const [url, setUrl] = useState("");
+  const urlInputRef = useRef<HTMLInputElement>(null);
   // Identity of the link we last synced from. While the user types in the
   // form, the editor's link mark hasn't changed, so this key matches and we
   // skip resync — preserving in-progress edits across unrelated transactions.
-  const linkKeyRef = useRef("")
-  const justOpenedRef = useRef(false)
+  const linkKeyRef = useRef("");
+  const justOpenedRef = useRef(false);
 
   useEffect(() => {
-    if (!editor) return
+    if (!editor) return;
     const sync = () => {
       if (!editor.isActive("link")) {
-        linkKeyRef.current = ""
-        return
+        linkKeyRef.current = "";
+        return;
       }
-      const range = getCurrentLinkRange(editor)
-      if (!range) return
-      const href = (editor.getAttributes("link").href as string | null) ?? ""
-      const key = `${range.from}|${range.to}|${href}`
-      if (key === linkKeyRef.current) return
-      const wasEmpty = linkKeyRef.current === ""
-      linkKeyRef.current = key
-      setText(editor.state.doc.textBetween(range.from, range.to))
-      setUrl(href)
+      const range = getCurrentLinkRange(editor);
+      if (!range) return;
+      const href = (editor.getAttributes("link").href as string | null) ?? "";
+      const key = `${range.from}|${range.to}|${href}`;
+      if (key === linkKeyRef.current) return;
+      const wasEmpty = linkKeyRef.current === "";
+      linkKeyRef.current = key;
+      setText(editor.state.doc.textBetween(range.from, range.to));
+      setUrl(href);
       // Auto-focus the URL field when the popover opens for a link with
       // no URL yet (just-inserted via /link, ⌘K, or bubble menu button).
       // Don't steal focus when opening over an existing real link.
       if (wasEmpty && !href) {
-        justOpenedRef.current = true
+        justOpenedRef.current = true;
       }
-    }
-    editor.on("selectionUpdate", sync)
-    editor.on("transaction", sync)
-    sync()
+    };
+    editor.on("selectionUpdate", sync);
+    editor.on("transaction", sync);
+    sync();
     return () => {
-      editor.off("selectionUpdate", sync)
-      editor.off("transaction", sync)
-    }
-  }, [editor])
+      editor.off("selectionUpdate", sync);
+      editor.off("transaction", sync);
+    };
+  }, [editor]);
 
   // The BubbleMenu plugin debounces show() (default 250ms) and removes its
   // host element from the live DOM while hidden. We can't focus the input
   // until the element is reattached, so poll across animation frames until
   // it's in the document — bounded to avoid spinning forever on edge cases.
   useEffect(() => {
-    if (!justOpenedRef.current) return
-    let cancelled = false
-    let attempts = 0
+    if (!justOpenedRef.current) return;
+    let cancelled = false;
+    let attempts = 0;
     const tryFocus = () => {
-      if (cancelled) return
-      const input = urlInputRef.current
+      if (cancelled) return;
+      const input = urlInputRef.current;
       if (input && document.contains(input)) {
-        input.focus()
-        input.select()
-        justOpenedRef.current = false
-        return
+        input.focus();
+        input.select();
+        justOpenedRef.current = false;
+        return;
       }
       if (attempts++ < 30) {
-        requestAnimationFrame(tryFocus)
+        requestAnimationFrame(tryFocus);
       } else {
-        justOpenedRef.current = false
+        justOpenedRef.current = false;
       }
-    }
-    requestAnimationFrame(tryFocus)
+    };
+    requestAnimationFrame(tryFocus);
     return () => {
-      cancelled = true
-    }
-  })
+      cancelled = true;
+    };
+  });
 
   // External trigger (⌘K / bubble-menu / slash) when already on a link asks
   // us to grab focus into the URL field for quick edit.
   useEffect(() => {
     function onFocusRequest() {
-      urlInputRef.current?.focus()
-      urlInputRef.current?.select()
+      urlInputRef.current?.focus();
+      urlInputRef.current?.select();
     }
-    window.addEventListener(LINK_POPOVER_FOCUS_EVENT, onFocusRequest)
-    return () => window.removeEventListener(LINK_POPOVER_FOCUS_EVENT, onFocusRequest)
-  }, [])
+    window.addEventListener(LINK_POPOVER_FOCUS_EVENT, onFocusRequest);
+    return () =>
+      window.removeEventListener(LINK_POPOVER_FOCUS_EVENT, onFocusRequest);
+  }, []);
 
-  if (!editor) return null
+  if (!editor) return null;
 
   function applyChanges() {
-    if (!editor) return
-    const range = getCurrentLinkRange(editor)
-    if (!range) return
-    const href = normalizeUrl(url)
+    if (!editor) return;
+    const range = getCurrentLinkRange(editor);
+    if (!range) return;
+    const href = normalizeUrl(url);
     if (!href) {
       // Empty URL — treat as remove
-      editor
-        .chain()
-        .focus()
-        .setTextSelection(range)
-        .unsetLink()
-        .run()
-      return
+      editor.chain().focus().setTextSelection(range).unsetLink().run();
+      return;
     }
-    const display = text.trim() || href
+    const display = text.trim() || href;
     editor
       .chain()
       .focus()
@@ -134,25 +139,25 @@ export function WikiLinkPopover({ editor }: WikiLinkPopoverProps) {
         text: display,
         marks: [{ type: "link", attrs: { href } }],
       })
-      .run()
+      .run();
   }
 
   function removeLink() {
-    if (!editor) return
-    editor.chain().focus().extendMarkRange("link").unsetLink().run()
+    if (!editor) return;
+    editor.chain().focus().extendMarkRange("link").unsetLink().run();
   }
 
   function openLink() {
-    const href = normalizeUrl(url)
-    if (!href) return
-    window.open(href, "_blank", "noopener,noreferrer")
+    const href = normalizeUrl(url);
+    if (!href) return;
+    window.open(href, "_blank", "noopener,noreferrer");
   }
 
   async function copyLink() {
-    const href = normalizeUrl(url)
-    if (!href) return
+    const href = normalizeUrl(url);
+    if (!href) return;
     try {
-      await navigator.clipboard.writeText(href)
+      await navigator.clipboard.writeText(href);
     } catch {
       // Clipboard write can fail in non-secure contexts or when the user
       // denied the permission. The popover's "Copy" affordance is best-effort
@@ -167,10 +172,12 @@ export function WikiLinkPopover({ editor }: WikiLinkPopoverProps) {
       updateDelay={0}
       options={{ placement: "bottom-start", offset: 6 }}
       shouldShow={({ editor }) => editor.isEditable && editor.isActive("link")}
-      className="z-50 flex w-[22rem] flex-col gap-2 rounded-lg bg-popover p-2 text-popover-foreground shadow-md ring-1 ring-foreground/10"
+      className="z-50 flex w-88 flex-col gap-2 rounded-lg bg-popover p-2 text-popover-foreground shadow-md ring-1 ring-foreground/10"
     >
       <div className="flex items-center gap-1.5">
-        <label className="w-9 shrink-0 text-xs text-muted-foreground">Text</label>
+        <label className="w-9 shrink-0 text-xs text-muted-foreground">
+          Text
+        </label>
         <input
           type="text"
           value={text}
@@ -181,7 +188,9 @@ export function WikiLinkPopover({ editor }: WikiLinkPopoverProps) {
         />
       </div>
       <div className="flex items-center gap-1.5">
-        <label className="w-9 shrink-0 text-xs text-muted-foreground">URL</label>
+        <label className="w-9 shrink-0 text-xs text-muted-foreground">
+          URL
+        </label>
         <input
           ref={urlInputRef}
           type="url"
@@ -221,7 +230,7 @@ export function WikiLinkPopover({ editor }: WikiLinkPopoverProps) {
         />
       </div>
     </BubbleMenu>
-  )
+  );
 }
 
 function onFormKeyDown(
@@ -230,11 +239,11 @@ function onFormKeyDown(
   editor: Editor,
 ) {
   if (e.key === "Enter") {
-    e.preventDefault()
-    apply()
+    e.preventDefault();
+    apply();
   } else if (e.key === "Escape") {
-    e.preventDefault()
-    editor.chain().focus().run()
+    e.preventDefault();
+    editor.chain().focus().run();
   }
 }
 
@@ -245,11 +254,11 @@ function PopoverIconButton({
   disabled,
   onClick,
 }: {
-  icon: React.ComponentType<{ className?: string }>
-  tooltip: string
-  destructive?: boolean
-  disabled?: boolean
-  onClick: () => void
+  icon: React.ComponentType<{ className?: string }>;
+  tooltip: string;
+  destructive?: boolean;
+  disabled?: boolean;
+  onClick: () => void;
 }) {
   return (
     <Tooltip>
@@ -259,10 +268,14 @@ function PopoverIconButton({
             variant="ghost"
             size="icon-xs"
             disabled={disabled}
-            className={destructive ? "text-destructive hover:text-destructive" : undefined}
+            className={
+              destructive
+                ? "text-destructive hover:text-destructive"
+                : undefined
+            }
             onMouseDown={(e) => {
-              e.preventDefault()
-              onClick()
+              e.preventDefault();
+              onClick();
             }}
           />
         }
@@ -271,27 +284,29 @@ function PopoverIconButton({
       </TooltipTrigger>
       <TooltipContent>{tooltip}</TooltipContent>
     </Tooltip>
-  )
+  );
 }
 
-function getCurrentLinkRange(editor: Editor): { from: number; to: number } | null {
-  const linkType = editor.schema.marks.link
-  if (!linkType) return null
-  const $from = editor.state.doc.resolve(editor.state.selection.from)
-  const range = getMarkRange($from, linkType)
-  return range ?? null
+function getCurrentLinkRange(
+  editor: Editor,
+): { from: number; to: number } | null {
+  const linkType = editor.schema.marks.link;
+  if (!linkType) return null;
+  const $from = editor.state.doc.resolve(editor.state.selection.from);
+  const range = getMarkRange($from, linkType);
+  return range ?? null;
 }
 
 /** Add an https:// scheme when the user typed a bare hostname so the rendered
  *  href actually navigates instead of resolving as a same-origin path. */
 function normalizeUrl(input: string): string {
-  const trimmed = input.trim()
-  if (!trimmed) return ""
-  if (/^[a-z][a-z0-9+.-]*:/i.test(trimmed)) return trimmed
-  if (trimmed.startsWith("//")) return `https:${trimmed}`
-  if (trimmed.startsWith("/") || trimmed.startsWith("#")) return trimmed
-  if (/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(trimmed)) return `mailto:${trimmed}`
-  return `https://${trimmed}`
+  const trimmed = input.trim();
+  if (!trimmed) return "";
+  if (/^[a-z][a-z0-9+.-]*:/i.test(trimmed)) return trimmed;
+  if (trimmed.startsWith("//")) return `https:${trimmed}`;
+  if (trimmed.startsWith("/") || trimmed.startsWith("#")) return trimmed;
+  if (/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(trimmed)) return `mailto:${trimmed}`;
+  return `https://${trimmed}`;
 }
 
 /** Imperative trigger used by the bubble-menu button, ⌘K shortcut, and the
@@ -305,15 +320,15 @@ function normalizeUrl(input: string): string {
 export function startLinkInsert(editor: Editor) {
   // Already on a link — popover is already showing; just nudge focus to it.
   if (editor.isActive("link")) {
-    window.dispatchEvent(new CustomEvent(LINK_POPOVER_FOCUS_EVENT))
-    return
+    window.dispatchEvent(new CustomEvent(LINK_POPOVER_FOCUS_EVENT));
+    return;
   }
-  const { selection } = editor.state
+  const { selection } = editor.state;
   if (selection.empty) {
     // Insert a placeholder "Link" wrapped in a link mark, then select it so
     // isActive('link') becomes true and the popover opens with text=Link.
-    const placeholder = "Link"
-    const from = selection.from
+    const placeholder = "Link";
+    const from = selection.from;
     editor
       .chain()
       .insertContent({
@@ -323,9 +338,9 @@ export function startLinkInsert(editor: Editor) {
       })
       .setTextSelection({ from, to: from + placeholder.length })
       .focus()
-      .run()
-    return
+      .run();
+    return;
   }
   // Wrap existing selection in an empty-href link mark; popover takes over.
-  editor.chain().focus().setLink({ href: "" }).run()
+  editor.chain().focus().setLink({ href: "" }).run();
 }
