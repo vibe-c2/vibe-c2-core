@@ -26,6 +26,7 @@ import { WikiFileExtension } from "@/components/wiki/wiki-file-node"
 import { WikiEditorBubbleMenu } from "@/components/wiki/wiki-editor-bubble-menu"
 import { WikiEditorTableMenu } from "@/components/wiki/wiki-editor-table-menu"
 import { WikiLinkPopover, startLinkInsert } from "@/components/wiki/wiki-link-popover"
+import { WikiInlineCodePopover } from "@/components/wiki/wiki-inline-code-popover"
 import { WikiSlashCommand } from "@/components/wiki/wiki-slash-command/extension"
 import { WikiNoticeExtension } from "@/components/wiki/wiki-notice-node"
 import { WikiEscapeEdgeBlock } from "@/components/wiki/wiki-escape-edge-block"
@@ -330,6 +331,7 @@ export function WikiEditor({ documentId, isEditor, footer }: WikiEditorProps) {
       <ConnectionBanner connectionStatus={connectionStatus} isSynced={isSynced} isReady={isReady} />
       {isEditor && <WikiEditorBubbleMenu editor={editor} />}
       {isEditor && <WikiEditorTableMenu editor={editor} />}
+      {isEditor && <WikiInlineCodePopover editor={editor} />}
       {isEditor && <WikiLinkPopover editor={editor} />}
       <div
         className="flex-1 overflow-y-auto px-4 py-2"

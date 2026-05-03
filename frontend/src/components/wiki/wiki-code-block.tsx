@@ -1,18 +1,14 @@
-import { useState } from "react"
 import {
   NodeViewContent,
   NodeViewWrapper,
   useEditorState,
   type ReactNodeViewProps,
 } from "@tiptap/react"
-import { CheckIcon, CopyIcon, WrapTextIcon } from "lucide-react"
-import { toast } from "sonner"
+import { WrapTextIcon } from "lucide-react"
 import { CODE_LANGUAGES } from "@/lib/wiki-lowlight"
-
-const COPIED_RESET_MS = 1500
+import { CodeCopyButton } from "@/components/wiki/wiki-code-copy-button"
 
 export function WikiCodeBlock({ node, updateAttributes, editor, getPos }: ReactNodeViewProps) {
-  const [copied, setCopied] = useState(false)
   const language: string = node.attrs.language ?? "plaintext"
   const wrap: boolean = node.attrs.wrap ?? false
   const isEditable = editor.isEditable
@@ -31,16 +27,6 @@ export function WikiCodeBlock({ node, updateAttributes, editor, getPos }: ReactN
       },
     }) ?? false
 
-  async function handleCopy() {
-    try {
-      await navigator.clipboard.writeText(node.textContent ?? "")
-      setCopied(true)
-      setTimeout(() => setCopied(false), COPIED_RESET_MS)
-    } catch {
-      toast.error("Failed to copy code")
-    }
-  }
-
   return (
     <NodeViewWrapper
       className="wiki-code-block wiki-node--toolbar-top"
@@ -49,20 +35,7 @@ export function WikiCodeBlock({ node, updateAttributes, editor, getPos }: ReactN
       data-wrap={wrap ? "true" : "false"}
     >
       <div className="wiki-code-block__toolbar" contentEditable={false}>
-        <button
-          type="button"
-          className="wiki-code-block__copy"
-          // Prevent mousedown from stealing ProseMirror selection; otherwise
-          // the cursor leaves the code block, data-cursor-inside flips to
-          // "false", and the toolbar's pointer-events get killed before the
-          // click lands. See wiki-image-node.tsx for the same pattern.
-          onMouseDown={(e) => e.preventDefault()}
-          onClick={handleCopy}
-          aria-label={copied ? "Copied" : "Copy code"}
-        >
-          {copied ? <CheckIcon size={14} /> : <CopyIcon size={14} />}
-          <span>{copied ? "Copied" : "Copy"}</span>
-        </button>
+        <CodeCopyButton getText={() => node.textContent ?? ""} />
         {isEditable && (
           <button
             type="button"

@@ -377,7 +377,10 @@
   outline-offset: 1px;
 }
 
-.tiptap .wiki-code-block__copy {
+/* Class is shared with WikiInlineCodePopover, which renders as a floating
+   BubbleMenu outside the .tiptap DOM tree — the .tiptap prefix is dropped
+   so the same styling applies in both places. */
+.wiki-code-block__copy {
   display: inline-flex;
   align-items: center;
   gap: 4px;
@@ -393,7 +396,7 @@
   transition: color 120ms ease-out, background 120ms ease-out;
 }
 
-.tiptap .wiki-code-block__copy:hover {
+.wiki-code-block__copy:hover {
   color: var(--foreground);
   background: var(--accent);
 }
