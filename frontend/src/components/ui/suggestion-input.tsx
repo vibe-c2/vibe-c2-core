@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react"
+import { useEffect, useRef, useState, type ReactNode } from "react"
 import { LoaderIcon } from "lucide-react"
 import { Input } from "@/components/ui/input"
 import { cn } from "@/lib/utils"
@@ -6,6 +6,8 @@ import { cn } from "@/lib/utils"
 export interface SuggestionOption {
   value: string
   label: string
+  /** Optional leading visual rendered before the label (e.g. a wiki document icon). */
+  icon?: ReactNode
 }
 
 interface SuggestionInputProps {
@@ -180,7 +182,7 @@ export function SuggestionInput({
                 role="option"
                 aria-selected={index === highlightedIndex}
                 className={cn(
-                  "flex w-full items-center px-3 py-2 text-sm text-left",
+                  "flex w-full items-center gap-2 px-3 py-2 text-sm text-left",
                   index === highlightedIndex
                     ? "bg-accent text-accent-foreground"
                     : "hover:bg-accent"
@@ -191,7 +193,8 @@ export function SuggestionInput({
                   selectOption(option)
                 }}
               >
-                {option.label}
+                {option.icon}
+                <span className="min-w-0 flex-1 truncate">{option.label}</span>
               </button>
             ))}
         </div>

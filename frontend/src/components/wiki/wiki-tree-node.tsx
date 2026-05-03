@@ -29,7 +29,11 @@ import { Input } from "@/components/ui/input"
 import { useWikiStore } from "@/stores/wiki"
 import { useWikiDragStore } from "@/stores/wiki-drag"
 import { useUpdateWikiDocument } from "@/graphql/hooks/wiki"
-import { EmojiPicker } from "@/components/wiki/emoji-picker"
+import {
+  DocumentIconPicker,
+  type DocumentIconValue,
+} from "@/components/wiki/document-icon-picker"
+import { DocumentIcon } from "@/components/wiki/document-icon"
 import { cn } from "@/lib/utils"
 import { collectBranchIdsWithChildren } from "@/components/wiki/wiki-tree-helpers"
 import type { TreeNode } from "@/components/wiki/wiki-tree-sidebar"
@@ -60,7 +64,7 @@ function WikiTreeNodeImpl({
 
   const [renaming, setRenaming] = useState(false)
   const [renameValue, setRenameValue] = useState(node.title)
-  const [emojiPickerOpen, setEmojiPickerOpen] = useState(false)
+  const [iconPickerOpen, setIconPickerOpen] = useState(false)
 
   const updateDocument = useUpdateWikiDocument()
 
@@ -102,9 +106,12 @@ function WikiTreeNodeImpl({
     setRenaming(false)
   }
 
-  function handleEmojiSelect(emoji: string) {
-    updateDocument.mutate({ id: node.id, input: { emoji } })
-    setEmojiPickerOpen(false)
+  function handleIconSelect(next: DocumentIconValue) {
+    updateDocument.mutate({
+      id: node.id,
+      input: { emoji: next.emoji, icon: next.icon },
+    })
+    setIconPickerOpen(false)
   }
 
   // Stable callbacks handed to the memoized quick-actions subcomponent.
@@ -115,8 +122,8 @@ function WikiTreeNodeImpl({
     setRenameValue(node.title)
     setRenaming(true)
   }, [node.title])
-  const handleStartEmojiPicker = useCallback(() => {
-    setEmojiPickerOpen(true)
+  const handleStartIconPicker = useCallback(() => {
+    setIconPickerOpen(true)
   }, [])
 
   const indent = depth * 16 + 4
@@ -162,8 +169,8 @@ function WikiTreeNodeImpl({
               />
             }
           >
-            <span className="text-sm group-hover:hidden">
-              {node.emoji || "\u{1F4C4}"}
+            <span className="flex size-5 items-center justify-center text-sm group-hover:hidden">
+              <DocumentIcon emoji={node.emoji} icon={node.icon} />
             </span>
             <ChevronRightIcon
               className={cn(
@@ -174,17 +181,17 @@ function WikiTreeNodeImpl({
           </CollapsibleTrigger>
         ) : (
           <span className="flex size-5 shrink-0 items-center justify-center text-sm">
-            {node.emoji || "\u{1F4C4}"}
+            <DocumentIcon emoji={node.emoji} icon={node.icon} />
           </span>
         )}
 
-        {/* Emoji picker: opened via context menu, anchored to the row */}
-        {emojiPickerOpen && (
-          <EmojiPicker
-            emoji={node.emoji}
-            onSelect={handleEmojiSelect}
-            open={emojiPickerOpen}
-            onOpenChange={setEmojiPickerOpen}
+        {/* Icon picker: opened via context menu, anchored to the row */}
+        {iconPickerOpen && (
+          <DocumentIconPicker
+            value={{ emoji: node.emoji, icon: node.icon }}
+            onSelect={handleIconSelect}
+            open={iconPickerOpen}
+            onOpenChange={setIconPickerOpen}
           />
         )}
 
@@ -223,7 +230,7 @@ function WikiTreeNodeImpl({
           node={node}
           isEditor={isEditor}
           onStartRename={handleStartRename}
-          onStartEmojiPicker={handleStartEmojiPicker}
+          onStartIconPicker={handleStartIconPicker}
         />
       </div>
 
@@ -262,14 +269,14 @@ interface WikiTreeRowQuickActionsProps {
   node: TreeNode
   isEditor: boolean
   onStartRename: () => void
-  onStartEmojiPicker: () => void
+  onStartIconPicker: () => void
 }
 
 function WikiTreeRowQuickActionsImpl({
   node,
   isEditor,
   onStartRename,
-  onStartEmojiPicker,
+  onStartIconPicker,
 }: WikiTreeRowQuickActionsProps) {
   const expandMany = useWikiStore((s) => s.expandMany)
   const collapseMany = useWikiStore((s) => s.collapseMany)
@@ -390,9 +397,9 @@ function WikiTreeRowQuickActionsImpl({
             </DropdownMenuItem>
           )}
           {isEditor && (
-            <DropdownMenuItem onClick={onStartEmojiPicker}>
+            <DropdownMenuItem onClick={onStartIconPicker}>
               <SmileIcon className="mr-2 size-4" />
-              Change emoji
+              Change icon
             </DropdownMenuItem>
           )}
           {isEditor && (

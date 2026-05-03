@@ -14,6 +14,7 @@ import {
 } from "@/components/ui/suggestion-input"
 import { useWikiStore } from "@/stores/wiki"
 import { useUpdateWikiDocument } from "@/graphql/hooks/wiki"
+import { DocumentIcon } from "@/components/wiki/document-icon"
 import type { WikiDocumentTreeFieldsFragment } from "@/graphql/gql/graphql"
 
 interface MoveWikiDocumentDialogProps {
@@ -55,7 +56,11 @@ export function MoveWikiDocumentDialog({
   )
 
   const rootOption: SuggestionOption = useMemo(
-    () => ({ value: "", label: "\u{1F4C1} / Root (top level)" }),
+    () => ({
+      value: "",
+      label: "/ Root (top level)",
+      icon: <span className="shrink-0 text-base leading-none">{"\u{1F4C1}"}</span>,
+    }),
     [],
   )
 
@@ -65,7 +70,8 @@ export function MoveWikiDocumentDialog({
       if (!excludedIds.has(doc.id)) {
         opts.push({
           value: doc.id,
-          label: `${doc.emoji || "\u{1F4C4}"} ${doc.title}`,
+          label: doc.title,
+          icon: <DocumentIcon emoji={doc.emoji} icon={doc.icon} />,
         })
       }
     }

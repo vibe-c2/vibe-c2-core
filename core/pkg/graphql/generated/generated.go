@@ -280,6 +280,7 @@ type ComplexityRoot struct {
 	WikiDocumentAncestor struct {
 		Emoji     func(childComplexity int) int
 		ID        func(childComplexity int) int
+		Icon      func(childComplexity int) int
 		IsDeleted func(childComplexity int) int
 		Title     func(childComplexity int) int
 	}
@@ -1754,6 +1755,12 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.WikiDocumentAncestor.ID(childComplexity), true
+	case "WikiDocumentAncestor.icon":
+		if e.ComplexityRoot.WikiDocumentAncestor.Icon == nil {
+			break
+		}
+
+		return e.ComplexityRoot.WikiDocumentAncestor.Icon(childComplexity), true
 	case "WikiDocumentAncestor.isDeleted":
 		if e.ComplexityRoot.WikiDocumentAncestor.IsDeleted == nil {
 			break
@@ -2825,6 +2832,7 @@ type WikiDocumentAncestor {
   id: ID!
   title: String!
   emoji: String!
+  icon: String!
   isDeleted: Boolean!
 }
 
@@ -11199,6 +11207,8 @@ func (ec *executionContext) fieldContext_WikiDocument_ancestors(_ context.Contex
 				return ec.fieldContext_WikiDocumentAncestor_title(ctx, field)
 			case "emoji":
 				return ec.fieldContext_WikiDocumentAncestor_emoji(ctx, field)
+			case "icon":
+				return ec.fieldContext_WikiDocumentAncestor_icon(ctx, field)
 			case "isDeleted":
 				return ec.fieldContext_WikiDocumentAncestor_isDeleted(ctx, field)
 			}
@@ -11557,6 +11567,35 @@ func (ec *executionContext) _WikiDocumentAncestor_emoji(ctx context.Context, fie
 }
 
 func (ec *executionContext) fieldContext_WikiDocumentAncestor_emoji(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "WikiDocumentAncestor",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _WikiDocumentAncestor_icon(ctx context.Context, field graphql.CollectedField, obj *model.WikiDocumentAncestor) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_WikiDocumentAncestor_icon,
+		func(ctx context.Context) (any, error) {
+			return obj.Icon, nil
+		},
+		nil,
+		ec.marshalNString2string,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_WikiDocumentAncestor_icon(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
 	fc = &graphql.FieldContext{
 		Object:     "WikiDocumentAncestor",
 		Field:      field,
@@ -18124,6 +18163,11 @@ func (ec *executionContext) _WikiDocumentAncestor(ctx context.Context, sel ast.S
 			}
 		case "emoji":
 			out.Values[i] = ec._WikiDocumentAncestor_emoji(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "icon":
+			out.Values[i] = ec._WikiDocumentAncestor_icon(ctx, field, obj)
 			if out.Values[i] == graphql.Null {
 				out.Invalids++
 			}

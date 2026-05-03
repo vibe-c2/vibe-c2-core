@@ -144,6 +144,7 @@ export const WikiSearchQuery = graphql(`
           id
           title
           emoji
+          icon
           parentDocument { id }
           createdBy { id username }
         }
@@ -165,10 +166,11 @@ export const WikiDocumentTrashQuery = graphql(`
           id
           title
           emoji
+          icon
           deletedAt
           deletedBy { id username }
           createdAt
-          ancestors { id title emoji isDeleted }
+          ancestors { id title emoji icon isDeleted }
         }
         cursor
       }

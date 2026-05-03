@@ -13,6 +13,7 @@ import { Skeleton } from "@/components/ui/skeleton"
 import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip"
 import { useWikiStore } from "@/stores/wiki"
 import { cn } from "@/lib/utils"
+import { DocumentIcon } from "@/components/wiki/document-icon"
 import {
   useWikiDocumentTrash,
   useRestoreWikiDocument,
@@ -126,7 +127,7 @@ export function WikiTrashPanel({ operationId }: WikiTrashPanelProps) {
                       aria-hidden
                       className="mt-0.5 flex size-7 shrink-0 items-center justify-center rounded-md bg-muted text-sm"
                     >
-                      {doc.emoji || "\u{1F4C4}"}
+                      <DocumentIcon emoji={doc.emoji} icon={doc.icon} />
                     </span>
                     <div className="min-w-0 flex-1">
                       <div className="flex items-baseline gap-2">
@@ -153,11 +154,18 @@ export function WikiTrashPanel({ operationId }: WikiTrashPanelProps) {
                               )}
                               <span
                                 className={cn(
+                                  "inline-flex items-center gap-1",
                                   a.isDeleted &&
                                     "text-muted-foreground/70 line-through",
                                 )}
                               >
-                                {a.emoji || "\u{1F4C4}"} {a.title}
+                                <DocumentIcon
+                                  emoji={a.emoji}
+                                  icon={a.icon}
+                                  size={12}
+                                  className="text-[11px]"
+                                />
+                                {a.title}
                               </span>
                             </span>
                           ))}

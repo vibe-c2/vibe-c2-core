@@ -26,6 +26,7 @@ import { useWikiStore } from "@/stores/wiki"
 import { useWikiDragStore, type DropPosition, type DropTarget } from "@/stores/wiki-drag"
 import { useWikiDocumentTrash, useUpdateWikiDocument } from "@/graphql/hooks/wiki"
 import { WikiTreeNode } from "@/components/wiki/wiki-tree-node"
+import { DocumentIcon } from "@/components/wiki/document-icon"
 import { collectBranchIdsWithChildren } from "@/components/wiki/wiki-tree-helpers"
 import type { WikiDocumentTreeFieldsFragment } from "@/graphql/gql/graphql"
 
@@ -33,6 +34,7 @@ export interface TreeNode {
   id: string
   title: string
   emoji: string
+  icon: string
   sortOrder: string
   parentId: string | null
   childCount: number
@@ -57,6 +59,7 @@ function buildTree(docs: readonly WikiDocumentTreeFieldsFragment[]): TreeNode[] 
         id: doc.id,
         title: doc.title,
         emoji: doc.emoji,
+        icon: doc.icon,
         sortOrder: doc.sortOrder,
         parentId: doc.parentDocument?.id ?? null,
         childCount: doc.childCount,
@@ -452,7 +455,7 @@ export function WikiTreeSidebar({
             <DragOverlay dropAnimation={null}>
               {activeDoc && (
                 <div className="flex items-center gap-1.5 rounded-md bg-popover px-2 py-1 text-sm shadow-md">
-                  <span className="shrink-0">{activeDoc.emoji || "\u{1F4C4}"}</span>
+                  <DocumentIcon emoji={activeDoc.emoji} icon={activeDoc.icon} />
                   <span className="truncate">{activeDoc.title}</span>
                 </div>
               )}

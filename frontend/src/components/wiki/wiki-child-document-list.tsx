@@ -3,6 +3,7 @@ import { useNavigate } from "react-router"
 import { ChevronRightIcon, PlusIcon } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { useWikiStore } from "@/stores/wiki"
+import { DocumentIcon } from "@/components/wiki/document-icon"
 import { getDirectChildren } from "@/components/wiki/wiki-tree-helpers"
 import type { WikiDocumentTreeFieldsFragment } from "@/graphql/gql/graphql"
 
@@ -62,9 +63,7 @@ export function WikiChildDocumentList({
                 onClick={() => navigate(`/wiki/${child.id}`)}
                 className="group/row flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm hover:bg-muted"
               >
-                <span className="shrink-0 text-base">
-                  {child.emoji || "\u{1F4C4}"}
-                </span>
+                <DocumentIcon emoji={child.emoji} icon={child.icon} />
                 <span className="min-w-0 flex-1 truncate">{child.title}</span>
                 {child.childCount > 0 && (
                   <span className="shrink-0 text-xs text-muted-foreground">

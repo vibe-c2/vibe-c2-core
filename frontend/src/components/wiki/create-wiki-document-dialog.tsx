@@ -12,13 +12,16 @@ import {
 import { Input } from "@/components/ui/input"
 import { useWikiStore } from "@/stores/wiki"
 import { useCreateWikiDocument } from "@/graphql/hooks/wiki"
-import { EmojiPicker } from "@/components/wiki/emoji-picker"
+import {
+  DocumentIconPicker,
+  type DocumentIconValue,
+} from "@/components/wiki/document-icon-picker"
 
 interface CreateWikiDocumentDialogProps {
   operationId: string
 }
 
-const DEFAULT_EMOJI = "📂"
+const DEFAULT_ICON_VALUE: DocumentIconValue = { emoji: "\u{1F4C2}", icon: "" }
 
 export function CreateWikiDocumentDialog({ operationId }: CreateWikiDocumentDialogProps) {
   const { createDialogOpen, createParentId, closeCreateDialog } = useWikiStore()
@@ -27,7 +30,7 @@ export function CreateWikiDocumentDialog({ operationId }: CreateWikiDocumentDial
   const navigate = useNavigate()
 
   const [error, setError] = useState<string | null>(null)
-  const [emoji, setEmoji] = useState(DEFAULT_EMOJI)
+  const [iconValue, setIconValue] = useState<DocumentIconValue>(DEFAULT_ICON_VALUE)
 
   async function handleSubmit(e: FormEvent<HTMLFormElement>) {
     e.preventDefault()
@@ -43,14 +46,15 @@ export function CreateWikiDocumentDialog({ operationId }: CreateWikiDocumentDial
         operationId,
         input: {
           title,
-          emoji: emoji || undefined,
+          emoji: iconValue.emoji || undefined,
+          icon: iconValue.icon || undefined,
           parentDocumentId: createParentId ?? undefined,
         },
       })
       // Expand parent so the new child is visible in the tree.
       if (createParentId) expandNode(createParentId)
       closeCreateDialog()
-      setEmoji(DEFAULT_EMOJI)
+      setIconValue(DEFAULT_ICON_VALUE)
       navigate(`/wiki/${result.createWikiDocument.id}`)
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to create document")
@@ -64,7 +68,7 @@ export function CreateWikiDocumentDialog({ operationId }: CreateWikiDocumentDial
         if (!open) {
           closeCreateDialog()
           setError(null)
-          setEmoji(DEFAULT_EMOJI)
+          setIconValue(DEFAULT_ICON_VALUE)
         }
       }}
     >
@@ -83,7 +87,7 @@ export function CreateWikiDocumentDialog({ operationId }: CreateWikiDocumentDial
             </div>
           )}
           <div className="flex items-center gap-2">
-            <EmojiPicker emoji={emoji} onSelect={setEmoji} />
+            <DocumentIconPicker value={iconValue} onSelect={setIconValue} />
             <Input
               name="title"
               placeholder="Document title"

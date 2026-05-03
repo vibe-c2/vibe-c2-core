@@ -16,6 +16,7 @@ import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useWikiStore } from "@/stores/wiki";
 import { useWikiSearch } from "@/graphql/hooks/wiki";
+import { DocumentIcon } from "@/components/wiki/document-icon";
 import { cn } from "@/lib/utils";
 
 interface WikiCommandPaletteProps {
@@ -205,9 +206,10 @@ function PaletteBody({ operationId, scope, onClose }: PaletteBodyProps) {
                 onClick={() => openHit(hit.document.id)}
               >
                 <div className="flex items-center gap-2">
-                  <span className="text-base leading-none">
-                    {hit.document.emoji || "📄"}
-                  </span>
+                  <DocumentIcon
+                    emoji={hit.document.emoji}
+                    icon={hit.document.icon}
+                  />
                   <span className="truncate text-sm font-medium">
                     {hit.document.title}
                   </span>

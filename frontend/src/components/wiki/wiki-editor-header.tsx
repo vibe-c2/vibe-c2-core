@@ -16,7 +16,11 @@ import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import { useUpdateWikiDocument, useWikiDocumentPresence } from "@/graphql/hooks/wiki"
 import { getCursorColor } from "@/lib/cursor-colors"
 import { useWikiStore } from "@/stores/wiki"
-import { EmojiPicker } from "@/components/wiki/emoji-picker"
+import {
+  DocumentIconPicker,
+  type DocumentIconValue,
+} from "@/components/wiki/document-icon-picker"
+import { DocumentIcon } from "@/components/wiki/document-icon"
 import { getDirectChildren } from "@/components/wiki/wiki-tree-helpers"
 import type { WikiDocumentFieldsFragment, WikiDocumentTreeFieldsFragment } from "@/graphql/gql/graphql"
 
@@ -30,6 +34,7 @@ interface AncestorNode {
   id: string
   title: string
   emoji: string
+  icon: string
 }
 
 export function WikiEditorHeader({
@@ -54,11 +59,15 @@ export function WikiEditorHeader({
 
   // Build ancestor path from treeDocuments.
   const ancestors = useMemo(() => {
-    const map = new Map<string, { title: string; emoji: string; parentId: string | null }>()
+    const map = new Map<
+      string,
+      { title: string; emoji: string; icon: string; parentId: string | null }
+    >()
     for (const d of treeDocuments) {
       map.set(d.id, {
         title: d.title,
         emoji: d.emoji,
+        icon: d.icon,
         parentId: d.parentDocument?.id ?? null,
       })
     }
@@ -67,7 +76,12 @@ export function WikiEditorHeader({
     while (currentId) {
       const node = map.get(currentId)
       if (!node) break
-      path.unshift({ id: currentId, title: node.title, emoji: node.emoji })
+      path.unshift({
+        id: currentId,
+        title: node.title,
+        emoji: node.emoji,
+        icon: node.icon,
+      })
       currentId = node.parentId
     }
     return path
@@ -90,8 +104,11 @@ export function WikiEditorHeader({
     setIsEditingTitle(false)
   }
 
-  function handleEmojiSelect(emoji: string) {
-    updateDocument.mutate({ id: doc.id, input: { emoji } })
+  function handleIconSelect(next: DocumentIconValue) {
+    updateDocument.mutate({
+      id: doc.id,
+      input: { emoji: next.emoji, icon: next.icon },
+    })
   }
 
   // Split ancestors: first, middle (collapsible), last is the current doc.
@@ -101,10 +118,10 @@ export function WikiEditorHeader({
 
   return (
     <div className="flex h-10 items-center gap-1 border-b px-3">
-      {/* Emoji */}
-      <EmojiPicker
-        emoji={doc.emoji}
-        onSelect={handleEmojiSelect}
+      {/* Document icon — emoji or lucide */}
+      <DocumentIconPicker
+        value={{ emoji: doc.emoji, icon: doc.icon }}
+        onSelect={handleIconSelect}
         disabled={!isEditor}
       />
 
@@ -143,7 +160,7 @@ export function WikiEditorHeader({
                   className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-sm hover:bg-accent"
                   onClick={() => navigate(`/wiki/${node.id}`)}
                 >
-                  <span className="shrink-0">{node.emoji || "📄"}</span>
+                  <DocumentIcon emoji={node.emoji} icon={node.icon} />
                   <span className="truncate">{node.title}</span>
                 </button>
               ))}
@@ -211,7 +228,7 @@ export function WikiEditorHeader({
                 className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm hover:bg-accent"
                 onClick={() => navigate(`/wiki/${child.id}`)}
               >
-                <span className="shrink-0">{child.emoji || "\u{1F4C4}"}</span>
+                <DocumentIcon emoji={child.emoji} icon={child.icon} />
                 <span className="min-w-0 flex-1 truncate">{child.title}</span>
                 {child.childCount > 0 && (
                   <span className="shrink-0 text-xs text-muted-foreground">
