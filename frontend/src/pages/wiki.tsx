@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react"
+import { useEffect, useMemo, useRef } from "react"
 import { Navigate, useNavigate, useParams } from "react-router"
 import { useScopedOperation } from "@/hooks/use-scoped-operation"
 import { useMyOperationRole } from "@/graphql/hooks/operations"
@@ -9,6 +9,7 @@ import {
 } from "@/graphql/hooks/wiki"
 import { useWikiStore } from "@/stores/wiki"
 import { WikiTreeSidebar } from "@/components/wiki/wiki-tree-sidebar"
+import { collectAncestorIds } from "@/components/wiki/wiki-tree-helpers"
 import { ResizeHandle } from "@/components/wiki/resize-handle"
 import { WikiContentArea } from "@/components/wiki/wiki-content-area"
 import { WikiCommandPalette } from "@/components/wiki/wiki-command-palette"
@@ -68,11 +69,35 @@ function WikiPageInner({
 
   // Fetch tree data once — shared between sidebar and content search breadcrumbs.
   const { data: treeData } = useWikiDocumentTree(operationId)
-  const treeDocuments = treeData?.wikiDocumentTree ?? []
+  // Memoize to keep the array reference stable across renders so effects with
+  // `treeDocuments` in their deps (e.g. auto-expand below) don't re-fire on
+  // unrelated parent re-renders.
+  const treeDocuments = useMemo(
+    () => treeData?.wikiDocumentTree ?? [],
+    [treeData?.wikiDocumentTree],
+  )
 
   const sidebarWidth = useWikiStore((s) => s.sidebarWidth)
   const setSidebarWidth = useWikiStore((s) => s.setSidebarWidth)
   const openContentSearch = useWikiStore((s) => s.openContentSearch)
+  const expandMany = useWikiStore((s) => s.expandMany)
+
+  // Auto-expand the tree to reveal the open document. Fires once per
+  // documentId — the user can manually collapse afterwards without us
+  // fighting back. Re-fires on a fresh navigation (e.g. from search) or
+  // after the tree finishes loading.
+  const lastExpandedFor = useRef<string | null>(null)
+  useEffect(() => {
+    if (!documentId) {
+      lastExpandedFor.current = null
+      return
+    }
+    if (treeDocuments.length === 0) return
+    if (lastExpandedFor.current === documentId) return
+    lastExpandedFor.current = documentId
+    const ancestorIds = collectAncestorIds(documentId, treeDocuments)
+    if (ancestorIds.length > 0) expandMany(ancestorIds)
+  }, [documentId, treeDocuments, expandMany])
 
   // Global Cmd/Ctrl+K opens the command palette with the "All Documents"
   // scope. Bound at the page level so any focus state inside the wiki

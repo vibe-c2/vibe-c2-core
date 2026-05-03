@@ -1,4 +1,4 @@
-import { useState } from "react"
+import { useEffect, useRef, useState } from "react"
 import { useNavigate, useParams } from "react-router"
 import { useDraggable, useDroppable } from "@dnd-kit/core"
 import {
@@ -77,6 +77,16 @@ export function WikiTreeNode({
   const { attributes, listeners, setNodeRef: setDragRef } = useDraggable({ id: node.id })
   const { setNodeRef: setDropRef } = useDroppable({ id: node.id })
 
+  // When the row becomes the selected document — usually because the user
+  // navigated from search or pasted a deep link — bring it into view. The
+  // page-level effect already expanded the ancestors by the time this fires.
+  const rowRef = useRef<HTMLDivElement | null>(null)
+  useEffect(() => {
+    if (isSelected) {
+      rowRef.current?.scrollIntoView({ block: "nearest", behavior: "smooth" })
+    }
+  }, [isSelected])
+
   const isDragging = activeId === node.id
   const isDropInside = dropTarget?.id === node.id && dropTarget.position === "inside"
   const isDropBefore = dropTarget?.id === node.id && dropTarget.position === "before"
@@ -114,6 +124,7 @@ export function WikiTreeNode({
 
       <div
         ref={(el) => {
+          rowRef.current = el
           setDropRef(el)
           if (isEditor) setDragRef(el)
         }}
