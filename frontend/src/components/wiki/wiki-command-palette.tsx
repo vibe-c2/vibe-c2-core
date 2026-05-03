@@ -5,49 +5,48 @@ import {
   useRef,
   useState,
   type KeyboardEvent as ReactKeyboardEvent,
-} from "react"
-import { useNavigate } from "react-router"
-import { SearchIcon, XIcon } from "lucide-react"
-import { Dialog as DialogPrimitive } from "@base-ui/react/dialog"
-import { Badge } from "@/components/ui/badge"
-import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
-import { Skeleton } from "@/components/ui/skeleton"
-import { useWikiStore } from "@/stores/wiki"
-import { useWikiSearch } from "@/graphql/hooks/wiki"
-import { cn } from "@/lib/utils"
+  type ReactNode,
+} from "react";
+import { useNavigate } from "react-router";
+import { SearchIcon, XIcon } from "lucide-react";
+import { Dialog as DialogPrimitive } from "@base-ui/react/dialog";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Skeleton } from "@/components/ui/skeleton";
+import { useWikiStore } from "@/stores/wiki";
+import { useWikiSearch } from "@/graphql/hooks/wiki";
+import { cn } from "@/lib/utils";
 
 interface WikiCommandPaletteProps {
-  operationId: string
+  operationId: string;
 }
 
 export function WikiCommandPalette({ operationId }: WikiCommandPaletteProps) {
-  const scope = useWikiStore((s) => s.searchScope)
-  const closeContentSearch = useWikiStore((s) => s.closeContentSearch)
-  const open = scope !== null
+  const scope = useWikiStore((s) => s.searchScope);
+  const closeContentSearch = useWikiStore((s) => s.closeContentSearch);
+  const open = scope !== null;
 
   // Keep the last non-null scope alive across the exit animation. base-ui
   // holds the Popup in the DOM for ~100ms while `data-closed` fades it out;
   // if we gate the children on `scope`, they vanish at t=0 and the overlay
-  // fades out around an empty box — which reads as a full-page blink.
-  const lastScopeRef = useRef(scope)
-  if (scope !== null) lastScopeRef.current = scope
-  const renderScope = scope ?? lastScopeRef.current
+  // fades out around an empty box — which reads as a full-page blink. Storing
+  // the carry-over in state (rather than a ref written during render) keeps
+  // the React Hooks rule happy and rerenders correctly when scope opens again.
+  const [lastScope, setLastScope] = useState(scope);
+  if (scope !== null && scope !== lastScope) setLastScope(scope);
+  const renderScope = scope ?? lastScope;
 
   return (
     <DialogPrimitive.Root
       open={open}
       onOpenChange={(next) => {
-        if (!next) closeContentSearch()
+        if (!next) closeContentSearch();
       }}
     >
       <DialogPrimitive.Portal>
-        <DialogPrimitive.Backdrop
-          className="fixed inset-0 z-50 bg-black/10 duration-100 data-open:animate-in data-open:fade-in-0 data-closed:animate-out data-closed:fade-out-0"
-        />
-        <DialogPrimitive.Popup
-          className="fixed left-1/2 top-[15%] z-50 w-[calc(100%-2rem)] max-w-2xl -translate-x-1/2 rounded-xl bg-popover ring-1 ring-foreground/10 outline-none shadow-xl duration-100 data-open:animate-in data-open:fade-in-0 data-open:zoom-in-95 data-closed:animate-out data-closed:fade-out-0"
-        >
+        <DialogPrimitive.Backdrop className="fixed inset-0 z-50 bg-black/10 duration-100 data-open:animate-in data-open:fade-in-0 data-closed:animate-out data-closed:fade-out-0" />
+        <DialogPrimitive.Popup className="fixed left-1/2 top-[15%] z-50 w-[calc(100%-2rem)] max-w-2xl -translate-x-1/2 rounded-xl bg-popover ring-1 ring-foreground/10 outline-none shadow-xl duration-100 data-open:animate-in data-open:fade-in-0 data-open:zoom-in-95 data-closed:animate-out data-closed:fade-out-0">
           {renderScope && (
             <PaletteBody
               operationId={operationId}
@@ -58,100 +57,99 @@ export function WikiCommandPalette({ operationId }: WikiCommandPaletteProps) {
         </DialogPrimitive.Popup>
       </DialogPrimitive.Portal>
     </DialogPrimitive.Root>
-  )
+  );
 }
 
 interface PaletteBodyProps {
-  operationId: string
-  scope: { parentDocumentId: string | null; parentTitle: string }
-  onClose: () => void
+  operationId: string;
+  scope: { parentDocumentId: string | null; parentTitle: string };
+  onClose: () => void;
 }
 
 function PaletteBody({ operationId, scope, onClose }: PaletteBodyProps) {
-  const navigate = useNavigate()
-  const inputRef = useRef<HTMLInputElement>(null)
-  const [query, setQuery] = useState("")
-  const [debounced, setDebounced] = useState("")
-  const [activeIndex, setActiveIndex] = useState(0)
+  const navigate = useNavigate();
+  const inputRef = useRef<HTMLInputElement>(null);
+  const [query, setQuery] = useState("");
+  const [debounced, setDebounced] = useState("");
+  const [activeIndex, setActiveIndex] = useState(0);
 
   useEffect(() => {
-    const t = setTimeout(() => setDebounced(query.trim()), 200)
-    return () => clearTimeout(t)
-  }, [query])
+    const t = setTimeout(() => setDebounced(query.trim()), 200);
+    return () => clearTimeout(t);
+  }, [query]);
 
   // Reset cursor when query changes — the active row would otherwise point
-  // into a stale result list.
-  useEffect(() => {
-    setActiveIndex(0)
-  }, [debounced])
+  // into a stale result list. Done during render via the prev-value pattern
+  // (https://react.dev/reference/react/useState#storing-information-from-previous-renders)
+  // rather than a setState-in-effect, which the React Hooks lint flags.
+  const [lastDebounced, setLastDebounced] = useState(debounced);
+  if (lastDebounced !== debounced) {
+    setLastDebounced(debounced);
+    setActiveIndex(0);
+  }
 
-  const {
-    data,
-    isLoading,
-    hasNextPage,
-    fetchNextPage,
-    isFetchingNextPage,
-  } = useWikiSearch({
-    operationId,
-    scope: scope.parentDocumentId,
-    query: debounced,
-  })
+  const { data, isLoading, hasNextPage, fetchNextPage, isFetchingNextPage } =
+    useWikiSearch({
+      operationId,
+      scope: scope.parentDocumentId,
+      query: debounced,
+    });
 
   const hits = useMemo(
     () => data?.pages.flatMap((p) => p.wikiSearch.hits) ?? [],
     [data],
-  )
+  );
 
-  const total = data?.pages[0]?.wikiSearch.total ?? 0
+  const total = data?.pages[0]?.wikiSearch.total ?? 0;
 
-  const listRef = useRef<HTMLDivElement>(null)
+  const listRef = useRef<HTMLDivElement>(null);
   // Keep the active row in view as the user arrows through results.
   useEffect(() => {
     const el = listRef.current?.querySelector<HTMLElement>(
       `[data-palette-index="${activeIndex}"]`,
-    )
-    el?.scrollIntoView({ block: "nearest" })
-  }, [activeIndex])
+    );
+    el?.scrollIntoView({ block: "nearest" });
+  }, [activeIndex]);
 
   // Sentinel for infinite scroll — load more when the bottom enters view.
-  const sentinelRef = useRef<HTMLDivElement>(null)
+  const sentinelRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
-    const node = sentinelRef.current
-    if (!node || !hasNextPage) return
+    const node = sentinelRef.current;
+    if (!node || !hasNextPage) return;
     const observer = new IntersectionObserver(
       ([entry]) => {
-        if (entry.isIntersecting && !isFetchingNextPage) fetchNextPage()
+        if (entry.isIntersecting && !isFetchingNextPage) fetchNextPage();
       },
       { threshold: 0.1 },
-    )
-    observer.observe(node)
-    return () => observer.disconnect()
-  }, [hasNextPage, isFetchingNextPage, fetchNextPage])
+    );
+    observer.observe(node);
+    return () => observer.disconnect();
+  }, [hasNextPage, isFetchingNextPage, fetchNextPage]);
 
   const openHit = useCallback(
     (docId: string) => {
-      navigate(`/wiki/${docId}`)
-      onClose()
+      navigate(`/wiki/${docId}`);
+      onClose();
     },
     [navigate, onClose],
-  )
+  );
 
   const onKeyDown = useCallback(
     (e: ReactKeyboardEvent<HTMLInputElement>) => {
       if (e.key === "ArrowDown") {
-        e.preventDefault()
-        setActiveIndex((i) => Math.min(i + 1, Math.max(hits.length - 1, 0)))
+        e.preventDefault();
+        setActiveIndex((i) => Math.min(i + 1, Math.max(hits.length - 1, 0)));
       } else if (e.key === "ArrowUp") {
-        e.preventDefault()
-        setActiveIndex((i) => Math.max(i - 1, 0))
+        e.preventDefault();
+        setActiveIndex((i) => Math.max(i - 1, 0));
       } else if (e.key === "Enter") {
-        e.preventDefault()
-        const hit = hits[activeIndex]
-        if (hit) openHit(hit.document.id)
+        e.preventDefault();
+        const hit = hits[activeIndex];
+        if (hit) openHit(hit.document.id);
       }
     },
     [hits, activeIndex, openHit],
-  )
+  );
 
   return (
     <div className="flex flex-col">
@@ -179,7 +177,7 @@ function PaletteBody({ operationId, scope, onClose }: PaletteBodyProps) {
       {/* Result list */}
       <div
         ref={listRef}
-        className="max-h-[50vh] min-h-[8rem] flex-1 overflow-y-auto"
+        className="max-h-[50vh] min-h-32 flex-1 overflow-y-auto"
       >
         {!debounced ? (
           <PaletteHint />
@@ -237,10 +235,14 @@ function PaletteBody({ operationId, scope, onClose }: PaletteBodyProps) {
           <kbd className="rounded border px-1">Enter</kbd> to open{" "}
           <kbd className="rounded border px-1">Esc</kbd> to close
         </span>
-        {total > 0 && <span>{total} result{total === 1 ? "" : "s"}</span>}
+        {total > 0 && (
+          <span>
+            {total} result{total === 1 ? "" : "s"}
+          </span>
+        )}
       </div>
     </div>
-  )
+  );
 }
 
 function PaletteHint() {
@@ -248,7 +250,7 @@ function PaletteHint() {
     <p className="px-4 py-8 text-center text-sm text-muted-foreground">
       Type to search titles and content.
     </p>
-  )
+  );
 }
 
 // HighlightedText wraps rune-offset ranges in <mark>. Ranges come from the
@@ -258,24 +260,24 @@ function HighlightedText({
   text,
   ranges,
 }: {
-  text: string
-  ranges: readonly { start: number; end: number }[]
+  text: string;
+  ranges: readonly { start: number; end: number }[];
 }) {
-  if (!ranges || ranges.length === 0) return <>{text}</>
+  if (!ranges || ranges.length === 0) return <>{text}</>;
 
-  const runes = Array.from(text) // codepoint-aware split
+  const runes = Array.from(text); // codepoint-aware split
 
   const sorted = [...ranges]
     .filter((r) => r.start < r.end && r.start >= 0 && r.end <= runes.length)
-    .sort((a, b) => a.start - b.start)
+    .sort((a, b) => a.start - b.start);
 
-  if (sorted.length === 0) return <>{text}</>
+  if (sorted.length === 0) return <>{text}</>;
 
-  const out: (string | JSX.Element)[] = []
-  let cursor = 0
+  const out: ReactNode[] = [];
+  let cursor = 0;
   sorted.forEach((r, i) => {
-    if (r.start < cursor) return // skip overlaps
-    if (r.start > cursor) out.push(runes.slice(cursor, r.start).join(""))
+    if (r.start < cursor) return; // skip overlaps
+    if (r.start > cursor) out.push(runes.slice(cursor, r.start).join(""));
     out.push(
       <mark
         key={i}
@@ -283,9 +285,9 @@ function HighlightedText({
       >
         {runes.slice(r.start, r.end).join("")}
       </mark>,
-    )
-    cursor = r.end
-  })
-  if (cursor < runes.length) out.push(runes.slice(cursor).join(""))
-  return <>{out}</>
+    );
+    cursor = r.end;
+  });
+  if (cursor < runes.length) out.push(runes.slice(cursor).join(""));
+  return <>{out}</>;
 }

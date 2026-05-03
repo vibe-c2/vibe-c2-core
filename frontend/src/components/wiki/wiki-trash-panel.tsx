@@ -23,7 +23,8 @@ interface WikiTrashPanelProps {
   operationId: string
 }
 
-function formatRelativeTime(dateStr: string): string {
+function formatRelativeTime(dateStr: string | null | undefined): string {
+  if (!dateStr) return "—"
   const now = Date.now()
   const then = new Date(dateStr).getTime()
   const diffMs = now - then

@@ -1,4 +1,4 @@
-import { forwardRef, useEffect, useImperativeHandle, useLayoutEffect, useRef, useState } from "react"
+import { forwardRef, useImperativeHandle, useLayoutEffect, useRef, useState } from "react"
 import { cn } from "@/lib/utils"
 import type { SlashItem } from "./items"
 
@@ -18,9 +18,14 @@ export const SlashMenu = forwardRef<SlashMenuHandle, SlashMenuProps>(function Sl
   const [selectedIndex, setSelectedIndex] = useState(0)
   const listRef = useRef<HTMLDivElement>(null)
 
-  useEffect(() => {
+  // Reset cursor when the result list changes. Done during render via the
+  // prev-value pattern (react.dev/reference/react/useState#storing-information-from-previous-renders)
+  // rather than a setState-in-effect, which the React Hooks lint flags.
+  const [lastItems, setLastItems] = useState(items)
+  if (lastItems !== items) {
+    setLastItems(items)
     setSelectedIndex(0)
-  }, [items])
+  }
 
   useLayoutEffect(() => {
     const list = listRef.current

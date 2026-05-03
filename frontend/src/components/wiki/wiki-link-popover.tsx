@@ -297,7 +297,11 @@ function normalizeUrl(input: string): string {
 /** Imperative trigger used by the bubble-menu button, ⌘K shortcut, and the
  *  /link slash item. Wraps the current selection in a link mark (or inserts a
  *  "Link" placeholder if the selection is empty), which makes the editor
- *  report `isActive('link')` true and the popover auto-shows above. */
+ *  report `isActive('link')` true and the popover auto-shows above.
+ *
+ *  Co-located with the component because both share the LINK_POPOVER_FOCUS_EVENT
+ *  module constant; splitting would require a third file just to host that. */
+// eslint-disable-next-line react-refresh/only-export-components
 export function startLinkInsert(editor: Editor) {
   // Already on a link — popover is already showing; just nudge focus to it.
   if (editor.isActive("link")) {

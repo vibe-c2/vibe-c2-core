@@ -1,6 +1,6 @@
-import { useMemo } from "react"
-import { diffLines } from "diff"
-import { Button } from "@/components/ui/button"
+import { useMemo } from "react";
+import { diffLines } from "diff";
+import { Button } from "@/components/ui/button";
 import {
   Dialog,
   DialogContent,
@@ -8,13 +8,13 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
-} from "@/components/ui/dialog"
-import { Skeleton } from "@/components/ui/skeleton"
-import { useWikiStore, type BackupConfirmTarget } from "@/stores/wiki"
-import { useWikiDocument, useWikiDocumentBackup } from "@/graphql/hooks/wiki"
-import { relativeTime, formatAbsolute } from "@/lib/relative-time"
-import { formatBytes } from "@/lib/format-bytes"
-import { getBackupVisual } from "./wiki-backup-visual"
+} from "@/components/ui/dialog";
+import { Skeleton } from "@/components/ui/skeleton";
+import { useWikiStore, type BackupConfirmTarget } from "@/stores/wiki";
+import { useWikiDocument, useWikiDocumentBackup } from "@/graphql/hooks/wiki";
+import { relativeTime, formatAbsolute } from "@/lib/relative-time";
+import { formatBytes } from "@/lib/format-bytes";
+import { getBackupVisual } from "./wiki-backup-visual";
 
 // Unified line-level diff between a backup and the current document. Uses
 // jsdiff's `diffLines` so context + added + removed lines render in one
@@ -22,8 +22,9 @@ import { getBackupVisual } from "./wiki-backup-visual"
 // a diff dialog's job is to answer "what changed", which a unified view
 // does in a fraction of the width.
 export function WikiBackupPreviewDialog() {
-  const { backupPreviewId, closeBackupPreview, openBackupConfirm } = useWikiStore()
-  const open = !!backupPreviewId
+  const { backupPreviewId, closeBackupPreview, openBackupConfirm } =
+    useWikiStore();
+  const open = !!backupPreviewId;
 
   return (
     <Dialog open={open} onOpenChange={(next) => !next && closeBackupPreview()}>
@@ -39,14 +40,14 @@ export function WikiBackupPreviewDialog() {
         ) : null}
       </DialogContent>
     </Dialog>
-  )
+  );
 }
 
-type DiffKind = "context" | "add" | "remove"
+type DiffKind = "context" | "add" | "remove";
 
 interface DiffLine {
-  kind: DiffKind
-  text: string
+  kind: DiffKind;
+  text: string;
 }
 
 function PreviewBody({
@@ -54,20 +55,23 @@ function PreviewBody({
   onClose,
   onRestore,
 }: {
-  backupId: string
-  onClose: () => void
-  onRestore: (target: BackupConfirmTarget) => void
+  backupId: string;
+  onClose: () => void;
+  onRestore: (target: BackupConfirmTarget) => void;
 }) {
-  const { data: backupData, isLoading: backupLoading } = useWikiDocumentBackup(backupId)
-  const backup = backupData?.wikiDocumentBackup
-  const documentId = backup?.documentId
-  const { data: docData, isLoading: docLoading } = useWikiDocument(documentId ?? "")
-  const current = docData?.wikiDocument
+  const { data: backupData, isLoading: backupLoading } =
+    useWikiDocumentBackup(backupId);
+  const backup = backupData?.wikiDocumentBackup;
+  const documentId = backup?.documentId;
+  const { data: docData, isLoading: docLoading } = useWikiDocument(
+    documentId ?? "",
+  );
+  const current = docData?.wikiDocument;
 
   const diff = useMemo(() => {
-    if (!backup || !current) return null
-    return computeDiff(backup.content ?? "", current.content ?? "")
-  }, [backup, current])
+    if (!backup || !current) return null;
+    return computeDiff(backup.content ?? "", current.content ?? "");
+  }, [backup, current]);
 
   if (backupLoading || !backup) {
     return (
@@ -78,13 +82,17 @@ function PreviewBody({
         </DialogHeader>
         <Skeleton className="h-80 w-full rounded" />
       </div>
-    )
+    );
   }
 
-  const visual = getBackupVisual(backup)
-  const Icon = visual.Icon
-  const backupSize = formatBytes(backup.contentLength)
-  const currentSize = current ? formatBytes(current.contentLength) : null
+  const visual = getBackupVisual(backup);
+  const Icon = visual.Icon;
+  const backupSize = formatBytes(backup.contentLength);
+  // WikiDocument doesn't expose contentLength via GraphQL, so derive it from
+  // the fetched content string. Encode as UTF-8 to match server-side bytes.
+  const currentSize = current
+    ? formatBytes(new TextEncoder().encode(current.content ?? "").byteLength)
+    : null;
 
   return (
     <>
@@ -97,7 +105,10 @@ function PreviewBody({
           Line-level diff between this snapshot and the current document.
         </DialogDescription>
         <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs text-muted-foreground">
-          <span className="text-foreground" title={formatAbsolute(backup.createdAt)}>
+          <span
+            className="text-foreground"
+            title={formatAbsolute(backup.createdAt)}
+          >
             {relativeTime(backup.createdAt)}
           </span>
           <span aria-hidden>·</span>
@@ -143,7 +154,7 @@ function PreviewBody({
         <Button
           variant="destructive"
           onClick={() => {
-            if (!documentId) return
+            if (!documentId) return;
             onRestore({
               backupId: backup.id,
               documentId,
@@ -151,35 +162,37 @@ function PreviewBody({
               createdAt: backup.createdAt,
               trigger: backup.trigger,
               description: backup.description,
-            })
+            });
           }}
         >
           Restore this backup
         </Button>
       </DialogFooter>
     </>
-  )
+  );
 }
 
 function DiffSummary({
   diff,
   loading,
 }: {
-  diff: { adds: number; removes: number } | null
-  loading: boolean
+  diff: { adds: number; removes: number } | null;
+  loading: boolean;
 }) {
-  if (loading) return <span className="italic">computing diff…</span>
-  if (!diff) return null
+  if (loading) return <span className="italic">computing diff…</span>;
+  if (!diff) return null;
   if (diff.adds === 0 && diff.removes === 0) {
-    return <span className="italic">identical</span>
+    return <span className="italic">identical</span>;
   }
   return (
     <span>
-      <span className="text-emerald-700 dark:text-emerald-400">+{diff.adds}</span>{" "}
-      <span className="text-rose-700 dark:text-rose-400">−{diff.removes}</span> since
-      snapshot
+      <span className="text-emerald-700 dark:text-emerald-400">
+        +{diff.adds}
+      </span>{" "}
+      <span className="text-rose-700 dark:text-rose-400">−{diff.removes}</span>{" "}
+      since snapshot
     </span>
-  )
+  );
 }
 
 function DiffBody({ lines }: { lines: DiffLine[] }) {
@@ -190,9 +203,12 @@ function DiffBody({ lines }: { lines: DiffLine[] }) {
           <span className="w-6 shrink-0 select-none text-center text-muted-foreground/50">
             {prefix(line.kind)}
           </span>
-          <span className="min-w-0 flex-1 whitespace-pre-wrap break-words px-2">
+          <span className="min-w-0 flex-1 whitespace-pre-wrap wrap-break-word px-2">
             {isVisuallyBlank(line.text) ? (
-              <span className="select-none text-muted-foreground/40">\n</span>
+              // Newline glyph (U+21B5) for blank lines so the row isn't an
+              // empty box. Muted + non-selectable so it doesn't bleed into
+              // copy-paste.
+              <span className="select-none text-muted-foreground/40">↵</span>
             ) : (
               renderLine(line.text)
             )}
@@ -200,7 +216,7 @@ function DiffBody({ lines }: { lines: DiffLine[] }) {
         </div>
       ))}
     </div>
-  )
+  );
 }
 
 // TipTap's serializer pads empty paragraphs with runs of non-breaking
@@ -209,9 +225,9 @@ function DiffBody({ lines }: { lines: DiffLine[] }) {
 // still what `diffLines` compares against, so a nbsp-padded line that
 // differs from a plain-empty one will still show red/green.
 function isVisuallyBlank(text: string): boolean {
-  if (text === "") return true
+  if (text === "") return true;
   for (const ch of text) {
-    const code = ch.charCodeAt(0)
+    const code = ch.charCodeAt(0);
     const isWs =
       code === 9 || // tab
       code === 10 || // lf (shouldn't occur — split)
@@ -219,10 +235,10 @@ function isVisuallyBlank(text: string): boolean {
       code === 32 || // space
       code === 160 || // nbsp
       code === 8203 || // zero-width space
-      code === 65279 // bom
-    if (!isWs) return false
+      code === 65279; // bom
+    if (!isWs) return false;
   }
-  return true
+  return true;
 }
 
 // Strip trailing invisible whitespace (spaces, tabs, nbsp, zwsp, BOM) for
@@ -230,14 +246,14 @@ function isVisuallyBlank(text: string): boolean {
 // that would otherwise visually wrap the row into many lines. `diffLines`
 // still operates on the raw content, so real differences are preserved.
 function renderLine(text: string): React.ReactNode {
-  const match = text.match(/^(.*?)([\s\u00A0\u200B\uFEFF]+)$/)
+  const match = text.match(/^(.*?)([\s\u00A0\u200B\uFEFF]+)$/);
   if (!match || match[1].length === 0) {
     // All whitespace (handled by the blank-line branch) or no trailing
     // whitespace — render as-is.
-    return text
+    return text;
   }
-  const trimmed = match[1]
-  const stripped = match[2].length
+  const trimmed = match[1];
+  const stripped = match[2].length;
   return (
     <>
       {trimmed}
@@ -248,28 +264,28 @@ function renderLine(text: string): React.ReactNode {
         {` ⏎${stripped > 1 ? `×${stripped}` : ""}`}
       </span>
     </>
-  )
+  );
 }
 
 function rowClass(kind: DiffKind): string {
   switch (kind) {
     case "add":
-      return "flex bg-emerald-500/10 text-emerald-900 dark:text-emerald-200"
+      return "flex bg-emerald-500/10 text-emerald-900 dark:text-emerald-200";
     case "remove":
-      return "flex bg-rose-500/10 text-rose-900 dark:text-rose-200"
+      return "flex bg-rose-500/10 text-rose-900 dark:text-rose-200";
     default:
-      return "flex"
+      return "flex";
   }
 }
 
 function prefix(kind: DiffKind): string {
   switch (kind) {
     case "add":
-      return "+"
+      return "+";
     case "remove":
-      return "−"
+      return "−";
     default:
-      return " "
+      return " ";
   }
 }
 
@@ -280,23 +296,27 @@ function computeDiff(
   // Normalize CRLF / CR-only line endings before diffing. CSS
   // `white-space: pre-wrap` renders a lone `\r` as a hard line break,
   // so a stray `\r` left on a row would double its visual height.
-  const a = before.replace(/\r\n?/g, "\n")
-  const b = after.replace(/\r\n?/g, "\n")
-  const parts = diffLines(a, b)
-  const out: DiffLine[] = []
-  let adds = 0
-  let removes = 0
+  const a = before.replace(/\r\n?/g, "\n");
+  const b = after.replace(/\r\n?/g, "\n");
+  const parts = diffLines(a, b);
+  const out: DiffLine[] = [];
+  let adds = 0;
+  let removes = 0;
   for (const part of parts) {
     // Split the chunk back into per-line entries, dropping the trailing
     // empty string that comes from a chunk that ends in "\n".
-    const raw = part.value.split("\n")
-    if (raw.length > 0 && raw[raw.length - 1] === "") raw.pop()
-    const kind: DiffKind = part.added ? "add" : part.removed ? "remove" : "context"
+    const raw = part.value.split("\n");
+    if (raw.length > 0 && raw[raw.length - 1] === "") raw.pop();
+    const kind: DiffKind = part.added
+      ? "add"
+      : part.removed
+        ? "remove"
+        : "context";
     for (const text of raw) {
-      out.push({ kind, text })
-      if (kind === "add") adds++
-      else if (kind === "remove") removes++
+      out.push({ kind, text });
+      if (kind === "add") adds++;
+      else if (kind === "remove") removes++;
     }
   }
-  return { lines: out, adds, removes }
+  return { lines: out, adds, removes };
 }

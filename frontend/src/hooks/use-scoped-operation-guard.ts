@@ -28,9 +28,13 @@ export function useScopedOperationGuard() {
   const hasPermission = useAuthStore((s) => s.hasPermission)
   const queryClient = useQueryClient()
 
-  // Track the scoped name in a ref so subscription callbacks always see the latest.
-  const scopedNameRef = useRef(scopedOperation?.name ?? null)
-  scopedNameRef.current = scopedOperation?.name ?? null
+  // Track the scoped name in a ref so subscription callbacks always see the
+  // latest value. Update via effect rather than during render — refs must not
+  // be written during render (react-hooks/refs).
+  const scopedNameRef = useRef<string | null>(scopedOperation?.name ?? null)
+  useEffect(() => {
+    scopedNameRef.current = scopedOperation?.name ?? null
+  }, [scopedOperation?.name])
 
   const scopedId = scopedOperation?.id ?? null
 

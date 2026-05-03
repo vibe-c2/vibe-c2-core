@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react"
+import { useEffect } from "react"
 import { Navigate, Outlet } from "react-router"
 import { useAuthStore } from "@/stores/auth"
 import { useConnectivityStore } from "@/stores/connectivity"
@@ -19,16 +19,13 @@ export function ProtectedRoute({ permission }: { permission?: string }) {
   useSessionGuard()
 
   // Hydrate the scoped operation from localStorage once the user is known.
-  // Track whether hydration has run so we don't render child routes
-  // before localStorage has been checked (prevents a flash redirect
-  // on pages like /wiki/:documentId that require a scoped operation).
+  // The store's `hydrated` flag flips to true synchronously inside hydrate(),
+  // so we don't need a local mirror — using the store directly avoids the
+  // setState-in-effect cascading-render that lint flags.
   const hydrate = useScopedOperationStore((s) => s.hydrate)
-  const [hydrated, setHydrated] = useState(false)
+  const hydrated = useScopedOperationStore((s) => s.hydrated)
   useEffect(() => {
-    if (userId) {
-      hydrate(userId)
-      setHydrated(true)
-    }
+    if (userId) hydrate(userId)
   }, [userId, hydrate])
 
   // Validate the restored scope and subscribe to real-time changes.

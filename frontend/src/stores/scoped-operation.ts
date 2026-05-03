@@ -10,6 +10,10 @@ export interface ScopedOperation {
 interface ScopedOperationState {
   scopedOperation: ScopedOperation | null
   isValidating: boolean
+  /** True once `hydrate` has been called for the current user (regardless of
+   *  whether anything was found in localStorage). Lets the route guard avoid
+   *  flash redirects on scoped pages while initial hydration is pending. */
+  hydrated: boolean
 
   /** Select an operation as the active scope. Persists to localStorage. */
   scopeOperation: (op: ScopedOperation) => void
@@ -53,6 +57,7 @@ function removeFromStorage() {
 export const useScopedOperationStore = create<ScopedOperationState>((set) => ({
   scopedOperation: null,
   isValidating: false,
+  hydrated: false,
 
   scopeOperation: (op) => {
     saveToStorage(op)
@@ -66,15 +71,17 @@ export const useScopedOperationStore = create<ScopedOperationState>((set) => ({
 
   reset: () => {
     activeUserId = null
-    set({ scopedOperation: null, isValidating: false })
+    set({ scopedOperation: null, isValidating: false, hydrated: false })
   },
 
   hydrate: (userId) => {
     activeUserId = userId
     const stored = loadFromStorage(userId)
-    if (stored) {
-      set({ scopedOperation: stored, isValidating: true })
-    }
+    set(
+      stored
+        ? { scopedOperation: stored, isValidating: true, hydrated: true }
+        : { hydrated: true },
+    )
   },
 
   setValidating: (v) => set({ isValidating: v }),

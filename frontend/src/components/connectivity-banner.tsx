@@ -12,17 +12,22 @@ export function ConnectivityBanner() {
 
   const [secondsLeft, setSecondsLeft] = useState<number | null>(null)
 
+  // Reset the countdown to null during render when the banner is hidden or
+  // the target retry time changes — without calling Date.now() (which is
+  // impure and forbidden in render bodies). The effect below runs the first
+  // tick synchronously to seed a value, then ticks every second.
+  const [lastKey, setLastKey] = useState("")
+  const currentKey = `${showBanner ? "1" : "0"}|${nextRetryAt ?? ""}`
+  if (lastKey !== currentKey) {
+    setLastKey(currentKey)
+    setSecondsLeft(null)
+  }
+
   useEffect(() => {
-    if (!showBanner || nextRetryAt == null) {
-      setSecondsLeft(null)
-      return
+    if (!showBanner || nextRetryAt == null) return
+    const tick = () => {
+      setSecondsLeft(Math.max(0, Math.ceil((nextRetryAt - Date.now()) / 1000)))
     }
-
-    function tick() {
-      const remaining = Math.max(0, Math.ceil((nextRetryAt! - Date.now()) / 1000))
-      setSecondsLeft(remaining)
-    }
-
     tick()
     const id = setInterval(tick, 1_000)
     return () => clearInterval(id)

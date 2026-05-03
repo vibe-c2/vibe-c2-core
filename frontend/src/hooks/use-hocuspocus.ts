@@ -38,16 +38,31 @@ export function useHocuspocus(documentId: string): UseHocuspocusReturn {
   // (connecting) from "lost an established connection" (disconnected).
   const hasConnectedRef = useRef(false)
 
-  // Provider + Y.Doc lifecycle: when documentId changes, tear down the
-  // old provider and doc, then create fresh ones. The ydoc is stored in
-  // state so consumers (WikiEditor) re-render and rebind automatically.
-  useEffect(() => {
-    hasConnectedRef.current = false
+  // Reset session state during render when documentId changes — the provider
+  // and ydoc are torn down and rebuilt by the effect below. Doing the reset
+  // here (prev-value pattern, react.dev/.../storing-information-from-previous-renders)
+  // avoids a setState-in-effect cascade.
+  const [lastDocumentId, setLastDocumentId] = useState(documentId)
+  if (lastDocumentId !== documentId) {
+    setLastDocumentId(documentId)
     setConnectionStatus("connecting")
     setIsSynced(false)
     setIsReady(false)
+  }
+
+  // Provider + Y.Doc lifecycle: when documentId changes, tear down the
+  // old provider and doc, then create fresh ones. The ydoc is stored in
+  // state so consumers (WikiEditor) re-render and rebind automatically.
+  // The setYdoc/setProvider calls below are flagged by react-hooks/set-state-in-effect,
+  // but the React docs explicitly carve out this exception: "Effects are
+  // intended to synchronize state ... with external systems." A YDoc and a
+  // WebSocket provider are external resources whose handles must be reflected
+  // in render state so consumers can rebind. Refs would break that rebind.
+  useEffect(() => {
+    hasConnectedRef.current = false
 
     const doc = new YDoc()
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setYdoc(doc)
 
     const hpProvider = new HocuspocusProvider({

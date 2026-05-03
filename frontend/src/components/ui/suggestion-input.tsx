@@ -61,10 +61,13 @@ export function SuggestionInput({
     }
   }, [highlightedIndex])
 
-  // Reset highlight when options change
-  useEffect(() => {
+  // Reset highlight when the options array reference changes. Done during
+  // render via the prev-value pattern rather than a setState-in-effect.
+  const [lastOptions, setLastOptions] = useState(options)
+  if (lastOptions !== options) {
+    setLastOptions(options)
     setHighlightedIndex(-1)
-  }, [options])
+  }
 
   function handleInputChange(e: React.ChangeEvent<HTMLInputElement>) {
     const val = e.target.value

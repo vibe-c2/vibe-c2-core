@@ -138,16 +138,18 @@ export function ImportOutlineDialog({ operationId }: ImportOutlineDialogProps) {
               >
                 Close
               </Button>
-              <Button asChild>
-                <Link
-                  to={`/wiki/${report.timestampParentId}`}
-                  onClick={() => {
-                    closeImportOutlineDialog()
-                    reset()
-                  }}
-                >
-                  Open imported folder
-                </Link>
+              <Button
+                render={
+                  <Link
+                    to={`/wiki/${report.timestampParentId}`}
+                    onClick={() => {
+                      closeImportOutlineDialog()
+                      reset()
+                    }}
+                  />
+                }
+              >
+                Open imported folder
               </Button>
             </DialogFooter>
           </div>

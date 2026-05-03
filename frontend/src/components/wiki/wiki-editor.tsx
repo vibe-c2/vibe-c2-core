@@ -120,7 +120,7 @@ export function WikiEditor({ documentId, isEditor }: WikiEditorProps) {
     },
     extensions: [
       StarterKit.configure({
-        history: false, // Y.js collaboration handles undo/redo
+        undoRedo: false, // Y.js collaboration handles undo/redo
         codeBlock: false, // Replaced by CodeBlockLowlight below
         horizontalRule: false, // Replaced by custom NodeView below
         code: { HTMLAttributes: { class: "wiki-inline-code" } },
@@ -224,11 +224,12 @@ export function WikiEditor({ documentId, isEditor }: WikiEditorProps) {
       // that Collaboration uses for ySyncPlugin) so the plugin keys match.
       // The @tiptap/extension-collaboration-cursor package imports from
       // y-prosemirror which has a different PluginKey instance.
-      ...(provider
+      ...(provider && provider.awareness
         ? [Extension.create({
             name: "collaborationCursor",
             addProseMirrorPlugins() {
               const awareness = provider.awareness
+              if (!awareness) return []
               awareness.setLocalStateField("user", {
                 name: user?.username ?? "Anonymous",
                 color: getCursorColor(user?.userId ?? "anon"),
@@ -292,8 +293,9 @@ export function WikiEditor({ documentId, isEditor }: WikiEditorProps) {
   useEffect(() => {
     if (!provider || !editor) return
     const awareness = provider.awareness
+    if (!awareness) return
 
-    function onVisibilityChange() {
+    const onVisibilityChange = () => {
       if (document.visibilityState === "hidden") {
         awareness.setLocalStateField("cursor", null)
       } else {

@@ -1,6 +1,10 @@
 import { createRoot, type Root } from "react-dom/client"
 import { Extension } from "@tiptap/core"
-import Suggestion, { type SuggestionOptions } from "@tiptap/suggestion"
+import Suggestion, {
+  type SuggestionKeyDownProps,
+  type SuggestionOptions,
+  type SuggestionProps,
+} from "@tiptap/suggestion"
 import { createElement } from "react"
 import { SlashMenu, type SlashMenuHandle } from "./slash-menu"
 import { filterItems, type SlashItem, type SlashItemContext } from "./items"
@@ -84,7 +88,7 @@ function renderSlashMenu() {
   }
 
   return {
-    onStart: (props) => {
+    onStart: (props: SuggestionProps<SlashItem, SlashItem>) => {
       mount()
       root?.render(
         createElement(SlashMenu, {
@@ -98,7 +102,7 @@ function renderSlashMenu() {
       position(props.clientRect?.() ?? null)
     },
 
-    onUpdate: (props) => {
+    onUpdate: (props: SuggestionProps<SlashItem, SlashItem>) => {
       root?.render(
         createElement(SlashMenu, {
           ref: (handle: SlashMenuHandle | null) => {
@@ -111,7 +115,7 @@ function renderSlashMenu() {
       position(props.clientRect?.() ?? null)
     },
 
-    onKeyDown: (props) => {
+    onKeyDown: (props: SuggestionKeyDownProps) => {
       if (props.event.key === "Escape") {
         unmount()
         return true

@@ -65,7 +65,9 @@ export function MembersDialog() {
   const [error, setError] = useState<string | null>(null)
 
   const operation = data?.operation
-  const members = operation?.members ?? []
+  // Wrap in useMemo so a fresh `[]` doesn't change reference on every render —
+  // otherwise downstream useMemo (memberUserIds, availableUsers) re-fires.
+  const members = useMemo(() => operation?.members ?? [], [operation?.members])
 
   // Current user is operation admin or app admin
   const isAppAdmin = hasPermission(Permissions.OPERATION_DELETE)

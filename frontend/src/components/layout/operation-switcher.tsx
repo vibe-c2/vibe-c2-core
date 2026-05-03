@@ -48,19 +48,24 @@ export function OperationSwitcher() {
     [data],
   )
 
-  // Reset search and highlight when popover opens/closes.
-  useEffect(() => {
+  // Reset search and highlight when popover transitions to open, and reset
+  // highlight when operations list reference changes. Done during render via
+  // the prev-value pattern (react.dev/.../storing-information-from-previous-renders)
+  // rather than setState-in-effect.
+  const [lastOpen, setLastOpen] = useState(open)
+  if (lastOpen !== open) {
+    setLastOpen(open)
     if (open) {
       setSearch("")
       setDebouncedSearch("")
       setHighlightedIndex(-1)
     }
-  }, [open])
-
-  // Reset highlight when operations list changes.
-  useEffect(() => {
+  }
+  const [lastOperations, setLastOperations] = useState(operations)
+  if (lastOperations !== operations) {
+    setLastOperations(operations)
     setHighlightedIndex(-1)
-  }, [operations])
+  }
 
   // Scroll highlighted item into view via Virtuoso.
   useEffect(() => {

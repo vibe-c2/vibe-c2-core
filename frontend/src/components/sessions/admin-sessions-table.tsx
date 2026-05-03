@@ -95,7 +95,11 @@ export function AdminSessionsTable({
                     )}
                   </div>
                   <div className="text-xs text-muted-foreground">
-                    <FormattedDateTimeText date={session.lastActivityAt} />
+                    {session.lastActivityAt ? (
+                      <FormattedDateTimeText date={session.lastActivityAt} />
+                    ) : (
+                      "—"
+                    )}
                   </div>
                   <div className="text-xs text-muted-foreground">
                     <FormattedDateTimeText date={session.createdAt} />
