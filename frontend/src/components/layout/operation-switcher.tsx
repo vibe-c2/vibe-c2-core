@@ -1,5 +1,5 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react"
-import { Virtuoso, type VirtuosoHandle } from "react-virtuoso"
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Virtuoso, type VirtuosoHandle } from "react-virtuoso";
 import {
   CheckIcon,
   SwordsIcon,
@@ -7,96 +7,106 @@ import {
   SearchIcon,
   TerminalSquareIcon,
   XIcon,
-} from "lucide-react"
-import { Input } from "@/components/ui/input"
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
-import { SidebarMenuButton, useSidebar } from "@/components/ui/sidebar"
-import { cn } from "@/lib/utils"
-import { useInfiniteOperations } from "@/graphql/hooks/operations"
-import { useScopedOperationStore } from "@/stores/scoped-operation"
+} from "lucide-react";
+import { Input } from "@/components/ui/input";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
+import { SidebarMenuButton, useSidebar } from "@/components/ui/sidebar";
+import { cn } from "@/lib/utils";
+import { useInfiniteOperations } from "@/graphql/hooks/operations";
+import { useScopedOperationStore } from "@/stores/scoped-operation";
 
 export function OperationSwitcher() {
-  const scopedOperation = useScopedOperationStore((s) => s.scopedOperation)
-  const scopeOperation = useScopedOperationStore((s) => s.scopeOperation)
-  const unscopeOperation = useScopedOperationStore((s) => s.unscopeOperation)
-  const { toggleSidebar } = useSidebar()
+  const scopedOperation = useScopedOperationStore((s) => s.scopedOperation);
+  const scopeOperation = useScopedOperationStore((s) => s.scopeOperation);
+  const unscopeOperation = useScopedOperationStore((s) => s.unscopeOperation);
+  const { toggleSidebar } = useSidebar();
 
-  const [open, setOpen] = useState(false)
-  const [search, setSearch] = useState("")
-  const [debouncedSearch, setDebouncedSearch] = useState("")
-  const [highlightedIndex, setHighlightedIndex] = useState(-1)
-  const virtuosoRef = useRef<VirtuosoHandle>(null)
+  const [open, setOpen] = useState(false);
+  const [search, setSearch] = useState("");
+  const [debouncedSearch, setDebouncedSearch] = useState("");
+  const [highlightedIndex, setHighlightedIndex] = useState(-1);
+  const virtuosoRef = useRef<VirtuosoHandle>(null);
 
   // Callback ref — focuses the search input when the popover mounts it.
   const inputCallbackRef = useCallback((node: HTMLInputElement | null) => {
-    if (node) node.focus()
-  }, [])
+    if (node) node.focus();
+  }, []);
 
   // Debounce search — fires query 300ms after the user stops typing.
   useEffect(() => {
-    const timeout = setTimeout(() => setDebouncedSearch(search), 300)
-    return () => clearTimeout(timeout)
-  }, [search])
+    const timeout = setTimeout(() => setDebouncedSearch(search), 300);
+    return () => clearTimeout(timeout);
+  }, [search]);
 
-  const { data, isLoading, isFetchingNextPage, hasNextPage, fetchNextPage } = useInfiniteOperations({
-    search: debouncedSearch || null,
-    first: 20,
-  })
+  const { data, isLoading, isFetchingNextPage, hasNextPage, fetchNextPage } =
+    useInfiniteOperations({
+      search: debouncedSearch || null,
+      first: 20,
+    });
 
   const operations = useMemo(
-    () => data?.pages.flatMap((page) => page.operations.edges.map((e) => e.node)) ?? [],
+    () =>
+      data?.pages.flatMap((page) => page.operations.edges.map((e) => e.node)) ??
+      [],
     [data],
-  )
+  );
 
   // Reset search and highlight when popover transitions to open, and reset
   // highlight when operations list reference changes. Done during render via
   // the prev-value pattern (react.dev/.../storing-information-from-previous-renders)
   // rather than setState-in-effect.
-  const [lastOpen, setLastOpen] = useState(open)
+  const [lastOpen, setLastOpen] = useState(open);
   if (lastOpen !== open) {
-    setLastOpen(open)
+    setLastOpen(open);
     if (open) {
-      setSearch("")
-      setDebouncedSearch("")
-      setHighlightedIndex(-1)
+      setSearch("");
+      setDebouncedSearch("");
+      setHighlightedIndex(-1);
     }
   }
-  const [lastOperations, setLastOperations] = useState(operations)
+  const [lastOperations, setLastOperations] = useState(operations);
   if (lastOperations !== operations) {
-    setLastOperations(operations)
-    setHighlightedIndex(-1)
+    setLastOperations(operations);
+    setHighlightedIndex(-1);
   }
 
   // Scroll highlighted item into view via Virtuoso.
   useEffect(() => {
     if (highlightedIndex >= 0) {
-      virtuosoRef.current?.scrollToIndex({ index: highlightedIndex, behavior: "auto" })
+      virtuosoRef.current?.scrollToIndex({
+        index: highlightedIndex,
+        behavior: "auto",
+      });
     }
-  }, [highlightedIndex])
+  }, [highlightedIndex]);
 
   function selectOperation(op: (typeof operations)[number]) {
-    scopeOperation({ id: op.id, name: op.name, description: op.description })
-    setOpen(false)
+    scopeOperation({ id: op.id, name: op.name, description: op.description });
+    setOpen(false);
   }
 
   function handleKeyDown(e: React.KeyboardEvent<HTMLInputElement>) {
     if (e.key === "ArrowDown") {
-      e.preventDefault()
+      e.preventDefault();
       setHighlightedIndex((prev) =>
         prev < operations.length - 1 ? prev + 1 : 0,
-      )
+      );
     } else if (e.key === "ArrowUp") {
-      e.preventDefault()
+      e.preventDefault();
       setHighlightedIndex((prev) =>
         prev > 0 ? prev - 1 : operations.length - 1,
-      )
+      );
     } else if (e.key === "Escape") {
-      e.preventDefault()
-      setOpen(false)
+      e.preventDefault();
+      setOpen(false);
     } else if (e.key === "Enter") {
-      e.preventDefault()
+      e.preventDefault();
       if (highlightedIndex >= 0 && highlightedIndex < operations.length) {
-        selectOperation(operations[highlightedIndex])
+        selectOperation(operations[highlightedIndex]);
       }
     }
   }
@@ -116,14 +126,16 @@ export function OperationSwitcher() {
             <div
               className="flex aspect-square size-8 items-center justify-center rounded-lg bg-sidebar-primary text-sidebar-primary-foreground cursor-pointer"
               onClick={(e) => {
-                e.stopPropagation()
-                toggleSidebar()
+                e.stopPropagation();
+                toggleSidebar();
               }}
             >
               <SwordsIcon className="size-4" />
             </div>
             <div className="grid flex-1 text-left text-sm leading-tight">
-              <span className="truncate font-medium">{scopedOperation.name}</span>
+              <span className="truncate font-medium">
+                {scopedOperation.name}
+              </span>
               <span className="truncate text-xs text-muted-foreground">
                 {scopedOperation.description || "Active operation"}
               </span>
@@ -132,14 +144,14 @@ export function OperationSwitcher() {
               role="button"
               tabIndex={0}
               onClick={(e) => {
-                e.stopPropagation()
-                unscopeOperation()
+                e.stopPropagation();
+                unscopeOperation();
               }}
               onKeyDown={(e) => {
                 if (e.key === "Enter" || e.key === " ") {
-                  e.preventDefault()
-                  e.stopPropagation()
-                  unscopeOperation()
+                  e.preventDefault();
+                  e.stopPropagation();
+                  unscopeOperation();
                 }
               }}
               className="ml-auto flex size-6 items-center justify-center rounded-md text-sidebar-foreground/70 hover:text-sidebar-foreground hover:bg-sidebar-accent transition-colors"
@@ -152,8 +164,8 @@ export function OperationSwitcher() {
             <div
               className="flex aspect-square size-8 items-center justify-center rounded-lg bg-sidebar-primary text-sidebar-primary-foreground cursor-pointer"
               onClick={(e) => {
-                e.stopPropagation()
-                toggleSidebar()
+                e.stopPropagation();
+                toggleSidebar();
               }}
             >
               <TerminalSquareIcon className="size-4" />
@@ -169,7 +181,7 @@ export function OperationSwitcher() {
       </PopoverTrigger>
 
       <PopoverContent
-        className="!w-[var(--anchor-width)] p-1.5 overflow-hidden"
+        className="w-(--anchor-width)! p-1.5 overflow-hidden"
         side="bottom"
         align="start"
         sideOffset={4}
@@ -206,12 +218,12 @@ export function OperationSwitcher() {
             data={operations}
             style={{ height: "256px" }}
             endReached={() => {
-              if (hasNextPage && !isFetchingNextPage) fetchNextPage()
+              if (hasNextPage && !isFetchingNextPage) fetchNextPage();
             }}
             overscan={100}
             role="listbox"
             itemContent={(index, op) => {
-              const isActive = scopedOperation?.id === op.id
+              const isActive = scopedOperation?.id === op.id;
 
               return (
                 <button
@@ -226,13 +238,15 @@ export function OperationSwitcher() {
                   )}
                   onMouseEnter={() => setHighlightedIndex(index)}
                   onMouseDown={(e) => {
-                    e.preventDefault()
-                    selectOperation(op)
+                    e.preventDefault();
+                    selectOperation(op);
                   }}
                 >
                   <SwordsIcon className="size-5 shrink-0 text-muted-foreground" />
                   <div className="grid flex-1 min-w-0 leading-tight">
-                    <span className="truncate text-sm font-medium">{op.name}</span>
+                    <span className="truncate text-sm font-medium">
+                      {op.name}
+                    </span>
                     {op.description && (
                       <span className="truncate text-xs text-muted-foreground">
                         {op.description}
@@ -243,7 +257,7 @@ export function OperationSwitcher() {
                     <CheckIcon className="size-3.5 shrink-0 text-primary" />
                   )}
                 </button>
-              )
+              );
             }}
             components={{
               Footer: () => {
@@ -252,14 +266,14 @@ export function OperationSwitcher() {
                     <div className="flex items-center justify-center py-2">
                       <LoaderIcon className="size-3.5 animate-spin" />
                     </div>
-                  )
+                  );
                 }
-                return null
+                return null;
               },
             }}
           />
         )}
       </PopoverContent>
     </Popover>
-  )
+  );
 }
