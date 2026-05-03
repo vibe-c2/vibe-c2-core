@@ -93,8 +93,24 @@ func (r *wikiDocumentRepository) SearchByOperationID(
 		"operation_id": opID,
 		"deleted_at":   nil,
 	}
+	// Subtree scope: match the scope doc and all its descendants, not just
+	// direct children. The schema advertises `scope` as "limit to this parent's
+	// descendants" — filtering on parent_document_id alone would silently miss
+	// grandchildren and deeper. Resolving the descendant set up front lets all
+	// three search branches (prefix / substring / $text) share one filter, and
+	// the resulting {document_id: {$in: ids}} filter is index-backed via the
+	// unique document_id index.
 	if scopeParentID != nil {
-		baseFilter["parent_document_id"] = *scopeParentID
+		descendants, err := r.FindDescendants(ctx, *scopeParentID)
+		if err != nil {
+			return nil, 0, err
+		}
+		ids := make([]uuid.UUID, 0, len(descendants)+1)
+		ids = append(ids, *scopeParentID)
+		for _, d := range descendants {
+			ids = append(ids, d.DocumentID)
+		}
+		baseFilter["document_id"] = v1bson.M{"$in": ids}
 	}
 
 	// Branch 1: title-prefix (always runs, always cheap).
