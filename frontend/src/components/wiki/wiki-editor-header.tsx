@@ -1,6 +1,11 @@
 import { useMemo, useRef, useState } from "react"
 import { useNavigate } from "react-router"
-import { ChevronRightIcon, ClockIcon, EllipsisIcon } from "lucide-react"
+import {
+  ChevronDownIcon,
+  ChevronRightIcon,
+  ClockIcon,
+  EllipsisIcon,
+} from "lucide-react"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Popover, PopoverTrigger, PopoverContent } from "@/components/ui/popover"
@@ -10,6 +15,7 @@ import { useUpdateWikiDocument, useWikiDocumentPresence } from "@/graphql/hooks/
 import { getCursorColor } from "@/lib/cursor-colors"
 import { useWikiStore } from "@/stores/wiki"
 import { EmojiPicker } from "@/components/wiki/emoji-picker"
+import { getDirectChildren } from "@/components/wiki/wiki-tree-helpers"
 import type { WikiDocumentFieldsFragment, WikiDocumentTreeFieldsFragment } from "@/graphql/gql/graphql"
 
 interface WikiEditorHeaderProps {
@@ -61,6 +67,13 @@ export function WikiEditorHeader({
     }
     return path
   }, [treeDocuments, doc.parentDocument?.id])
+
+  // Drives the ▾ N-children dropdown next to the title — quick navigation
+  // without scrolling to the footer block.
+  const directChildren = useMemo(
+    () => getDirectChildren(treeDocuments, doc.id),
+    [treeDocuments, doc.id],
+  )
 
   function handleTitleBlur() {
     const trimmed = title.trim()
@@ -168,6 +181,42 @@ export function WikiEditorHeader({
         >
           {doc.title}
         </button>
+      )}
+
+      {/* Children dropdown — shown only when this doc has direct children. */}
+      {directChildren.length > 0 && (
+        <Popover>
+          <PopoverTrigger
+            render={
+              <Button
+                variant="ghost"
+                size="xs"
+                className="shrink-0 text-muted-foreground"
+              />
+            }
+          >
+            <ChevronDownIcon className="size-3.5" />
+            {directChildren.length}{" "}
+            {directChildren.length === 1 ? "child" : "children"}
+          </PopoverTrigger>
+          <PopoverContent align="start" className="w-auto min-w-56 max-w-72 p-1">
+            {directChildren.map((child) => (
+              <button
+                key={child.id}
+                className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm hover:bg-accent"
+                onClick={() => navigate(`/wiki/${child.id}`)}
+              >
+                <span className="shrink-0">{child.emoji || "\u{1F4C4}"}</span>
+                <span className="min-w-0 flex-1 truncate">{child.title}</span>
+                {child.childCount > 0 && (
+                  <span className="shrink-0 text-xs text-muted-foreground">
+                    {child.childCount}
+                  </span>
+                )}
+              </button>
+            ))}
+          </PopoverContent>
+        </Popover>
       )}
 
       {/* Spacer + right side actions */}

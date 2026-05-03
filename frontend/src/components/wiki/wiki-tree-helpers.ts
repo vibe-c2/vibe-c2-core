@@ -23,6 +23,22 @@ export function collectBranchIdsWithChildren(
 }
 
 /**
+ * Direct children of `parentId` from a flat list, sorted by sortOrder.
+ * Pulled out of the header/footer because both surfaces compute the same
+ * 1st-level slice and share the fractional-index sort comparator.
+ */
+export function getDirectChildren(
+  docs: readonly WikiDocumentTreeFieldsFragment[],
+  parentId: string,
+): WikiDocumentTreeFieldsFragment[] {
+  return docs
+    .filter((d) => d.parentDocument?.id === parentId)
+    .sort((a, b) =>
+      a.sortOrder < b.sortOrder ? -1 : a.sortOrder > b.sortOrder ? 1 : 0,
+    )
+}
+
+/**
  * Walk parent pointers from `documentId` upward, returning each ancestor's id.
  * Excludes the document itself (a leaf doesn't need expanding to be visible —
  * its parent does). Returns [] if the document isn't in the flat list or has

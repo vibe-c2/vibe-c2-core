@@ -5,6 +5,7 @@ import { useWikiDocument } from "@/graphql/hooks/wiki"
 import { WikiEditorHeader } from "@/components/wiki/wiki-editor-header"
 import { WikiDocumentMeta } from "@/components/wiki/wiki-document-meta"
 import { WikiEditor } from "@/components/wiki/wiki-editor"
+import { WikiChildDocumentList } from "@/components/wiki/wiki-child-document-list"
 import type { WikiDocumentTreeFieldsFragment } from "@/graphql/gql/graphql"
 
 interface WikiEditorPaneProps {
@@ -52,7 +53,17 @@ export function WikiEditorPane({
       />
       <WikiDocumentMeta document={document} />
       <EditorErrorBoundary documentId={documentId}>
-        <WikiEditor documentId={documentId} isEditor={isEditor} />
+        <WikiEditor
+          documentId={documentId}
+          isEditor={isEditor}
+          footer={
+            <WikiChildDocumentList
+              documentId={documentId}
+              treeDocuments={treeDocuments}
+              isEditor={isEditor}
+            />
+          }
+        />
       </EditorErrorBoundary>
     </div>
   )

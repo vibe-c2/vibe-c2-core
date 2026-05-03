@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react"
+import { useEffect, useRef, type ReactNode } from "react"
 import { Extension } from "@tiptap/core"
 import { useEditor, EditorContent, ReactNodeViewRenderer } from "@tiptap/react"
 import StarterKit from "@tiptap/starter-kit"
@@ -44,9 +44,12 @@ import "./wiki-editor.css"
 interface WikiEditorProps {
   documentId: string
   isEditor: boolean
+  // Rendered inside the scroll container after the editor content so it
+  // scrolls together with the document body (Notion-style "Sub-pages" block).
+  footer?: ReactNode
 }
 
-export function WikiEditor({ documentId, isEditor }: WikiEditorProps) {
+export function WikiEditor({ documentId, isEditor, footer }: WikiEditorProps) {
   const { ydoc, provider, connectionStatus, isSynced, isReady } = useHocuspocus(documentId)
   const user = useAuthStore((s) => s.user)
 
@@ -409,6 +412,7 @@ export function WikiEditor({ documentId, isEditor }: WikiEditorProps) {
             <Skeleton className="h-4 w-2/3" />
           </div>
         )}
+        {isReady && footer}
       </div>
     </>
   )
