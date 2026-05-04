@@ -1,4 +1,4 @@
-name: Build and Publish Docker Image
+name: Publish Core Image
 
 on:
   push:
@@ -6,13 +6,13 @@ on:
       - main
     paths:
       - "core/**"
-      - ".github/workflows/docker-publish.yml"
+      - ".github/workflows/publish-core.yml"
   pull_request:
     branches:
       - main
     paths:
       - "core/**"
-      - ".github/workflows/docker-publish.yml"
+      - ".github/workflows/publish-core.yml"
   workflow_dispatch:
 
 env:
