@@ -22,20 +22,16 @@ export function setupDisconnectApi(app: Express, server: Hocuspocus): void {
 
     let disconnected = 0;
 
-    // Find and close matching connections
-    // Hocuspocus stores connections per document
+    // Hocuspocus stores connections per document; iterate every doc and close
+    // any connection whose auth context targets the (userId, operationId) we
+    // were asked to evict. Code 4403 is a custom WebSocket close code we use
+    // to signal "role insufficient" to the client.
+    const closeEvent = { code: 4403, reason: "role-insufficient" };
     for (const [, document] of server.documents) {
       for (const connection of document.getConnections()) {
         const ctx = connection.context;
         if (ctx?.userId === userId && ctx?.operationId === operationId) {
-          // Close with code 4403 (custom: role insufficient).
-          // @hocuspocus/server's Connection.close type is `close(event?:
-          // CloseEvent): void`, but the underlying WebSocket.close accepts
-          // (code, reason) at runtime, which is what we need here. Suppress
-          // the type error rather than wrap a CloseEvent — the runtime
-          // signature is what we depend on.
-          // @ts-expect-error — see comment above
-          connection.close(4403, "role-insufficient");
+          connection.close(closeEvent);
           disconnected++;
         }
       }
