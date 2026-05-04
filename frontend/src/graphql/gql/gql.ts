@@ -63,7 +63,8 @@ type Documents = {
     "\n  mutation CreateWikiDocument($operationId: ID!, $input: CreateWikiDocumentInput!) {\n    createWikiDocument(operationId: $operationId, input: $input) {\n      id operationId title emoji color icon sortOrder\n      parentDocument { id }\n      createdBy { id username }\n      createdAt updatedAt\n    }\n  }\n": typeof types.CreateWikiDocumentDocument,
     "\n  mutation UpdateWikiDocument($id: ID!, $input: UpdateWikiDocumentInput!) {\n    updateWikiDocument(id: $id, input: $input) {\n      id title emoji color icon sortOrder\n      parentDocument { id }\n      updatedAt\n    }\n  }\n": typeof types.UpdateWikiDocumentDocument,
     "\n  mutation DeleteWikiDocument($id: ID!) {\n    deleteWikiDocument(id: $id)\n  }\n": typeof types.DeleteWikiDocumentDocument,
-    "\n  mutation RestoreWikiDocument($id: ID!) {\n    restoreWikiDocument(id: $id) {\n      id operationId title emoji sortOrder\n      parentDocument { id }\n    }\n  }\n": typeof types.RestoreWikiDocumentDocument,
+    "\n  mutation RestoreWikiDocument($id: ID!, $cascade: Boolean) {\n    restoreWikiDocument(id: $id, cascade: $cascade) {\n      id operationId title emoji sortOrder\n      parentDocument { id }\n    }\n  }\n": typeof types.RestoreWikiDocumentDocument,
+    "\n  query WikiDocumentTrashedDescendants($documentId: ID!) {\n    wikiDocumentTrashedDescendants(documentId: $documentId) {\n      id title emoji icon\n    }\n  }\n": typeof types.WikiDocumentTrashedDescendantsDocument,
     "\n  mutation PermanentlyDeleteWikiDocument($id: ID!) {\n    permanentlyDeleteWikiDocument(id: $id)\n  }\n": typeof types.PermanentlyDeleteWikiDocumentDocument,
     "\n  mutation EmptyWikiDocumentTrash($operationId: ID!) {\n    emptyWikiDocumentTrash(operationId: $operationId)\n  }\n": typeof types.EmptyWikiDocumentTrashDocument,
     "\n  mutation CreateWikiDocumentBackup($documentId: ID!, $description: String) {\n    createWikiDocumentBackup(documentId: $documentId, description: $description) {\n      id documentId title trigger description\n      createdBy { id username }\n      createdAt\n    }\n  }\n": typeof types.CreateWikiDocumentBackupDocument,
@@ -122,7 +123,8 @@ const documents: Documents = {
     "\n  mutation CreateWikiDocument($operationId: ID!, $input: CreateWikiDocumentInput!) {\n    createWikiDocument(operationId: $operationId, input: $input) {\n      id operationId title emoji color icon sortOrder\n      parentDocument { id }\n      createdBy { id username }\n      createdAt updatedAt\n    }\n  }\n": types.CreateWikiDocumentDocument,
     "\n  mutation UpdateWikiDocument($id: ID!, $input: UpdateWikiDocumentInput!) {\n    updateWikiDocument(id: $id, input: $input) {\n      id title emoji color icon sortOrder\n      parentDocument { id }\n      updatedAt\n    }\n  }\n": types.UpdateWikiDocumentDocument,
     "\n  mutation DeleteWikiDocument($id: ID!) {\n    deleteWikiDocument(id: $id)\n  }\n": types.DeleteWikiDocumentDocument,
-    "\n  mutation RestoreWikiDocument($id: ID!) {\n    restoreWikiDocument(id: $id) {\n      id operationId title emoji sortOrder\n      parentDocument { id }\n    }\n  }\n": types.RestoreWikiDocumentDocument,
+    "\n  mutation RestoreWikiDocument($id: ID!, $cascade: Boolean) {\n    restoreWikiDocument(id: $id, cascade: $cascade) {\n      id operationId title emoji sortOrder\n      parentDocument { id }\n    }\n  }\n": types.RestoreWikiDocumentDocument,
+    "\n  query WikiDocumentTrashedDescendants($documentId: ID!) {\n    wikiDocumentTrashedDescendants(documentId: $documentId) {\n      id title emoji icon\n    }\n  }\n": types.WikiDocumentTrashedDescendantsDocument,
     "\n  mutation PermanentlyDeleteWikiDocument($id: ID!) {\n    permanentlyDeleteWikiDocument(id: $id)\n  }\n": types.PermanentlyDeleteWikiDocumentDocument,
     "\n  mutation EmptyWikiDocumentTrash($operationId: ID!) {\n    emptyWikiDocumentTrash(operationId: $operationId)\n  }\n": types.EmptyWikiDocumentTrashDocument,
     "\n  mutation CreateWikiDocumentBackup($documentId: ID!, $description: String) {\n    createWikiDocumentBackup(documentId: $documentId, description: $description) {\n      id documentId title trigger description\n      createdBy { id username }\n      createdAt\n    }\n  }\n": types.CreateWikiDocumentBackupDocument,
@@ -345,7 +347,11 @@ export function graphql(source: "\n  mutation DeleteWikiDocument($id: ID!) {\n  
 /**
  * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
  */
-export function graphql(source: "\n  mutation RestoreWikiDocument($id: ID!) {\n    restoreWikiDocument(id: $id) {\n      id operationId title emoji sortOrder\n      parentDocument { id }\n    }\n  }\n"): (typeof documents)["\n  mutation RestoreWikiDocument($id: ID!) {\n    restoreWikiDocument(id: $id) {\n      id operationId title emoji sortOrder\n      parentDocument { id }\n    }\n  }\n"];
+export function graphql(source: "\n  mutation RestoreWikiDocument($id: ID!, $cascade: Boolean) {\n    restoreWikiDocument(id: $id, cascade: $cascade) {\n      id operationId title emoji sortOrder\n      parentDocument { id }\n    }\n  }\n"): (typeof documents)["\n  mutation RestoreWikiDocument($id: ID!, $cascade: Boolean) {\n    restoreWikiDocument(id: $id, cascade: $cascade) {\n      id operationId title emoji sortOrder\n      parentDocument { id }\n    }\n  }\n"];
+/**
+ * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
+ */
+export function graphql(source: "\n  query WikiDocumentTrashedDescendants($documentId: ID!) {\n    wikiDocumentTrashedDescendants(documentId: $documentId) {\n      id title emoji icon\n    }\n  }\n"): (typeof documents)["\n  query WikiDocumentTrashedDescendants($documentId: ID!) {\n    wikiDocumentTrashedDescendants(documentId: $documentId) {\n      id title emoji icon\n    }\n  }\n"];
 /**
  * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
  */

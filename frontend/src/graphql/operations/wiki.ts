@@ -251,10 +251,18 @@ export const DeleteWikiDocumentMutation = graphql(`
 `)
 
 export const RestoreWikiDocumentMutation = graphql(`
-  mutation RestoreWikiDocument($id: ID!) {
-    restoreWikiDocument(id: $id) {
+  mutation RestoreWikiDocument($id: ID!, $cascade: Boolean) {
+    restoreWikiDocument(id: $id, cascade: $cascade) {
       id operationId title emoji sortOrder
       parentDocument { id }
+    }
+  }
+`)
+
+export const WikiDocumentTrashedDescendantsQuery = graphql(`
+  query WikiDocumentTrashedDescendants($documentId: ID!) {
+    wikiDocumentTrashedDescendants(documentId: $documentId) {
+      id title emoji icon
     }
   }
 `)

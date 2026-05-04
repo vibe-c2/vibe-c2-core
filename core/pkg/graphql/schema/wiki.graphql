@@ -221,6 +221,13 @@ extend type Query {
   ): WikiDocumentConnection!
     @hasPermission(permission: "operation:member")
 
+  # All currently-trashed descendants of the given document (children, grand-
+  # children, etc.). Used to drive the cascade-restore prompt: when a user
+  # restores a doc whose subtree was cascade-deleted, this lists what would
+  # come back if they choose "restore all". Returns documents in BFS order.
+  wikiDocumentTrashedDescendants(documentId: ID!): [WikiDocument!]!
+    @hasPermission(permission: "operation:member")
+
   wikiDocumentBackups(
     documentId: ID!
     trigger: WikiDocumentBackupTrigger
@@ -253,7 +260,11 @@ extend type Mutation {
   deleteWikiDocument(id: ID!): Boolean!
     @hasPermission(permission: "operation:member")
 
-  restoreWikiDocument(id: ID!): WikiDocument!
+  # Restores a soft-deleted document. When `cascade` is true, also restores
+  # every currently-trashed descendant of the document (children, grand-
+  # children, etc.). Defaults to false: the document itself comes back but
+  # any cascade-deleted subtree stays in trash unless the caller opts in.
+  restoreWikiDocument(id: ID!, cascade: Boolean = false): WikiDocument!
     @hasPermission(permission: "operation:member")
 
   permanentlyDeleteWikiDocument(id: ID!): Boolean!

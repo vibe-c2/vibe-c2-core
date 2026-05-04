@@ -188,6 +188,9 @@ func (r *fakeDocRepo) Update(_ context.Context, doc *models.WikiDocument, update
 func (r *fakeDocRepo) FindByOperationIDWithCursor(context.Context, uuid.UUID, repository.WikiDocumentFilter, *pagination.Cursor, int64, bool) ([]models.WikiDocument, error) {
 	return nil, nil
 }
+func (r *fakeDocRepo) FindTrashedByOperationIDWithCursor(context.Context, uuid.UUID, *pagination.Cursor, int64, bool) ([]models.WikiDocument, error) {
+	return nil, nil
+}
 func (r *fakeDocRepo) CountByOperationID(context.Context, uuid.UUID, repository.WikiDocumentFilter) (int64, error) {
 	return 0, nil
 }
@@ -200,12 +203,16 @@ func (r *fakeDocRepo) CountChildDocuments(context.Context, uuid.UUID) (int64, er
 func (r *fakeDocRepo) FindDescendants(context.Context, uuid.UUID) ([]models.WikiDocument, error) {
 	return nil, nil
 }
+func (r *fakeDocRepo) FindTrashedDescendants(context.Context, uuid.UUID) ([]models.WikiDocument, error) {
+	return nil, nil
+}
 func (r *fakeDocRepo) FindAncestors(context.Context, uuid.UUID) ([]models.WikiDocument, error) {
 	return nil, nil
 }
 func (r *fakeDocRepo) SoftDelete(context.Context, *models.WikiDocument, uuid.UUID) error { return nil }
 func (r *fakeDocRepo) SoftDeleteBatch(context.Context, []uuid.UUID, uuid.UUID) error    { return nil }
 func (r *fakeDocRepo) Restore(context.Context, *models.WikiDocument) error              { return nil }
+func (r *fakeDocRepo) RestoreBatch(context.Context, []uuid.UUID, uuid.UUID) error       { return nil }
 func (r *fakeDocRepo) HardDelete(context.Context, *models.WikiDocument) error           { return nil }
 func (r *fakeDocRepo) HardDeleteByOperationID(context.Context, uuid.UUID) error         { return nil }
 func (r *fakeDocRepo) HardDeleteTrashed(context.Context, uuid.UUID) error               { return nil }

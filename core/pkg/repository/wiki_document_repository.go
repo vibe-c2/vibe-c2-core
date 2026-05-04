@@ -29,16 +29,28 @@ type IWikiDocumentRepository interface {
 	Create(ctx context.Context, doc *models.WikiDocument) error
 	FindByID(ctx context.Context, id uuid.UUID) (models.WikiDocument, error)
 	FindByOperationIDWithCursor(ctx context.Context, opID uuid.UUID, filter WikiDocumentFilter, cursor *pagination.Cursor, limit int64, forward bool) ([]models.WikiDocument, error)
+	// FindTrashedByOperationIDWithCursor lists soft-deleted documents ordered by
+	// deleted_at (most recently deleted first). Cursor encodes deleted_at +
+	// _id so concurrent restores/permanent-deletes don't perturb pagination.
+	FindTrashedByOperationIDWithCursor(ctx context.Context, opID uuid.UUID, cursor *pagination.Cursor, limit int64, forward bool) ([]models.WikiDocument, error)
 	CountByOperationID(ctx context.Context, opID uuid.UUID, filter WikiDocumentFilter) (int64, error)
 	FindChildDocuments(ctx context.Context, parentID uuid.UUID) ([]models.WikiDocument, error)
 	FindAllByOperationID(ctx context.Context, opID uuid.UUID) ([]models.WikiDocument, error)
 	CountChildDocuments(ctx context.Context, parentID uuid.UUID) (int64, error)
 	FindDescendants(ctx context.Context, docID uuid.UUID) ([]models.WikiDocument, error)
+	// FindTrashedDescendants returns soft-deleted descendants of docID. Walks
+	// downward through parent_document_id, only following children whose
+	// deleted_at is set. Used for cascade-restore prompts.
+	FindTrashedDescendants(ctx context.Context, docID uuid.UUID) ([]models.WikiDocument, error)
 	FindAncestors(ctx context.Context, id uuid.UUID) ([]models.WikiDocument, error)
 	NestingDepth(ctx context.Context, parentID uuid.UUID) (int, error)
 	SoftDelete(ctx context.Context, doc *models.WikiDocument, deletedByID uuid.UUID) error
 	SoftDeleteBatch(ctx context.Context, docIDs []uuid.UUID, deletedByID uuid.UUID) error
 	Restore(ctx context.Context, doc *models.WikiDocument) error
+	// RestoreBatch clears deleted_at/deleted_by_id on the given doc IDs and
+	// stamps last_updated to the restorer in one round-trip. No-op for an
+	// empty slice.
+	RestoreBatch(ctx context.Context, docIDs []uuid.UUID, restorerID uuid.UUID) error
 	Update(ctx context.Context, doc *models.WikiDocument, updates map[string]interface{}) error
 	HardDelete(ctx context.Context, doc *models.WikiDocument) error
 	HardDeleteByOperationID(ctx context.Context, opID uuid.UUID) error
@@ -108,6 +120,60 @@ func (r *wikiDocumentRepository) FindByOperationIDWithCursor(ctx context.Context
 	return docs, err
 }
 
+// FindTrashedByOperationIDWithCursor sorts trash entries by:
+//
+//	1. deleted_at DESC — most recently trashed item first. Within a single
+//	   cascade delete, the root is trashed after its descendants (see
+//	   DeleteWikiDocument), so the user-facing root sits above its subtree.
+//	2. _id ASC — tie-breaker within a cascade batch. All descendants share a
+//	   single deleted_at from SoftDeleteBatch; _id roughly reflects creation
+//	   order, so direct children (created first) appear above grandchildren.
+//
+// Mixed sort direction means the cursor filter is hand-built rather than
+// reusing pagination.BuildCursorFilterOn, which assumes both fields go the
+// same way.
+func (r *wikiDocumentRepository) FindTrashedByOperationIDWithCursor(ctx context.Context, opID uuid.UUID, cursor *pagination.Cursor, limit int64, forward bool) ([]models.WikiDocument, error) {
+	mongoFilter := bson.M{
+		"operation_id": opID,
+		"deleted_at":   bson.M{"$ne": nil},
+	}
+
+	if cursor != nil {
+		// Forward = descending deleted_at + ascending _id.
+		// (older deleted_at) OR (same deleted_at AND larger _id)
+		timeOp, idOp := "$lt", "$gt"
+		if !forward {
+			timeOp, idOp = "$gt", "$lt"
+		}
+		mongoFilter["$or"] = bson.A{
+			bson.M{"deleted_at": bson.M{timeOp: cursor.CreateAt}},
+			bson.M{
+				"deleted_at": cursor.CreateAt,
+				"_id":        bson.M{idOp: cursor.ID},
+			},
+		}
+	}
+
+	sort := []string{"-deleted_at", "_id"}
+	if !forward {
+		sort = []string{"deleted_at", "-_id"}
+	}
+
+	var docs []models.WikiDocument
+	err := r.coll.Find(ctx, mongoFilter).
+		Sort(sort...).
+		Limit(limit).
+		All(&docs)
+
+	if !forward && len(docs) > 0 {
+		for i, j := 0, len(docs)-1; i < j; i, j = i+1, j-1 {
+			docs[i], docs[j] = docs[j], docs[i]
+		}
+	}
+
+	return docs, err
+}
+
 func (r *wikiDocumentRepository) CountByOperationID(ctx context.Context, opID uuid.UUID, filter WikiDocumentFilter) (int64, error) {
 	return r.coll.Count(ctx, buildWikiDocumentFilter(opID, filter))
 }
@@ -140,8 +206,28 @@ func (r *wikiDocumentRepository) CountChildDocuments(ctx context.Context, parent
 // FindDescendants returns all descendants of a document (children, grandchildren, etc.)
 // for cascading soft-delete. Uses iterative breadth-first traversal.
 func (r *wikiDocumentRepository) FindDescendants(ctx context.Context, docID uuid.UUID) ([]models.WikiDocument, error) {
+	return r.findDescendantsBFS(ctx, docID, false)
+}
+
+// FindTrashedDescendants is the trash-only counterpart of FindDescendants:
+// it walks the parent chain downward but only follows children whose
+// deleted_at is set. Cycle-safe via a visited set.
+func (r *wikiDocumentRepository) FindTrashedDescendants(ctx context.Context, docID uuid.UUID) ([]models.WikiDocument, error) {
+	return r.findDescendantsBFS(ctx, docID, true)
+}
+
+// findDescendantsBFS is the shared BFS walker. trashed=false matches active
+// children (deleted_at == nil); trashed=true matches soft-deleted children
+// (deleted_at != nil). The starting docID itself is never included.
+func (r *wikiDocumentRepository) findDescendantsBFS(ctx context.Context, docID uuid.UUID, trashed bool) ([]models.WikiDocument, error) {
 	var allDescendants []models.WikiDocument
 	queue := []uuid.UUID{docID}
+	visited := map[uuid.UUID]struct{}{docID: {}}
+
+	var deletedAtFilter interface{} // matches `deleted_at: null` for the active path
+	if trashed {
+		deletedAtFilter = bson.M{"$ne": nil}
+	}
 
 	for len(queue) > 0 {
 		parentID := queue[0]
@@ -150,13 +236,17 @@ func (r *wikiDocumentRepository) FindDescendants(ctx context.Context, docID uuid
 		var children []models.WikiDocument
 		err := r.coll.Find(ctx, bson.M{
 			"parent_document_id": parentID,
-			"deleted_at":         nil,
+			"deleted_at":         deletedAtFilter,
 		}).All(&children)
 		if err != nil {
 			return nil, err
 		}
 
 		for _, child := range children {
+			if _, seen := visited[child.DocumentID]; seen {
+				continue // defensive cycle guard
+			}
+			visited[child.DocumentID] = struct{}{}
 			allDescendants = append(allDescendants, child)
 			queue = append(queue, child.DocumentID)
 		}
@@ -272,6 +362,28 @@ func (r *wikiDocumentRepository) Restore(ctx context.Context, doc *models.WikiDo
 			"deleted_by_id": nil,
 		}},
 	)
+}
+
+// RestoreBatch clears deleted_at/deleted_by_id and stamps last_updated for a
+// set of doc IDs in a single Mongo round-trip — used by cascade restore.
+// Skips reparenting on purpose: the caller already restored the subtree root
+// (with its own re-home logic), so descendant parent_document_id values can
+// stay pointing at IDs that are now alive again.
+func (r *wikiDocumentRepository) RestoreBatch(ctx context.Context, docIDs []uuid.UUID, restorerID uuid.UUID) error {
+	if len(docIDs) == 0 {
+		return nil
+	}
+	now := time.Now().UTC()
+	_, err := r.coll.UpdateAll(ctx,
+		bson.M{"document_id": bson.M{"$in": docIDs}},
+		bson.M{"$set": bson.M{
+			"deleted_at":         nil,
+			"deleted_by_id":      nil,
+			"last_updated_at":    now,
+			"last_updated_by_id": restorerID,
+		}},
+	)
+	return err
 }
 
 func (r *wikiDocumentRepository) Update(ctx context.Context, doc *models.WikiDocument, updates map[string]interface{}) error {

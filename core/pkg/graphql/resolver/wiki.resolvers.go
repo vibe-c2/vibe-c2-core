@@ -29,8 +29,8 @@ func (r *mutationResolver) DeleteWikiDocument(ctx context.Context, id string) (b
 }
 
 // RestoreWikiDocument is the resolver for the restoreWikiDocument field.
-func (r *mutationResolver) RestoreWikiDocument(ctx context.Context, id string) (*models.WikiDocument, error) {
-	return r.WikiDocumentResolver.RestoreWikiDocument(ctx, id)
+func (r *mutationResolver) RestoreWikiDocument(ctx context.Context, id string, cascade *bool) (*models.WikiDocument, error) {
+	return r.WikiDocumentResolver.RestoreWikiDocument(ctx, id, cascade)
 }
 
 // PermanentlyDeleteWikiDocument is the resolver for the permanentlyDeleteWikiDocument field.
@@ -81,6 +81,11 @@ func (r *queryResolver) WikiSearch(ctx context.Context, operationID string, scop
 // WikiDocumentTrash is the resolver for the wikiDocumentTrash field.
 func (r *queryResolver) WikiDocumentTrash(ctx context.Context, operationID string, first *int, after *string, last *int, before *string) (*model.WikiDocumentConnection, error) {
 	return r.WikiDocumentResolver.WikiDocumentTrash(ctx, operationID, first, after, last, before)
+}
+
+// WikiDocumentTrashedDescendants is the resolver for the wikiDocumentTrashedDescendants field.
+func (r *queryResolver) WikiDocumentTrashedDescendants(ctx context.Context, documentID string) ([]*models.WikiDocument, error) {
+	return r.WikiDocumentResolver.WikiDocumentTrashedDescendants(ctx, documentID)
 }
 
 // WikiDocumentBackups is the resolver for the wikiDocumentBackups field.

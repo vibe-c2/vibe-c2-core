@@ -30,7 +30,7 @@ type IWikiDocumentResolver interface {
 	CreateWikiDocument(ctx context.Context, operationID string, input model.CreateWikiDocumentInput) (*models.WikiDocument, error)
 	UpdateWikiDocument(ctx context.Context, id string, input model.UpdateWikiDocumentInput) (*models.WikiDocument, error)
 	DeleteWikiDocument(ctx context.Context, id string) (bool, error)
-	RestoreWikiDocument(ctx context.Context, id string) (*models.WikiDocument, error)
+	RestoreWikiDocument(ctx context.Context, id string, cascade *bool) (*models.WikiDocument, error)
 	PermanentlyDeleteWikiDocument(ctx context.Context, id string) (bool, error)
 	EmptyWikiDocumentTrash(ctx context.Context, operationID string) (bool, error)
 
@@ -44,6 +44,7 @@ type IWikiDocumentResolver interface {
 	WikiDocuments(ctx context.Context, operationID string, parentDocumentID *string, search *string, first *int, after *string, last *int, before *string) (*model.WikiDocumentConnection, error)
 	WikiDocumentTree(ctx context.Context, operationID string) ([]*models.WikiDocument, error)
 	WikiDocumentTrash(ctx context.Context, operationID string, first *int, after *string, last *int, before *string) (*model.WikiDocumentConnection, error)
+	WikiDocumentTrashedDescendants(ctx context.Context, documentID string) ([]*models.WikiDocument, error)
 	WikiSearch(ctx context.Context, operationID string, scope *string, query string, offset *int, limit *int) (*model.WikiSearchConnection, error)
 
 	// Backup queries
@@ -425,7 +426,7 @@ func (r *wikiDocumentResolver) DeleteWikiDocument(ctx context.Context, id string
 	return true, nil
 }
 
-func (r *wikiDocumentResolver) RestoreWikiDocument(ctx context.Context, id string) (*models.WikiDocument, error) {
+func (r *wikiDocumentResolver) RestoreWikiDocument(ctx context.Context, id string, cascade *bool) (*models.WikiDocument, error) {
 	auth := gqlctx.AuthFromContext(ctx)
 
 	uid, err := uuid.Parse(id)
@@ -482,6 +483,27 @@ func (r *wikiDocumentResolver) RestoreWikiDocument(ctx context.Context, id strin
 	stampLastUpdated(stamp, callerUID)
 	if err := r.docRepo.Update(ctx, &doc, stamp); err != nil {
 		return nil, fmt.Errorf("failed to stamp last updated on restore: %w", err)
+	}
+
+	// Cascade restore: bring back every still-trashed descendant in one
+	// batch update. Mirrors DeleteWikiDocument's cascade-delete pattern,
+	// which only publishes one event for the root — frontend subscribers
+	// invalidate the whole tree on a single restore event, so per-descendant
+	// events would just duplicate that work.
+	if cascade != nil && *cascade {
+		descendants, err := r.docRepo.FindTrashedDescendants(ctx, uid)
+		if err != nil {
+			return nil, fmt.Errorf("failed to find trashed descendants: %w", err)
+		}
+		if len(descendants) > 0 {
+			cascadedIDs := make([]uuid.UUID, len(descendants))
+			for i := range descendants {
+				cascadedIDs[i] = descendants[i].DocumentID
+			}
+			if err := r.docRepo.RestoreBatch(ctx, cascadedIDs, callerUID); err != nil {
+				return nil, fmt.Errorf("failed to cascade-restore descendants: %w", err)
+			}
+		}
 	}
 
 	restored, err := r.docRepo.FindByID(ctx, uid)
@@ -953,7 +975,7 @@ func (r *wikiDocumentResolver) WikiDocumentTrash(ctx context.Context, operationI
 		return nil, fmt.Errorf("failed to count trashed documents: %w", err)
 	}
 
-	docs, err := r.docRepo.FindByOperationIDWithCursor(ctx, opUID, filter, args.Cursor, args.Limit+1, args.Forward)
+	docs, err := r.docRepo.FindTrashedByOperationIDWithCursor(ctx, opUID, args.Cursor, args.Limit+1, args.Forward)
 	if err != nil {
 		return nil, fmt.Errorf("failed to list trashed documents: %w", err)
 	}
@@ -965,7 +987,15 @@ func (r *wikiDocumentResolver) WikiDocumentTrash(ctx context.Context, operationI
 
 	edges := make([]*model.WikiDocumentEdge, len(docs))
 	for i := range docs {
-		cursor := pagination.EncodeCursor(docs[i].CreateAt, docs[i].Id)
+		// Encode cursor on deleted_at (the trash sort key) instead of createAt
+		// so seek-pagination matches the listing order. Falls back to CreateAt
+		// only as a defensive guard against a corrupt row with deleted_at=nil
+		// slipping through the filter — should never happen in practice.
+		t := docs[i].CreateAt
+		if docs[i].DeletedAt != nil {
+			t = *docs[i].DeletedAt
+		}
+		cursor := pagination.EncodeCursor(t, docs[i].Id)
 		edges[i] = &model.WikiDocumentEdge{
 			Node:   &docs[i],
 			Cursor: cursor,
@@ -986,6 +1016,37 @@ func (r *wikiDocumentResolver) WikiDocumentTrash(ctx context.Context, operationI
 		PageInfo:   &pageInfo,
 		TotalCount: int(total),
 	}, nil
+}
+
+// WikiDocumentTrashedDescendants powers the cascade-restore prompt: given a
+// trashed (or live) document, lists every currently-trashed descendant so
+// the UI can ask "restore X and N children?". The starting document itself
+// is excluded from the result.
+func (r *wikiDocumentResolver) WikiDocumentTrashedDescendants(ctx context.Context, documentID string) ([]*models.WikiDocument, error) {
+	uid, err := uuid.Parse(documentID)
+	if err != nil {
+		return nil, fmt.Errorf("invalid document ID: %w", err)
+	}
+
+	doc, err := r.docRepo.FindByID(ctx, uid)
+	if err != nil {
+		return nil, fmt.Errorf("document not found: %w", err)
+	}
+
+	if err := r.authorizeForOperation(ctx, doc.OperationID, models.OperationRoleViewer); err != nil {
+		return nil, err
+	}
+
+	descendants, err := r.docRepo.FindTrashedDescendants(ctx, uid)
+	if err != nil {
+		return nil, fmt.Errorf("failed to list trashed descendants: %w", err)
+	}
+
+	out := make([]*models.WikiDocument, len(descendants))
+	for i := range descendants {
+		out[i] = &descendants[i]
+	}
+	return out, nil
 }
 
 // --- Backup queries ---

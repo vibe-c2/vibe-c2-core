@@ -38,6 +38,8 @@ export const wikiKeys = {
   search: (params: { operationId: string; scope?: string | null; query: string }) =>
     [...wikiKeys.all, "search", params] as const,
   trash: (operationId: string) => [...wikiKeys.all, "trash", operationId] as const,
+  trashedDescendants: (documentId: string) =>
+    [...wikiKeys.all, "trashedDescendants", documentId] as const,
   backups: (documentId: string) => [...wikiKeys.all, "backups", documentId] as const,
   backup: (id: string) => [...wikiKeys.all, "backup", id] as const,
   presence: (documentId: string) => [...wikiKeys.all, "presence", documentId] as const,
@@ -223,8 +225,11 @@ export function useDeleteWikiDocument() {
 export function useRestoreWikiDocument() {
   const queryClient = useQueryClient()
   return useMutation({
-    mutationFn: (id: string) =>
-      graphqlClient(RestoreWikiDocumentDocument, { id }),
+    mutationFn: (vars: { id: string; cascade?: boolean }) =>
+      graphqlClient(RestoreWikiDocumentDocument, {
+        id: vars.id,
+        cascade: vars.cascade ?? false,
+      }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: wikiKeys.trees() })
       queryClient.invalidateQueries({ queryKey: wikiKeys.all })
