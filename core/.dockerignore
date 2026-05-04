@@ -1,0 +1,13 @@
+tmp/
+testdata/
+mockoon/
+tests/
+*.md
+.air.toml
+dev.Dockerfile
+.env
+.env.*
+.DS_Store
+.git
+.gitignore
+*.log
