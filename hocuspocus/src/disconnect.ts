@@ -29,13 +29,12 @@ export function setupDisconnectApi(app: Express, server: Hocuspocus): void {
         const ctx = connection.context;
         if (ctx?.userId === userId && ctx?.operationId === operationId) {
           // Close with code 4403 (custom: role insufficient).
-          // TODO: `tsc` reports "Expected 0-1 arguments, but got 2" because
           // @hocuspocus/server's Connection.close type is `close(event?:
-          // CloseEvent): void`. The underlying WebSocket close DOES accept
-          // (code, reason) at runtime so this works in production, but the
-          // build is broken. Pre-existing on `main`. Fix when next touching
-          // this file: cast the call site, file an upstream bug, or pass a
-          // CloseEvent-shaped object.
+          // CloseEvent): void`, but the underlying WebSocket.close accepts
+          // (code, reason) at runtime, which is what we need here. Suppress
+          // the type error rather than wrap a CloseEvent — the runtime
+          // signature is what we depend on.
+          // @ts-expect-error — see comment above
           connection.close(4403, "role-insufficient");
           disconnected++;
         }
