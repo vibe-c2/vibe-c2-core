@@ -61,6 +61,7 @@ type WikiDocumentAncestor {
   title: String!
   emoji: String!
   icon: String!
+  color: String!
   isDeleted: Boolean!
 }
 

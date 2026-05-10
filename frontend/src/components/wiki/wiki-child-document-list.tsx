@@ -63,7 +63,11 @@ export function WikiChildDocumentList({
                 onClick={() => navigate(`/wiki/${child.id}`)}
                 className="group/row flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm hover:bg-muted"
               >
-                <DocumentIcon emoji={child.emoji} icon={child.icon} />
+                <DocumentIcon
+                  emoji={child.emoji}
+                  icon={child.icon}
+                  color={child.color}
+                />
                 <span className="min-w-0 flex-1 truncate">{child.title}</span>
                 {child.childCount > 0 && (
                   <span className="shrink-0 text-xs text-muted-foreground">

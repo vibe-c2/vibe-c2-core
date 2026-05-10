@@ -71,7 +71,13 @@ export function MoveWikiDocumentDialog({
         opts.push({
           value: doc.id,
           label: doc.title,
-          icon: <DocumentIcon emoji={doc.emoji} icon={doc.icon} />,
+          icon: (
+            <DocumentIcon
+              emoji={doc.emoji}
+              icon={doc.icon}
+              color={doc.color}
+            />
+          ),
         })
       }
     }

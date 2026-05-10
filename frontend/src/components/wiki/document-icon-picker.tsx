@@ -2,7 +2,7 @@ import { useMemo, useState } from "react";
 import { useTheme } from "next-themes";
 import data from "@emoji-mart/data";
 import Picker from "@emoji-mart/react";
-import { SearchIcon, XIcon } from "lucide-react";
+import { BanIcon, SearchIcon, XIcon } from "lucide-react";
 import {
   Popover,
   PopoverTrigger,
@@ -18,17 +18,25 @@ import {
   type IconEntry,
 } from "@/components/wiki/icon-catalog";
 import { DocumentIcon } from "@/components/wiki/document-icon";
+import {
+  WIKI_ICON_COLORS,
+  type WikiIconColor,
+} from "@/components/wiki/icon-color-palette";
 import { useWikiStore, type IconPickerTab } from "@/stores/wiki";
 import { cn } from "@/lib/utils";
 
 export interface DocumentIconValue {
   emoji: string;
   icon: string;
+  /** OKLCH string from WIKI_ICON_COLORS, or "" for default/inherit. Only
+   *  visible when `icon` is set; ignored on the emoji branch of DocumentIcon. */
+  color: string;
 }
 
 interface DocumentIconPickerProps {
   value: DocumentIconValue;
-  /** Always receives both fields — the unset side is empty string. Caller can pass straight to UpdateWikiDocumentInput. */
+  /** Always receives all three fields — unset sides are empty strings.
+   *  Caller can pass straight to UpdateWikiDocumentInput. */
   onSelect: (value: DocumentIconValue) => void;
   disabled?: boolean;
   /** Controlled open state (used by tree node context menu). */
@@ -61,15 +69,30 @@ export function DocumentIconPicker({
       : lastIconPickerTab;
 
   function handleEmojiPick(native: string) {
-    onSelect({ emoji: native, icon: "" });
+    // Switching to emoji clears color — color is meaningless for emojis and
+    // a stale value would resurface if the user later swaps back to an icon.
+    onSelect({ emoji: native, icon: "", color: "" });
     setLastIconPickerTab("emoji");
     setOpen(false);
   }
 
   function handleIconPick(name: string) {
-    onSelect({ emoji: "", icon: name });
+    // Preserve color across icon swaps so users can pick color first or change
+    // their icon without losing the chosen color.
+    onSelect({ emoji: "", icon: name, color: value.color });
     setLastIconPickerTab("icons");
     setOpen(false);
+  }
+
+  function handleColorPick(color: string) {
+    // Stage the color without clearing the existing emoji/icon. If the doc
+    // currently shows an emoji, it stays visible until the user actually
+    // picks an icon (handleIconPick clears emoji). This avoids silently
+    // wiping the emoji when the user clicks a swatch to preview the catalog.
+    // Color is only painted on the lucide branch of DocumentIcon, so a doc
+    // displaying an emoji ignores the staged color until an icon is chosen.
+    onSelect({ emoji: value.emoji, icon: value.icon, color });
+    // Don't close the popover — the user may want to keep browsing icons.
   }
 
   return (
@@ -84,7 +107,11 @@ export function DocumentIconPicker({
           />
         }
       >
-        <DocumentIcon emoji={value.emoji} icon={value.icon} />
+        <DocumentIcon
+          emoji={value.emoji}
+          icon={value.icon}
+          color={value.color}
+        />
       </PopoverTrigger>
       <PopoverContent className="w-88 border-none p-2 shadow-lg" align="start">
         <Tabs defaultValue={defaultTab}>
@@ -108,7 +135,15 @@ export function DocumentIconPicker({
             />
           </TabsContent>
           <TabsContent value="icons">
-            <IconGrid selectedName={value.icon} onPick={handleIconPick} />
+            <ColorSwatchRow
+              selectedColor={value.color}
+              onPick={handleColorPick}
+            />
+            <IconGrid
+              selectedName={value.icon}
+              previewColor={value.color}
+              onPick={handleIconPick}
+            />
           </TabsContent>
         </Tabs>
       </PopoverContent>
@@ -118,6 +153,9 @@ export function DocumentIconPicker({
 
 interface IconGridProps {
   selectedName: string;
+  /** Preview color applied to every icon in the grid so users see the result
+   *  before committing. Empty string = inherited foreground (default). */
+  previewColor: string;
   onPick: (name: string) => void;
 }
 
@@ -125,7 +163,7 @@ interface IconGridProps {
 // hundreds of icons at once. Users can refine the search to narrow further.
 const EXTENDED_RESULTS_LIMIT = 64;
 
-function IconGrid({ selectedName, onPick }: IconGridProps) {
+function IconGrid({ selectedName, previewColor, onPick }: IconGridProps) {
   const [search, setSearch] = useState("");
 
   const filteredGroups = useMemo(() => {
@@ -202,6 +240,7 @@ function IconGrid({ selectedName, onPick }: IconGridProps) {
                       key={entry.name}
                       entry={entry}
                       selected={entry.name === selectedName}
+                      previewColor={previewColor}
                       onPick={onPick}
                     />
                   ))}
@@ -224,6 +263,7 @@ function IconGrid({ selectedName, onPick }: IconGridProps) {
                       key={name}
                       name={name}
                       selected={name === selectedName}
+                      previewColor={previewColor}
                       onPick={onPick}
                     />
                   ))}
@@ -240,11 +280,21 @@ function IconGrid({ selectedName, onPick }: IconGridProps) {
 interface IconButtonProps {
   entry: IconEntry;
   selected: boolean;
+  previewColor: string;
   onPick: (name: string) => void;
 }
 
-function IconButton({ entry, selected, onPick }: IconButtonProps) {
+function IconButton({
+  entry,
+  selected,
+  previewColor,
+  onPick,
+}: IconButtonProps) {
   const Icon = entry.component;
+  // Inline color overrides text-foreground / text-primary classes; falls back
+  // to currentColor when previewColor is empty so default-color selection
+  // still highlights with text-primary.
+  const style = previewColor ? { color: previewColor } : undefined;
   return (
     <button
       type="button"
@@ -256,7 +306,7 @@ function IconButton({ entry, selected, onPick }: IconButtonProps) {
         selected && "bg-primary/10 text-primary ring-1 ring-primary",
       )}
     >
-      <Icon size={20} />
+      <Icon size={20} style={style} />
     </button>
   );
 }
@@ -264,6 +314,7 @@ function IconButton({ entry, selected, onPick }: IconButtonProps) {
 interface ExtendedIconButtonProps {
   name: string;
   selected: boolean;
+  previewColor: string;
   onPick: (name: string) => void;
 }
 
@@ -275,6 +326,7 @@ interface ExtendedIconButtonProps {
 function ExtendedIconButton({
   name,
   selected,
+  previewColor,
   onPick,
 }: ExtendedIconButtonProps) {
   return (
@@ -288,7 +340,64 @@ function ExtendedIconButton({
         selected && "bg-primary/10 text-primary ring-1 ring-primary",
       )}
     >
-      <DocumentIcon icon={name} size={20} />
+      <DocumentIcon icon={name} color={previewColor} size={20} />
+    </button>
+  );
+}
+
+interface ColorSwatchRowProps {
+  selectedColor: string;
+  onPick: (color: string) => void;
+}
+
+function ColorSwatchRow({ selectedColor, onPick }: ColorSwatchRowProps) {
+  return (
+    <div
+      role="radiogroup"
+      aria-label="Icon color"
+      className="mb-3 flex items-center justify-between px-1 pb-1"
+    >
+      {WIKI_ICON_COLORS.map((c) => (
+        <ColorSwatch
+          key={c.label}
+          color={c}
+          selected={selectedColor === c.value}
+          onPick={onPick}
+        />
+      ))}
+    </div>
+  );
+}
+
+interface ColorSwatchProps {
+  color: WikiIconColor;
+  selected: boolean;
+  onPick: (color: string) => void;
+}
+
+function ColorSwatch({ color, selected, onPick }: ColorSwatchProps) {
+  const isDefault = color.value === "";
+  return (
+    <button
+      type="button"
+      role="radio"
+      aria-checked={selected}
+      aria-label={color.label}
+      title={color.label}
+      onClick={() => onPick(color.value)}
+      className={cn(
+        "flex size-5 items-center justify-center rounded-full ring-1 ring-border transition-transform hover:scale-110",
+        selected && "ring-2 ring-foreground",
+      )}
+      style={isDefault ? undefined : { backgroundColor: color.value }}
+    >
+      {isDefault && (
+        <BanIcon
+          className="size-3 text-muted-foreground"
+          strokeWidth={2}
+          aria-hidden
+        />
+      )}
     </button>
   );
 }

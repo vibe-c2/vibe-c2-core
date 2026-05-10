@@ -171,6 +171,7 @@ type WikiDocumentAncestor struct {
 	Title     string `json:"title"`
 	Emoji     string `json:"emoji"`
 	Icon      string `json:"icon"`
+	Color     string `json:"color"`
 	IsDeleted bool   `json:"isDeleted"`
 }
 

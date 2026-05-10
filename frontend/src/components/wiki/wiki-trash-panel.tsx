@@ -270,7 +270,12 @@ function RestoreCascadeDialog({
           <ul className="max-h-48 overflow-y-auto rounded-md border bg-muted/30 p-2 text-sm">
             {preview.map((d) => (
               <li key={d.id} className="flex items-center gap-2 rounded px-1 py-1">
-                <DocumentIcon emoji={d.emoji} icon={d.icon} size={14} />
+                <DocumentIcon
+                  emoji={d.emoji}
+                  icon={d.icon}
+                  color={d.color}
+                  size={14}
+                />
                 <span className="truncate">{d.title}</span>
               </li>
             ))}
@@ -316,7 +321,7 @@ function TrashItem({ doc, onRestore, onPermanentDelete, restorePending }: TrashI
         aria-hidden
         className="mt-0.5 flex size-7 shrink-0 items-center justify-center rounded-md bg-muted text-sm"
       >
-        <DocumentIcon emoji={doc.emoji} icon={doc.icon} />
+        <DocumentIcon emoji={doc.emoji} icon={doc.icon} color={doc.color} />
       </span>
       <div className="min-w-0 flex-1">
         <div className="flex items-baseline gap-2">

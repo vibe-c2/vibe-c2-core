@@ -7,6 +7,13 @@ const DEFAULT_EMOJI = "\u{1F4C4}"
 interface DocumentIconProps {
   emoji?: string | null
   icon?: string | null
+  /**
+   * Optional color for the lucide icon variant. Empty/null falls back to
+   * inherited currentColor. Applied via inline style so it overrides any
+   * Tailwind text-color class on parent containers (e.g. tree hover states).
+   * Ignored for the emoji branch — emojis carry their own intrinsic color.
+   */
+  color?: string | null
   className?: string
   /** Pixel size for the lucide icon variant; ignored for emoji glyphs (CSS sizes them via class). */
   size?: number
@@ -29,12 +36,16 @@ interface DocumentIconProps {
 export function DocumentIcon({
   emoji,
   icon,
+  color,
   className,
   size = 18,
 }: DocumentIconProps) {
   /* eslint-disable react-hooks/static-components */
   const Lucide = resolveIcon(icon)
   if (Lucide) {
+    // color || undefined keeps empty string from becoming an empty CSS value;
+    // undefined lets the icon inherit currentColor like before.
+    const style = color ? { color } : undefined
     return (
       <Suspense
         fallback={
@@ -48,6 +59,7 @@ export function DocumentIcon({
         <Lucide
           className={cn("shrink-0", className)}
           size={size}
+          style={style}
           aria-hidden
         />
       </Suspense>

@@ -21,7 +21,11 @@ interface CreateWikiDocumentDialogProps {
   operationId: string
 }
 
-const DEFAULT_ICON_VALUE: DocumentIconValue = { emoji: "\u{1F4C2}", icon: "" }
+const DEFAULT_ICON_VALUE: DocumentIconValue = {
+  emoji: "\u{1F4C2}",
+  icon: "",
+  color: "",
+}
 
 export function CreateWikiDocumentDialog({ operationId }: CreateWikiDocumentDialogProps) {
   const { createDialogOpen, createParentId, closeCreateDialog } = useWikiStore()
@@ -48,6 +52,7 @@ export function CreateWikiDocumentDialog({ operationId }: CreateWikiDocumentDial
           title,
           emoji: iconValue.emoji || undefined,
           icon: iconValue.icon || undefined,
+          color: iconValue.color || undefined,
           parentDocumentId: createParentId ?? undefined,
         },
       })

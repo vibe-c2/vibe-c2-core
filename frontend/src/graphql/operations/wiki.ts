@@ -111,6 +111,8 @@ export const WikiDocumentsQuery = graphql(`
           parentDocument { id }
           title
           emoji
+          icon
+          color
           sortOrder
           createdBy { id username }
           createdAt
@@ -145,6 +147,7 @@ export const WikiSearchQuery = graphql(`
           title
           emoji
           icon
+          color
           parentDocument { id }
           createdBy { id username }
         }
@@ -167,10 +170,11 @@ export const WikiDocumentTrashQuery = graphql(`
           title
           emoji
           icon
+          color
           deletedAt
           deletedBy { id username }
           createdAt
-          ancestors { id title emoji icon isDeleted }
+          ancestors { id title emoji icon color isDeleted }
         }
         cursor
       }
@@ -253,7 +257,7 @@ export const DeleteWikiDocumentMutation = graphql(`
 export const RestoreWikiDocumentMutation = graphql(`
   mutation RestoreWikiDocument($id: ID!, $cascade: Boolean) {
     restoreWikiDocument(id: $id, cascade: $cascade) {
-      id operationId title emoji sortOrder
+      id operationId title emoji icon color sortOrder
       parentDocument { id }
     }
   }
@@ -262,7 +266,7 @@ export const RestoreWikiDocumentMutation = graphql(`
 export const WikiDocumentTrashedDescendantsQuery = graphql(`
   query WikiDocumentTrashedDescendants($documentId: ID!) {
     wikiDocumentTrashedDescendants(documentId: $documentId) {
-      id title emoji icon
+      id title emoji icon color
     }
   }
 `)
@@ -313,7 +317,7 @@ export const WikiDocumentChangedSubscription = graphql(`
       documentId
       operationId
       parentDocumentId
-      document { id title emoji sortOrder parentDocument { id } }
+      document { id title emoji icon color sortOrder parentDocument { id } }
     }
   }
 `)

@@ -1237,6 +1237,7 @@ func (r *wikiDocumentResolver) WikiDocumentAncestors(ctx context.Context, obj *m
 			Title:     a.Title,
 			Emoji:     a.Emoji,
 			Icon:      a.Icon,
+			Color:     a.Color,
 			IsDeleted: a.DeletedAt != nil,
 		})
 	}

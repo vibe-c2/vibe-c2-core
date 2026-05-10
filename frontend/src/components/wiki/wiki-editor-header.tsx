@@ -107,7 +107,7 @@ export function WikiEditorHeader({
   function handleIconSelect(next: DocumentIconValue) {
     updateDocument.mutate({
       id: doc.id,
-      input: { emoji: next.emoji, icon: next.icon },
+      input: { emoji: next.emoji, icon: next.icon, color: next.color },
     })
   }
 
@@ -120,7 +120,7 @@ export function WikiEditorHeader({
     <div className="flex h-10 items-center gap-1 border-b px-3">
       {/* Document icon — emoji or lucide */}
       <DocumentIconPicker
-        value={{ emoji: doc.emoji, icon: doc.icon }}
+        value={{ emoji: doc.emoji, icon: doc.icon, color: doc.color }}
         onSelect={handleIconSelect}
         disabled={!isEditor}
       />
@@ -160,7 +160,11 @@ export function WikiEditorHeader({
                   className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-sm hover:bg-accent"
                   onClick={() => navigate(`/wiki/${node.id}`)}
                 >
-                  <DocumentIcon emoji={node.emoji} icon={node.icon} />
+                  <DocumentIcon
+                    emoji={node.emoji}
+                    icon={node.icon}
+                    color={node.color}
+                  />
                   <span className="truncate">{node.title}</span>
                 </button>
               ))}
@@ -228,7 +232,11 @@ export function WikiEditorHeader({
                 className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm hover:bg-accent"
                 onClick={() => navigate(`/wiki/${child.id}`)}
               >
-                <DocumentIcon emoji={child.emoji} icon={child.icon} />
+                <DocumentIcon
+                  emoji={child.emoji}
+                  icon={child.icon}
+                  color={child.color}
+                />
                 <span className="min-w-0 flex-1 truncate">{child.title}</span>
                 {child.childCount > 0 && (
                   <span className="shrink-0 text-xs text-muted-foreground">

@@ -35,6 +35,7 @@ export interface TreeNode {
   title: string
   emoji: string
   icon: string
+  color: string
   sortOrder: string
   parentId: string | null
   childCount: number
@@ -60,6 +61,7 @@ function buildTree(docs: readonly WikiDocumentTreeFieldsFragment[]): TreeNode[] 
         title: doc.title,
         emoji: doc.emoji,
         icon: doc.icon,
+        color: doc.color,
         sortOrder: doc.sortOrder,
         parentId: doc.parentDocument?.id ?? null,
         childCount: doc.childCount,
@@ -455,7 +457,11 @@ export function WikiTreeSidebar({
             <DragOverlay dropAnimation={null}>
               {activeDoc && (
                 <div className="flex items-center gap-1.5 rounded-md bg-popover px-2 py-1 text-sm shadow-md">
-                  <DocumentIcon emoji={activeDoc.emoji} icon={activeDoc.icon} />
+                  <DocumentIcon
+                    emoji={activeDoc.emoji}
+                    icon={activeDoc.icon}
+                    color={activeDoc.color}
+                  />
                   <span className="truncate">{activeDoc.title}</span>
                 </div>
               )}

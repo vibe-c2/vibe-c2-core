@@ -109,7 +109,7 @@ function WikiTreeNodeImpl({
   function handleIconSelect(next: DocumentIconValue) {
     updateDocument.mutate({
       id: node.id,
-      input: { emoji: next.emoji, icon: next.icon },
+      input: { emoji: next.emoji, icon: next.icon, color: next.color },
     })
     setIconPickerOpen(false)
   }
@@ -170,7 +170,11 @@ function WikiTreeNodeImpl({
             }
           >
             <span className="flex size-5 items-center justify-center text-sm group-hover:hidden">
-              <DocumentIcon emoji={node.emoji} icon={node.icon} />
+              <DocumentIcon
+                emoji={node.emoji}
+                icon={node.icon}
+                color={node.color}
+              />
             </span>
             <ChevronRightIcon
               className={cn(
@@ -181,14 +185,18 @@ function WikiTreeNodeImpl({
           </CollapsibleTrigger>
         ) : (
           <span className="flex size-5 shrink-0 items-center justify-center text-sm">
-            <DocumentIcon emoji={node.emoji} icon={node.icon} />
+            <DocumentIcon
+              emoji={node.emoji}
+              icon={node.icon}
+              color={node.color}
+            />
           </span>
         )}
 
         {/* Icon picker: opened via context menu, anchored to the row */}
         {iconPickerOpen && (
           <DocumentIconPicker
-            value={{ emoji: node.emoji, icon: node.icon }}
+            value={{ emoji: node.emoji, icon: node.icon, color: node.color }}
             onSelect={handleIconSelect}
             open={iconPickerOpen}
             onOpenChange={setIconPickerOpen}

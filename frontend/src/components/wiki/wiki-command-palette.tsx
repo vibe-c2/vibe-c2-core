@@ -209,6 +209,7 @@ function PaletteBody({ operationId, scope, onClose }: PaletteBodyProps) {
                   <DocumentIcon
                     emoji={hit.document.emoji}
                     icon={hit.document.icon}
+                    color={hit.document.color}
                   />
                   <span className="truncate text-sm font-medium">
                     {hit.document.title}
