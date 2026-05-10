@@ -42,10 +42,10 @@ helm install vibe-c2 ./deploy/helm/vibe-c2 \
   --set secrets.values.hocuspocusTicketSecret="$(openssl rand -hex 32)" \
   --set secrets.values.hocuspocusWebhookSecret="$(openssl rand -hex 32)"
 
-# Then: enroll the first admin
-curl -X POST http://vibe-c2.lab.local/api/v1/enroll \
-  -H 'Content-Type: application/json' \
-  -d '{"username":"admin","password":"<strong>","email":"you@example.com"}'
+# Then open the enrollment page in a browser:
+#   http://vibe-c2.lab.local/enroll
+# Submit the form to create the first admin. The endpoint locks itself
+# after the first successful enrollment.
 ```
 
 For local kind testing, see [`README.kind.md`](./README.kind.md) and

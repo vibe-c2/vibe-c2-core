@@ -25,20 +25,21 @@ The release "{{ .Release.Name }}" is now in namespace "{{ .Release.Namespace }}"
 ────────────────────────────────────────────────────────────────────────
 2. Create the first admin user
 
-The first admin is provisioned through the public enroll endpoint (it is
-automatically locked after the first successful call):
+Open the enrollment page in a browser. The form posts to the public
+enroll endpoint, which is automatically locked after the first
+successful call. Use the UI rather than curl so the password never
+lands in shell history.
 
 {{- if .Values.ingress.enabled }}
 {{- if .Values.ingress.tls.enabled }}
-   curl -X POST https://{{ .Values.ingress.host }}/api/v1/enroll \
+   https://{{ .Values.ingress.host }}/enroll
 {{- else }}
-   curl -X POST http://{{ .Values.ingress.host }}/api/v1/enroll \
+   http://{{ .Values.ingress.host }}/enroll
 {{- end }}
 {{- else }}
-   curl -X POST http://localhost:8002/api/v1/enroll \
+   Port-forward the frontend Service first (see step 1), then open:
+   http://localhost:8080/enroll
 {{- end }}
-        -H 'Content-Type: application/json' \
-        -d '{"username":"admin","password":"<strong-password>","email":"you@example.com"}'
 
 ────────────────────────────────────────────────────────────────────────
 3. Verify the bucket bootstrap

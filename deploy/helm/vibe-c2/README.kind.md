@@ -174,13 +174,12 @@ kubectl -n vibe-c2 get all,ingress,pvc,job
 
 ## 8. Create the first admin and log in
 
-```sh
-curl -fsSL -X POST http://vibe-c2.local/api/v1/enroll \
-  -H 'Content-Type: application/json' \
-  -d '{"username":"admin","password":"adminadmin","email":"a@b.c"}'
-```
+Open <http://vibe-c2.local/enroll> in a browser and submit the form to
+create the first admin. Using the UI keeps the password out of your
+shell history. The enroll endpoint is public on a fresh install and
+locks itself after the first successful submission.
 
-Then open <http://vibe-c2.local> in a browser and log in.
+After enrolling, you'll be redirected to the app and signed in.
 
 ## 9. Smoke tests
 

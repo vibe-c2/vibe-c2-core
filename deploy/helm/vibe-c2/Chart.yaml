@@ -8,7 +8,7 @@ description: |
 type: application
 
 # Chart version — bump on chart template changes.
-version: 0.1.0
+version: 0.1.1
 
 # Default app version — pinned to the image tag the chart deploys when
 # `*.image.tag` is left unset. Override per environment via values.
