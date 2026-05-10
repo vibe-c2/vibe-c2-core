@@ -7,7 +7,13 @@ dist-ssr
 .DS_Store
 .git
 .gitignore
+# Developer-local env files — never ship these in the image.
+# `.env.production` IS shipped (it carries build-time public constants
+# like VITE_API_URL that Vite must inline at build time).
 .env
-.env.*
+.env.local
+.env.development
+.env.development.local
+.env.production.local
 dev.Dockerfile
 README.md
