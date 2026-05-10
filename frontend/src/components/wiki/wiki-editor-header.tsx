@@ -35,6 +35,7 @@ interface AncestorNode {
   title: string
   emoji: string
   icon: string
+  color: string
 }
 
 export function WikiEditorHeader({
@@ -61,13 +62,14 @@ export function WikiEditorHeader({
   const ancestors = useMemo(() => {
     const map = new Map<
       string,
-      { title: string; emoji: string; icon: string; parentId: string | null }
+      { title: string; emoji: string; icon: string; color: string; parentId: string | null }
     >()
     for (const d of treeDocuments) {
       map.set(d.id, {
         title: d.title,
         emoji: d.emoji,
         icon: d.icon,
+        color: d.color,
         parentId: d.parentDocument?.id ?? null,
       })
     }
@@ -81,6 +83,7 @@ export function WikiEditorHeader({
         title: node.title,
         emoji: node.emoji,
         icon: node.icon,
+        color: node.color,
       })
       currentId = node.parentId
     }

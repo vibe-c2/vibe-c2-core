@@ -365,12 +365,13 @@ export const ICON_LOOKUP: Readonly<Record<string, LucideIcon>> = (() => {
 // "AArrowDown"). The map below exposes the kebab key for each PascalCase
 // name so we can look up the right thunk.
 
-import { lazy, type ComponentType } from "react"
+import { lazy, type ComponentType, type CSSProperties } from "react"
 
 /** Renderable icon — either a sync lucide component (curated) or a React.lazy wrapper (uncurated). Both accept the standard lucide props. */
 export type IconComponent = ComponentType<{
   size?: number | string
   className?: string
+  style?: CSSProperties
 }>
 
 // lucide-react@1.6.0 ships a broken `dynamicIconImports.js` that references
