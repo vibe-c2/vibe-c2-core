@@ -435,3 +435,32 @@ export function resolveIcon(
   if (!name) return null
   return ICON_LOOKUP[name] ?? loadLazyIcon(name)
 }
+
+const asyncLoadCache = new Map<string, LucideIcon>()
+
+/**
+ * Awaits the lucide module for an uncurated icon name and returns the
+ * concrete component. Use this when you need the resolved icon outside a
+ * Suspense boundary (e.g. rendering to an SVG string for the favicon). Sync
+ * callers should use `resolveIcon` and render through Suspense instead.
+ *
+ * Returns null for unknown names or import failures.
+ */
+export async function loadLucideIconAsync(
+  name: string,
+): Promise<LucideIcon | null> {
+  const cached = asyncLoadCache.get(name)
+  if (cached) return cached
+  const path = ALL_LUCIDE_NAMES.get(name)
+  if (!path) return null
+  const importFn = ICON_GLOB[path]
+  if (!importFn) return null
+  try {
+    const mod = await importFn()
+    const Icon = mod.default as unknown as LucideIcon
+    asyncLoadCache.set(name, Icon)
+    return Icon
+  } catch {
+    return null
+  }
+}

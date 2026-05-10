@@ -1,9 +1,15 @@
 import { Navigate } from "react-router"
-import { SwordsIcon } from "lucide-react"
+import { LayoutDashboardIcon, SwordsIcon } from "lucide-react"
 import { useScopedOperation } from "@/hooks/use-scoped-operation"
+import { usePageMetadata } from "@/hooks/use-page-metadata"
 
 export function DashboardPage() {
   const scopedOperation = useScopedOperation()
+
+  usePageMetadata({
+    title: "Dashboard",
+    icon: { kind: "lucide", component: LayoutDashboardIcon },
+  })
 
   // No operation scoped — redirect to operations page so the user can pick one.
   if (!scopedOperation) {

@@ -6,9 +6,12 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Field, FieldGroup, FieldLabel } from "@/components/ui/field"
 import { Input } from "@/components/ui/input"
 import { useAuthStore } from "@/stores/auth"
+import { usePageMetadata } from "@/hooks/use-page-metadata"
 import { authService } from "@/services/auth"
 
 export function EnrollPage() {
+  usePageMetadata({ title: "Enroll", icon: { kind: "static" } })
+
   const navigate = useNavigate()
   const setSession = useAuthStore((s) => s.setSession)
   const [error, setError] = useState<string | null>(null)

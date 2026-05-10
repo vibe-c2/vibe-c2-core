@@ -7,11 +7,14 @@ import { Field, FieldGroup, FieldLabel } from "@/components/ui/field"
 import { Input } from "@/components/ui/input"
 import { useAuthStore } from "@/stores/auth"
 import { useSessionStore } from "@/stores/sessions"
+import { usePageMetadata } from "@/hooks/use-page-metadata"
 import { authService } from "@/services/auth"
 import { graphqlClient } from "@/lib/graphql-client"
 import { MySessionsDocument } from "@/graphql/gql/graphql"
 
 export function LoginPage() {
+  usePageMetadata({ title: "Sign in", icon: { kind: "static" } })
+
   const navigate = useNavigate()
   const setSession = useAuthStore((s) => s.setSession)
   const isAuthenticated = useAuthStore((s) => s.isAuthenticated)

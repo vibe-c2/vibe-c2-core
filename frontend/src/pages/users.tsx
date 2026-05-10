@@ -1,7 +1,9 @@
 import { useMemo } from "react"
+import { UsersIcon } from "lucide-react"
 import { useInfiniteUsers, useUserChangedSubscription } from "@/graphql/hooks/users"
 import { useUserStore } from "@/stores/users"
 import { useAuthStore } from "@/stores/auth"
+import { usePageMetadata } from "@/hooks/use-page-metadata"
 import { Permissions } from "@/constants/permissions"
 import { UsersToolbar } from "@/components/users/users-toolbar"
 import { UsersTable } from "@/components/users/users-table"
@@ -11,6 +13,11 @@ import { DeleteUserDialog } from "@/components/users/delete-user-dialog"
 import { AdminSessionsView } from "@/components/sessions/admin-sessions-view"
 
 export function UsersPage() {
+  usePageMetadata({
+    title: "Users",
+    icon: { kind: "lucide", component: UsersIcon },
+  })
+
   const hasPermission = useAuthStore((s) => s.hasPermission)
   const canViewSessions = hasPermission(Permissions.SESSION_READ)
   const activeTab = useUserStore((s) => s.activeTab)

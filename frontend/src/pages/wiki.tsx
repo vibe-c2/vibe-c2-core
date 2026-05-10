@@ -1,13 +1,16 @@
 import { useEffect, useMemo, useRef } from "react"
 import { Navigate, useParams } from "react-router"
+import { BookOpenIcon } from "lucide-react"
 import { useScopedOperation } from "@/hooks/use-scoped-operation"
 import { useMyOperationRole } from "@/graphql/hooks/operations"
 import {
+  useWikiDocument,
   useWikiDocumentChangedSubscription,
   useWikiDocumentPresenceChangedSubscription,
   useWikiDocumentTree,
   useTrackWikiDocumentVisit,
 } from "@/graphql/hooks/wiki"
+import { usePageMetadata, type PageIcon } from "@/hooks/use-page-metadata"
 import { useWikiStore } from "@/stores/wiki"
 import { WikiTreeSidebar } from "@/components/wiki/wiki-tree-sidebar"
 import { collectAncestorIds } from "@/components/wiki/wiki-tree-helpers"
@@ -53,6 +56,30 @@ function WikiPageInner({
   const { data: roleData, isLoading: isRoleLoading } = useMyOperationRole(operationId)
   // Default to false while loading to avoid premature WebSocket connections.
   const isEditor = !isRoleLoading && roleData?.myOperationRole !== "VIEWER"
+
+  // Browser tab title + favicon. Reads the open document from the same
+  // TanStack Query cache key as wiki-editor-pane.tsx — no extra request.
+  // While the doc is null/loading we fall back to "Wiki" + book icon, so
+  // there's at most one transition per navigation.
+  const { data: docData } = useWikiDocument(documentId ?? "")
+  const doc = documentId ? docData?.wikiDocument : null
+  const wikiDefaultIcon: PageIcon = { kind: "lucide", component: BookOpenIcon }
+  const pageIcon: PageIcon = (() => {
+    if (!doc) return wikiDefaultIcon
+    if (doc.icon)
+      return {
+        kind: "lucide-name",
+        name: doc.icon,
+        color: doc.color,
+        fallbackEmoji: doc.emoji,
+      }
+    if (doc.emoji) return { kind: "emoji", emoji: doc.emoji }
+    return wikiDefaultIcon
+  })()
+  usePageMetadata({
+    title: doc ? doc.title || "Untitled" : "Wiki",
+    icon: pageIcon,
+  })
 
   // Real-time subscriptions scoped to this operation.
   useWikiDocumentChangedSubscription(operationId)
