@@ -207,3 +207,18 @@ models:
   WikiDocumentBackupTrigger:
     model:
       - github.com/vibe-c2/vibe-c2-core/core/pkg/models.WikiDocumentBackupTrigger
+
+  # Map the GraphQL "WikiDocumentVisit" type to our existing model. The
+  # `document` field is a relation lookup — we store DocumentID and resolve
+  # the live WikiDocument at query time so renamed/moved docs render with
+  # current metadata.
+  WikiDocumentVisit:
+    model:
+      - github.com/vibe-c2/vibe-c2-core/core/pkg/models.WikiDocumentVisit
+    fields:
+      id:
+        resolver: true   # ObjectID -> ID (string)
+      document:
+        resolver: true   # DocumentID (uuid.UUID) -> WikiDocument (fetched from DB)
+      visitedAt:
+        resolver: true   # time.Time -> RFC3339 string

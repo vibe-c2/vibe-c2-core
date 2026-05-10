@@ -6,6 +6,7 @@ import {
   useWikiDocumentChangedSubscription,
   useWikiDocumentPresenceChangedSubscription,
   useWikiDocumentTree,
+  useTrackWikiDocumentVisit,
 } from "@/graphql/hooks/wiki"
 import { useWikiStore } from "@/stores/wiki"
 import { WikiTreeSidebar } from "@/components/wiki/wiki-tree-sidebar"
@@ -88,6 +89,25 @@ function WikiPageInner({
     const ancestorIds = collectAncestorIds(documentId, treeDocuments)
     if (ancestorIds.length > 0) expandMany(ancestorIds)
   }, [documentId, treeDocuments, expandMany])
+
+  // Record a visit ~700ms after a document opens, so quick navigation
+  // through the tree doesn't spam the mutation. Best-effort: failures are
+  // silent (history is a convenience). The ref dedupes per documentId so
+  // re-renders don't re-fire.
+  const trackedFor = useRef<string | null>(null)
+  const trackVisit = useTrackWikiDocumentVisit()
+  useEffect(() => {
+    if (!documentId) {
+      trackedFor.current = null
+      return
+    }
+    if (trackedFor.current === documentId) return
+    const t = setTimeout(() => {
+      trackedFor.current = documentId
+      trackVisit.mutate({ documentId })
+    }, 700)
+    return () => clearTimeout(t)
+  }, [documentId, trackVisit])
 
   // Global Cmd/Ctrl+K opens the command palette with the "All Documents"
   // scope. Bound at the page level so any focus state inside the wiki

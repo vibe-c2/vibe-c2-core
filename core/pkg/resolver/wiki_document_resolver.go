@@ -84,6 +84,7 @@ type wikiDocumentResolver struct {
 	backupRepo    repository.IWikiDocumentBackupRepository
 	operationRepo repository.IOperationRepository
 	userRepo      repository.IUserRepository
+	visitRepo     repository.IWikiDocumentVisitRepository
 	eventBus      eventbus.IEventBus
 	presence      *wiki.PresenceTracker
 }
@@ -94,6 +95,7 @@ func NewWikiDocumentResolver(
 	backupRepo repository.IWikiDocumentBackupRepository,
 	operationRepo repository.IOperationRepository,
 	userRepo repository.IUserRepository,
+	visitRepo repository.IWikiDocumentVisitRepository,
 	eventBus eventbus.IEventBus,
 	presence *wiki.PresenceTracker,
 ) IWikiDocumentResolver {
@@ -102,6 +104,7 @@ func NewWikiDocumentResolver(
 		backupRepo:    backupRepo,
 		operationRepo: operationRepo,
 		userRepo:      userRepo,
+		visitRepo:     visitRepo,
 		eventBus:      eventBus,
 		presence:      presence,
 	}
@@ -579,6 +582,12 @@ func (r *wikiDocumentResolver) PermanentlyDeleteWikiDocument(ctx context.Context
 		return false, fmt.Errorf("failed to delete backups: %w", err)
 	}
 
+	// Cascade visit history rows pointing at this doc — once the doc is
+	// hard-deleted no user should see it as a ghost in their history.
+	if err := r.visitRepo.DeleteByDocumentID(ctx, uid); err != nil {
+		return false, fmt.Errorf("failed to delete visit history: %w", err)
+	}
+
 	if err := r.docRepo.HardDelete(ctx, &doc); err != nil {
 		return false, fmt.Errorf("failed to permanently delete document: %w", err)
 	}
@@ -613,6 +622,17 @@ func (r *wikiDocumentResolver) EmptyWikiDocumentTrash(ctx context.Context, opera
 	for _, doc := range trashed {
 		if err := r.backupRepo.DeleteByDocumentID(ctx, doc.DocumentID); err != nil {
 			return false, fmt.Errorf("failed to delete backups for document %s: %w", doc.DocumentID, err)
+		}
+	}
+
+	// Cascade visit history rows for the docs about to be purged.
+	if len(trashed) > 0 {
+		trashedIDs := make([]uuid.UUID, len(trashed))
+		for i := range trashed {
+			trashedIDs[i] = trashed[i].DocumentID
+		}
+		if err := r.visitRepo.DeleteByDocumentIDs(ctx, trashedIDs); err != nil {
+			return false, fmt.Errorf("failed to delete visit history: %w", err)
 		}
 	}
 
@@ -914,10 +934,10 @@ func (r *wikiDocumentResolver) WikiSearch(
 			ranges[j] = &model.WikiSearchMatchRange{Start: rg[0], End: rg[1]}
 		}
 		out[i] = &model.WikiSearchHit{
-			Document:     &doc,
-			Snippet:      hits[i].Snippet,
-			MatchRanges:  ranges,
-			Score:        hits[i].Score,
+			Document:    &doc,
+			Snippet:     hits[i].Snippet,
+			MatchRanges: ranges,
+			Score:       hits[i].Score,
 		}
 	}
 

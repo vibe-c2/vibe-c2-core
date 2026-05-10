@@ -54,7 +54,11 @@ func (a *App) NewRouter() *gin.Engine {
 	wikiDocRes := resolver.NewWikiDocumentResolver(
 		a.repos.WikiDocument, a.repos.WikiDocumentBackup,
 		a.repos.Operation, a.repos.User,
+		a.repos.WikiDocumentVisit,
 		a.eventBus, a.presenceTracker,
+	)
+	wikiVisitRes := resolver.NewWikiDocumentVisitResolver(
+		a.repos.WikiDocumentVisit, a.repos.WikiDocument, a.repos.Operation,
 	)
 
 	// Wiki controller (REST endpoints)
@@ -153,7 +157,7 @@ func (a *App) NewRouter() *gin.Engine {
 		// Authorization (RBAC) is handled by the @hasPermission directive inside
 		// the GraphQL schema — each query/mutation declares what permission it needs.
 		v1.POST("/graphql", gql.NewHandler(
-			userRes, opRes, snpRes, sessRes, wikiDocRes,
+			userRes, opRes, snpRes, sessRes, wikiDocRes, wikiVisitRes,
 			a.eventBus,
 			a.repos.User, a.repos.Operation, a.repos.Session, a.repos.WikiDocument,
 			a.presenceTracker,

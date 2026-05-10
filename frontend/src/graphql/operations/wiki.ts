@@ -71,6 +71,24 @@ export const WikiDocumentBackupDetailFields = graphql(`
   }
 `)
 
+// Visit-history list row. The `document` relation is resolved server-side so
+// renames/icon updates flow into the dropdown without a separate invalidate
+// cycle. The doc projection is minimal — only the fields the dropdown row
+// renders (icon trio + title) — to keep the history payload small.
+export const WikiDocumentVisitListFields = graphql(`
+  fragment WikiDocumentVisitListFields on WikiDocumentVisit {
+    id
+    visitedAt
+    document {
+      id
+      title
+      emoji
+      icon
+      color
+    }
+  }
+`)
+
 // --- Queries ---
 
 export const WikiDocumentTreeQuery = graphql(`
@@ -225,6 +243,19 @@ export const WikiOperationPresenceQuery = graphql(`
   }
 `)
 
+export const WikiDocumentHistoryQuery = graphql(`
+  query WikiDocumentHistory($operationId: ID!, $offset: Int, $limit: Int) {
+    wikiDocumentHistory(operationId: $operationId, offset: $offset, limit: $limit) {
+      edges {
+        node {
+          ...WikiDocumentVisitListFields
+        }
+      }
+      totalCount
+    }
+  }
+`)
+
 // --- Mutations ---
 
 export const CreateWikiDocumentMutation = graphql(`
@@ -304,6 +335,15 @@ export const RestoreWikiDocumentBackupMutation = graphql(`
 export const DeleteWikiDocumentBackupMutation = graphql(`
   mutation DeleteWikiDocumentBackup($id: ID!) {
     deleteWikiDocumentBackup(id: $id)
+  }
+`)
+
+export const TrackWikiDocumentVisitMutation = graphql(`
+  mutation TrackWikiDocumentVisit($documentId: ID!) {
+    trackWikiDocumentVisit(documentId: $documentId) {
+      id
+      visitedAt
+    }
   }
 `)
 

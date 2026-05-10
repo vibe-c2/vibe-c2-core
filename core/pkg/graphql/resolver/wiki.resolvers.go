@@ -58,6 +58,11 @@ func (r *mutationResolver) DeleteWikiDocumentBackup(ctx context.Context, id stri
 	return r.WikiDocumentResolver.DeleteWikiDocumentBackup(ctx, id)
 }
 
+// TrackWikiDocumentVisit is the resolver for the trackWikiDocumentVisit field.
+func (r *mutationResolver) TrackWikiDocumentVisit(ctx context.Context, documentID string) (*models.WikiDocumentVisit, error) {
+	return r.WikiDocumentVisitResolver.TrackWikiDocumentVisit(ctx, documentID)
+}
+
 // WikiDocument is the resolver for the wikiDocument field.
 func (r *queryResolver) WikiDocument(ctx context.Context, id string) (*models.WikiDocument, error) {
 	return r.WikiDocumentResolver.WikiDocument(ctx, id)
@@ -106,6 +111,11 @@ func (r *queryResolver) WikiDocumentPresence(ctx context.Context, documentID str
 // WikiOperationPresence is the resolver for the wikiOperationPresence field.
 func (r *queryResolver) WikiOperationPresence(ctx context.Context, operationID string) ([]*model.WikiDocumentPresence, error) {
 	return r.WikiDocumentResolver.WikiOperationPresence(ctx, operationID)
+}
+
+// WikiDocumentHistory is the resolver for the wikiDocumentHistory field.
+func (r *queryResolver) WikiDocumentHistory(ctx context.Context, operationID string, offset *int, limit *int) (*model.WikiDocumentVisitConnection, error) {
+	return r.WikiDocumentVisitResolver.WikiDocumentHistory(ctx, operationID, offset, limit)
 }
 
 // WikiDocumentChanged is the resolver for the wikiDocumentChanged field.
@@ -213,6 +223,21 @@ func (r *wikiDocumentBackupResolver) CreatedAt(ctx context.Context, obj *models.
 	return r.WikiDocumentResolver.WikiDocumentBackupCreatedAt(ctx, obj)
 }
 
+// ID is the resolver for the id field.
+func (r *wikiDocumentVisitResolver) ID(ctx context.Context, obj *models.WikiDocumentVisit) (string, error) {
+	return r.WikiDocumentVisitResolver.WikiDocumentVisitID(ctx, obj)
+}
+
+// Document is the resolver for the document field.
+func (r *wikiDocumentVisitResolver) Document(ctx context.Context, obj *models.WikiDocumentVisit) (*models.WikiDocument, error) {
+	return r.WikiDocumentVisitResolver.WikiDocumentVisitDocument(ctx, obj)
+}
+
+// VisitedAt is the resolver for the visitedAt field.
+func (r *wikiDocumentVisitResolver) VisitedAt(ctx context.Context, obj *models.WikiDocumentVisit) (string, error) {
+	return r.WikiDocumentVisitResolver.WikiDocumentVisitVisitedAt(ctx, obj)
+}
+
 // WikiDocument returns generated.WikiDocumentResolver implementation.
 func (r *Resolver) WikiDocument() generated.WikiDocumentResolver { return &wikiDocumentResolver{r} }
 
@@ -221,5 +246,11 @@ func (r *Resolver) WikiDocumentBackup() generated.WikiDocumentBackupResolver {
 	return &wikiDocumentBackupResolver{r}
 }
 
+// WikiDocumentVisit returns generated.WikiDocumentVisitResolver implementation.
+func (r *Resolver) WikiDocumentVisit() generated.WikiDocumentVisitResolver {
+	return &wikiDocumentVisitResolver{r}
+}
+
 type wikiDocumentResolver struct{ *Resolver }
 type wikiDocumentBackupResolver struct{ *Resolver }
+type wikiDocumentVisitResolver struct{ *Resolver }

@@ -40,6 +40,7 @@ type ResolverRoot interface {
 	User() UserResolver
 	WikiDocument() WikiDocumentResolver
 	WikiDocumentBackup() WikiDocumentBackupResolver
+	WikiDocumentVisit() WikiDocumentVisitResolver
 }
 
 type DirectiveRoot struct {
@@ -70,6 +71,7 @@ type ComplexityRoot struct {
 		RestoreWikiDocumentBackup     func(childComplexity int, documentID string, backupID string) int
 		RevokeAllMySessions           func(childComplexity int) int
 		RevokeSession                 func(childComplexity int, id string) int
+		TrackWikiDocumentVisit        func(childComplexity int, documentID string) int
 		UpdateOperation               func(childComplexity int, id string, input model.UpdateOperationInput) int
 		UpdateOperationMemberRole     func(childComplexity int, operationID string, userID string, role models.OperationRole) int
 		UpdateOwnProfile              func(childComplexity int, input model.UpdateUserInput) int
@@ -140,6 +142,7 @@ type ComplexityRoot struct {
 		WikiDocument                   func(childComplexity int, id string) int
 		WikiDocumentBackup             func(childComplexity int, id string) int
 		WikiDocumentBackups            func(childComplexity int, documentID string, trigger *models.WikiDocumentBackupTrigger, first *int, after *string, last *int, before *string) int
+		WikiDocumentHistory            func(childComplexity int, operationID string, offset *int, limit *int) int
 		WikiDocumentPresence           func(childComplexity int, documentID string) int
 		WikiDocumentTrash              func(childComplexity int, operationID string, first *int, after *string, last *int, before *string) int
 		WikiDocumentTrashedDescendants func(childComplexity int, documentID string) int
@@ -348,6 +351,23 @@ type ComplexityRoot struct {
 		Username    func(childComplexity int) int
 	}
 
+	WikiDocumentVisit struct {
+		Document  func(childComplexity int) int
+		ID        func(childComplexity int) int
+		VisitedAt func(childComplexity int) int
+	}
+
+	WikiDocumentVisitConnection struct {
+		Edges      func(childComplexity int) int
+		PageInfo   func(childComplexity int) int
+		TotalCount func(childComplexity int) int
+	}
+
+	WikiDocumentVisitEdge struct {
+		Cursor func(childComplexity int) int
+		Node   func(childComplexity int) int
+	}
+
 	WikiSearchConnection struct {
 		HasMore func(childComplexity int) int
 		Hits    func(childComplexity int) int
@@ -397,6 +417,7 @@ type MutationResolver interface {
 	CreateWikiDocumentBackup(ctx context.Context, documentID string, description *string) (*models.WikiDocumentBackup, error)
 	RestoreWikiDocumentBackup(ctx context.Context, documentID string, backupID string) (*models.WikiDocument, error)
 	DeleteWikiDocumentBackup(ctx context.Context, id string) (bool, error)
+	TrackWikiDocumentVisit(ctx context.Context, documentID string) (*models.WikiDocumentVisit, error)
 }
 type OperationResolver interface {
 	ID(ctx context.Context, obj *models.Operation) (string, error)
@@ -431,6 +452,7 @@ type QueryResolver interface {
 	WikiDocumentBackup(ctx context.Context, id string) (*models.WikiDocumentBackup, error)
 	WikiDocumentPresence(ctx context.Context, documentID string) (*model.WikiDocumentPresence, error)
 	WikiOperationPresence(ctx context.Context, operationID string) ([]*model.WikiDocumentPresence, error)
+	WikiDocumentHistory(ctx context.Context, operationID string, offset *int, limit *int) (*model.WikiDocumentVisitConnection, error)
 }
 type SchemeNetworkPointResolver interface {
 	ID(ctx context.Context, obj *models.SchemeNetworkPoint) (string, error)
@@ -493,6 +515,11 @@ type WikiDocumentBackupResolver interface {
 	ContentLength(ctx context.Context, obj *models.WikiDocumentBackup) (int, error)
 	CreatedBy(ctx context.Context, obj *models.WikiDocumentBackup) (*models.User, error)
 	CreatedAt(ctx context.Context, obj *models.WikiDocumentBackup) (string, error)
+}
+type WikiDocumentVisitResolver interface {
+	ID(ctx context.Context, obj *models.WikiDocumentVisit) (string, error)
+	Document(ctx context.Context, obj *models.WikiDocumentVisit) (*models.WikiDocument, error)
+	VisitedAt(ctx context.Context, obj *models.WikiDocumentVisit) (string, error)
 }
 
 type executableSchema graphql.ExecutableSchemaState[ResolverRoot, DirectiveRoot, ComplexityRoot]
@@ -746,6 +773,17 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.Mutation.RevokeSession(childComplexity, args["id"].(string)), true
+	case "Mutation.trackWikiDocumentVisit":
+		if e.ComplexityRoot.Mutation.TrackWikiDocumentVisit == nil {
+			break
+		}
+
+		args, err := ec.field_Mutation_trackWikiDocumentVisit_args(ctx, rawArgs)
+		if err != nil {
+			return 0, false
+		}
+
+		return e.ComplexityRoot.Mutation.TrackWikiDocumentVisit(childComplexity, args["documentId"].(string)), true
 	case "Mutation.updateOperation":
 		if e.ComplexityRoot.Mutation.UpdateOperation == nil {
 			break
@@ -1135,6 +1173,17 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.Query.WikiDocumentBackups(childComplexity, args["documentId"].(string), args["trigger"].(*models.WikiDocumentBackupTrigger), args["first"].(*int), args["after"].(*string), args["last"].(*int), args["before"].(*string)), true
+	case "Query.wikiDocumentHistory":
+		if e.ComplexityRoot.Query.WikiDocumentHistory == nil {
+			break
+		}
+
+		args, err := ec.field_Query_wikiDocumentHistory_args(ctx, rawArgs)
+		if err != nil {
+			return 0, false
+		}
+
+		return e.ComplexityRoot.Query.WikiDocumentHistory(childComplexity, args["operationId"].(string), args["offset"].(*int), args["limit"].(*int)), true
 	case "Query.wikiDocumentPresence":
 		if e.ComplexityRoot.Query.WikiDocumentPresence == nil {
 			break
@@ -2006,6 +2055,57 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.WikiDocumentPresenceEvent.Username(childComplexity), true
+
+	case "WikiDocumentVisit.document":
+		if e.ComplexityRoot.WikiDocumentVisit.Document == nil {
+			break
+		}
+
+		return e.ComplexityRoot.WikiDocumentVisit.Document(childComplexity), true
+	case "WikiDocumentVisit.id":
+		if e.ComplexityRoot.WikiDocumentVisit.ID == nil {
+			break
+		}
+
+		return e.ComplexityRoot.WikiDocumentVisit.ID(childComplexity), true
+	case "WikiDocumentVisit.visitedAt":
+		if e.ComplexityRoot.WikiDocumentVisit.VisitedAt == nil {
+			break
+		}
+
+		return e.ComplexityRoot.WikiDocumentVisit.VisitedAt(childComplexity), true
+
+	case "WikiDocumentVisitConnection.edges":
+		if e.ComplexityRoot.WikiDocumentVisitConnection.Edges == nil {
+			break
+		}
+
+		return e.ComplexityRoot.WikiDocumentVisitConnection.Edges(childComplexity), true
+	case "WikiDocumentVisitConnection.pageInfo":
+		if e.ComplexityRoot.WikiDocumentVisitConnection.PageInfo == nil {
+			break
+		}
+
+		return e.ComplexityRoot.WikiDocumentVisitConnection.PageInfo(childComplexity), true
+	case "WikiDocumentVisitConnection.totalCount":
+		if e.ComplexityRoot.WikiDocumentVisitConnection.TotalCount == nil {
+			break
+		}
+
+		return e.ComplexityRoot.WikiDocumentVisitConnection.TotalCount(childComplexity), true
+
+	case "WikiDocumentVisitEdge.cursor":
+		if e.ComplexityRoot.WikiDocumentVisitEdge.Cursor == nil {
+			break
+		}
+
+		return e.ComplexityRoot.WikiDocumentVisitEdge.Cursor(childComplexity), true
+	case "WikiDocumentVisitEdge.node":
+		if e.ComplexityRoot.WikiDocumentVisitEdge.Node == nil {
+			break
+		}
+
+		return e.ComplexityRoot.WikiDocumentVisitEdge.Node(childComplexity), true
 
 	case "WikiSearchConnection.hasMore":
 		if e.ComplexityRoot.WikiSearchConnection.HasMore == nil {
@@ -2950,6 +3050,28 @@ type WikiDocumentEvent {
   document: WikiDocument
 }
 
+# Per-user "recently visited" entry. The collection deduplicates by
+# (user, operation, document) — a revisit refreshes visitedAt and moves the
+# entry to the top of the list. History is capped server-side; older entries
+# are pruned automatically. The ` + "`" + `document` + "`" + ` field is the live wiki document,
+# resolved at query time so renamed/moved docs render with current metadata.
+type WikiDocumentVisit {
+  id: ID!
+  document: WikiDocument!
+  visitedAt: String!
+}
+
+type WikiDocumentVisitEdge {
+  node: WikiDocumentVisit!
+  cursor: String!
+}
+
+type WikiDocumentVisitConnection {
+  edges: [WikiDocumentVisitEdge!]!
+  pageInfo: PageInfo!
+  totalCount: Int!
+}
+
 # --- Inputs ---
 
 input CreateWikiDocumentInput {
@@ -3039,6 +3161,18 @@ extend type Query {
 
   wikiOperationPresence(operationId: ID!): [WikiDocumentPresence!]!
     @hasPermission(permission: "operation:member")
+
+  # The calling user's wiki document visit history within an operation,
+  # most-recent-first. Visits to soft-deleted documents are filtered out
+  # server-side. Pagination uses an offset/limit shape rather than a cursor
+  # because the underlying list is small (capped at a few hundred entries
+  # per user) and the dropdown loads it in one shot.
+  wikiDocumentHistory(
+    operationId: ID!
+    offset: Int = 0
+    limit: Int = 300
+  ): WikiDocumentVisitConnection!
+    @hasPermission(permission: "operation:member")
 }
 
 # --- Mutations ---
@@ -3073,6 +3207,13 @@ extend type Mutation {
     @hasPermission(permission: "operation:member")
 
   deleteWikiDocumentBackup(id: ID!): Boolean!
+    @hasPermission(permission: "operation:member")
+
+  # Records (or refreshes) a visit to the given document for the calling
+  # user. Idempotent: if a visit row already exists for this user-document
+  # pair, its visitedAt is bumped and it moves to the top of history.
+  # The user's history is pruned to the configured cap on each call.
+  trackWikiDocumentVisit(documentId: ID!): WikiDocumentVisit!
     @hasPermission(permission: "operation:member")
 }
 
@@ -3382,6 +3523,17 @@ func (ec *executionContext) field_Mutation_revokeSession_args(ctx context.Contex
 		return nil, err
 	}
 	args["id"] = arg0
+	return args, nil
+}
+
+func (ec *executionContext) field_Mutation_trackWikiDocumentVisit_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
+	var err error
+	args := map[string]any{}
+	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "documentId", ec.unmarshalNID2string)
+	if err != nil {
+		return nil, err
+	}
+	args["documentId"] = arg0
 	return args, nil
 }
 
@@ -3798,6 +3950,27 @@ func (ec *executionContext) field_Query_wikiDocumentBackups_args(ctx context.Con
 		return nil, err
 	}
 	args["before"] = arg5
+	return args, nil
+}
+
+func (ec *executionContext) field_Query_wikiDocumentHistory_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
+	var err error
+	args := map[string]any{}
+	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "operationId", ec.unmarshalNID2string)
+	if err != nil {
+		return nil, err
+	}
+	args["operationId"] = arg0
+	arg1, err := graphql.ProcessArgField(ctx, rawArgs, "offset", ec.unmarshalOInt2ᚖint)
+	if err != nil {
+		return nil, err
+	}
+	args["offset"] = arg1
+	arg2, err := graphql.ProcessArgField(ctx, rawArgs, "limit", ec.unmarshalOInt2ᚖint)
+	if err != nil {
+		return nil, err
+	}
+	args["limit"] = arg2
 	return args, nil
 }
 
@@ -6149,6 +6322,73 @@ func (ec *executionContext) fieldContext_Mutation_deleteWikiDocumentBackup(ctx c
 	}()
 	ctx = graphql.WithFieldContext(ctx, fc)
 	if fc.Args, err = ec.field_Mutation_deleteWikiDocumentBackup_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
+		ec.Error(ctx, err)
+		return fc, err
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Mutation_trackWikiDocumentVisit(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Mutation_trackWikiDocumentVisit,
+		func(ctx context.Context) (any, error) {
+			fc := graphql.GetFieldContext(ctx)
+			return ec.Resolvers.Mutation().TrackWikiDocumentVisit(ctx, fc.Args["documentId"].(string))
+		},
+		func(ctx context.Context, next graphql.Resolver) graphql.Resolver {
+			directive0 := next
+
+			directive1 := func(ctx context.Context) (any, error) {
+				permission, err := ec.unmarshalNString2string(ctx, "operation:member")
+				if err != nil {
+					var zeroVal *models.WikiDocumentVisit
+					return zeroVal, err
+				}
+				if ec.Directives.HasPermission == nil {
+					var zeroVal *models.WikiDocumentVisit
+					return zeroVal, errors.New("directive hasPermission is not implemented")
+				}
+				return ec.Directives.HasPermission(ctx, nil, directive0, permission)
+			}
+
+			next = directive1
+			return next
+		},
+		ec.marshalNWikiDocumentVisit2ᚖgithubᚗcomᚋvibeᚑc2ᚋvibeᚑc2ᚑcoreᚋcoreᚋpkgᚋmodelsᚐWikiDocumentVisit,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_Mutation_trackWikiDocumentVisit(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Mutation",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "id":
+				return ec.fieldContext_WikiDocumentVisit_id(ctx, field)
+			case "document":
+				return ec.fieldContext_WikiDocumentVisit_document(ctx, field)
+			case "visitedAt":
+				return ec.fieldContext_WikiDocumentVisit_visitedAt(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type WikiDocumentVisit", field.Name)
+		},
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			err = ec.Recover(ctx, r)
+			ec.Error(ctx, err)
+		}
+	}()
+	ctx = graphql.WithFieldContext(ctx, fc)
+	if fc.Args, err = ec.field_Mutation_trackWikiDocumentVisit_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
 		ec.Error(ctx, err)
 		return fc, err
 	}
@@ -8519,6 +8759,73 @@ func (ec *executionContext) fieldContext_Query_wikiOperationPresence(ctx context
 	}()
 	ctx = graphql.WithFieldContext(ctx, fc)
 	if fc.Args, err = ec.field_Query_wikiOperationPresence_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
+		ec.Error(ctx, err)
+		return fc, err
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Query_wikiDocumentHistory(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Query_wikiDocumentHistory,
+		func(ctx context.Context) (any, error) {
+			fc := graphql.GetFieldContext(ctx)
+			return ec.Resolvers.Query().WikiDocumentHistory(ctx, fc.Args["operationId"].(string), fc.Args["offset"].(*int), fc.Args["limit"].(*int))
+		},
+		func(ctx context.Context, next graphql.Resolver) graphql.Resolver {
+			directive0 := next
+
+			directive1 := func(ctx context.Context) (any, error) {
+				permission, err := ec.unmarshalNString2string(ctx, "operation:member")
+				if err != nil {
+					var zeroVal *model.WikiDocumentVisitConnection
+					return zeroVal, err
+				}
+				if ec.Directives.HasPermission == nil {
+					var zeroVal *model.WikiDocumentVisitConnection
+					return zeroVal, errors.New("directive hasPermission is not implemented")
+				}
+				return ec.Directives.HasPermission(ctx, nil, directive0, permission)
+			}
+
+			next = directive1
+			return next
+		},
+		ec.marshalNWikiDocumentVisitConnection2ᚖgithubᚗcomᚋvibeᚑc2ᚋvibeᚑc2ᚑcoreᚋcoreᚋpkgᚋgraphqlᚋmodelᚐWikiDocumentVisitConnection,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_Query_wikiDocumentHistory(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Query",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "edges":
+				return ec.fieldContext_WikiDocumentVisitConnection_edges(ctx, field)
+			case "pageInfo":
+				return ec.fieldContext_WikiDocumentVisitConnection_pageInfo(ctx, field)
+			case "totalCount":
+				return ec.fieldContext_WikiDocumentVisitConnection_totalCount(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type WikiDocumentVisitConnection", field.Name)
+		},
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			err = ec.Recover(ctx, r)
+			ec.Error(ctx, err)
+		}
+	}()
+	ctx = graphql.WithFieldContext(ctx, fc)
+	if fc.Args, err = ec.field_Query_wikiDocumentHistory_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
 		ec.Error(ctx, err)
 		return fc, err
 	}
@@ -12961,6 +13268,304 @@ func (ec *executionContext) fieldContext_WikiDocumentPresenceEvent_action(_ cont
 	return fc, nil
 }
 
+func (ec *executionContext) _WikiDocumentVisit_id(ctx context.Context, field graphql.CollectedField, obj *models.WikiDocumentVisit) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_WikiDocumentVisit_id,
+		func(ctx context.Context) (any, error) {
+			return ec.Resolvers.WikiDocumentVisit().ID(ctx, obj)
+		},
+		nil,
+		ec.marshalNID2string,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_WikiDocumentVisit_id(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "WikiDocumentVisit",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type ID does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _WikiDocumentVisit_document(ctx context.Context, field graphql.CollectedField, obj *models.WikiDocumentVisit) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_WikiDocumentVisit_document,
+		func(ctx context.Context) (any, error) {
+			return ec.Resolvers.WikiDocumentVisit().Document(ctx, obj)
+		},
+		nil,
+		ec.marshalNWikiDocument2ᚖgithubᚗcomᚋvibeᚑc2ᚋvibeᚑc2ᚑcoreᚋcoreᚋpkgᚋmodelsᚐWikiDocument,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_WikiDocumentVisit_document(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "WikiDocumentVisit",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "id":
+				return ec.fieldContext_WikiDocument_id(ctx, field)
+			case "operationId":
+				return ec.fieldContext_WikiDocument_operationId(ctx, field)
+			case "parentDocument":
+				return ec.fieldContext_WikiDocument_parentDocument(ctx, field)
+			case "childDocuments":
+				return ec.fieldContext_WikiDocument_childDocuments(ctx, field)
+			case "title":
+				return ec.fieldContext_WikiDocument_title(ctx, field)
+			case "content":
+				return ec.fieldContext_WikiDocument_content(ctx, field)
+			case "emoji":
+				return ec.fieldContext_WikiDocument_emoji(ctx, field)
+			case "color":
+				return ec.fieldContext_WikiDocument_color(ctx, field)
+			case "icon":
+				return ec.fieldContext_WikiDocument_icon(ctx, field)
+			case "sortOrder":
+				return ec.fieldContext_WikiDocument_sortOrder(ctx, field)
+			case "childCount":
+				return ec.fieldContext_WikiDocument_childCount(ctx, field)
+			case "ancestors":
+				return ec.fieldContext_WikiDocument_ancestors(ctx, field)
+			case "createdBy":
+				return ec.fieldContext_WikiDocument_createdBy(ctx, field)
+			case "lastUpdatedBy":
+				return ec.fieldContext_WikiDocument_lastUpdatedBy(ctx, field)
+			case "lastUpdatedAt":
+				return ec.fieldContext_WikiDocument_lastUpdatedAt(ctx, field)
+			case "lastBackupAt":
+				return ec.fieldContext_WikiDocument_lastBackupAt(ctx, field)
+			case "deletedAt":
+				return ec.fieldContext_WikiDocument_deletedAt(ctx, field)
+			case "deletedBy":
+				return ec.fieldContext_WikiDocument_deletedBy(ctx, field)
+			case "createdAt":
+				return ec.fieldContext_WikiDocument_createdAt(ctx, field)
+			case "updatedAt":
+				return ec.fieldContext_WikiDocument_updatedAt(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type WikiDocument", field.Name)
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _WikiDocumentVisit_visitedAt(ctx context.Context, field graphql.CollectedField, obj *models.WikiDocumentVisit) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_WikiDocumentVisit_visitedAt,
+		func(ctx context.Context) (any, error) {
+			return ec.Resolvers.WikiDocumentVisit().VisitedAt(ctx, obj)
+		},
+		nil,
+		ec.marshalNString2string,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_WikiDocumentVisit_visitedAt(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "WikiDocumentVisit",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _WikiDocumentVisitConnection_edges(ctx context.Context, field graphql.CollectedField, obj *model.WikiDocumentVisitConnection) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_WikiDocumentVisitConnection_edges,
+		func(ctx context.Context) (any, error) {
+			return obj.Edges, nil
+		},
+		nil,
+		ec.marshalNWikiDocumentVisitEdge2ᚕᚖgithubᚗcomᚋvibeᚑc2ᚋvibeᚑc2ᚑcoreᚋcoreᚋpkgᚋgraphqlᚋmodelᚐWikiDocumentVisitEdgeᚄ,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_WikiDocumentVisitConnection_edges(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "WikiDocumentVisitConnection",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "node":
+				return ec.fieldContext_WikiDocumentVisitEdge_node(ctx, field)
+			case "cursor":
+				return ec.fieldContext_WikiDocumentVisitEdge_cursor(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type WikiDocumentVisitEdge", field.Name)
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _WikiDocumentVisitConnection_pageInfo(ctx context.Context, field graphql.CollectedField, obj *model.WikiDocumentVisitConnection) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_WikiDocumentVisitConnection_pageInfo,
+		func(ctx context.Context) (any, error) {
+			return obj.PageInfo, nil
+		},
+		nil,
+		ec.marshalNPageInfo2ᚖgithubᚗcomᚋvibeᚑc2ᚋvibeᚑc2ᚑcoreᚋcoreᚋpkgᚋpaginationᚐPageInfo,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_WikiDocumentVisitConnection_pageInfo(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "WikiDocumentVisitConnection",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "hasNextPage":
+				return ec.fieldContext_PageInfo_hasNextPage(ctx, field)
+			case "hasPreviousPage":
+				return ec.fieldContext_PageInfo_hasPreviousPage(ctx, field)
+			case "startCursor":
+				return ec.fieldContext_PageInfo_startCursor(ctx, field)
+			case "endCursor":
+				return ec.fieldContext_PageInfo_endCursor(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type PageInfo", field.Name)
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _WikiDocumentVisitConnection_totalCount(ctx context.Context, field graphql.CollectedField, obj *model.WikiDocumentVisitConnection) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_WikiDocumentVisitConnection_totalCount,
+		func(ctx context.Context) (any, error) {
+			return obj.TotalCount, nil
+		},
+		nil,
+		ec.marshalNInt2int,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_WikiDocumentVisitConnection_totalCount(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "WikiDocumentVisitConnection",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Int does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _WikiDocumentVisitEdge_node(ctx context.Context, field graphql.CollectedField, obj *model.WikiDocumentVisitEdge) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_WikiDocumentVisitEdge_node,
+		func(ctx context.Context) (any, error) {
+			return obj.Node, nil
+		},
+		nil,
+		ec.marshalNWikiDocumentVisit2ᚖgithubᚗcomᚋvibeᚑc2ᚋvibeᚑc2ᚑcoreᚋcoreᚋpkgᚋmodelsᚐWikiDocumentVisit,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_WikiDocumentVisitEdge_node(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "WikiDocumentVisitEdge",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "id":
+				return ec.fieldContext_WikiDocumentVisit_id(ctx, field)
+			case "document":
+				return ec.fieldContext_WikiDocumentVisit_document(ctx, field)
+			case "visitedAt":
+				return ec.fieldContext_WikiDocumentVisit_visitedAt(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type WikiDocumentVisit", field.Name)
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _WikiDocumentVisitEdge_cursor(ctx context.Context, field graphql.CollectedField, obj *model.WikiDocumentVisitEdge) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_WikiDocumentVisitEdge_cursor,
+		func(ctx context.Context) (any, error) {
+			return obj.Cursor, nil
+		},
+		nil,
+		ec.marshalNString2string,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_WikiDocumentVisitEdge_cursor(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "WikiDocumentVisitEdge",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
 func (ec *executionContext) _WikiSearchConnection_hits(ctx context.Context, field graphql.CollectedField, obj *model.WikiSearchConnection) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
@@ -15463,6 +16068,13 @@ func (ec *executionContext) _Mutation(ctx context.Context, sel ast.SelectionSet)
 			if out.Values[i] == graphql.Null {
 				out.Invalids++
 			}
+		case "trackWikiDocumentVisit":
+			out.Values[i] = ec.OperationContext.RootResolverMiddleware(innerCtx, func(ctx context.Context) (res graphql.Marshaler) {
+				return ec._Mutation_trackWikiDocumentVisit(ctx, field)
+			})
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
 		default:
 			panic("unknown field " + strconv.Quote(field.Name))
 		}
@@ -16475,6 +17087,28 @@ func (ec *executionContext) _Query(ctx context.Context, sel ast.SelectionSet) gr
 					}
 				}()
 				res = ec._Query_wikiOperationPresence(ctx, field)
+				if res == graphql.Null {
+					atomic.AddUint32(&fs.Invalids, 1)
+				}
+				return res
+			}
+
+			rrm := func(ctx context.Context) graphql.Marshaler {
+				return ec.OperationContext.RootResolverMiddleware(ctx,
+					func(ctx context.Context) graphql.Marshaler { return innerFunc(ctx, out) })
+			}
+
+			out.Concurrently(i, func(ctx context.Context) graphql.Marshaler { return rrm(innerCtx) })
+		case "wikiDocumentHistory":
+			field := field
+
+			innerFunc := func(ctx context.Context, fs *graphql.FieldSet) (res graphql.Marshaler) {
+				defer func() {
+					if r := recover(); r != nil {
+						ec.Error(ctx, ec.Recover(ctx, r))
+					}
+				}()
+				res = ec._Query_wikiDocumentHistory(ctx, field)
 				if res == graphql.Null {
 					atomic.AddUint32(&fs.Invalids, 1)
 				}
@@ -19028,6 +19662,241 @@ func (ec *executionContext) _WikiDocumentPresenceEvent(ctx context.Context, sel 
 	return out
 }
 
+var wikiDocumentVisitImplementors = []string{"WikiDocumentVisit"}
+
+func (ec *executionContext) _WikiDocumentVisit(ctx context.Context, sel ast.SelectionSet, obj *models.WikiDocumentVisit) graphql.Marshaler {
+	fields := graphql.CollectFields(ec.OperationContext, sel, wikiDocumentVisitImplementors)
+
+	out := graphql.NewFieldSet(fields)
+	deferred := make(map[string]*graphql.FieldSet)
+	for i, field := range fields {
+		switch field.Name {
+		case "__typename":
+			out.Values[i] = graphql.MarshalString("WikiDocumentVisit")
+		case "id":
+			field := field
+
+			innerFunc := func(ctx context.Context, fs *graphql.FieldSet) (res graphql.Marshaler) {
+				defer func() {
+					if r := recover(); r != nil {
+						ec.Error(ctx, ec.Recover(ctx, r))
+					}
+				}()
+				res = ec._WikiDocumentVisit_id(ctx, field, obj)
+				if res == graphql.Null {
+					atomic.AddUint32(&fs.Invalids, 1)
+				}
+				return res
+			}
+
+			if field.Deferrable != nil {
+				dfs, ok := deferred[field.Deferrable.Label]
+				di := 0
+				if ok {
+					dfs.AddField(field)
+					di = len(dfs.Values) - 1
+				} else {
+					dfs = graphql.NewFieldSet([]graphql.CollectedField{field})
+					deferred[field.Deferrable.Label] = dfs
+				}
+				dfs.Concurrently(di, func(ctx context.Context) graphql.Marshaler {
+					return innerFunc(ctx, dfs)
+				})
+
+				// don't run the out.Concurrently() call below
+				out.Values[i] = graphql.Null
+				continue
+			}
+
+			out.Concurrently(i, func(ctx context.Context) graphql.Marshaler { return innerFunc(ctx, out) })
+		case "document":
+			field := field
+
+			innerFunc := func(ctx context.Context, fs *graphql.FieldSet) (res graphql.Marshaler) {
+				defer func() {
+					if r := recover(); r != nil {
+						ec.Error(ctx, ec.Recover(ctx, r))
+					}
+				}()
+				res = ec._WikiDocumentVisit_document(ctx, field, obj)
+				if res == graphql.Null {
+					atomic.AddUint32(&fs.Invalids, 1)
+				}
+				return res
+			}
+
+			if field.Deferrable != nil {
+				dfs, ok := deferred[field.Deferrable.Label]
+				di := 0
+				if ok {
+					dfs.AddField(field)
+					di = len(dfs.Values) - 1
+				} else {
+					dfs = graphql.NewFieldSet([]graphql.CollectedField{field})
+					deferred[field.Deferrable.Label] = dfs
+				}
+				dfs.Concurrently(di, func(ctx context.Context) graphql.Marshaler {
+					return innerFunc(ctx, dfs)
+				})
+
+				// don't run the out.Concurrently() call below
+				out.Values[i] = graphql.Null
+				continue
+			}
+
+			out.Concurrently(i, func(ctx context.Context) graphql.Marshaler { return innerFunc(ctx, out) })
+		case "visitedAt":
+			field := field
+
+			innerFunc := func(ctx context.Context, fs *graphql.FieldSet) (res graphql.Marshaler) {
+				defer func() {
+					if r := recover(); r != nil {
+						ec.Error(ctx, ec.Recover(ctx, r))
+					}
+				}()
+				res = ec._WikiDocumentVisit_visitedAt(ctx, field, obj)
+				if res == graphql.Null {
+					atomic.AddUint32(&fs.Invalids, 1)
+				}
+				return res
+			}
+
+			if field.Deferrable != nil {
+				dfs, ok := deferred[field.Deferrable.Label]
+				di := 0
+				if ok {
+					dfs.AddField(field)
+					di = len(dfs.Values) - 1
+				} else {
+					dfs = graphql.NewFieldSet([]graphql.CollectedField{field})
+					deferred[field.Deferrable.Label] = dfs
+				}
+				dfs.Concurrently(di, func(ctx context.Context) graphql.Marshaler {
+					return innerFunc(ctx, dfs)
+				})
+
+				// don't run the out.Concurrently() call below
+				out.Values[i] = graphql.Null
+				continue
+			}
+
+			out.Concurrently(i, func(ctx context.Context) graphql.Marshaler { return innerFunc(ctx, out) })
+		default:
+			panic("unknown field " + strconv.Quote(field.Name))
+		}
+	}
+	out.Dispatch(ctx)
+	if out.Invalids > 0 {
+		return graphql.Null
+	}
+
+	atomic.AddInt32(&ec.Deferred, int32(len(deferred)))
+
+	for label, dfs := range deferred {
+		ec.ProcessDeferredGroup(graphql.DeferredGroup{
+			Label:    label,
+			Path:     graphql.GetPath(ctx),
+			FieldSet: dfs,
+			Context:  ctx,
+		})
+	}
+
+	return out
+}
+
+var wikiDocumentVisitConnectionImplementors = []string{"WikiDocumentVisitConnection"}
+
+func (ec *executionContext) _WikiDocumentVisitConnection(ctx context.Context, sel ast.SelectionSet, obj *model.WikiDocumentVisitConnection) graphql.Marshaler {
+	fields := graphql.CollectFields(ec.OperationContext, sel, wikiDocumentVisitConnectionImplementors)
+
+	out := graphql.NewFieldSet(fields)
+	deferred := make(map[string]*graphql.FieldSet)
+	for i, field := range fields {
+		switch field.Name {
+		case "__typename":
+			out.Values[i] = graphql.MarshalString("WikiDocumentVisitConnection")
+		case "edges":
+			out.Values[i] = ec._WikiDocumentVisitConnection_edges(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "pageInfo":
+			out.Values[i] = ec._WikiDocumentVisitConnection_pageInfo(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "totalCount":
+			out.Values[i] = ec._WikiDocumentVisitConnection_totalCount(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		default:
+			panic("unknown field " + strconv.Quote(field.Name))
+		}
+	}
+	out.Dispatch(ctx)
+	if out.Invalids > 0 {
+		return graphql.Null
+	}
+
+	atomic.AddInt32(&ec.Deferred, int32(len(deferred)))
+
+	for label, dfs := range deferred {
+		ec.ProcessDeferredGroup(graphql.DeferredGroup{
+			Label:    label,
+			Path:     graphql.GetPath(ctx),
+			FieldSet: dfs,
+			Context:  ctx,
+		})
+	}
+
+	return out
+}
+
+var wikiDocumentVisitEdgeImplementors = []string{"WikiDocumentVisitEdge"}
+
+func (ec *executionContext) _WikiDocumentVisitEdge(ctx context.Context, sel ast.SelectionSet, obj *model.WikiDocumentVisitEdge) graphql.Marshaler {
+	fields := graphql.CollectFields(ec.OperationContext, sel, wikiDocumentVisitEdgeImplementors)
+
+	out := graphql.NewFieldSet(fields)
+	deferred := make(map[string]*graphql.FieldSet)
+	for i, field := range fields {
+		switch field.Name {
+		case "__typename":
+			out.Values[i] = graphql.MarshalString("WikiDocumentVisitEdge")
+		case "node":
+			out.Values[i] = ec._WikiDocumentVisitEdge_node(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "cursor":
+			out.Values[i] = ec._WikiDocumentVisitEdge_cursor(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		default:
+			panic("unknown field " + strconv.Quote(field.Name))
+		}
+	}
+	out.Dispatch(ctx)
+	if out.Invalids > 0 {
+		return graphql.Null
+	}
+
+	atomic.AddInt32(&ec.Deferred, int32(len(deferred)))
+
+	for label, dfs := range deferred {
+		ec.ProcessDeferredGroup(graphql.DeferredGroup{
+			Label:    label,
+			Path:     graphql.GetPath(ctx),
+			FieldSet: dfs,
+			Context:  ctx,
+		})
+	}
+
+	return out
+}
+
 var wikiSearchConnectionImplementors = []string{"WikiSearchConnection"}
 
 func (ec *executionContext) _WikiSearchConnection(ctx context.Context, sel ast.SelectionSet, obj *model.WikiSearchConnection) graphql.Marshaler {
@@ -20293,6 +21162,60 @@ func (ec *executionContext) marshalNWikiDocumentPresenceEvent2ᚖgithubᚗcomᚋ
 		return graphql.Null
 	}
 	return ec._WikiDocumentPresenceEvent(ctx, sel, v)
+}
+
+func (ec *executionContext) marshalNWikiDocumentVisit2githubᚗcomᚋvibeᚑc2ᚋvibeᚑc2ᚑcoreᚋcoreᚋpkgᚋmodelsᚐWikiDocumentVisit(ctx context.Context, sel ast.SelectionSet, v models.WikiDocumentVisit) graphql.Marshaler {
+	return ec._WikiDocumentVisit(ctx, sel, &v)
+}
+
+func (ec *executionContext) marshalNWikiDocumentVisit2ᚖgithubᚗcomᚋvibeᚑc2ᚋvibeᚑc2ᚑcoreᚋcoreᚋpkgᚋmodelsᚐWikiDocumentVisit(ctx context.Context, sel ast.SelectionSet, v *models.WikiDocumentVisit) graphql.Marshaler {
+	if v == nil {
+		if !graphql.HasFieldError(ctx, graphql.GetFieldContext(ctx)) {
+			graphql.AddErrorf(ctx, "the requested element is null which the schema does not allow")
+		}
+		return graphql.Null
+	}
+	return ec._WikiDocumentVisit(ctx, sel, v)
+}
+
+func (ec *executionContext) marshalNWikiDocumentVisitConnection2githubᚗcomᚋvibeᚑc2ᚋvibeᚑc2ᚑcoreᚋcoreᚋpkgᚋgraphqlᚋmodelᚐWikiDocumentVisitConnection(ctx context.Context, sel ast.SelectionSet, v model.WikiDocumentVisitConnection) graphql.Marshaler {
+	return ec._WikiDocumentVisitConnection(ctx, sel, &v)
+}
+
+func (ec *executionContext) marshalNWikiDocumentVisitConnection2ᚖgithubᚗcomᚋvibeᚑc2ᚋvibeᚑc2ᚑcoreᚋcoreᚋpkgᚋgraphqlᚋmodelᚐWikiDocumentVisitConnection(ctx context.Context, sel ast.SelectionSet, v *model.WikiDocumentVisitConnection) graphql.Marshaler {
+	if v == nil {
+		if !graphql.HasFieldError(ctx, graphql.GetFieldContext(ctx)) {
+			graphql.AddErrorf(ctx, "the requested element is null which the schema does not allow")
+		}
+		return graphql.Null
+	}
+	return ec._WikiDocumentVisitConnection(ctx, sel, v)
+}
+
+func (ec *executionContext) marshalNWikiDocumentVisitEdge2ᚕᚖgithubᚗcomᚋvibeᚑc2ᚋvibeᚑc2ᚑcoreᚋcoreᚋpkgᚋgraphqlᚋmodelᚐWikiDocumentVisitEdgeᚄ(ctx context.Context, sel ast.SelectionSet, v []*model.WikiDocumentVisitEdge) graphql.Marshaler {
+	ret := graphql.MarshalSliceConcurrently(ctx, len(v), 0, false, func(ctx context.Context, i int) graphql.Marshaler {
+		fc := graphql.GetFieldContext(ctx)
+		fc.Result = &v[i]
+		return ec.marshalNWikiDocumentVisitEdge2ᚖgithubᚗcomᚋvibeᚑc2ᚋvibeᚑc2ᚑcoreᚋcoreᚋpkgᚋgraphqlᚋmodelᚐWikiDocumentVisitEdge(ctx, sel, v[i])
+	})
+
+	for _, e := range ret {
+		if e == graphql.Null {
+			return graphql.Null
+		}
+	}
+
+	return ret
+}
+
+func (ec *executionContext) marshalNWikiDocumentVisitEdge2ᚖgithubᚗcomᚋvibeᚑc2ᚋvibeᚑc2ᚑcoreᚋcoreᚋpkgᚋgraphqlᚋmodelᚐWikiDocumentVisitEdge(ctx context.Context, sel ast.SelectionSet, v *model.WikiDocumentVisitEdge) graphql.Marshaler {
+	if v == nil {
+		if !graphql.HasFieldError(ctx, graphql.GetFieldContext(ctx)) {
+			graphql.AddErrorf(ctx, "the requested element is null which the schema does not allow")
+		}
+		return graphql.Null
+	}
+	return ec._WikiDocumentVisitEdge(ctx, sel, v)
 }
 
 func (ec *executionContext) marshalNWikiSearchConnection2githubᚗcomᚋvibeᚑc2ᚋvibeᚑc2ᚑcoreᚋcoreᚋpkgᚋgraphqlᚋmodelᚐWikiSearchConnection(ctx context.Context, sel ast.SelectionSet, v model.WikiSearchConnection) graphql.Marshaler {

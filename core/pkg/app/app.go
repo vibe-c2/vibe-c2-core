@@ -39,6 +39,7 @@ type Repositories struct {
 	Session            repository.ISessionRepository
 	WikiDocument       repository.IWikiDocumentRepository
 	WikiDocumentBackup repository.IWikiDocumentBackupRepository
+	WikiDocumentVisit  repository.IWikiDocumentVisitRepository
 	WikiImage          repository.IWikiImageRepository
 	WikiFile           repository.IWikiFileRepository
 }
@@ -95,6 +96,7 @@ func NewApp() (*App, error) {
 		Session:            repository.NewSessionRepository(db),
 		WikiDocument:       repository.NewWikiDocumentRepository(db),
 		WikiDocumentBackup: repository.NewWikiDocumentBackupRepository(db),
+		WikiDocumentVisit:  repository.NewWikiDocumentVisitRepository(db),
 		WikiImage:          repository.NewWikiImageRepository(db),
 		WikiFile:           repository.NewWikiFileRepository(db),
 	}

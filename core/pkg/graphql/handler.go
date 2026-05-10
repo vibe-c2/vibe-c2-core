@@ -32,24 +32,30 @@ import (
 // NewHandler creates a Gin handler that serves GraphQL requests.
 //
 // The flow for each request:
+//
 //  1. Gin middleware (JWTAuth) already ran and set userID/username/roles
+//
 //  2. This handler reads those values from gin.Context
+//
 //  3. It injects them into context.Context as AuthInfo
+//
 //  4. gqlgen takes over: parses the query, runs directives, calls resolvers
+//
 //  5. The response (JSON) is written back through Gin
 //
-//	@Summary		GraphQL endpoint
-//	@Description	Execute GraphQL queries and mutations. Authentication via httpOnly cookies; state-changing operations require an X-CSRF-Token header matching the csrf_token cookie.
-//	@Tags			GraphQL
-//	@Accept			json
-//	@Produce		json
-//	@Router			/graphql [post]
+//     @Summary		GraphQL endpoint
+//     @Description	Execute GraphQL queries and mutations. Authentication via httpOnly cookies; state-changing operations require an X-CSRF-Token header matching the csrf_token cookie.
+//     @Tags			GraphQL
+//     @Accept			json
+//     @Produce		json
+//     @Router			/graphql [post]
 func NewHandler(
 	users resolver.IUserResolver,
 	operations resolver.IOperationResolver,
 	schemeNetworkPoints resolver.ISchemeNetworkPointResolver,
 	sessions resolver.ISessionResolver,
 	wikiDocuments resolver.IWikiDocumentResolver,
+	wikiVisits resolver.IWikiDocumentVisitResolver,
 	bus eventbus.IEventBus,
 	userRepo repository.IUserRepository,
 	operationRepo repository.IOperationRepository,
@@ -66,6 +72,7 @@ func NewHandler(
 		SchemeNetworkPointResolver: schemeNetworkPoints,
 		SessionResolver:            sessions,
 		WikiDocumentResolver:       wikiDocuments,
+		WikiDocumentVisitResolver:  wikiVisits,
 		EventBus:                   bus,
 		UserRepo:                   userRepo,
 		OperationRepo:              operationRepo,

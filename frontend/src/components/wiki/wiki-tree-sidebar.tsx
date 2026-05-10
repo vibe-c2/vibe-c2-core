@@ -27,6 +27,7 @@ import { useWikiDragStore, type DropPosition, type DropTarget } from "@/stores/w
 import { useWikiDocumentTrash, useUpdateWikiDocument } from "@/graphql/hooks/wiki"
 import { WikiTreeNode } from "@/components/wiki/wiki-tree-node"
 import { DocumentIcon } from "@/components/wiki/document-icon"
+import { WikiHistoryDropdown } from "@/components/wiki/wiki-history-dropdown"
 import { collectBranchIdsWithChildren } from "@/components/wiki/wiki-tree-helpers"
 import type { WikiDocumentTreeFieldsFragment } from "@/graphql/gql/graphql"
 
@@ -367,6 +368,7 @@ export function WikiTreeSidebar({
           </TooltipTrigger>
           <TooltipContent>Search documents</TooltipContent>
         </Tooltip>
+        <WikiHistoryDropdown operationId={operationId} />
         {isEditor && (
           <Tooltip>
             <TooltipTrigger

@@ -224,6 +224,17 @@ type WikiDocumentPresenceEvent struct {
 	Action      PresenceAction `json:"action"`
 }
 
+type WikiDocumentVisitConnection struct {
+	Edges      []*WikiDocumentVisitEdge `json:"edges"`
+	PageInfo   *pagination.PageInfo     `json:"pageInfo"`
+	TotalCount int                      `json:"totalCount"`
+}
+
+type WikiDocumentVisitEdge struct {
+	Node   *models.WikiDocumentVisit `json:"node"`
+	Cursor string                    `json:"cursor"`
+}
+
 type WikiSearchConnection struct {
 	Hits    []*WikiSearchHit `json:"hits"`
 	Total   int              `json:"total"`

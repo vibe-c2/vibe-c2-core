@@ -158,6 +158,28 @@ type WikiDocumentEvent {
   document: WikiDocument
 }
 
+# Per-user "recently visited" entry. The collection deduplicates by
+# (user, operation, document) — a revisit refreshes visitedAt and moves the
+# entry to the top of the list. History is capped server-side; older entries
+# are pruned automatically. The `document` field is the live wiki document,
+# resolved at query time so renamed/moved docs render with current metadata.
+type WikiDocumentVisit {
+  id: ID!
+  document: WikiDocument!
+  visitedAt: String!
+}
+
+type WikiDocumentVisitEdge {
+  node: WikiDocumentVisit!
+  cursor: String!
+}
+
+type WikiDocumentVisitConnection {
+  edges: [WikiDocumentVisitEdge!]!
+  pageInfo: PageInfo!
+  totalCount: Int!
+}
+
 # --- Inputs ---
 
 input CreateWikiDocumentInput {
@@ -247,6 +269,18 @@ extend type Query {
 
   wikiOperationPresence(operationId: ID!): [WikiDocumentPresence!]!
     @hasPermission(permission: "operation:member")
+
+  # The calling user's wiki document visit history within an operation,
+  # most-recent-first. Visits to soft-deleted documents are filtered out
+  # server-side. Pagination uses an offset/limit shape rather than a cursor
+  # because the underlying list is small (capped at a few hundred entries
+  # per user) and the dropdown loads it in one shot.
+  wikiDocumentHistory(
+    operationId: ID!
+    offset: Int = 0
+    limit: Int = 300
+  ): WikiDocumentVisitConnection!
+    @hasPermission(permission: "operation:member")
 }
 
 # --- Mutations ---
@@ -281,6 +315,13 @@ extend type Mutation {
     @hasPermission(permission: "operation:member")
 
   deleteWikiDocumentBackup(id: ID!): Boolean!
+    @hasPermission(permission: "operation:member")
+
+  # Records (or refreshes) a visit to the given document for the calling
+  # user. Idempotent: if a visit row already exists for this user-document
+  # pair, its visitedAt is bumped and it moves to the top of history.
+  # The user's history is pruned to the configured cap on each call.
+  trackWikiDocumentVisit(documentId: ID!): WikiDocumentVisit!
     @hasPermission(permission: "operation:member")
 }
 

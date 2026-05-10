@@ -73,6 +73,41 @@ export function dayGroup(input: string | Date, now: Date = new Date()): { key: s
   return { key, label }
 }
 
+// Visit-history bucketing. Coarser than dayGroup: collapses days 2–7 into a
+// single "2–7 days ago" bucket, then falls through to per-day labels for
+// older entries. Used by the wiki history dropdown.
+export function historyGroup(
+  input: string | Date,
+  now: Date = new Date(),
+): { key: string; label: string } {
+  const date = typeof input === "string" ? new Date(input) : input
+
+  if (isSameDay(date, now)) return { key: "today", label: "Today" }
+
+  const yesterday = new Date(now)
+  yesterday.setDate(yesterday.getDate() - 1)
+  if (isSameDay(date, yesterday)) return { key: "yesterday", label: "Yesterday" }
+
+  // 2–7 days ago: collapse the calendar-day range [now-7, now-2] into a
+  // single bucket. Compute the diff against day-aligned timestamps so DST
+  // transitions don't shift the boundary.
+  const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate())
+  const startOfDate = new Date(date.getFullYear(), date.getMonth(), date.getDate())
+  const diffDays = Math.round((startOfToday.getTime() - startOfDate.getTime()) / DAY)
+  if (diffDays >= 2 && diffDays <= 7) {
+    return { key: "2-7d", label: "2–7 days ago" }
+  }
+
+  const sameYear = date.getFullYear() === now.getFullYear()
+  const key = `${date.getFullYear()}-${date.getMonth() + 1}-${date.getDate()}`
+  const label = date.toLocaleDateString(undefined, {
+    month: "short",
+    day: "numeric",
+    year: sameYear ? undefined : "numeric",
+  })
+  return { key, label }
+}
+
 function isSameDay(a: Date, b: Date): boolean {
   return (
     a.getFullYear() === b.getFullYear() &&

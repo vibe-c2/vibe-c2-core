@@ -12,6 +12,7 @@ import {
   WikiDocumentBackupDetailDocument,
   WikiDocumentPresenceDocument,
   WikiOperationPresenceDocument,
+  WikiDocumentHistoryDocument,
   CreateWikiDocumentDocument,
   UpdateWikiDocumentDocument,
   DeleteWikiDocumentDocument,
@@ -21,6 +22,7 @@ import {
   CreateWikiDocumentBackupDocument,
   RestoreWikiDocumentBackupDocument,
   DeleteWikiDocumentBackupDocument,
+  TrackWikiDocumentVisitDocument,
   WikiDocumentChangedDocument,
   WikiDocumentPresenceChangedDocument,
 } from "@/graphql/gql/graphql"
@@ -44,6 +46,8 @@ export const wikiKeys = {
   backup: (id: string) => [...wikiKeys.all, "backup", id] as const,
   presence: (documentId: string) => [...wikiKeys.all, "presence", documentId] as const,
   operationPresence: (operationId: string) => [...wikiKeys.all, "operationPresence", operationId] as const,
+  histories: () => [...wikiKeys.all, "history"] as const,
+  history: (operationId: string) => [...wikiKeys.histories(), operationId] as const,
 }
 
 // --- Queries ---
@@ -185,6 +189,20 @@ export function useWikiOperationPresence(operationId: string) {
   })
 }
 
+// History is loaded in one shot (capped at 300 entries server-side) so
+// useQuery is sufficient — no infinite scroll needed. `enabled` lets callers
+// defer the fetch until the dropdown is opened, so closed-dropdown users
+// pay zero round-trips.
+export function useWikiDocumentHistory(operationId: string, options?: { enabled?: boolean }) {
+  return useQuery({
+    queryKey: wikiKeys.history(operationId),
+    queryFn: () =>
+      graphqlClient(WikiDocumentHistoryDocument, { operationId, offset: 0, limit: 300 }),
+    enabled: !!operationId && (options?.enabled ?? true),
+    staleTime: 30_000,
+  })
+}
+
 // --- Mutations ---
 
 export function useCreateWikiDocument() {
@@ -289,6 +307,21 @@ export function useDeleteWikiDocumentBackup() {
       graphqlClient(DeleteWikiDocumentBackupDocument, { id: vars.id }),
     onSuccess: (_data, vars) => {
       queryClient.invalidateQueries({ queryKey: wikiKeys.backups(vars.documentId) })
+    },
+  })
+}
+
+// Records (or refreshes) a visit. Best-effort: we don't surface failures —
+// history is a convenience feature and a missed visit is fine. On success we
+// invalidate every operation's history cache so the next dropdown open shows
+// the new top entry.
+export function useTrackWikiDocumentVisit() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (vars: { documentId: string }) =>
+      graphqlClient(TrackWikiDocumentVisitDocument, vars),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: wikiKeys.histories() })
     },
   })
 }

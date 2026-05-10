@@ -37,13 +37,14 @@ type Resolver struct {
 	SchemeNetworkPointResolver resolver.ISchemeNetworkPointResolver
 	SessionResolver            resolver.ISessionResolver
 	WikiDocumentResolver       resolver.IWikiDocumentResolver
+	WikiDocumentVisitResolver  resolver.IWikiDocumentVisitResolver
 
 	// Subscription dependencies — event bus for real-time events,
 	// repos for fetching full entities to include in event payloads.
-	EventBus        eventbus.IEventBus
-	UserRepo        repository.IUserRepository
-	OperationRepo   repository.IOperationRepository
-	SessionRepo     repository.ISessionRepository
+	EventBus         eventbus.IEventBus
+	UserRepo         repository.IUserRepository
+	OperationRepo    repository.IOperationRepository
+	SessionRepo      repository.ISessionRepository
 	WikiDocumentRepo repository.IWikiDocumentRepository
-	PresenceTracker *wiki.PresenceTracker
+	PresenceTracker  *wiki.PresenceTracker
 }
