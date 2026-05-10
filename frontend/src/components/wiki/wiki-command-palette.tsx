@@ -7,7 +7,7 @@ import {
   type KeyboardEvent as ReactKeyboardEvent,
   type ReactNode,
 } from "react";
-import { useNavigate } from "react-router";
+import { Link, useNavigate } from "react-router";
 import { SearchIcon, XIcon } from "lucide-react";
 import { Dialog as DialogPrimitive } from "@base-ui/react/dialog";
 import { Badge } from "@/components/ui/badge";
@@ -17,7 +17,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { useWikiStore } from "@/stores/wiki";
 import { useWikiSearch } from "@/graphql/hooks/wiki";
 import { DocumentIcon } from "@/components/wiki/document-icon";
-import { cn } from "@/lib/utils";
+import { cn, isPlainLeftClick } from "@/lib/utils";
 
 interface WikiCommandPaletteProps {
   operationId: string;
@@ -195,34 +195,38 @@ function PaletteBody({ operationId, scope, onClose }: PaletteBodyProps) {
         ) : (
           <ul className="py-1">
             {hits.map((hit, i) => (
-              <li
-                key={hit.document.id}
-                data-palette-index={i}
-                className={cn(
-                  "mx-1 flex cursor-pointer flex-col gap-0.5 rounded px-3 py-2 text-left",
-                  i === activeIndex ? "bg-accent" : "hover:bg-muted/60",
-                )}
-                onMouseMove={() => setActiveIndex(i)}
-                onClick={() => openHit(hit.document.id)}
-              >
-                <div className="flex items-center gap-2">
-                  <DocumentIcon
-                    emoji={hit.document.emoji}
-                    icon={hit.document.icon}
-                    color={hit.document.color}
-                  />
-                  <span className="truncate text-sm font-medium">
-                    {hit.document.title}
-                  </span>
-                </div>
-                {hit.snippet && (
-                  <p className="truncate text-xs text-muted-foreground">
-                    <HighlightedText
-                      text={hit.snippet}
-                      ranges={hit.matchRanges}
+              <li key={hit.document.id}>
+                <Link
+                  to={`/wiki/${hit.document.id}`}
+                  data-palette-index={i}
+                  className={cn(
+                    "mx-1 flex cursor-pointer flex-col gap-0.5 rounded px-3 py-2 text-left",
+                    i === activeIndex ? "bg-accent" : "hover:bg-muted/60",
+                  )}
+                  onMouseMove={() => setActiveIndex(i)}
+                  onClick={(e) => {
+                    if (isPlainLeftClick(e)) onClose()
+                  }}
+                >
+                  <div className="flex items-center gap-2">
+                    <DocumentIcon
+                      emoji={hit.document.emoji}
+                      icon={hit.document.icon}
+                      color={hit.document.color}
                     />
-                  </p>
-                )}
+                    <span className="truncate text-sm font-medium">
+                      {hit.document.title}
+                    </span>
+                  </div>
+                  {hit.snippet && (
+                    <p className="truncate text-xs text-muted-foreground">
+                      <HighlightedText
+                        text={hit.snippet}
+                        ranges={hit.matchRanges}
+                      />
+                    </p>
+                  )}
+                </Link>
               </li>
             ))}
             <div ref={sentinelRef} className="h-1" />

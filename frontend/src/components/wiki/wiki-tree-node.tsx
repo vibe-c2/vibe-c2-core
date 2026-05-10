@@ -1,5 +1,5 @@
 import { memo, useCallback, useEffect, useRef, useState } from "react"
-import { useNavigate, useParams } from "react-router"
+import { Link, useParams } from "react-router"
 import { useDraggable, useDroppable } from "@dnd-kit/core"
 import {
   ArrowDownAZIcon,
@@ -51,7 +51,6 @@ function WikiTreeNodeImpl({
   isEditor,
   operationId,
 }: WikiTreeNodeProps) {
-  const navigate = useNavigate()
   const { documentId: selectedDocumentId } = useParams<{ documentId: string }>()
   const isSelected = selectedDocumentId === node.id
 
@@ -220,12 +219,16 @@ function WikiTreeNodeImpl({
             className="h-5 flex-1 border-none bg-transparent px-1 py-0 text-sm shadow-none focus-visible:ring-0"
           />
         ) : (
-          <button
+          <Link
+            to={`/wiki/${node.id}`}
+            // draggable=false prevents the browser's native HTML5 link drag
+            // (which would let the user drag the URL as text); dnd-kit uses
+            // pointer events on the row, so this doesn't disable reordering.
+            draggable={false}
             className="flex h-full flex-1 items-center truncate px-1 text-left text-sm"
-            onClick={() => navigate(`/wiki/${node.id}`)}
           >
             {node.title}
-          </button>
+          </Link>
         )}
 
         {/* Quick actions + context menu — extracted so this expensive subtree

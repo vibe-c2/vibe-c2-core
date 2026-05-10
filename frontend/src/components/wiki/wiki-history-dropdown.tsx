@@ -1,5 +1,5 @@
 import { useState, useMemo, type ReactNode } from "react"
-import { useNavigate } from "react-router"
+import { Link } from "react-router"
 import { HistoryIcon } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import {
@@ -12,6 +12,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip
 import { DocumentIcon } from "@/components/wiki/document-icon"
 import { useWikiDocumentHistory } from "@/graphql/hooks/wiki"
 import { historyGroup, relativeTime } from "@/lib/relative-time"
+import { isPlainLeftClick } from "@/lib/utils"
 import type { WikiDocumentHistoryQuery } from "@/graphql/gql/graphql"
 
 interface WikiHistoryDropdownProps {
@@ -27,7 +28,6 @@ type HistoryVisit = HistoryEdge["node"]
 // buckets via a sticky header that changes when the bucket key transitions.
 export function WikiHistoryDropdown({ operationId }: WikiHistoryDropdownProps) {
   const [open, setOpen] = useState(false)
-  const navigate = useNavigate()
 
   const { data, isLoading } = useWikiDocumentHistory(operationId, { enabled: open })
 
@@ -36,11 +36,6 @@ export function WikiHistoryDropdown({ operationId }: WikiHistoryDropdownProps) {
     [data],
   )
   const totalCount = data?.wikiDocumentHistory.totalCount ?? 0
-
-  function handleRowClick(visit: HistoryVisit) {
-    navigate(`/wiki/${visit.document.id}`)
-    setOpen(false)
-  }
 
   return (
     <Popover open={open} onOpenChange={setOpen}>
@@ -87,7 +82,7 @@ export function WikiHistoryDropdown({ operationId }: WikiHistoryDropdownProps) {
           ) : visits.length === 0 ? (
             <EmptyState />
           ) : (
-            <GroupedList visits={visits} onSelect={handleRowClick} />
+            <GroupedList visits={visits} onClose={() => setOpen(false)} />
           )}
         </div>
       </PopoverContent>
@@ -111,13 +106,13 @@ function EmptyState() {
 
 interface GroupedListProps {
   visits: HistoryVisit[]
-  onSelect: (visit: HistoryVisit) => void
+  onClose: () => void
 }
 
 // Walks the visit list once, emitting a sticky bucket header whenever the
 // historyGroup key transitions. `now` is captured once per render so all rows
 // in this pass agree on the same "today" boundary.
-function GroupedList({ visits, onSelect }: GroupedListProps) {
+function GroupedList({ visits, onClose }: GroupedListProps) {
   const now = new Date()
 
   const rows: ReactNode[] = []
@@ -134,7 +129,7 @@ function GroupedList({ visits, onSelect }: GroupedListProps) {
         key={visit.id}
         visit={visit}
         now={now}
-        onClick={() => onSelect(visit)}
+        onClose={onClose}
       />,
     )
   }
@@ -153,14 +148,16 @@ function GroupHeader({ label }: { label: string }) {
 interface HistoryRowProps {
   visit: HistoryVisit
   now: Date
-  onClick: () => void
+  onClose: () => void
 }
 
-function HistoryRow({ visit, now, onClick }: HistoryRowProps) {
+function HistoryRow({ visit, now, onClose }: HistoryRowProps) {
   return (
-    <button
-      type="button"
-      onClick={onClick}
+    <Link
+      to={`/wiki/${visit.document.id}`}
+      onClick={(e) => {
+        if (isPlainLeftClick(e)) onClose()
+      }}
       className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-sm hover:bg-accent"
       title={visit.document.title}
     >
@@ -174,6 +171,6 @@ function HistoryRow({ visit, now, onClick }: HistoryRowProps) {
       <span className="shrink-0 text-[11px] text-muted-foreground tabular-nums">
         {relativeTime(visit.visitedAt, now)}
       </span>
-    </button>
+    </Link>
   )
 }

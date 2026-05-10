@@ -1,5 +1,5 @@
 import { useMemo, useRef, useState } from "react"
-import { useNavigate } from "react-router"
+import { Link } from "react-router"
 import {
   ChevronDownIcon,
   ChevronRightIcon,
@@ -43,7 +43,6 @@ export function WikiEditorHeader({
   isEditor,
   treeDocuments,
 }: WikiEditorHeaderProps) {
-  const navigate = useNavigate()
   const updateDocument = useUpdateWikiDocument()
   const openBackupPanel = useWikiStore((s) => s.openBackupPanel)
   const editorZoomed = useWikiStore((s) => s.editorZoomed)
@@ -132,7 +131,7 @@ export function WikiEditorHeader({
       {firstAncestor && (
         <>
           <BreadcrumbSep />
-          <BreadcrumbLink node={firstAncestor} onClick={() => navigate(`/wiki/${firstAncestor.id}`)} />
+          <BreadcrumbLink node={firstAncestor} />
         </>
       )}
 
@@ -140,7 +139,7 @@ export function WikiEditorHeader({
       {directParent && (
         <>
           <BreadcrumbSep />
-          <BreadcrumbLink node={directParent} onClick={() => navigate(`/wiki/${directParent.id}`)} />
+          <BreadcrumbLink node={directParent} />
         </>
       )}
 
@@ -158,10 +157,10 @@ export function WikiEditorHeader({
             </PopoverTrigger>
             <PopoverContent align="start" className="w-auto min-w-40 max-w-64 p-1">
               {middleAncestors.map((node) => (
-                <button
+                <Link
                   key={node.id}
+                  to={`/wiki/${node.id}`}
                   className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-sm hover:bg-accent"
-                  onClick={() => navigate(`/wiki/${node.id}`)}
                 >
                   <DocumentIcon
                     emoji={node.emoji}
@@ -169,7 +168,7 @@ export function WikiEditorHeader({
                     color={node.color}
                   />
                   <span className="truncate">{node.title}</span>
-                </button>
+                </Link>
               ))}
             </PopoverContent>
           </Popover>
@@ -230,10 +229,10 @@ export function WikiEditorHeader({
           </PopoverTrigger>
           <PopoverContent align="start" className="w-auto min-w-56 max-w-72 p-1">
             {directChildren.map((child) => (
-              <button
+              <Link
                 key={child.id}
+                to={`/wiki/${child.id}`}
                 className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm hover:bg-accent"
-                onClick={() => navigate(`/wiki/${child.id}`)}
               >
                 <DocumentIcon
                   emoji={child.emoji}
@@ -246,7 +245,7 @@ export function WikiEditorHeader({
                     {child.childCount}
                   </span>
                 )}
-              </button>
+              </Link>
             ))}
           </PopoverContent>
         </Popover>
@@ -334,13 +333,13 @@ function BreadcrumbSep() {
   return <ChevronRightIcon className="size-3.5 shrink-0 text-muted-foreground" />
 }
 
-function BreadcrumbLink({ node, onClick }: { node: AncestorNode; onClick: () => void }) {
+function BreadcrumbLink({ node }: { node: AncestorNode }) {
   return (
-    <button
+    <Link
+      to={`/wiki/${node.id}`}
       className="shrink-0 truncate text-sm text-muted-foreground hover:text-foreground"
-      onClick={onClick}
     >
       {node.title}
-    </button>
+    </Link>
   )
 }

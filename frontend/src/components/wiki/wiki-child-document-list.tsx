@@ -1,5 +1,5 @@
 import { useMemo } from "react"
-import { useNavigate } from "react-router"
+import { Link } from "react-router"
 import { ChevronRightIcon, PlusIcon } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { useWikiStore } from "@/stores/wiki"
@@ -18,7 +18,6 @@ export function WikiChildDocumentList({
   treeDocuments,
   isEditor,
 }: WikiChildDocumentListProps) {
-  const navigate = useNavigate()
   const openCreateDialog = useWikiStore((s) => s.openCreateDialog)
 
   const children = useMemo(
@@ -59,8 +58,8 @@ export function WikiChildDocumentList({
         <ul className="flex flex-col gap-0.5">
           {children.map((child) => (
             <li key={child.id}>
-              <button
-                onClick={() => navigate(`/wiki/${child.id}`)}
+              <Link
+                to={`/wiki/${child.id}`}
                 className="group/row flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm hover:bg-muted"
               >
                 <DocumentIcon
@@ -75,7 +74,7 @@ export function WikiChildDocumentList({
                   </span>
                 )}
                 <ChevronRightIcon className="size-3.5 shrink-0 text-muted-foreground opacity-0 transition-opacity group-hover/row:opacity-100" />
-              </button>
+              </Link>
             </li>
           ))}
         </ul>
