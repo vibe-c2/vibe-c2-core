@@ -1,0 +1,19 @@
+kind: Cluster
+apiVersion: kind.x-k8s.io/v1alpha4
+nodes:
+  - role: control-plane
+    # Forward the host's :80 and :443 into the node container so the
+    # ingress controller running inside the cluster is reachable from
+    # your browser. Without this, you'd need port-forwarding for every
+    # Service you want to hit.
+    extraPortMappings:
+      - { containerPort: 80, hostPort: 80, protocol: TCP }
+      - { containerPort: 443, hostPort: 443, protocol: TCP }
+    # Required so the ingress-nginx controller pod schedules on this
+    # node. Without the label, kind's manifest selector won't match.
+    kubeadmConfigPatches:
+      - |
+        kind: InitConfiguration
+        nodeRegistration:
+          kubeletExtraArgs:
+            node-labels: "ingress-ready=true"

@@ -1,0 +1,109 @@
+name: Publish Helm Chart
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - "deploy/helm/**"
+      - ".github/workflows/publish-helm.yml"
+  pull_request:
+    branches:
+      - main
+    paths:
+      - "deploy/helm/**"
+      - ".github/workflows/publish-helm.yml"
+  workflow_dispatch:
+
+env:
+  REGISTRY: ghcr.io
+  CHART_PATH: deploy/helm/vibe-c2
+  # GHCR OCI namespace for charts. Pushes land at:
+  #   oci://ghcr.io/vibe-c2/charts/vibe-c2:<chart-version>
+  CHART_OCI_PREFIX: ghcr.io/vibe-c2/charts
+
+jobs:
+  lint-and-template:
+    name: Lint and template
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Helm
+        uses: azure/setup-helm@v4
+        with:
+          version: v3.16.3
+
+      - name: Add chart repositories
+        run: |
+          helm repo add bitnami https://charts.bitnami.com/bitnami
+          helm repo add seaweedfs https://seaweedfs.github.io/seaweedfs/helm
+
+      - name: Resolve dependencies
+        run: helm dependency build ${{ env.CHART_PATH }}
+
+      - name: Lint chart
+        run: helm lint ${{ env.CHART_PATH }}
+
+      # Render with example values to catch template errors that lint
+      # alone won't surface (missing required values, malformed refs).
+      - name: Template render (smoke test)
+        run: |
+          helm template smoke ${{ env.CHART_PATH }} \
+            --set ingress.host=smoke.example.com \
+            --set secrets.values.jwtSecretKey=smoke-jwt-secret \
+            --set secrets.values.mongoPassword=smoke-mongo \
+            --set secrets.values.redisPassword=smoke-redis \
+            --set secrets.values.seaweedfsS3SecretKey=smoke-s3 \
+            --set secrets.values.hocuspocusTicketSecret=smoke-ticket \
+            --set secrets.values.hocuspocusWebhookSecret=smoke-webhook \
+            > /tmp/render.yaml
+          # Print resource kinds so any major omission shows up in CI logs.
+          grep -E '^kind: ' /tmp/render.yaml | sort | uniq -c
+
+  publish:
+    name: Package and push chart
+    runs-on: ubuntu-latest
+    needs: lint-and-template
+    if: github.event_name != 'pull_request'
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Helm
+        uses: azure/setup-helm@v4
+        with:
+          version: v3.16.3
+
+      - name: Add chart repositories
+        run: |
+          helm repo add bitnami https://charts.bitnami.com/bitnami
+          helm repo add seaweedfs https://seaweedfs.github.io/seaweedfs/helm
+
+      - name: Resolve dependencies
+        run: helm dependency build ${{ env.CHART_PATH }}
+
+      - name: Package chart
+        run: |
+          mkdir -p dist
+          helm package ${{ env.CHART_PATH }} --destination dist
+          ls -la dist
+
+      - name: Log in to GHCR with Helm
+        run: |
+          echo "${{ secrets.GITHUB_TOKEN }}" \
+            | helm registry login ${{ env.REGISTRY }} \
+                --username ${{ github.actor }} \
+                --password-stdin
+
+      - name: Push chart to GHCR
+        run: |
+          shopt -s nullglob
+          for tarball in dist/*.tgz; do
+            echo "Pushing $tarball → oci://${CHART_OCI_PREFIX}"
+            helm push "$tarball" "oci://${CHART_OCI_PREFIX}"
+          done

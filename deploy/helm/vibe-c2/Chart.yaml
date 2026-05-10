@@ -1,0 +1,48 @@
+apiVersion: v2
+name: vibe-c2
+description: |
+  VibeC2 — command-and-control platform. Bundles the core Go API, the
+  React SPA frontend, the Hocuspocus collab-editing sidecar, and the
+  required stateful backends (MongoDB, Redis, SeaweedFS) into a single
+  Helm release suitable for on-prem Kubernetes clusters.
+type: application
+
+# Chart version — bump on chart template changes.
+version: 0.1.0
+
+# Default app version — pinned to the image tag the chart deploys when
+# `*.image.tag` is left unset. Override per environment via values.
+appVersion: "main"
+
+kubeVersion: ">=1.26.0-0"
+
+home: https://github.com/vibe-c2/vibe-c2-core
+sources:
+  - https://github.com/vibe-c2/vibe-c2-core
+
+maintainers:
+  - name: VibeC2
+    url: https://github.com/vibe-c2
+
+keywords:
+  - vibe-c2
+  - command-and-control
+  - graphql
+  - collaboration
+
+# Subchart dependencies. Each is conditionally enabled so operators with
+# existing infrastructure can disable a backend and point the app at
+# their own service via the `external*` values.
+dependencies:
+  - name: mongodb
+    version: "16.5.7"
+    repository: https://charts.bitnami.com/bitnami
+    condition: mongodb.enabled
+  - name: redis
+    version: "20.6.2"
+    repository: https://charts.bitnami.com/bitnami
+    condition: redis.enabled
+  - name: seaweedfs
+    version: "4.0.385"
+    repository: https://seaweedfs.github.io/seaweedfs/helm
+    condition: seaweedfs.enabled

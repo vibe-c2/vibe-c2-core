@@ -1,0 +1,153 @@
+# Smoke-test values for a local kind cluster.
+#
+# Usage:
+#   kind create cluster --config=- <<EOF
+#   kind: Cluster
+#   apiVersion: kind.x-k8s.io/v1alpha4
+#   nodes:
+#     - role: control-plane
+#       extraPortMappings:
+#         - { containerPort: 80,  hostPort: 80,  protocol: TCP }
+#         - { containerPort: 443, hostPort: 443, protocol: TCP }
+#   EOF
+#   kubectl apply -f https://kind.sigs.k8s.io/examples/ingress/deploy-ingress-nginx.yaml
+#   echo '127.0.0.1 vibe-c2.local' | sudo tee -a /etc/hosts
+#
+#   helm dependency build ./deploy/helm/vibe-c2
+#   helm install vibe-c2 ./deploy/helm/vibe-c2 \
+#     -n vibe-c2 --create-namespace \
+#     -f ./deploy/helm/vibe-c2/values-kind.yaml \
+#     --set secrets.values.jwtSecretKey=$(openssl rand -hex 32) \
+#     --set secrets.values.mongoPassword=$(openssl rand -hex 16) \
+#     --set secrets.values.redisPassword=$(openssl rand -hex 16) \
+#     --set secrets.values.seaweedfsS3SecretKey=$(openssl rand -hex 16) \
+#     --set secrets.values.hocuspocusTicketSecret=$(openssl rand -hex 32) \
+#     --set secrets.values.hocuspocusWebhookSecret=$(openssl rand -hex 32)
+#
+# Tear down: kind delete cluster
+
+# -----------------------------------------------------------------------------
+# Application — single replica each, lighter probes, shrunk resource asks.
+# -----------------------------------------------------------------------------
+core:
+  replicaCount: 1
+  config:
+    # Kind exposes the cluster on plain HTTP (kind/examples/ingress/deploy-ingress-nginx.yaml
+    # serves :80 only). The auth code sets cookies with Secure=true whenever
+    # APP_STAGE_STATUS != "development" — and browsers silently DROP Secure
+    # cookies on http:// origins. Result: login succeeds server-side but the
+    # browser forgets the access/refresh/csrf cookies, so every subsequent
+    # request gets 401 (no JWT) or 403 (no CSRF token).
+    #
+    # Switching to development relaxes the cookie attrs (Secure=false,
+    # SameSite=Lax) so HTTP smoke testing on kind works end-to-end. Do NOT
+    # set this in production — it weakens cookie security and turns gin
+    # into debug mode. Production deployments terminate TLS at the
+    # ingress and stay on appStageStatus=production.
+    appStageStatus: development
+  resources:
+    requests:
+      cpu: 50m
+      memory: 96Mi
+    limits:
+      cpu: 500m
+      memory: 256Mi
+  # The SeaweedFS bucket Job and the Go server start in parallel; on a
+  # cold laptop the Mongo handshake can take a while. Give startup more
+  # room before the kubelet starts killing the pod.
+  startupProbe:
+    httpGet:
+      path: /api/v1/status
+      port: http
+    initialDelaySeconds: 5
+    periodSeconds: 5
+    failureThreshold: 60   # ~5 min budget for first boot
+
+frontend:
+  replicaCount: 1
+  resources:
+    requests:
+      cpu: 10m
+      memory: 24Mi
+    limits:
+      cpu: 100m
+      memory: 64Mi
+
+hocuspocus:
+  replicaCount: 1
+  resources:
+    requests:
+      cpu: 50m
+      memory: 128Mi
+    limits:
+      cpu: 500m
+      memory: 384Mi
+
+# -----------------------------------------------------------------------------
+# Ingress — kind's ingress-nginx, served on http://vibe-c2.local
+# -----------------------------------------------------------------------------
+ingress:
+  enabled: true
+  className: nginx
+  host: vibe-c2.local
+  tls:
+    enabled: false
+  annotations:
+    nginx.ingress.kubernetes.io/proxy-body-size: "50m"
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "3600"
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "3600"
+    nginx.ingress.kubernetes.io/proxy-buffering: "off"
+
+# -----------------------------------------------------------------------------
+# Subcharts — minimum viable persistence and resources for a laptop.
+# Every PVC stays well under the 5 GiB total kind allocates by default.
+# -----------------------------------------------------------------------------
+mongodb:
+  persistence:
+    size: 1Gi
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      cpu: 500m
+      memory: 768Mi
+  # Bitnami's mongo standalone defaults to a PodDisruptionBudget that
+  # requires at least one always-available pod. Disable on single-node.
+  pdb:
+    create: false
+
+redis:
+  master:
+    persistence:
+      size: 512Mi
+    resources:
+      requests:
+        cpu: 25m
+        memory: 64Mi
+      limits:
+        cpu: 200m
+        memory: 192Mi
+    pdb:
+      create: false
+
+seaweedfs:
+  master:
+    data:
+      size: 1Gi
+    resources:
+      requests: { cpu: 25m, memory: 96Mi }
+      limits:   { cpu: 300m, memory: 384Mi }
+  volume:
+    replicas: 1
+    data:
+      size: 2Gi
+    resources:
+      requests: { cpu: 25m, memory: 96Mi }
+      limits:   { cpu: 300m, memory: 384Mi }
+  filer:
+    data:
+      size: 1Gi
+    resources:
+      requests: { cpu: 25m, memory: 96Mi }
+      limits:   { cpu: 300m, memory: 384Mi }

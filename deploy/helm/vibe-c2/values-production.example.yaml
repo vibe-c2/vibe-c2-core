@@ -1,0 +1,83 @@
+# Example production values — copy and edit, do not commit secrets.
+#
+# Usage:
+#   helm dependency build ./deploy/helm/vibe-c2
+#   helm install vibe-c2 ./deploy/helm/vibe-c2 \
+#     -f my-values.yaml \
+#     -n vibe-c2 --create-namespace
+
+# Pin the image tag explicitly. `main` follows the latest commit; pin a
+# `sha-abcd123` build for reproducible deploys.
+core:
+  image:
+    tag: "sha-REPLACEME"
+  replicaCount: 3
+
+frontend:
+  image:
+    tag: "sha-REPLACEME"
+  replicaCount: 3
+
+hocuspocus:
+  image:
+    tag: "sha-REPLACEME"
+
+ingress:
+  enabled: true
+  className: nginx
+  host: vibe-c2.example.com
+  tls:
+    enabled: true
+    secretName: vibe-c2-tls
+  annotations:
+    nginx.ingress.kubernetes.io/proxy-body-size: "50m"
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "3600"
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "3600"
+    nginx.ingress.kubernetes.io/proxy-buffering: "off"
+    # cert-manager: uncomment to issue the TLS cert automatically.
+    # cert-manager.io/cluster-issuer: letsencrypt-prod
+
+# Pull all credentials from a Secret managed outside the chart (sealed
+# secrets, External Secrets Operator, Vault sync, …). The Secret must
+# expose every key documented in templates/secret.yaml.
+secrets:
+  existingSecret: vibe-c2-app-secrets
+
+# Storage tuning per environment. Use the StorageClass available on the
+# cluster — most clusters have a default, but production deployments
+# should pin one explicitly.
+global:
+  storageClass: standard-rwo
+
+mongodb:
+  persistence:
+    size: 100Gi
+    storageClass: standard-rwo
+  resources:
+    requests:
+      cpu: 500m
+      memory: 1Gi
+    limits:
+      cpu: 2000m
+      memory: 4Gi
+
+redis:
+  master:
+    persistence:
+      size: 10Gi
+      storageClass: standard-rwo
+
+seaweedfs:
+  master:
+    data:
+      size: 10Gi
+      storageClass: standard-rwo
+  volume:
+    replicas: 2
+    data:
+      size: 200Gi
+      storageClass: standard-rwo
+  filer:
+    data:
+      size: 50Gi
+      storageClass: standard-rwo

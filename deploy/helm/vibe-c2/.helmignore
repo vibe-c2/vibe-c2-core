@@ -1,0 +1,16 @@
+# Patterns to ignore when packaging the chart.
+# Note: do NOT exclude `charts/` or `*.tgz` — helm needs to load subchart
+# tarballs from that directory when packaging or templating.
+.DS_Store
+.git/
+.gitignore
+.idea/
+.vscode/
+*.swp
+*.bak
+*.tmp
+*.orig
+*~
+# CI / dev tooling
+.circleci/
+.github/

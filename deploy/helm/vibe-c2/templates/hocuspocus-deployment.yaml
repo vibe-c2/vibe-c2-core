@@ -1,0 +1,98 @@
+{{- if .Values.hocuspocus.enabled -}}
+{{- $secretName := include "vibe-c2.appSecretName" . -}}
+{{- $configName := include "vibe-c2.configName" . -}}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "vibe-c2.hocuspocus.fullname" . }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "vibe-c2.labels" . | nindent 4 }}
+    app.kubernetes.io/component: hocuspocus
+spec:
+  replicas: {{ .Values.hocuspocus.replicaCount }}
+  # Hocuspocus state lives in process memory. Recreate-style rollouts
+  # avoid two pods racing to load the same Y.Doc from MongoDB during a
+  # rolling update. With a single replica this is also less surprising
+  # for clients (single drop-and-reconnect instead of two).
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      {{- include "vibe-c2.hocuspocus.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "vibe-c2.labels" . | nindent 8 }}
+        app.kubernetes.io/component: hocuspocus
+      annotations:
+        checksum/config: {{ include (print $.Template.BasePath "/configmap.yaml") . | sha256sum }}
+        {{- if not .Values.secrets.existingSecret }}
+        checksum/secret: {{ include (print $.Template.BasePath "/secret.yaml") . | sha256sum }}
+        {{- end }}
+        {{- with .Values.hocuspocus.podAnnotations }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+    spec:
+      {{- include "vibe-c2.imagePullSecrets" . | nindent 6 }}
+      securityContext:
+        {{- toYaml .Values.hocuspocus.podSecurityContext | nindent 8 }}
+      containers:
+        - name: hocuspocus
+          image: {{ include "vibe-c2.image" (dict "image" .Values.hocuspocus.image "root" $) | quote }}
+          imagePullPolicy: {{ .Values.hocuspocus.image.pullPolicy }}
+          ports:
+            - name: ws
+              containerPort: {{ .Values.hocuspocus.wsPort }}
+              protocol: TCP
+            - name: http
+              containerPort: {{ .Values.hocuspocus.httpPort }}
+              protocol: TCP
+          envFrom:
+            - configMapRef:
+                name: {{ $configName }}
+          env:
+            - name: MONGO_INITDB_ROOT_USERNAME
+              valueFrom:
+                secretKeyRef:
+                  name: {{ $secretName }}
+                  key: mongoUsername
+            - name: MONGO_INITDB_ROOT_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ $secretName }}
+                  key: mongoPassword
+            - name: MONGO_URI
+              value: "mongodb://$(MONGO_INITDB_ROOT_USERNAME):$(MONGO_INITDB_ROOT_PASSWORD)@$(MONGO_HOST):$(MONGO_PORT)"
+
+            - name: HOCUSPOCUS_TICKET_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: {{ $secretName }}
+                  key: hocuspocusTicketSecret
+            - name: HOCUSPOCUS_WEBHOOK_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: {{ $secretName }}
+                  key: hocuspocusWebhookSecret
+          livenessProbe:
+            {{- toYaml .Values.hocuspocus.livenessProbe | nindent 12 }}
+          readinessProbe:
+            {{- toYaml .Values.hocuspocus.readinessProbe | nindent 12 }}
+          resources:
+            {{- toYaml .Values.hocuspocus.resources | nindent 12 }}
+          securityContext:
+            {{- toYaml .Values.hocuspocus.securityContext | nindent 12 }}
+      {{- with .Values.hocuspocus.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.hocuspocus.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.hocuspocus.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+{{- end -}}

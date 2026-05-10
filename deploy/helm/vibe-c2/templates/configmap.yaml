@@ -1,0 +1,69 @@
+{{/*
+Non-secret application configuration shared by core and hocuspocus.
+Mounted via envFrom so adding a key here makes it available to both
+deployments without per-Pod template churn.
+
+Keys map directly onto the env vars expected by:
+  - core/pkg/environment/environment.go
+  - hocuspocus/src/index.ts
+*/}}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "vibe-c2.configName" . }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "vibe-c2.labels" . | nindent 4 }}
+data:
+  # ----- Core: app behavior -----
+  APP_STAGE_STATUS: {{ .Values.core.config.appStageStatus | quote }}
+  APP_DEBUG: {{ .Values.core.config.appDebug | quote }}
+
+  # ----- MongoDB connection (URI is composed in the Deployment from
+  # username/password env vars and these host/db values, since the
+  # password lives in a Secret and must not appear here) -----
+  MONGO_DATABASE: {{ .Values.core.config.mongoDatabase | quote }}
+  MONGO_HOST: {{ include "vibe-c2.mongo.host" . | quote }}
+  MONGO_PORT: {{ include "vibe-c2.mongo.port" . | quote }}
+
+  # ----- Redis -----
+  REDIS_HOST: {{ include "vibe-c2.redis.host" . | quote }}
+  REDIS_PORT: {{ include "vibe-c2.redis.port" . | quote }}
+  CACHE_ENABLED: {{ .Values.core.config.cacheEnabled | quote }}
+
+  # ----- SeaweedFS S3 -----
+  SEAWEEDFS_S3_ENDPOINT: {{ include "vibe-c2.seaweedfs.s3Endpoint" . | quote }}
+
+  # ----- Hocuspocus integration -----
+  HOCUSPOCUS_URL: {{ include "vibe-c2.hocuspocus.internalUrl" . | quote }}
+  HOCUSPOCUS_WEBHOOK_URL: {{ include "vibe-c2.core.webhookUrl" . | quote }}
+  HOCUSPOCUS_DEBOUNCE_MS: {{ .Values.hocuspocus.config.debounceMs | quote }}
+  MAX_ACTIVE_ROOMS: {{ .Values.hocuspocus.config.maxActiveRooms | quote }}
+  MAX_CLIENTS_PER_ROOM: {{ .Values.hocuspocus.config.maxClientsPerRoom | quote }}
+  PORT: {{ .Values.hocuspocus.wsPort | quote }}
+
+  # ----- Wiki backups -----
+  WIKI_AUTO_BACKUP_INTERVAL: {{ .Values.core.config.wikiAutoBackupInterval | quote }}
+
+  # ----- Wiki image uploads -----
+  WIKI_IMAGE_BUCKET: {{ .Values.core.config.wikiImage.bucket | quote }}
+  WIKI_IMAGE_MAX_SIZE: {{ .Values.core.config.wikiImage.maxSize | quote }}
+  WIKI_IMAGE_MAX_DIMENSION: {{ .Values.core.config.wikiImage.maxDimension | quote }}
+  WIKI_IMAGE_SWEEPER_INTERVAL: {{ .Values.core.config.wikiImage.sweeperInterval | quote }}
+  WIKI_IMAGE_SWEEPER_GRACE: {{ .Values.core.config.wikiImage.sweeperGrace | quote }}
+
+  # ----- Wiki file uploads -----
+  WIKI_FILE_BUCKET: {{ .Values.core.config.wikiFile.bucket | quote }}
+  WIKI_FILE_MAX_SIZE: {{ .Values.core.config.wikiFile.maxSize | quote }}
+  WIKI_FILE_DENIED_CONTENT_TYPES: {{ .Values.core.config.wikiFile.deniedContentTypes | quote }}
+  WIKI_FILE_SWEEPER_INTERVAL: {{ .Values.core.config.wikiFile.sweeperInterval | quote }}
+  WIKI_FILE_SWEEPER_GRACE: {{ .Values.core.config.wikiFile.sweeperGrace | quote }}
+
+  # ----- Wiki Outline import -----
+  WIKI_IMPORT_ZIP_MAX_SIZE: {{ .Values.core.config.wikiImport.zipMaxSize | quote }}
+
+  # ----- Auth -----
+  AUTH_ACCESS_TTL: {{ .Values.core.config.auth.accessTtl | quote }}
+  AUTH_REFRESH_TTL: {{ .Values.core.config.auth.refreshTtl | quote }}
+  AUTH_REFRESH_GRACE_TTL: {{ .Values.core.config.auth.refreshGraceTtl | quote }}
+  AUTH_CSRF_ENABLED: {{ .Values.core.config.auth.csrfEnabled | quote }}

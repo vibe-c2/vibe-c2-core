@@ -1005,7 +1005,7 @@ internal := v1.Group("/internal")
 internal.POST("/wiki/webhook", wiki.NewWebhookHandler(presenceTracker, eventBus, webhookSecret, logger))
 ```
 
-### Nginx reverse proxy config (`nginx/default.conf`)
+### Nginx reverse proxy config (`deploy/nginx/default.conf`)
 
 Full nginx configuration unifying all app services behind port 8080 (see §2.12):
 
@@ -1143,7 +1143,7 @@ No new direct dependencies for collaborative editing. The Go backend uses only t
 
 | File | Purpose |
 |------|---------|
-| `nginx/default.conf` | Reverse proxy config — routes to frontend, Go backend, and Hocuspocus (see §16) |
+| `deploy/nginx/default.conf` | Reverse proxy config (docker-compose dev profile) — routes to frontend, Go backend, and Hocuspocus (see §16) |
 
 ### Modified files
 
@@ -1194,7 +1194,7 @@ nginx:
   ports:
     - "8080:80"
   volumes:
-    - ./nginx/default.conf:/etc/nginx/conf.d/default.conf:ro
+    - ./deploy/nginx/default.conf:/etc/nginx/conf.d/default.conf:ro
   depends_on:
     - core-dev
     - frontend-dev

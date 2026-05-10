@@ -1,0 +1,490 @@
+# Default values for the vibe-c2 chart.
+# Override the bare minimum in your environment values file: ingress host,
+# the app secrets block, and any persistence storageClass overrides.
+
+# -----------------------------------------------------------------------------
+# Global / shared configuration
+# -----------------------------------------------------------------------------
+global:
+  # imageRegistry overrides the registry portion of every image (app + subcharts)
+  # if you mirror images to a private registry like Harbor. Empty = use each
+  # image's `repository` field as-is.
+  imageRegistry: ""
+  # imagePullSecrets are added to every Pod we create. Leave empty for the
+  # default public GHCR images; populate when mirroring to a private registry.
+  imagePullSecrets: []
+  # storageClass applied to MongoDB, Redis, and SeaweedFS PVCs unless they
+  # override individually. Empty = use the cluster default StorageClass.
+  storageClass: ""
+  # The bitnami subcharts (mongodb, redis) refuse to render with images
+  # outside their hardcoded allowlist. We need this flag because we point
+  # at the freely-pullable `bitnamilegacy/*` mirror that replaced
+  # `bitnami/*` after the August-2025 DockerHub deprecation. Without it
+  # `helm install` fails with "Unrecognized images". The override is
+  # safe — the bitnamilegacy mirror serves the same images Bitnami used
+  # to ship at docker.io/bitnami before they restricted public access.
+  security:
+    allowInsecureImages: true
+
+# -----------------------------------------------------------------------------
+# Application secrets
+#
+# Required values that have no safe defaults. Either set them inline (dev only)
+# or reference an existing Kubernetes Secret. Production deployments should
+# manage these via Sealed Secrets, External Secrets Operator, or equivalent.
+# -----------------------------------------------------------------------------
+secrets:
+  # When existingSecret is set, the chart reads ALL of the keys below from that
+  # Secret instead of creating its own. The Secret must contain every key that
+  # would otherwise come from `secrets.values`.
+  existingSecret: ""
+
+  # Inline values, only used when existingSecret is empty.
+  values:
+    # JWT signing key — minimum 32 random bytes.
+    jwtSecretKey: ""
+
+    # MongoDB root user. The bundled Bitnami chart provisions a single
+    # root user; the app authenticates as that user. Default matches the
+    # chart default; if you change it, also override `mongodb.auth.rootUser`.
+    mongoUsername: "root"
+    mongoPassword: ""
+
+    # Redis password. Empty disables auth on the Redis subchart, which is
+    # ONLY appropriate for cluster-internal-only Redis without exposure.
+    redisPassword: ""
+
+    # SeaweedFS S3 credentials. The same pair is consumed by core (writes
+    # to the S3 endpoint) and by the bucket-bootstrap Job.
+    seaweedfsS3AccessKey: "vibec2"
+    seaweedfsS3SecretKey: ""
+
+    # Hocuspocus shared secrets:
+    #   ticket: HMAC key for one-shot collab tickets minted by core,
+    #           verified by hocuspocus before opening a WebSocket.
+    #   webhook: HMAC key signing onConnect/onDisconnect webhooks back
+    #            to core's /api/v1/internal/wiki/webhook receiver.
+    hocuspocusTicketSecret: ""
+    hocuspocusWebhookSecret: ""
+
+# -----------------------------------------------------------------------------
+# Core API (Go backend)
+# -----------------------------------------------------------------------------
+core:
+  enabled: true
+
+  image:
+    repository: ghcr.io/vibe-c2/vibe-c2-core
+    # Pinning the tag is strongly recommended in production. Defaults to
+    # the chart's appVersion.
+    tag: ""
+    pullPolicy: IfNotPresent
+
+  replicaCount: 2
+
+  # Container port the Go server listens on (matches Dockerfile EXPOSE 8002).
+  containerPort: 8002
+
+  # Size cap for the in-pod /tmp emptyDir volume. /tmp is a writable
+  # scratch space used to spool uploaded zip archives during Outline
+  # import (the stdlib zip reader needs ReaderAt over the file). The
+  # cap should be at least `wikiImport.zipMaxSize` plus headroom for
+  # concurrent imports.
+  tmpSizeLimit: "512Mi"
+
+  service:
+    type: ClusterIP
+    port: 8002
+
+  # Application configuration — non-secret env vars. These map 1:1 to the
+  # variables consumed by core/pkg/environment/environment.go.
+  config:
+    appStageStatus: production
+    appDebug: false
+
+    mongoDatabase: vibec2
+
+    cacheEnabled: true
+
+    wikiAutoBackupInterval: "30m"
+
+    wikiImage:
+      bucket: wiki-images
+      maxSize: 10485760        # 10 MB
+      maxDimension: 2560
+      sweeperInterval: "24h"
+      sweeperGrace: "168h"
+
+    wikiFile:
+      bucket: wiki-files
+      maxSize: 52428800        # 50 MB
+      deniedContentTypes: ""   # comma-separated MIME blocklist
+      sweeperInterval: "24h"
+      sweeperGrace: "168h"
+
+    wikiImport:
+      zipMaxSize: 209715200    # 200 MB
+
+    auth:
+      accessTtl: "15m"
+      refreshTtl: "168h"
+      refreshGraceTtl: "10s"
+      csrfEnabled: true
+
+  resources:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+    limits:
+      cpu: 1000m
+      memory: 512Mi
+
+  livenessProbe:
+    httpGet:
+      path: /api/v1/status
+      port: http
+    initialDelaySeconds: 20
+    periodSeconds: 30
+    timeoutSeconds: 5
+    failureThreshold: 6
+  readinessProbe:
+    httpGet:
+      path: /api/v1/status
+      port: http
+    initialDelaySeconds: 10
+    periodSeconds: 10
+    timeoutSeconds: 3
+    failureThreshold: 3
+  startupProbe:
+    httpGet:
+      path: /api/v1/status
+      port: http
+    initialDelaySeconds: 5
+    periodSeconds: 5
+    failureThreshold: 30   # allow up to ~2.5 min for first start
+
+  podSecurityContext:
+    runAsNonRoot: true
+    runAsUser: 10001
+    runAsGroup: 10001
+    fsGroup: 10001
+  securityContext:
+    allowPrivilegeEscalation: false
+    readOnlyRootFilesystem: true
+    capabilities:
+      drop:
+        - ALL
+
+  nodeSelector: {}
+  tolerations: []
+  affinity: {}
+  podAnnotations: {}
+
+# -----------------------------------------------------------------------------
+# Frontend (React SPA served by nginx)
+# -----------------------------------------------------------------------------
+frontend:
+  enabled: true
+
+  image:
+    repository: ghcr.io/vibe-c2/vibe-c2-frontend
+    tag: ""
+    pullPolicy: IfNotPresent
+
+  replicaCount: 2
+
+  # nginx in the published image listens on :80
+  containerPort: 80
+
+  service:
+    type: ClusterIP
+    port: 80
+
+  resources:
+    requests:
+      cpu: 25m
+      memory: 32Mi
+    limits:
+      cpu: 200m
+      memory: 128Mi
+
+  livenessProbe:
+    httpGet:
+      path: /healthz
+      port: http
+    initialDelaySeconds: 5
+    periodSeconds: 30
+  readinessProbe:
+    httpGet:
+      path: /healthz
+      port: http
+    initialDelaySeconds: 2
+    periodSeconds: 10
+
+  # The published frontend image (frontend/Dockerfile) uses the upstream
+  # `nginx:alpine` base, which runs the nginx master as root and forks
+  # workers as the `nginx` user. The master needs:
+  #   - NET_BIND_SERVICE: bind to :80
+  #   - CHOWN, SETUID, SETGID: chown cache dirs and become nginx worker
+  #   - DAC_OVERRIDE: read root-owned config
+  # Forcing runAsNonRoot, or dropping ALL capabilities, fails. We keep
+  # privilege escalation blocked and stay with the smallest cap set the
+  # image actually requires.
+  #
+  # FOLLOW-UP: switch the Dockerfile to `nginxinc/nginx-unprivileged`,
+  # then this can become runAsNonRoot: true with no capabilities.
+  podSecurityContext: {}
+  securityContext:
+    allowPrivilegeEscalation: false
+    readOnlyRootFilesystem: false
+    capabilities:
+      drop:
+        - ALL
+      add:
+        - CHOWN
+        - SETUID
+        - SETGID
+        - DAC_OVERRIDE
+        - NET_BIND_SERVICE
+
+  nodeSelector: {}
+  tolerations: []
+  affinity: {}
+  podAnnotations: {}
+
+# -----------------------------------------------------------------------------
+# Hocuspocus (Yjs collab WebSocket sidecar)
+# -----------------------------------------------------------------------------
+hocuspocus:
+  enabled: true
+
+  image:
+    repository: ghcr.io/vibe-c2/vibe-c2-hocuspocus
+    tag: ""
+    pullPolicy: IfNotPresent
+
+  # Hocuspocus holds in-memory document state per connection. Multiple
+  # replicas mean a document loaded by one pod is invisible to clients
+  # connected through another. Keep at 1 unless you front it with a
+  # sticky-session ingress AND shard documents by hash.
+  replicaCount: 1
+
+  # Ports defined in src/index.ts:
+  #   1234 — WebSocket server (clients connect here through ingress)
+  #   1235 — Internal HTTP API (disconnect, markdown-to-yjs, /health)
+  wsPort: 1234
+  httpPort: 1235
+
+  service:
+    type: ClusterIP
+    wsPort: 1234
+    httpPort: 1235
+
+  config:
+    debounceMs: 2000
+    maxActiveRooms: 100
+    maxClientsPerRoom: 20
+
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      cpu: 1000m
+      memory: 1Gi
+
+  livenessProbe:
+    httpGet:
+      path: /health
+      port: http
+    initialDelaySeconds: 10
+    periodSeconds: 30
+  readinessProbe:
+    httpGet:
+      path: /health
+      port: http
+    initialDelaySeconds: 5
+    periodSeconds: 10
+
+  podSecurityContext:
+    runAsNonRoot: true
+    runAsUser: 10001
+    runAsGroup: 10001
+    fsGroup: 10001
+  securityContext:
+    allowPrivilegeEscalation: false
+    readOnlyRootFilesystem: true
+    capabilities:
+      drop:
+        - ALL
+
+  nodeSelector: {}
+  tolerations: []
+  affinity: {}
+  podAnnotations: {}
+
+# -----------------------------------------------------------------------------
+# Ingress
+#
+# The chart assumes a single host serves all three services and routes by
+# path. The ordering is important — `/api/v1/ws/wiki/` must match before
+# `/api/` so the hocuspocus path wins. ingress-nginx evaluates by longest
+# prefix, which gives the desired result.
+# -----------------------------------------------------------------------------
+ingress:
+  enabled: true
+  className: nginx
+
+  # Public hostname. Override per environment.
+  host: vibe-c2.example.com
+
+  # Annotations recommended for ingress-nginx with WebSocket support and
+  # request bodies up to the wiki-file cap.
+  annotations:
+    nginx.ingress.kubernetes.io/proxy-body-size: "50m"
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "3600"
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "3600"
+    # Disable buffering so SSE GraphQL subscription frames flush
+    # immediately, matching the dev nginx.conf behaviour.
+    nginx.ingress.kubernetes.io/proxy-buffering: "off"
+
+  tls:
+    enabled: false
+    # When enabled, set secretName to a TLS Secret pre-created in the
+    # release namespace, or rely on cert-manager via annotations.
+    secretName: ""
+
+# -----------------------------------------------------------------------------
+# SeaweedFS bucket bootstrap Job
+#
+# Creates wiki-images and wiki-files buckets after install/upgrade so the
+# first wiki upload succeeds. Uses minio/mc against the SeaweedFS S3 API.
+# Runs as a regular Job (not a helm hook) so `helm install` returns
+# immediately; the Job retries on its own while SeaweedFS warms up.
+# -----------------------------------------------------------------------------
+bucketBootstrap:
+  enabled: true
+  image:
+    repository: minio/mc
+    tag: RELEASE.2025-04-16T18-13-26Z
+    pullPolicy: IfNotPresent
+  resources:
+    requests:
+      cpu: 25m
+      memory: 32Mi
+    limits:
+      cpu: 200m
+      memory: 128Mi
+
+# -----------------------------------------------------------------------------
+# External backends (used when the matching subchart is disabled)
+#
+# Set when you bring your own MongoDB / Redis / SeaweedFS — for example a
+# managed Atlas cluster or an operator-managed deployment in the same
+# cluster but a different namespace.
+# -----------------------------------------------------------------------------
+external:
+  mongodb:
+    # The chart composes MONGO_URI in-pod from these host/port values
+    # plus the username/password that come from the application Secret.
+    host: ""
+    port: 27017
+  redis:
+    host: ""
+    port: 6379
+  seaweedfs:
+    s3Endpoint: ""
+
+# -----------------------------------------------------------------------------
+# Subchart configuration
+#
+# Only the values we need to override are listed; refer to each chart's
+# upstream values.yaml for the full surface.
+# -----------------------------------------------------------------------------
+mongodb:
+  enabled: true
+  architecture: standalone
+  # Bitnami restricted public access to docker.io/bitnami/* in 2025-08
+  # (https://github.com/bitnami/charts/issues/35164). Freely-pullable
+  # images are now mirrored at docker.io/bitnamilegacy/*. Override both
+  # the main mongodb image and the volumePermissions init image.
+  image:
+    registry: docker.io
+    repository: bitnamilegacy/mongodb
+  volumePermissions:
+    image:
+      registry: docker.io
+      repository: bitnamilegacy/os-shell
+  auth:
+    enabled: true
+    rootUser: root
+    # Both bitnami charts evaluate `auth.existingSecret` through `tpl`,
+    # so Go template expressions resolve at render time using the parent
+    # release context. We point them at the same Secret the app reads
+    # (see vibe-c2.appSecretName helper) so all credentials live in one
+    # place and rotate together. To use a pre-existing Secret instead,
+    # set `secrets.existingSecret` AND override `mongodb.auth.existingSecret`
+    # / `redis.auth.existingSecret` to that same Secret name.
+    existingSecret: '{{ printf "%s-vibe-c2-secrets" .Release.Name }}'
+  persistence:
+    enabled: true
+    size: 20Gi
+  resources:
+    requests:
+      cpu: 250m
+      memory: 512Mi
+    limits:
+      cpu: 1000m
+      memory: 2Gi
+
+redis:
+  enabled: true
+  architecture: standalone
+  # Bitnami DockerHub deprecation — see comment in mongodb section above.
+  image:
+    registry: docker.io
+    repository: bitnamilegacy/redis
+  volumePermissions:
+    image:
+      registry: docker.io
+      repository: bitnamilegacy/os-shell
+  auth:
+    enabled: true
+    existingSecret: '{{ printf "%s-vibe-c2-secrets" .Release.Name }}'
+    existingSecretPasswordKey: redis-password
+  master:
+    persistence:
+      enabled: true
+      size: 8Gi
+    resources:
+      requests:
+        cpu: 100m
+        memory: 128Mi
+      limits:
+        cpu: 500m
+        memory: 512Mi
+  replica:
+    replicaCount: 0   # standalone
+
+seaweedfs:
+  enabled: true
+  master:
+    replicas: 1
+    data:
+      type: persistentVolumeClaim
+      size: 5Gi
+  volume:
+    replicas: 1
+    data:
+      type: persistentVolumeClaim
+      size: 30Gi
+  filer:
+    replicas: 1
+    data:
+      type: persistentVolumeClaim
+      size: 10Gi
+    s3:
+      enabled: true
+      port: 8333
+  s3:
+    enabled: false   # we use the filer-embedded S3 (filer.s3.enabled)

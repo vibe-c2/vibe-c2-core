@@ -1,0 +1,64 @@
+Thanks for installing {{ .Chart.Name }} {{ .Chart.Version }} (app: {{ .Chart.AppVersion }}).
+
+The release "{{ .Release.Name }}" is now in namespace "{{ .Release.Namespace }}".
+
+────────────────────────────────────────────────────────────────────────
+1. Reach the application
+
+{{- if .Values.ingress.enabled }}
+   The ingress is configured for: {{ .Values.ingress.host }}
+   {{- if .Values.ingress.tls.enabled }}
+   TLS is enabled — open: https://{{ .Values.ingress.host }}/
+   {{- else }}
+   TLS is disabled — open: http://{{ .Values.ingress.host }}/
+
+   ⚠  Browsers send Secure cookies (refresh + CSRF) only over HTTPS. For
+      production deployments, terminate TLS at the ingress.
+   {{- end }}
+{{- else }}
+   Ingress is disabled. Forward the frontend Service locally for testing:
+
+   kubectl -n {{ .Release.Namespace }} port-forward svc/{{ include "vibe-c2.frontend.fullname" . }} 8080:{{ .Values.frontend.service.port }}
+   kubectl -n {{ .Release.Namespace }} port-forward svc/{{ include "vibe-c2.core.fullname" . }} 8002:{{ .Values.core.service.port }}
+{{- end }}
+
+────────────────────────────────────────────────────────────────────────
+2. Create the first admin user
+
+The first admin is provisioned through the public enroll endpoint (it is
+automatically locked after the first successful call):
+
+{{- if .Values.ingress.enabled }}
+{{- if .Values.ingress.tls.enabled }}
+   curl -X POST https://{{ .Values.ingress.host }}/api/v1/enroll \
+{{- else }}
+   curl -X POST http://{{ .Values.ingress.host }}/api/v1/enroll \
+{{- end }}
+{{- else }}
+   curl -X POST http://localhost:8002/api/v1/enroll \
+{{- end }}
+        -H 'Content-Type: application/json' \
+        -d '{"username":"admin","password":"<strong-password>","email":"you@example.com"}'
+
+────────────────────────────────────────────────────────────────────────
+3. Verify the bucket bootstrap
+
+   kubectl -n {{ .Release.Namespace }} get jobs -l app.kubernetes.io/component=bucket-bootstrap
+
+   The Job creates "{{ .Values.core.config.wikiImage.bucket }}" and
+   "{{ .Values.core.config.wikiFile.bucket }}" against SeaweedFS S3 so
+   the first wiki upload succeeds.
+
+────────────────────────────────────────────────────────────────────────
+4. Useful commands
+
+   kubectl -n {{ .Release.Namespace }} get pods
+   kubectl -n {{ .Release.Namespace }} logs -l app.kubernetes.io/component=core
+   kubectl -n {{ .Release.Namespace }} logs -l app.kubernetes.io/component=hocuspocus
+
+────────────────────────────────────────────────────────────────────────
+{{- if and (not .Values.secrets.existingSecret) (or (eq .Values.secrets.values.jwtSecretKey "changeme") (eq .Values.secrets.values.jwtSecretKey "")) }}
+
+⚠  WARNING: secrets.values.jwtSecretKey is unset or weak. Override it
+   for any non-development install. See deploy/helm/vibe-c2/README.md.
+{{- end }}

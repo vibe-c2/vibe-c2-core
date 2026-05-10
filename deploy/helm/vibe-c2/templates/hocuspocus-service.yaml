@@ -1,0 +1,26 @@
+{{- if .Values.hocuspocus.enabled -}}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "vibe-c2.hocuspocus.fullname" . }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "vibe-c2.labels" . | nindent 4 }}
+    app.kubernetes.io/component: hocuspocus
+spec:
+  type: {{ .Values.hocuspocus.service.type }}
+  ports:
+    # WebSocket — exposed through the Ingress to clients.
+    - name: ws
+      port: {{ .Values.hocuspocus.service.wsPort }}
+      targetPort: ws
+      protocol: TCP
+    # Internal HTTP API — only consumed by core via cluster-internal DNS.
+    # Not exposed through the Ingress.
+    - name: http
+      port: {{ .Values.hocuspocus.service.httpPort }}
+      targetPort: http
+      protocol: TCP
+  selector:
+    {{- include "vibe-c2.hocuspocus.selectorLabels" . | nindent 4 }}
+{{- end -}}

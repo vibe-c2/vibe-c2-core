@@ -1,0 +1,66 @@
+{{- if .Values.ingress.enabled -}}
+{{- $coreSvc := include "vibe-c2.core.fullname" . -}}
+{{- $frontendSvc := include "vibe-c2.frontend.fullname" . -}}
+{{- $hocuspocusSvc := include "vibe-c2.hocuspocus.fullname" . -}}
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: {{ include "vibe-c2.fullname" . }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "vibe-c2.labels" . | nindent 4 }}
+  {{- with .Values.ingress.annotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+spec:
+  {{- if .Values.ingress.className }}
+  ingressClassName: {{ .Values.ingress.className }}
+  {{- end }}
+  {{- if .Values.ingress.tls.enabled }}
+  tls:
+    - hosts:
+        - {{ .Values.ingress.host | quote }}
+      {{- if .Values.ingress.tls.secretName }}
+      secretName: {{ .Values.ingress.tls.secretName | quote }}
+      {{- end }}
+  {{- end }}
+  rules:
+    - host: {{ .Values.ingress.host | quote }}
+      http:
+        paths:
+          # Hocuspocus WebSocket. Must come BEFORE /api/ — ingress-nginx
+          # picks the longest matching prefix, but to keep behaviour
+          # consistent across controllers we keep the order explicit too.
+          - path: /api/v1/ws/wiki/
+            pathType: Prefix
+            backend:
+              service:
+                name: {{ $hocuspocusSvc }}
+                port:
+                  name: ws
+          # Core REST + GraphQL (incl. SSE subscriptions on POST /graphql)
+          - path: /api/
+            pathType: Prefix
+            backend:
+              service:
+                name: {{ $coreSvc }}
+                port:
+                  name: http
+          # Swagger UI lives outside /api/ on the core service.
+          - path: /swagger/
+            pathType: Prefix
+            backend:
+              service:
+                name: {{ $coreSvc }}
+                port:
+                  name: http
+          # Frontend SPA — catch-all, must come last.
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: {{ $frontendSvc }}
+                port:
+                  name: http
+{{- end -}}
