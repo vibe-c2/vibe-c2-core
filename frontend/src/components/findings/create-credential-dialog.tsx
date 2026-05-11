@@ -1,5 +1,5 @@
-import { type FormEvent, useState } from "react"
-import { Button } from "@/components/ui/button"
+import { type FormEvent, useState } from "react";
+import { Button } from "@/components/ui/button";
 import {
   Dialog,
   DialogContent,
@@ -7,13 +7,15 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
-} from "@/components/ui/dialog"
-import { useCredentialStore } from "@/stores/credentials"
-import { useCreateCredential } from "@/graphql/hooks/credentials"
+} from "@/components/ui/dialog";
+import { Switch } from "@/components/ui/switch";
+import { useCredentialStore } from "@/stores/credentials";
+import { useCreateCredential } from "@/graphql/hooks/credentials";
 import {
   CredentialFormFields,
   type CredentialFormValues,
-} from "@/components/findings/credential-form-fields"
+} from "@/components/findings/credential-form-fields";
+import { keyDraftsToInputs } from "@/components/findings/credential-key-drafts";
 
 const emptyValues: CredentialFormValues = {
   name: "",
@@ -23,28 +25,28 @@ const emptyValues: CredentialFormValues = {
   keys: [],
   isValid: false,
   tags: [],
-}
+};
 
 interface CreateCredentialDialogProps {
-  operationId: string
+  operationId: string;
 }
 
 export function CreateCredentialDialog({
   operationId,
 }: CreateCredentialDialogProps) {
-  const { createDialogOpen, closeDialogs } = useCredentialStore()
-  const createCredential = useCreateCredential()
-  const [values, setValues] = useState<CredentialFormValues>(emptyValues)
-  const [error, setError] = useState<string | null>(null)
+  const { createDialogOpen, closeDialogs } = useCredentialStore();
+  const createCredential = useCreateCredential();
+  const [values, setValues] = useState<CredentialFormValues>(emptyValues);
+  const [error, setError] = useState<string | null>(null);
 
   function reset() {
-    setValues(emptyValues)
-    setError(null)
+    setValues(emptyValues);
+    setError(null);
   }
 
   async function handleSubmit(e: FormEvent<HTMLFormElement>) {
-    e.preventDefault()
-    setError(null)
+    e.preventDefault();
+    setError(null);
     try {
       await createCredential.mutateAsync({
         operationId,
@@ -53,15 +55,17 @@ export function CreateCredentialDialog({
           type: values.type,
           username: values.username || null,
           password: values.password || null,
-          keys: values.keys,
+          keys: keyDraftsToInputs(values.keys),
           isValid: values.isValid,
           tags: values.tags,
         },
-      })
-      reset()
-      closeDialogs()
+      });
+      reset();
+      closeDialogs();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to create credential")
+      setError(
+        err instanceof Error ? err.message : "Failed to create credential",
+      );
     }
   }
 
@@ -70,12 +74,12 @@ export function CreateCredentialDialog({
       open={createDialogOpen}
       onOpenChange={(open) => {
         if (!open) {
-          reset()
-          closeDialogs()
+          reset();
+          closeDialogs();
         }
       }}
     >
-      <DialogContent className="max-w-lg">
+      <DialogContent className="sm:max-w-3xl">
         <DialogHeader>
           <DialogTitle>Add credential</DialogTitle>
           <DialogDescription>
@@ -93,7 +97,16 @@ export function CreateCredentialDialog({
             values={values}
             onChange={setValues}
           />
-          <DialogFooter className="mt-4">
+          <DialogFooter className="mt-4 flex-row items-center justify-between sm:justify-between">
+            <label className="flex cursor-pointer items-center gap-2 text-sm">
+              <Switch
+                checked={values.isValid}
+                onCheckedChange={(checked) =>
+                  setValues((v) => ({ ...v, isValid: checked }))
+                }
+              />
+              <span>Mark as valid</span>
+            </label>
             <Button
               type="submit"
               disabled={createCredential.isPending || !values.name.trim()}
@@ -104,5 +117,5 @@ export function CreateCredentialDialog({
         </form>
       </DialogContent>
     </Dialog>
-  )
+  );
 }

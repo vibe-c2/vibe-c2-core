@@ -95,9 +95,25 @@ export function CredentialDetailsDialog() {
                   <div className="text-xs uppercase text-muted-foreground">
                     Keys
                   </div>
-                  <pre className="mt-1 overflow-x-auto rounded-md bg-muted p-2 font-mono text-xs">
-                    {credential.keys.join("\n")}
-                  </pre>
+                  <div className="mt-1 flex flex-col gap-2">
+                    {credential.keys.map((k, i) => (
+                      <div
+                        key={i}
+                        className="rounded-md border bg-muted/30 p-2"
+                      >
+                        <div className="mb-1 text-xs font-medium">
+                          {k.name || (
+                            <span className="text-muted-foreground italic">
+                              Unnamed key
+                            </span>
+                          )}
+                        </div>
+                        <pre className="overflow-x-auto whitespace-pre-wrap break-all rounded bg-muted p-2 font-mono text-xs">
+                          {k.content}
+                        </pre>
+                      </div>
+                    ))}
+                  </div>
                 </div>
               )}
 

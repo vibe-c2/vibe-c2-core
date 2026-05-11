@@ -45,6 +45,15 @@ type CredentialComment struct {
 	UpdatedAt time.Time `bson:"updated_at" json:"updated_at"`
 }
 
+// CredentialKey is a named blob of key material attached to a credential
+// (e.g. an SSH private key, an API certificate). Stored as an embedded
+// sub-document so a credential can carry several labelled keys without
+// spawning a separate collection.
+type CredentialKey struct {
+	Name    string `bson:"name"    json:"name"`
+	Content string `bson:"content" json:"content"`
+}
+
 // Credential is a discovered secret recorded by operators against an operation's
 // target systems. Passwords and keys here are *target* secrets — they are
 // stored as plain data, not application secrets, and are not redacted.
@@ -56,7 +65,7 @@ type Credential struct {
 	Type               CredentialType      `bson:"type"          json:"type"`
 	Username           string              `bson:"username"      json:"username"`
 	Password           string              `bson:"password"      json:"password"`
-	Keys               []string            `bson:"keys"          json:"keys"`
+	Keys               []CredentialKey     `bson:"keys"          json:"keys"`
 	IsValid            bool                `bson:"is_valid"      json:"is_valid"`
 	Tags               []string            `bson:"tags"          json:"tags"`
 	Comments           []CredentialComment `bson:"comments"      json:"comments"`

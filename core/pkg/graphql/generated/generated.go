@@ -92,6 +92,11 @@ type ComplexityRoot struct {
 		OperationID  func(childComplexity int) int
 	}
 
+	CredentialKey struct {
+		Content func(childComplexity int) int
+		Name    func(childComplexity int) int
+	}
+
 	Mutation struct {
 		AddCredentialComment          func(childComplexity int, credentialID string, text string) int
 		AddOperationMember            func(childComplexity int, operationID string, userID string, role models.OperationRole) int
@@ -782,6 +787,19 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.CredentialEvent.OperationID(childComplexity), true
+
+	case "CredentialKey.content":
+		if e.ComplexityRoot.CredentialKey.Content == nil {
+			break
+		}
+
+		return e.ComplexityRoot.CredentialKey.Content(childComplexity), true
+	case "CredentialKey.name":
+		if e.ComplexityRoot.CredentialKey.Name == nil {
+			break
+		}
+
+		return e.ComplexityRoot.CredentialKey.Name(childComplexity), true
 
 	case "Mutation.addCredentialComment":
 		if e.ComplexityRoot.Mutation.AddCredentialComment == nil {
@@ -2536,6 +2554,7 @@ func (e *executableSchema) Exec(ctx context.Context) graphql.ResponseHandler {
 		ec.unmarshalInputCreateSchemeNetworkPortInput,
 		ec.unmarshalInputCreateUserInput,
 		ec.unmarshalInputCreateWikiDocumentInput,
+		ec.unmarshalInputCredentialKeyInput,
 		ec.unmarshalInputUpdateCredentialInput,
 		ec.unmarshalInputUpdateOperationInput,
 		ec.unmarshalInputUpdateSchemeNetworkPointInput,
@@ -2668,6 +2687,14 @@ type CredentialComment {
   updatedAt: String!
 }
 
+# A named blob of key material attached to a credential (e.g. an SSH private
+# key, a TLS cert). Operators give each key a label so a single credential
+# can carry several keys without losing context.
+type CredentialKey {
+  name: String!
+  content: String!
+}
+
 type Credential {
   id: ID!
   operationId: ID!
@@ -2675,7 +2702,7 @@ type Credential {
   type: CredentialType!
   username: String!
   password: String!
-  keys: [String!]!
+  keys: [CredentialKey!]!
   isValid: Boolean!
   tags: [String!]!
   comments: [CredentialComment!]!
@@ -2705,12 +2732,17 @@ type CredentialEvent {
 
 # --- Inputs ---
 
+input CredentialKeyInput {
+  name: String!
+  content: String!
+}
+
 input CreateCredentialInput {
   name: String!
   type: CredentialType!
   username: String
   password: String
-  keys: [String!]
+  keys: [CredentialKeyInput!]
   isValid: Boolean
   tags: [String!]
 }
@@ -2720,7 +2752,7 @@ input UpdateCredentialInput {
   type: CredentialType
   username: String
   password: String
-  keys: [String!]
+  keys: [CredentialKeyInput!]
   isValid: Boolean
   tags: [String!]
 }
@@ -5125,7 +5157,7 @@ func (ec *executionContext) _Credential_keys(ctx context.Context, field graphql.
 			return obj.Keys, nil
 		},
 		nil,
-		ec.marshalNString2ᚕstringᚄ,
+		ec.marshalNCredentialKey2ᚕgithubᚗcomᚋvibeᚑc2ᚋvibeᚑc2ᚑcoreᚋcoreᚋpkgᚋmodelsᚐCredentialKeyᚄ,
 		true,
 		true,
 	)
@@ -5138,7 +5170,13 @@ func (ec *executionContext) fieldContext_Credential_keys(_ context.Context, fiel
 		IsMethod:   false,
 		IsResolver: false,
 		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
-			return nil, errors.New("field of type String does not have child fields")
+			switch field.Name {
+			case "name":
+				return ec.fieldContext_CredentialKey_name(ctx, field)
+			case "content":
+				return ec.fieldContext_CredentialKey_content(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type CredentialKey", field.Name)
 		},
 	}
 	return fc, nil
@@ -5831,6 +5869,64 @@ func (ec *executionContext) fieldContext_CredentialEvent_credential(_ context.Co
 				return ec.fieldContext_Credential_updatedAt(ctx, field)
 			}
 			return nil, fmt.Errorf("no field named %q was found under type Credential", field.Name)
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _CredentialKey_name(ctx context.Context, field graphql.CollectedField, obj *models.CredentialKey) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_CredentialKey_name,
+		func(ctx context.Context) (any, error) {
+			return obj.Name, nil
+		},
+		nil,
+		ec.marshalNString2string,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_CredentialKey_name(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "CredentialKey",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _CredentialKey_content(ctx context.Context, field graphql.CollectedField, obj *models.CredentialKey) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_CredentialKey_content,
+		func(ctx context.Context) (any, error) {
+			return obj.Content, nil
+		},
+		nil,
+		ec.marshalNString2string,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_CredentialKey_content(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "CredentialKey",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
 		},
 	}
 	return fc, nil
@@ -17752,7 +17848,7 @@ func (ec *executionContext) unmarshalInputCreateCredentialInput(ctx context.Cont
 			it.Password = data
 		case "keys":
 			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("keys"))
-			data, err := ec.unmarshalOString2ᚕstringᚄ(ctx, v)
+			data, err := ec.unmarshalOCredentialKeyInput2ᚕᚖgithubᚗcomᚋvibeᚑc2ᚋvibeᚑc2ᚑcoreᚋcoreᚋpkgᚋgraphqlᚋmodelᚐCredentialKeyInputᚄ(ctx, v)
 			if err != nil {
 				return it, err
 			}
@@ -18035,6 +18131,43 @@ func (ec *executionContext) unmarshalInputCreateWikiDocumentInput(ctx context.Co
 	return it, nil
 }
 
+func (ec *executionContext) unmarshalInputCredentialKeyInput(ctx context.Context, obj any) (model.CredentialKeyInput, error) {
+	var it model.CredentialKeyInput
+	if obj == nil {
+		return it, nil
+	}
+
+	asMap := map[string]any{}
+	for k, v := range obj.(map[string]any) {
+		asMap[k] = v
+	}
+
+	fieldsInOrder := [...]string{"name", "content"}
+	for _, k := range fieldsInOrder {
+		v, ok := asMap[k]
+		if !ok {
+			continue
+		}
+		switch k {
+		case "name":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("name"))
+			data, err := ec.unmarshalNString2string(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.Name = data
+		case "content":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("content"))
+			data, err := ec.unmarshalNString2string(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.Content = data
+		}
+	}
+	return it, nil
+}
+
 func (ec *executionContext) unmarshalInputUpdateCredentialInput(ctx context.Context, obj any) (model.UpdateCredentialInput, error) {
 	var it model.UpdateCredentialInput
 	if obj == nil {
@@ -18083,7 +18216,7 @@ func (ec *executionContext) unmarshalInputUpdateCredentialInput(ctx context.Cont
 			it.Password = data
 		case "keys":
 			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("keys"))
-			data, err := ec.unmarshalOString2ᚕstringᚄ(ctx, v)
+			data, err := ec.unmarshalOCredentialKeyInput2ᚕᚖgithubᚗcomᚋvibeᚑc2ᚋvibeᚑc2ᚑcoreᚋcoreᚋpkgᚋgraphqlᚋmodelᚐCredentialKeyInputᚄ(ctx, v)
 			if err != nil {
 				return it, err
 			}
@@ -18946,6 +19079,50 @@ func (ec *executionContext) _CredentialEvent(ctx context.Context, sel ast.Select
 			}
 		case "credential":
 			out.Values[i] = ec._CredentialEvent_credential(ctx, field, obj)
+		default:
+			panic("unknown field " + strconv.Quote(field.Name))
+		}
+	}
+	out.Dispatch(ctx)
+	if out.Invalids > 0 {
+		return graphql.Null
+	}
+
+	atomic.AddInt32(&ec.Deferred, int32(len(deferred)))
+
+	for label, dfs := range deferred {
+		ec.ProcessDeferredGroup(graphql.DeferredGroup{
+			Label:    label,
+			Path:     graphql.GetPath(ctx),
+			FieldSet: dfs,
+			Context:  ctx,
+		})
+	}
+
+	return out
+}
+
+var credentialKeyImplementors = []string{"CredentialKey"}
+
+func (ec *executionContext) _CredentialKey(ctx context.Context, sel ast.SelectionSet, obj *models.CredentialKey) graphql.Marshaler {
+	fields := graphql.CollectFields(ec.OperationContext, sel, credentialKeyImplementors)
+
+	out := graphql.NewFieldSet(fields)
+	deferred := make(map[string]*graphql.FieldSet)
+	for i, field := range fields {
+		switch field.Name {
+		case "__typename":
+			out.Values[i] = graphql.MarshalString("CredentialKey")
+		case "name":
+			out.Values[i] = ec._CredentialKey_name(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "content":
+			out.Values[i] = ec._CredentialKey_content(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
 		default:
 			panic("unknown field " + strconv.Quote(field.Name))
 		}
@@ -23749,6 +23926,31 @@ func (ec *executionContext) marshalNCredentialEvent2ᚖgithubᚗcomᚋvibeᚑc2�
 	return ec._CredentialEvent(ctx, sel, v)
 }
 
+func (ec *executionContext) marshalNCredentialKey2githubᚗcomᚋvibeᚑc2ᚋvibeᚑc2ᚑcoreᚋcoreᚋpkgᚋmodelsᚐCredentialKey(ctx context.Context, sel ast.SelectionSet, v models.CredentialKey) graphql.Marshaler {
+	return ec._CredentialKey(ctx, sel, &v)
+}
+
+func (ec *executionContext) marshalNCredentialKey2ᚕgithubᚗcomᚋvibeᚑc2ᚋvibeᚑc2ᚑcoreᚋcoreᚋpkgᚋmodelsᚐCredentialKeyᚄ(ctx context.Context, sel ast.SelectionSet, v []models.CredentialKey) graphql.Marshaler {
+	ret := graphql.MarshalSliceConcurrently(ctx, len(v), 0, false, func(ctx context.Context, i int) graphql.Marshaler {
+		fc := graphql.GetFieldContext(ctx)
+		fc.Result = &v[i]
+		return ec.marshalNCredentialKey2githubᚗcomᚋvibeᚑc2ᚋvibeᚑc2ᚑcoreᚋcoreᚋpkgᚋmodelsᚐCredentialKey(ctx, sel, v[i])
+	})
+
+	for _, e := range ret {
+		if e == graphql.Null {
+			return graphql.Null
+		}
+	}
+
+	return ret
+}
+
+func (ec *executionContext) unmarshalNCredentialKeyInput2ᚖgithubᚗcomᚋvibeᚑc2ᚋvibeᚑc2ᚑcoreᚋcoreᚋpkgᚋgraphqlᚋmodelᚐCredentialKeyInput(ctx context.Context, v any) (*model.CredentialKeyInput, error) {
+	res, err := ec.unmarshalInputCredentialKeyInput(ctx, v)
+	return &res, graphql.ErrorOnPath(ctx, err)
+}
+
 func (ec *executionContext) unmarshalNCredentialType2githubᚗcomᚋvibeᚑc2ᚋvibeᚑc2ᚑcoreᚋcoreᚋpkgᚋmodelsᚐCredentialType(ctx context.Context, v any) (models.CredentialType, error) {
 	tmp, err := graphql.UnmarshalString(v)
 	res := models.CredentialType(tmp)
@@ -24814,6 +25016,24 @@ func (ec *executionContext) marshalOCredential2ᚖgithubᚗcomᚋvibeᚑc2ᚋvib
 		return graphql.Null
 	}
 	return ec._Credential(ctx, sel, v)
+}
+
+func (ec *executionContext) unmarshalOCredentialKeyInput2ᚕᚖgithubᚗcomᚋvibeᚑc2ᚋvibeᚑc2ᚑcoreᚋcoreᚋpkgᚋgraphqlᚋmodelᚐCredentialKeyInputᚄ(ctx context.Context, v any) ([]*model.CredentialKeyInput, error) {
+	if v == nil {
+		return nil, nil
+	}
+	var vSlice []any
+	vSlice = graphql.CoerceList(v)
+	var err error
+	res := make([]*model.CredentialKeyInput, len(vSlice))
+	for i := range vSlice {
+		ctx := graphql.WithPathContext(ctx, graphql.NewPathWithIndex(i))
+		res[i], err = ec.unmarshalNCredentialKeyInput2ᚖgithubᚗcomᚋvibeᚑc2ᚋvibeᚑc2ᚑcoreᚋcoreᚋpkgᚋgraphqlᚋmodelᚐCredentialKeyInput(ctx, vSlice[i])
+		if err != nil {
+			return nil, err
+		}
+	}
+	return res, nil
 }
 
 func (ec *executionContext) unmarshalOCredentialType2ᚖgithubᚗcomᚋvibeᚑc2ᚋvibeᚑc2ᚑcoreᚋcoreᚋpkgᚋmodelsᚐCredentialType(ctx context.Context, v any) (*models.CredentialType, error) {

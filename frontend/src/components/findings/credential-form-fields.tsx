@@ -2,7 +2,6 @@ import { useState } from "react"
 import { XIcon } from "lucide-react"
 import { Field, FieldGroup, FieldLabel } from "@/components/ui/field"
 import { Input } from "@/components/ui/input"
-import { Textarea } from "@/components/ui/textarea"
 import {
   Select,
   SelectContent,
@@ -11,21 +10,21 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import { Badge } from "@/components/ui/badge"
-import { Switch } from "@/components/ui/switch"
 import type { CredentialType } from "@/graphql/gql/graphql"
 import {
   CREDENTIAL_TYPES,
   credentialTypeLabel,
-  parseKeysText,
   parseTagsText,
 } from "@/components/findings/credential-type-utils"
+import type { KeyDraft } from "@/components/findings/credential-key-drafts"
+import { CredentialKeysEditor } from "@/components/findings/credential-keys-editor"
 
 export interface CredentialFormValues {
   name: string
   type: CredentialType
   username: string
   password: string
-  keys: string[]
+  keys: KeyDraft[]
   isValid: boolean
   tags: string[]
 }
@@ -60,72 +59,73 @@ export function CredentialFormFields({
 
   return (
     <FieldGroup>
-      <Field>
-        <FieldLabel htmlFor={`${idPrefix}-name`}>Name</FieldLabel>
-        <Input
-          id={`${idPrefix}-name`}
-          name="name"
-          type="text"
-          required
-          value={values.name}
-          onChange={(e) => patch({ name: e.target.value })}
-          autoFocus
-        />
-      </Field>
+      {/* Row 1: Name takes 2/3, Type takes 1/3 — collapses to single column under sm. */}
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+        <Field className="sm:col-span-2">
+          <FieldLabel htmlFor={`${idPrefix}-name`}>Name</FieldLabel>
+          <Input
+            id={`${idPrefix}-name`}
+            name="name"
+            type="text"
+            required
+            value={values.name}
+            onChange={(e) => patch({ name: e.target.value })}
+            autoFocus
+          />
+        </Field>
+
+        <Field>
+          <FieldLabel htmlFor={`${idPrefix}-type`}>Type</FieldLabel>
+          <Select
+            value={values.type}
+            onValueChange={(v) => patch({ type: v as CredentialType })}
+          >
+            <SelectTrigger id={`${idPrefix}-type`} className="w-full">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {CREDENTIAL_TYPES.map((t) => (
+                <SelectItem key={t} value={t}>
+                  {credentialTypeLabel(t)}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </Field>
+      </div>
+
+      {/* Row 2: Username + Password share width evenly. */}
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+        <Field>
+          <FieldLabel htmlFor={`${idPrefix}-username`}>Username</FieldLabel>
+          <Input
+            id={`${idPrefix}-username`}
+            name="username"
+            type="text"
+            value={values.username}
+            onChange={(e) => patch({ username: e.target.value })}
+          />
+        </Field>
+
+        <Field>
+          <FieldLabel htmlFor={`${idPrefix}-password`}>Password</FieldLabel>
+          <Input
+            id={`${idPrefix}-password`}
+            name="password"
+            type="text"
+            value={values.password}
+            onChange={(e) => patch({ password: e.target.value })}
+            autoComplete="off"
+            spellCheck={false}
+          />
+        </Field>
+      </div>
 
       <Field>
-        <FieldLabel htmlFor={`${idPrefix}-type`}>Type</FieldLabel>
-        <Select
-          value={values.type}
-          onValueChange={(v) => patch({ type: v as CredentialType })}
-        >
-          <SelectTrigger id={`${idPrefix}-type`} className="w-full">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            {CREDENTIAL_TYPES.map((t) => (
-              <SelectItem key={t} value={t}>
-                {credentialTypeLabel(t)}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-      </Field>
-
-      <Field>
-        <FieldLabel htmlFor={`${idPrefix}-username`}>Username</FieldLabel>
-        <Input
-          id={`${idPrefix}-username`}
-          name="username"
-          type="text"
-          value={values.username}
-          onChange={(e) => patch({ username: e.target.value })}
-        />
-      </Field>
-
-      <Field>
-        <FieldLabel htmlFor={`${idPrefix}-password`}>Password</FieldLabel>
-        <Input
-          id={`${idPrefix}-password`}
-          name="password"
-          type="text"
-          value={values.password}
-          onChange={(e) => patch({ password: e.target.value })}
-          autoComplete="off"
-          spellCheck={false}
-        />
-      </Field>
-
-      <Field>
-        <FieldLabel htmlFor={`${idPrefix}-keys`}>Keys (one per line)</FieldLabel>
-        <Textarea
-          id={`${idPrefix}-keys`}
-          name="keys"
-          rows={4}
-          value={values.keys.join("\n")}
-          onChange={(e) => patch({ keys: parseKeysText(e.target.value) })}
-          spellCheck={false}
-          placeholder="ssh-ed25519 AAAA..."
+        <FieldLabel>Keys</FieldLabel>
+        <CredentialKeysEditor
+          keys={values.keys}
+          onChange={(keys: KeyDraft[]) => onChange({ ...values, keys })}
         />
       </Field>
 
@@ -168,16 +168,6 @@ export function CredentialFormFields({
             placeholder="Type and press Enter"
           />
         </div>
-      </Field>
-
-      <Field>
-        <label className="flex cursor-pointer items-center gap-2 text-sm">
-          <Switch
-            checked={values.isValid}
-            onCheckedChange={(checked) => patch({ isValid: checked })}
-          />
-          <span>Mark as valid</span>
-        </label>
       </Field>
     </FieldGroup>
   )

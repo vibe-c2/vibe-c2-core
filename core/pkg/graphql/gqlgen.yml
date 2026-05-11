@@ -248,6 +248,12 @@ models:
       updatedAt:
         resolver: true         # field.DefaultField.UpdateAt -> string
 
+  # Map the GraphQL "CredentialKey" type to our existing Go model. The struct
+  # fields line up with the GraphQL field names, so no field resolvers needed.
+  CredentialKey:
+    model:
+      - github.com/vibe-c2/vibe-c2-core/core/pkg/models.CredentialKey
+
   # Map the GraphQL "CredentialComment" type to our existing model.
   CredentialComment:
     model:

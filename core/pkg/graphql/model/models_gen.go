@@ -17,7 +17,7 @@ type CreateCredentialInput struct {
 	Type     models.CredentialType `json:"type"`
 	Username *string               `json:"username,omitempty"`
 	Password *string               `json:"password,omitempty"`
-	Keys     []string              `json:"keys,omitempty"`
+	Keys     []*CredentialKeyInput `json:"keys,omitempty"`
 	IsValid  *bool                 `json:"isValid,omitempty"`
 	Tags     []string              `json:"tags,omitempty"`
 }
@@ -73,6 +73,11 @@ type CredentialEvent struct {
 	CredentialID string             `json:"credentialId"`
 	OperationID  string             `json:"operationId"`
 	Credential   *models.Credential `json:"credential,omitempty"`
+}
+
+type CredentialKeyInput struct {
+	Name    string `json:"name"`
+	Content string `json:"content"`
 }
 
 type Mutation struct {
@@ -142,7 +147,7 @@ type UpdateCredentialInput struct {
 	Type     *models.CredentialType `json:"type,omitempty"`
 	Username *string                `json:"username,omitempty"`
 	Password *string                `json:"password,omitempty"`
-	Keys     []string               `json:"keys,omitempty"`
+	Keys     []*CredentialKeyInput  `json:"keys,omitempty"`
 	IsValid  *bool                  `json:"isValid,omitempty"`
 	Tags     []string               `json:"tags,omitempty"`
 }

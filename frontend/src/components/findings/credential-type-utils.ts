@@ -25,17 +25,6 @@ export function credentialTypeLabel(t: CredentialType): string {
 }
 
 /**
- * Splits a "one per line" textarea into a trimmed, non-empty string list.
- * Used for the credential keys input.
- */
-export function parseKeysText(text: string): string[] {
-  return text
-    .split("\n")
-    .map((k) => k.trim())
-    .filter((k) => k.length > 0)
-}
-
-/**
  * Parses a comma-separated tag string into a deduplicated lowercase array.
  * Mirrors the backend normalization so the UI displays cleanly after submit.
  */

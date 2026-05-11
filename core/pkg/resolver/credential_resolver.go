@@ -121,7 +121,7 @@ func (r *credentialResolver) CreateCredential(ctx context.Context, operationID s
 		Type:         input.Type,
 		Username:     strDeref(input.Username),
 		Password:     strDeref(input.Password),
-		Keys:         normalizeStringSlice(input.Keys),
+		Keys:         normalizeCredentialKeys(input.Keys),
 		IsValid:      boolDeref(input.IsValid, false),
 		Tags:         normalizeTags(input.Tags),
 		Comments:     []models.CredentialComment{},
@@ -181,7 +181,7 @@ func (r *credentialResolver) UpdateCredential(ctx context.Context, id string, in
 		updates["password"] = *input.Password
 	}
 	if input.Keys != nil {
-		updates["keys"] = normalizeStringSlice(input.Keys)
+		updates["keys"] = normalizeCredentialKeys(input.Keys)
 	}
 	if input.IsValid != nil {
 		updates["is_valid"] = *input.IsValid
@@ -635,18 +635,25 @@ func boolDeref(p *bool, fallback bool) bool {
 	return *p
 }
 
-// normalizeStringSlice trims each entry and drops empty entries.
-// Returns a non-nil empty slice for nil input to keep BSON arrays consistent.
-func normalizeStringSlice(in []string) []string {
+// normalizeCredentialKeys trims each field and drops entries where both name
+// and content are empty after trimming. Returns a non-nil empty slice for nil
+// input to keep BSON arrays consistent. Whitespace-only fields are normalised
+// to "" so the DB never stores accidental spaces.
+func normalizeCredentialKeys(in []*model.CredentialKeyInput) []models.CredentialKey {
 	if len(in) == 0 {
-		return []string{}
+		return []models.CredentialKey{}
 	}
-	out := make([]string, 0, len(in))
-	for _, s := range in {
-		s = strings.TrimSpace(s)
-		if s != "" {
-			out = append(out, s)
+	out := make([]models.CredentialKey, 0, len(in))
+	for _, k := range in {
+		if k == nil {
+			continue
 		}
+		name := strings.TrimSpace(k.Name)
+		content := strings.TrimSpace(k.Content)
+		if name == "" && content == "" {
+			continue
+		}
+		out = append(out, models.CredentialKey{Name: name, Content: content})
 	}
 	return out
 }

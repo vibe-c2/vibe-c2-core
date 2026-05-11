@@ -8,6 +8,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog"
+import { Switch } from "@/components/ui/switch"
 import { useCredentialStore } from "@/stores/credentials"
 import {
   useCredential,
@@ -17,6 +18,10 @@ import {
   CredentialFormFields,
   type CredentialFormValues,
 } from "@/components/findings/credential-form-fields"
+import {
+  keyDraftsFromWire,
+  keyDraftsToInputs,
+} from "@/components/findings/credential-key-drafts"
 import type { CredentialFieldsFragment } from "@/graphql/gql/graphql"
 
 export function EditCredentialDialog() {
@@ -31,7 +36,7 @@ export function EditCredentialDialog() {
         if (!open) closeDialogs()
       }}
     >
-      <DialogContent className="max-w-lg">
+      <DialogContent className="sm:max-w-3xl">
         <DialogHeader>
           <DialogTitle>Edit credential</DialogTitle>
           <DialogDescription>
@@ -68,7 +73,7 @@ function EditCredentialForm({ credential, onSaved }: EditCredentialFormProps) {
     type: credential.type,
     username: credential.username,
     password: credential.password,
-    keys: credential.keys,
+    keys: keyDraftsFromWire(credential.keys),
     isValid: credential.isValid,
     tags: credential.tags,
   })
@@ -85,7 +90,7 @@ function EditCredentialForm({ credential, onSaved }: EditCredentialFormProps) {
           type: values.type,
           username: values.username,
           password: values.password,
-          keys: values.keys,
+          keys: keyDraftsToInputs(values.keys),
           isValid: values.isValid,
           tags: values.tags,
         },
@@ -108,7 +113,16 @@ function EditCredentialForm({ credential, onSaved }: EditCredentialFormProps) {
         values={values}
         onChange={setValues}
       />
-      <DialogFooter className="mt-4">
+      <DialogFooter className="mt-4 flex-row items-center justify-between sm:justify-between">
+        <label className="flex cursor-pointer items-center gap-2 text-sm">
+          <Switch
+            checked={values.isValid}
+            onCheckedChange={(checked) =>
+              setValues((v) => ({ ...v, isValid: checked }))
+            }
+          />
+          <span>Mark as valid</span>
+        </label>
         <Button
           type="submit"
           disabled={updateCredential.isPending || !values.name.trim()}
