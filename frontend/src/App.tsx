@@ -12,6 +12,7 @@ import { DashboardPage } from "@/pages/dashboard"
 import { OperationsPage } from "@/pages/operations"
 import { UsersPage } from "@/pages/users"
 import { WikiPage } from "@/pages/wiki"
+import { FindingsPage } from "@/pages/findings"
 import { useAuthStore } from "@/stores/auth"
 import { useConnectivityStore } from "@/stores/connectivity"
 
@@ -52,6 +53,7 @@ function App() {
               <Route path="users" element={<UsersPage />} />
               <Route path="wiki" element={<WikiPage />} />
               <Route path="wiki/:documentId" element={<WikiPage />} />
+              <Route path="findings" element={<FindingsPage />} />
             </Route>
           </Route>
         </Routes>

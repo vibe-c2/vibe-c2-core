@@ -12,6 +12,16 @@ import (
 	"github.com/vibe-c2/vibe-c2-core/core/pkg/pagination"
 )
 
+type CreateCredentialInput struct {
+	Name     string                `json:"name"`
+	Type     models.CredentialType `json:"type"`
+	Username *string               `json:"username,omitempty"`
+	Password *string               `json:"password,omitempty"`
+	Keys     []string              `json:"keys,omitempty"`
+	IsValid  *bool                 `json:"isValid,omitempty"`
+	Tags     []string              `json:"tags,omitempty"`
+}
+
 type CreateOperationInput struct {
 	Name        string  `json:"name"`
 	Description *string `json:"description,omitempty"`
@@ -45,6 +55,24 @@ type CreateWikiDocumentInput struct {
 	Color            *string `json:"color,omitempty"`
 	Icon             *string `json:"icon,omitempty"`
 	SortOrder        *string `json:"sortOrder,omitempty"`
+}
+
+type CredentialConnection struct {
+	Edges      []*CredentialEdge    `json:"edges"`
+	PageInfo   *pagination.PageInfo `json:"pageInfo"`
+	TotalCount int                  `json:"totalCount"`
+}
+
+type CredentialEdge struct {
+	Node   *models.Credential `json:"node"`
+	Cursor string             `json:"cursor"`
+}
+
+type CredentialEvent struct {
+	Action       EventAction        `json:"action"`
+	CredentialID string             `json:"credentialId"`
+	OperationID  string             `json:"operationId"`
+	Credential   *models.Credential `json:"credential,omitempty"`
 }
 
 type Mutation struct {
@@ -107,6 +135,16 @@ type SessionEvent struct {
 }
 
 type Subscription struct {
+}
+
+type UpdateCredentialInput struct {
+	Name     *string                `json:"name,omitempty"`
+	Type     *models.CredentialType `json:"type,omitempty"`
+	Username *string                `json:"username,omitempty"`
+	Password *string                `json:"password,omitempty"`
+	Keys     []string               `json:"keys,omitempty"`
+	IsValid  *bool                  `json:"isValid,omitempty"`
+	Tags     []string               `json:"tags,omitempty"`
 }
 
 type UpdateOperationInput struct {

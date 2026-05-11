@@ -132,6 +132,8 @@ func extractOperationID(event eventbus.Event) string {
 		return p.OperationID
 	case eventbus.WikiPresencePayload:
 		return p.OperationID
+	case eventbus.CredentialEventPayload:
+		return p.OperationID
 	}
 	return ""
 }
@@ -223,6 +225,37 @@ func toWikiDocumentPresenceEvent(event eventbus.Event) *model.WikiDocumentPresen
 		evt.OperationID = p.OperationID
 		evt.UserID = p.UserID
 		evt.Username = p.Username
+	}
+	return evt
+}
+
+// credentialTopics is the list of credential event bus topics for subscriptions.
+var credentialTopics = []eventbus.Topic{
+	eventbus.TopicCredentialCreated,
+	eventbus.TopicCredentialUpdated,
+	eventbus.TopicCredentialDeleted,
+	eventbus.TopicCredentialCommentAdded,
+	eventbus.TopicCredentialCommentUpdated,
+	eventbus.TopicCredentialCommentRemoved,
+}
+
+// toCredentialEvent converts an event bus Event to a GraphQL CredentialEvent.
+// Comment.* topics surface as UPDATED so the client refetches the full credential.
+func toCredentialEvent(event eventbus.Event) *model.CredentialEvent {
+	var action model.EventAction
+	switch event.Topic {
+	case eventbus.TopicCredentialCreated:
+		action = model.EventActionCreated
+	case eventbus.TopicCredentialDeleted:
+		action = model.EventActionDeleted
+	default:
+		action = model.EventActionUpdated
+	}
+
+	evt := &model.CredentialEvent{Action: action}
+	if p, ok := event.Payload.(eventbus.CredentialEventPayload); ok {
+		evt.CredentialID = p.CredentialID
+		evt.OperationID = p.OperationID
 	}
 	return evt
 }

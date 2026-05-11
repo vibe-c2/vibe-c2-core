@@ -1,6 +1,7 @@
 import {
   BookOpenIcon,
   LayoutDashboardIcon,
+  SearchCheckIcon,
   SwordsIcon,
   UsersIcon,
 } from 'lucide-react';
@@ -25,6 +26,12 @@ export const navigationItems: NavigationItem[] = [
     url: '/wiki',
     permission: null,
     icon: BookOpenIcon,
+  },
+  {
+    title: 'Findings',
+    url: '/findings',
+    permission: null,
+    icon: SearchCheckIcon,
   },
 ];
 

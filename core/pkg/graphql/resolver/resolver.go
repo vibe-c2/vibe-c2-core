@@ -38,6 +38,7 @@ type Resolver struct {
 	SessionResolver            resolver.ISessionResolver
 	WikiDocumentResolver       resolver.IWikiDocumentResolver
 	WikiDocumentVisitResolver  resolver.IWikiDocumentVisitResolver
+	CredentialResolver         resolver.ICredentialResolver
 
 	// Subscription dependencies — event bus for real-time events,
 	// repos for fetching full entities to include in event payloads.
@@ -46,5 +47,6 @@ type Resolver struct {
 	OperationRepo    repository.IOperationRepository
 	SessionRepo      repository.ISessionRepository
 	WikiDocumentRepo repository.IWikiDocumentRepository
+	CredentialRepo   repository.ICredentialRepository
 	PresenceTracker  *wiki.PresenceTracker
 }

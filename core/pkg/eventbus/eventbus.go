@@ -47,6 +47,14 @@ const (
 	// Wiki presence events — emitted by Hocuspocus webhook handler.
 	TopicWikiPresenceJoined Topic = "wiki.presence.joined"
 	TopicWikiPresenceLeft   Topic = "wiki.presence.left"
+
+	// Credential events — emitted by CredentialResolver.
+	TopicCredentialCreated        Topic = "credential.created"
+	TopicCredentialUpdated        Topic = "credential.updated"
+	TopicCredentialDeleted        Topic = "credential.deleted"
+	TopicCredentialCommentAdded   Topic = "credential.comment.added"
+	TopicCredentialCommentUpdated Topic = "credential.comment.updated"
+	TopicCredentialCommentRemoved Topic = "credential.comment.removed"
 )
 
 // ActorType identifies who originated an event.

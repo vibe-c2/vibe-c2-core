@@ -222,3 +222,42 @@ models:
         resolver: true   # DocumentID (uuid.UUID) -> WikiDocument (fetched from DB)
       visitedAt:
         resolver: true   # time.Time -> RFC3339 string
+
+  # Map the GraphQL "CredentialType" enum to our existing Go type.
+  CredentialType:
+    model:
+      - github.com/vibe-c2/vibe-c2-core/core/pkg/models.CredentialType
+
+  # Map the GraphQL "Credential" type to our existing Go model.
+  # Field resolvers bridge UUID->string, timestamp->RFC3339, and the
+  # createdBy lookup that fetches the User by CreatedByID.
+  Credential:
+    model:
+      - github.com/vibe-c2/vibe-c2-core/core/pkg/models.Credential
+    fields:
+      id:
+        resolver: true         # CredentialID (uuid.UUID) -> ID (string)
+      operationId:
+        resolver: true         # OperationID (uuid.UUID) -> ID (string)
+      comments:
+        resolver: true         # []CredentialComment -> []*CredentialComment
+      createdBy:
+        resolver: true         # CreatedByID (uuid.UUID) -> User (fetched from DB)
+      createdAt:
+        resolver: true         # field.DefaultField.CreateAt -> string
+      updatedAt:
+        resolver: true         # field.DefaultField.UpdateAt -> string
+
+  # Map the GraphQL "CredentialComment" type to our existing model.
+  CredentialComment:
+    model:
+      - github.com/vibe-c2/vibe-c2-core/core/pkg/models.CredentialComment
+    fields:
+      id:
+        resolver: true         # CommentID (uuid.UUID) -> ID (string)
+      author:
+        resolver: true         # AuthorID (uuid.UUID) -> User (fetched from DB)
+      createdAt:
+        resolver: true         # time.Time -> RFC3339 string
+      updatedAt:
+        resolver: true         # time.Time -> RFC3339 string

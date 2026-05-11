@@ -48,6 +48,7 @@ func (a *App) NewRouter() *gin.Engine {
 		resolver.WithSchemeNetworkPointRepo(a.repos.SchemeNetworkPoint),
 		resolver.WithWikiDocumentRepo(a.repos.WikiDocument),
 		resolver.WithWikiDocumentBackupRepo(a.repos.WikiDocumentBackup),
+		resolver.WithCredentialRepo(a.repos.Credential),
 		resolver.WithEventBus(a.eventBus))
 	snpRes := resolver.NewSchemeNetworkPointResolver(a.repos.SchemeNetworkPoint, a.repos.Operation)
 	sessRes := resolver.NewSessionResolver(a.repos.Session, a.repos.User, a.tokenStore, a.eventBus)
@@ -59,6 +60,9 @@ func (a *App) NewRouter() *gin.Engine {
 	)
 	wikiVisitRes := resolver.NewWikiDocumentVisitResolver(
 		a.repos.WikiDocumentVisit, a.repos.WikiDocument, a.repos.Operation,
+	)
+	credRes := resolver.NewCredentialResolver(
+		a.repos.Credential, a.repos.Operation, a.repos.User, a.eventBus,
 	)
 
 	// Wiki controller (REST endpoints)
@@ -157,9 +161,9 @@ func (a *App) NewRouter() *gin.Engine {
 		// Authorization (RBAC) is handled by the @hasPermission directive inside
 		// the GraphQL schema — each query/mutation declares what permission it needs.
 		v1.POST("/graphql", gql.NewHandler(
-			userRes, opRes, snpRes, sessRes, wikiDocRes, wikiVisitRes,
+			userRes, opRes, snpRes, sessRes, wikiDocRes, wikiVisitRes, credRes,
 			a.eventBus,
-			a.repos.User, a.repos.Operation, a.repos.Session, a.repos.WikiDocument,
+			a.repos.User, a.repos.Operation, a.repos.Session, a.repos.WikiDocument, a.repos.Credential,
 			a.presenceTracker,
 		))
 

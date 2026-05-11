@@ -42,6 +42,7 @@ type Repositories struct {
 	WikiDocumentVisit  repository.IWikiDocumentVisitRepository
 	WikiImage          repository.IWikiImageRepository
 	WikiFile           repository.IWikiFileRepository
+	Credential         repository.ICredentialRepository
 }
 
 type App struct {
@@ -99,6 +100,7 @@ func NewApp() (*App, error) {
 		WikiDocumentVisit:  repository.NewWikiDocumentVisitRepository(db),
 		WikiImage:          repository.NewWikiImageRepository(db),
 		WikiFile:           repository.NewWikiFileRepository(db),
+		Credential:         repository.NewCredentialRepository(db),
 	}
 
 	// Initialize cache (noop fallback is acceptable for caching)

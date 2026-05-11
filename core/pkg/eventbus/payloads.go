@@ -176,3 +176,35 @@ func NewWikiPresenceJoinedEvent(actor Actor, p WikiPresencePayload) Event {
 func NewWikiPresenceLeftEvent(actor Actor, p WikiPresencePayload) Event {
 	return NewEvent(TopicWikiPresenceLeft, actor, p)
 }
+
+// --- Credential event payloads ---
+
+// CredentialEventPayload is the payload for credential create/update/delete events.
+type CredentialEventPayload struct {
+	CredentialID string
+	OperationID  string
+}
+
+func NewCredentialCreatedEvent(actor Actor, p CredentialEventPayload) Event {
+	return NewEvent(TopicCredentialCreated, actor, p)
+}
+
+func NewCredentialUpdatedEvent(actor Actor, p CredentialEventPayload) Event {
+	return NewEvent(TopicCredentialUpdated, actor, p)
+}
+
+func NewCredentialDeletedEvent(actor Actor, p CredentialEventPayload) Event {
+	return NewEvent(TopicCredentialDeleted, actor, p)
+}
+
+func NewCredentialCommentAddedEvent(actor Actor, p CredentialEventPayload) Event {
+	return NewEvent(TopicCredentialCommentAdded, actor, p)
+}
+
+func NewCredentialCommentUpdatedEvent(actor Actor, p CredentialEventPayload) Event {
+	return NewEvent(TopicCredentialCommentUpdated, actor, p)
+}
+
+func NewCredentialCommentRemovedEvent(actor Actor, p CredentialEventPayload) Event {
+	return NewEvent(TopicCredentialCommentRemoved, actor, p)
+}

@@ -56,11 +56,13 @@ func NewHandler(
 	sessions resolver.ISessionResolver,
 	wikiDocuments resolver.IWikiDocumentResolver,
 	wikiVisits resolver.IWikiDocumentVisitResolver,
+	credentials resolver.ICredentialResolver,
 	bus eventbus.IEventBus,
 	userRepo repository.IUserRepository,
 	operationRepo repository.IOperationRepository,
 	sessionRepo repository.ISessionRepository,
 	wikiDocumentRepo repository.IWikiDocumentRepository,
+	credentialRepo repository.ICredentialRepository,
 	presenceTracker *wiki.PresenceTracker,
 ) gin.HandlerFunc {
 	// Create the resolver root with entity resolvers and subscription dependencies.
@@ -73,11 +75,13 @@ func NewHandler(
 		SessionResolver:            sessions,
 		WikiDocumentResolver:       wikiDocuments,
 		WikiDocumentVisitResolver:  wikiVisits,
+		CredentialResolver:         credentials,
 		EventBus:                   bus,
 		UserRepo:                   userRepo,
 		OperationRepo:              operationRepo,
 		SessionRepo:                sessionRepo,
 		WikiDocumentRepo:           wikiDocumentRepo,
+		CredentialRepo:             credentialRepo,
 		PresenceTracker:            presenceTracker,
 	}
 
