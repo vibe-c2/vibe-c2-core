@@ -4,6 +4,7 @@ import type { WikiDocumentTreeFieldsFragment } from "@/graphql/gql/graphql"
 
 interface WikiContentAreaProps {
   documentId: string | null
+  operationId: string
   isEditor: boolean
   treeDocuments: WikiDocumentTreeFieldsFragment[]
 }
@@ -13,6 +14,7 @@ interface WikiContentAreaProps {
 // editor while typing.
 export function WikiContentArea({
   documentId,
+  operationId,
   isEditor,
   treeDocuments,
 }: WikiContentAreaProps) {
@@ -20,6 +22,7 @@ export function WikiContentArea({
     return (
       <WikiEditorPane
         documentId={documentId}
+        operationId={operationId}
         isEditor={isEditor}
         treeDocuments={treeDocuments}
       />

@@ -7,6 +7,7 @@ import {
   Heading3Icon,
   ImageIcon,
   InfoIcon,
+  KeyIcon,
   LinkIcon,
   ListIcon,
   ListOrderedIcon,
@@ -21,6 +22,7 @@ import {
 import { pickAndUploadWikiImage } from "@/components/wiki/wiki-image-upload"
 import { pickAndUploadWikiFile } from "@/components/wiki/wiki-file-upload"
 import { startLinkInsert } from "@/components/wiki/wiki-link-popover"
+import { openCredentialPicker } from "@/components/wiki/wiki-credential-picker"
 import type { NoticeVariant } from "@/components/wiki/wiki-notice-node"
 
 /** Context the slash command plugin passes through to every item's command.
@@ -28,6 +30,10 @@ import type { NoticeVariant } from "@/components/wiki/wiki-notice-node"
  *  document-scoped resources (uploads, presence) can reach them. */
 export interface SlashItemContext {
   documentId: string
+  /** Operation this document belongs to. Threaded so cross-feature slash items
+   *  (e.g. credential references) can query operation-scoped data without
+   *  re-deriving it from the document. */
+  operationId: string
 }
 
 export interface SlashItem {
@@ -213,6 +219,32 @@ export const SLASH_ITEMS: SlashItem[] = [
       // the Cmd+K, bubble-menu, and slash entry points all behave the same.
       editor.chain().focus().deleteRange(range).run()
       startLinkInsert(editor)
+    },
+  },
+  {
+    title: "Credential reference",
+    description: "Reference a stored credential from this operation",
+    keywords: [
+      "findings:credential",
+      "credential",
+      "credentials",
+      "creds",
+      "findings",
+      "secret",
+      "password",
+      "key",
+      "auth",
+    ],
+    icon: KeyIcon,
+    command: ({ editor, range, context }) => {
+      // Drop the slash trigger first so the chip lands where the user typed.
+      editor.chain().focus().deleteRange(range).run()
+      const pos = editor.state.selection.from
+      openCredentialPicker({
+        editor,
+        operationId: context.operationId,
+        insertPos: pos,
+      })
     },
   },
 ]

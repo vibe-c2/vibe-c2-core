@@ -21,7 +21,7 @@ export const WikiSlashCommand = Extension.create<SlashCommandOptions>({
 
   addOptions() {
     return {
-      context: { documentId: "" },
+      context: { documentId: "", operationId: "" },
       suggestion: {
         char: "/",
         startOfLine: false,

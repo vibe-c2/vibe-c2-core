@@ -23,6 +23,7 @@ import { createIncrementalLowlightPlugin } from "@/components/wiki/wiki-code-blo
 import { WikiHorizontalRuleNode } from "@/components/wiki/wiki-horizontal-rule-node"
 import { WikiImageNode } from "@/components/wiki/wiki-image-node"
 import { WikiFileExtension } from "@/components/wiki/wiki-file-node"
+import { WikiCredentialReferenceExtension } from "@/components/wiki/wiki-credential-reference-node"
 import { WikiEditorBubbleMenu } from "@/components/wiki/wiki-editor-bubble-menu"
 import { WikiEditorTableMenu } from "@/components/wiki/wiki-editor-table-menu"
 import { WikiLinkPopover, startLinkInsert } from "@/components/wiki/wiki-link-popover"
@@ -44,13 +45,19 @@ import "./wiki-editor.css"
 
 interface WikiEditorProps {
   documentId: string
+  operationId: string
   isEditor: boolean
   // Rendered inside the scroll container after the editor content so it
   // scrolls together with the document body (Notion-style "Sub-pages" block).
   footer?: ReactNode
 }
 
-export function WikiEditor({ documentId, isEditor, footer }: WikiEditorProps) {
+export function WikiEditor({
+  documentId,
+  operationId,
+  isEditor,
+  footer,
+}: WikiEditorProps) {
   const { ydoc, provider, connectionStatus, isSynced, isReady } = useHocuspocus(documentId)
   const user = useAuthStore((s) => s.user)
 
@@ -269,13 +276,14 @@ export function WikiEditor({ documentId, isEditor, footer }: WikiEditorProps) {
         HTMLAttributes: { class: "wiki-image" },
       }),
       WikiFileExtension,
+      WikiCredentialReferenceExtension,
       WikiNoticeExtension,
       WikiSlashCommand.configure({
-        context: { documentId },
+        context: { documentId, operationId },
       }),
       WikiEscapeEdgeBlock,
     ],
-  }, [ydoc, provider, documentId, isEditor])
+  }, [ydoc, provider, documentId, operationId, isEditor])
 
   // Keep the paste/drop ref pointed at the live editor so those handlers
   // never fire against a stale/destroyed instance after a deps-driven rebuild.

@@ -12,12 +12,14 @@ import type { WikiDocumentTreeFieldsFragment } from "@/graphql/gql/graphql"
 
 interface WikiEditorPaneProps {
   documentId: string
+  operationId: string
   isEditor: boolean
   treeDocuments: WikiDocumentTreeFieldsFragment[]
 }
 
 export function WikiEditorPane({
   documentId,
+  operationId,
   isEditor,
   treeDocuments,
 }: WikiEditorPaneProps) {
@@ -85,6 +87,7 @@ export function WikiEditorPane({
       <EditorErrorBoundary documentId={documentId}>
         <WikiEditor
           documentId={documentId}
+          operationId={operationId}
           isEditor={isEditor}
           footer={
             <WikiChildDocumentList

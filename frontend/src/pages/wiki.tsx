@@ -24,6 +24,10 @@ import { MoveWikiDocumentDialog } from "@/components/wiki/move-wiki-document-dia
 import { PermanentDeleteWikiDocumentDialog } from "@/components/wiki/permanent-delete-wiki-document-dialog"
 import { WikiTrashPanel } from "@/components/wiki/wiki-trash-panel"
 import { WikiBackupPanel } from "@/components/wiki/wiki-backup-panel"
+import { WikiCredentialPickerDialog } from "@/components/wiki/wiki-credential-picker"
+import { CredentialDetailsDialog } from "@/components/findings/credential-details-dialog"
+import { EditCredentialDialog } from "@/components/findings/edit-credential-dialog"
+import { DeleteCredentialDialog } from "@/components/findings/delete-credential-dialog"
 
 export function WikiPage() {
   const scopedOperation = useScopedOperation()
@@ -84,6 +88,12 @@ function WikiPageInner({
   // Real-time subscriptions scoped to this operation.
   useWikiDocumentChangedSubscription(operationId)
   useWikiDocumentPresenceChangedSubscription(operationId)
+  // Deliberately NOT subscribing to credentialChanged here. This page already
+  // holds ~5 long-lived SSE connections plus the hocuspocus WebSocket — over
+  // HTTP/1.1, Firefox caps a single origin at 6 concurrent sockets, and
+  // adding a 6th SSE starved the WS upgrade. Chips refresh via React Query's
+  // refetchOnWindowFocus and via the details dialog's explicit fetch on
+  // click; live cross-session updates only land in the Findings tab.
 
   // Fetch tree data once — shared between sidebar and content search breadcrumbs.
   const { data: treeData } = useWikiDocumentTree(operationId)
@@ -171,6 +181,7 @@ function WikiPageInner({
       />
       <WikiContentArea
         documentId={documentId}
+        operationId={operationId}
         isEditor={isEditor}
         treeDocuments={treeDocuments}
       />
@@ -184,6 +195,15 @@ function WikiPageInner({
       <WikiTrashPanel operationId={operationId} />
       <WikiBackupPanel />
       <WikiCommandPalette operationId={operationId} />
+
+      {/* Credential surface mounted at the page level so chip-driven flows
+          (details / edit / delete / picker) survive navigation between
+          documents within the wiki. State is store-driven so these stay
+          dormant until a chip or slash command opens them. */}
+      <CredentialDetailsDialog />
+      <EditCredentialDialog />
+      <DeleteCredentialDialog />
+      <WikiCredentialPickerDialog />
     </div>
   )
 }

@@ -770,6 +770,193 @@
   background: rgb(185, 28, 28);
 }
 
+/* Wiki credential reference — inline atom chip rendered inside prose.
+   Click opens the same details modal as a Findings table row; right-click
+   surfaces the same per-row context menu. The chip is sized to sit on a
+   single text line without disturbing the line box.
+
+   Inline placement: both the NodeViewWrapper span and ReactNodeViewRenderer's
+   own outer `.react-renderer.node-wikiCredentialReference` wrapper need to
+   render as inline boxes — otherwise the chip drops onto its own line when
+   placed between prose tokens. The outer wrapper defaults to block in
+   @tiptap/react, so we force it inline here. */
+.tiptap .wiki-credential-chip-wrapper {
+  display: inline;
+}
+
+.tiptap .react-renderer.node-wikiCredentialReference {
+  display: inline;
+}
+
+/* Dedicated credential-chip palette. Kept separate from `--primary` so the
+   chip reads as a distinct affordance — it's neither prose, a link, nor an
+   inline code span. Violet was chosen because it (a) doesn't collide with
+   any other inline chrome in the editor and (b) carries a "secrets" feel
+   without leaning into the destructive red used by missing-credential
+   placeholders below. The accent tokens are theme-scoped, the surface/border
+   mixes derive from them so light/dark stay coherent without bespoke values. */
+.tiptap .wiki-credential-chip {
+  --chip-accent: oklch(0.5 0.18 295);
+  --chip-fg: oklch(0.36 0.16 295);
+}
+
+.dark .tiptap .wiki-credential-chip {
+  --chip-accent: oklch(0.72 0.18 295);
+  --chip-fg: oklch(0.86 0.12 295);
+}
+
+.tiptap .wiki-credential-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  vertical-align: baseline;
+  /* Wrap gracefully when the chip stretches past the column edge — the
+     username/password + multiple key hash segments can easily make the chip
+     wider than the prose container. */
+  flex-wrap: wrap;
+  max-width: 100%;
+  font-family: inherit;
+  font-size: 0.875em;
+  font-weight: 500;
+  line-height: 1.2;
+  padding: 0.32em 0.7em;
+  margin: 0 0.15em;
+  border-radius: 6px;
+  color: var(--chip-fg);
+  background: color-mix(in oklch, var(--chip-accent) 14%, transparent);
+  border: 1px solid color-mix(in oklch, var(--chip-accent) 36%, transparent);
+  cursor: pointer;
+  appearance: none;
+  text-align: inherit;
+  transition: background-color 120ms ease-out,
+    border-color 120ms ease-out, color 120ms ease-out,
+    box-shadow 120ms ease-out;
+}
+
+.tiptap .wiki-credential-chip__icon {
+  flex-shrink: 0;
+  color: var(--chip-accent);
+}
+
+.tiptap .wiki-credential-chip:hover {
+  background: color-mix(in oklch, var(--chip-accent) 22%, transparent);
+  border-color: color-mix(in oklch, var(--chip-accent) 52%, transparent);
+}
+
+.tiptap .wiki-credential-chip:focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: 1px;
+}
+
+/* Selection cue. ProseMirror's `ProseMirror-selectednode` lands on the
+   NodeView wrapper for inline atoms — match both that and the `is-selected`
+   class driven off the NodeViewProps `selected` flag, so the ring shows
+   regardless of which signal arrives first. */
+.tiptap .wiki-credential-chip.is-selected,
+.tiptap .ProseMirror-selectednode .wiki-credential-chip,
+.tiptap .ProseMirror-selectednode.wiki-credential-chip-wrapper
+  .wiki-credential-chip {
+  background: color-mix(in oklch, var(--chip-accent) 26%, transparent);
+  box-shadow: 0 0 0 2px var(--ring);
+}
+
+/* Invalid override remaps the chip accent to the muted-foreground neutral.
+   Both selectors are spelled out so the rule sits at the same (0,3,0)
+   specificity as `.dark .tiptap .wiki-credential-chip` above — otherwise the
+   theme-scoped violet `--chip-accent` would beat this in dark mode and the
+   invalid state would stay violet (only the icon would shift). */
+.tiptap .wiki-credential-chip--invalid,
+.dark .tiptap .wiki-credential-chip--invalid {
+  --chip-accent: var(--muted-foreground);
+  --chip-fg: var(--muted-foreground);
+}
+
+.tiptap .wiki-credential-chip--invalid:hover {
+  background: color-mix(in oklch, var(--muted-foreground) 22%, transparent);
+  border-color: color-mix(in oklch, var(--muted-foreground) 48%, transparent);
+}
+
+.tiptap .wiki-credential-chip--missing {
+  color: var(--destructive);
+  background: color-mix(in oklch, var(--destructive) 12%, transparent);
+  border-color: color-mix(in oklch, var(--destructive) 32%, transparent);
+  cursor: default;
+}
+
+.tiptap .wiki-credential-chip--loading {
+  cursor: progress;
+  opacity: 0.75;
+}
+
+.tiptap .wiki-credential-chip__name {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 28ch;
+}
+
+/* Secondary segments — `(username:password)` and per-key `(name:sha1prefix)`.
+   Muted compared to the credential name so the chip's primary affordance
+   (the name) still anchors the eye. Key segments render only a 12-char
+   prefix of the SHA-1 (see KEY_HASH_DISPLAY_LEN in wiki-credential-chip.tsx),
+   short enough that the closing `)` stays inside the chip without ellipsis
+   truncation hiding it; the full digest is preserved in the tooltip. The
+   creds segment can hold a longer password — let it truncate there only,
+   and only when it would otherwise blow the column width. */
+.tiptap .wiki-credential-chip__segment {
+  display: inline-flex;
+  align-items: center;
+  min-width: 0;
+  color: color-mix(in oklch, currentColor 78%, transparent);
+  font-weight: 400;
+  font-family: var(--font-mono);
+  font-size: 0.85em;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 32ch;
+}
+
+.tiptap .wiki-credential-chip__segment--key {
+  /* Prefix is short by construction; no need to truncate, and truncating
+     would hide the closing `)`. Allow the full rendered text to size the
+     segment. */
+  max-width: none;
+  overflow: visible;
+}
+
+.tiptap .wiki-credential-chip__validity--valid {
+  color: oklch(0.62 0.16 152);
+}
+
+.dark .tiptap .wiki-credential-chip__validity--valid {
+  color: oklch(0.72 0.18 152);
+}
+
+.tiptap .wiki-credential-chip__validity--invalid {
+  color: var(--muted-foreground);
+  opacity: 0.7;
+}
+
+.tiptap .wiki-credential-chip__skel {
+  display: inline-block;
+  width: 6ch;
+  height: 0.9em;
+  border-radius: 4px;
+  background: color-mix(in oklch, currentColor 22%, transparent);
+  animation: wiki-credential-chip-pulse 1.2s ease-in-out infinite;
+}
+
+@keyframes wiki-credential-chip-pulse {
+  0%,
+  100% {
+    opacity: 0.5;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+
 /* Notice / callout block — Outline-style tinted band with a left accent rail,
    a small leading icon (filled chip with white glyph for info/success/warning,
    solid star for tip), and a floating variant picker that appears while the
