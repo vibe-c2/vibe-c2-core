@@ -1,4 +1,5 @@
 import { create } from "zustand"
+import { persist, createJSONStorage } from "zustand/middleware"
 import type { CredentialType } from "@/graphql/gql/graphql"
 
 /**
@@ -57,46 +58,72 @@ const defaultFilters: CredentialFilters = {
   validOnly: true,
 }
 
-export const useCredentialStore = create<CredentialStoreState>((set, get) => ({
-  filters: defaultFilters,
-  selected: null,
+export const useCredentialStore = create<CredentialStoreState>()(
+  persist(
+    (set, get) => ({
+      filters: defaultFilters,
+      selected: null,
 
-  createDialogOpen: false,
-  editDialogOpen: false,
-  deleteDialogOpen: false,
-  detailsPanelOpen: false,
+      createDialogOpen: false,
+      editDialogOpen: false,
+      deleteDialogOpen: false,
+      detailsPanelOpen: false,
 
-  setSearch: (search) =>
-    set((s) => ({ filters: { ...s.filters, search } })),
-  setType: (type) =>
-    set((s) => ({ filters: { ...s.filters, type } })),
-  setTags: (tags) =>
-    set((s) => ({ filters: { ...s.filters, tags } })),
-  toggleTag: (tag) => {
-    const { filters } = get()
-    const present = filters.tags.includes(tag)
-    const nextTags = present
-      ? filters.tags.filter((t) => t !== tag)
-      : [...filters.tags, tag]
-    set({ filters: { ...filters, tags: nextTags } })
-  },
-  setValidOnly: (validOnly) =>
-    set((s) => ({ filters: { ...s.filters, validOnly } })),
-  resetFilters: () => set({ filters: defaultFilters }),
+      setSearch: (search) =>
+        set((s) => ({ filters: { ...s.filters, search } })),
+      setType: (type) =>
+        set((s) => ({ filters: { ...s.filters, type } })),
+      setTags: (tags) =>
+        set((s) => ({ filters: { ...s.filters, tags } })),
+      toggleTag: (tag) => {
+        const { filters } = get()
+        const present = filters.tags.includes(tag)
+        const nextTags = present
+          ? filters.tags.filter((t) => t !== tag)
+          : [...filters.tags, tag]
+        set({ filters: { ...filters, tags: nextTags } })
+      },
+      setValidOnly: (validOnly) =>
+        set((s) => ({ filters: { ...s.filters, validOnly } })),
+      resetFilters: () => set({ filters: defaultFilters }),
 
-  openCreateDialog: () => set({ createDialogOpen: true }),
-  openEditDialog: (c) =>
-    set({ editDialogOpen: true, selected: c }),
-  openDeleteDialog: (c) =>
-    set({ deleteDialogOpen: true, selected: c }),
-  openDetailsPanel: (c) =>
-    set({ detailsPanelOpen: true, selected: c }),
-  // Each dialog closes itself so layered flows (e.g. edit opened on top of
-  // details) don't tear down the dialog underneath. Closing the details panel
-  // is the only place we clear `selected`, since it's the entry point.
-  closeCreateDialog: () => set({ createDialogOpen: false }),
-  closeEditDialog: () => set({ editDialogOpen: false }),
-  closeDeleteDialog: () => set({ deleteDialogOpen: false }),
-  closeDetailsPanel: () =>
-    set({ detailsPanelOpen: false, selected: null }),
-}))
+      openCreateDialog: () => set({ createDialogOpen: true }),
+      openEditDialog: (c) =>
+        set({ editDialogOpen: true, selected: c }),
+      openDeleteDialog: (c) =>
+        set({ deleteDialogOpen: true, selected: c }),
+      openDetailsPanel: (c) =>
+        set({ detailsPanelOpen: true, selected: c }),
+      // Each dialog closes itself so layered flows (e.g. edit opened on top of
+      // details) don't tear down the dialog underneath. Closing the details panel
+      // is the only place we clear `selected`, since it's the entry point.
+      closeCreateDialog: () => set({ createDialogOpen: false }),
+      closeEditDialog: () => set({ editDialogOpen: false }),
+      closeDeleteDialog: () => set({ deleteDialogOpen: false }),
+      closeDetailsPanel: () =>
+        set({ detailsPanelOpen: false, selected: null }),
+    }),
+    {
+      name: "vibe-c2:credentials",
+      storage: createJSONStorage(() => localStorage),
+      // Only persist the validOnly toggle — search/tags/type are session-scoped
+      // and dialog state is transient. Custom merge layers the persisted slice
+      // onto the default filters so missing fields fall back to defaults.
+      partialize: (state) => ({
+        filters: { validOnly: state.filters.validOnly },
+      }),
+      merge: (persisted, current) => {
+        const p = persisted as
+          | { filters?: { validOnly?: boolean | null } }
+          | undefined
+        return {
+          ...current,
+          filters: {
+            ...current.filters,
+            ...(p?.filters ?? {}),
+          },
+        }
+      },
+    },
+  ),
+)

@@ -1,11 +1,11 @@
 import {
   BookOpenIcon,
   LayoutDashboardIcon,
-  SearchCheckIcon,
+  GemIcon,
   SwordsIcon,
   UsersIcon,
-} from 'lucide-react';
-import { type Permission, Permissions } from '@/constants/permissions';
+} from "lucide-react";
+import { type Permission, Permissions } from "@/constants/permissions";
 
 export interface NavigationItem {
   title: string;
@@ -16,35 +16,35 @@ export interface NavigationItem {
 
 export const navigationItems: NavigationItem[] = [
   {
-    title: 'Dashboard',
-    url: '/',
+    title: "Dashboard",
+    url: "/",
     permission: null,
     icon: LayoutDashboardIcon,
   },
   {
-    title: 'Wiki',
-    url: '/wiki',
+    title: "Wiki",
+    url: "/wiki",
     permission: null,
     icon: BookOpenIcon,
   },
   {
-    title: 'Findings',
-    url: '/findings',
+    title: "Findings",
+    url: "/findings",
     permission: null,
-    icon: SearchCheckIcon,
+    icon: GemIcon,
   },
 ];
 
 export const navigationAdminItems: NavigationItem[] = [
   {
-    title: 'Operations',
-    url: '/operations',
+    title: "Operations",
+    url: "/operations",
     permission: Permissions.OPERATION_READ,
     icon: SwordsIcon,
   },
   {
-    title: 'Users',
-    url: '/users',
+    title: "Users",
+    url: "/users",
     permission: Permissions.USER_READ,
     icon: UsersIcon,
   },

@@ -1,6 +1,9 @@
 import { type FormEvent, useState } from "react"
+import { toast } from "sonner"
 import {
   CheckCircle2Icon,
+  CheckIcon,
+  CopyIcon,
   KeyIcon,
   PencilIcon,
   TrashIcon,
@@ -87,8 +90,19 @@ export function CredentialDetailsDialog() {
                 </Button>
               </div>
 
-              <FieldRow label="Username" value={credential.username || "—"} />
-              <FieldRow label="Password" value={credential.password || "—"} mono />
+              <FieldRow
+                label="Username"
+                value={credential.username || "—"}
+                copyValue={credential.username}
+                copyLabel="username"
+              />
+              <FieldRow
+                label="Password"
+                value={credential.password || "—"}
+                copyValue={credential.password}
+                copyLabel="password"
+                mono
+              />
 
               {credential.keys.length > 0 && (
                 <div>
@@ -96,23 +110,32 @@ export function CredentialDetailsDialog() {
                     Keys
                   </div>
                   <div className="mt-1 flex flex-col gap-2">
-                    {credential.keys.map((k, i) => (
-                      <div
-                        key={i}
-                        className="rounded-md border bg-muted/30 p-2"
-                      >
-                        <div className="mb-1 text-xs font-medium">
-                          {k.name || (
-                            <span className="text-muted-foreground italic">
-                              Unnamed key
+                    {credential.keys.map((k, i) => {
+                      const copyLabel = k.name?.trim() || `Key ${i + 1}`
+                      return (
+                        <div
+                          key={i}
+                          className="rounded-md border bg-muted/30 p-2"
+                        >
+                          <div className="mb-1 flex items-center gap-1.5 text-xs font-medium">
+                            <span className="min-w-0 flex-1 truncate">
+                              {k.name || (
+                                <span className="text-muted-foreground italic">
+                                  Unnamed key
+                                </span>
+                              )}
                             </span>
-                          )}
+                            <CopyIconButton
+                              value={k.content}
+                              label={copyLabel}
+                            />
+                          </div>
+                          <pre className="overflow-x-auto whitespace-pre-wrap break-all rounded bg-muted p-2 font-mono text-xs">
+                            {k.content}
+                          </pre>
                         </div>
-                        <pre className="overflow-x-auto whitespace-pre-wrap break-all rounded bg-muted p-2 font-mono text-xs">
-                          {k.content}
-                        </pre>
-                      </div>
-                    ))}
+                      )
+                    })}
                   </div>
                 </div>
               )}
@@ -154,17 +177,68 @@ export function CredentialDetailsDialog() {
 function FieldRow({
   label,
   value,
+  copyValue,
+  copyLabel,
   mono,
 }: {
   label: string
   value: string
+  copyValue?: string
+  copyLabel?: string
   mono?: boolean
 }) {
   return (
-    <div className="grid grid-cols-[7rem_1fr] items-baseline gap-2">
+    <div className="grid grid-cols-[7rem_1fr_auto] items-center gap-2">
       <div className="text-xs uppercase text-muted-foreground">{label}</div>
-      <div className={mono ? "font-mono break-all" : "break-words"}>{value}</div>
+      <div
+        className={
+          mono ? "font-mono break-all" : "break-words"
+        }
+      >
+        {value}
+      </div>
+      <div className="justify-self-end">
+        {copyValue ? (
+          <CopyIconButton value={copyValue} label={copyLabel ?? label} />
+        ) : null}
+      </div>
     </div>
+  )
+}
+
+const COPIED_RESET_MS = 1500
+
+// Tiny inline copy-to-clipboard button. Shows a check icon on success and
+// resets after a short delay; surfaces clipboard errors via sonner.
+function CopyIconButton({ value, label }: { value: string; label: string }) {
+  const [copied, setCopied] = useState(false)
+
+  async function handleCopy() {
+    try {
+      await navigator.clipboard.writeText(value)
+      setCopied(true)
+      toast.success(`Copied ${label}`)
+      setTimeout(() => setCopied(false), COPIED_RESET_MS)
+    } catch {
+      toast.error(`Failed to copy ${label}`)
+    }
+  }
+
+  return (
+    <Button
+      type="button"
+      variant="ghost"
+      size="icon-sm"
+      onClick={handleCopy}
+      aria-label={`Copy ${label}`}
+      title={`Copy ${label}`}
+    >
+      {copied ? (
+        <CheckIcon className="size-3.5 text-emerald-600 dark:text-emerald-400" />
+      ) : (
+        <CopyIcon className="size-3.5" />
+      )}
+    </Button>
   )
 }
 

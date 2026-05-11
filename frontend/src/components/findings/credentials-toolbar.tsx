@@ -69,7 +69,13 @@ export function CredentialsToolbar({ operationId }: CredentialsToolbarProps) {
         }
       >
         <SelectTrigger className="min-w-[10rem]">
-          <SelectValue placeholder="All types" />
+          <SelectValue placeholder="All types">
+            {(v) =>
+              !v || v === ALL_TYPES_VALUE
+                ? "All types"
+                : credentialTypeLabel(v as CredentialType)
+            }
+          </SelectValue>
         </SelectTrigger>
         <SelectContent>
           <SelectItem value={ALL_TYPES_VALUE}>All types</SelectItem>

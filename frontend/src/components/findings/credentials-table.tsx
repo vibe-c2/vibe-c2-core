@@ -1,26 +1,17 @@
 import { Virtuoso } from "react-virtuoso"
 import {
-  EllipsisIcon,
   LoaderIcon,
-  PencilIcon,
-  TrashIcon,
   MessageSquareIcon,
   CheckCircle2Icon,
   XCircleIcon,
   KeyIcon,
 } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
-import { Button } from "@/components/ui/button"
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu"
 import { Skeleton } from "@/components/ui/skeleton"
 import { FormattedDateTimeText } from "@/components/ui/formatted-date-time-text"
 import { useCredentialStore } from "@/stores/credentials"
 import { credentialTypeLabel } from "@/components/findings/credential-type-utils"
+import { CredentialRowContextMenu } from "@/components/findings/credential-row-context-menu"
 import type { CredentialFieldsFragment } from "@/graphql/gql/graphql"
 
 interface CredentialsTableProps {
@@ -32,7 +23,7 @@ interface CredentialsTableProps {
 }
 
 const GRID_COLS =
-  "grid-cols-[32px_2fr_1fr_1.5fr_2fr_60px_140px_48px]"
+  "grid-cols-[32px_1.6fr_1fr_1.2fr_1.2fr_60px_1.4fr_60px_140px]"
 
 export function CredentialsTable({
   credentials,
@@ -41,8 +32,6 @@ export function CredentialsTable({
   hasNextPage,
   fetchNextPage,
 }: CredentialsTableProps) {
-  const openEdit = useCredentialStore((s) => s.openEditDialog)
-  const openDelete = useCredentialStore((s) => s.openDeleteDialog)
   const openDetails = useCredentialStore((s) => s.openDetailsPanel)
 
   const showEmpty = !isLoading && credentials.length === 0
@@ -58,12 +47,15 @@ export function CredentialsTable({
           <div>Name</div>
           <div>Type</div>
           <div>Username</div>
+          <div>Password</div>
+          <div className="text-center" title="Keys">
+            <KeyIcon className="mx-auto size-3.5" />
+          </div>
           <div>Tags</div>
           <div className="text-center" title="Comments">
             <MessageSquareIcon className="mx-auto size-3.5" />
           </div>
           <div>Created</div>
-          <div />
         </div>
       </div>
 
@@ -93,76 +85,54 @@ export function CredentialsTable({
             style={{ height: "100%" }}
             className="min-h-0 flex-1"
             itemContent={(_index, cred) => (
-              <button
-                type="button"
-                onClick={() => openDetails({ id: cred.id, name: cred.name })}
-                className={`grid ${GRID_COLS} w-full cursor-pointer items-center gap-3 border-b px-4 py-2 text-left text-sm transition-colors hover:bg-muted/50`}
-              >
-                <div title={cred.isValid ? "Valid" : "Invalid"}>
-                  {cred.isValid ? (
-                    <CheckCircle2Icon className="size-4 text-emerald-600 dark:text-emerald-400" />
-                  ) : (
-                    <XCircleIcon className="size-4 text-muted-foreground/60" />
-                  )}
-                </div>
-                <div className="truncate font-medium">{cred.name}</div>
-                <div>
-                  <Badge variant="outline">
-                    {credentialTypeLabel(cred.type)}
-                  </Badge>
-                </div>
-                <div className="truncate text-muted-foreground">
-                  {cred.username || "—"}
-                </div>
-                <div className="flex flex-wrap gap-1 overflow-hidden">
-                  {cred.tags.length === 0 ? (
-                    <span className="text-muted-foreground">—</span>
-                  ) : (
-                    cred.tags.slice(0, 4).map((t) => (
-                      <Badge key={t} variant="secondary">
-                        {t}
-                      </Badge>
-                    ))
-                  )}
-                  {cred.tags.length > 4 && (
-                    <Badge variant="ghost">+{cred.tags.length - 4}</Badge>
-                  )}
-                </div>
-                <div className="text-center text-muted-foreground">
-                  {cred.comments.length || "—"}
-                </div>
-                <div className="text-muted-foreground">
-                  <FormattedDateTimeText date={cred.createdAt} />
-                </div>
-                <div onClick={(e) => e.stopPropagation()}>
-                  <DropdownMenu>
-                    <DropdownMenuTrigger
-                      render={<Button variant="ghost" size="icon-sm" />}
-                    >
-                      <EllipsisIcon className="size-4" />
-                    </DropdownMenuTrigger>
-                    <DropdownMenuContent align="end">
-                      <DropdownMenuItem
-                        onClick={() =>
-                          openEdit({ id: cred.id, name: cred.name })
-                        }
-                      >
-                        <PencilIcon className="size-4" />
-                        Edit
-                      </DropdownMenuItem>
-                      <DropdownMenuItem
-                        variant="destructive"
-                        onClick={() =>
-                          openDelete({ id: cred.id, name: cred.name })
-                        }
-                      >
-                        <TrashIcon className="size-4" />
-                        Delete
-                      </DropdownMenuItem>
-                    </DropdownMenuContent>
-                  </DropdownMenu>
-                </div>
-              </button>
+              <CredentialRowContextMenu credential={cred}>
+                <button
+                  type="button"
+                  onClick={() => openDetails({ id: cred.id, name: cred.name })}
+                  className={`grid ${GRID_COLS} w-full cursor-pointer items-center gap-3 border-b px-4 py-2 text-left text-sm transition-colors hover:bg-muted/50`}
+                >
+                  <div title={cred.isValid ? "Valid" : "Invalid"}>
+                    {cred.isValid ? (
+                      <CheckCircle2Icon className="size-4 text-emerald-600 dark:text-emerald-400" />
+                    ) : (
+                      <XCircleIcon className="size-4 text-muted-foreground/60" />
+                    )}
+                  </div>
+                  <div className="truncate font-medium">{cred.name}</div>
+                  <div>
+                    <Badge variant="outline">
+                      {credentialTypeLabel(cred.type)}
+                    </Badge>
+                  </div>
+                  <div className="truncate text-muted-foreground">
+                    {cred.username || "—"}
+                  </div>
+                  <div className="truncate font-mono text-xs text-muted-foreground">
+                    {cred.password || "—"}
+                  </div>
+                  <KeysCountCell count={cred.keys.length} />
+                  <div className="flex flex-wrap gap-1 overflow-hidden">
+                    {cred.tags.length === 0 ? (
+                      <span className="text-muted-foreground">—</span>
+                    ) : (
+                      cred.tags.slice(0, 4).map((t) => (
+                        <Badge key={t} variant="secondary">
+                          {t}
+                        </Badge>
+                      ))
+                    )}
+                    {cred.tags.length > 4 && (
+                      <Badge variant="ghost">+{cred.tags.length - 4}</Badge>
+                    )}
+                  </div>
+                  <div className="text-center text-muted-foreground">
+                    {cred.comments.length || "—"}
+                  </div>
+                  <div className="text-muted-foreground">
+                    <FormattedDateTimeText date={cred.createdAt} />
+                  </div>
+                </button>
+              </CredentialRowContextMenu>
             )}
             components={{
               Footer: () => {
@@ -186,6 +156,19 @@ export function CredentialsTable({
           />
         </div>
       )}
+    </div>
+  )
+}
+
+function KeysCountCell({ count }: { count: number }) {
+  if (count === 0) {
+    return <div className="text-center text-muted-foreground">—</div>
+  }
+  return (
+    <div className="flex justify-center">
+      <Badge variant="default" className="px-1.5 tabular-nums">
+        {count}
+      </Badge>
     </div>
   )
 }
