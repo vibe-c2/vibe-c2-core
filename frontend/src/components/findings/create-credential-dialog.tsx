@@ -34,7 +34,7 @@ interface CreateCredentialDialogProps {
 export function CreateCredentialDialog({
   operationId,
 }: CreateCredentialDialogProps) {
-  const { createDialogOpen, closeDialogs } = useCredentialStore();
+  const { createDialogOpen, closeCreateDialog } = useCredentialStore();
   const createCredential = useCreateCredential();
   const [values, setValues] = useState<CredentialFormValues>(emptyValues);
   const [error, setError] = useState<string | null>(null);
@@ -61,7 +61,7 @@ export function CreateCredentialDialog({
         },
       });
       reset();
-      closeDialogs();
+      closeCreateDialog();
     } catch (err) {
       setError(
         err instanceof Error ? err.message : "Failed to create credential",
@@ -75,7 +75,7 @@ export function CreateCredentialDialog({
       onOpenChange={(open) => {
         if (!open) {
           reset();
-          closeDialogs();
+          closeCreateDialog();
         }
       }}
     >

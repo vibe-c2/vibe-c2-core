@@ -29,7 +29,7 @@ import { credentialTypeLabel } from "@/components/findings/credential-type-utils
 import type { CredentialCommentFieldsFragment } from "@/graphql/gql/graphql"
 
 export function CredentialDetailsDialog() {
-  const { detailsPanelOpen, selected, closeDialogs, openEditDialog } =
+  const { detailsPanelOpen, selected, closeDetailsPanel, openEditDialog } =
     useCredentialStore()
   const { data, isLoading } = useCredential(selected?.id ?? "")
   const credential = data?.credential
@@ -38,10 +38,10 @@ export function CredentialDetailsDialog() {
     <Dialog
       open={detailsPanelOpen}
       onOpenChange={(open) => {
-        if (!open) closeDialogs()
+        if (!open) closeDetailsPanel()
       }}
     >
-      <DialogContent className="max-w-2xl">
+      <DialogContent className="sm:max-w-3xl">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <KeyIcon className="size-4" />

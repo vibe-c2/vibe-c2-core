@@ -12,7 +12,7 @@ import { useCredentialStore } from "@/stores/credentials"
 import { useDeleteCredential } from "@/graphql/hooks/credentials"
 
 export function DeleteCredentialDialog() {
-  const { deleteDialogOpen, selected, closeDialogs } = useCredentialStore()
+  const { deleteDialogOpen, selected, closeDeleteDialog } = useCredentialStore()
   const deleteCredential = useDeleteCredential()
   const [error, setError] = useState<string | null>(null)
 
@@ -21,7 +21,7 @@ export function DeleteCredentialDialog() {
     setError(null)
     try {
       await deleteCredential.mutateAsync(selected.id)
-      closeDialogs()
+      closeDeleteDialog()
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to delete credential")
     }
@@ -33,7 +33,7 @@ export function DeleteCredentialDialog() {
       onOpenChange={(open) => {
         if (!open) {
           setError(null)
-          closeDialogs()
+          closeDeleteDialog()
         }
       }}
     >
@@ -54,7 +54,7 @@ export function DeleteCredentialDialog() {
           </div>
         )}
         <DialogFooter>
-          <Button variant="outline" onClick={closeDialogs}>
+          <Button variant="outline" onClick={closeDeleteDialog}>
             Cancel
           </Button>
           <Button

@@ -41,7 +41,10 @@ interface CredentialStoreState {
   openEditDialog: (c: SelectedCredential) => void
   openDeleteDialog: (c: SelectedCredential) => void
   openDetailsPanel: (c: SelectedCredential) => void
-  closeDialogs: () => void
+  closeCreateDialog: () => void
+  closeEditDialog: () => void
+  closeDeleteDialog: () => void
+  closeDetailsPanel: () => void
 }
 
 // Default filter set — matches the requirement that the table hides invalid
@@ -88,12 +91,12 @@ export const useCredentialStore = create<CredentialStoreState>((set, get) => ({
     set({ deleteDialogOpen: true, selected: c }),
   openDetailsPanel: (c) =>
     set({ detailsPanelOpen: true, selected: c }),
-  closeDialogs: () =>
-    set({
-      createDialogOpen: false,
-      editDialogOpen: false,
-      deleteDialogOpen: false,
-      detailsPanelOpen: false,
-      selected: null,
-    }),
+  // Each dialog closes itself so layered flows (e.g. edit opened on top of
+  // details) don't tear down the dialog underneath. Closing the details panel
+  // is the only place we clear `selected`, since it's the entry point.
+  closeCreateDialog: () => set({ createDialogOpen: false }),
+  closeEditDialog: () => set({ editDialogOpen: false }),
+  closeDeleteDialog: () => set({ deleteDialogOpen: false }),
+  closeDetailsPanel: () =>
+    set({ detailsPanelOpen: false, selected: null }),
 }))
