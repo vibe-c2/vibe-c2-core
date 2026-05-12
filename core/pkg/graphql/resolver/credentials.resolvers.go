@@ -27,6 +27,11 @@ func (r *credentialResolver) OperationID(ctx context.Context, obj *models.Creden
 	return r.CredentialResolver.OperationIDField(ctx, obj)
 }
 
+// Operation is the resolver for the operation field.
+func (r *credentialResolver) Operation(ctx context.Context, obj *models.Credential) (*models.Operation, error) {
+	return r.CredentialResolver.Operation(ctx, obj)
+}
+
 // Comments is the resolver for the comments field.
 func (r *credentialResolver) Comments(ctx context.Context, obj *models.Credential) ([]*models.CredentialComment, error) {
 	return r.CredentialResolver.Comments(ctx, obj)
@@ -112,6 +117,16 @@ func (r *queryResolver) CredentialTags(ctx context.Context, operationID string) 
 	return r.CredentialResolver.CredentialTags(ctx, operationID)
 }
 
+// MyCredentials is the resolver for the myCredentials field.
+func (r *queryResolver) MyCredentials(ctx context.Context, operationIds []string, search *string, typeArg *models.CredentialType, tags []string, validOnly *bool, first *int, after *string, last *int, before *string) (*model.CredentialConnection, error) {
+	return r.CredentialResolver.MyCredentials(ctx, operationIds, search, typeArg, tags, validOnly, first, after, last, before)
+}
+
+// MyCredentialTags is the resolver for the myCredentialTags field.
+func (r *queryResolver) MyCredentialTags(ctx context.Context, operationIds []string) ([]string, error) {
+	return r.CredentialResolver.MyCredentialTags(ctx, operationIds)
+}
+
 // CredentialChanged is the resolver for the credentialChanged field.
 //
 // Same shape as wikiDocumentChanged: subscribe to credential events scoped
@@ -137,6 +152,56 @@ func (r *subscriptionResolver) CredentialChanged(ctx context.Context, operationI
 
 			// For non-DELETE events, fetch the full credential so the
 			// client gets fresh state without a follow-up query.
+			if evt.Action != model.EventActionDeleted && r.CredentialRepo != nil {
+				if cid, err := uuid.Parse(evt.CredentialID); err == nil {
+					if cred, err := r.CredentialRepo.FindByID(ctx, cid); err == nil {
+						evt.Credential = &cred
+					}
+				}
+			}
+
+			select {
+			case ch <- evt:
+			case <-ctx.Done():
+			}
+		},
+		filter,
+	)
+
+	go func() {
+		<-ctx.Done()
+		unsubscribe()
+		close(ch)
+	}()
+
+	return ch, nil
+}
+
+// MyCredentialChanged is the resolver for the myCredentialChanged field.
+//
+// Multi-operation sibling of CredentialChanged. Builds an operation-set filter
+// from the operationIds argument (see buildOperationsFilter for the
+// nil/empty/explicit semantics) and streams every matching credential event
+// to the subscriber. For non-DELETE events we fetch the full credential here
+// so the client can update its cache without a follow-up query.
+func (r *subscriptionResolver) MyCredentialChanged(ctx context.Context, operationIds []string) (<-chan *model.CredentialEvent, error) {
+	auth := gqlctx.AuthFromContext(ctx)
+	if auth.UserID == "" {
+		return nil, fmt.Errorf("unauthorized")
+	}
+
+	filter, err := r.buildOperationsFilter(ctx, auth, operationIds)
+	if err != nil {
+		return nil, err
+	}
+
+	ch := make(chan *model.CredentialEvent, 1)
+
+	unsubscribe := r.EventBus.Subscribe(
+		credentialTopics,
+		func(_ context.Context, event eventbus.Event) {
+			evt := toCredentialEvent(event)
+
 			if evt.Action != model.EventActionDeleted && r.CredentialRepo != nil {
 				if cid, err := uuid.Parse(evt.CredentialID); err == nil {
 					if cred, err := r.CredentialRepo.FindByID(ctx, cid); err == nil {

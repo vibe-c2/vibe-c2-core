@@ -58,6 +58,7 @@ type ComplexityRoot struct {
 		IsValid     func(childComplexity int) int
 		Keys        func(childComplexity int) int
 		Name        func(childComplexity int) int
+		Operation   func(childComplexity int) int
 		OperationID func(childComplexity int) int
 		Password    func(childComplexity int) int
 		Tags        func(childComplexity int) int
@@ -186,6 +187,8 @@ type ComplexityRoot struct {
 		CredentialTags                 func(childComplexity int, operationID string) int
 		Credentials                    func(childComplexity int, operationID string, search *string, typeArg *models.CredentialType, tags []string, validOnly *bool, first *int, after *string, last *int, before *string) int
 		Me                             func(childComplexity int) int
+		MyCredentialTags               func(childComplexity int, operationIds []string) int
+		MyCredentials                  func(childComplexity int, operationIds []string, search *string, typeArg *models.CredentialType, tags []string, validOnly *bool, first *int, after *string, last *int, before *string) int
 		MyOperationRole                func(childComplexity int, operationID string) int
 		MySessions                     func(childComplexity int, activeOnly *bool, first *int, after *string, last *int, before *string) int
 		Operation                      func(childComplexity int, id string) int
@@ -276,6 +279,7 @@ type ComplexityRoot struct {
 
 	Subscription struct {
 		CredentialChanged           func(childComplexity int, operationID string) int
+		MyCredentialChanged         func(childComplexity int, operationIds []string) int
 		MySessionChanged            func(childComplexity int) int
 		OperationChanged            func(childComplexity int, operationID *string) int
 		OperationMemberChanged      func(childComplexity int, operationID *string) int
@@ -449,6 +453,7 @@ type ComplexityRoot struct {
 type CredentialResolver interface {
 	ID(ctx context.Context, obj *models.Credential) (string, error)
 	OperationID(ctx context.Context, obj *models.Credential) (string, error)
+	Operation(ctx context.Context, obj *models.Credential) (*models.Operation, error)
 
 	Comments(ctx context.Context, obj *models.Credential) ([]*models.CredentialComment, error)
 	CreatedBy(ctx context.Context, obj *models.Credential) (*models.User, error)
@@ -523,6 +528,8 @@ type QueryResolver interface {
 	Credential(ctx context.Context, id string) (*models.Credential, error)
 	Credentials(ctx context.Context, operationID string, search *string, typeArg *models.CredentialType, tags []string, validOnly *bool, first *int, after *string, last *int, before *string) (*model.CredentialConnection, error)
 	CredentialTags(ctx context.Context, operationID string) ([]string, error)
+	MyCredentials(ctx context.Context, operationIds []string, search *string, typeArg *models.CredentialType, tags []string, validOnly *bool, first *int, after *string, last *int, before *string) (*model.CredentialConnection, error)
+	MyCredentialTags(ctx context.Context, operationIds []string) ([]string, error)
 	MySessions(ctx context.Context, activeOnly *bool, first *int, after *string, last *int, before *string) (*model.SessionConnection, error)
 	Sessions(ctx context.Context, userID *string, search *string, activeOnly *bool, first *int, after *string, last *int, before *string) (*model.SessionConnection, error)
 	Session(ctx context.Context, id string) (*models.Session, error)
@@ -565,6 +572,7 @@ type SubscriptionResolver interface {
 	OperationChanged(ctx context.Context, operationID *string) (<-chan *model.OperationEvent, error)
 	OperationMemberChanged(ctx context.Context, operationID *string) (<-chan *model.OperationMemberEvent, error)
 	CredentialChanged(ctx context.Context, operationID string) (<-chan *model.CredentialEvent, error)
+	MyCredentialChanged(ctx context.Context, operationIds []string) (<-chan *model.CredentialEvent, error)
 	MySessionChanged(ctx context.Context) (<-chan *model.SessionEvent, error)
 	SessionChanged(ctx context.Context, userID *string) (<-chan *model.SessionEvent, error)
 	WikiDocumentChanged(ctx context.Context, operationID string) (<-chan *model.WikiDocumentEvent, error)
@@ -663,6 +671,12 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.Credential.Name(childComplexity), true
+	case "Credential.operation":
+		if e.ComplexityRoot.Credential.Operation == nil {
+			break
+		}
+
+		return e.ComplexityRoot.Credential.Operation(childComplexity), true
 	case "Credential.operationId":
 		if e.ComplexityRoot.Credential.OperationID == nil {
 			break
@@ -1384,6 +1398,28 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.Query.Me(childComplexity), true
+	case "Query.myCredentialTags":
+		if e.ComplexityRoot.Query.MyCredentialTags == nil {
+			break
+		}
+
+		args, err := ec.field_Query_myCredentialTags_args(ctx, rawArgs)
+		if err != nil {
+			return 0, false
+		}
+
+		return e.ComplexityRoot.Query.MyCredentialTags(childComplexity, args["operationIds"].([]string)), true
+	case "Query.myCredentials":
+		if e.ComplexityRoot.Query.MyCredentials == nil {
+			break
+		}
+
+		args, err := ec.field_Query_myCredentials_args(ctx, rawArgs)
+		if err != nil {
+			return 0, false
+		}
+
+		return e.ComplexityRoot.Query.MyCredentials(childComplexity, args["operationIds"].([]string), args["search"].(*string), args["type"].(*models.CredentialType), args["tags"].([]string), args["validOnly"].(*bool), args["first"].(*int), args["after"].(*string), args["last"].(*int), args["before"].(*string)), true
 	case "Query.myOperationRole":
 		if e.ComplexityRoot.Query.MyOperationRole == nil {
 			break
@@ -1886,6 +1922,17 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.Subscription.CredentialChanged(childComplexity, args["operationId"].(string)), true
+	case "Subscription.myCredentialChanged":
+		if e.ComplexityRoot.Subscription.MyCredentialChanged == nil {
+			break
+		}
+
+		args, err := ec.field_Subscription_myCredentialChanged_args(ctx, rawArgs)
+		if err != nil {
+			return 0, false
+		}
+
+		return e.ComplexityRoot.Subscription.MyCredentialChanged(childComplexity, args["operationIds"].([]string)), true
 	case "Subscription.mySessionChanged":
 		if e.ComplexityRoot.Subscription.MySessionChanged == nil {
 			break
@@ -2698,6 +2745,13 @@ type CredentialKey {
 type Credential {
   id: ID!
   operationId: ID!
+  # The full parent Operation. Resolved on demand via a DB lookup.
+  #
+  # Use this in cross-operation views (e.g. the global Findings page) where
+  # you need to display which operation a credential belongs to. In scoped
+  # views the operation is implicit, so keep using ` + "`" + `operationId` + "`" + ` and skip
+  # this field — it costs a DB round trip per credential when selected.
+  operation: Operation!
   name: String!
   type: CredentialType!
   username: String!
@@ -2784,6 +2838,38 @@ extend type Query {
   # Used to drive the tag filter / autocomplete UI.
   credentialTags(operationId: ID!): [String!]!
     @hasPermission(permission: "operation:member")
+
+  # Cross-operation credentials list — powers the "global" Findings page.
+  #
+  # Note: this field intentionally has **no** @hasPermission directive. The
+  # directive can only enforce a single operation_id, but this query spans
+  # several operations. Authorization is performed by the resolver, which
+  # verifies the caller's role in **every** operation referenced in the
+  # result set:
+  #   - operationIds = null  → resolver derives the caller's membership set
+  #                            via the operation repository and queries those.
+  #   - operationIds = []    → returns an empty connection without hitting DB.
+  #   - operationIds = [...] → resolver authorizes each op (viewer minimum)
+  #                            and returns 403 if any is not accessible.
+  #
+  # The list is capped server-side; passing more than the cap (currently 100)
+  # returns an error. Use the standard filters (search/type/tags/validOnly) on
+  # top — they apply across the union.
+  myCredentials(
+    operationIds: [ID!]
+    search: String
+    type: CredentialType
+    tags: [String!]
+    validOnly: Boolean = true
+    first: Int = 20
+    after: String
+    last: Int
+    before: String
+  ): CredentialConnection!
+
+  # Deduplicated tag set across credentials in the given operations.
+  # Same authorization model as myCredentials.
+  myCredentialTags(operationIds: [ID!]): [String!]!
 }
 
 # --- Mutations ---
@@ -2826,6 +2912,29 @@ extend type Subscription {
   # Real-time credential changes scoped to an operation.
   credentialChanged(operationId: ID!): CredentialEvent!
     @hasPermission(permission: "operation:member")
+
+  # Real-time credential changes across multiple operations. Sibling of
+  # myCredentials — powers the global Findings page.
+  #
+  # Like myCredentials, this field has **no** @hasPermission directive. The
+  # directive can only enforce a single operation_id, but this subscription
+  # spans several operations. Authorization is performed by the resolver at
+  # subscribe time, with the same semantics:
+  #
+  #   - operationIds = null  → resolver derives the caller's membership set
+  #                            via the operation repository and filters
+  #                            incoming events to that set.
+  #   - operationIds = []    → connect succeeds and never emits.
+  #   - operationIds = [...] → resolver authorizes each op (viewer minimum)
+  #                            and returns 403 if any is not accessible. Only
+  #                            events whose operation_id is in the set are
+  #                            delivered.
+  #
+  # The membership set is captured at subscribe time. If the caller joins or
+  # leaves an operation while a "nil" subscription is live, they need to
+  # reconnect to pick up the new membership set — same constraint as
+  # operationChanged.
+  myCredentialChanged(operationIds: [ID!]): CredentialEvent!
 }
 `, BuiltIn: false},
 	{Name: "../schema/schema.graphql", Input: `# =============================================================================
@@ -4388,6 +4497,68 @@ func (ec *executionContext) field_Query_credentials_args(ctx context.Context, ra
 	return args, nil
 }
 
+func (ec *executionContext) field_Query_myCredentialTags_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
+	var err error
+	args := map[string]any{}
+	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "operationIds", ec.unmarshalOID2ᚕstringᚄ)
+	if err != nil {
+		return nil, err
+	}
+	args["operationIds"] = arg0
+	return args, nil
+}
+
+func (ec *executionContext) field_Query_myCredentials_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
+	var err error
+	args := map[string]any{}
+	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "operationIds", ec.unmarshalOID2ᚕstringᚄ)
+	if err != nil {
+		return nil, err
+	}
+	args["operationIds"] = arg0
+	arg1, err := graphql.ProcessArgField(ctx, rawArgs, "search", ec.unmarshalOString2ᚖstring)
+	if err != nil {
+		return nil, err
+	}
+	args["search"] = arg1
+	arg2, err := graphql.ProcessArgField(ctx, rawArgs, "type", ec.unmarshalOCredentialType2ᚖgithubᚗcomᚋvibeᚑc2ᚋvibeᚑc2ᚑcoreᚋcoreᚋpkgᚋmodelsᚐCredentialType)
+	if err != nil {
+		return nil, err
+	}
+	args["type"] = arg2
+	arg3, err := graphql.ProcessArgField(ctx, rawArgs, "tags", ec.unmarshalOString2ᚕstringᚄ)
+	if err != nil {
+		return nil, err
+	}
+	args["tags"] = arg3
+	arg4, err := graphql.ProcessArgField(ctx, rawArgs, "validOnly", ec.unmarshalOBoolean2ᚖbool)
+	if err != nil {
+		return nil, err
+	}
+	args["validOnly"] = arg4
+	arg5, err := graphql.ProcessArgField(ctx, rawArgs, "first", ec.unmarshalOInt2ᚖint)
+	if err != nil {
+		return nil, err
+	}
+	args["first"] = arg5
+	arg6, err := graphql.ProcessArgField(ctx, rawArgs, "after", ec.unmarshalOString2ᚖstring)
+	if err != nil {
+		return nil, err
+	}
+	args["after"] = arg6
+	arg7, err := graphql.ProcessArgField(ctx, rawArgs, "last", ec.unmarshalOInt2ᚖint)
+	if err != nil {
+		return nil, err
+	}
+	args["last"] = arg7
+	arg8, err := graphql.ProcessArgField(ctx, rawArgs, "before", ec.unmarshalOString2ᚖstring)
+	if err != nil {
+		return nil, err
+	}
+	args["before"] = arg8
+	return args, nil
+}
+
 func (ec *executionContext) field_Query_myOperationRole_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
 	var err error
 	args := map[string]any{}
@@ -4866,6 +5037,17 @@ func (ec *executionContext) field_Subscription_credentialChanged_args(ctx contex
 	return args, nil
 }
 
+func (ec *executionContext) field_Subscription_myCredentialChanged_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
+	var err error
+	args := map[string]any{}
+	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "operationIds", ec.unmarshalOID2ᚕstringᚄ)
+	if err != nil {
+		return nil, err
+	}
+	args["operationIds"] = arg0
+	return args, nil
+}
+
 func (ec *executionContext) field_Subscription_operationChanged_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
 	var err error
 	args := map[string]any{}
@@ -5026,6 +5208,49 @@ func (ec *executionContext) fieldContext_Credential_operationId(_ context.Contex
 		IsResolver: true,
 		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
 			return nil, errors.New("field of type ID does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Credential_operation(ctx context.Context, field graphql.CollectedField, obj *models.Credential) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Credential_operation,
+		func(ctx context.Context) (any, error) {
+			return ec.Resolvers.Credential().Operation(ctx, obj)
+		},
+		nil,
+		ec.marshalNOperation2ᚖgithubᚗcomᚋvibeᚑc2ᚋvibeᚑc2ᚑcoreᚋcoreᚋpkgᚋmodelsᚐOperation,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_Credential_operation(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Credential",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "id":
+				return ec.fieldContext_Operation_id(ctx, field)
+			case "name":
+				return ec.fieldContext_Operation_name(ctx, field)
+			case "description":
+				return ec.fieldContext_Operation_description(ctx, field)
+			case "members":
+				return ec.fieldContext_Operation_members(ctx, field)
+			case "createdAt":
+				return ec.fieldContext_Operation_createdAt(ctx, field)
+			case "updatedAt":
+				return ec.fieldContext_Operation_updatedAt(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type Operation", field.Name)
 		},
 	}
 	return fc, nil
@@ -5672,6 +5897,8 @@ func (ec *executionContext) fieldContext_CredentialEdge_node(_ context.Context, 
 				return ec.fieldContext_Credential_id(ctx, field)
 			case "operationId":
 				return ec.fieldContext_Credential_operationId(ctx, field)
+			case "operation":
+				return ec.fieldContext_Credential_operation(ctx, field)
 			case "name":
 				return ec.fieldContext_Credential_name(ctx, field)
 			case "type":
@@ -5845,6 +6072,8 @@ func (ec *executionContext) fieldContext_CredentialEvent_credential(_ context.Co
 				return ec.fieldContext_Credential_id(ctx, field)
 			case "operationId":
 				return ec.fieldContext_Credential_operationId(ctx, field)
+			case "operation":
+				return ec.fieldContext_Credential_operation(ctx, field)
 			case "name":
 				return ec.fieldContext_Credential_name(ctx, field)
 			case "type":
@@ -7125,6 +7354,8 @@ func (ec *executionContext) fieldContext_Mutation_createCredential(ctx context.C
 				return ec.fieldContext_Credential_id(ctx, field)
 			case "operationId":
 				return ec.fieldContext_Credential_operationId(ctx, field)
+			case "operation":
+				return ec.fieldContext_Credential_operation(ctx, field)
 			case "name":
 				return ec.fieldContext_Credential_name(ctx, field)
 			case "type":
@@ -7212,6 +7443,8 @@ func (ec *executionContext) fieldContext_Mutation_updateCredential(ctx context.C
 				return ec.fieldContext_Credential_id(ctx, field)
 			case "operationId":
 				return ec.fieldContext_Credential_operationId(ctx, field)
+			case "operation":
+				return ec.fieldContext_Credential_operation(ctx, field)
 			case "name":
 				return ec.fieldContext_Credential_name(ctx, field)
 			case "type":
@@ -7358,6 +7591,8 @@ func (ec *executionContext) fieldContext_Mutation_addCredentialComment(ctx conte
 				return ec.fieldContext_Credential_id(ctx, field)
 			case "operationId":
 				return ec.fieldContext_Credential_operationId(ctx, field)
+			case "operation":
+				return ec.fieldContext_Credential_operation(ctx, field)
 			case "name":
 				return ec.fieldContext_Credential_name(ctx, field)
 			case "type":
@@ -7445,6 +7680,8 @@ func (ec *executionContext) fieldContext_Mutation_updateCredentialComment(ctx co
 				return ec.fieldContext_Credential_id(ctx, field)
 			case "operationId":
 				return ec.fieldContext_Credential_operationId(ctx, field)
+			case "operation":
+				return ec.fieldContext_Credential_operation(ctx, field)
 			case "name":
 				return ec.fieldContext_Credential_name(ctx, field)
 			case "type":
@@ -7532,6 +7769,8 @@ func (ec *executionContext) fieldContext_Mutation_deleteCredentialComment(ctx co
 				return ec.fieldContext_Credential_id(ctx, field)
 			case "operationId":
 				return ec.fieldContext_Credential_operationId(ctx, field)
+			case "operation":
+				return ec.fieldContext_Credential_operation(ctx, field)
 			case "name":
 				return ec.fieldContext_Credential_name(ctx, field)
 			case "type":
@@ -9998,6 +10237,8 @@ func (ec *executionContext) fieldContext_Query_credential(ctx context.Context, f
 				return ec.fieldContext_Credential_id(ctx, field)
 			case "operationId":
 				return ec.fieldContext_Credential_operationId(ctx, field)
+			case "operation":
+				return ec.fieldContext_Credential_operation(ctx, field)
 			case "name":
 				return ec.fieldContext_Credential_name(ctx, field)
 			case "type":
@@ -10158,6 +10399,96 @@ func (ec *executionContext) fieldContext_Query_credentialTags(ctx context.Contex
 	}()
 	ctx = graphql.WithFieldContext(ctx, fc)
 	if fc.Args, err = ec.field_Query_credentialTags_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
+		ec.Error(ctx, err)
+		return fc, err
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Query_myCredentials(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Query_myCredentials,
+		func(ctx context.Context) (any, error) {
+			fc := graphql.GetFieldContext(ctx)
+			return ec.Resolvers.Query().MyCredentials(ctx, fc.Args["operationIds"].([]string), fc.Args["search"].(*string), fc.Args["type"].(*models.CredentialType), fc.Args["tags"].([]string), fc.Args["validOnly"].(*bool), fc.Args["first"].(*int), fc.Args["after"].(*string), fc.Args["last"].(*int), fc.Args["before"].(*string))
+		},
+		nil,
+		ec.marshalNCredentialConnection2ᚖgithubᚗcomᚋvibeᚑc2ᚋvibeᚑc2ᚑcoreᚋcoreᚋpkgᚋgraphqlᚋmodelᚐCredentialConnection,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_Query_myCredentials(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Query",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "edges":
+				return ec.fieldContext_CredentialConnection_edges(ctx, field)
+			case "pageInfo":
+				return ec.fieldContext_CredentialConnection_pageInfo(ctx, field)
+			case "totalCount":
+				return ec.fieldContext_CredentialConnection_totalCount(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type CredentialConnection", field.Name)
+		},
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			err = ec.Recover(ctx, r)
+			ec.Error(ctx, err)
+		}
+	}()
+	ctx = graphql.WithFieldContext(ctx, fc)
+	if fc.Args, err = ec.field_Query_myCredentials_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
+		ec.Error(ctx, err)
+		return fc, err
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Query_myCredentialTags(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Query_myCredentialTags,
+		func(ctx context.Context) (any, error) {
+			fc := graphql.GetFieldContext(ctx)
+			return ec.Resolvers.Query().MyCredentialTags(ctx, fc.Args["operationIds"].([]string))
+		},
+		nil,
+		ec.marshalNString2ᚕstringᚄ,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_Query_myCredentialTags(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Query",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			err = ec.Recover(ctx, r)
+			ec.Error(ctx, err)
+		}
+	}()
+	ctx = graphql.WithFieldContext(ctx, fc)
+	if fc.Args, err = ec.field_Query_myCredentialTags_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
 		ec.Error(ctx, err)
 		return fc, err
 	}
@@ -12888,6 +13219,57 @@ func (ec *executionContext) fieldContext_Subscription_credentialChanged(ctx cont
 	}()
 	ctx = graphql.WithFieldContext(ctx, fc)
 	if fc.Args, err = ec.field_Subscription_credentialChanged_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
+		ec.Error(ctx, err)
+		return fc, err
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Subscription_myCredentialChanged(ctx context.Context, field graphql.CollectedField) (ret func(ctx context.Context) graphql.Marshaler) {
+	return graphql.ResolveFieldStream(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Subscription_myCredentialChanged,
+		func(ctx context.Context) (any, error) {
+			fc := graphql.GetFieldContext(ctx)
+			return ec.Resolvers.Subscription().MyCredentialChanged(ctx, fc.Args["operationIds"].([]string))
+		},
+		nil,
+		ec.marshalNCredentialEvent2ᚖgithubᚗcomᚋvibeᚑc2ᚋvibeᚑc2ᚑcoreᚋcoreᚋpkgᚋgraphqlᚋmodelᚐCredentialEvent,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_Subscription_myCredentialChanged(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Subscription",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "action":
+				return ec.fieldContext_CredentialEvent_action(ctx, field)
+			case "credentialId":
+				return ec.fieldContext_CredentialEvent_credentialId(ctx, field)
+			case "operationId":
+				return ec.fieldContext_CredentialEvent_operationId(ctx, field)
+			case "credential":
+				return ec.fieldContext_CredentialEvent_credential(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type CredentialEvent", field.Name)
+		},
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			err = ec.Recover(ctx, r)
+			ec.Error(ctx, err)
+		}
+	}()
+	ctx = graphql.WithFieldContext(ctx, fc)
+	if fc.Args, err = ec.field_Subscription_myCredentialChanged_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
 		ec.Error(ctx, err)
 		return fc, err
 	}
@@ -18579,6 +18961,42 @@ func (ec *executionContext) _Credential(ctx context.Context, sel ast.SelectionSe
 			}
 
 			out.Concurrently(i, func(ctx context.Context) graphql.Marshaler { return innerFunc(ctx, out) })
+		case "operation":
+			field := field
+
+			innerFunc := func(ctx context.Context, fs *graphql.FieldSet) (res graphql.Marshaler) {
+				defer func() {
+					if r := recover(); r != nil {
+						ec.Error(ctx, ec.Recover(ctx, r))
+					}
+				}()
+				res = ec._Credential_operation(ctx, field, obj)
+				if res == graphql.Null {
+					atomic.AddUint32(&fs.Invalids, 1)
+				}
+				return res
+			}
+
+			if field.Deferrable != nil {
+				dfs, ok := deferred[field.Deferrable.Label]
+				di := 0
+				if ok {
+					dfs.AddField(field)
+					di = len(dfs.Values) - 1
+				} else {
+					dfs = graphql.NewFieldSet([]graphql.CollectedField{field})
+					deferred[field.Deferrable.Label] = dfs
+				}
+				dfs.Concurrently(di, func(ctx context.Context) graphql.Marshaler {
+					return innerFunc(ctx, dfs)
+				})
+
+				// don't run the out.Concurrently() call below
+				out.Values[i] = graphql.Null
+				continue
+			}
+
+			out.Concurrently(i, func(ctx context.Context) graphql.Marshaler { return innerFunc(ctx, out) })
 		case "name":
 			out.Values[i] = ec._Credential_name(ctx, field, obj)
 			if out.Values[i] == graphql.Null {
@@ -20221,6 +20639,50 @@ func (ec *executionContext) _Query(ctx context.Context, sel ast.SelectionSet) gr
 			}
 
 			out.Concurrently(i, func(ctx context.Context) graphql.Marshaler { return rrm(innerCtx) })
+		case "myCredentials":
+			field := field
+
+			innerFunc := func(ctx context.Context, fs *graphql.FieldSet) (res graphql.Marshaler) {
+				defer func() {
+					if r := recover(); r != nil {
+						ec.Error(ctx, ec.Recover(ctx, r))
+					}
+				}()
+				res = ec._Query_myCredentials(ctx, field)
+				if res == graphql.Null {
+					atomic.AddUint32(&fs.Invalids, 1)
+				}
+				return res
+			}
+
+			rrm := func(ctx context.Context) graphql.Marshaler {
+				return ec.OperationContext.RootResolverMiddleware(ctx,
+					func(ctx context.Context) graphql.Marshaler { return innerFunc(ctx, out) })
+			}
+
+			out.Concurrently(i, func(ctx context.Context) graphql.Marshaler { return rrm(innerCtx) })
+		case "myCredentialTags":
+			field := field
+
+			innerFunc := func(ctx context.Context, fs *graphql.FieldSet) (res graphql.Marshaler) {
+				defer func() {
+					if r := recover(); r != nil {
+						ec.Error(ctx, ec.Recover(ctx, r))
+					}
+				}()
+				res = ec._Query_myCredentialTags(ctx, field)
+				if res == graphql.Null {
+					atomic.AddUint32(&fs.Invalids, 1)
+				}
+				return res
+			}
+
+			rrm := func(ctx context.Context) graphql.Marshaler {
+				return ec.OperationContext.RootResolverMiddleware(ctx,
+					func(ctx context.Context) graphql.Marshaler { return innerFunc(ctx, out) })
+			}
+
+			out.Concurrently(i, func(ctx context.Context) graphql.Marshaler { return rrm(innerCtx) })
 		case "mySessions":
 			field := field
 
@@ -21481,6 +21943,8 @@ func (ec *executionContext) _Subscription(ctx context.Context, sel ast.Selection
 		return ec._Subscription_operationMemberChanged(ctx, fields[0])
 	case "credentialChanged":
 		return ec._Subscription_credentialChanged(ctx, fields[0])
+	case "myCredentialChanged":
+		return ec._Subscription_myCredentialChanged(ctx, fields[0])
 	case "mySessionChanged":
 		return ec._Subscription_mySessionChanged(ctx, fields[0])
 	case "sessionChanged":
@@ -25070,6 +25534,42 @@ func (ec *executionContext) marshalOFloat2ᚖfloat64(ctx context.Context, sel as
 	_ = sel
 	res := graphql.MarshalFloatContext(*v)
 	return graphql.WrapContextMarshaler(ctx, res)
+}
+
+func (ec *executionContext) unmarshalOID2ᚕstringᚄ(ctx context.Context, v any) ([]string, error) {
+	if v == nil {
+		return nil, nil
+	}
+	var vSlice []any
+	vSlice = graphql.CoerceList(v)
+	var err error
+	res := make([]string, len(vSlice))
+	for i := range vSlice {
+		ctx := graphql.WithPathContext(ctx, graphql.NewPathWithIndex(i))
+		res[i], err = ec.unmarshalNID2string(ctx, vSlice[i])
+		if err != nil {
+			return nil, err
+		}
+	}
+	return res, nil
+}
+
+func (ec *executionContext) marshalOID2ᚕstringᚄ(ctx context.Context, sel ast.SelectionSet, v []string) graphql.Marshaler {
+	if v == nil {
+		return graphql.Null
+	}
+	ret := make(graphql.Array, len(v))
+	for i := range v {
+		ret[i] = ec.marshalNID2string(ctx, sel, v[i])
+	}
+
+	for _, e := range ret {
+		if e == graphql.Null {
+			return graphql.Null
+		}
+	}
+
+	return ret
 }
 
 func (ec *executionContext) unmarshalOID2ᚖstring(ctx context.Context, v any) (*string, error) {

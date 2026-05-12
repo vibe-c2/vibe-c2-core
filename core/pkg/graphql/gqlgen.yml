@@ -239,6 +239,8 @@ models:
         resolver: true         # CredentialID (uuid.UUID) -> ID (string)
       operationId:
         resolver: true         # OperationID (uuid.UUID) -> ID (string)
+      operation:
+        resolver: true         # OperationID (uuid.UUID) -> Operation (fetched from DB)
       comments:
         resolver: true         # []CredentialComment -> []*CredentialComment
       createdBy:

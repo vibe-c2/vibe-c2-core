@@ -5,6 +5,7 @@ import {
   CheckCircle2Icon,
   XCircleIcon,
   KeyIcon,
+  SwordsIcon,
 } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
 import { Skeleton } from "@/components/ui/skeleton"
@@ -14,16 +15,27 @@ import { credentialTypeLabel } from "@/components/findings/credential-type-utils
 import { CredentialRowContextMenu } from "@/components/findings/credential-row-context-menu"
 import type { CredentialFieldsFragment } from "@/graphql/gql/graphql"
 
+// Rows may carry an optional `operation` (resolved by the global-mode query
+// only). Scoped-mode queries return rows without this field.
+export type CredentialRow = CredentialFieldsFragment & {
+  operation?: { id: string; name: string }
+}
+
 interface CredentialsTableProps {
-  credentials: CredentialFieldsFragment[]
+  credentials: CredentialRow[]
   isLoading: boolean
   isFetchingNextPage: boolean
   hasNextPage: boolean
   fetchNextPage: () => void
+  // When true, the table renders an extra "Operation" column. Used by the
+  // global Findings view; scoped views leave it off.
+  showOperationColumn?: boolean
 }
 
-const GRID_COLS =
+const GRID_COLS_SCOPED =
   "grid-cols-[32px_1.6fr_1fr_1.2fr_1.2fr_60px_1.4fr_60px_140px]"
+const GRID_COLS_GLOBAL =
+  "grid-cols-[32px_1.6fr_1.2fr_1fr_1.2fr_1.2fr_60px_1.4fr_60px_140px]"
 
 export function CredentialsTable({
   credentials,
@@ -31,20 +43,23 @@ export function CredentialsTable({
   isFetchingNextPage,
   hasNextPage,
   fetchNextPage,
+  showOperationColumn = false,
 }: CredentialsTableProps) {
   const openDetails = useCredentialStore((s) => s.openDetailsPanel)
 
   const showEmpty = !isLoading && credentials.length === 0
   const showList = !isLoading && credentials.length > 0
+  const gridCols = showOperationColumn ? GRID_COLS_GLOBAL : GRID_COLS_SCOPED
 
   return (
     <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-lg border bg-card">
       <div className="shrink-0 border-b bg-muted/50">
         <div
-          className={`grid ${GRID_COLS} gap-3 px-4 py-2 text-xs font-medium text-muted-foreground uppercase tracking-wide`}
+          className={`grid ${gridCols} gap-3 px-4 py-2 text-xs font-medium text-muted-foreground uppercase tracking-wide`}
         >
           <div />
           <div>Name</div>
+          {showOperationColumn && <div>Operation</div>}
           <div>Type</div>
           <div>Username</div>
           <div>Password</div>
@@ -89,7 +104,7 @@ export function CredentialsTable({
                 <button
                   type="button"
                   onClick={() => openDetails({ id: cred.id, name: cred.name })}
-                  className={`grid ${GRID_COLS} w-full cursor-pointer items-center gap-3 border-b px-4 py-2 text-left text-sm transition-colors hover:bg-muted/50`}
+                  className={`grid ${gridCols} w-full cursor-pointer items-center gap-3 border-b px-4 py-2 text-left text-sm transition-colors hover:bg-muted/50`}
                 >
                   <div title={cred.isValid ? "Valid" : "Invalid"}>
                     {cred.isValid ? (
@@ -99,6 +114,17 @@ export function CredentialsTable({
                     )}
                   </div>
                   <div className="truncate font-medium">{cred.name}</div>
+                  {showOperationColumn && (
+                    <div
+                      className="flex min-w-0 items-center gap-1.5 text-muted-foreground"
+                      title={cred.operation?.name}
+                    >
+                      <SwordsIcon className="size-3.5 shrink-0" />
+                      <span className="truncate">
+                        {cred.operation?.name ?? "—"}
+                      </span>
+                    </div>
+                  )}
                   <div>
                     <Badge variant="outline">
                       {credentialTypeLabel(cred.type)}

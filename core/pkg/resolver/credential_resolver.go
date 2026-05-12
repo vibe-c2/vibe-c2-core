@@ -21,6 +21,14 @@ import (
 // errCommentNotFound signals a commentId that doesn't exist on the target credential.
 var errCommentNotFound = errors.New("comment not found on this credential")
 
+// myCredentialsOpCap bounds the number of operations a single myCredentials
+// query may target. Each explicit op triggers a membership check, and the
+// resulting $in query fans out across the credentials collection — a hard
+// cap keeps both costs predictable. Callers (typically the global Findings
+// picker) are expected to narrow their selection or fall back to nil
+// (= "all my operations", which the resolver derives in one repo call).
+const myCredentialsOpCap = 100
+
 // ICredentialResolver defines the business logic methods for the Credential entity.
 // These map 1:1 to the GraphQL query, mutation, and field resolvers for Credential.
 type ICredentialResolver interface {
@@ -39,9 +47,18 @@ type ICredentialResolver interface {
 	Credentials(ctx context.Context, operationID string, search *string, typeArg *models.CredentialType, tags []string, validOnly *bool, first *int, after *string, last *int, before *string) (*model.CredentialConnection, error)
 	CredentialTags(ctx context.Context, operationID string) ([]string, error)
 
+	// Cross-operation queries — power the "global" Findings page. See
+	// resolveAccessibleOperationIDs for the operationIDs semantics:
+	//   nil   ⇒ caller's full membership set
+	//   []    ⇒ explicit empty, returns empty result
+	//   [...] ⇒ resolver authorizes each id (viewer role minimum)
+	MyCredentials(ctx context.Context, operationIDs []string, search *string, typeArg *models.CredentialType, tags []string, validOnly *bool, first *int, after *string, last *int, before *string) (*model.CredentialConnection, error)
+	MyCredentialTags(ctx context.Context, operationIDs []string) ([]string, error)
+
 	// Field resolvers for Credential type
 	ID(ctx context.Context, obj *models.Credential) (string, error)
 	OperationIDField(ctx context.Context, obj *models.Credential) (string, error)
+	Operation(ctx context.Context, obj *models.Credential) (*models.Operation, error)
 	Comments(ctx context.Context, obj *models.Credential) ([]*models.CredentialComment, error)
 	CreatedBy(ctx context.Context, obj *models.Credential) (*models.User, error)
 	CreatedAt(ctx context.Context, obj *models.Credential) (string, error)
@@ -545,6 +562,159 @@ func (r *credentialResolver) CredentialTags(ctx context.Context, operationID str
 	return tags, nil
 }
 
+// resolveAccessibleOperationIDs maps the optional `operationIDs` argument to a
+// concrete, authorized list of operation UUIDs for the cross-operation queries.
+//
+//   - nil          ⇒ caller's full membership set (one repo call). Note that
+//     app-admins also receive their membership set here, not every operation
+//     in the system — admins who want all ops must select them explicitly.
+//   - empty slice  ⇒ explicit empty selection. Returns (nil, nil, false) and
+//     the caller should short-circuit to an empty connection.
+//   - non-empty    ⇒ each id parsed and authorized at OperationRoleViewer.
+//     Any unauthorized id returns the resolver error verbatim. Length is
+//     capped at myCredentialsOpCap.
+//
+// Returns (opUIDs, nil, true) on a fillable selection, (nil, nil, false) for
+// the explicit-empty case, and (nil, err, false) on any failure.
+func (r *credentialResolver) resolveAccessibleOperationIDs(ctx context.Context, operationIDs []string) ([]uuid.UUID, error, bool) {
+	if operationIDs == nil {
+		auth := gqlctx.AuthFromContext(ctx)
+		callerUID, err := uuid.Parse(auth.UserID)
+		if err != nil {
+			return nil, fmt.Errorf("invalid caller ID: %w", err), false
+		}
+		ops, err := r.operationRepo.FindByMemberID(ctx, callerUID)
+		if err != nil {
+			return nil, fmt.Errorf("failed to list accessible operations: %w", err), false
+		}
+		if len(ops) == 0 {
+			return nil, nil, false
+		}
+		opUIDs := make([]uuid.UUID, len(ops))
+		for i := range ops {
+			opUIDs[i] = ops[i].OperationID
+		}
+		return opUIDs, nil, true
+	}
+
+	if len(operationIDs) == 0 {
+		return nil, nil, false
+	}
+	if len(operationIDs) > myCredentialsOpCap {
+		return nil, fmt.Errorf("too many operations selected (max %d)", myCredentialsOpCap), false
+	}
+
+	opUIDs := make([]uuid.UUID, 0, len(operationIDs))
+	for _, raw := range operationIDs {
+		opUID, err := uuid.Parse(raw)
+		if err != nil {
+			return nil, fmt.Errorf("invalid operation ID %q: %w", raw, err), false
+		}
+		if err := r.authorizeForOperation(ctx, opUID, models.OperationRoleViewer); err != nil {
+			return nil, err, false
+		}
+		opUIDs = append(opUIDs, opUID)
+	}
+	return opUIDs, nil, true
+}
+
+// MyCredentials returns a cursor-paginated list of credentials across the
+// caller's accessible operations. See the GraphQL schema doc for the
+// operationIDs semantics. The pagination shape mirrors Credentials exactly.
+func (r *credentialResolver) MyCredentials(ctx context.Context, operationIDs []string, search *string, typeArg *models.CredentialType, tags []string, validOnly *bool, first *int, after *string, last *int, before *string) (*model.CredentialConnection, error) {
+	opUIDs, err, ok := r.resolveAccessibleOperationIDs(ctx, operationIDs)
+	if err != nil {
+		return nil, err
+	}
+
+	args, err := pagination.ParseArgs(first, after, last, before)
+	if err != nil {
+		return nil, fmt.Errorf("invalid pagination args: %w", err)
+	}
+
+	if !ok {
+		// Explicit empty selection (or caller has zero accessible ops).
+		return &model.CredentialConnection{
+			Edges:      []*model.CredentialEdge{},
+			PageInfo:   &pagination.PageInfo{},
+			TotalCount: 0,
+		}, nil
+	}
+
+	filter := repository.CredentialFilter{
+		Tags:      normalizeTags(tags),
+		ValidOnly: validOnly,
+	}
+	if search != nil {
+		filter.Search = strings.TrimSpace(*search)
+	}
+	if typeArg != nil {
+		if !typeArg.IsValid() {
+			return nil, fmt.Errorf("invalid credential type: %s", *typeArg)
+		}
+		filter.Type = typeArg
+	}
+
+	total, err := r.credRepo.CountByOperationIDs(ctx, opUIDs, filter)
+	if err != nil {
+		return nil, fmt.Errorf("failed to count credentials: %w", err)
+	}
+
+	creds, err := r.credRepo.FindByOperationIDsWithCursor(ctx, opUIDs, filter, args.Cursor, args.Limit+1, args.Forward)
+	if err != nil {
+		return nil, fmt.Errorf("failed to list credentials: %w", err)
+	}
+
+	hasMore := int64(len(creds)) > args.Limit
+	if hasMore {
+		creds = creds[:args.Limit]
+	}
+
+	edges := make([]*model.CredentialEdge, len(creds))
+	for i := range creds {
+		cursor := pagination.EncodeCursor(creds[i].CreateAt, creds[i].Id)
+		edges[i] = &model.CredentialEdge{
+			Node:   &creds[i],
+			Cursor: cursor,
+		}
+	}
+
+	pageInfo := pagination.PageInfo{
+		HasNextPage:     args.Forward && hasMore,
+		HasPreviousPage: (!args.Forward && hasMore) || (args.Forward && args.Cursor != nil),
+	}
+	if len(edges) > 0 {
+		pageInfo.StartCursor = &edges[0].Cursor
+		pageInfo.EndCursor = &edges[len(edges)-1].Cursor
+	}
+
+	return &model.CredentialConnection{
+		Edges:      edges,
+		PageInfo:   &pageInfo,
+		TotalCount: int(total),
+	}, nil
+}
+
+// MyCredentialTags returns the deduplicated tag set across credentials in the
+// caller's accessible operations. Same auth model as MyCredentials.
+func (r *credentialResolver) MyCredentialTags(ctx context.Context, operationIDs []string) ([]string, error) {
+	opUIDs, err, ok := r.resolveAccessibleOperationIDs(ctx, operationIDs)
+	if err != nil {
+		return nil, err
+	}
+	if !ok {
+		return []string{}, nil
+	}
+
+	tags, err := r.credRepo.DistinctTagsByOperationIDs(ctx, opUIDs)
+	if err != nil {
+		return nil, fmt.Errorf("failed to list credential tags: %w", err)
+	}
+
+	sort.Strings(tags)
+	return tags, nil
+}
+
 // ID converts the Credential's UUID to a GraphQL ID string.
 func (r *credentialResolver) ID(ctx context.Context, obj *models.Credential) (string, error) {
 	return obj.CredentialID.String(), nil
@@ -553,6 +723,19 @@ func (r *credentialResolver) ID(ctx context.Context, obj *models.Credential) (st
 // OperationIDField converts the OperationID UUID to a GraphQL ID string.
 func (r *credentialResolver) OperationIDField(ctx context.Context, obj *models.Credential) (string, error) {
 	return obj.OperationID.String(), nil
+}
+
+// Operation resolves the credential's parent Operation via a DB lookup.
+// Used by the global Findings page to display which operation each row
+// belongs to. Authorization is upstream: the credential was already returned
+// to the caller, which means they had at least viewer access to its op via
+// the parent query (Credential / Credentials / MyCredentials).
+func (r *credentialResolver) Operation(ctx context.Context, obj *models.Credential) (*models.Operation, error) {
+	op, err := r.operationRepo.FindByID(ctx, obj.OperationID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to load operation: %w", err)
+	}
+	return &op, nil
 }
 
 // Comments returns the credential's comment list as pointers for GraphQL resolution.

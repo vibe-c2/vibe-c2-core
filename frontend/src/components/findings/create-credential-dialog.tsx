@@ -16,6 +16,10 @@ import {
   type CredentialFormValues,
 } from "@/components/findings/credential-form-fields";
 import { keyDraftsToInputs } from "@/components/findings/credential-key-drafts";
+import {
+  OperationSinglePicker,
+  type OperationSinglePickerValue,
+} from "@/components/findings/operation-single-select";
 
 const emptyValues: CredentialFormValues = {
   name: "",
@@ -28,7 +32,11 @@ const emptyValues: CredentialFormValues = {
 };
 
 interface CreateCredentialDialogProps {
-  operationId: string;
+  // Scoped mode: the parent fixes the target operation. The dialog hides its
+  // op picker and submits straight against this id.
+  // Global mode: omit this prop. The dialog renders an inline op picker and
+  // requires the user to choose before submitting.
+  operationId?: string;
 }
 
 export function CreateCredentialDialog({
@@ -38,18 +46,30 @@ export function CreateCredentialDialog({
   const createCredential = useCreateCredential();
   const [values, setValues] = useState<CredentialFormValues>(emptyValues);
   const [error, setError] = useState<string | null>(null);
+  const [pickedOp, setPickedOp] =
+    useState<OperationSinglePickerValue | null>(null);
+
+  const isGlobalMode = operationId === undefined;
+  // Resolve the target operation id at submit time. In scoped mode it's the
+  // prop; in global mode the user must pick one via the dialog's picker.
+  const targetOpId = operationId ?? pickedOp?.id ?? null;
 
   function reset() {
     setValues(emptyValues);
     setError(null);
+    setPickedOp(null);
   }
 
   async function handleSubmit(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
     setError(null);
+    if (!targetOpId) {
+      setError("Pick an operation to add this credential to.");
+      return;
+    }
     try {
       await createCredential.mutateAsync({
-        operationId,
+        operationId: targetOpId,
         input: {
           name: values.name,
           type: values.type,
@@ -92,6 +112,20 @@ export function CreateCredentialDialog({
               {error}
             </div>
           )}
+          {isGlobalMode && (
+            <div className="mb-4 grid gap-1.5">
+              <label className="text-sm font-medium">Operation</label>
+              <OperationSinglePicker
+                value={pickedOp}
+                onChange={setPickedOp}
+                placeholder="Pick the operation to add this credential to"
+                className="w-full"
+              />
+              <p className="text-xs text-muted-foreground">
+                Credentials live inside an operation. Pick one before saving.
+              </p>
+            </div>
+          )}
           <CredentialFormFields
             idPrefix="create-cred"
             values={values}
@@ -109,7 +143,11 @@ export function CreateCredentialDialog({
             </label>
             <Button
               type="submit"
-              disabled={createCredential.isPending || !values.name.trim()}
+              disabled={
+                createCredential.isPending ||
+                !values.name.trim() ||
+                !targetOpId
+              }
             >
               {createCredential.isPending ? "Saving..." : "Add credential"}
             </Button>

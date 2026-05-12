@@ -37,6 +37,21 @@ type ICredentialRepository interface {
 	FindByOperationIDWithCursor(ctx context.Context, opID uuid.UUID, filter CredentialFilter, cursor *pagination.Cursor, limit int64, forward bool) ([]models.Credential, error)
 	CountByOperationID(ctx context.Context, opID uuid.UUID, filter CredentialFilter) (int64, error)
 	DistinctTagsByOperationID(ctx context.Context, opID uuid.UUID) ([]string, error)
+
+	// Multi-operation variants — used by the "global / cross-operation" Findings
+	// view where the caller has selected several operations to search across.
+	// Each method matches `{operation_id: {$in: opIDs}}` and otherwise behaves
+	// identically to its single-op sibling. An empty opIDs slice MUST short-circuit
+	// to a no-match result without hitting the DB; callers rely on that to model
+	// "explicit empty selection".
+	//
+	// Index note: the existing {operation_id, -createAt, -_id} compound index
+	// supports these queries via index union. Acceptable for moderate fan-out
+	// (~tens of ops); revisit for very large op sets.
+	FindByOperationIDsWithCursor(ctx context.Context, opIDs []uuid.UUID, filter CredentialFilter, cursor *pagination.Cursor, limit int64, forward bool) ([]models.Credential, error)
+	CountByOperationIDs(ctx context.Context, opIDs []uuid.UUID, filter CredentialFilter) (int64, error)
+	DistinctTagsByOperationIDs(ctx context.Context, opIDs []uuid.UUID) ([]string, error)
+
 	Update(ctx context.Context, c *models.Credential, updates map[string]interface{}) error
 	Delete(ctx context.Context, c *models.Credential) error
 	DeleteByOperationID(ctx context.Context, operationID uuid.UUID) error
@@ -116,6 +131,60 @@ func (r *credentialRepository) DistinctTagsByOperationID(ctx context.Context, op
 	return tags, nil
 }
 
+// FindByOperationIDsWithCursor lists credentials across multiple operations.
+// Returns an empty slice (and no error) when opIDs is empty so callers can
+// model "explicit empty selection" without a DB round-trip.
+func (r *credentialRepository) FindByOperationIDsWithCursor(ctx context.Context, opIDs []uuid.UUID, filter CredentialFilter, cursor *pagination.Cursor, limit int64, forward bool) ([]models.Credential, error) {
+	if len(opIDs) == 0 {
+		return []models.Credential{}, nil
+	}
+
+	q := buildCredentialFilterMulti(opIDs, filter)
+
+	if cursorFilter := pagination.BuildCursorFilter(cursor, forward); len(cursorFilter) > 0 {
+		for k, v := range cursorFilter {
+			q[k] = v
+		}
+	}
+
+	var creds []models.Credential
+	err := r.coll.Find(ctx, q).
+		Sort(pagination.SortFields(forward)...).
+		Limit(limit).
+		All(&creds)
+
+	if !forward && len(creds) > 0 {
+		for i, j := 0, len(creds)-1; i < j; i, j = i+1, j-1 {
+			creds[i], creds[j] = creds[j], creds[i]
+		}
+	}
+
+	return creds, err
+}
+
+// CountByOperationIDs counts credentials matching the filter across multiple
+// operations. Empty opIDs ⇒ 0 with no DB call.
+func (r *credentialRepository) CountByOperationIDs(ctx context.Context, opIDs []uuid.UUID, filter CredentialFilter) (int64, error) {
+	if len(opIDs) == 0 {
+		return 0, nil
+	}
+	return r.coll.Count(ctx, buildCredentialFilterMulti(opIDs, filter))
+}
+
+// DistinctTagsByOperationIDs returns the deduplicated tag set across all
+// credentials in the given operations. Empty opIDs ⇒ empty slice, no DB call.
+func (r *credentialRepository) DistinctTagsByOperationIDs(ctx context.Context, opIDs []uuid.UUID) ([]string, error) {
+	if len(opIDs) == 0 {
+		return []string{}, nil
+	}
+	var tags []string
+	err := r.coll.Find(ctx, bson.M{"operation_id": bson.M{"$in": opIDs}}).Distinct("tags", &tags)
+	if err != nil {
+		return nil, err
+	}
+	return tags, nil
+}
+
 func (r *credentialRepository) Update(ctx context.Context, c *models.Credential, updates map[string]interface{}) error {
 	// Defense-in-depth: filter includes operation_id so a resolver bug cannot
 	// accidentally mutate a credential belonging to a different operation.
@@ -169,8 +238,20 @@ func (r *credentialRepository) RemoveComment(ctx context.Context, credentialID, 
 // buildCredentialFilter composes a MongoDB filter from a CredentialFilter,
 // always scoped to the given operation.
 func buildCredentialFilter(opID uuid.UUID, f CredentialFilter) bson.M {
-	q := bson.M{"operation_id": opID}
+	return applyCredentialFilter(bson.M{"operation_id": opID}, f)
+}
 
+// buildCredentialFilterMulti is the multi-operation variant of
+// buildCredentialFilter. The operation predicate becomes {$in: opIDs} and the
+// rest of the filter shape is identical.
+func buildCredentialFilterMulti(opIDs []uuid.UUID, f CredentialFilter) bson.M {
+	return applyCredentialFilter(bson.M{"operation_id": bson.M{"$in": opIDs}}, f)
+}
+
+// applyCredentialFilter layers Type / ValidOnly / Tags / Search constraints
+// on top of a base filter (operation predicate). Shared between the single-op
+// and multi-op builders.
+func applyCredentialFilter(q bson.M, f CredentialFilter) bson.M {
 	if f.Type != nil {
 		q["type"] = *f.Type
 	}

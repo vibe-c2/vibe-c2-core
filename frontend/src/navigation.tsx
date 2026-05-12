@@ -14,6 +14,8 @@ export interface NavigationItem {
   icon?: React.ComponentType<{ className?: string }>;
 }
 
+// Navigation entries that require an operation to be scoped. The sidebar
+// hides this block until the user picks an operation via the switcher.
 export const navigationItems: NavigationItem[] = [
   {
     title: "Dashboard",
@@ -27,6 +29,12 @@ export const navigationItems: NavigationItem[] = [
     permission: null,
     icon: BookOpenIcon,
   },
+];
+
+// Navigation entries that work even when no operation is scoped. Findings
+// has a "global / cross-operation" mode that lets the user search credentials
+// (and future finding types) across the operations they belong to.
+export const navigationGlobalItems: NavigationItem[] = [
   {
     title: "Findings",
     url: "/findings",

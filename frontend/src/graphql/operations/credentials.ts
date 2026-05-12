@@ -39,6 +39,20 @@ export const CredentialFields = graphql(`
   }
 `)
 
+// Variant used by the cross-operation Findings view. Adds the parent
+// operation so the table can render an "Operation" column. Kept separate
+// from CredentialFields so scoped views don't pay the extra Operation
+// lookup per row.
+export const CredentialFieldsWithOperation = graphql(`
+  fragment CredentialFieldsWithOperation on Credential {
+    ...CredentialFields
+    operation {
+      id
+      name
+    }
+  }
+`)
+
 export const CredentialQuery = graphql(`
   query Credential($id: ID!) {
     credential(id: $id) {
@@ -84,6 +98,50 @@ export const CredentialsQuery = graphql(`
 export const CredentialTagsQuery = graphql(`
   query CredentialTags($operationId: ID!) {
     credentialTags(operationId: $operationId)
+  }
+`)
+
+// Cross-operation list query — powers the "global" Findings page.
+// operationIds: null  = "all my accessible operations" (server resolves)
+// operationIds: []    = explicit empty (returns empty connection)
+// operationIds: [...] = listed operations (server authorizes each)
+export const MyCredentialsQuery = graphql(`
+  query MyCredentials(
+    $operationIds: [ID!]
+    $search: String
+    $type: CredentialType
+    $tags: [String!]
+    $validOnly: Boolean
+    $first: Int
+    $after: String
+  ) {
+    myCredentials(
+      operationIds: $operationIds
+      search: $search
+      type: $type
+      tags: $tags
+      validOnly: $validOnly
+      first: $first
+      after: $after
+    ) {
+      edges {
+        node {
+          ...CredentialFieldsWithOperation
+        }
+        cursor
+      }
+      pageInfo {
+        hasNextPage
+        endCursor
+      }
+      totalCount
+    }
+  }
+`)
+
+export const MyCredentialTagsQuery = graphql(`
+  query MyCredentialTags($operationIds: [ID!]) {
+    myCredentialTags(operationIds: $operationIds)
   }
 `)
 
@@ -149,6 +207,22 @@ export const CredentialChangedSubscription = graphql(`
       operationId
       credential {
         ...CredentialFields
+      }
+    }
+  }
+`)
+
+// Cross-operation subscription — sibling of credentialChanged. Powers live
+// updates on the global Findings page. operationIds follows the same
+// null/empty/explicit semantics as MyCredentialsQuery.
+export const MyCredentialChangedSubscription = graphql(`
+  subscription MyCredentialChanged($operationIds: [ID!]) {
+    myCredentialChanged(operationIds: $operationIds) {
+      action
+      credentialId
+      operationId
+      credential {
+        ...CredentialFieldsWithOperation
       }
     }
   }

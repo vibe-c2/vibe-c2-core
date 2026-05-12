@@ -119,6 +119,121 @@ func (r *subscriptionResolver) buildOperationFilter(ctx context.Context, auth gq
 	}, nil
 }
 
+// myCredentialChangedOpCap mirrors the limit in pkg/resolver.myCredentialsOpCap.
+// The two values intentionally agree — a client that can fetch myCredentials
+// for N operations should also be able to subscribe to that same N.
+// Bumping one without the other will silently desync the two surfaces.
+const myCredentialChangedOpCap = 100
+
+// buildOperationsFilter is the multi-op sibling of buildOperationFilter, built
+// for subscriptions that span several operations at once (myCredentialChanged).
+// Same nil/empty/explicit semantics as resolveAccessibleOperationIDs in the
+// myCredentials query resolver:
+//
+//   - opIDs == nil  → caller's full membership set, captured once at subscribe
+//     time (same trade-off as buildOperationFilter's nil branch — a new
+//     membership won't be picked up without a reconnect).
+//   - opIDs == []   → returns a filter that never matches. The subscription
+//     stays open but emits nothing. The frontend uses an `enabled` flag to
+//     avoid opening the SSE stream in this case, so this branch is mostly
+//     defensive.
+//   - opIDs has ids → every id is authorized at viewer minimum. Returns a
+//     filter that delivers events only when the event's operation_id is in
+//     the set.
+//
+// Authorization mirrors the inline check in buildOperationFilter rather than
+// going through authorization.AuthorizeOperationRole — consistent with the
+// neighboring single-op helper.
+func (r *subscriptionResolver) buildOperationsFilter(ctx context.Context, auth gqlctx.AuthInfo, opIDs []string) (eventbus.Filter, error) {
+	if opIDs == nil {
+		userID, err := uuid.Parse(auth.UserID)
+		if err != nil {
+			return nil, fmt.Errorf("invalid user ID")
+		}
+		ops, err := r.OperationRepo.FindByMemberID(ctx, userID)
+		if err != nil {
+			return nil, fmt.Errorf("failed to fetch operations: %w", err)
+		}
+		opSet := make(map[string]struct{}, len(ops))
+		for _, op := range ops {
+			opSet[op.OperationID.String()] = struct{}{}
+		}
+		return filterFromOpSet(opSet, auth), nil
+	}
+
+	if len(opIDs) == 0 {
+		return func(_ eventbus.Event) bool { return false }, nil
+	}
+
+	if len(opIDs) > myCredentialChangedOpCap {
+		return nil, fmt.Errorf("too many operations selected (max %d)", myCredentialChangedOpCap)
+	}
+
+	// Explicit ids: regular users must be at least viewers in every id, so
+	// we FindByID each one and check Members. App-admins skip the DB lookup
+	// — they bypass operation-level checks everywhere else, and the filter
+	// itself ignores ids that never produce events anyway.
+	isAdmin := false
+	for _, role := range auth.Roles {
+		if role == "admin" {
+			isAdmin = true
+			break
+		}
+	}
+
+	opSet := make(map[string]struct{}, len(opIDs))
+	if !isAdmin {
+		userID, err := uuid.Parse(auth.UserID)
+		if err != nil {
+			return nil, fmt.Errorf("invalid user ID")
+		}
+		for _, raw := range opIDs {
+			opUID, err := uuid.Parse(raw)
+			if err != nil {
+				return nil, fmt.Errorf("invalid operation ID %q: %w", raw, err)
+			}
+			op, err := r.OperationRepo.FindByID(ctx, opUID)
+			if err != nil {
+				return nil, fmt.Errorf("operation not found: %w", err)
+			}
+			isMember := false
+			for _, m := range op.Members {
+				if m.UserID == userID {
+					isMember = true
+					break
+				}
+			}
+			if !isMember {
+				return nil, fmt.Errorf("forbidden: not a member of operation %s", raw)
+			}
+			opSet[raw] = struct{}{}
+		}
+	} else {
+		for _, raw := range opIDs {
+			if _, err := uuid.Parse(raw); err != nil {
+				return nil, fmt.Errorf("invalid operation ID %q: %w", raw, err)
+			}
+			opSet[raw] = struct{}{}
+		}
+	}
+
+	return filterFromOpSet(opSet, auth), nil
+}
+
+// filterFromOpSet returns an event-bus filter that delivers an event only if
+// its operation_id is in the set. Self-authored events always pass — same
+// affordance as buildOperationFilter so the subscriber sees their own writes
+// without a refetch.
+func filterFromOpSet(opSet map[string]struct{}, auth gqlctx.AuthInfo) eventbus.Filter {
+	return func(event eventbus.Event) bool {
+		if event.Actor.Type == eventbus.ActorUser && event.Actor.ID == auth.UserID {
+			return true
+		}
+		_, ok := opSet[extractOperationID(event)]
+		return ok
+	}
+}
+
 // extractOperationID pulls the operation ID from any operation-related event payload.
 func extractOperationID(event eventbus.Event) string {
 	switch p := event.Payload.(type) {

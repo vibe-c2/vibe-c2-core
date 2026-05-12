@@ -16,9 +16,12 @@ import type { TypedDocumentNode as DocumentNode } from '@graphql-typed-document-
 type Documents = {
     "\n  fragment CredentialCommentFields on CredentialComment {\n    id\n    text\n    createdAt\n    updatedAt\n    author {\n      id\n      username\n    }\n  }\n": typeof types.CredentialCommentFieldsFragmentDoc,
     "\n  fragment CredentialFields on Credential {\n    id\n    operationId\n    name\n    type\n    username\n    password\n    keys {\n      name\n      content\n    }\n    isValid\n    tags\n    comments {\n      ...CredentialCommentFields\n    }\n    createdBy {\n      id\n      username\n    }\n    createdAt\n    updatedAt\n  }\n": typeof types.CredentialFieldsFragmentDoc,
+    "\n  fragment CredentialFieldsWithOperation on Credential {\n    ...CredentialFields\n    operation {\n      id\n      name\n    }\n  }\n": typeof types.CredentialFieldsWithOperationFragmentDoc,
     "\n  query Credential($id: ID!) {\n    credential(id: $id) {\n      ...CredentialFields\n    }\n  }\n": typeof types.CredentialDocument,
     "\n  query Credentials(\n    $operationId: ID!\n    $search: String\n    $type: CredentialType\n    $tags: [String!]\n    $validOnly: Boolean\n    $first: Int\n    $after: String\n  ) {\n    credentials(\n      operationId: $operationId\n      search: $search\n      type: $type\n      tags: $tags\n      validOnly: $validOnly\n      first: $first\n      after: $after\n    ) {\n      edges {\n        node {\n          ...CredentialFields\n        }\n        cursor\n      }\n      pageInfo {\n        hasNextPage\n        endCursor\n      }\n      totalCount\n    }\n  }\n": typeof types.CredentialsDocument,
     "\n  query CredentialTags($operationId: ID!) {\n    credentialTags(operationId: $operationId)\n  }\n": typeof types.CredentialTagsDocument,
+    "\n  query MyCredentials(\n    $operationIds: [ID!]\n    $search: String\n    $type: CredentialType\n    $tags: [String!]\n    $validOnly: Boolean\n    $first: Int\n    $after: String\n  ) {\n    myCredentials(\n      operationIds: $operationIds\n      search: $search\n      type: $type\n      tags: $tags\n      validOnly: $validOnly\n      first: $first\n      after: $after\n    ) {\n      edges {\n        node {\n          ...CredentialFieldsWithOperation\n        }\n        cursor\n      }\n      pageInfo {\n        hasNextPage\n        endCursor\n      }\n      totalCount\n    }\n  }\n": typeof types.MyCredentialsDocument,
+    "\n  query MyCredentialTags($operationIds: [ID!]) {\n    myCredentialTags(operationIds: $operationIds)\n  }\n": typeof types.MyCredentialTagsDocument,
     "\n  mutation CreateCredential($operationId: ID!, $input: CreateCredentialInput!) {\n    createCredential(operationId: $operationId, input: $input) {\n      ...CredentialFields\n    }\n  }\n": typeof types.CreateCredentialDocument,
     "\n  mutation UpdateCredential($id: ID!, $input: UpdateCredentialInput!) {\n    updateCredential(id: $id, input: $input) {\n      ...CredentialFields\n    }\n  }\n": typeof types.UpdateCredentialDocument,
     "\n  mutation DeleteCredential($id: ID!) {\n    deleteCredential(id: $id)\n  }\n": typeof types.DeleteCredentialDocument,
@@ -26,6 +29,7 @@ type Documents = {
     "\n  mutation UpdateCredentialComment(\n    $credentialId: ID!\n    $commentId: ID!\n    $text: String!\n  ) {\n    updateCredentialComment(\n      credentialId: $credentialId\n      commentId: $commentId\n      text: $text\n    ) {\n      ...CredentialFields\n    }\n  }\n": typeof types.UpdateCredentialCommentDocument,
     "\n  mutation DeleteCredentialComment($credentialId: ID!, $commentId: ID!) {\n    deleteCredentialComment(credentialId: $credentialId, commentId: $commentId) {\n      ...CredentialFields\n    }\n  }\n": typeof types.DeleteCredentialCommentDocument,
     "\n  subscription CredentialChanged($operationId: ID!) {\n    credentialChanged(operationId: $operationId) {\n      action\n      credentialId\n      operationId\n      credential {\n        ...CredentialFields\n      }\n    }\n  }\n": typeof types.CredentialChangedDocument,
+    "\n  subscription MyCredentialChanged($operationIds: [ID!]) {\n    myCredentialChanged(operationIds: $operationIds) {\n      action\n      credentialId\n      operationId\n      credential {\n        ...CredentialFieldsWithOperation\n      }\n    }\n  }\n": typeof types.MyCredentialChangedDocument,
     "\n  fragment OperationMemberFields on OperationMember {\n    user {\n      id\n      username\n      roles\n      active\n      createdAt\n      updatedAt\n    }\n    role\n  }\n": typeof types.OperationMemberFieldsFragmentDoc,
     "\n  fragment OperationFields on Operation {\n    id\n    name\n    description\n    members {\n      ...OperationMemberFields\n    }\n    createdAt\n    updatedAt\n  }\n": typeof types.OperationFieldsFragmentDoc,
     "\n  query Operation($id: ID!) {\n    operation(id: $id) {\n      ...OperationFields\n    }\n  }\n": typeof types.OperationDocument,
@@ -91,9 +95,12 @@ type Documents = {
 const documents: Documents = {
     "\n  fragment CredentialCommentFields on CredentialComment {\n    id\n    text\n    createdAt\n    updatedAt\n    author {\n      id\n      username\n    }\n  }\n": types.CredentialCommentFieldsFragmentDoc,
     "\n  fragment CredentialFields on Credential {\n    id\n    operationId\n    name\n    type\n    username\n    password\n    keys {\n      name\n      content\n    }\n    isValid\n    tags\n    comments {\n      ...CredentialCommentFields\n    }\n    createdBy {\n      id\n      username\n    }\n    createdAt\n    updatedAt\n  }\n": types.CredentialFieldsFragmentDoc,
+    "\n  fragment CredentialFieldsWithOperation on Credential {\n    ...CredentialFields\n    operation {\n      id\n      name\n    }\n  }\n": types.CredentialFieldsWithOperationFragmentDoc,
     "\n  query Credential($id: ID!) {\n    credential(id: $id) {\n      ...CredentialFields\n    }\n  }\n": types.CredentialDocument,
     "\n  query Credentials(\n    $operationId: ID!\n    $search: String\n    $type: CredentialType\n    $tags: [String!]\n    $validOnly: Boolean\n    $first: Int\n    $after: String\n  ) {\n    credentials(\n      operationId: $operationId\n      search: $search\n      type: $type\n      tags: $tags\n      validOnly: $validOnly\n      first: $first\n      after: $after\n    ) {\n      edges {\n        node {\n          ...CredentialFields\n        }\n        cursor\n      }\n      pageInfo {\n        hasNextPage\n        endCursor\n      }\n      totalCount\n    }\n  }\n": types.CredentialsDocument,
     "\n  query CredentialTags($operationId: ID!) {\n    credentialTags(operationId: $operationId)\n  }\n": types.CredentialTagsDocument,
+    "\n  query MyCredentials(\n    $operationIds: [ID!]\n    $search: String\n    $type: CredentialType\n    $tags: [String!]\n    $validOnly: Boolean\n    $first: Int\n    $after: String\n  ) {\n    myCredentials(\n      operationIds: $operationIds\n      search: $search\n      type: $type\n      tags: $tags\n      validOnly: $validOnly\n      first: $first\n      after: $after\n    ) {\n      edges {\n        node {\n          ...CredentialFieldsWithOperation\n        }\n        cursor\n      }\n      pageInfo {\n        hasNextPage\n        endCursor\n      }\n      totalCount\n    }\n  }\n": types.MyCredentialsDocument,
+    "\n  query MyCredentialTags($operationIds: [ID!]) {\n    myCredentialTags(operationIds: $operationIds)\n  }\n": types.MyCredentialTagsDocument,
     "\n  mutation CreateCredential($operationId: ID!, $input: CreateCredentialInput!) {\n    createCredential(operationId: $operationId, input: $input) {\n      ...CredentialFields\n    }\n  }\n": types.CreateCredentialDocument,
     "\n  mutation UpdateCredential($id: ID!, $input: UpdateCredentialInput!) {\n    updateCredential(id: $id, input: $input) {\n      ...CredentialFields\n    }\n  }\n": types.UpdateCredentialDocument,
     "\n  mutation DeleteCredential($id: ID!) {\n    deleteCredential(id: $id)\n  }\n": types.DeleteCredentialDocument,
@@ -101,6 +108,7 @@ const documents: Documents = {
     "\n  mutation UpdateCredentialComment(\n    $credentialId: ID!\n    $commentId: ID!\n    $text: String!\n  ) {\n    updateCredentialComment(\n      credentialId: $credentialId\n      commentId: $commentId\n      text: $text\n    ) {\n      ...CredentialFields\n    }\n  }\n": types.UpdateCredentialCommentDocument,
     "\n  mutation DeleteCredentialComment($credentialId: ID!, $commentId: ID!) {\n    deleteCredentialComment(credentialId: $credentialId, commentId: $commentId) {\n      ...CredentialFields\n    }\n  }\n": types.DeleteCredentialCommentDocument,
     "\n  subscription CredentialChanged($operationId: ID!) {\n    credentialChanged(operationId: $operationId) {\n      action\n      credentialId\n      operationId\n      credential {\n        ...CredentialFields\n      }\n    }\n  }\n": types.CredentialChangedDocument,
+    "\n  subscription MyCredentialChanged($operationIds: [ID!]) {\n    myCredentialChanged(operationIds: $operationIds) {\n      action\n      credentialId\n      operationId\n      credential {\n        ...CredentialFieldsWithOperation\n      }\n    }\n  }\n": types.MyCredentialChangedDocument,
     "\n  fragment OperationMemberFields on OperationMember {\n    user {\n      id\n      username\n      roles\n      active\n      createdAt\n      updatedAt\n    }\n    role\n  }\n": types.OperationMemberFieldsFragmentDoc,
     "\n  fragment OperationFields on Operation {\n    id\n    name\n    description\n    members {\n      ...OperationMemberFields\n    }\n    createdAt\n    updatedAt\n  }\n": types.OperationFieldsFragmentDoc,
     "\n  query Operation($id: ID!) {\n    operation(id: $id) {\n      ...OperationFields\n    }\n  }\n": types.OperationDocument,
@@ -189,6 +197,10 @@ export function graphql(source: "\n  fragment CredentialFields on Credential {\n
 /**
  * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
  */
+export function graphql(source: "\n  fragment CredentialFieldsWithOperation on Credential {\n    ...CredentialFields\n    operation {\n      id\n      name\n    }\n  }\n"): (typeof documents)["\n  fragment CredentialFieldsWithOperation on Credential {\n    ...CredentialFields\n    operation {\n      id\n      name\n    }\n  }\n"];
+/**
+ * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
+ */
 export function graphql(source: "\n  query Credential($id: ID!) {\n    credential(id: $id) {\n      ...CredentialFields\n    }\n  }\n"): (typeof documents)["\n  query Credential($id: ID!) {\n    credential(id: $id) {\n      ...CredentialFields\n    }\n  }\n"];
 /**
  * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
@@ -198,6 +210,14 @@ export function graphql(source: "\n  query Credentials(\n    $operationId: ID!\n
  * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
  */
 export function graphql(source: "\n  query CredentialTags($operationId: ID!) {\n    credentialTags(operationId: $operationId)\n  }\n"): (typeof documents)["\n  query CredentialTags($operationId: ID!) {\n    credentialTags(operationId: $operationId)\n  }\n"];
+/**
+ * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
+ */
+export function graphql(source: "\n  query MyCredentials(\n    $operationIds: [ID!]\n    $search: String\n    $type: CredentialType\n    $tags: [String!]\n    $validOnly: Boolean\n    $first: Int\n    $after: String\n  ) {\n    myCredentials(\n      operationIds: $operationIds\n      search: $search\n      type: $type\n      tags: $tags\n      validOnly: $validOnly\n      first: $first\n      after: $after\n    ) {\n      edges {\n        node {\n          ...CredentialFieldsWithOperation\n        }\n        cursor\n      }\n      pageInfo {\n        hasNextPage\n        endCursor\n      }\n      totalCount\n    }\n  }\n"): (typeof documents)["\n  query MyCredentials(\n    $operationIds: [ID!]\n    $search: String\n    $type: CredentialType\n    $tags: [String!]\n    $validOnly: Boolean\n    $first: Int\n    $after: String\n  ) {\n    myCredentials(\n      operationIds: $operationIds\n      search: $search\n      type: $type\n      tags: $tags\n      validOnly: $validOnly\n      first: $first\n      after: $after\n    ) {\n      edges {\n        node {\n          ...CredentialFieldsWithOperation\n        }\n        cursor\n      }\n      pageInfo {\n        hasNextPage\n        endCursor\n      }\n      totalCount\n    }\n  }\n"];
+/**
+ * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
+ */
+export function graphql(source: "\n  query MyCredentialTags($operationIds: [ID!]) {\n    myCredentialTags(operationIds: $operationIds)\n  }\n"): (typeof documents)["\n  query MyCredentialTags($operationIds: [ID!]) {\n    myCredentialTags(operationIds: $operationIds)\n  }\n"];
 /**
  * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
  */
@@ -226,6 +246,10 @@ export function graphql(source: "\n  mutation DeleteCredentialComment($credentia
  * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
  */
 export function graphql(source: "\n  subscription CredentialChanged($operationId: ID!) {\n    credentialChanged(operationId: $operationId) {\n      action\n      credentialId\n      operationId\n      credential {\n        ...CredentialFields\n      }\n    }\n  }\n"): (typeof documents)["\n  subscription CredentialChanged($operationId: ID!) {\n    credentialChanged(operationId: $operationId) {\n      action\n      credentialId\n      operationId\n      credential {\n        ...CredentialFields\n      }\n    }\n  }\n"];
+/**
+ * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
+ */
+export function graphql(source: "\n  subscription MyCredentialChanged($operationIds: [ID!]) {\n    myCredentialChanged(operationIds: $operationIds) {\n      action\n      credentialId\n      operationId\n      credential {\n        ...CredentialFieldsWithOperation\n      }\n    }\n  }\n"): (typeof documents)["\n  subscription MyCredentialChanged($operationIds: [ID!]) {\n    myCredentialChanged(operationIds: $operationIds) {\n      action\n      credentialId\n      operationId\n      credential {\n        ...CredentialFieldsWithOperation\n      }\n    }\n  }\n"];
 /**
  * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
  */

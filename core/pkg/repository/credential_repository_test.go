@@ -138,3 +138,57 @@ func TestBuildCredentialFilter_NilValidOnlyShowsBoth(t *testing.T) {
 		t.Fatalf("did not expect is_valid filter when ValidOnly is nil")
 	}
 }
+
+// TestBuildCredentialFilterMulti_UsesIn verifies the multi-op builder pins the
+// operation_id predicate to a {$in: [...]} clause instead of a single value.
+// All other filter fields layer on top identically.
+func TestBuildCredentialFilterMulti_UsesIn(t *testing.T) {
+	op1 := uuid.New()
+	op2 := uuid.New()
+	pwd := models.CredentialTypePassword
+
+	f := buildCredentialFilterMulti([]uuid.UUID{op1, op2}, CredentialFilter{
+		Type: &pwd,
+		Tags: []string{"prod"},
+	})
+
+	opPred, ok := f["operation_id"].(bson.M)
+	if !ok {
+		t.Fatalf("expected operation_id to be bson.M, got %T", f["operation_id"])
+	}
+	got, ok := opPred["$in"].([]uuid.UUID)
+	if !ok {
+		t.Fatalf("expected $in []uuid.UUID, got %T", opPred["$in"])
+	}
+	if len(got) != 2 || got[0] != op1 || got[1] != op2 {
+		t.Fatalf("unexpected $in contents: %v", got)
+	}
+	if f["type"] != pwd {
+		t.Fatalf("type filter did not carry over: got %v", f["type"])
+	}
+	tagsFilter, ok := f["tags"].(bson.M)
+	if !ok {
+		t.Fatalf("expected tags filter to be bson.M, got %T", f["tags"])
+	}
+	tagsAll, _ := tagsFilter["$all"].([]string)
+	if len(tagsAll) != 1 || tagsAll[0] != "prod" {
+		t.Fatalf("unexpected tags $all: %v", tagsAll)
+	}
+}
+
+// TestBuildCredentialFilterMulti_SingleOp confirms a one-element slice still
+// goes through the $in path — we don't optimise to a scalar predicate. This
+// keeps the multi-op resolver path uniform regardless of selection size.
+func TestBuildCredentialFilterMulti_SingleOp(t *testing.T) {
+	op1 := uuid.New()
+
+	f := buildCredentialFilterMulti([]uuid.UUID{op1}, CredentialFilter{})
+
+	opPred, ok := f["operation_id"].(bson.M)
+	if !ok {
+		t.Fatalf("expected operation_id to be bson.M, got %T", f["operation_id"])
+	}
+	if _, ok := opPred["$in"]; !ok {
+		t.Fatalf("expected $in predicate even for single op")
+	}
+}

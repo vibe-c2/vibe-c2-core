@@ -22,6 +22,9 @@ import {
   UpdateCredentialCommentDocument,
   DeleteCredentialCommentDocument,
   CredentialChangedDocument,
+  MyCredentialsDocument,
+  MyCredentialTagsDocument,
+  MyCredentialChangedDocument,
 } from "@/graphql/gql/graphql"
 
 export type CredentialListParams = {
@@ -34,16 +37,32 @@ export type CredentialListParams = {
   first?: number
 }
 
+// Cross-operation list params for the global Findings view.
+// operationIds: null = "all my operations" (server resolves to caller's
+// membership set). Empty array = explicit empty selection.
+export type MyCredentialListParams = {
+  operationIds: string[] | null
+  search?: string | null
+  type?: CredentialType | null
+  tags?: string[] | null
+  validOnly?: boolean | null
+  first?: number
+}
+
 // Query key factory.
 export const credentialKeys = {
   all: ["credentials"] as const,
   lists: () => [...credentialKeys.all, "list"] as const,
   infiniteList: (params: CredentialListParams) =>
     [...credentialKeys.lists(), "infinite", params] as const,
+  infiniteMyList: (params: MyCredentialListParams) =>
+    [...credentialKeys.lists(), "infinite-my", params] as const,
   details: () => [...credentialKeys.all, "detail"] as const,
   detail: (id: string) => [...credentialKeys.details(), id] as const,
   tagSets: () => [...credentialKeys.all, "tags"] as const,
   tagSet: (operationId: string) => [...credentialKeys.tagSets(), operationId] as const,
+  myTagSet: (operationIds: string[] | null) =>
+    [...credentialKeys.tagSets(), "my", operationIds] as const,
 }
 
 // --- Queries ---
@@ -86,6 +105,46 @@ export function useCredentialTags(operationId: string) {
   })
 }
 
+// Cross-operation list. Mirrors useInfiniteCredentials but talks to myCredentials
+// and accepts an operationIds list (null = caller's full accessible set).
+// Pass `enabled: false` to keep the hook in the call tree without firing the
+// query (used from CredentialsTab when we're in scoped mode).
+export function useInfiniteMyCredentials(
+  params: MyCredentialListParams,
+  options: { enabled?: boolean } = {},
+) {
+  return useInfiniteQuery({
+    queryKey: credentialKeys.infiniteMyList(params),
+    queryFn: ({ pageParam }) =>
+      graphqlClient(MyCredentialsDocument, {
+        operationIds: params.operationIds,
+        search: params.search ?? null,
+        type: params.type ?? null,
+        tags: params.tags && params.tags.length > 0 ? params.tags : null,
+        validOnly: params.validOnly ?? null,
+        first: params.first ?? 20,
+        after: pageParam,
+      }),
+    initialPageParam: undefined as string | undefined,
+    getNextPageParam: (lastPage) =>
+      lastPage.myCredentials.pageInfo.hasNextPage
+        ? lastPage.myCredentials.pageInfo.endCursor ?? undefined
+        : undefined,
+    enabled: options.enabled ?? true,
+  })
+}
+
+export function useMyCredentialTags(
+  operationIds: string[] | null,
+  options: { enabled?: boolean } = {},
+) {
+  return useQuery({
+    queryKey: credentialKeys.myTagSet(operationIds),
+    queryFn: () => graphqlClient(MyCredentialTagsDocument, { operationIds }),
+    enabled: options.enabled ?? true,
+  })
+}
+
 // --- Mutations ---
 
 export function useCreateCredential() {
@@ -98,9 +157,10 @@ export function useCreateCredential() {
         credential: data.createCredential,
       })
       queryClient.invalidateQueries({ queryKey: credentialKeys.lists() })
-      queryClient.invalidateQueries({
-        queryKey: credentialKeys.tagSet(vars.operationId),
-      })
+      // Invalidate both the scoped tag set and any my-tag sets that include
+      // this operation; cheaper to drop tagSets() wholesale than to enumerate.
+      queryClient.invalidateQueries({ queryKey: credentialKeys.tagSet(vars.operationId) })
+      queryClient.invalidateQueries({ queryKey: credentialKeys.tagSets() })
     },
   })
 }
@@ -118,6 +178,7 @@ export function useUpdateCredential() {
       queryClient.invalidateQueries({
         queryKey: credentialKeys.tagSet(data.updateCredential.operationId),
       })
+      queryClient.invalidateQueries({ queryKey: credentialKeys.tagSets() })
     },
   })
 }
@@ -129,6 +190,8 @@ export function useDeleteCredential() {
       graphqlClient(DeleteCredentialDocument, { id }),
     onSuccess: (_data, id) => {
       queryClient.removeQueries({ queryKey: credentialKeys.detail(id) })
+      // lists() covers both scoped (infiniteList) and global (infiniteMyList)
+      // because their query keys share the [..., "list"] prefix.
       queryClient.invalidateQueries({ queryKey: credentialKeys.lists() })
       queryClient.invalidateQueries({ queryKey: credentialKeys.tagSets() })
     },
@@ -199,4 +262,44 @@ export function useCredentialChangedSubscription(operationId: string) {
     },
     enabled: !!operationId,
   })
+}
+
+// Cross-operation real-time subscription for the global Findings view.
+// Mirrors useCredentialChangedSubscription but talks to myCredentialChanged
+// and accepts an operationIds list (null = caller's full accessible set, []
+// = explicit empty — see MyCredentialsQuery for the same semantics).
+//
+// Invalidation is broader than the scoped version: we drop all credential
+// lists and all tag sets, because a single event can affect either the
+// global infiniteMyList key or any scoped infiniteList key (e.g. another
+// session of the same user has a scoped page open).
+export function useMyCredentialChangedSubscription(
+  operationIds: string[] | null,
+  options: { enabled?: boolean } = {},
+) {
+  const queryClient = useQueryClient()
+
+  useSubscription(
+    MyCredentialChangedDocument,
+    { operationIds },
+    {
+      onData: (data) => {
+        const { action, credentialId, credential } = data.myCredentialChanged
+
+        if (action === "DELETED") {
+          queryClient.removeQueries({
+            queryKey: credentialKeys.detail(credentialId),
+          })
+        } else if (credential) {
+          queryClient.setQueryData(credentialKeys.detail(credentialId), {
+            credential,
+          })
+        }
+
+        queryClient.invalidateQueries({ queryKey: credentialKeys.lists() })
+        queryClient.invalidateQueries({ queryKey: credentialKeys.tagSets() })
+      },
+      enabled: options.enabled ?? true,
+    },
+  )
 }
