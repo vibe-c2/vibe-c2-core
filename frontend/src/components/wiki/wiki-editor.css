@@ -957,6 +957,121 @@
   }
 }
 
+/* Wiki document reference — inline atom chip rendered inside prose. Click
+   navigates to the referenced document. Mirrors the credential chip layout
+   (same inline-atom constraints — see notes above) but uses a sky/blue
+   accent so the two reference flavors are visually distinguishable at a
+   glance. The blue keeps "cross-document link" feeling like prose-anchored
+   navigation, while violet keeps "credential" feeling like sensitive data. */
+.tiptap .wiki-document-chip-wrapper {
+  display: inline;
+}
+
+.tiptap .react-renderer.node-wikiDocumentReference {
+  display: inline;
+}
+
+.tiptap .wiki-document-chip {
+  --chip-accent: oklch(0.55 0.16 240);
+  --chip-fg: oklch(0.36 0.14 240);
+}
+
+.dark .tiptap .wiki-document-chip {
+  --chip-accent: oklch(0.75 0.14 240);
+  --chip-fg: oklch(0.88 0.1 240);
+}
+
+.tiptap .wiki-document-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  vertical-align: baseline;
+  flex-wrap: wrap;
+  max-width: 100%;
+  font-family: inherit;
+  font-size: 0.875em;
+  font-weight: 500;
+  line-height: 1.2;
+  padding: 0.28em 0.65em;
+  margin: 0 0.15em;
+  border-radius: 6px;
+  color: var(--chip-fg);
+  background: color-mix(in oklch, var(--chip-accent) 12%, transparent);
+  border: 1px solid color-mix(in oklch, var(--chip-accent) 34%, transparent);
+  cursor: pointer;
+  appearance: none;
+  text-align: inherit;
+  transition: background-color 120ms ease-out,
+    border-color 120ms ease-out, color 120ms ease-out,
+    box-shadow 120ms ease-out;
+}
+
+.tiptap .wiki-document-chip__icon {
+  display: inline-flex;
+  flex-shrink: 0;
+  color: var(--chip-accent);
+}
+
+/* DocumentIcon renders a Lucide icon (or emoji) at its native size; clamp the
+   inner svg/emoji to chip height so a mismatched icon-size prop can't push the
+   chip taller than a single text line. */
+.tiptap .wiki-document-chip__icon svg,
+.tiptap .wiki-document-chip__icon > span {
+  width: 1em;
+  height: 1em;
+  font-size: 1em;
+}
+
+.tiptap .wiki-document-chip:hover {
+  background: color-mix(in oklch, var(--chip-accent) 22%, transparent);
+  border-color: color-mix(in oklch, var(--chip-accent) 50%, transparent);
+}
+
+.tiptap .wiki-document-chip:focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: 1px;
+}
+
+.tiptap .wiki-document-chip.is-selected,
+.tiptap .ProseMirror-selectednode .wiki-document-chip,
+.tiptap .ProseMirror-selectednode.wiki-document-chip-wrapper
+  .wiki-document-chip {
+  background: color-mix(in oklch, var(--chip-accent) 26%, transparent);
+  box-shadow: 0 0 0 2px var(--ring);
+}
+
+.tiptap .wiki-document-chip--missing {
+  color: var(--destructive);
+  background: color-mix(in oklch, var(--destructive) 12%, transparent);
+  border-color: color-mix(in oklch, var(--destructive) 32%, transparent);
+  cursor: default;
+}
+
+.tiptap .wiki-document-chip--missing:disabled {
+  cursor: not-allowed;
+}
+
+.tiptap .wiki-document-chip--loading {
+  cursor: progress;
+  opacity: 0.75;
+}
+
+.tiptap .wiki-document-chip__name {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 36ch;
+}
+
+.tiptap .wiki-document-chip__skel {
+  display: inline-block;
+  width: 8ch;
+  height: 0.9em;
+  border-radius: 4px;
+  background: color-mix(in oklch, currentColor 22%, transparent);
+  animation: wiki-credential-chip-pulse 1.2s ease-in-out infinite;
+}
+
 /* Notice / callout block — Outline-style tinted band with a left accent rail,
    a small leading icon (filled chip with white glyph for info/success/warning,
    solid star for tip), and a floating variant picker that appears while the

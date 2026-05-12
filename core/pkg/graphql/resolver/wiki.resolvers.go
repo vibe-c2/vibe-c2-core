@@ -93,6 +93,11 @@ func (r *queryResolver) WikiDocumentTrashedDescendants(ctx context.Context, docu
 	return r.WikiDocumentResolver.WikiDocumentTrashedDescendants(ctx, documentID)
 }
 
+// WikiDocumentBacklinks is the resolver for the wikiDocumentBacklinks field.
+func (r *queryResolver) WikiDocumentBacklinks(ctx context.Context, documentID string) ([]*models.WikiDocument, error) {
+	return r.WikiDocumentResolver.WikiDocumentBacklinks(ctx, documentID)
+}
+
 // WikiDocumentBackups is the resolver for the wikiDocumentBackups field.
 func (r *queryResolver) WikiDocumentBackups(ctx context.Context, documentID string, trigger *models.WikiDocumentBackupTrigger, first *int, after *string, last *int, before *string) (*model.WikiDocumentBackupConnection, error) {
 	return r.WikiDocumentResolver.WikiDocumentBackups(ctx, documentID, trigger, first, after, last, before)
@@ -151,6 +156,11 @@ func (r *wikiDocumentResolver) ChildDocuments(ctx context.Context, obj *models.W
 // ChildCount is the resolver for the childCount field.
 func (r *wikiDocumentResolver) ChildCount(ctx context.Context, obj *models.WikiDocument) (int, error) {
 	return r.WikiDocumentResolver.WikiDocumentChildCount(ctx, obj)
+}
+
+// Backlinks is the resolver for the backlinks field.
+func (r *wikiDocumentResolver) Backlinks(ctx context.Context, obj *models.WikiDocument) ([]*models.WikiDocument, error) {
+	return r.WikiDocumentResolver.WikiDocumentBacklinksField(ctx, obj)
 }
 
 // Ancestors is the resolver for the ancestors field.

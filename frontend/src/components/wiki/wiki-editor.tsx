@@ -24,6 +24,7 @@ import { WikiHorizontalRuleNode } from "@/components/wiki/wiki-horizontal-rule-n
 import { WikiImageNode } from "@/components/wiki/wiki-image-node"
 import { WikiFileExtension } from "@/components/wiki/wiki-file-node"
 import { WikiCredentialReferenceExtension } from "@/components/wiki/wiki-credential-reference-node"
+import { WikiDocumentReferenceExtension } from "@/components/wiki/wiki-document-reference-node"
 import { WikiEditorBubbleMenu } from "@/components/wiki/wiki-editor-bubble-menu"
 import { WikiEditorTableMenu } from "@/components/wiki/wiki-editor-table-menu"
 import { WikiLinkPopover, startLinkInsert } from "@/components/wiki/wiki-link-popover"
@@ -277,6 +278,7 @@ export function WikiEditor({
       }),
       WikiFileExtension,
       WikiCredentialReferenceExtension,
+      WikiDocumentReferenceExtension,
       WikiNoticeExtension,
       WikiSlashCommand.configure({
         context: { documentId, operationId },

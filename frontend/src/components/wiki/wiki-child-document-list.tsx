@@ -28,7 +28,7 @@ export function WikiChildDocumentList({
   if (children.length === 0 && !isEditor) return null
 
   return (
-    <div className="mt-8 border-t pt-4">
+    <div>
       <div className="mb-2 flex items-center justify-between">
         <h3 className="text-xs font-medium tracking-wide text-muted-foreground uppercase">
           Sub-pages

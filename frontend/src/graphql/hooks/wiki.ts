@@ -5,6 +5,8 @@ import type { CreateWikiDocumentInput, UpdateWikiDocumentInput } from "@/graphql
 import {
   WikiDocumentTreeDocument,
   WikiDocumentDocument,
+  WikiDocumentLiteDocument,
+  WikiDocumentBacklinksDocument,
   WikiDocumentsDocument,
   WikiSearchDocument,
   WikiDocumentTrashDocument,
@@ -48,6 +50,11 @@ export const wikiKeys = {
   operationPresence: (operationId: string) => [...wikiKeys.all, "operationPresence", operationId] as const,
   histories: () => [...wikiKeys.all, "history"] as const,
   history: (operationId: string) => [...wikiKeys.histories(), operationId] as const,
+  // Lightweight per-doc projection used by inline /doc chips. Separate from
+  // `detail` so chips don't trigger a refetch of the full document body.
+  lite: (id: string) => [...wikiKeys.all, "lite", id] as const,
+  backlinks: (documentId: string) =>
+    [...wikiKeys.all, "backlinks", documentId] as const,
 }
 
 // --- Queries ---
@@ -64,6 +71,30 @@ export function useWikiDocument(documentId: string) {
   return useQuery({
     queryKey: wikiKeys.detail(documentId),
     queryFn: () => graphqlClient(WikiDocumentDocument, { id: documentId }),
+    enabled: !!documentId,
+  })
+}
+
+// Lightweight per-document hook used by inline /doc chips. A page can cite
+// the same doc many times — all chips for the same id share one cache entry,
+// so render cost stays flat. Long staleTime because chip data (title, icon)
+// changes rarely; live updates flow in via the wikiDocumentChanged subscription.
+export function useWikiDocumentLite(documentId: string) {
+  return useQuery({
+    queryKey: wikiKeys.lite(documentId),
+    queryFn: () => graphqlClient(WikiDocumentLiteDocument, { id: documentId }),
+    enabled: !!documentId,
+    staleTime: 30_000,
+  })
+}
+
+// Documents that reference this one via inline /doc chips. Trashed referrers
+// and self-references are filtered server-side.
+export function useWikiDocumentBacklinks(documentId: string) {
+  return useQuery({
+    queryKey: wikiKeys.backlinks(documentId),
+    queryFn: () =>
+      graphqlClient(WikiDocumentBacklinksDocument, { documentId }),
     enabled: !!documentId,
   })
 }
@@ -341,13 +372,24 @@ export function useWikiDocumentChangedSubscription(operationId: string) {
 
       if (action === "DELETED") {
         queryClient.removeQueries({ queryKey: wikiKeys.detail(documentId) })
+        queryClient.removeQueries({ queryKey: wikiKeys.lite(documentId) })
       } else if (document) {
         // Seed detail cache on create/update so navigating to the doc is instant.
         queryClient.invalidateQueries({ queryKey: wikiKeys.detail(documentId) })
+        queryClient.invalidateQueries({ queryKey: wikiKeys.lite(documentId) })
       }
 
       queryClient.invalidateQueries({ queryKey: wikiKeys.tree(operationId) })
       queryClient.invalidateQueries({ queryKey: wikiKeys.trash(operationId) })
+
+      // Backlinks live on any document whose referrer set might have changed.
+      // We don't know server-side which targets were affected by this edit, so
+      // invalidate every cached backlinks query in the operation. The cap of
+      // ~5 open documents per user keeps this cheap; precise diffing can come
+      // later if needed.
+      queryClient.invalidateQueries({
+        queryKey: [...wikiKeys.all, "backlinks"],
+      })
     },
     enabled: !!operationId,
   })

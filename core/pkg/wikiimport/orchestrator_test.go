@@ -225,6 +225,9 @@ func (r *fakeDocRepo) RestoreFromBackup(context.Context, uuid.UUID, string, []by
 func (r *fakeDocRepo) SearchByOperationID(context.Context, uuid.UUID, *uuid.UUID, string, int64, int64) ([]repository.WikiDocumentSearchHit, int64, error) {
 	return nil, 0, nil
 }
+func (r *fakeDocRepo) FindReferrers(context.Context, uuid.UUID, uuid.UUID, int64) ([]models.WikiDocument, error) {
+	return nil, nil
+}
 
 type fakeImageIngestor struct{ count int }
 

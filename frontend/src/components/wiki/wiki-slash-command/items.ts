@@ -2,6 +2,7 @@ import type { Editor, Range } from "@tiptap/core"
 import {
   CircleAlertIcon,
   CircleCheckIcon,
+  FileTextIcon,
   Heading1Icon,
   Heading2Icon,
   Heading3Icon,
@@ -23,6 +24,7 @@ import { pickAndUploadWikiImage } from "@/components/wiki/wiki-image-upload"
 import { pickAndUploadWikiFile } from "@/components/wiki/wiki-file-upload"
 import { startLinkInsert } from "@/components/wiki/wiki-link-popover"
 import { openCredentialPicker } from "@/components/wiki/wiki-credential-picker"
+import { openDocumentPicker } from "@/components/wiki/wiki-document-picker"
 import type { NoticeVariant } from "@/components/wiki/wiki-notice-node"
 
 /** Context the slash command plugin passes through to every item's command.
@@ -219,6 +221,32 @@ export const SLASH_ITEMS: SlashItem[] = [
       // the Cmd+K, bubble-menu, and slash entry points all behave the same.
       editor.chain().focus().deleteRange(range).run()
       startLinkInsert(editor)
+    },
+  },
+  {
+    title: "Document reference",
+    description: "Link inline to another wiki document",
+    keywords: [
+      "doc",
+      "doc:",
+      "document",
+      "page",
+      "wiki",
+      "ref",
+      "reference",
+      "mention",
+    ],
+    icon: FileTextIcon,
+    command: ({ editor, range, context }) => {
+      // Drop the slash trigger first so the chip lands where the user typed.
+      editor.chain().focus().deleteRange(range).run()
+      const pos = editor.state.selection.from
+      openDocumentPicker({
+        editor,
+        operationId: context.operationId,
+        insertPos: pos,
+        excludeIds: [context.documentId],
+      })
     },
   },
   {

@@ -19,6 +19,34 @@ export const WikiDocumentTreeFields = graphql(`
   }
 `)
 
+// Minimal projection used by the inline /doc chip — never reads content.
+// A page can cite the same doc many times; this fragment is shared across
+// all chip instances via the per-id query cache key.
+export const WikiDocumentLiteFields = graphql(`
+  fragment WikiDocumentLiteFields on WikiDocument {
+    id
+    title
+    emoji
+    icon
+    color
+    deletedAt
+  }
+`)
+
+// Backlink row fields. Carries one ancestor segment so the UI can
+// disambiguate same-titled pages without pulling the full breadcrumb chain.
+export const WikiDocumentBacklinkFields = graphql(`
+  fragment WikiDocumentBacklinkFields on WikiDocument {
+    id
+    title
+    emoji
+    icon
+    color
+    updatedAt
+    ancestors { id title emoji icon color isDeleted }
+  }
+`)
+
 // Full document fields including content and metadata.
 export const WikiDocumentFields = graphql(`
   fragment WikiDocumentFields on WikiDocument {
@@ -175,6 +203,22 @@ export const WikiSearchQuery = graphql(`
       }
       total
       hasMore
+    }
+  }
+`)
+
+export const WikiDocumentLiteQuery = graphql(`
+  query WikiDocumentLite($id: ID!) {
+    wikiDocument(id: $id) {
+      ...WikiDocumentLiteFields
+    }
+  }
+`)
+
+export const WikiDocumentBacklinksQuery = graphql(`
+  query WikiDocumentBacklinks($documentId: ID!) {
+    wikiDocumentBacklinks(documentId: $documentId) {
+      ...WikiDocumentBacklinkFields
     }
   }
 `)

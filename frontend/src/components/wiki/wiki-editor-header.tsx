@@ -13,7 +13,11 @@ import { Button } from "@/components/ui/button"
 import { Popover, PopoverTrigger, PopoverContent } from "@/components/ui/popover"
 import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
-import { useUpdateWikiDocument, useWikiDocumentPresence } from "@/graphql/hooks/wiki"
+import {
+  useUpdateWikiDocument,
+  useWikiDocumentBacklinks,
+  useWikiDocumentPresence,
+} from "@/graphql/hooks/wiki"
 import { getCursorColor } from "@/lib/cursor-colors"
 import { useWikiStore } from "@/stores/wiki"
 import {
@@ -95,6 +99,12 @@ export function WikiEditorHeader({
     () => getDirectChildren(treeDocuments, doc.id),
     [treeDocuments, doc.id],
   )
+
+  // Same idea for backlinks. Reuses the cached query already populated by
+  // the footer's WikiBacklinkList — TanStack Query dedupes by key so this
+  // never doubles the network roundtrip.
+  const { data: backlinksData } = useWikiDocumentBacklinks(doc.id)
+  const backlinks = backlinksData?.wikiDocumentBacklinks ?? []
 
   function handleTitleBlur() {
     const trimmed = title.trim()
@@ -239,7 +249,7 @@ export function WikiEditorHeader({
                   icon={child.icon}
                   color={child.color}
                 />
-                <span className="min-w-0 flex-1 truncate">{child.title}</span>
+                <span className="min-w-0 flex-1 truncate">{child.title || "Untitled"}</span>
                 {child.childCount > 0 && (
                   <span className="shrink-0 text-xs text-muted-foreground">
                     {child.childCount}
@@ -247,6 +257,56 @@ export function WikiEditorHeader({
                 )}
               </Link>
             ))}
+          </PopoverContent>
+        </Popover>
+      )}
+
+      {/* Backlinks dropdown — mirror of the children dropdown for incoming
+          /doc references. Shown only when at least one other document cites
+          this page inline, so unreferenced pages don't get a noisy "0" pill. */}
+      {backlinks.length > 0 && (
+        <Popover>
+          <PopoverTrigger
+            render={
+              <Button
+                variant="ghost"
+                size="xs"
+                className="shrink-0 text-muted-foreground"
+              />
+            }
+          >
+            <ChevronDownIcon className="size-3.5" />
+            {backlinks.length}{" "}
+            {backlinks.length === 1 ? "backlink" : "backlinks"}
+          </PopoverTrigger>
+          <PopoverContent align="start" className="w-auto min-w-56 max-w-72 p-1">
+            {backlinks.map((ref) => {
+              const parent =
+                ref.ancestors.length > 0
+                  ? ref.ancestors[ref.ancestors.length - 1]
+                  : null
+              return (
+                <Link
+                  key={ref.id}
+                  to={`/wiki/${ref.id}`}
+                  className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm hover:bg-accent"
+                >
+                  <DocumentIcon
+                    emoji={ref.emoji}
+                    icon={ref.icon}
+                    color={ref.color}
+                  />
+                  <span className="min-w-0 flex-1 truncate">
+                    {ref.title || "Untitled"}
+                    {parent && (
+                      <span className="ml-1.5 text-xs text-muted-foreground/70">
+                        in {parent.title || "Untitled"}
+                      </span>
+                    )}
+                  </span>
+                </Link>
+              )
+            })}
           </PopoverContent>
         </Popover>
       )}

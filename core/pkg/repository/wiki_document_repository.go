@@ -58,6 +58,11 @@ type IWikiDocumentRepository interface {
 	FindChangedSinceLastBackup(ctx context.Context, batchSize int64) ([]models.WikiDocument, error)
 	RestoreFromBackup(ctx context.Context, docID uuid.UUID, content string, contentState []byte) error
 	SearchByOperationID(ctx context.Context, opID uuid.UUID, scopeParentID *uuid.UUID, query string, offset, limit int64) (hits []WikiDocumentSearchHit, total int64, err error)
+	// FindReferrers returns active documents in opID whose References array
+	// contains documentID. Self-references are excluded. Trashed referrers are
+	// excluded. Ordered by most recently updated; capped at limit (caller
+	// supplies a sane cap, e.g. 200).
+	FindReferrers(ctx context.Context, opID, documentID uuid.UUID, limit int64) ([]models.WikiDocument, error)
 }
 
 type wikiDocumentRepository struct {
@@ -78,6 +83,10 @@ func NewWikiDocumentRepository(db database.Database) IWikiDocumentRepository {
 		// index as long as the pattern is anchored and does NOT use $options:"i".
 		{Key: []string{"operation_id", "title_lower"}},
 		{Key: []string{"operation_id", "parent_document_id", "title_lower"}},
+		// Backlinks: "documents in this operation that reference doc X".
+		// Multikey index on the References array; deleted_at trails so the
+		// resolver can both match and filter trashed referrers in one scan.
+		{Key: []string{"operation_id", "references", "deleted_at"}},
 	})
 
 	setupWikiSearchIndexes(coll)
@@ -441,6 +450,21 @@ func (r *wikiDocumentRepository) RestoreFromBackup(ctx context.Context, docID uu
 		bson.M{"document_id": docID},
 		bson.M{"$set": updates},
 	)
+}
+
+// FindReferrers lists active documents in opID whose References array contains
+// documentID — the inverse of the inline /doc reference. Self-references are
+// excluded server-side so a doc that cites itself never appears in its own
+// backlinks list. Sorted by most recently updated.
+func (r *wikiDocumentRepository) FindReferrers(ctx context.Context, opID, documentID uuid.UUID, limit int64) ([]models.WikiDocument, error) {
+	var docs []models.WikiDocument
+	err := r.coll.Find(ctx, bson.M{
+		"operation_id": opID,
+		"references":   documentID,
+		"deleted_at":   nil,
+		"document_id":  bson.M{"$ne": documentID},
+	}).Sort("-updateAt", "-_id").Limit(limit).All(&docs)
+	return docs, err
 }
 
 func buildWikiDocumentFilter(opID uuid.UUID, filter WikiDocumentFilter) bson.M {

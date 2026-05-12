@@ -44,4 +44,10 @@ type WikiDocument struct {
 	LastBackupAt       *time.Time `bson:"last_backup_at,omitempty" json:"lastBackupAt,omitempty"`
 	DeletedAt          *time.Time `bson:"deleted_at,omitempty" json:"deletedAt,omitempty"`
 	DeletedByID        *uuid.UUID `bson:"deleted_by_id,omitempty" json:"deletedById,omitempty"`
+	// References lists the document IDs that this document cites inline via the
+	// /doc slash command (wikiDocumentReference nodes). Rewritten in full by
+	// the Hocuspocus sidecar on every content persist — the editor JSON is the
+	// source of truth. Used to drive the backlinks resolver. Plain markdown
+	// links (<a href="/wiki/…">) are intentionally not tracked here.
+	References []uuid.UUID `bson:"references,omitempty" json:"-"`
 }

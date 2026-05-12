@@ -36,6 +36,11 @@ type WikiDocument {
   icon: String!
   sortOrder: String!
   childCount: Int!
+  # Other active documents in this operation that cite this one inline via
+  # the /doc slash command. Trashed referrers are excluded; self-references
+  # are excluded. Capped at 200 most recently updated — past that, refining
+  # the source documents is the expected fix, not pagination.
+  backlinks: [WikiDocument!]!
   # Parent chain from root to the document's immediate parent (excludes self).
   # Walks through trashed ancestors too — each segment carries an isDeleted
   # flag so the client can render them distinctly. Empty for root documents.
@@ -249,6 +254,12 @@ extend type Query {
   # restores a doc whose subtree was cascade-deleted, this lists what would
   # come back if they choose "restore all". Returns documents in BFS order.
   wikiDocumentTrashedDescendants(documentId: ID!): [WikiDocument!]!
+    @hasPermission(permission: "operation:member")
+
+  # Same data as WikiDocument.backlinks, exposed standalone so the editor
+  # footer can refetch backlinks independently (e.g. after a wikiDocumentChanged
+  # event) without re-pulling the whole document.
+  wikiDocumentBacklinks(documentId: ID!): [WikiDocument!]!
     @hasPermission(permission: "operation:member")
 
   wikiDocumentBackups(

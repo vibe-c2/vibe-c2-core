@@ -1,6 +1,7 @@
 import { Database } from "@hocuspocus/extension-database";
 import { Binary, MongoClient, type Db } from "mongodb";
 import * as Y from "yjs";
+import { collectReferenceIds } from "./references.js";
 
 /**
  * Convert a UUID string to a BSON Binary matching how the Go backend (qmgo)
@@ -145,8 +146,10 @@ export function createDatabaseExtension(): Database {
 
       const xmlFragment = ydoc.getXmlFragment("default");
       let markdown: string;
+      let referenceBinaries: Binary[] = [];
       if (xmlFragment.length > 0) {
         markdown = extractTextFromFragment(xmlFragment);
+        referenceBinaries = collectReferenceBinaries(xmlFragment);
       } else {
         markdown = ydoc.getText("content").toString();
       }
@@ -167,6 +170,10 @@ export function createDatabaseExtension(): Database {
         // hook never fires. Set it explicitly so GraphQL `updatedAt`
         // reflects content edits, not just metadata ones.
         updateAt: now,
+        // Rewrite the full references array on every save. Removing the
+        // last /doc chip leaves an empty array (not absent), so the
+        // backlinks resolver immediately stops returning this doc.
+        references: referenceBinaries,
       };
 
       if (ctx?.userId) {
@@ -206,6 +213,28 @@ function extractTextFromFragment(node: Y.XmlFragment | Y.XmlElement): string {
     }
   }
   return parts.join("\n").trim();
+}
+
+/**
+ * Wrap collectReferenceIds with the BSON Binary conversion that Mongo needs.
+ * Pure ID extraction lives in references.ts; persistence only owns the I/O
+ * boundary (Mongo Binary, Y.js round-trip, webhook dispatch).
+ */
+function collectReferenceBinaries(
+  node: Y.XmlFragment | Y.XmlElement
+): Binary[] {
+  const ids = collectReferenceIds(node);
+  const out: Binary[] = [];
+  for (const id of ids) {
+    try {
+      out.push(uuidToBinary(id));
+    } catch {
+      // uuidToBinary validates hex length — defense in depth on top of the
+      // UUID regex inside collectReferenceIds. A single bad ID never blocks
+      // the save.
+    }
+  }
+  return out;
 }
 
 export { debounceMs };

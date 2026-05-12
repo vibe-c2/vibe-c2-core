@@ -22,6 +22,10 @@ const (
 	maxContentSize  = 1 * 1024 * 1024 // 1 MB
 	maxNestingDepth = 10
 	maxSearchLength = 200
+	// maxBacklinks caps both the standalone query and the WikiDocument.backlinks
+	// field. Past this point the UI would degrade into a wall of rows and the
+	// right fix is editing the referrers, not paginating the list.
+	maxBacklinks = 200
 )
 
 // IWikiDocumentResolver defines the business logic methods for wiki documents and backups.
@@ -45,6 +49,7 @@ type IWikiDocumentResolver interface {
 	WikiDocumentTree(ctx context.Context, operationID string) ([]*models.WikiDocument, error)
 	WikiDocumentTrash(ctx context.Context, operationID string, first *int, after *string, last *int, before *string) (*model.WikiDocumentConnection, error)
 	WikiDocumentTrashedDescendants(ctx context.Context, documentID string) ([]*models.WikiDocument, error)
+	WikiDocumentBacklinks(ctx context.Context, documentID string) ([]*models.WikiDocument, error)
 	WikiSearch(ctx context.Context, operationID string, scope *string, query string, offset *int, limit *int) (*model.WikiSearchConnection, error)
 
 	// Backup queries
@@ -61,6 +66,7 @@ type IWikiDocumentResolver interface {
 	WikiDocumentParentDocument(ctx context.Context, obj *models.WikiDocument) (*models.WikiDocument, error)
 	WikiDocumentChildDocuments(ctx context.Context, obj *models.WikiDocument) ([]*models.WikiDocument, error)
 	WikiDocumentChildCount(ctx context.Context, obj *models.WikiDocument) (int, error)
+	WikiDocumentBacklinksField(ctx context.Context, obj *models.WikiDocument) ([]*models.WikiDocument, error)
 	WikiDocumentAncestors(ctx context.Context, obj *models.WikiDocument) ([]*model.WikiDocumentAncestor, error)
 	WikiDocumentCreatedBy(ctx context.Context, obj *models.WikiDocument) (*models.User, error)
 	WikiDocumentLastUpdatedBy(ctx context.Context, obj *models.WikiDocument) (*models.User, error)
@@ -1069,6 +1075,43 @@ func (r *wikiDocumentResolver) WikiDocumentTrashedDescendants(ctx context.Contex
 	return out, nil
 }
 
+// WikiDocumentBacklinks returns the documents that cite documentID inline.
+// Standalone query path — used by the editor footer's backlinks list and by
+// invalidation flows that don't want to refetch the entire WikiDocument.
+func (r *wikiDocumentResolver) WikiDocumentBacklinks(ctx context.Context, documentID string) ([]*models.WikiDocument, error) {
+	uid, err := uuid.Parse(documentID)
+	if err != nil {
+		return nil, fmt.Errorf("invalid document ID: %w", err)
+	}
+
+	doc, err := r.docRepo.FindByID(ctx, uid)
+	if err != nil {
+		return nil, fmt.Errorf("document not found: %w", err)
+	}
+
+	if err := r.authorizeForOperation(ctx, doc.OperationID, models.OperationRoleViewer); err != nil {
+		return nil, err
+	}
+
+	return r.fetchBacklinks(ctx, &doc)
+}
+
+// fetchBacklinks is the shared body of the standalone query and the
+// WikiDocument.backlinks field resolver. Pulled out so the field path can
+// skip re-fetching and re-authorizing the document — gqlgen has already
+// resolved obj from an authorized query.
+func (r *wikiDocumentResolver) fetchBacklinks(ctx context.Context, doc *models.WikiDocument) ([]*models.WikiDocument, error) {
+	referrers, err := r.docRepo.FindReferrers(ctx, doc.OperationID, doc.DocumentID, maxBacklinks)
+	if err != nil {
+		return nil, fmt.Errorf("failed to list backlinks: %w", err)
+	}
+	out := make([]*models.WikiDocument, len(referrers))
+	for i := range referrers {
+		out[i] = &referrers[i]
+	}
+	return out, nil
+}
+
 // --- Backup queries ---
 
 func (r *wikiDocumentResolver) WikiDocumentBackups(ctx context.Context, documentID string, trigger *models.WikiDocumentBackupTrigger, first *int, after *string, last *int, before *string) (*model.WikiDocumentBackupConnection, error) {
@@ -1282,6 +1325,13 @@ func (r *wikiDocumentResolver) WikiDocumentChildCount(ctx context.Context, obj *
 		return 0, fmt.Errorf("failed to count children: %w", err)
 	}
 	return int(count), nil
+}
+
+// WikiDocumentBacklinksField is the field resolver for WikiDocument.backlinks.
+// Auth already happened on the parent query — skip the re-authorize that the
+// standalone WikiDocumentBacklinks path performs.
+func (r *wikiDocumentResolver) WikiDocumentBacklinksField(ctx context.Context, obj *models.WikiDocument) ([]*models.WikiDocument, error) {
+	return r.fetchBacklinks(ctx, obj)
 }
 
 func (r *wikiDocumentResolver) WikiDocumentCreatedBy(ctx context.Context, obj *models.WikiDocument) (*models.User, error) {
