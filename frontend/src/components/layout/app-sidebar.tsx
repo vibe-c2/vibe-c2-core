@@ -39,12 +39,21 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
           </SidebarMenuItem>
         </SidebarMenu>
       </SidebarHeader>
+      {/* Global items (Findings) stay visible whether or not an operation
+          is scoped; Findings switches to its cross-operation mode in that
+          case so users can search across the operations they belong to.
+          Render scoped + global items inside a single NavMain (and thus a
+          single SidebarGroup) so the spacing between them matches the
+          gap between scoped items — otherwise stacked p-2 padding from two
+          groups doubles the visual gap. */}
       <SidebarContent className="flex flex-col">
-        {scopedOperation && <NavMain items={navigationItems} />}
-        {/* Global items (Findings) stay visible whether or not an operation
-            is scoped; Findings switches to its cross-operation mode in that
-            case so users can search across the operations they belong to. */}
-        <NavMain items={navigationGlobalItems} />
+        <NavMain
+          items={
+            scopedOperation
+              ? [...navigationItems, ...navigationGlobalItems]
+              : navigationGlobalItems
+          }
+        />
         {visibleAdminItems.length > 0 && (
           <div className="mt-auto">
             <NavMain items={visibleAdminItems} />
