@@ -1,5 +1,5 @@
 import { NodeViewWrapper, type NodeViewProps } from "@tiptap/react"
-import { useNavigate } from "react-router"
+import { Link } from "react-router"
 import { FileTextIcon, LinkIcon } from "lucide-react"
 import { DocumentIcon } from "@/components/wiki/document-icon"
 import { useWikiDocumentLite } from "@/graphql/hooks/wiki"
@@ -16,7 +16,6 @@ import { cn } from "@/lib/utils"
  */
 export function WikiDocumentChip({ node, selected }: NodeViewProps) {
   const id = (node.attrs.documentId as string | null) ?? ""
-  const navigate = useNavigate()
   const { data, isLoading, error } = useWikiDocumentLite(id)
   const doc = data?.wikiDocument
 
@@ -80,32 +79,41 @@ export function WikiDocumentChip({ node, selected }: NodeViewProps) {
   const isDeleted = !!doc.deletedAt
   const displayTitle = doc.title || "Untitled"
 
+  const iconAndLabel = (
+    <>
+      <span className="wiki-document-chip__icon">
+        <DocumentIcon emoji={doc.emoji} icon={doc.icon} color={doc.color} />
+      </span>
+      <span className="wiki-document-chip__name">{displayTitle}</span>
+    </>
+  )
+
+  if (isDeleted) {
+    return (
+      <NodeViewWrapper as="span" className="wiki-document-chip-wrapper">
+        <span
+          className={cn(
+            "wiki-document-chip wiki-document-chip--missing",
+            selected && "is-selected",
+          )}
+          aria-disabled="true"
+          title="This document is in the trash"
+        >
+          {iconAndLabel}
+        </span>
+      </NodeViewWrapper>
+    )
+  }
+
   return (
     <NodeViewWrapper as="span" className="wiki-document-chip-wrapper">
-      <button
-        type="button"
-        onClick={(e) => {
-          e.preventDefault()
-          if (isDeleted) return
-          navigate(`/wiki/${doc.id}`)
-        }}
-        disabled={isDeleted}
-        className={cn(
-          "wiki-document-chip",
-          isDeleted && "wiki-document-chip--missing",
-          selected && "is-selected",
-        )}
-        title={isDeleted ? "This document is in the trash" : displayTitle}
+      <Link
+        to={`/wiki/${doc.id}`}
+        className={cn("wiki-document-chip", selected && "is-selected")}
+        title={displayTitle}
       >
-        <span className="wiki-document-chip__icon">
-          <DocumentIcon
-            emoji={doc.emoji}
-            icon={doc.icon}
-            color={doc.color}
-          />
-        </span>
-        <span className="wiki-document-chip__name">{displayTitle}</span>
-      </button>
+        {iconAndLabel}
+      </Link>
     </NodeViewWrapper>
   )
 }
