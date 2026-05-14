@@ -27,7 +27,7 @@ func (a *App) NewRouter() *gin.Engine {
 
 	// Global middleware
 	r.Use(middleware.Recovery(a.logger))
-	r.Use(middleware.Cors())
+	r.Use(middleware.Cors(a.env.CORSAllowedOrigins))
 	r.Use(middleware.Logger(a.logger))
 
 	// Controllers

@@ -69,6 +69,9 @@ type EnvironmentSettings struct {
 	AuthRefreshTTL      time.Duration
 	AuthRefreshGraceTTL time.Duration
 	AuthCSRFEnabled     bool
+
+	// CORS
+	CORSAllowedOrigins []string
 }
 
 func init() {
@@ -109,6 +112,7 @@ func init() {
 	viper.SetDefault("AUTH_REFRESH_TTL", "168h")
 	viper.SetDefault("AUTH_REFRESH_GRACE_TTL", "10s")
 	viper.SetDefault("AUTH_CSRF_ENABLED", true)
+	viper.SetDefault("CORS_ALLOWED_ORIGINS", "http://localhost:5173,http://localhost:8080")
 
 	env = &EnvironmentSettings{
 		StageStatus: viper.GetString("APP_STAGE_STATUS"),
@@ -166,6 +170,9 @@ func init() {
 		AuthRefreshTTL:      parseDurationOrFatal("AUTH_REFRESH_TTL", viper.GetString("AUTH_REFRESH_TTL")),
 		AuthRefreshGraceTTL: parseDurationOrFatal("AUTH_REFRESH_GRACE_TTL", viper.GetString("AUTH_REFRESH_GRACE_TTL")),
 		AuthCSRFEnabled:     viper.GetBool("AUTH_CSRF_ENABLED"),
+
+		// CORS
+		CORSAllowedOrigins: parseCSV(viper.GetString("CORS_ALLOWED_ORIGINS")),
 	}
 
 	// Validate required configuration — fail fast on missing critical values.
