@@ -1,9 +1,10 @@
-import { useMemo } from "react"
+import { useMemo, useState, useTransition } from "react"
 import { useQueryClient } from "@tanstack/react-query"
 import {
   ChevronsDownUpIcon,
   ChevronsUpDownIcon,
   DownloadIcon,
+  Loader2Icon,
   PlusIcon,
   SearchIcon,
   Trash2Icon,
@@ -356,10 +357,27 @@ export function WikiTreeSidebar({
   // has never opened, which was the pre-fix gap.
   const ensureWikiTree = useEnsureWikiTree(operationId)
 
+  // Two phases dominate on huge trees: the GraphQL fetch (network/server)
+  // and the React commit that mounts every newly-expanded row. `isFetching`
+  // covers the first; `useTransition`'s pending flag covers the second. We
+  // OR them together so the spinner stays visible from click until the last
+  // row paints.
+  const [isFetching, setIsFetching] = useState(false)
+  const [isExpanding, startExpandTransition] = useTransition()
+  const expandAllLoading = isFetching || isExpanding
+
   async function handleExpandAll() {
-    const rows = await ensureWikiTree()
-    const ids = collectExpandableIdsFromFlat(rows, null)
-    expandMany(ids)
+    if (expandAllLoading) return
+    setIsFetching(true)
+    try {
+      const rows = await ensureWikiTree()
+      const ids = collectExpandableIdsFromFlat(rows, null)
+      // startTransition keeps the spinner responsive while React commits the
+      // (potentially thousands of) newly-rendered rows in the background.
+      startExpandTransition(() => expandMany(ids))
+    } finally {
+      setIsFetching(false)
+    }
   }
 
   return (
@@ -381,12 +399,19 @@ export function WikiTreeSidebar({
                 variant="ghost"
                 size="icon-xs"
                 onClick={handleExpandAll}
+                disabled={expandAllLoading}
               />
             }
           >
-            <ChevronsUpDownIcon className="size-3.5" />
+            {expandAllLoading ? (
+              <Loader2Icon className="size-3.5 animate-spin" />
+            ) : (
+              <ChevronsUpDownIcon className="size-3.5" />
+            )}
           </TooltipTrigger>
-          <TooltipContent>Expand all</TooltipContent>
+          <TooltipContent>
+            {expandAllLoading ? "Expanding…" : "Expand all"}
+          </TooltipContent>
         </Tooltip>
         <Tooltip>
           <TooltipTrigger

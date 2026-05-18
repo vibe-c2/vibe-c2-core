@@ -1,4 +1,4 @@
-import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react"
+import { memo, useCallback, useEffect, useMemo, useRef, useState, useTransition } from "react"
 import { Link, useParams } from "react-router"
 import { useDraggable, useDroppable } from "@dnd-kit/core"
 import {
@@ -9,6 +9,7 @@ import {
   EllipsisIcon,
   FilePlusIcon,
   FolderInputIcon,
+  Loader2Icon,
   PencilIcon,
   PlusIcon,
   SearchIcon,
@@ -340,6 +341,32 @@ function WikiTreeRowQuickActionsImpl({
   // re-render whenever the menu opens or closes.
   const [menuOpen, setMenuOpen] = useState(false)
 
+  // Subtree expand/collapse can be slow on huge ops: the GraphQL fetch
+  // (network/server) plus the React commit that mounts every newly-rendered
+  // descendant row. `isFetching` covers the fetch; `useTransition`'s pending
+  // flag covers the commit. We share one loading state across both subtree
+  // buttons — they share the same fetch and only one runs at a time.
+  const [isFetching, setIsFetching] = useState(false)
+  const [isCommitting, startCommitTransition] = useTransition()
+  const subtreeLoading = isFetching || isCommitting
+
+  async function runSubtreeAction(action: "expand" | "collapse") {
+    if (subtreeLoading) return
+    setIsFetching(true)
+    try {
+      const rows = await ensureWikiTree()
+      const ids = collectExpandableIdsFromFlat(rows, node.id)
+      // startTransition keeps the spinner responsive while React commits the
+      // expansion/collapse of (potentially thousands of) descendant rows.
+      startCommitTransition(() => {
+        if (action === "expand") expandMany(ids)
+        else collapseMany(ids)
+      })
+    } finally {
+      setIsFetching(false)
+    }
+  }
+
   // childCount is the canonical "has any children?" signal (cheap, comes
   // from the server). The "Expand/Collapse subtree" buttons prime the full
   // operation tree on click so they cover unloaded branches.
@@ -365,22 +392,31 @@ function WikiTreeRowQuickActionsImpl({
                 <Button
                   variant="ghost"
                   size="icon-xs"
-                  className="shrink-0 hidden group-hover:inline-flex"
-                  onClick={async (e) => {
+                  className={cn(
+                    "shrink-0",
+                    // Keep the spinner visible during the long-running case
+                    // even when the cursor is no longer hovering the row.
+                    subtreeLoading
+                      ? "inline-flex"
+                      : "hidden group-hover:inline-flex",
+                  )}
+                  disabled={subtreeLoading}
+                  onClick={(e) => {
                     e.stopPropagation()
-                    // Walk every descendant (loaded or not) by priming the
-                    // full operation tree on demand, then expand every
-                    // non-leaf row from this node down.
-                    const rows = await ensureWikiTree()
-                    const ids = collectExpandableIdsFromFlat(rows, node.id)
-                    expandMany(ids)
+                    void runSubtreeAction("expand")
                   }}
                 />
               }
             >
-              <ChevronsUpDownIcon className="size-3.5" />
+              {subtreeLoading ? (
+                <Loader2Icon className="size-3.5 animate-spin" />
+              ) : (
+                <ChevronsUpDownIcon className="size-3.5" />
+              )}
             </TooltipTrigger>
-            <TooltipContent>Expand subtree</TooltipContent>
+            <TooltipContent>
+              {subtreeLoading ? "Working…" : "Expand subtree"}
+            </TooltipContent>
           </Tooltip>
           <Tooltip>
             <TooltipTrigger
@@ -389,11 +425,10 @@ function WikiTreeRowQuickActionsImpl({
                   variant="ghost"
                   size="icon-xs"
                   className="shrink-0 hidden group-hover:inline-flex"
-                  onClick={async (e) => {
+                  disabled={subtreeLoading}
+                  onClick={(e) => {
                     e.stopPropagation()
-                    const rows = await ensureWikiTree()
-                    const ids = collectExpandableIdsFromFlat(rows, node.id)
-                    collapseMany(ids)
+                    void runSubtreeAction("collapse")
                   }}
                 />
               }
