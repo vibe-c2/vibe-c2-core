@@ -236,77 +236,66 @@ export function useWikiDocumentHistory(operationId: string, options?: { enabled?
 
 // --- Mutations ---
 
+// --- SSE-owned mutations ---
+//
+// Each mutation in this block publishes a wikiDocumentChanged event
+// server-side. The actor receives the event back over SSE and
+// useWikiDocumentChangedSubscription invalidates every affected query in
+// one place. Adding onSuccess invalidation here would just duplicate
+// refetches (the SSE event arrives ~25 ms after the mutation response).
+//
+// Backup CRUD and visit-tracking mutations further down do NOT publish a
+// wikiDocumentChanged event — they keep their own onSuccess invalidation.
+
 export function useCreateWikiDocument() {
-  const queryClient = useQueryClient()
   return useMutation({
     mutationFn: (vars: { operationId: string; input: CreateWikiDocumentInput }) =>
       graphqlClient(CreateWikiDocumentDocument, vars),
-    onSuccess: (_data, vars) => {
-      queryClient.invalidateQueries({ queryKey: wikiKeys.tree(vars.operationId) })
-    },
   })
 }
 
 export function useUpdateWikiDocument() {
-  const queryClient = useQueryClient()
   return useMutation({
     mutationFn: (vars: { id: string; input: UpdateWikiDocumentInput }) =>
       graphqlClient(UpdateWikiDocumentDocument, vars),
-    onSuccess: (_data, vars) => {
-      queryClient.invalidateQueries({ queryKey: wikiKeys.detail(vars.id) })
-      queryClient.invalidateQueries({ queryKey: wikiKeys.trees() })
-    },
   })
 }
 
 export function useDeleteWikiDocument() {
-  const queryClient = useQueryClient()
   return useMutation({
     mutationFn: (id: string) =>
       graphqlClient(DeleteWikiDocumentDocument, { id }),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: wikiKeys.trees() })
-      queryClient.invalidateQueries({ queryKey: wikiKeys.all.filter(() => true) })
-    },
   })
 }
 
 export function useRestoreWikiDocument() {
-  const queryClient = useQueryClient()
   return useMutation({
     mutationFn: (vars: { id: string; cascade?: boolean }) =>
       graphqlClient(RestoreWikiDocumentDocument, {
         id: vars.id,
         cascade: vars.cascade ?? false,
       }),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: wikiKeys.trees() })
-      queryClient.invalidateQueries({ queryKey: wikiKeys.all })
-    },
   })
 }
 
 export function usePermanentlyDeleteWikiDocument() {
-  const queryClient = useQueryClient()
   return useMutation({
     mutationFn: (id: string) =>
       graphqlClient(PermanentlyDeleteWikiDocumentDocument, { id }),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: wikiKeys.all })
-    },
   })
 }
 
 export function useEmptyWikiDocumentTrash() {
-  const queryClient = useQueryClient()
   return useMutation({
     mutationFn: (operationId: string) =>
       graphqlClient(EmptyWikiDocumentTrashDocument, { operationId }),
-    onSuccess: (_data, operationId) => {
-      queryClient.invalidateQueries({ queryKey: wikiKeys.trash(operationId) })
-    },
   })
 }
+
+// --- Self-invalidating mutations ---
+//
+// These mutations do not publish a wikiDocumentChanged event, so the SSE
+// subscription cannot refresh their derived caches. They invalidate locally.
 
 export function useCreateWikiDocumentBackup() {
   const queryClient = useQueryClient()
@@ -325,7 +314,10 @@ export function useRestoreWikiDocumentBackup() {
     mutationFn: (vars: { documentId: string; backupId: string }) =>
       graphqlClient(RestoreWikiDocumentBackupDocument, vars),
     onSuccess: (_data, vars) => {
-      queryClient.invalidateQueries({ queryKey: wikiKeys.detail(vars.documentId) })
+      // detail/lite/tree are refreshed by the wikiDocumentChanged SSE event
+      // (the restore publishes wiki.document.updated). The backup list has
+      // no event of its own, so refresh it here — a restore typically also
+      // creates a pre-restore safety backup, which should appear immediately.
       queryClient.invalidateQueries({ queryKey: wikiKeys.backups(vars.documentId) })
     },
   })
@@ -361,7 +353,15 @@ export function useTrackWikiDocumentVisit() {
 
 /**
  * Subscribe to real-time document change events via SSE.
- * Invalidates tree and trash caches on any document event.
+ *
+ * This is the single source of cache invalidation for every wiki document
+ * mutation that publishes a wikiDocumentChanged event server-side (create,
+ * update, soft-delete, restore, hard-delete, empty-trash, restore-backup).
+ * The actor receives their own event because the backend filter passes
+ * self-authored events through (see core/pkg/graphql/resolver/subscription_helpers.go).
+ *
+ * Mutations that do NOT publish a wikiDocumentChanged event (backup CRUD,
+ * visit tracking) keep their own onSuccess invalidation.
  */
 export function useWikiDocumentChangedSubscription(operationId: string) {
   const queryClient = useQueryClient()
@@ -371,16 +371,27 @@ export function useWikiDocumentChangedSubscription(operationId: string) {
       const { action, documentId, document } = data.wikiDocumentChanged
 
       if (action === "DELETED") {
+        // Hard- or soft-delete: drop per-document caches so we don't keep
+        // stale data around. Backups and trashed-descendants are removed
+        // outright because the doc they describe is gone or in trash.
         queryClient.removeQueries({ queryKey: wikiKeys.detail(documentId) })
         queryClient.removeQueries({ queryKey: wikiKeys.lite(documentId) })
+        queryClient.removeQueries({ queryKey: wikiKeys.backups(documentId) })
+        queryClient.removeQueries({ queryKey: wikiKeys.trashedDescendants(documentId) })
       } else if (document) {
         // Seed detail cache on create/update so navigating to the doc is instant.
         queryClient.invalidateQueries({ queryKey: wikiKeys.detail(documentId) })
         queryClient.invalidateQueries({ queryKey: wikiKeys.lite(documentId) })
       }
 
+      // Operation-scoped lists that may include or reference this document.
+      // histories() and lists() are invalidated wholesale — invalidateQueries
+      // is a no-op for queries that aren't mounted, so the cost is just a
+      // stale-flag flip when those views are closed.
       queryClient.invalidateQueries({ queryKey: wikiKeys.tree(operationId) })
       queryClient.invalidateQueries({ queryKey: wikiKeys.trash(operationId) })
+      queryClient.invalidateQueries({ queryKey: wikiKeys.histories() })
+      queryClient.invalidateQueries({ queryKey: wikiKeys.lists() })
 
       // Backlinks live on any document whose referrer set might have changed.
       // We don't know server-side which targets were affected by this edit, so
