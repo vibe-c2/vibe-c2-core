@@ -67,6 +67,15 @@ func TestParse_RealFixture_Attachments(t *testing.T) {
 		t.Errorf("attachment count: got %d want 2", len(got.AttachmentBlobs))
 	}
 
+	// Attachment keys are the `uploads/...` suffix exactly as it appears
+	// in the markdown — no collection prefix. The orchestrator looks up
+	// blobs by what the markdown wrote.
+	for k := range got.AttachmentBlobs {
+		if !strings.HasPrefix(k, "uploads/") {
+			t.Errorf("attachment key %q must start with uploads/", k)
+		}
+	}
+
 	testDoc := findDoc(got.Collections[0].Documents, "test")
 	if testDoc == nil {
 		t.Fatal("'test' doc missing")
@@ -84,6 +93,49 @@ func TestParse_RealFixture_Attachments(t *testing.T) {
 		if !found {
 			t.Errorf("attachment ref containing %q not found in %v", want, testDoc.AttachmentRefs)
 		}
+	}
+}
+
+// TestParse_NestedUploadsLayout covers Outline's workspace-export layout
+// where the `uploads/` directory lives deep inside the folder tree, not at
+// the collection root. The cropped single-collection fixture has uploads
+// at `<coll>/uploads/...`; a full workspace export emits paths like
+// `<coll>/<sub>/<sub2>/uploads/<userId>/<attId>/<file>`, and the doc's
+// markdown still references `uploads/<userId>/<attId>/<file>` regardless.
+// Regression for the bug where 946 docs imported with 0 attachments
+// because indexZip's `segments[1] == "uploads"` check only matched the
+// collection-root case.
+func TestParse_NestedUploadsLayout(t *testing.T) {
+	zr := buildZip(t, map[string]string{
+		"col/sub/sub2/doc.md":                                        "# doc\n[file 100](uploads/u1/a1/file.bin)\n",
+		"col/sub/sub2/uploads/u1/a1/file.bin":                        "binary",
+		"col/other/uploads/u2/a2/img.png":                            "png",
+		"col/uploads/u3/a3/at-collection-root.zip":                   "root-zip",
+		"col/wrong-path-without-uploads/u9/a9/should-be-ignored.txt": "no",
+	})
+	got, err := Parse(zr)
+	if err != nil {
+		t.Fatalf("Parse: %v", err)
+	}
+	wantKeys := map[string]bool{
+		"uploads/u1/a1/file.bin":               false,
+		"uploads/u2/a2/img.png":                false,
+		"uploads/u3/a3/at-collection-root.zip": false,
+	}
+	for k := range got.AttachmentBlobs {
+		if _, ok := wantKeys[k]; !ok {
+			t.Errorf("unexpected attachment key: %q", k)
+			continue
+		}
+		wantKeys[k] = true
+	}
+	for k, seen := range wantKeys {
+		if !seen {
+			t.Errorf("attachment key %q not cataloged", k)
+		}
+	}
+	if _, bad := got.AttachmentBlobs["wrong-path-without-uploads/u9/a9/should-be-ignored.txt"]; bad {
+		t.Error("non-uploads file got cataloged as attachment")
 	}
 }
 
@@ -121,8 +173,8 @@ func TestParse_AllowsDoubleDotInFilename(t *testing.T) {
 	// not crash the import. Regression for the Post-Exploitation export
 	// failure where "WMI Disable. Reasons%2Fsolutions..md" was rejected.
 	zr := buildZip(t, map[string]string{
-		"col/solutions..md":  "# solutions\nbody\n",
-		"col/v1.0..md":       "# v1.0\nbody\n",
+		"col/solutions..md":   "# solutions\nbody\n",
+		"col/v1.0..md":        "# v1.0\nbody\n",
 		"col/sub/foo..bar.md": "# foo bar\nbody\n",
 	})
 	got, err := Parse(zr)

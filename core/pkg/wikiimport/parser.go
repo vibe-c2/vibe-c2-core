@@ -164,9 +164,17 @@ func indexZip(zr *zip.Reader) (*indexedZip, error) {
 			continue
 		}
 
-		// Attachments live under <collection>/uploads/...
-		if len(segments) >= 2 && segments[1] == "uploads" {
-			out.attachments[f.Name] = f
+		// Attachments live in some `<...>/uploads/<userId>/<attId>/<filename>`
+		// path. Outline puts the `uploads/` directory at the collection root
+		// in a single-collection export but DEEP inside each containing
+		// folder in a workspace export — `avia.ru/caica.ru/Humans/uploads/...`
+		// is real. Markdown refs always say `uploads/<userId>/<attId>/<file>`
+		// regardless of doc location, so we key the map by that suffix
+		// (`uploads/...`) and let the orchestrator look up exactly what the
+		// markdown wrote.
+		if uploadsIdx := indexOfUploadsSegment(segments); uploadsIdx >= 0 {
+			suffix := strings.Join(segments[uploadsIdx:], "/")
+			out.attachments[suffix] = f
 			continue
 		}
 
@@ -183,6 +191,18 @@ func indexZip(zr *zip.Reader) (*indexedZip, error) {
 	}
 
 	return out, nil
+}
+
+// indexOfUploadsSegment returns the index of the first segment named
+// "uploads" that is followed by at least one more segment (so the entry is
+// an attachment file, not an empty uploads dir). Returns -1 when none found.
+func indexOfUploadsSegment(segments []string) int {
+	for i := 0; i < len(segments)-1; i++ {
+		if segments[i] == "uploads" {
+			return i
+		}
+	}
+	return -1
 }
 
 // buildDocTree turns a flat list of (relPath, file) pairs into a nested Doc

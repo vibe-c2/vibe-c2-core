@@ -166,11 +166,10 @@ func (o *Orchestrator) Run(
 		}
 
 		o.processDocs(ctx, processCtx{
-			export:         export,
-			operationID:    operationID,
-			callerID:       callerID,
-			report:         report,
-			collectionName: coll.Name,
+			export:      export,
+			operationID: operationID,
+			callerID:    callerID,
+			report:      report,
 		}, coll.Documents, collectionParent.DocumentID, coll.Name+"/")
 	}
 
@@ -198,11 +197,10 @@ func (o *Orchestrator) Run(
 // processCtx bundles the per-import context that recursive document
 // processing needs. Avoids passing seven scalars through every recursion.
 type processCtx struct {
-	export         *ParsedExport
-	operationID    uuid.UUID
-	callerID       uuid.UUID
-	report         *Report
-	collectionName string // prepended when resolving an attachment ref to a zip path
+	export      *ParsedExport
+	operationID uuid.UUID
+	callerID    uuid.UUID
+	report      *Report
 }
 
 func (o *Orchestrator) processDocs(
@@ -327,16 +325,17 @@ func (o *Orchestrator) ingestAttachmentsAndRewrite(
 ) string {
 	body := parsed.BodyMarkdown
 	for _, ref := range parsed.AttachmentRefs {
-		// `ref` is the URL-encoded zip path *relative to the collection
-		// root* as it appears in the markdown. The AttachmentBlobs map
-		// keys are full zip paths, so we prefix the collection name and
-		// decode the URL-escapes before lookup.
-		decoded := pctx.collectionName + "/" + decodeURLPath(ref)
+		// `ref` is the URL-encoded `uploads/<userId>/<attId>/<filename>`
+		// suffix as it appears in the markdown. The AttachmentBlobs map
+		// is keyed by the same suffix regardless of where the `uploads/`
+		// directory actually sits in the zip (collection root, or deep
+		// inside a workspace export). Decode URL-escapes before lookup.
+		decoded := decodeURLPath(ref)
 		blob, ok := pctx.export.AttachmentBlobs[decoded]
 		if !ok {
 			// Older Outline exports may not URL-encode every character;
 			// retry with the as-written form.
-			blob, ok = pctx.export.AttachmentBlobs[pctx.collectionName+"/"+ref]
+			blob, ok = pctx.export.AttachmentBlobs[ref]
 		}
 		if !ok {
 			o.logger.Warn("attachment blob not found in zip",

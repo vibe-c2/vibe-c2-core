@@ -12,7 +12,7 @@ This is a one-way import. Outline-side updates do not propagate; re-importing th
 
 ## 2. Outline Markdown Export Format
 
-The export is a `.zip` whose root contains exactly one folder per Outline collection. Inside each collection folder, every document is a `.md` file, and a document's children live in a sibling folder of the same name. Attachments live in `<collection>/uploads/`.
+The export is a `.zip` whose root contains exactly one folder per Outline collection. Inside each collection folder, every document is a `.md` file, and a document's children live in a sibling folder of the same name. Attachments live in an `uploads/` directory whose depth depends on the export type: a single-collection export places it at `<collection>/uploads/`, while a workspace export emits one `uploads/` directory inside each containing folder (e.g. `<collection>/<sub>/<sub2>/uploads/`). Markdown references the suffix `uploads/<userId>/<attId>/<filename>` regardless of where the directory actually sits in the zip; the importer keys the attachment map by that suffix so both layouts resolve.
 
 ### 2.1 Zip layout (from the test fixture)
 
