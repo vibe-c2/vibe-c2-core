@@ -45,9 +45,25 @@ export function useScopedOperationGuard() {
   // Shared validation logic.
   // silent=false (default): clears isValidating on success — used by the initial hydration gate.
   // silent=true: never touches isValidating — used by tab-focus background re-validation.
+  //
+  // Routes the MyOperationRole call through TanStack Query so the page-level
+  // useMyOperationRole(operationId) hook (mounted right after the gate
+  // succeeds) lands on a cache hit instead of firing the same query a second
+  // time. ensureQueryData on mount; fetchQuery (always network) on focus
+  // revalidate so a stale cached role doesn't mask a fresh "you were kicked".
   const doValidate = useCallback(async (silent: boolean, signal?: AbortSignal) => {
     try {
-      const result = await graphqlClient(MyOperationRoleDocument, { operationId: scopedId! })
+      const fetchRole = () =>
+        graphqlClient(MyOperationRoleDocument, { operationId: scopedId! })
+      const result = silent
+        ? await queryClient.fetchQuery({
+            queryKey: operationKeys.myRole(scopedId!),
+            queryFn: fetchRole,
+          })
+        : await queryClient.ensureQueryData({
+            queryKey: operationKeys.myRole(scopedId!),
+            queryFn: fetchRole,
+          })
       if (signal?.aborted) return
 
       if (result.myOperationRole) {
@@ -58,7 +74,10 @@ export function useScopedOperationGuard() {
 
       if (hasPermission("admin")) {
         try {
-          await graphqlClient(OperationDocument, { id: scopedId! })
+          await queryClient.ensureQueryData({
+            queryKey: operationKeys.detail(scopedId!),
+            queryFn: () => graphqlClient(OperationDocument, { id: scopedId! }),
+          })
           if (signal?.aborted) return
           lastValidatedAtRef.current = Date.now()
           if (!silent) setValidating(false)
@@ -78,7 +97,7 @@ export function useScopedOperationGuard() {
       unscopeOperation()
       toast.info(`Operation "${name}" is no longer accessible. Scope cleared.`)
     }
-  }, [scopedId, hasPermission, setValidating, unscopeOperation])
+  }, [scopedId, hasPermission, setValidating, unscopeOperation, queryClient])
 
   // --- Validation on mount / hydrate (blocking — shows loading gate) ---
   useEffect(() => {

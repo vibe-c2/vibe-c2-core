@@ -151,6 +151,11 @@ func NewHandler(
 			CurrentSessionID: c.GetString("sessionID"),
 		})
 
+		// Per-request scratch space for tree-style queries to share precomputed
+		// childCount values with the per-document field resolver, killing the
+		// N+1 Count() storm. See resolver.WikiTreeLoader.
+		ctx = resolver.WithWikiTreeLoader(ctx, resolver.NewWikiTreeLoader())
+
 		// Replace the request context with our auth-enriched context.
 		c.Request = c.Request.WithContext(ctx)
 

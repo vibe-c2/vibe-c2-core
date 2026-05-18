@@ -3,19 +3,27 @@ import { graphql } from "@/graphql/gql"
 // --- Fragments ---
 
 // Lightweight fields for tree rendering (no content).
+//
+// `parentDocumentId` is a scalar id (not a nested `parentDocument { id }`)
+// so the backend doesn't issue a per-row Mongo lookup just to surface the
+// parent's identity. `childCount` is precomputed in bulk by the tree-shaped
+// query resolvers (aggregation pipeline) so it's a constant-time read on
+// the wire, no N+1.
+//
+// Shared by the lazy-children query (wikiDocumentChildren), the reveal-path
+// query (wikiDocumentTreeRevealPath), and the legacy full-tree query
+// (wikiDocumentTree) — the latter is still used by the move dialog, which
+// lazy-fetches the full tree only when opened.
 export const WikiDocumentTreeFields = graphql(`
   fragment WikiDocumentTreeFields on WikiDocument {
     id
-    operationId
-    parentDocument { id }
+    parentDocumentId
     title
     emoji
     icon
     color
     sortOrder
     childCount
-    createdAt
-    updatedAt
   }
 `)
 
@@ -48,11 +56,16 @@ export const WikiDocumentBacklinkFields = graphql(`
 `)
 
 // Full document fields including content and metadata.
+//
+// `ancestors` is included so the editor header can render its breadcrumb
+// without consulting a separate flat tree — the server already walks the
+// parent chain and the data piggybacks on the single per-doc fetch.
 export const WikiDocumentFields = graphql(`
   fragment WikiDocumentFields on WikiDocument {
     id
     operationId
-    parentDocument { id }
+    parentDocumentId
+    ancestors { id title emoji icon color isDeleted }
     title
     content
     emoji
@@ -127,6 +140,37 @@ export const WikiDocumentTreeQuery = graphql(`
   }
 `)
 
+// Direct children of a parent (roots when parentDocumentId is null) — the
+// core query for the lazy sidebar. One request per expanded branch.
+export const WikiDocumentChildrenQuery = graphql(`
+  query WikiDocumentChildren($operationId: ID!, $parentDocumentId: ID) {
+    wikiDocumentChildren(
+      operationId: $operationId
+      parentDocumentId: $parentDocumentId
+    ) {
+      ...WikiDocumentTreeFields
+    }
+  }
+`)
+
+// Everything the sidebar needs to render itself expanded down to documentId:
+// roots + each ancestor's siblings. One round trip on direct-link landings.
+export const WikiDocumentTreeRevealPathQuery = graphql(`
+  query WikiDocumentTreeRevealPath($documentId: ID!) {
+    wikiDocumentTreeRevealPath(documentId: $documentId) {
+      ...WikiDocumentTreeFields
+    }
+  }
+`)
+
+// Cheap badge query for the trash icon. Replaces the old practice of
+// firing the full paginated trash list just to read its totalCount.
+export const WikiDocumentTrashCountQuery = graphql(`
+  query WikiDocumentTrashCount($operationId: ID!) {
+    wikiDocumentTrashCount(operationId: $operationId)
+  }
+`)
+
 export const WikiDocumentQuery = graphql(`
   query WikiDocument($id: ID!) {
     wikiDocument(id: $id) {
@@ -154,7 +198,7 @@ export const WikiDocumentsQuery = graphql(`
         node {
           id
           operationId
-          parentDocument { id }
+          parentDocumentId
           title
           emoji
           icon
@@ -194,7 +238,7 @@ export const WikiSearchQuery = graphql(`
           emoji
           icon
           color
-          parentDocument { id }
+          parentDocumentId
           createdBy { id username }
         }
         snippet
@@ -306,7 +350,7 @@ export const CreateWikiDocumentMutation = graphql(`
   mutation CreateWikiDocument($operationId: ID!, $input: CreateWikiDocumentInput!) {
     createWikiDocument(operationId: $operationId, input: $input) {
       id operationId title emoji color icon sortOrder
-      parentDocument { id }
+      parentDocumentId
       createdBy { id username }
       createdAt updatedAt
     }
@@ -317,7 +361,7 @@ export const UpdateWikiDocumentMutation = graphql(`
   mutation UpdateWikiDocument($id: ID!, $input: UpdateWikiDocumentInput!) {
     updateWikiDocument(id: $id, input: $input) {
       id title emoji color icon sortOrder
-      parentDocument { id }
+      parentDocumentId
       updatedAt
     }
   }
@@ -333,7 +377,7 @@ export const RestoreWikiDocumentMutation = graphql(`
   mutation RestoreWikiDocument($id: ID!, $cascade: Boolean) {
     restoreWikiDocument(id: $id, cascade: $cascade) {
       id operationId title emoji icon color sortOrder
-      parentDocument { id }
+      parentDocumentId
     }
   }
 `)

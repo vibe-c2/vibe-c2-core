@@ -204,11 +204,14 @@ type ComplexityRoot struct {
 		WikiDocumentBacklinks          func(childComplexity int, documentID string) int
 		WikiDocumentBackup             func(childComplexity int, id string) int
 		WikiDocumentBackups            func(childComplexity int, documentID string, trigger *models.WikiDocumentBackupTrigger, first *int, after *string, last *int, before *string) int
+		WikiDocumentChildren           func(childComplexity int, operationID string, parentDocumentID *string) int
 		WikiDocumentHistory            func(childComplexity int, operationID string, offset *int, limit *int) int
 		WikiDocumentPresence           func(childComplexity int, documentID string) int
 		WikiDocumentTrash              func(childComplexity int, operationID string, first *int, after *string, last *int, before *string) int
+		WikiDocumentTrashCount         func(childComplexity int, operationID string) int
 		WikiDocumentTrashedDescendants func(childComplexity int, documentID string) int
 		WikiDocumentTree               func(childComplexity int, operationID string) int
+		WikiDocumentTreeRevealPath     func(childComplexity int, documentID string) int
 		WikiDocuments                  func(childComplexity int, operationID string, parentDocumentID *string, search *string, first *int, after *string, last *int, before *string) int
 		WikiOperationPresence          func(childComplexity int, operationID string) int
 		WikiSearch                     func(childComplexity int, operationID string, scope *string, query string, offset *int, limit *int) int
@@ -323,27 +326,28 @@ type ComplexityRoot struct {
 	}
 
 	WikiDocument struct {
-		Ancestors      func(childComplexity int) int
-		Backlinks      func(childComplexity int) int
-		ChildCount     func(childComplexity int) int
-		ChildDocuments func(childComplexity int) int
-		Color          func(childComplexity int) int
-		Content        func(childComplexity int) int
-		CreatedAt      func(childComplexity int) int
-		CreatedBy      func(childComplexity int) int
-		DeletedAt      func(childComplexity int) int
-		DeletedBy      func(childComplexity int) int
-		Emoji          func(childComplexity int) int
-		ID             func(childComplexity int) int
-		Icon           func(childComplexity int) int
-		LastBackupAt   func(childComplexity int) int
-		LastUpdatedAt  func(childComplexity int) int
-		LastUpdatedBy  func(childComplexity int) int
-		OperationID    func(childComplexity int) int
-		ParentDocument func(childComplexity int) int
-		SortOrder      func(childComplexity int) int
-		Title          func(childComplexity int) int
-		UpdatedAt      func(childComplexity int) int
+		Ancestors        func(childComplexity int) int
+		Backlinks        func(childComplexity int) int
+		ChildCount       func(childComplexity int) int
+		ChildDocuments   func(childComplexity int) int
+		Color            func(childComplexity int) int
+		Content          func(childComplexity int) int
+		CreatedAt        func(childComplexity int) int
+		CreatedBy        func(childComplexity int) int
+		DeletedAt        func(childComplexity int) int
+		DeletedBy        func(childComplexity int) int
+		Emoji            func(childComplexity int) int
+		ID               func(childComplexity int) int
+		Icon             func(childComplexity int) int
+		LastBackupAt     func(childComplexity int) int
+		LastUpdatedAt    func(childComplexity int) int
+		LastUpdatedBy    func(childComplexity int) int
+		OperationID      func(childComplexity int) int
+		ParentDocument   func(childComplexity int) int
+		ParentDocumentID func(childComplexity int) int
+		SortOrder        func(childComplexity int) int
+		Title            func(childComplexity int) int
+		UpdatedAt        func(childComplexity int) int
 	}
 
 	WikiDocumentAncestor struct {
@@ -538,6 +542,9 @@ type QueryResolver interface {
 	WikiDocument(ctx context.Context, id string) (*models.WikiDocument, error)
 	WikiDocuments(ctx context.Context, operationID string, parentDocumentID *string, search *string, first *int, after *string, last *int, before *string) (*model.WikiDocumentConnection, error)
 	WikiDocumentTree(ctx context.Context, operationID string) ([]*models.WikiDocument, error)
+	WikiDocumentChildren(ctx context.Context, operationID string, parentDocumentID *string) ([]*models.WikiDocument, error)
+	WikiDocumentTreeRevealPath(ctx context.Context, documentID string) ([]*models.WikiDocument, error)
+	WikiDocumentTrashCount(ctx context.Context, operationID string) (int, error)
 	WikiSearch(ctx context.Context, operationID string, scope *string, query string, offset *int, limit *int) (*model.WikiSearchConnection, error)
 	WikiDocumentTrash(ctx context.Context, operationID string, first *int, after *string, last *int, before *string) (*model.WikiDocumentConnection, error)
 	WikiDocumentTrashedDescendants(ctx context.Context, documentID string) ([]*models.WikiDocument, error)
@@ -591,6 +598,7 @@ type WikiDocumentResolver interface {
 	ID(ctx context.Context, obj *models.WikiDocument) (string, error)
 	OperationID(ctx context.Context, obj *models.WikiDocument) (string, error)
 	ParentDocument(ctx context.Context, obj *models.WikiDocument) (*models.WikiDocument, error)
+	ParentDocumentID(ctx context.Context, obj *models.WikiDocument) (*string, error)
 	ChildDocuments(ctx context.Context, obj *models.WikiDocument) ([]*models.WikiDocument, error)
 
 	ChildCount(ctx context.Context, obj *models.WikiDocument) (int, error)
@@ -1589,6 +1597,17 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.Query.WikiDocumentBackups(childComplexity, args["documentId"].(string), args["trigger"].(*models.WikiDocumentBackupTrigger), args["first"].(*int), args["after"].(*string), args["last"].(*int), args["before"].(*string)), true
+	case "Query.wikiDocumentChildren":
+		if e.ComplexityRoot.Query.WikiDocumentChildren == nil {
+			break
+		}
+
+		args, err := ec.field_Query_wikiDocumentChildren_args(ctx, rawArgs)
+		if err != nil {
+			return 0, false
+		}
+
+		return e.ComplexityRoot.Query.WikiDocumentChildren(childComplexity, args["operationId"].(string), args["parentDocumentId"].(*string)), true
 	case "Query.wikiDocumentHistory":
 		if e.ComplexityRoot.Query.WikiDocumentHistory == nil {
 			break
@@ -1622,6 +1641,17 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.Query.WikiDocumentTrash(childComplexity, args["operationId"].(string), args["first"].(*int), args["after"].(*string), args["last"].(*int), args["before"].(*string)), true
+	case "Query.wikiDocumentTrashCount":
+		if e.ComplexityRoot.Query.WikiDocumentTrashCount == nil {
+			break
+		}
+
+		args, err := ec.field_Query_wikiDocumentTrashCount_args(ctx, rawArgs)
+		if err != nil {
+			return 0, false
+		}
+
+		return e.ComplexityRoot.Query.WikiDocumentTrashCount(childComplexity, args["operationId"].(string)), true
 	case "Query.wikiDocumentTrashedDescendants":
 		if e.ComplexityRoot.Query.WikiDocumentTrashedDescendants == nil {
 			break
@@ -1644,6 +1674,17 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.Query.WikiDocumentTree(childComplexity, args["operationId"].(string)), true
+	case "Query.wikiDocumentTreeRevealPath":
+		if e.ComplexityRoot.Query.WikiDocumentTreeRevealPath == nil {
+			break
+		}
+
+		args, err := ec.field_Query_wikiDocumentTreeRevealPath_args(ctx, rawArgs)
+		if err != nil {
+			return 0, false
+		}
+
+		return e.ComplexityRoot.Query.WikiDocumentTreeRevealPath(childComplexity, args["documentId"].(string)), true
 	case "Query.wikiDocuments":
 		if e.ComplexityRoot.Query.WikiDocuments == nil {
 			break
@@ -2231,6 +2272,12 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.WikiDocument.ParentDocument(childComplexity), true
+	case "WikiDocument.parentDocumentId":
+		if e.ComplexityRoot.WikiDocument.ParentDocumentID == nil {
+			break
+		}
+
+		return e.ComplexityRoot.WikiDocument.ParentDocumentID(childComplexity), true
 	case "WikiDocument.sortOrder":
 		if e.ComplexityRoot.WikiDocument.SortOrder == nil {
 			break
@@ -3604,6 +3651,9 @@ type WikiDocument {
   id: ID!
   operationId: ID!
   parentDocument: WikiDocument
+  # Scalar form of parentDocument.id — exposed so tree-style queries can avoid
+  # a per-row Mongo lookup just to surface the parent's id. Null for roots.
+  parentDocumentId: ID
   childDocuments: [WikiDocument!]!
   title: String!
   content: String!
@@ -3800,6 +3850,32 @@ extend type Query {
     @hasPermission(permission: "operation:member")
 
   wikiDocumentTree(operationId: ID!): [WikiDocument!]!
+    @hasPermission(permission: "operation:member")
+
+  # Direct children of ` + "`" + `parentDocumentId` + "`" + ` (or root-level documents when
+  # ` + "`" + `parentDocumentId` + "`" + ` is null), sorted by sortOrder. Trashed documents are
+  # excluded. Drives the lazy tree sidebar — the client fetches roots on
+  # mount, then a fresh page per expanded branch. childCount on each
+  # returned row is precomputed in a single aggregation so the
+  # caret-vs-no-caret decision is one round trip per expand.
+  wikiDocumentChildren(
+    operationId: ID!
+    parentDocumentId: ID
+  ): [WikiDocument!]!
+    @hasPermission(permission: "operation:member")
+
+  # Returns every document needed to render the sidebar tree expanded down to
+  # ` + "`" + `documentId` + "`" + `: ancestors + each ancestor's siblings + roots. One round
+  # trip instead of N when a user lands on a deeply nested doc via direct
+  # link. Returns an empty list if the document doesn't exist or the caller
+  # lacks access — the sidebar falls back to the roots fetch.
+  wikiDocumentTreeRevealPath(documentId: ID!): [WikiDocument!]!
+    @hasPermission(permission: "operation:member")
+
+  # Total count of soft-deleted documents in the operation. Cheap badge query
+  # for the sidebar; avoids fetching the full trash list just to read its
+  # totalCount.
+  wikiDocumentTrashCount(operationId: ID!): Int!
     @hasPermission(permission: "operation:member")
 
   # Ranked, snippet-returning search over wiki documents within an operation.
@@ -4890,6 +4966,22 @@ func (ec *executionContext) field_Query_wikiDocumentBackups_args(ctx context.Con
 	return args, nil
 }
 
+func (ec *executionContext) field_Query_wikiDocumentChildren_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
+	var err error
+	args := map[string]any{}
+	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "operationId", ec.unmarshalNID2string)
+	if err != nil {
+		return nil, err
+	}
+	args["operationId"] = arg0
+	arg1, err := graphql.ProcessArgField(ctx, rawArgs, "parentDocumentId", ec.unmarshalOID2ᚖstring)
+	if err != nil {
+		return nil, err
+	}
+	args["parentDocumentId"] = arg1
+	return args, nil
+}
+
 func (ec *executionContext) field_Query_wikiDocumentHistory_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
 	var err error
 	args := map[string]any{}
@@ -4919,6 +5011,17 @@ func (ec *executionContext) field_Query_wikiDocumentPresence_args(ctx context.Co
 		return nil, err
 	}
 	args["documentId"] = arg0
+	return args, nil
+}
+
+func (ec *executionContext) field_Query_wikiDocumentTrashCount_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
+	var err error
+	args := map[string]any{}
+	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "operationId", ec.unmarshalNID2string)
+	if err != nil {
+		return nil, err
+	}
+	args["operationId"] = arg0
 	return args, nil
 }
 
@@ -4954,6 +5057,17 @@ func (ec *executionContext) field_Query_wikiDocumentTrash_args(ctx context.Conte
 }
 
 func (ec *executionContext) field_Query_wikiDocumentTrashedDescendants_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
+	var err error
+	args := map[string]any{}
+	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "documentId", ec.unmarshalNID2string)
+	if err != nil {
+		return nil, err
+	}
+	args["documentId"] = arg0
+	return args, nil
+}
+
+func (ec *executionContext) field_Query_wikiDocumentTreeRevealPath_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
 	var err error
 	args := map[string]any{}
 	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "documentId", ec.unmarshalNID2string)
@@ -8127,6 +8241,8 @@ func (ec *executionContext) fieldContext_Mutation_createWikiDocument(ctx context
 				return ec.fieldContext_WikiDocument_operationId(ctx, field)
 			case "parentDocument":
 				return ec.fieldContext_WikiDocument_parentDocument(ctx, field)
+			case "parentDocumentId":
+				return ec.fieldContext_WikiDocument_parentDocumentId(ctx, field)
 			case "childDocuments":
 				return ec.fieldContext_WikiDocument_childDocuments(ctx, field)
 			case "title":
@@ -8230,6 +8346,8 @@ func (ec *executionContext) fieldContext_Mutation_updateWikiDocument(ctx context
 				return ec.fieldContext_WikiDocument_operationId(ctx, field)
 			case "parentDocument":
 				return ec.fieldContext_WikiDocument_parentDocument(ctx, field)
+			case "parentDocumentId":
+				return ec.fieldContext_WikiDocument_parentDocumentId(ctx, field)
 			case "childDocuments":
 				return ec.fieldContext_WikiDocument_childDocuments(ctx, field)
 			case "title":
@@ -8392,6 +8510,8 @@ func (ec *executionContext) fieldContext_Mutation_restoreWikiDocument(ctx contex
 				return ec.fieldContext_WikiDocument_operationId(ctx, field)
 			case "parentDocument":
 				return ec.fieldContext_WikiDocument_parentDocument(ctx, field)
+			case "parentDocumentId":
+				return ec.fieldContext_WikiDocument_parentDocumentId(ctx, field)
 			case "childDocuments":
 				return ec.fieldContext_WikiDocument_childDocuments(ctx, field)
 			case "title":
@@ -8692,6 +8812,8 @@ func (ec *executionContext) fieldContext_Mutation_restoreWikiDocumentBackup(ctx 
 				return ec.fieldContext_WikiDocument_operationId(ctx, field)
 			case "parentDocument":
 				return ec.fieldContext_WikiDocument_parentDocument(ctx, field)
+			case "parentDocumentId":
+				return ec.fieldContext_WikiDocument_parentDocumentId(ctx, field)
 			case "childDocuments":
 				return ec.fieldContext_WikiDocument_childDocuments(ctx, field)
 			case "title":
@@ -10816,6 +10938,8 @@ func (ec *executionContext) fieldContext_Query_wikiDocument(ctx context.Context,
 				return ec.fieldContext_WikiDocument_operationId(ctx, field)
 			case "parentDocument":
 				return ec.fieldContext_WikiDocument_parentDocument(ctx, field)
+			case "parentDocumentId":
+				return ec.fieldContext_WikiDocument_parentDocumentId(ctx, field)
 			case "childDocuments":
 				return ec.fieldContext_WikiDocument_childDocuments(ctx, field)
 			case "title":
@@ -10986,6 +11110,8 @@ func (ec *executionContext) fieldContext_Query_wikiDocumentTree(ctx context.Cont
 				return ec.fieldContext_WikiDocument_operationId(ctx, field)
 			case "parentDocument":
 				return ec.fieldContext_WikiDocument_parentDocument(ctx, field)
+			case "parentDocumentId":
+				return ec.fieldContext_WikiDocument_parentDocumentId(ctx, field)
 			case "childDocuments":
 				return ec.fieldContext_WikiDocument_childDocuments(ctx, field)
 			case "title":
@@ -11034,6 +11160,275 @@ func (ec *executionContext) fieldContext_Query_wikiDocumentTree(ctx context.Cont
 	}()
 	ctx = graphql.WithFieldContext(ctx, fc)
 	if fc.Args, err = ec.field_Query_wikiDocumentTree_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
+		ec.Error(ctx, err)
+		return fc, err
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Query_wikiDocumentChildren(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Query_wikiDocumentChildren,
+		func(ctx context.Context) (any, error) {
+			fc := graphql.GetFieldContext(ctx)
+			return ec.Resolvers.Query().WikiDocumentChildren(ctx, fc.Args["operationId"].(string), fc.Args["parentDocumentId"].(*string))
+		},
+		func(ctx context.Context, next graphql.Resolver) graphql.Resolver {
+			directive0 := next
+
+			directive1 := func(ctx context.Context) (any, error) {
+				permission, err := ec.unmarshalNString2string(ctx, "operation:member")
+				if err != nil {
+					var zeroVal []*models.WikiDocument
+					return zeroVal, err
+				}
+				if ec.Directives.HasPermission == nil {
+					var zeroVal []*models.WikiDocument
+					return zeroVal, errors.New("directive hasPermission is not implemented")
+				}
+				return ec.Directives.HasPermission(ctx, nil, directive0, permission)
+			}
+
+			next = directive1
+			return next
+		},
+		ec.marshalNWikiDocument2ᚕᚖgithubᚗcomᚋvibeᚑc2ᚋvibeᚑc2ᚑcoreᚋcoreᚋpkgᚋmodelsᚐWikiDocumentᚄ,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_Query_wikiDocumentChildren(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Query",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "id":
+				return ec.fieldContext_WikiDocument_id(ctx, field)
+			case "operationId":
+				return ec.fieldContext_WikiDocument_operationId(ctx, field)
+			case "parentDocument":
+				return ec.fieldContext_WikiDocument_parentDocument(ctx, field)
+			case "parentDocumentId":
+				return ec.fieldContext_WikiDocument_parentDocumentId(ctx, field)
+			case "childDocuments":
+				return ec.fieldContext_WikiDocument_childDocuments(ctx, field)
+			case "title":
+				return ec.fieldContext_WikiDocument_title(ctx, field)
+			case "content":
+				return ec.fieldContext_WikiDocument_content(ctx, field)
+			case "emoji":
+				return ec.fieldContext_WikiDocument_emoji(ctx, field)
+			case "color":
+				return ec.fieldContext_WikiDocument_color(ctx, field)
+			case "icon":
+				return ec.fieldContext_WikiDocument_icon(ctx, field)
+			case "sortOrder":
+				return ec.fieldContext_WikiDocument_sortOrder(ctx, field)
+			case "childCount":
+				return ec.fieldContext_WikiDocument_childCount(ctx, field)
+			case "backlinks":
+				return ec.fieldContext_WikiDocument_backlinks(ctx, field)
+			case "ancestors":
+				return ec.fieldContext_WikiDocument_ancestors(ctx, field)
+			case "createdBy":
+				return ec.fieldContext_WikiDocument_createdBy(ctx, field)
+			case "lastUpdatedBy":
+				return ec.fieldContext_WikiDocument_lastUpdatedBy(ctx, field)
+			case "lastUpdatedAt":
+				return ec.fieldContext_WikiDocument_lastUpdatedAt(ctx, field)
+			case "lastBackupAt":
+				return ec.fieldContext_WikiDocument_lastBackupAt(ctx, field)
+			case "deletedAt":
+				return ec.fieldContext_WikiDocument_deletedAt(ctx, field)
+			case "deletedBy":
+				return ec.fieldContext_WikiDocument_deletedBy(ctx, field)
+			case "createdAt":
+				return ec.fieldContext_WikiDocument_createdAt(ctx, field)
+			case "updatedAt":
+				return ec.fieldContext_WikiDocument_updatedAt(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type WikiDocument", field.Name)
+		},
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			err = ec.Recover(ctx, r)
+			ec.Error(ctx, err)
+		}
+	}()
+	ctx = graphql.WithFieldContext(ctx, fc)
+	if fc.Args, err = ec.field_Query_wikiDocumentChildren_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
+		ec.Error(ctx, err)
+		return fc, err
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Query_wikiDocumentTreeRevealPath(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Query_wikiDocumentTreeRevealPath,
+		func(ctx context.Context) (any, error) {
+			fc := graphql.GetFieldContext(ctx)
+			return ec.Resolvers.Query().WikiDocumentTreeRevealPath(ctx, fc.Args["documentId"].(string))
+		},
+		func(ctx context.Context, next graphql.Resolver) graphql.Resolver {
+			directive0 := next
+
+			directive1 := func(ctx context.Context) (any, error) {
+				permission, err := ec.unmarshalNString2string(ctx, "operation:member")
+				if err != nil {
+					var zeroVal []*models.WikiDocument
+					return zeroVal, err
+				}
+				if ec.Directives.HasPermission == nil {
+					var zeroVal []*models.WikiDocument
+					return zeroVal, errors.New("directive hasPermission is not implemented")
+				}
+				return ec.Directives.HasPermission(ctx, nil, directive0, permission)
+			}
+
+			next = directive1
+			return next
+		},
+		ec.marshalNWikiDocument2ᚕᚖgithubᚗcomᚋvibeᚑc2ᚋvibeᚑc2ᚑcoreᚋcoreᚋpkgᚋmodelsᚐWikiDocumentᚄ,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_Query_wikiDocumentTreeRevealPath(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Query",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "id":
+				return ec.fieldContext_WikiDocument_id(ctx, field)
+			case "operationId":
+				return ec.fieldContext_WikiDocument_operationId(ctx, field)
+			case "parentDocument":
+				return ec.fieldContext_WikiDocument_parentDocument(ctx, field)
+			case "parentDocumentId":
+				return ec.fieldContext_WikiDocument_parentDocumentId(ctx, field)
+			case "childDocuments":
+				return ec.fieldContext_WikiDocument_childDocuments(ctx, field)
+			case "title":
+				return ec.fieldContext_WikiDocument_title(ctx, field)
+			case "content":
+				return ec.fieldContext_WikiDocument_content(ctx, field)
+			case "emoji":
+				return ec.fieldContext_WikiDocument_emoji(ctx, field)
+			case "color":
+				return ec.fieldContext_WikiDocument_color(ctx, field)
+			case "icon":
+				return ec.fieldContext_WikiDocument_icon(ctx, field)
+			case "sortOrder":
+				return ec.fieldContext_WikiDocument_sortOrder(ctx, field)
+			case "childCount":
+				return ec.fieldContext_WikiDocument_childCount(ctx, field)
+			case "backlinks":
+				return ec.fieldContext_WikiDocument_backlinks(ctx, field)
+			case "ancestors":
+				return ec.fieldContext_WikiDocument_ancestors(ctx, field)
+			case "createdBy":
+				return ec.fieldContext_WikiDocument_createdBy(ctx, field)
+			case "lastUpdatedBy":
+				return ec.fieldContext_WikiDocument_lastUpdatedBy(ctx, field)
+			case "lastUpdatedAt":
+				return ec.fieldContext_WikiDocument_lastUpdatedAt(ctx, field)
+			case "lastBackupAt":
+				return ec.fieldContext_WikiDocument_lastBackupAt(ctx, field)
+			case "deletedAt":
+				return ec.fieldContext_WikiDocument_deletedAt(ctx, field)
+			case "deletedBy":
+				return ec.fieldContext_WikiDocument_deletedBy(ctx, field)
+			case "createdAt":
+				return ec.fieldContext_WikiDocument_createdAt(ctx, field)
+			case "updatedAt":
+				return ec.fieldContext_WikiDocument_updatedAt(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type WikiDocument", field.Name)
+		},
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			err = ec.Recover(ctx, r)
+			ec.Error(ctx, err)
+		}
+	}()
+	ctx = graphql.WithFieldContext(ctx, fc)
+	if fc.Args, err = ec.field_Query_wikiDocumentTreeRevealPath_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
+		ec.Error(ctx, err)
+		return fc, err
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Query_wikiDocumentTrashCount(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Query_wikiDocumentTrashCount,
+		func(ctx context.Context) (any, error) {
+			fc := graphql.GetFieldContext(ctx)
+			return ec.Resolvers.Query().WikiDocumentTrashCount(ctx, fc.Args["operationId"].(string))
+		},
+		func(ctx context.Context, next graphql.Resolver) graphql.Resolver {
+			directive0 := next
+
+			directive1 := func(ctx context.Context) (any, error) {
+				permission, err := ec.unmarshalNString2string(ctx, "operation:member")
+				if err != nil {
+					var zeroVal int
+					return zeroVal, err
+				}
+				if ec.Directives.HasPermission == nil {
+					var zeroVal int
+					return zeroVal, errors.New("directive hasPermission is not implemented")
+				}
+				return ec.Directives.HasPermission(ctx, nil, directive0, permission)
+			}
+
+			next = directive1
+			return next
+		},
+		ec.marshalNInt2int,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_Query_wikiDocumentTrashCount(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Query",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Int does not have child fields")
+		},
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			err = ec.Recover(ctx, r)
+			ec.Error(ctx, err)
+		}
+	}()
+	ctx = graphql.WithFieldContext(ctx, fc)
+	if fc.Args, err = ec.field_Query_wikiDocumentTrashCount_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
 		ec.Error(ctx, err)
 		return fc, err
 	}
@@ -11223,6 +11618,8 @@ func (ec *executionContext) fieldContext_Query_wikiDocumentTrashedDescendants(ct
 				return ec.fieldContext_WikiDocument_operationId(ctx, field)
 			case "parentDocument":
 				return ec.fieldContext_WikiDocument_parentDocument(ctx, field)
+			case "parentDocumentId":
+				return ec.fieldContext_WikiDocument_parentDocumentId(ctx, field)
 			case "childDocuments":
 				return ec.fieldContext_WikiDocument_childDocuments(ctx, field)
 			case "title":
@@ -11326,6 +11723,8 @@ func (ec *executionContext) fieldContext_Query_wikiDocumentBacklinks(ctx context
 				return ec.fieldContext_WikiDocument_operationId(ctx, field)
 			case "parentDocument":
 				return ec.fieldContext_WikiDocument_parentDocument(ctx, field)
+			case "parentDocumentId":
+				return ec.fieldContext_WikiDocument_parentDocumentId(ctx, field)
 			case "childDocuments":
 				return ec.fieldContext_WikiDocument_childDocuments(ctx, field)
 			case "title":
@@ -14329,6 +14728,8 @@ func (ec *executionContext) fieldContext_WikiDocument_parentDocument(_ context.C
 				return ec.fieldContext_WikiDocument_operationId(ctx, field)
 			case "parentDocument":
 				return ec.fieldContext_WikiDocument_parentDocument(ctx, field)
+			case "parentDocumentId":
+				return ec.fieldContext_WikiDocument_parentDocumentId(ctx, field)
 			case "childDocuments":
 				return ec.fieldContext_WikiDocument_childDocuments(ctx, field)
 			case "title":
@@ -14372,6 +14773,35 @@ func (ec *executionContext) fieldContext_WikiDocument_parentDocument(_ context.C
 	return fc, nil
 }
 
+func (ec *executionContext) _WikiDocument_parentDocumentId(ctx context.Context, field graphql.CollectedField, obj *models.WikiDocument) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_WikiDocument_parentDocumentId,
+		func(ctx context.Context) (any, error) {
+			return ec.Resolvers.WikiDocument().ParentDocumentID(ctx, obj)
+		},
+		nil,
+		ec.marshalOID2ᚖstring,
+		true,
+		false,
+	)
+}
+
+func (ec *executionContext) fieldContext_WikiDocument_parentDocumentId(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "WikiDocument",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type ID does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
 func (ec *executionContext) _WikiDocument_childDocuments(ctx context.Context, field graphql.CollectedField, obj *models.WikiDocument) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
@@ -14402,6 +14832,8 @@ func (ec *executionContext) fieldContext_WikiDocument_childDocuments(_ context.C
 				return ec.fieldContext_WikiDocument_operationId(ctx, field)
 			case "parentDocument":
 				return ec.fieldContext_WikiDocument_parentDocument(ctx, field)
+			case "parentDocumentId":
+				return ec.fieldContext_WikiDocument_parentDocumentId(ctx, field)
 			case "childDocuments":
 				return ec.fieldContext_WikiDocument_childDocuments(ctx, field)
 			case "title":
@@ -14678,6 +15110,8 @@ func (ec *executionContext) fieldContext_WikiDocument_backlinks(_ context.Contex
 				return ec.fieldContext_WikiDocument_operationId(ctx, field)
 			case "parentDocument":
 				return ec.fieldContext_WikiDocument_parentDocument(ctx, field)
+			case "parentDocumentId":
+				return ec.fieldContext_WikiDocument_parentDocumentId(ctx, field)
 			case "childDocuments":
 				return ec.fieldContext_WikiDocument_childDocuments(ctx, field)
 			case "title":
@@ -15801,6 +16235,8 @@ func (ec *executionContext) fieldContext_WikiDocumentEdge_node(_ context.Context
 				return ec.fieldContext_WikiDocument_operationId(ctx, field)
 			case "parentDocument":
 				return ec.fieldContext_WikiDocument_parentDocument(ctx, field)
+			case "parentDocumentId":
+				return ec.fieldContext_WikiDocument_parentDocumentId(ctx, field)
 			case "childDocuments":
 				return ec.fieldContext_WikiDocument_childDocuments(ctx, field)
 			case "title":
@@ -16106,6 +16542,8 @@ func (ec *executionContext) fieldContext_WikiDocumentEvent_document(_ context.Co
 				return ec.fieldContext_WikiDocument_operationId(ctx, field)
 			case "parentDocument":
 				return ec.fieldContext_WikiDocument_parentDocument(ctx, field)
+			case "parentDocumentId":
+				return ec.fieldContext_WikiDocument_parentDocumentId(ctx, field)
 			case "childDocuments":
 				return ec.fieldContext_WikiDocument_childDocuments(ctx, field)
 			case "title":
@@ -16419,6 +16857,8 @@ func (ec *executionContext) fieldContext_WikiDocumentVisit_document(_ context.Co
 				return ec.fieldContext_WikiDocument_operationId(ctx, field)
 			case "parentDocument":
 				return ec.fieldContext_WikiDocument_parentDocument(ctx, field)
+			case "parentDocumentId":
+				return ec.fieldContext_WikiDocument_parentDocumentId(ctx, field)
 			case "childDocuments":
 				return ec.fieldContext_WikiDocument_childDocuments(ctx, field)
 			case "title":
@@ -16787,6 +17227,8 @@ func (ec *executionContext) fieldContext_WikiSearchHit_document(_ context.Contex
 				return ec.fieldContext_WikiDocument_operationId(ctx, field)
 			case "parentDocument":
 				return ec.fieldContext_WikiDocument_parentDocument(ctx, field)
+			case "parentDocumentId":
+				return ec.fieldContext_WikiDocument_parentDocumentId(ctx, field)
 			case "childDocuments":
 				return ec.fieldContext_WikiDocument_childDocuments(ctx, field)
 			case "title":
@@ -21060,6 +21502,72 @@ func (ec *executionContext) _Query(ctx context.Context, sel ast.SelectionSet) gr
 			}
 
 			out.Concurrently(i, func(ctx context.Context) graphql.Marshaler { return rrm(innerCtx) })
+		case "wikiDocumentChildren":
+			field := field
+
+			innerFunc := func(ctx context.Context, fs *graphql.FieldSet) (res graphql.Marshaler) {
+				defer func() {
+					if r := recover(); r != nil {
+						ec.Error(ctx, ec.Recover(ctx, r))
+					}
+				}()
+				res = ec._Query_wikiDocumentChildren(ctx, field)
+				if res == graphql.Null {
+					atomic.AddUint32(&fs.Invalids, 1)
+				}
+				return res
+			}
+
+			rrm := func(ctx context.Context) graphql.Marshaler {
+				return ec.OperationContext.RootResolverMiddleware(ctx,
+					func(ctx context.Context) graphql.Marshaler { return innerFunc(ctx, out) })
+			}
+
+			out.Concurrently(i, func(ctx context.Context) graphql.Marshaler { return rrm(innerCtx) })
+		case "wikiDocumentTreeRevealPath":
+			field := field
+
+			innerFunc := func(ctx context.Context, fs *graphql.FieldSet) (res graphql.Marshaler) {
+				defer func() {
+					if r := recover(); r != nil {
+						ec.Error(ctx, ec.Recover(ctx, r))
+					}
+				}()
+				res = ec._Query_wikiDocumentTreeRevealPath(ctx, field)
+				if res == graphql.Null {
+					atomic.AddUint32(&fs.Invalids, 1)
+				}
+				return res
+			}
+
+			rrm := func(ctx context.Context) graphql.Marshaler {
+				return ec.OperationContext.RootResolverMiddleware(ctx,
+					func(ctx context.Context) graphql.Marshaler { return innerFunc(ctx, out) })
+			}
+
+			out.Concurrently(i, func(ctx context.Context) graphql.Marshaler { return rrm(innerCtx) })
+		case "wikiDocumentTrashCount":
+			field := field
+
+			innerFunc := func(ctx context.Context, fs *graphql.FieldSet) (res graphql.Marshaler) {
+				defer func() {
+					if r := recover(); r != nil {
+						ec.Error(ctx, ec.Recover(ctx, r))
+					}
+				}()
+				res = ec._Query_wikiDocumentTrashCount(ctx, field)
+				if res == graphql.Null {
+					atomic.AddUint32(&fs.Invalids, 1)
+				}
+				return res
+			}
+
+			rrm := func(ctx context.Context) graphql.Marshaler {
+				return ec.OperationContext.RootResolverMiddleware(ctx,
+					func(ctx context.Context) graphql.Marshaler { return innerFunc(ctx, out) })
+			}
+
+			out.Concurrently(i, func(ctx context.Context) graphql.Marshaler { return rrm(innerCtx) })
 		case "wikiSearch":
 			field := field
 
@@ -22660,6 +23168,39 @@ func (ec *executionContext) _WikiDocument(ctx context.Context, sel ast.Selection
 					}
 				}()
 				res = ec._WikiDocument_parentDocument(ctx, field, obj)
+				return res
+			}
+
+			if field.Deferrable != nil {
+				dfs, ok := deferred[field.Deferrable.Label]
+				di := 0
+				if ok {
+					dfs.AddField(field)
+					di = len(dfs.Values) - 1
+				} else {
+					dfs = graphql.NewFieldSet([]graphql.CollectedField{field})
+					deferred[field.Deferrable.Label] = dfs
+				}
+				dfs.Concurrently(di, func(ctx context.Context) graphql.Marshaler {
+					return innerFunc(ctx, dfs)
+				})
+
+				// don't run the out.Concurrently() call below
+				out.Values[i] = graphql.Null
+				continue
+			}
+
+			out.Concurrently(i, func(ctx context.Context) graphql.Marshaler { return innerFunc(ctx, out) })
+		case "parentDocumentId":
+			field := field
+
+			innerFunc := func(ctx context.Context, _ *graphql.FieldSet) (res graphql.Marshaler) {
+				defer func() {
+					if r := recover(); r != nil {
+						ec.Error(ctx, ec.Recover(ctx, r))
+					}
+				}()
+				res = ec._WikiDocument_parentDocumentId(ctx, field, obj)
 				return res
 			}
 

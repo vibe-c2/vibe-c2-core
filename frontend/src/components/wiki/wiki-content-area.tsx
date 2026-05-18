@@ -1,12 +1,10 @@
 import { FileTextIcon } from "lucide-react"
 import { WikiEditorPane } from "@/components/wiki/wiki-editor-pane"
-import type { WikiDocumentTreeFieldsFragment } from "@/graphql/gql/graphql"
 
 interface WikiContentAreaProps {
   documentId: string | null
   operationId: string
   isEditor: boolean
-  treeDocuments: WikiDocumentTreeFieldsFragment[]
 }
 
 // Content area for the wiki page. Search used to live here inline; it's now
@@ -16,7 +14,6 @@ export function WikiContentArea({
   documentId,
   operationId,
   isEditor,
-  treeDocuments,
 }: WikiContentAreaProps) {
   if (documentId) {
     return (
@@ -24,7 +21,6 @@ export function WikiContentArea({
         documentId={documentId}
         operationId={operationId}
         isEditor={isEditor}
-        treeDocuments={treeDocuments}
       />
     )
   }

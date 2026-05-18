@@ -40,7 +40,10 @@ export function useOperation(id: string) {
   })
 }
 
-export function useInfiniteOperations(params: { search?: string | null; first?: number }) {
+export function useInfiniteOperations(
+  params: { search?: string | null; first?: number },
+  options?: { enabled?: boolean },
+) {
   return useInfiniteQuery({
     queryKey: operationKeys.infiniteList(params),
     queryFn: ({ pageParam }) =>
@@ -54,6 +57,7 @@ export function useInfiniteOperations(params: { search?: string | null; first?: 
       lastPage.operations.pageInfo.hasNextPage
         ? lastPage.operations.pageInfo.endCursor ?? undefined
         : undefined,
+    enabled: options?.enabled ?? true,
   })
 }
 

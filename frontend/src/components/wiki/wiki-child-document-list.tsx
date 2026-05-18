@@ -4,25 +4,28 @@ import { ChevronRightIcon, PlusIcon } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { useWikiStore } from "@/stores/wiki"
 import { DocumentIcon } from "@/components/wiki/document-icon"
-import { getDirectChildren } from "@/components/wiki/wiki-tree-helpers"
-import type { WikiDocumentTreeFieldsFragment } from "@/graphql/gql/graphql"
+import { useWikiDocumentChildren } from "@/graphql/hooks/wiki"
+import { sortByOrder } from "@/components/wiki/wiki-tree-helpers"
 
 interface WikiChildDocumentListProps {
   documentId: string
-  treeDocuments: WikiDocumentTreeFieldsFragment[]
+  operationId: string
   isEditor: boolean
 }
 
 export function WikiChildDocumentList({
   documentId,
-  treeDocuments,
+  operationId,
   isEditor,
 }: WikiChildDocumentListProps) {
   const openCreateDialog = useWikiStore((s) => s.openCreateDialog)
 
+  // Shares the per-parent cache key with the sidebar's lazy expand for this
+  // doc — the second call is a TanStack cache hit, no extra network.
+  const { data } = useWikiDocumentChildren(operationId, documentId)
   const children = useMemo(
-    () => getDirectChildren(treeDocuments, documentId),
-    [treeDocuments, documentId],
+    () => sortByOrder(data?.wikiDocumentChildren ?? []),
+    [data?.wikiDocumentChildren],
   )
 
   if (children.length === 0 && !isEditor) return null

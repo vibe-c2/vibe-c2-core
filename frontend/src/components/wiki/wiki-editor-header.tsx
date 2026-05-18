@@ -16,6 +16,7 @@ import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import {
   useUpdateWikiDocument,
   useWikiDocumentBacklinks,
+  useWikiDocumentChildren,
   useWikiDocumentPresence,
 } from "@/graphql/hooks/wiki"
 import { getCursorColor } from "@/lib/cursor-colors"
@@ -25,13 +26,13 @@ import {
   type DocumentIconValue,
 } from "@/components/wiki/document-icon-picker"
 import { DocumentIcon } from "@/components/wiki/document-icon"
-import { getDirectChildren } from "@/components/wiki/wiki-tree-helpers"
-import type { WikiDocumentFieldsFragment, WikiDocumentTreeFieldsFragment } from "@/graphql/gql/graphql"
+import { sortByOrder } from "@/components/wiki/wiki-tree-helpers"
+import type { WikiDocumentFieldsFragment } from "@/graphql/gql/graphql"
 
 interface WikiEditorHeaderProps {
   document: WikiDocumentFieldsFragment
+  operationId: string
   isEditor: boolean
-  treeDocuments: WikiDocumentTreeFieldsFragment[]
 }
 
 interface AncestorNode {
@@ -44,8 +45,8 @@ interface AncestorNode {
 
 export function WikiEditorHeader({
   document: doc,
+  operationId,
   isEditor,
-  treeDocuments,
 }: WikiEditorHeaderProps) {
   const updateDocument = useUpdateWikiDocument()
   const openBackupPanel = useWikiStore((s) => s.openBackupPanel)
@@ -61,43 +62,33 @@ export function WikiEditorHeader({
   const [isEditingTitle, setIsEditingTitle] = useState(false)
   const titleRef = useRef<HTMLInputElement>(null)
 
-  // Build ancestor path from treeDocuments.
-  const ancestors = useMemo(() => {
-    const map = new Map<
-      string,
-      { title: string; emoji: string; icon: string; color: string; parentId: string | null }
-    >()
-    for (const d of treeDocuments) {
-      map.set(d.id, {
-        title: d.title,
-        emoji: d.emoji,
-        icon: d.icon,
-        color: d.color,
-        parentId: d.parentDocument?.id ?? null,
-      })
-    }
-    const path: AncestorNode[] = []
-    let currentId: string | null = doc.parentDocument?.id ?? null
-    while (currentId) {
-      const node = map.get(currentId)
-      if (!node) break
-      path.unshift({
-        id: currentId,
-        title: node.title,
-        emoji: node.emoji,
-        icon: node.icon,
-        color: node.color,
-      })
-      currentId = node.parentId
-    }
-    return path
-  }, [treeDocuments, doc.parentDocument?.id])
+  // Breadcrumb path: comes baked into the document payload via the server's
+  // ancestors resolver. No need to consult a flat tree client-side — that
+  // would force the whole operation tree to be loaded just for this breadcrumb.
+  // Trashed ancestors are filtered out (they render as missing in the chain
+  // and break navigation if rendered as breadcrumb links).
+  const ancestors = useMemo<AncestorNode[]>(
+    () =>
+      (doc.ancestors ?? [])
+        .filter((a) => !a.isDeleted)
+        .map((a) => ({
+          id: a.id,
+          title: a.title,
+          emoji: a.emoji,
+          icon: a.icon,
+          color: a.color,
+        })),
+    [doc.ancestors],
+  )
 
   // Drives the ▾ N-children dropdown next to the title — quick navigation
-  // without scrolling to the footer block.
+  // without scrolling to the footer block. Shares the per-parent cache key
+  // with the sidebar's lazy expand for this doc, so the call is a cache hit
+  // whenever the user already expanded this branch in the tree.
+  const { data: childrenData } = useWikiDocumentChildren(operationId, doc.id)
   const directChildren = useMemo(
-    () => getDirectChildren(treeDocuments, doc.id),
-    [treeDocuments, doc.id],
+    () => sortByOrder(childrenData?.wikiDocumentChildren ?? []),
+    [childrenData?.wikiDocumentChildren],
   )
 
   // Same idea for backlinks. Reuses the cached query already populated by

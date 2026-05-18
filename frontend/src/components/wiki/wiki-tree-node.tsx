@@ -1,4 +1,4 @@
-import { memo, useCallback, useEffect, useRef, useState } from "react"
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { Link, useParams } from "react-router"
 import { useDraggable, useDroppable } from "@dnd-kit/core"
 import {
@@ -26,16 +26,24 @@ import {
 import { Button } from "@/components/ui/button"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
 import { Input } from "@/components/ui/input"
+import { Skeleton } from "@/components/ui/skeleton"
 import { useWikiStore } from "@/stores/wiki"
 import { useWikiDragStore } from "@/stores/wiki-drag"
-import { useUpdateWikiDocument } from "@/graphql/hooks/wiki"
+import {
+  useUpdateWikiDocument,
+  useWikiDocumentChildren,
+} from "@/graphql/hooks/wiki"
 import {
   DocumentIconPicker,
   type DocumentIconValue,
 } from "@/components/wiki/document-icon-picker"
 import { DocumentIcon } from "@/components/wiki/document-icon"
 import { cn } from "@/lib/utils"
-import { collectBranchIdsWithChildren } from "@/components/wiki/wiki-tree-helpers"
+import {
+  collectBranchIdsWithChildren,
+  rowToTreeNode,
+  sortByOrder,
+} from "@/components/wiki/wiki-tree-helpers"
 import type { TreeNode } from "@/components/wiki/wiki-tree-sidebar"
 
 interface WikiTreeNodeProps {
@@ -67,7 +75,22 @@ function WikiTreeNodeImpl({
 
   const updateDocument = useUpdateWikiDocument()
 
-  const hasChildren = node.children.length > 0
+  // childCount carries the "are there children?" signal directly from the
+  // server — we don't have to load the children to know whether the caret
+  // should show. children.length is the *loaded* count (used for sort
+  // operations on the already-fetched subtree).
+  const hasChildren = node.childCount > 0
+
+  // Lazy children fetch: only fires when expanded. Once loaded, cached
+  // forever (staleTime: Infinity) — SSE invalidates per-parent on mutations.
+  const { data: childrenData, isLoading: isLoadingChildren } =
+    useWikiDocumentChildren(operationId, node.id, {
+      enabled: hasChildren && isExpanded,
+    })
+  const childRows = useMemo(
+    () => sortByOrder(childrenData?.wikiDocumentChildren ?? []),
+    [childrenData?.wikiDocumentChildren],
+  )
 
   // DnD: each node is both draggable (via handle) and a drop target.
   const { attributes, listeners, setNodeRef: setDragRef } = useDraggable({ id: node.id })
@@ -239,6 +262,7 @@ function WikiTreeNodeImpl({
             time; memoizing it here is the highest-leverage win. */}
         <WikiTreeRowQuickActions
           node={node}
+          operationId={operationId}
           isEditor={isEditor}
           onStartRename={handleStartRename}
           onStartIconPicker={handleStartIconPicker}
@@ -252,18 +276,25 @@ function WikiTreeNodeImpl({
         </div>
       )}
 
-      {/* Children */}
+      {/* Children — lazy: only mounted when expanded; the hook above gates
+          the fetch on the same condition so collapsed branches cost nothing. */}
       {hasChildren && (
         <CollapsibleContent>
-          {node.children.map((child) => (
-            <WikiTreeNode
-              key={child.id}
-              node={child}
-              depth={depth + 1}
-              isEditor={isEditor}
-              operationId={operationId}
-            />
-          ))}
+          {isLoadingChildren ? (
+            <div style={{ paddingLeft: (depth + 1) * 16 + 4 }} className="py-1">
+              <Skeleton className="h-5 rounded" />
+            </div>
+          ) : (
+            childRows.map((row) => (
+              <WikiTreeNode
+                key={row.id}
+                node={rowToTreeNode(row)}
+                depth={depth + 1}
+                isEditor={isEditor}
+                operationId={operationId}
+              />
+            ))
+          )}
         </CollapsibleContent>
       )}
     </Collapsible>
@@ -278,6 +309,7 @@ export const WikiTreeNode = memo(WikiTreeNodeImpl)
 
 interface WikiTreeRowQuickActionsProps {
   node: TreeNode
+  operationId: string
   isEditor: boolean
   onStartRename: () => void
   onStartIconPicker: () => void
@@ -285,6 +317,7 @@ interface WikiTreeRowQuickActionsProps {
 
 function WikiTreeRowQuickActionsImpl({
   node,
+  operationId,
   isEditor,
   onStartRename,
   onStartIconPicker,
@@ -302,7 +335,21 @@ function WikiTreeRowQuickActionsImpl({
   // re-render whenever the menu opens or closes.
   const [menuOpen, setMenuOpen] = useState(false)
 
-  const hasChildren = node.children.length > 0
+  // childCount is the canonical "has any children?" signal (cheap, comes
+  // from the server). The "Sort" and "Expand subtree" buttons that operate
+  // on already-loaded children read from the per-parent cache directly —
+  // they implicitly skip unloaded branches.
+  const hasChildren = node.childCount > 0
+  // Cached children for this node, if its branch was ever expanded. Used by
+  // the "Sort" action; we don't trigger a fetch from here, so unloaded
+  // branches show no Sort row (acceptable — the user only sorts what they
+  // can see).
+  const { data: cachedChildren } = useWikiDocumentChildren(
+    operationId,
+    node.id,
+    { enabled: false },
+  )
+  const loadedChildren = cachedChildren?.wikiDocumentChildren ?? []
 
   return (
     <>
@@ -317,7 +364,15 @@ function WikiTreeRowQuickActionsImpl({
                   className="shrink-0 hidden group-hover:inline-flex"
                   onClick={(e) => {
                     e.stopPropagation()
-                    expandMany(collectBranchIdsWithChildren([node], true))
+                    // Lazy tree: we only know what's loaded. Expanding the
+                    // node itself triggers its children fetch; descendants
+                    // expand naturally as the user walks deeper. For already
+                    // loaded subtrees we expand everything we have.
+                    const ids = collectBranchIdsWithChildren(
+                      [{ ...node, children: loadedChildren.map(rowToTreeNode) }],
+                      true,
+                    )
+                    expandMany(ids)
                   }}
                 />
               }
@@ -335,7 +390,11 @@ function WikiTreeRowQuickActionsImpl({
                   className="shrink-0 hidden group-hover:inline-flex"
                   onClick={(e) => {
                     e.stopPropagation()
-                    collapseMany(collectBranchIdsWithChildren([node], true))
+                    const ids = collectBranchIdsWithChildren(
+                      [{ ...node, children: loadedChildren.map(rowToTreeNode) }],
+                      true,
+                    )
+                    collapseMany(ids)
                   }}
                 />
               }
@@ -423,10 +482,10 @@ function WikiTreeRowQuickActionsImpl({
               Move to
             </DropdownMenuItem>
           )}
-          {isEditor && hasChildren && (
+          {isEditor && hasChildren && loadedChildren.length > 0 && (
             <DropdownMenuItem
               onClick={() => {
-                const sorted = [...node.children].sort((a, b) =>
+                const sorted = [...loadedChildren].sort((a, b) =>
                   a.title.localeCompare(b.title, undefined, { sensitivity: "base" }),
                 )
                 const count = sorted.length

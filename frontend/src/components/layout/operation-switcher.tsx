@@ -42,11 +42,18 @@ export function OperationSwitcher() {
     return () => clearTimeout(timeout);
   }, [search]);
 
+  // Gated on popover open: the switcher's primary trigger renders the
+  // currently-scoped op from localStorage/Zustand, so the list isn't needed
+  // until the user actually opens the picker. Saves one round trip per page
+  // load across the entire app.
   const { data, isLoading, isFetchingNextPage, hasNextPage, fetchNextPage } =
-    useInfiniteOperations({
-      search: debouncedSearch || null,
-      first: 20,
-    });
+    useInfiniteOperations(
+      {
+        search: debouncedSearch || null,
+        first: 20,
+      },
+      { enabled: open },
+    );
 
   const operations = useMemo(
     () =>

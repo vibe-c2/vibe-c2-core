@@ -28,6 +28,9 @@ type WikiDocument {
   id: ID!
   operationId: ID!
   parentDocument: WikiDocument
+  # Scalar form of parentDocument.id — exposed so tree-style queries can avoid
+  # a per-row Mongo lookup just to surface the parent's id. Null for roots.
+  parentDocumentId: ID
   childDocuments: [WikiDocument!]!
   title: String!
   content: String!
@@ -224,6 +227,32 @@ extend type Query {
     @hasPermission(permission: "operation:member")
 
   wikiDocumentTree(operationId: ID!): [WikiDocument!]!
+    @hasPermission(permission: "operation:member")
+
+  # Direct children of `parentDocumentId` (or root-level documents when
+  # `parentDocumentId` is null), sorted by sortOrder. Trashed documents are
+  # excluded. Drives the lazy tree sidebar — the client fetches roots on
+  # mount, then a fresh page per expanded branch. childCount on each
+  # returned row is precomputed in a single aggregation so the
+  # caret-vs-no-caret decision is one round trip per expand.
+  wikiDocumentChildren(
+    operationId: ID!
+    parentDocumentId: ID
+  ): [WikiDocument!]!
+    @hasPermission(permission: "operation:member")
+
+  # Returns every document needed to render the sidebar tree expanded down to
+  # `documentId`: ancestors + each ancestor's siblings + roots. One round
+  # trip instead of N when a user lands on a deeply nested doc via direct
+  # link. Returns an empty list if the document doesn't exist or the caller
+  # lacks access — the sidebar falls back to the roots fetch.
+  wikiDocumentTreeRevealPath(documentId: ID!): [WikiDocument!]!
+    @hasPermission(permission: "operation:member")
+
+  # Total count of soft-deleted documents in the operation. Cheap badge query
+  # for the sidebar; avoids fetching the full trash list just to read its
+  # totalCount.
+  wikiDocumentTrashCount(operationId: ID!): Int!
     @hasPermission(permission: "operation:member")
 
   # Ranked, snippet-returning search over wiki documents within an operation.

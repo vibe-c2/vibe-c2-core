@@ -170,6 +170,8 @@ models:
         resolver: true
       parentDocument:
         resolver: true
+      parentDocumentId:
+        resolver: true
       childDocuments:
         resolver: true
       childCount:

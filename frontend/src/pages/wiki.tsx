@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef } from "react"
+import { useEffect, useRef } from "react"
 import { Navigate, useParams } from "react-router"
 import { BookOpenIcon } from "lucide-react"
 import { useScopedOperation } from "@/hooks/use-scoped-operation"
@@ -7,13 +7,12 @@ import {
   useWikiDocument,
   useWikiDocumentChangedSubscription,
   useWikiDocumentPresenceChangedSubscription,
-  useWikiDocumentTree,
+  useWikiDocumentTreeRevealPath,
   useTrackWikiDocumentVisit,
 } from "@/graphql/hooks/wiki"
 import { usePageMetadata, type PageIcon } from "@/hooks/use-page-metadata"
 import { useWikiStore } from "@/stores/wiki"
 import { WikiTreeSidebar } from "@/components/wiki/wiki-tree-sidebar"
-import { collectAncestorIds } from "@/components/wiki/wiki-tree-helpers"
 import { ResizeHandle } from "@/components/wiki/resize-handle"
 import { WikiContentArea } from "@/components/wiki/wiki-content-area"
 import { WikiCommandPalette } from "@/components/wiki/wiki-command-palette"
@@ -96,14 +95,13 @@ function WikiPageInner({
   // refetchOnWindowFocus and via the details dialog's explicit fetch on
   // click; live cross-session updates only land in the Findings tab.
 
-  // Fetch tree data once — shared between sidebar and content search breadcrumbs.
-  const { data: treeData } = useWikiDocumentTree(operationId)
-  // Memoize to keep the array reference stable across renders so effects with
-  // `treeDocuments` in their deps (e.g. auto-expand below) don't re-fire on
-  // unrelated parent re-renders.
-  const treeDocuments = useMemo(
-    () => treeData?.wikiDocumentTree ?? [],
-    [treeData?.wikiDocumentTree],
+  // Reveal-path: when the URL points at a document, fetch every row the
+  // sidebar needs to render itself expanded down to that doc — and shred
+  // the response into per-parent `children` cache entries so the lazy
+  // renders that follow are cache hits. Only fires when documentId is set.
+  const { data: revealData } = useWikiDocumentTreeRevealPath(
+    documentId ?? "",
+    operationId,
   )
 
   const sidebarWidth = useWikiStore((s) => s.sidebarWidth)
@@ -111,22 +109,22 @@ function WikiPageInner({
   const openContentSearch = useWikiStore((s) => s.openContentSearch)
   const expandMany = useWikiStore((s) => s.expandMany)
 
-  // Auto-expand the tree to reveal the open document. Fires once per
-  // documentId — the user can manually collapse afterwards without us
-  // fighting back. Re-fires on a fresh navigation (e.g. from search) or
-  // after the tree finishes loading.
+  // Auto-expand the tree to reveal the open document. The reveal-path hook
+  // already returns the precomputed ancestor chain — expand it once per
+  // navigation. The user can manually collapse afterwards without us
+  // fighting back.
   const lastExpandedFor = useRef<string | null>(null)
   useEffect(() => {
     if (!documentId) {
       lastExpandedFor.current = null
       return
     }
-    if (treeDocuments.length === 0) return
+    const ancestorIds = revealData?.ancestorIds
+    if (!ancestorIds || ancestorIds.length === 0) return
     if (lastExpandedFor.current === documentId) return
     lastExpandedFor.current = documentId
-    const ancestorIds = collectAncestorIds(documentId, treeDocuments)
-    if (ancestorIds.length > 0) expandMany(ancestorIds)
-  }, [documentId, treeDocuments, expandMany])
+    expandMany(ancestorIds)
+  }, [documentId, revealData?.ancestorIds, expandMany])
 
   // Record a visit ~700ms after a document opens, so quick navigation
   // through the tree doesn't spam the mutation. Best-effort: failures are
@@ -173,7 +171,6 @@ function WikiPageInner({
         ref={sidebarRef}
         operationId={operationId}
         isEditor={isEditor}
-        documents={treeDocuments}
       />
       <ResizeHandle
         currentWidth={sidebarWidth}
@@ -184,13 +181,14 @@ function WikiPageInner({
         documentId={documentId}
         operationId={operationId}
         isEditor={isEditor}
-        treeDocuments={treeDocuments}
       />
 
-      {/* Dialogs + panels — mounted once, controlled by store */}
+      {/* Dialogs + panels — mounted once, controlled by store. Move dialog
+          owns its own tree fetch (lazy on dialog-open) so the wiki page no
+          longer eagerly loads the full tree on every navigation. */}
       <CreateWikiDocumentDialog operationId={operationId} />
       <ImportOutlineDialog operationId={operationId} />
-      <MoveWikiDocumentDialog documents={treeDocuments} />
+      <MoveWikiDocumentDialog operationId={operationId} />
       <DeleteWikiDocumentDialog documentId={documentId} />
       <PermanentDeleteWikiDocumentDialog />
       <WikiTrashPanel operationId={operationId} />

@@ -47,7 +47,10 @@ type IWikiDocumentResolver interface {
 	WikiDocument(ctx context.Context, id string) (*models.WikiDocument, error)
 	WikiDocuments(ctx context.Context, operationID string, parentDocumentID *string, search *string, first *int, after *string, last *int, before *string) (*model.WikiDocumentConnection, error)
 	WikiDocumentTree(ctx context.Context, operationID string) ([]*models.WikiDocument, error)
+	WikiDocumentChildren(ctx context.Context, operationID string, parentDocumentID *string) ([]*models.WikiDocument, error)
+	WikiDocumentTreeRevealPath(ctx context.Context, documentID string) ([]*models.WikiDocument, error)
 	WikiDocumentTrash(ctx context.Context, operationID string, first *int, after *string, last *int, before *string) (*model.WikiDocumentConnection, error)
+	WikiDocumentTrashCount(ctx context.Context, operationID string) (int, error)
 	WikiDocumentTrashedDescendants(ctx context.Context, documentID string) ([]*models.WikiDocument, error)
 	WikiDocumentBacklinks(ctx context.Context, documentID string) ([]*models.WikiDocument, error)
 	WikiSearch(ctx context.Context, operationID string, scope *string, query string, offset *int, limit *int) (*model.WikiSearchConnection, error)
@@ -64,6 +67,7 @@ type IWikiDocumentResolver interface {
 	WikiDocumentID(ctx context.Context, obj *models.WikiDocument) (string, error)
 	WikiDocumentOperationID(ctx context.Context, obj *models.WikiDocument) (string, error)
 	WikiDocumentParentDocument(ctx context.Context, obj *models.WikiDocument) (*models.WikiDocument, error)
+	WikiDocumentParentDocumentID(ctx context.Context, obj *models.WikiDocument) (*string, error)
 	WikiDocumentChildDocuments(ctx context.Context, obj *models.WikiDocument) ([]*models.WikiDocument, error)
 	WikiDocumentChildCount(ctx context.Context, obj *models.WikiDocument) (int, error)
 	WikiDocumentBacklinksField(ctx context.Context, obj *models.WikiDocument) ([]*models.WikiDocument, error)
@@ -971,12 +975,135 @@ func (r *wikiDocumentResolver) WikiDocumentTree(ctx context.Context, operationID
 		return nil, fmt.Errorf("failed to fetch document tree: %w", err)
 	}
 
+	// Derive child counts from the flat list in memory — no extra round trips.
+	// Stashed in the per-request loader so the WikiDocument.childCount field
+	// resolver returns map lookups instead of N+1 Count() calls.
+	counts := make(map[uuid.UUID]int, len(docs))
+	for _, d := range docs {
+		if d.ParentDocumentID != nil {
+			counts[*d.ParentDocumentID]++
+		}
+	}
+	WikiTreeLoaderFromContext(ctx).SetAllChildCounts(counts)
+
 	ptrs := make([]*models.WikiDocument, len(docs))
 	for i := range docs {
 		ptrs[i] = &docs[i]
 	}
 
 	return ptrs, nil
+}
+
+// WikiDocumentChildren returns the active direct children of a parent
+// document (or root documents in the operation when parentDocumentID is
+// nil/empty), sorted by sortOrder. childCount on each returned row is
+// precomputed via aggregation so the sidebar can decide expand-arrow visibility
+// without a per-row Count call.
+func (r *wikiDocumentResolver) WikiDocumentChildren(ctx context.Context, operationID string, parentDocumentID *string) ([]*models.WikiDocument, error) {
+	opUID, err := uuid.Parse(operationID)
+	if err != nil {
+		return nil, fmt.Errorf("invalid operation ID: %w", err)
+	}
+
+	if err := r.authorizeForOperation(ctx, opUID, models.OperationRoleViewer); err != nil {
+		return nil, err
+	}
+
+	var parentUID *uuid.UUID
+	if parentDocumentID != nil && *parentDocumentID != "" {
+		pid, err := uuid.Parse(*parentDocumentID)
+		if err != nil {
+			return nil, fmt.Errorf("invalid parent document ID: %w", err)
+		}
+		parentUID = &pid
+	}
+
+	docs, counts, err := r.docRepo.FindChildDocumentsWithCounts(ctx, opUID, parentUID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to fetch children: %w", err)
+	}
+	WikiTreeLoaderFromContext(ctx).SetAllChildCounts(counts)
+
+	ptrs := make([]*models.WikiDocument, len(docs))
+	for i := range docs {
+		ptrs[i] = &docs[i]
+	}
+	return ptrs, nil
+}
+
+// WikiDocumentTreeRevealPath returns every active document the sidebar needs
+// to render a tree expanded down to `documentID`: ancestors plus the siblings
+// of each ancestor, plus root documents. One reveal round trip instead of N
+// per-level fetches when a user lands on a deeply nested doc via direct link.
+//
+// Returns an empty list (no error) when the doc doesn't exist or is in trash —
+// the sidebar will just render the roots fetch and skip auto-expansion.
+func (r *wikiDocumentResolver) WikiDocumentTreeRevealPath(ctx context.Context, documentID string) ([]*models.WikiDocument, error) {
+	docUID, err := uuid.Parse(documentID)
+	if err != nil {
+		return nil, fmt.Errorf("invalid document ID: %w", err)
+	}
+
+	target, err := r.docRepo.FindByID(ctx, docUID)
+	if err != nil {
+		// Not found — return empty rather than error; the sidebar treats this
+		// as "no reveal" and falls back to roots.
+		return []*models.WikiDocument{}, nil
+	}
+	if target.DeletedAt != nil {
+		return []*models.WikiDocument{}, nil
+	}
+	if err := r.authorizeForOperation(ctx, target.OperationID, models.OperationRoleViewer); err != nil {
+		return nil, err
+	}
+
+	// Collect the parent IDs we need siblings for: every ancestor of the
+	// target. The target's own parent provides the row containing the target;
+	// each grand-ancestor provides the row containing its child. Roots are
+	// added by the repo regardless of the parent list.
+	var ancestorIDs []uuid.UUID
+	if target.ParentDocumentID != nil {
+		chain, err := r.docRepo.FindAncestors(ctx, *target.ParentDocumentID)
+		if err == nil {
+			ancestorIDs = make([]uuid.UUID, 0, len(chain))
+			for _, a := range chain {
+				// Walks through trashed ancestors too; the reveal-path filter
+				// already excludes trashed docs from the result set, so a
+				// trashed ancestor just means its level shows no siblings.
+				ancestorIDs = append(ancestorIDs, a.DocumentID)
+			}
+		}
+	}
+
+	docs, counts, err := r.docRepo.FindDocumentsForRevealPath(ctx, target.OperationID, ancestorIDs)
+	if err != nil {
+		return nil, fmt.Errorf("failed to fetch reveal path: %w", err)
+	}
+	WikiTreeLoaderFromContext(ctx).SetAllChildCounts(counts)
+
+	ptrs := make([]*models.WikiDocument, len(docs))
+	for i := range docs {
+		ptrs[i] = &docs[i]
+	}
+	return ptrs, nil
+}
+
+// WikiDocumentTrashCount returns the number of soft-deleted documents in the
+// operation. Used by the sidebar to render the trash badge without fetching
+// the full paginated trash list.
+func (r *wikiDocumentResolver) WikiDocumentTrashCount(ctx context.Context, operationID string) (int, error) {
+	opUID, err := uuid.Parse(operationID)
+	if err != nil {
+		return 0, fmt.Errorf("invalid operation ID: %w", err)
+	}
+	if err := r.authorizeForOperation(ctx, opUID, models.OperationRoleViewer); err != nil {
+		return 0, err
+	}
+	count, err := r.docRepo.CountByOperationID(ctx, opUID, repository.WikiDocumentFilter{Trashed: true})
+	if err != nil {
+		return 0, fmt.Errorf("failed to count trashed documents: %w", err)
+	}
+	return int(count), nil
 }
 
 func (r *wikiDocumentResolver) WikiDocumentTrash(ctx context.Context, operationID string, first *int, after *string, last *int, before *string) (*model.WikiDocumentConnection, error) {
@@ -1275,6 +1402,17 @@ func (r *wikiDocumentResolver) WikiDocumentParentDocument(ctx context.Context, o
 	return &parent, nil
 }
 
+// WikiDocumentParentDocumentID exposes the parent's id as a scalar — preferred
+// by tree-style queries where loading the full parent document just to read
+// its id would cost a Mongo round trip per row. Nil for root documents.
+func (r *wikiDocumentResolver) WikiDocumentParentDocumentID(ctx context.Context, obj *models.WikiDocument) (*string, error) {
+	if obj.ParentDocumentID == nil {
+		return nil, nil
+	}
+	s := obj.ParentDocumentID.String()
+	return &s, nil
+}
+
 // WikiDocumentAncestors returns the parent chain root→leaf (excluding obj
 // itself) so the frontend can render a breadcrumb for any document — notably
 // trashed ones, where the tree cache doesn't carry the path. Walks through
@@ -1320,6 +1458,13 @@ func (r *wikiDocumentResolver) WikiDocumentChildDocuments(ctx context.Context, o
 }
 
 func (r *wikiDocumentResolver) WikiDocumentChildCount(ctx context.Context, obj *models.WikiDocument) (int, error) {
+	// Tree-shaped queries pre-populate the loader with bulk counts; honor
+	// that so this resolver doesn't issue one Mongo Count per visible row.
+	// Map miss falls back to a live count — covers non-tree callers and
+	// rows that weren't included in the bulk precompute (defensive).
+	if c, ok := WikiTreeLoaderFromContext(ctx).ChildCount(obj.DocumentID); ok {
+		return c, nil
+	}
 	count, err := r.docRepo.CountChildDocuments(ctx, obj.DocumentID)
 	if err != nil {
 		return 0, fmt.Errorf("failed to count children: %w", err)

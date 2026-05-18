@@ -200,6 +200,12 @@ func (r *fakeDocRepo) FindChildDocuments(context.Context, uuid.UUID) ([]models.W
 func (r *fakeDocRepo) CountChildDocuments(context.Context, uuid.UUID) (int64, error) {
 	return 0, nil
 }
+func (r *fakeDocRepo) FindChildDocumentsWithCounts(context.Context, uuid.UUID, *uuid.UUID) ([]models.WikiDocument, map[uuid.UUID]int, error) {
+	return nil, nil, nil
+}
+func (r *fakeDocRepo) FindDocumentsForRevealPath(context.Context, uuid.UUID, []uuid.UUID) ([]models.WikiDocument, map[uuid.UUID]int, error) {
+	return nil, nil, nil
+}
 func (r *fakeDocRepo) FindDescendants(context.Context, uuid.UUID) ([]models.WikiDocument, error) {
 	return nil, nil
 }

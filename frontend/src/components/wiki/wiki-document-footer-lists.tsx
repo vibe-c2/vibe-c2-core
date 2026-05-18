@@ -1,10 +1,9 @@
 import { WikiChildDocumentList } from "@/components/wiki/wiki-child-document-list"
 import { WikiBacklinkList } from "@/components/wiki/wiki-backlink-list"
-import type { WikiDocumentTreeFieldsFragment } from "@/graphql/gql/graphql"
 
 interface WikiDocumentFooterListsProps {
   documentId: string
-  treeDocuments: WikiDocumentTreeFieldsFragment[]
+  operationId: string
   isEditor: boolean
 }
 
@@ -21,7 +20,7 @@ interface WikiDocumentFooterListsProps {
  */
 export function WikiDocumentFooterLists({
   documentId,
-  treeDocuments,
+  operationId,
   isEditor,
 }: WikiDocumentFooterListsProps) {
   return (
@@ -29,7 +28,7 @@ export function WikiDocumentFooterLists({
       <div className="grid grid-cols-1 gap-6 @3xl/footer:grid-cols-2 @3xl/footer:gap-8">
         <WikiChildDocumentList
           documentId={documentId}
-          treeDocuments={treeDocuments}
+          operationId={operationId}
           isEditor={isEditor}
         />
         <WikiBacklinkList documentId={documentId} />

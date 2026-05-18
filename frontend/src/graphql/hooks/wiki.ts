@@ -4,6 +4,9 @@ import { useSubscription } from "@/hooks/use-subscription"
 import type { CreateWikiDocumentInput, UpdateWikiDocumentInput } from "@/graphql/gql/graphql"
 import {
   WikiDocumentTreeDocument,
+  WikiDocumentChildrenDocument,
+  WikiDocumentTreeRevealPathDocument,
+  WikiDocumentTrashCountDocument,
   WikiDocumentDocument,
   WikiDocumentLiteDocument,
   WikiDocumentBacklinksDocument,
@@ -27,13 +30,29 @@ import {
   TrackWikiDocumentVisitDocument,
   WikiDocumentChangedDocument,
   WikiDocumentPresenceChangedDocument,
+  type WikiDocumentTreeFieldsFragment,
+  type WikiDocumentChildrenQuery,
 } from "@/graphql/gql/graphql"
 
 // Query key factory for consistent cache keys and targeted invalidation.
 export const wikiKeys = {
   all: ["wiki"] as const,
+  // Legacy full-tree query — still used by the move dialog, which lazy-fetches
+  // it only when opened. The sidebar uses the per-parent `children` key below.
   trees: () => [...wikiKeys.all, "tree"] as const,
   tree: (operationId: string) => [...wikiKeys.trees(), operationId] as const,
+  // Per-parent direct-children entry. Used by the lazy sidebar (one entry per
+  // expanded branch) and the document-footer Sub-pages list. Root-level rows
+  // live under the sentinel "__root__" so a single shape covers both cases.
+  childrenAll: () => [...wikiKeys.all, "children"] as const,
+  childrenByOp: (operationId: string) => [...wikiKeys.childrenAll(), operationId] as const,
+  children: (operationId: string, parentDocumentId: string | null) =>
+    [...wikiKeys.childrenByOp(operationId), parentDocumentId ?? "__root__"] as const,
+  // Reveal path for direct-link landings on /wiki/:documentId. One round trip
+  // returns every doc the sidebar needs to render itself expanded to the
+  // target; on success we shred the result into per-parent `children` entries
+  // so the lazy renders below are cache hits.
+  revealPath: (documentId: string) => [...wikiKeys.all, "revealPath", documentId] as const,
   details: () => [...wikiKeys.all, "detail"] as const,
   detail: (id: string) => [...wikiKeys.details(), id] as const,
   lists: () => [...wikiKeys.all, "list"] as const,
@@ -42,6 +61,8 @@ export const wikiKeys = {
   search: (params: { operationId: string; scope?: string | null; query: string }) =>
     [...wikiKeys.all, "search", params] as const,
   trash: (operationId: string) => [...wikiKeys.all, "trash", operationId] as const,
+  trashCount: (operationId: string) =>
+    [...wikiKeys.all, "trashCount", operationId] as const,
   trashedDescendants: (documentId: string) =>
     [...wikiKeys.all, "trashedDescendants", documentId] as const,
   backups: (documentId: string) => [...wikiKeys.all, "backups", documentId] as const,
@@ -59,10 +80,113 @@ export const wikiKeys = {
 
 // --- Queries ---
 
-export function useWikiDocumentTree(operationId: string) {
+// Legacy full-tree fetch. Kept for the move dialog (which needs every doc as
+// a target option). The sidebar now uses useWikiDocumentChildren below.
+// `enabled` is opt-in so callers can gate the fetch on dialog visibility.
+export function useWikiDocumentTree(
+  operationId: string,
+  options?: { enabled?: boolean },
+) {
   return useQuery({
     queryKey: wikiKeys.tree(operationId),
     queryFn: () => graphqlClient(WikiDocumentTreeDocument, { operationId }),
+    enabled: !!operationId && (options?.enabled ?? true),
+  })
+}
+
+// Direct children of a parent (or roots when parentDocumentId is null).
+// Each expanded sidebar branch holds one of these; subscriptions invalidate
+// per-parent keys, so a move only refetches the two affected branches.
+//
+// `staleTime: Infinity` because the SSE wikiDocumentChanged subscription is
+// the single source of truth for invalidation — without that, branches would
+// background-refetch on every window focus and add traffic the sidebar
+// doesn't actually need.
+export function useWikiDocumentChildren(
+  operationId: string,
+  parentDocumentId: string | null,
+  options?: { enabled?: boolean },
+) {
+  return useQuery({
+    queryKey: wikiKeys.children(operationId, parentDocumentId),
+    queryFn: () =>
+      graphqlClient(WikiDocumentChildrenDocument, {
+        operationId,
+        parentDocumentId,
+      }),
+    enabled: !!operationId && (options?.enabled ?? true),
+    staleTime: Infinity,
+  })
+}
+
+// Returns every row needed to expand the sidebar down to documentId, then
+// shreds the response into per-parent `children` cache entries so the lazy
+// nodes that follow are cache hits — no extra round trips per ancestor level.
+//
+// Returns the ancestor IDs (root → target's parent) so the page can call
+// expandMany() once with no follow-up walking.
+export function useWikiDocumentTreeRevealPath(
+  documentId: string,
+  operationId: string,
+) {
+  const queryClient = useQueryClient()
+  return useQuery({
+    queryKey: wikiKeys.revealPath(documentId),
+    queryFn: async () => {
+      const result = await graphqlClient(WikiDocumentTreeRevealPathDocument, {
+        documentId,
+      })
+      const rows = result.wikiDocumentTreeRevealPath
+
+      // Group by parentDocumentId and seed each per-parent cache entry. The
+      // shape must match what useWikiDocumentChildren produces, so the
+      // ChildrenQuery envelope name (`wikiDocumentChildren`) is what consumers
+      // read.
+      const byParent = new Map<string | null, WikiDocumentTreeFieldsFragment[]>()
+      for (const row of rows) {
+        const pid = row.parentDocumentId ?? null
+        const arr = byParent.get(pid) ?? []
+        arr.push(row)
+        byParent.set(pid, arr)
+      }
+      for (const [pid, list] of byParent) {
+        list.sort((a, b) =>
+          a.sortOrder < b.sortOrder ? -1 : a.sortOrder > b.sortOrder ? 1 : 0,
+        )
+        queryClient.setQueryData<WikiDocumentChildrenQuery>(
+          wikiKeys.children(operationId, pid),
+          { wikiDocumentChildren: list },
+        )
+      }
+
+      // Compute the ancestor chain that the sidebar needs to auto-expand.
+      // Walk parent pointers upward from the target's parent (the target
+      // itself doesn't need to be expanded — its parent does).
+      const byId = new Map(rows.map((r) => [r.id, r]))
+      const ancestorIds: string[] = []
+      const target = rows.find((r) => r.id === documentId)
+      let cursor = target?.parentDocumentId ?? null
+      const seen = new Set<string>()
+      while (cursor && !seen.has(cursor)) {
+        seen.add(cursor)
+        ancestorIds.push(cursor)
+        const parent = byId.get(cursor)
+        cursor = parent?.parentDocumentId ?? null
+      }
+
+      return { rows, ancestorIds }
+    },
+    enabled: !!documentId && !!operationId,
+    staleTime: Infinity,
+  })
+}
+
+// Cheap count for the trash badge. Pure scalar — no list fetch.
+export function useWikiDocumentTrashCount(operationId: string) {
+  return useQuery({
+    queryKey: wikiKeys.trashCount(operationId),
+    queryFn: () =>
+      graphqlClient(WikiDocumentTrashCountDocument, { operationId }),
     enabled: !!operationId,
   })
 }
@@ -389,7 +513,14 @@ export function useWikiDocumentChangedSubscription(operationId: string) {
       // is a no-op for queries that aren't mounted, so the cost is just a
       // stale-flag flip when those views are closed.
       queryClient.invalidateQueries({ queryKey: wikiKeys.tree(operationId) })
+      // Lazy sidebar: invalidate every per-parent children entry for this op.
+      // The event payload only carries the post-mutation parentDocumentId, so
+      // we can't surgically target old + new on a move — invalidating the op
+      // subtree is correct and cheap (unmounted entries are no-ops).
+      queryClient.invalidateQueries({ queryKey: wikiKeys.childrenByOp(operationId) })
       queryClient.invalidateQueries({ queryKey: wikiKeys.trash(operationId) })
+      // Trash badge: delete/restore/empty-trash all shift the count.
+      queryClient.invalidateQueries({ queryKey: wikiKeys.trashCount(operationId) })
       queryClient.invalidateQueries({ queryKey: wikiKeys.histories() })
       queryClient.invalidateQueries({ queryKey: wikiKeys.lists() })
 

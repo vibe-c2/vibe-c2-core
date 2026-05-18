@@ -22,6 +22,52 @@ import { RevokeSessionDialog } from "./revoke-session-dialog"
 
 export function MySessionsDialog() {
   const { mySessionsDialogOpen, securityWarning, closeDialogs, openRevokeDialog } = useSessionStore()
+
+  return (
+    <>
+      <Dialog
+        open={mySessionsDialogOpen}
+        onOpenChange={(open) => {
+          if (!open) {
+            closeDialogs()
+          }
+        }}
+      >
+        <DialogContent className="max-w-lg max-h-[80vh] flex flex-col">
+          <DialogHeader>
+            <DialogTitle>My Sessions</DialogTitle>
+            <DialogDescription>
+              Manage your active sessions across devices.
+            </DialogDescription>
+          </DialogHeader>
+
+          {/* Body lives in a child that only mounts when the dialog opens.
+              The useInfiniteMySessions query lives inside it, so the network
+              call is paid only when the user actually views their sessions —
+              no more eager fetch on every page load just because the dialog
+              is statically mounted in nav-user. */}
+          {mySessionsDialogOpen && (
+            <MySessionsDialogBody
+              securityWarning={securityWarning}
+              onRevokeClicked={(id) => openRevokeDialog(id, false)}
+            />
+          )}
+        </DialogContent>
+      </Dialog>
+      <RevokeSessionDialog />
+    </>
+  )
+}
+
+interface MySessionsDialogBodyProps {
+  securityWarning: boolean
+  onRevokeClicked: (sessionId: string) => void
+}
+
+function MySessionsDialogBody({
+  securityWarning,
+  onRevokeClicked,
+}: MySessionsDialogBodyProps) {
   const [activeOnly, setActiveOnly] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
@@ -59,119 +105,99 @@ export function MySessionsDialog() {
 
   return (
     <>
-      <Dialog
-        open={mySessionsDialogOpen}
-        onOpenChange={(open) => {
-          if (!open) {
-            closeDialogs()
-            setError(null)
-          }
-        }}
-      >
-        <DialogContent className="max-w-lg max-h-[80vh] flex flex-col">
-          <DialogHeader>
-            <DialogTitle>My Sessions</DialogTitle>
-            <DialogDescription>
-              Manage your active sessions across devices.
-            </DialogDescription>
-          </DialogHeader>
+      {securityWarning && (
+        <div className="flex items-start gap-2 rounded-md border border-yellow-500/50 bg-yellow-500/10 p-3 text-sm text-yellow-700 dark:text-yellow-400">
+          <ShieldAlertIcon className="size-4 mt-0.5 shrink-0" />
+          <span>
+            We have detected more than one active session for your account.
+            Security concern is advised!
+          </span>
+        </div>
+      )}
 
-          {securityWarning && (
-            <div className="flex items-start gap-2 rounded-md border border-yellow-500/50 bg-yellow-500/10 p-3 text-sm text-yellow-700 dark:text-yellow-400">
-              <ShieldAlertIcon className="size-4 mt-0.5 shrink-0" />
-              <span>
-                We have detected more than one active session for your account.
-                Security concern is advised!
-              </span>
-            </div>
-          )}
+      {/* Controls */}
+      <div className="flex items-center justify-between gap-2">
+        <div className="flex items-center gap-2">
+          <Switch
+            id="active-only"
+            checked={activeOnly}
+            onCheckedChange={setActiveOnly}
+          />
+          <Label htmlFor="active-only" className="text-sm">
+            Active only
+          </Label>
+        </div>
+        {activeCount > 1 && (
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={handleRevokeAll}
+            disabled={revokeAll.isPending}
+          >
+            <ShieldXIcon className="size-4" />
+            {revokeAll.isPending ? "Revoking..." : "Revoke all others"}
+          </Button>
+        )}
+      </div>
 
-          {/* Controls */}
-          <div className="flex items-center justify-between gap-2">
-            <div className="flex items-center gap-2">
-              <Switch
-                id="active-only"
-                checked={activeOnly}
-                onCheckedChange={setActiveOnly}
+      {error && (
+        <div className="rounded-md bg-destructive/15 p-3 text-sm text-destructive">
+          {error}
+        </div>
+      )}
+
+      {/* Session list */}
+      {isLoading && (
+        <div className="space-y-2">
+          {Array.from({ length: 3 }).map((_, i) => (
+            <Skeleton key={i} className="h-20 w-full" />
+          ))}
+        </div>
+      )}
+
+      {!isLoading && sessions.length === 0 && (
+        <div className="flex items-center justify-center py-8 text-sm text-muted-foreground">
+          No sessions found.
+        </div>
+      )}
+
+      {!isLoading && sessions.length > 0 && (
+        <Virtuoso
+          data={sessions}
+          style={{ height: "400px" }}
+          endReached={() => {
+            if (hasNextPage && !isFetchingNextPage) fetchNextPage()
+          }}
+          overscan={100}
+          itemContent={(_index, session) => (
+            <div className="pb-2">
+              <SessionItem
+                session={session}
+                onRevoke={onRevokeClicked}
               />
-              <Label htmlFor="active-only" className="text-sm">
-                Active only
-              </Label>
-            </div>
-            {activeCount > 1 && (
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={handleRevokeAll}
-                disabled={revokeAll.isPending}
-              >
-                <ShieldXIcon className="size-4" />
-                {revokeAll.isPending ? "Revoking..." : "Revoke all others"}
-              </Button>
-            )}
-          </div>
-
-          {error && (
-            <div className="rounded-md bg-destructive/15 p-3 text-sm text-destructive">
-              {error}
             </div>
           )}
-
-          {/* Session list */}
-          {isLoading && (
-            <div className="space-y-2">
-              {Array.from({ length: 3 }).map((_, i) => (
-                <Skeleton key={i} className="h-20 w-full" />
-              ))}
-            </div>
-          )}
-
-          {!isLoading && sessions.length === 0 && (
-            <div className="flex items-center justify-center py-8 text-sm text-muted-foreground">
-              No sessions found.
-            </div>
-          )}
-
-          {!isLoading && sessions.length > 0 && (
-            <Virtuoso
-              data={sessions}
-              style={{ height: "400px" }}
-              endReached={() => {
-                if (hasNextPage && !isFetchingNextPage) fetchNextPage()
-              }}
-              overscan={100}
-              itemContent={(_index, session) => (
-                <div className="pb-2">
-                  <SessionItem
-                    session={session}
-                    onRevoke={(id) => openRevokeDialog(id, false)}
-                  />
-                </div>
-              )}
-              components={{
-                Footer: () => {
-                  if (isFetchingNextPage) {
-                    return (
-                      <div className="flex items-center justify-center py-4">
-                        <LoaderIcon className="size-4 animate-spin" />
-                      </div>
-                    )
-                  }
-                  if (!hasNextPage && sessions.length > 0) {
-                    return (
-                      <div className="flex items-center justify-center py-4 text-sm text-muted-foreground">
-                        No more sessions to load
-                      </div>
-                    )
-                  }
-                  return null
-                },
-              }}
-            />
-          )}
-        </DialogContent>
-      </Dialog>
-      <RevokeSessionDialog />
+          components={{
+            Footer: () => {
+              if (isFetchingNextPage) {
+                return (
+                  <div className="flex items-center justify-center py-4">
+                    <LoaderIcon className="size-4 animate-spin" />
+                  </div>
+                )
+              }
+              if (!hasNextPage && sessions.length > 0) {
+                return (
+                  <div className="flex items-center justify-center py-4 text-sm text-muted-foreground">
+                    No more sessions to load
+                  </div>
+                )
+              }
+              return null
+            },
+          }}
+        />
+      )}
     </>
   )
 }

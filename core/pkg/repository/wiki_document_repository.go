@@ -37,6 +37,19 @@ type IWikiDocumentRepository interface {
 	FindChildDocuments(ctx context.Context, parentID uuid.UUID) ([]models.WikiDocument, error)
 	FindAllByOperationID(ctx context.Context, opID uuid.UUID) ([]models.WikiDocument, error)
 	CountChildDocuments(ctx context.Context, parentID uuid.UUID) (int64, error)
+	// FindChildDocumentsWithCounts returns active children of `parentID` (or
+	// root documents in opID when parentID is nil), sorted by sort_order,
+	// alongside a map of grandchild counts keyed by each returned document's
+	// id. The grandchild counts are computed in one aggregation, so the entire
+	// call is two Mongo round trips regardless of the result size. Used by
+	// the lazy tree path to render expand carets without an N+1 Count storm.
+	FindChildDocumentsWithCounts(ctx context.Context, opID uuid.UUID, parentID *uuid.UUID) ([]models.WikiDocument, map[uuid.UUID]int, error)
+	// FindDocumentsForRevealPath returns every active document needed to
+	// render the sidebar tree expanded down to a target document: root
+	// documents in opID plus the direct children of each id in `parentIDs`
+	// (typically the target's ancestor chain). One Find + one count
+	// aggregation. Counts cover every returned row.
+	FindDocumentsForRevealPath(ctx context.Context, opID uuid.UUID, parentIDs []uuid.UUID) ([]models.WikiDocument, map[uuid.UUID]int, error)
 	FindDescendants(ctx context.Context, docID uuid.UUID) ([]models.WikiDocument, error)
 	// FindTrashedDescendants returns soft-deleted descendants of docID. Walks
 	// downward through parent_document_id, only following children whose
@@ -210,6 +223,98 @@ func (r *wikiDocumentRepository) CountChildDocuments(ctx context.Context, parent
 		"parent_document_id": parentID,
 		"deleted_at":         nil,
 	})
+}
+
+func (r *wikiDocumentRepository) FindChildDocumentsWithCounts(ctx context.Context, opID uuid.UUID, parentID *uuid.UUID) ([]models.WikiDocument, map[uuid.UUID]int, error) {
+	filter := bson.M{"operation_id": opID, "deleted_at": nil}
+	if parentID != nil {
+		filter["parent_document_id"] = *parentID
+	} else {
+		filter["parent_document_id"] = nil
+	}
+
+	var docs []models.WikiDocument
+	if err := r.coll.Find(ctx, filter).Sort("sort_order").All(&docs); err != nil {
+		return nil, nil, err
+	}
+	if len(docs) == 0 {
+		return docs, map[uuid.UUID]int{}, nil
+	}
+
+	ids := make([]uuid.UUID, len(docs))
+	for i, d := range docs {
+		ids[i] = d.DocumentID
+	}
+	counts, err := r.aggregateChildCounts(ctx, ids)
+	if err != nil {
+		return nil, nil, err
+	}
+	return docs, counts, nil
+}
+
+func (r *wikiDocumentRepository) FindDocumentsForRevealPath(ctx context.Context, opID uuid.UUID, parentIDs []uuid.UUID) ([]models.WikiDocument, map[uuid.UUID]int, error) {
+	// Roots are always part of the reveal: even for a deeply-nested target,
+	// the sidebar starts at top-level documents. When `parentIDs` is empty
+	// (target is itself a root) the result is just the roots.
+	filter := bson.M{"operation_id": opID, "deleted_at": nil}
+	if len(parentIDs) > 0 {
+		filter["$or"] = bson.A{
+			bson.M{"parent_document_id": nil},
+			bson.M{"parent_document_id": bson.M{"$in": parentIDs}},
+		}
+	} else {
+		filter["parent_document_id"] = nil
+	}
+
+	var docs []models.WikiDocument
+	if err := r.coll.Find(ctx, filter).Sort("sort_order").All(&docs); err != nil {
+		return nil, nil, err
+	}
+	if len(docs) == 0 {
+		return docs, map[uuid.UUID]int{}, nil
+	}
+
+	ids := make([]uuid.UUID, len(docs))
+	for i, d := range docs {
+		ids[i] = d.DocumentID
+	}
+	counts, err := r.aggregateChildCounts(ctx, ids)
+	if err != nil {
+		return nil, nil, err
+	}
+	return docs, counts, nil
+}
+
+// aggregateChildCounts groups active documents by parent_document_id where the
+// parent is in `parentIDs`, returning a map of parent → direct child count.
+// Parents with zero children are absent from the map. Used by tree-shaped
+// queries to populate the per-row childCount field without an N+1 storm.
+func (r *wikiDocumentRepository) aggregateChildCounts(ctx context.Context, parentIDs []uuid.UUID) (map[uuid.UUID]int, error) {
+	if len(parentIDs) == 0 {
+		return map[uuid.UUID]int{}, nil
+	}
+	pipeline := bson.A{
+		bson.M{"$match": bson.M{
+			"parent_document_id": bson.M{"$in": parentIDs},
+			"deleted_at":         nil,
+		}},
+		bson.M{"$group": bson.M{
+			"_id":   "$parent_document_id",
+			"count": bson.M{"$sum": 1},
+		}},
+	}
+	var rows []struct {
+		ID    uuid.UUID `bson:"_id"`
+		Count int       `bson:"count"`
+	}
+	if err := r.coll.Aggregate(ctx, pipeline).All(&rows); err != nil {
+		return nil, err
+	}
+	out := make(map[uuid.UUID]int, len(rows))
+	for _, row := range rows {
+		out[row.ID] = row.Count
+	}
+	return out, nil
 }
 
 // FindDescendants returns all descendants of a document (children, grandchildren, etc.)

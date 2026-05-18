@@ -1,4 +1,5 @@
 import { useMemo } from "react"
+import { useQueryClient } from "@tanstack/react-query"
 import {
   ChevronsDownUpIcon,
   ChevronsUpDownIcon,
@@ -24,12 +25,20 @@ import { Skeleton } from "@/components/ui/skeleton"
 import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip"
 import { useWikiStore } from "@/stores/wiki"
 import { useWikiDragStore, type DropPosition, type DropTarget } from "@/stores/wiki-drag"
-import { useWikiDocumentTrash, useUpdateWikiDocument } from "@/graphql/hooks/wiki"
+import {
+  useWikiDocumentChildren,
+  useWikiDocumentTrashCount,
+  useUpdateWikiDocument,
+  wikiKeys,
+} from "@/graphql/hooks/wiki"
 import { WikiTreeNode } from "@/components/wiki/wiki-tree-node"
 import { DocumentIcon } from "@/components/wiki/document-icon"
 import { WikiHistoryDropdown } from "@/components/wiki/wiki-history-dropdown"
-import { collectBranchIdsWithChildren } from "@/components/wiki/wiki-tree-helpers"
-import type { WikiDocumentTreeFieldsFragment } from "@/graphql/gql/graphql"
+import { rowToTreeNode, sortByOrder } from "@/components/wiki/wiki-tree-helpers"
+import type {
+  WikiDocumentChildrenQuery,
+  WikiDocumentTreeFieldsFragment,
+} from "@/graphql/gql/graphql"
 
 export interface TreeNode {
   id: string
@@ -40,37 +49,45 @@ export interface TreeNode {
   sortOrder: string
   parentId: string | null
   childCount: number
+  // Children are lazy — empty until the branch is expanded and its
+  // useWikiDocumentChildren query returns. `childCount` drives the expand
+  // caret independently so leaves can be distinguished without a fetch.
   children: TreeNode[]
 }
 
-/** Build a recursive tree from the flat document list. */
-function buildTree(docs: readonly WikiDocumentTreeFieldsFragment[]): TreeNode[] {
-  const childrenMap = new Map<string | null, WikiDocumentTreeFieldsFragment[]>()
-  for (const doc of docs) {
-    const parentId = doc.parentDocument?.id ?? null
-    const group = childrenMap.get(parentId) ?? []
-    group.push(doc)
-    childrenMap.set(parentId, group)
-  }
+// Read the (parentId → rows) slice for an op out of the React Query cache.
+// Used by DnD math (descendant exclusion, sibling reorder) which has to
+// walk loaded branches without re-rendering on every children fetch.
+function readChildrenFromCache(
+  queryClient: ReturnType<typeof useQueryClient>,
+  operationId: string,
+  parentId: string | null,
+): WikiDocumentTreeFieldsFragment[] {
+  const data = queryClient.getQueryData<WikiDocumentChildrenQuery>(
+    wikiKeys.children(operationId, parentId),
+  )
+  return data?.wikiDocumentChildren ?? []
+}
 
-  function build(parentId: string | null): TreeNode[] {
-    const group = childrenMap.get(parentId) ?? []
-    return group
-      .sort((a, b) => a.sortOrder < b.sortOrder ? -1 : a.sortOrder > b.sortOrder ? 1 : 0)
-      .map((doc) => ({
-        id: doc.id,
-        title: doc.title,
-        emoji: doc.emoji,
-        icon: doc.icon,
-        color: doc.color,
-        sortOrder: doc.sortOrder,
-        parentId: doc.parentDocument?.id ?? null,
-        childCount: doc.childCount,
-        children: build(doc.id),
-      }))
+/** Collect a document's ID and all *already-loaded* descendant IDs (BFS). */
+function collectLoadedDescendantIds(
+  queryClient: ReturnType<typeof useQueryClient>,
+  operationId: string,
+  docId: string,
+): Set<string> {
+  const ids = new Set<string>([docId])
+  const queue = [docId]
+  while (queue.length > 0) {
+    const current = queue.pop()!
+    const kids = readChildrenFromCache(queryClient, operationId, current)
+    for (const kid of kids) {
+      if (!ids.has(kid.id)) {
+        ids.add(kid.id)
+        queue.push(kid.id)
+      }
+    }
   }
-
-  return build(null)
+  return ids
 }
 
 /**
@@ -80,7 +97,6 @@ function buildTree(docs: readonly WikiDocumentTreeFieldsFragment[]): TreeNode[] 
 function midSortOrder(before: string | null, after: string | null): string {
   const a = before ?? ""
   const b = after ?? ""
-  // Simple approach: average the first differing character position
   const maxLen = Math.max(a.length, b.length) + 1
   let result = ""
   for (let i = 0; i < maxLen; i++) {
@@ -96,30 +112,9 @@ function midSortOrder(before: string | null, after: string | null): string {
   return result + "V" // fallback: append midpoint char
 }
 
-/** Collect a document's ID and all its descendant IDs (BFS). */
-function collectDescendantIds(
-  docId: string,
-  docs: readonly WikiDocumentTreeFieldsFragment[],
-): Set<string> {
-  const ids = new Set<string>([docId])
-  const queue = [docId]
-  while (queue.length > 0) {
-    const current = queue.pop()!
-    for (const doc of docs) {
-      if (doc.parentDocument?.id === current && !ids.has(doc.id)) {
-        ids.add(doc.id)
-        queue.push(doc.id)
-      }
-    }
-  }
-  return ids
-}
-
 interface WikiTreeSidebarProps {
   operationId: string
   isEditor: boolean
-  documents: readonly WikiDocumentTreeFieldsFragment[]
-  isLoading?: boolean
   // Forwarded to the wrapper div so ResizeHandle can imperatively mutate
   // `--wiki-sidebar-width` during a drag without going through React.
   ref?: React.Ref<HTMLDivElement>
@@ -128,8 +123,6 @@ interface WikiTreeSidebarProps {
 export function WikiTreeSidebar({
   operationId,
   isEditor,
-  documents,
-  isLoading,
   ref,
 }: WikiTreeSidebarProps) {
   const sidebarWidth = useWikiStore((s) => s.sidebarWidth)
@@ -137,48 +130,68 @@ export function WikiTreeSidebar({
   const openImportOutlineDialog = useWikiStore((s) => s.openImportOutlineDialog)
   const openTrashPanel = useWikiStore((s) => s.openTrashPanel)
   const openContentSearch = useWikiStore((s) => s.openContentSearch)
-  // Note: we deliberately do NOT subscribe to `expandedNodes` here. The
-  // header's "Collapse all" button reads it lazily via `getState()` at
-  // click time, so the sidebar doesn't re-render every time someone
-  // expands or collapses a row.
   const expandMany = useWikiStore((s) => s.expandMany)
   const collapseMany = useWikiStore((s) => s.collapseMany)
 
-  // Trash count for badge.
-  const { data: trashData } = useWikiDocumentTrash(operationId)
-  const trashCount = trashData?.pages[0]?.wikiDocumentTrash.totalCount ?? 0
+  // Trash count for badge — scalar query, not the full list.
+  const { data: trashCountData } = useWikiDocumentTrashCount(operationId)
+  const trashCount = trashCountData?.wikiDocumentTrashCount ?? 0
 
-  // Build tree from flat documents. Title-substring filtering used to live
-  // here; it's now replaced by the Cmd+K command palette which searches
-  // title + content via the backend text index with ranked snippets.
-  const tree = useMemo(() => buildTree(documents), [documents])
+  // Roots only — each WikiTreeNode fetches its own children on expand.
+  const { data: rootsData, isLoading: rootsLoading } = useWikiDocumentChildren(
+    operationId,
+    null,
+  )
+  const roots = useMemo(
+    () => sortByOrder(rootsData?.wikiDocumentChildren ?? []).map(rowToTreeNode),
+    [rootsData?.wikiDocumentChildren],
+  )
 
-  // DnD sensors with activation distance to distinguish click from drag.
+  // DnD math (descendant exclusion, sibling reorder) reads the per-parent
+  // cache directly — branches that aren't expanded simply aren't in the
+  // exclusion set, but dnd-kit only proposes drop targets among rendered
+  // (= expanded) nodes anyway, so unloaded subtrees can't be drop targets.
+  const queryClient = useQueryClient()
+
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
   )
 
   const updateDocument = useUpdateWikiDocument()
 
-  // DnD state lives in a separate store (`useWikiDragStore`) so per-row
-  // highlight changes don't re-render the whole sidebar. We subscribe to
-  // `activeId` here only because the overlay + the dragged-node descendant
-  // exclusion both need it (both change once at drag start/end, not per
-  // hover tick). `dropTarget` is intentionally NOT subscribed — handlers
-  // read it via `getState()`.
   const activeId = useWikiDragStore((s) => s.activeId)
 
-  // Descendants of the dragged node — cannot drop onto these.
+  // Descendants of the dragged node — cannot drop onto these. Computed at
+  // drag start by walking only the loaded per-parent slices.
   const excludedIds = useMemo(
-    () => (activeId ? collectDescendantIds(activeId, documents) : new Set<string>()),
-    [activeId, documents],
+    () =>
+      activeId
+        ? collectLoadedDescendantIds(queryClient, operationId, activeId)
+        : new Set<string>(),
+    [activeId, queryClient, operationId],
   )
 
   // Root drop zone so items can be dropped to top level.
   const { setNodeRef: setRootDropRef } = useDroppable({ id: "root" })
 
-  // Find the active document for the drag overlay.
-  const activeDoc = activeId ? documents.find((d) => d.id === activeId) : null
+  // Find the active document for the drag overlay. Walk the roots first, then
+  // every loaded children entry — DnD can only drag visible (= rendered) rows
+  // so the row must live in at least one cached slice.
+  const activeDoc = useMemo<WikiDocumentTreeFieldsFragment | null>(() => {
+    if (!activeId) return null
+    const rootHit = (rootsData?.wikiDocumentChildren ?? []).find(
+      (d) => d.id === activeId,
+    )
+    if (rootHit) return rootHit
+    const all = queryClient.getQueriesData<WikiDocumentChildrenQuery>({
+      queryKey: wikiKeys.childrenByOp(operationId),
+    })
+    for (const [, data] of all) {
+      const hit = data?.wikiDocumentChildren.find((d) => d.id === activeId)
+      if (hit) return hit
+    }
+    return null
+  }, [activeId, rootsData?.wikiDocumentChildren, queryClient, operationId])
 
   function handleDragStart(event: DragStartEvent) {
     const id = event.active.id as string
@@ -220,22 +233,39 @@ export function WikiTreeSidebar({
   }
 
   function handleDragEnd() {
-    // Read from store directly — avoids capturing stale closures.
     const dragStore = useWikiDragStore.getState()
     const draggedId = dragStore.activeId
     const target = dragStore.dropTarget
 
-    // Reset drag state immediately so the overlay disappears.
     dragStore.reset()
 
     if (!draggedId || !target) return
+
+    // Locate the dragged row by scanning loaded children slices. Drag is
+    // only possible on visible rows, so it must be in at least one slice.
+    let draggedDoc: WikiDocumentTreeFieldsFragment | null = null
+    const allSlices = queryClient.getQueriesData<WikiDocumentChildrenQuery>({
+      queryKey: wikiKeys.childrenByOp(operationId),
+    })
+    for (const [, data] of allSlices) {
+      const hit = data?.wikiDocumentChildren.find((d) => d.id === draggedId)
+      if (hit) {
+        draggedDoc = hit
+        break
+      }
+    }
+    if (!draggedDoc) return
 
     // "After" an expanded node with children = visually "before its first child".
     let resolvedTarget = target
     if (target.position === "after" && target.id !== "root") {
       const { expandedNodes } = useWikiStore.getState()
       if (expandedNodes.has(target.id)) {
-        const firstChild = documents.find((d) => d.parentDocument?.id === target.id)
+        const firstChild = readChildrenFromCache(
+          queryClient,
+          operationId,
+          target.id,
+        )[0]
         if (firstChild) {
           resolvedTarget = { id: firstChild.id, position: "before" }
         }
@@ -243,13 +273,16 @@ export function WikiTreeSidebar({
     }
 
     if (resolvedTarget.position === "inside") {
-      // Reparent: make it the last child of the target node.
       const newParentId = resolvedTarget.id === "root" ? "" : resolvedTarget.id
-      const parentIdForSiblings = resolvedTarget.id === "root" ? null : resolvedTarget.id
-      const siblings = documents
-        .filter((d) => (d.parentDocument?.id ?? null) === parentIdForSiblings && d.id !== draggedId)
-        .sort((a, b) => a.sortOrder < b.sortOrder ? -1 : a.sortOrder > b.sortOrder ? 1 : 0)
-      const lastSort = siblings.length > 0 ? siblings[siblings.length - 1].sortOrder : null
+      const parentIdForSiblings =
+        resolvedTarget.id === "root" ? null : resolvedTarget.id
+      const siblings = readChildrenFromCache(
+        queryClient,
+        operationId,
+        parentIdForSiblings,
+      ).filter((d) => d.id !== draggedId)
+      const sorted = sortByOrder(siblings)
+      const lastSort = sorted.length > 0 ? sorted[sorted.length - 1].sortOrder : null
 
       updateDocument.mutate({
         id: draggedId,
@@ -260,27 +293,34 @@ export function WikiTreeSidebar({
       })
     } else {
       // Reorder: insert before/after the target among its siblings.
-      const overDoc = documents.find((d) => d.id === resolvedTarget.id)
+      // Locate the over-doc by scanning loaded slices (same shape as the
+      // dragged-doc lookup above).
+      let overDoc: WikiDocumentTreeFieldsFragment | null = null
+      for (const [, data] of allSlices) {
+        const hit = data?.wikiDocumentChildren.find(
+          (d) => d.id === resolvedTarget.id,
+        )
+        if (hit) {
+          overDoc = hit
+          break
+        }
+      }
       if (!overDoc) return
 
-      const parentId = overDoc.parentDocument?.id ?? ""
-      const parentIdForFilter = overDoc.parentDocument?.id ?? null
+      const parentId = overDoc.parentDocumentId ?? ""
+      const parentIdForFilter = overDoc.parentDocumentId ?? null
 
-      // Build current sibling order (INCLUDING dragged node).
-      const allSiblings = documents
-        .filter((d) => (d.parentDocument?.id ?? null) === parentIdForFilter)
-        .sort((a, b) => a.sortOrder < b.sortOrder ? -1 : a.sortOrder > b.sortOrder ? 1 : 0)
-
-      // Remove dragged node and insert at the target position.
+      const allSiblings = sortByOrder(
+        readChildrenFromCache(queryClient, operationId, parentIdForFilter),
+      )
       const withoutDragged = allSiblings.filter((d) => d.id !== draggedId)
-      const insertAt = resolvedTarget.position === "before"
-        ? withoutDragged.findIndex((d) => d.id === resolvedTarget.id)
-        : withoutDragged.findIndex((d) => d.id === resolvedTarget.id) + 1
+      const insertAt =
+        resolvedTarget.position === "before"
+          ? withoutDragged.findIndex((d) => d.id === resolvedTarget.id)
+          : withoutDragged.findIndex((d) => d.id === resolvedTarget.id) + 1
       const reordered = [...withoutDragged]
-      const draggedDoc = documents.find((d) => d.id === draggedId)!
       reordered.splice(insertAt, 0, draggedDoc)
 
-      // Assign evenly spaced sort orders to the entire list.
       const count = reordered.length
       for (let i = 0; i < count; i++) {
         const fraction = (i + 1) / (count + 1)
@@ -289,7 +329,9 @@ export function WikiTreeSidebar({
           updateDocument.mutate({
             id: reordered[i].id,
             input: {
-              ...(reordered[i].id === draggedId ? { parentDocumentId: parentId } : {}),
+              ...(reordered[i].id === draggedId
+                ? { parentDocumentId: parentId }
+                : {}),
               sortOrder: newSort,
             },
           })
@@ -302,17 +344,32 @@ export function WikiTreeSidebar({
     useWikiDragStore.getState().reset()
   }
 
+  // "Expand all" needs the union of every loaded subtree's parent ids. We
+  // only know what's loaded (lazy tree by definition), so this collapses to
+  // "every parent we have a cached slice for". Anything not yet loaded stays
+  // collapsed — clicking it triggers a fetch the next time.
+  function getAllLoadedExpandableIds(): string[] {
+    const out: string[] = []
+    const all = queryClient.getQueriesData<WikiDocumentChildrenQuery>({
+      queryKey: wikiKeys.childrenByOp(operationId),
+    })
+    for (const [key, data] of all) {
+      // key shape: [...wikiKeys.childrenByOp(opId), parentIdOrRoot]
+      const parentKey = key[key.length - 1] as string
+      if (parentKey === "__root__") continue
+      if ((data?.wikiDocumentChildren?.length ?? 0) > 0) out.push(parentKey)
+    }
+    // Also include any root row with childCount > 0 (otherwise an unexpanded
+    // root branch never lands in the expanded set).
+    for (const row of rootsData?.wikiDocumentChildren ?? []) {
+      if (row.childCount > 0 && !out.includes(row.id)) out.push(row.id)
+    }
+    return out
+  }
+
   return (
     <div
       ref={ref}
-      // Width is driven via a CSS custom property so ResizeHandle can update
-      // it in pure DOM during a drag (no React re-render). React still owns
-      // the value at rest — when `sidebarWidth` changes via the store
-      // (mouseup commit, hydration), the inline style re-applies the
-      // variable. Mid-drag re-renders for unrelated state changes are safe:
-      // React diffs the style prop and skips writing when the prop value
-      // (the store width) hasn't changed, so the imperatively-set value
-      // survives.
       style={{
         width: "var(--wiki-sidebar-width)",
         ["--wiki-sidebar-width" as string]: `${sidebarWidth}px`,
@@ -328,9 +385,7 @@ export function WikiTreeSidebar({
               <Button
                 variant="ghost"
                 size="icon-xs"
-                onClick={() =>
-                  expandMany(collectBranchIdsWithChildren(tree, true))
-                }
+                onClick={() => expandMany(getAllLoadedExpandableIds())}
               />
             }
           >
@@ -428,13 +483,13 @@ export function WikiTreeSidebar({
 
       {/* Tree body */}
       <div ref={setRootDropRef} className="flex-1 overflow-y-auto px-1 py-1">
-        {isLoading ? (
+        {rootsLoading ? (
           <div className="flex flex-col gap-1 px-1">
             {Array.from({ length: 4 }, (_, i) => (
               <Skeleton key={i} className="h-7 rounded" />
             ))}
           </div>
-        ) : tree.length === 0 ? (
+        ) : roots.length === 0 ? (
           <p className="px-2 py-4 text-center text-xs text-muted-foreground">
             No documents yet
           </p>
@@ -447,7 +502,7 @@ export function WikiTreeSidebar({
             onDragEnd={handleDragEnd}
             onDragCancel={handleDragCancel}
           >
-            {tree.map((node) => (
+            {roots.map((node) => (
               <WikiTreeNode
                 key={node.id}
                 node={node}

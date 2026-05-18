@@ -78,6 +78,21 @@ func (r *queryResolver) WikiDocumentTree(ctx context.Context, operationID string
 	return r.WikiDocumentResolver.WikiDocumentTree(ctx, operationID)
 }
 
+// WikiDocumentChildren is the resolver for the wikiDocumentChildren field.
+func (r *queryResolver) WikiDocumentChildren(ctx context.Context, operationID string, parentDocumentID *string) ([]*models.WikiDocument, error) {
+	return r.WikiDocumentResolver.WikiDocumentChildren(ctx, operationID, parentDocumentID)
+}
+
+// WikiDocumentTreeRevealPath is the resolver for the wikiDocumentTreeRevealPath field.
+func (r *queryResolver) WikiDocumentTreeRevealPath(ctx context.Context, documentID string) ([]*models.WikiDocument, error) {
+	return r.WikiDocumentResolver.WikiDocumentTreeRevealPath(ctx, documentID)
+}
+
+// WikiDocumentTrashCount is the resolver for the wikiDocumentTrashCount field.
+func (r *queryResolver) WikiDocumentTrashCount(ctx context.Context, operationID string) (int, error) {
+	return r.WikiDocumentResolver.WikiDocumentTrashCount(ctx, operationID)
+}
+
 // WikiSearch is the resolver for the wikiSearch field.
 func (r *queryResolver) WikiSearch(ctx context.Context, operationID string, scope *string, query string, offset *int, limit *int) (*model.WikiSearchConnection, error) {
 	return r.WikiDocumentResolver.WikiSearch(ctx, operationID, scope, query, offset, limit)
@@ -146,6 +161,11 @@ func (r *wikiDocumentResolver) OperationID(ctx context.Context, obj *models.Wiki
 // ParentDocument is the resolver for the parentDocument field.
 func (r *wikiDocumentResolver) ParentDocument(ctx context.Context, obj *models.WikiDocument) (*models.WikiDocument, error) {
 	return r.WikiDocumentResolver.WikiDocumentParentDocument(ctx, obj)
+}
+
+// ParentDocumentID is the resolver for the parentDocumentId field.
+func (r *wikiDocumentResolver) ParentDocumentID(ctx context.Context, obj *models.WikiDocument) (*string, error) {
+	return r.WikiDocumentResolver.WikiDocumentParentDocumentID(ctx, obj)
 }
 
 // ChildDocuments is the resolver for the childDocuments field.

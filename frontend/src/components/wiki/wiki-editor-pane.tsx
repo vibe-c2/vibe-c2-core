@@ -8,20 +8,17 @@ import { WikiEditor } from "@/components/wiki/wiki-editor"
 import { WikiDocumentFooterLists } from "@/components/wiki/wiki-document-footer-lists"
 import { useWikiStore } from "@/stores/wiki"
 import { cn } from "@/lib/utils"
-import type { WikiDocumentTreeFieldsFragment } from "@/graphql/gql/graphql"
 
 interface WikiEditorPaneProps {
   documentId: string
   operationId: string
   isEditor: boolean
-  treeDocuments: WikiDocumentTreeFieldsFragment[]
 }
 
 export function WikiEditorPane({
   documentId,
   operationId,
   isEditor,
-  treeDocuments,
 }: WikiEditorPaneProps) {
   const { data, isLoading, error } = useWikiDocument(documentId)
   const document = data?.wikiDocument
@@ -80,8 +77,8 @@ export function WikiEditorPane({
     >
       <WikiEditorHeader
         document={document}
+        operationId={operationId}
         isEditor={isEditor}
-        treeDocuments={treeDocuments}
       />
       <WikiDocumentMeta document={document} />
       <EditorErrorBoundary documentId={documentId}>
@@ -92,7 +89,7 @@ export function WikiEditorPane({
           footer={
             <WikiDocumentFooterLists
               documentId={documentId}
-              treeDocuments={treeDocuments}
+              operationId={operationId}
               isEditor={isEditor}
             />
           }

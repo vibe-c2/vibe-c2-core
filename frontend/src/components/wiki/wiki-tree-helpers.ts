@@ -23,41 +23,32 @@ export function collectBranchIdsWithChildren(
 }
 
 /**
- * Direct children of `parentId` from a flat list, sorted by sortOrder.
- * Pulled out of the header/footer because both surfaces compute the same
- * 1st-level slice and share the fractional-index sort comparator.
+ * Sort tree rows by their fractional sort order (lexicographic). The lazy
+ * children query already returns rows in sort_order, but client-side
+ * operations (DnD optimistic updates, palette filtering) reuse the comparator.
  */
-export function getDirectChildren(
-  docs: readonly WikiDocumentTreeFieldsFragment[],
-  parentId: string,
-): WikiDocumentTreeFieldsFragment[] {
-  return docs
-    .filter((d) => d.parentDocument?.id === parentId)
-    .sort((a, b) =>
-      a.sortOrder < b.sortOrder ? -1 : a.sortOrder > b.sortOrder ? 1 : 0,
-    )
+export function sortByOrder<T extends { sortOrder: string }>(rows: readonly T[]): T[] {
+  return [...rows].sort((a, b) =>
+    a.sortOrder < b.sortOrder ? -1 : a.sortOrder > b.sortOrder ? 1 : 0,
+  )
 }
 
 /**
- * Walk parent pointers from `documentId` upward, returning each ancestor's id.
- * Excludes the document itself (a leaf doesn't need expanding to be visible —
- * its parent does). Returns [] if the document isn't in the flat list or has
- * no parent. Cycle-safe.
+ * Promote a flat tree-row fragment to the recursive TreeNode shape consumed
+ * by the sidebar. `children` is initialized empty — lazy hooks fill it in
+ * per-branch when a node expands. Shared by the sidebar's root render and
+ * each WikiTreeNode's children render so the conversion stays one line.
  */
-export function collectAncestorIds(
-  documentId: string,
-  docs: readonly WikiDocumentTreeFieldsFragment[],
-): string[] {
-  const byId = new Map(docs.map((d) => [d.id, d]))
-  const out: string[] = []
-  const seen = new Set<string>()
-  let current = byId.get(documentId)
-  while (current?.parentDocument?.id) {
-    const parentId = current.parentDocument.id
-    if (seen.has(parentId)) break
-    seen.add(parentId)
-    out.push(parentId)
-    current = byId.get(parentId)
+export function rowToTreeNode(row: WikiDocumentTreeFieldsFragment): TreeNode {
+  return {
+    id: row.id,
+    title: row.title,
+    emoji: row.emoji,
+    icon: row.icon,
+    color: row.color,
+    sortOrder: row.sortOrder,
+    parentId: row.parentDocumentId ?? null,
+    childCount: row.childCount,
+    children: [],
   }
-  return out
 }
