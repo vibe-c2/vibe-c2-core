@@ -315,9 +315,19 @@ function liftFileLinksToBlocks(doc: Node): Node {
 
   doc.descendants((node, pos) => {
     if (node.type !== wikiSchema.nodes.paragraph) return true;
-    if (node.childCount !== 1) return false;
 
-    const onlyChild = node.firstChild!;
+    // Outline emits a backslash line on its own to add visual spacing
+    // between adjacent block-level attachments. CommonMark parses
+    // `\<newline>` as a hardBreak, so the paragraph holding the file link
+    // ends up with a leading hardBreak before the linked text. We treat
+    // hardBreaks as ignorable when looking for the "lone file link"
+    // pattern so the second attachment still lifts correctly.
+    const significant: Node[] = [];
+    node.forEach((child) => {
+      if (child.type !== wikiSchema.nodes.hardBreak) significant.push(child);
+    });
+    if (significant.length !== 1) return false;
+    const onlyChild = significant[0];
     if (!onlyChild.isText) return false;
 
     const linkMark = onlyChild.marks.find(
@@ -368,8 +378,12 @@ function liftFileLinksToBlocks(doc: Node): Node {
     (child) => {
       if (child.type !== "paragraph") return child;
       const inline = child.content as Array<Record<string, unknown>> | undefined;
-      if (!inline || inline.length !== 1) return child;
-      const t = inline[0];
+      if (!inline) return child;
+      // Strip hardBreak children so a leading `\` line break (see above)
+      // doesn't prevent the lift.
+      const significant = inline.filter((c) => c.type !== "hardBreak");
+      if (significant.length !== 1) return child;
+      const t = significant[0];
       if (t.type !== "text") return child;
       const marks = t.marks as Array<{ type: string; attrs?: Record<string, unknown> }> | undefined;
       if (!marks || marks.length !== 1) return child;

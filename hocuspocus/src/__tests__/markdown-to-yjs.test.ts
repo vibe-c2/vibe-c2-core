@@ -196,6 +196,29 @@ test("file attachment link in a lone paragraph lifts to wikiFile block", () => {
   assert.equal(attrs.contentType, "application/pdf");
 });
 
+test("file attachment preceded by a backslash line break still lifts to wikiFile", () => {
+  // Outline emits a backslash on its own line as visual spacing between
+  // adjacent block-level attachments. In CommonMark `\<newline>` is a hard
+  // line break, so markdown-it parses the second paragraph as
+  // hardBreak + linked-text. The lifter must still recognise this as a
+  // single-attachment paragraph or the file renders as a plain hyperlink.
+  const md = [
+    "[ALL vpn configs.zip 310328](/api/v1/wiki/files/6ae945b2-05c1-40d7-a9ba-e63b1c5d0fcb)",
+    "",
+    "",
+    "\\",
+    "[sic_new25.ovpn 1694](/api/v1/wiki/files/cc4ed915-cf27-44d9-8279-ca9f74c0c5eb)",
+  ].join("\n");
+  const json = decode(markdownToYjsUpdate(md));
+  const content = json.content as Array<Record<string, unknown>>;
+  const fileBlocks = content.filter((n) => n.type === "wikiFile");
+  assert.equal(fileBlocks.length, 2, "both attachments must lift to wikiFile");
+  const second = fileBlocks[1].attrs as Record<string, unknown>;
+  assert.equal(second.fileId, "cc4ed915-cf27-44d9-8279-ca9f74c0c5eb");
+  assert.equal(second.filename, "sic_new25.ovpn");
+  assert.equal(second.size, 1694);
+});
+
 test("non-attachment links keep the link mark", () => {
   const md = "Visit [the docs](https://example.com/docs) for more.";
   const json = decode(markdownToYjsUpdate(md));
