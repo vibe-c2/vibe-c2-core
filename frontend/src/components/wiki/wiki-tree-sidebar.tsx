@@ -380,6 +380,17 @@ export function WikiTreeSidebar({
     }
   }
 
+  // Collapse-all only does the React commit (unmounting every expanded row);
+  // no fetch needed, so the transition pending flag is the whole story.
+  const [isCollapsing, startCollapseTransition] = useTransition()
+
+  function handleCollapseAll() {
+    if (isCollapsing) return
+    const ids = [...useWikiStore.getState().expandedNodes]
+    if (ids.length === 0) return
+    startCollapseTransition(() => collapseMany(ids))
+  }
+
   return (
     <div
       ref={ref}
@@ -419,15 +430,20 @@ export function WikiTreeSidebar({
               <Button
                 variant="ghost"
                 size="icon-xs"
-                onClick={() =>
-                  collapseMany([...useWikiStore.getState().expandedNodes])
-                }
+                onClick={handleCollapseAll}
+                disabled={isCollapsing}
               />
             }
           >
-            <ChevronsDownUpIcon className="size-3.5" />
+            {isCollapsing ? (
+              <Loader2Icon className="size-3.5 animate-spin" />
+            ) : (
+              <ChevronsDownUpIcon className="size-3.5" />
+            )}
           </TooltipTrigger>
-          <TooltipContent>Collapse all</TooltipContent>
+          <TooltipContent>
+            {isCollapsing ? "Collapsing…" : "Collapse all"}
+          </TooltipContent>
         </Tooltip>
         <Tooltip>
           <TooltipTrigger
