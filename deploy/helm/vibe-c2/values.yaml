@@ -339,9 +339,10 @@ ingress:
   host: vibe-c2.example.com
 
   # Annotations recommended for ingress-nginx with WebSocket support and
-  # request bodies up to the wiki-file cap.
+  # request bodies up to the largest backend upload cap (WIKI_IMPORT_ZIP_MAX_SIZE,
+  # 200 MB by default, used by the Outline-export importer).
   annotations:
-    nginx.ingress.kubernetes.io/proxy-body-size: "50m"
+    nginx.ingress.kubernetes.io/proxy-body-size: "200m"
     nginx.ingress.kubernetes.io/proxy-read-timeout: "3600"
     nginx.ingress.kubernetes.io/proxy-send-timeout: "3600"
     # Disable buffering so SSE GraphQL subscription frames flush
