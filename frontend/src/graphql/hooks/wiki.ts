@@ -1,3 +1,4 @@
+import { useCallback } from "react"
 import { useQuery, useInfiniteQuery, useMutation, useQueryClient } from "@tanstack/react-query"
 import { graphqlClient } from "@/lib/graphql-client"
 import { useSubscription } from "@/hooks/use-subscription"
@@ -92,6 +93,54 @@ export function useWikiDocumentTree(
     queryFn: () => graphqlClient(WikiDocumentTreeDocument, { operationId }),
     enabled: !!operationId && (options?.enabled ?? true),
   })
+}
+
+// On-demand full-tree fetch that ALSO shreds the response into per-parent
+// children cache entries. Powers "Expand all" / "Expand subtree" in the lazy
+// sidebar: those actions need to know about branches the user has never
+// expanded, so a one-shot tree fetch primes the cache and any subsequent
+// useWikiDocumentChildren read becomes a cache hit. The SSE
+// wikiDocumentChanged subscription invalidates wikiKeys.tree(operationId),
+// so the next call refetches automatically after mutations.
+export function useEnsureWikiTree(operationId: string) {
+  const queryClient = useQueryClient()
+  return useCallback(async (): Promise<WikiDocumentTreeFieldsFragment[]> => {
+    const data = await queryClient.fetchQuery({
+      queryKey: wikiKeys.tree(operationId),
+      queryFn: () => graphqlClient(WikiDocumentTreeDocument, { operationId }),
+    })
+    const rows = data.wikiDocumentTree
+
+    // Group rows by parent and seed every per-parent cache entry so the lazy
+    // sidebar treats this as a free walk. Same shape as
+    // useWikiDocumentTreeRevealPath emits.
+    const byParent = new Map<string | null, WikiDocumentTreeFieldsFragment[]>()
+    // Pre-seed every doc id with an empty list so leaf branches that the user
+    // later clicks into don't re-fetch (their empty children are still cached).
+    for (const row of rows) {
+      byParent.set(row.id, [])
+    }
+    // Always include the root bucket — when an operation has zero documents
+    // the children:root entry still needs to be populated as an empty list.
+    if (!byParent.has(null)) byParent.set(null, [])
+    for (const row of rows) {
+      const pid = row.parentDocumentId ?? null
+      const arr = byParent.get(pid) ?? []
+      arr.push(row)
+      byParent.set(pid, arr)
+    }
+    for (const [pid, list] of byParent) {
+      list.sort((a, b) =>
+        a.sortOrder < b.sortOrder ? -1 : a.sortOrder > b.sortOrder ? 1 : 0,
+      )
+      queryClient.setQueryData<WikiDocumentChildrenQuery>(
+        wikiKeys.children(operationId, pid),
+        { wikiDocumentChildren: list },
+      )
+    }
+
+    return rows
+  }, [queryClient, operationId])
 }
 
 // Direct children of a parent (or roots when parentDocumentId is null).

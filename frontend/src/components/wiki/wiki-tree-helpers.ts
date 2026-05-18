@@ -2,23 +2,49 @@ import type { TreeNode } from "@/components/wiki/wiki-tree-sidebar"
 import type { WikiDocumentTreeFieldsFragment } from "@/graphql/gql/graphql"
 
 /**
- * Collect IDs of every node in the given subtrees that *has children* — these
- * are the ids that need to live in `expandedNodes` to fully unfold a branch.
- * Leaves are skipped because they can't be expanded. Pass `includeRoots=false`
- * to skip the top-level `nodes` themselves.
+ * Walk a flat list of tree-row fragments and return every id under `rootId`
+ * (inclusive of `rootId` itself when not null) whose row has children. Used
+ * by "Expand all" / "Expand subtree" — the lazy tree has no knowledge of
+ * unloaded branches, so the caller first primes the full tree (see
+ * `useEnsureWikiTree`) and then hands the resulting flat list here.
+ *
+ * Pass `rootId = null` to walk the whole operation from the roots.
  */
-export function collectBranchIdsWithChildren(
-  nodes: readonly TreeNode[],
-  includeRoots: boolean,
+export function collectExpandableIdsFromFlat(
+  rows: readonly WikiDocumentTreeFieldsFragment[],
+  rootId: string | null,
 ): string[] {
-  const out: string[] = []
-  function visit(n: TreeNode, isRoot: boolean) {
-    if (n.children.length > 0 && (!isRoot || includeRoots)) {
-      out.push(n.id)
-    }
-    for (const c of n.children) visit(c, false)
+  // Build the parent → children index once so each subtree walk is O(n).
+  const byParent = new Map<string | null, WikiDocumentTreeFieldsFragment[]>()
+  for (const row of rows) {
+    const pid = row.parentDocumentId ?? null
+    const arr = byParent.get(pid) ?? []
+    arr.push(row)
+    byParent.set(pid, arr)
   }
-  for (const n of nodes) visit(n, true)
+
+  const out: string[] = []
+
+  function visit(parentId: string | null) {
+    const children = byParent.get(parentId) ?? []
+    for (const child of children) {
+      if (child.childCount > 0) {
+        out.push(child.id)
+        visit(child.id)
+      }
+    }
+  }
+
+  if (rootId === null) {
+    visit(null)
+    return out
+  }
+
+  // Scoped to a subtree — include the root itself when it has children, so
+  // the caller's "Expand subtree on N" actually opens N.
+  const root = rows.find((r) => r.id === rootId)
+  if (root && root.childCount > 0) out.push(rootId)
+  visit(rootId)
   return out
 }
 

@@ -30,6 +30,7 @@ import { Skeleton } from "@/components/ui/skeleton"
 import { useWikiStore } from "@/stores/wiki"
 import { useWikiDragStore } from "@/stores/wiki-drag"
 import {
+  useEnsureWikiTree,
   useUpdateWikiDocument,
   useWikiDocumentChildren,
 } from "@/graphql/hooks/wiki"
@@ -40,7 +41,7 @@ import {
 import { DocumentIcon } from "@/components/wiki/document-icon"
 import { cn } from "@/lib/utils"
 import {
-  collectBranchIdsWithChildren,
+  collectExpandableIdsFromFlat,
   rowToTreeNode,
   sortByOrder,
 } from "@/components/wiki/wiki-tree-helpers"
@@ -329,6 +330,10 @@ function WikiTreeRowQuickActionsImpl({
   const openDeleteDialog = useWikiStore((s) => s.openDeleteDialog)
   const openContentSearch = useWikiStore((s) => s.openContentSearch)
   const updateDocument = useUpdateWikiDocument()
+  // Expand/collapse subtree needs to see branches the user has never opened.
+  // The full-tree fetch (cached + SSE-invalidated) primes the per-parent
+  // children cache so the affected rows render immediately after expansion.
+  const ensureWikiTree = useEnsureWikiTree(operationId)
 
   // Menu-open state is local to this subtree — no reason to live in the
   // parent row, where it would force the row (and its dnd hooks) to
@@ -336,9 +341,8 @@ function WikiTreeRowQuickActionsImpl({
   const [menuOpen, setMenuOpen] = useState(false)
 
   // childCount is the canonical "has any children?" signal (cheap, comes
-  // from the server). The "Sort" and "Expand subtree" buttons that operate
-  // on already-loaded children read from the per-parent cache directly —
-  // they implicitly skip unloaded branches.
+  // from the server). The "Expand/Collapse subtree" buttons prime the full
+  // operation tree on click so they cover unloaded branches.
   const hasChildren = node.childCount > 0
   // Cached children for this node, if its branch was ever expanded. Used by
   // the "Sort" action; we don't trigger a fetch from here, so unloaded
@@ -362,16 +366,13 @@ function WikiTreeRowQuickActionsImpl({
                   variant="ghost"
                   size="icon-xs"
                   className="shrink-0 hidden group-hover:inline-flex"
-                  onClick={(e) => {
+                  onClick={async (e) => {
                     e.stopPropagation()
-                    // Lazy tree: we only know what's loaded. Expanding the
-                    // node itself triggers its children fetch; descendants
-                    // expand naturally as the user walks deeper. For already
-                    // loaded subtrees we expand everything we have.
-                    const ids = collectBranchIdsWithChildren(
-                      [{ ...node, children: loadedChildren.map(rowToTreeNode) }],
-                      true,
-                    )
+                    // Walk every descendant (loaded or not) by priming the
+                    // full operation tree on demand, then expand every
+                    // non-leaf row from this node down.
+                    const rows = await ensureWikiTree()
+                    const ids = collectExpandableIdsFromFlat(rows, node.id)
                     expandMany(ids)
                   }}
                 />
@@ -388,12 +389,10 @@ function WikiTreeRowQuickActionsImpl({
                   variant="ghost"
                   size="icon-xs"
                   className="shrink-0 hidden group-hover:inline-flex"
-                  onClick={(e) => {
+                  onClick={async (e) => {
                     e.stopPropagation()
-                    const ids = collectBranchIdsWithChildren(
-                      [{ ...node, children: loadedChildren.map(rowToTreeNode) }],
-                      true,
-                    )
+                    const rows = await ensureWikiTree()
+                    const ids = collectExpandableIdsFromFlat(rows, node.id)
                     collapseMany(ids)
                   }}
                 />

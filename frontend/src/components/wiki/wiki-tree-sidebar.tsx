@@ -26,6 +26,7 @@ import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip
 import { useWikiStore } from "@/stores/wiki"
 import { useWikiDragStore, type DropPosition, type DropTarget } from "@/stores/wiki-drag"
 import {
+  useEnsureWikiTree,
   useWikiDocumentChildren,
   useWikiDocumentTrashCount,
   useUpdateWikiDocument,
@@ -34,7 +35,11 @@ import {
 import { WikiTreeNode } from "@/components/wiki/wiki-tree-node"
 import { DocumentIcon } from "@/components/wiki/document-icon"
 import { WikiHistoryDropdown } from "@/components/wiki/wiki-history-dropdown"
-import { rowToTreeNode, sortByOrder } from "@/components/wiki/wiki-tree-helpers"
+import {
+  collectExpandableIdsFromFlat,
+  rowToTreeNode,
+  sortByOrder,
+} from "@/components/wiki/wiki-tree-helpers"
 import type {
   WikiDocumentChildrenQuery,
   WikiDocumentTreeFieldsFragment,
@@ -344,27 +349,17 @@ export function WikiTreeSidebar({
     useWikiDragStore.getState().reset()
   }
 
-  // "Expand all" needs the union of every loaded subtree's parent ids. We
-  // only know what's loaded (lazy tree by definition), so this collapses to
-  // "every parent we have a cached slice for". Anything not yet loaded stays
-  // collapsed — clicking it triggers a fetch the next time.
-  function getAllLoadedExpandableIds(): string[] {
-    const out: string[] = []
-    const all = queryClient.getQueriesData<WikiDocumentChildrenQuery>({
-      queryKey: wikiKeys.childrenByOp(operationId),
-    })
-    for (const [key, data] of all) {
-      // key shape: [...wikiKeys.childrenByOp(opId), parentIdOrRoot]
-      const parentKey = key[key.length - 1] as string
-      if (parentKey === "__root__") continue
-      if ((data?.wikiDocumentChildren?.length ?? 0) > 0) out.push(parentKey)
-    }
-    // Also include any root row with childCount > 0 (otherwise an unexpanded
-    // root branch never lands in the expanded set).
-    for (const row of rootsData?.wikiDocumentChildren ?? []) {
-      if (row.childCount > 0 && !out.includes(row.id)) out.push(row.id)
-    }
-    return out
+  // "Expand all" fetches the operation's full flat tree once (cached after
+  // first call, invalidated by the SSE subscription) and seeds every per-
+  // parent children cache entry as a side effect. With the cache primed, we
+  // can hand expandMany() every non-leaf id — including branches the user
+  // has never opened, which was the pre-fix gap.
+  const ensureWikiTree = useEnsureWikiTree(operationId)
+
+  async function handleExpandAll() {
+    const rows = await ensureWikiTree()
+    const ids = collectExpandableIdsFromFlat(rows, null)
+    expandMany(ids)
   }
 
   return (
@@ -385,7 +380,7 @@ export function WikiTreeSidebar({
               <Button
                 variant="ghost"
                 size="icon-xs"
-                onClick={() => expandMany(getAllLoadedExpandableIds())}
+                onClick={handleExpandAll}
               />
             }
           >
