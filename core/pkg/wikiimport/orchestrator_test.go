@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/google/uuid"
+	"github.com/vibe-c2/vibe-c2-core/core/pkg/eventbus"
 	"github.com/vibe-c2/vibe-c2-core/core/pkg/models"
 	"github.com/vibe-c2/vibe-c2-core/core/pkg/pagination"
 	"github.com/vibe-c2/vibe-c2-core/core/pkg/repository"
@@ -33,7 +34,7 @@ func TestOrchestrator_Run_Smoke(t *testing.T) {
 	fileIn := &fakeFileIngestor{}
 	converter := &fakeConverter{}
 
-	orch := NewOrchestrator(docRepo, imageIn, fileIn, converter, zap.NewNop())
+	orch := NewOrchestrator(docRepo, imageIn, fileIn, converter, nil, zap.NewNop())
 
 	opID := uuid.New()
 	callerID := uuid.New()
@@ -78,6 +79,50 @@ func TestOrchestrator_Run_Smoke(t *testing.T) {
 	}
 }
 
+// TestOrchestrator_PublishesSingleEvent verifies that one wikiDocumentCreated
+// event is published on successful import — the frontend's SSE-driven tree
+// invalidation depends on it to refresh without a manual page reload.
+func TestOrchestrator_PublishesSingleEvent(t *testing.T) {
+	zr := openFixture(t)
+	parsed, _ := Parse(&zr.Reader)
+
+	docRepo := newFakeDocRepo()
+	bus := &fakeEventBus{}
+	orch := NewOrchestrator(docRepo, &fakeImageIngestor{}, &fakeFileIngestor{}, &fakeConverter{}, bus, zap.NewNop())
+
+	opID := uuid.New()
+	callerID := uuid.New()
+
+	report, err := orch.Run(context.Background(), opID, callerID, parsed)
+	if err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+
+	if got := len(bus.published); got != 1 {
+		t.Fatalf("published %d events, want exactly 1", got)
+	}
+	evt := bus.published[0]
+	if evt.Topic != eventbus.TopicWikiDocumentCreated {
+		t.Errorf("topic = %s, want %s", evt.Topic, eventbus.TopicWikiDocumentCreated)
+	}
+	if evt.Actor.Type != eventbus.ActorUser || evt.Actor.ID != callerID.String() {
+		t.Errorf("actor = %+v, want user %s", evt.Actor, callerID)
+	}
+	p, ok := evt.Payload.(eventbus.WikiDocumentEventPayload)
+	if !ok {
+		t.Fatalf("payload type = %T, want WikiDocumentEventPayload", evt.Payload)
+	}
+	if p.DocumentID != report.TimestampParentID.String() {
+		t.Errorf("DocumentID = %s, want timestamp parent %s", p.DocumentID, report.TimestampParentID)
+	}
+	if p.OperationID != opID.String() {
+		t.Errorf("OperationID = %s, want %s", p.OperationID, opID)
+	}
+	if p.ParentDocumentID != report.ImportParentID.String() {
+		t.Errorf("ParentDocumentID = %s, want import parent %s", p.ParentDocumentID, report.ImportParentID)
+	}
+}
+
 // TestOrchestrator_ReusesImportParent verifies that running two imports
 // against the same operation reuses the singleton import parent rather
 // than creating a new one each time.
@@ -86,7 +131,7 @@ func TestOrchestrator_ReusesImportParent(t *testing.T) {
 	parsed, _ := Parse(&zr.Reader)
 
 	docRepo := newFakeDocRepo()
-	orch := NewOrchestrator(docRepo, &fakeImageIngestor{}, &fakeFileIngestor{}, &fakeConverter{}, zap.NewNop())
+	orch := NewOrchestrator(docRepo, &fakeImageIngestor{}, &fakeFileIngestor{}, &fakeConverter{}, nil, zap.NewNop())
 
 	opID := uuid.New()
 	callerID := uuid.New()
@@ -216,12 +261,12 @@ func (r *fakeDocRepo) FindAncestors(context.Context, uuid.UUID) ([]models.WikiDo
 	return nil, nil
 }
 func (r *fakeDocRepo) SoftDelete(context.Context, *models.WikiDocument, uuid.UUID) error { return nil }
-func (r *fakeDocRepo) SoftDeleteBatch(context.Context, []uuid.UUID, uuid.UUID) error    { return nil }
-func (r *fakeDocRepo) Restore(context.Context, *models.WikiDocument) error              { return nil }
-func (r *fakeDocRepo) RestoreBatch(context.Context, []uuid.UUID, uuid.UUID) error       { return nil }
-func (r *fakeDocRepo) HardDelete(context.Context, *models.WikiDocument) error           { return nil }
-func (r *fakeDocRepo) HardDeleteByOperationID(context.Context, uuid.UUID) error         { return nil }
-func (r *fakeDocRepo) HardDeleteTrashed(context.Context, uuid.UUID) error               { return nil }
+func (r *fakeDocRepo) SoftDeleteBatch(context.Context, []uuid.UUID, uuid.UUID) error     { return nil }
+func (r *fakeDocRepo) Restore(context.Context, *models.WikiDocument) error               { return nil }
+func (r *fakeDocRepo) RestoreBatch(context.Context, []uuid.UUID, uuid.UUID) error        { return nil }
+func (r *fakeDocRepo) HardDelete(context.Context, *models.WikiDocument) error            { return nil }
+func (r *fakeDocRepo) HardDeleteByOperationID(context.Context, uuid.UUID) error          { return nil }
+func (r *fakeDocRepo) HardDeleteTrashed(context.Context, uuid.UUID) error                { return nil }
 func (r *fakeDocRepo) FindChangedSinceLastBackup(context.Context, int64) ([]models.WikiDocument, error) {
 	return nil, nil
 }
@@ -266,3 +311,16 @@ func (f *fakeConverter) MarkdownToYjs(_ context.Context, _ string) ([]byte, erro
 	// A non-empty stub — orchestrator only stores it, doesn't decode.
 	return []byte("y-doc-update"), nil
 }
+
+// fakeEventBus records every Publish for assertion. Subscribe/Start/Stop are
+// no-ops because the orchestrator only uses Publish.
+type fakeEventBus struct {
+	published []eventbus.Event
+}
+
+func (b *fakeEventBus) Publish(e eventbus.Event) { b.published = append(b.published, e) }
+func (b *fakeEventBus) Subscribe([]eventbus.Topic, eventbus.Handler, ...eventbus.Filter) func() {
+	return func() {}
+}
+func (b *fakeEventBus) Start()                 {}
+func (b *fakeEventBus) Stop(_ context.Context) {}

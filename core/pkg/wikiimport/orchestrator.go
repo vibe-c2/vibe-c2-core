@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/vibe-c2/vibe-c2-core/core/pkg/eventbus"
 	"github.com/vibe-c2/vibe-c2-core/core/pkg/models"
 	"github.com/vibe-c2/vibe-c2-core/core/pkg/repository"
 	"github.com/vibe-c2/vibe-c2-core/core/pkg/wiki"
@@ -56,6 +57,7 @@ type Orchestrator struct {
 	imageIn   ImageIngestor
 	fileIn    FileIngestor
 	converter MarkdownConverter
+	eventBus  eventbus.IEventBus
 	logger    *zap.Logger
 
 	// importParentMu serialises the lookup-or-create of the singleton
@@ -67,12 +69,14 @@ type Orchestrator struct {
 }
 
 // NewOrchestrator constructs an orchestrator wired up to the live
-// repository and ingest helpers.
+// repository and ingest helpers. eventBus may be nil in tests — when nil,
+// the orchestrator skips post-import event publication.
 func NewOrchestrator(
 	docRepo repository.IWikiDocumentRepository,
 	imageIn ImageIngestor,
 	fileIn FileIngestor,
 	converter MarkdownConverter,
+	eventBus eventbus.IEventBus,
 	logger *zap.Logger,
 ) *Orchestrator {
 	return &Orchestrator{
@@ -80,6 +84,7 @@ func NewOrchestrator(
 		imageIn:   imageIn,
 		fileIn:    fileIn,
 		converter: converter,
+		eventBus:  eventBus,
 		logger:    logger,
 	}
 }
@@ -167,6 +172,24 @@ func (o *Orchestrator) Run(
 			report:         report,
 			collectionName: coll.Name,
 		}, coll.Documents, collectionParent.DocumentID, coll.Name+"/")
+	}
+
+	// Single wikiDocumentChanged event for the freshly-created timestamp
+	// parent. The frontend's SSE handler invalidates the op's whole tree
+	// and per-parent children caches on any wiki event, so one notification
+	// covers every newly-created descendant. Actor = the importing user so
+	// the subscription filter passes the event back to their own stream
+	// (see core/pkg/graphql/resolver/subscription_helpers.go).
+	if o.eventBus != nil {
+		o.eventBus.Publish(eventbus.NewWikiDocumentCreatedEvent(
+			eventbus.UserActor(callerID.String()),
+			eventbus.WikiDocumentEventPayload{
+				DocumentID:       timestampParent.DocumentID.String(),
+				OperationID:      operationID.String(),
+				ParentDocumentID: importParent.DocumentID.String(),
+				Title:            timestampParent.Title,
+			},
+		))
 	}
 
 	return report, nil

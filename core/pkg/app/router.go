@@ -89,6 +89,7 @@ func (a *App) NewRouter() *gin.Engine {
 		wikiImageCtrl,
 		wikiFileCtrl,
 		a.hpClient,
+		a.eventBus,
 		a.logger,
 	)
 	wikiImportCtrl := controller.NewWikiImportController(
