@@ -1,4 +1,4 @@
-import { memo, useCallback, useEffect, useMemo, useRef, useState, useTransition } from "react"
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { Link, useParams } from "react-router"
 import { useDraggable, useDroppable } from "@dnd-kit/core"
 import {
@@ -31,21 +31,17 @@ import { Skeleton } from "@/components/ui/skeleton"
 import { useWikiStore } from "@/stores/wiki"
 import { useWikiDragStore } from "@/stores/wiki-drag"
 import {
-  useEnsureWikiTree,
   useUpdateWikiDocument,
   useWikiDocumentChildren,
 } from "@/graphql/hooks/wiki"
+import { useWikiSubtreeExpansion } from "@/components/wiki/use-wiki-subtree-expansion"
 import {
   DocumentIconPicker,
   type DocumentIconValue,
 } from "@/components/wiki/document-icon-picker"
 import { DocumentIcon } from "@/components/wiki/document-icon"
 import { cn } from "@/lib/utils"
-import {
-  collectExpandableIdsFromFlat,
-  rowToTreeNode,
-  sortByOrder,
-} from "@/components/wiki/wiki-tree-helpers"
+import { rowToTreeNode, sortByOrder } from "@/components/wiki/wiki-tree-helpers"
 import type { TreeNode } from "@/components/wiki/wiki-tree-sidebar"
 
 interface WikiTreeNodeProps {
@@ -324,48 +320,21 @@ function WikiTreeRowQuickActionsImpl({
   onStartRename,
   onStartIconPicker,
 }: WikiTreeRowQuickActionsProps) {
-  const expandMany = useWikiStore((s) => s.expandMany)
-  const collapseMany = useWikiStore((s) => s.collapseMany)
   const openCreateDialog = useWikiStore((s) => s.openCreateDialog)
   const openMoveDialog = useWikiStore((s) => s.openMoveDialog)
   const openDeleteDialog = useWikiStore((s) => s.openDeleteDialog)
   const openContentSearch = useWikiStore((s) => s.openContentSearch)
   const updateDocument = useUpdateWikiDocument()
-  // Expand/collapse subtree needs to see branches the user has never opened.
-  // The full-tree fetch (cached + SSE-invalidated) primes the per-parent
-  // children cache so the affected rows render immediately after expansion.
-  const ensureWikiTree = useEnsureWikiTree(operationId)
 
   // Menu-open state is local to this subtree — no reason to live in the
   // parent row, where it would force the row (and its dnd hooks) to
   // re-render whenever the menu opens or closes.
   const [menuOpen, setMenuOpen] = useState(false)
 
-  // Subtree expand/collapse can be slow on huge ops: the GraphQL fetch
-  // (network/server) plus the React commit that mounts every newly-rendered
-  // descendant row. `isFetching` covers the fetch; `useTransition`'s pending
-  // flag covers the commit. We share one loading state across both subtree
-  // buttons — they share the same fetch and only one runs at a time.
-  const [isFetching, setIsFetching] = useState(false)
-  const [isCommitting, startCommitTransition] = useTransition()
-  const subtreeLoading = isFetching || isCommitting
-
-  async function runSubtreeAction(action: "expand" | "collapse") {
-    if (subtreeLoading) return
-    setIsFetching(true)
-    try {
-      const rows = await ensureWikiTree()
-      const ids = collectExpandableIdsFromFlat(rows, node.id)
-      // startTransition keeps the spinner responsive while React commits the
-      // expansion/collapse of (potentially thousands of) descendant rows.
-      startCommitTransition(() => {
-        if (action === "expand") expandMany(ids)
-        else collapseMany(ids)
-      })
-    } finally {
-      setIsFetching(false)
-    }
-  }
+  // One loading flag shared across Expand/Collapse subtree: they hit the
+  // same tree-fetch + transition pipeline and only one runs at a time.
+  const { loading: subtreeLoading, run: runSubtreeAction } =
+    useWikiSubtreeExpansion(operationId)
 
   // childCount is the canonical "has any children?" signal (cheap, comes
   // from the server). The "Expand/Collapse subtree" buttons prime the full
@@ -403,7 +372,7 @@ function WikiTreeRowQuickActionsImpl({
                   disabled={subtreeLoading}
                   onClick={(e) => {
                     e.stopPropagation()
-                    void runSubtreeAction("expand")
+                    void runSubtreeAction("expand", node.id)
                   }}
                 />
               }
@@ -428,7 +397,7 @@ function WikiTreeRowQuickActionsImpl({
                   disabled={subtreeLoading}
                   onClick={(e) => {
                     e.stopPropagation()
-                    void runSubtreeAction("collapse")
+                    void runSubtreeAction("collapse", node.id)
                   }}
                 />
               }

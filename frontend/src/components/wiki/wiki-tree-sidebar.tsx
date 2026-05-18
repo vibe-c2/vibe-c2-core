@@ -1,4 +1,4 @@
-import { useMemo, useState, useTransition } from "react"
+import { useMemo, useTransition } from "react"
 import { useQueryClient } from "@tanstack/react-query"
 import {
   ChevronsDownUpIcon,
@@ -27,7 +27,6 @@ import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip
 import { useWikiStore } from "@/stores/wiki"
 import { useWikiDragStore, type DropPosition, type DropTarget } from "@/stores/wiki-drag"
 import {
-  useEnsureWikiTree,
   useWikiDocumentChildren,
   useWikiDocumentTrashCount,
   useUpdateWikiDocument,
@@ -36,11 +35,8 @@ import {
 import { WikiTreeNode } from "@/components/wiki/wiki-tree-node"
 import { DocumentIcon } from "@/components/wiki/document-icon"
 import { WikiHistoryDropdown } from "@/components/wiki/wiki-history-dropdown"
-import {
-  collectExpandableIdsFromFlat,
-  rowToTreeNode,
-  sortByOrder,
-} from "@/components/wiki/wiki-tree-helpers"
+import { rowToTreeNode, sortByOrder } from "@/components/wiki/wiki-tree-helpers"
+import { useWikiSubtreeExpansion } from "@/components/wiki/use-wiki-subtree-expansion"
 import type {
   WikiDocumentChildrenQuery,
   WikiDocumentTreeFieldsFragment,
@@ -136,7 +132,8 @@ export function WikiTreeSidebar({
   const openImportOutlineDialog = useWikiStore((s) => s.openImportOutlineDialog)
   const openTrashPanel = useWikiStore((s) => s.openTrashPanel)
   const openContentSearch = useWikiStore((s) => s.openContentSearch)
-  const expandMany = useWikiStore((s) => s.expandMany)
+  // expandMany lives inside useWikiSubtreeExpansion; only collapseMany is
+  // used directly here, by the no-fetch Collapse-all handler.
   const collapseMany = useWikiStore((s) => s.collapseMany)
 
   // Trash count for badge — scalar query, not the full list.
@@ -350,38 +347,14 @@ export function WikiTreeSidebar({
     useWikiDragStore.getState().reset()
   }
 
-  // "Expand all" fetches the operation's full flat tree once (cached after
-  // first call, invalidated by the SSE subscription) and seeds every per-
-  // parent children cache entry as a side effect. With the cache primed, we
-  // can hand expandMany() every non-leaf id — including branches the user
-  // has never opened, which was the pre-fix gap.
-  const ensureWikiTree = useEnsureWikiTree(operationId)
+  // "Expand all" primes the full operation tree (one cached GraphQL fetch)
+  // and expands every non-leaf id — including branches the user has never
+  // opened. The hook also covers the React commit phase via useTransition.
+  const { loading: expandAllLoading, run: runSubtreeAction } =
+    useWikiSubtreeExpansion(operationId)
 
-  // Two phases dominate on huge trees: the GraphQL fetch (network/server)
-  // and the React commit that mounts every newly-expanded row. `isFetching`
-  // covers the first; `useTransition`'s pending flag covers the second. We
-  // OR them together so the spinner stays visible from click until the last
-  // row paints.
-  const [isFetching, setIsFetching] = useState(false)
-  const [isExpanding, startExpandTransition] = useTransition()
-  const expandAllLoading = isFetching || isExpanding
-
-  async function handleExpandAll() {
-    if (expandAllLoading) return
-    setIsFetching(true)
-    try {
-      const rows = await ensureWikiTree()
-      const ids = collectExpandableIdsFromFlat(rows, null)
-      // startTransition keeps the spinner responsive while React commits the
-      // (potentially thousands of) newly-rendered rows in the background.
-      startExpandTransition(() => expandMany(ids))
-    } finally {
-      setIsFetching(false)
-    }
-  }
-
-  // Collapse-all only does the React commit (unmounting every expanded row);
-  // no fetch needed, so the transition pending flag is the whole story.
+  // Collapse-all has no fetch phase — `expandedNodes` already lists every id
+  // we need to drop. Just a transition around the unmount commit.
   const [isCollapsing, startCollapseTransition] = useTransition()
 
   function handleCollapseAll() {
@@ -409,7 +382,7 @@ export function WikiTreeSidebar({
               <Button
                 variant="ghost"
                 size="icon-xs"
-                onClick={handleExpandAll}
+                onClick={() => void runSubtreeAction("expand", null)}
                 disabled={expandAllLoading}
               />
             }
