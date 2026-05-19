@@ -137,6 +137,14 @@ import {
   type LucideIcon,
 } from "lucide-react"
 
+/**
+ * Reserved icon name for the adaptive default icon. Persisted in
+ * WikiDocument.icon. Rendered specially by DocumentIcon — resolves to
+ * FileText / Folder / FolderOpen based on the row's children + expansion
+ * state. Picked here so it never collides with a real lucide name.
+ */
+export const ADAPTIVE_ICON_NAME = "Adaptive"
+
 export interface IconEntry {
   /** Stable key persisted in WikiDocument.icon. Never rename without a migration. */
   name: string

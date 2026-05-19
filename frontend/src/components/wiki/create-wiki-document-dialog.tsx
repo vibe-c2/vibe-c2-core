@@ -16,14 +16,18 @@ import {
   DocumentIconPicker,
   type DocumentIconValue,
 } from "@/components/wiki/document-icon-picker"
+import { ADAPTIVE_ICON_NAME } from "@/components/wiki/icon-catalog"
 
 interface CreateWikiDocumentDialogProps {
   operationId: string
 }
 
+// Adaptive default: renders as a page icon on a leaf doc, swaps to a
+// folder once children land. Picked here over the legacy "📂" emoji so a
+// brand-new doc reads as a page until it actually nests.
 const DEFAULT_ICON_VALUE: DocumentIconValue = {
-  emoji: "\u{1F4C2}",
-  icon: "",
+  emoji: "",
+  icon: ADAPTIVE_ICON_NAME,
   color: "",
 }
 

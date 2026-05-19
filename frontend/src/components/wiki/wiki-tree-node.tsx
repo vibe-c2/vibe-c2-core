@@ -233,6 +233,8 @@ function WikiTreeNodeImpl({
                   emoji={node.emoji}
                   icon={node.icon}
                   color={node.color}
+                  hasChildren
+                  isExpanded={isExpanded}
                 />
               </span>
               <ChevronRightIcon
