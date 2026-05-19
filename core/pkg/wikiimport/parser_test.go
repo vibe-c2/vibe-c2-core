@@ -139,6 +139,75 @@ func TestParse_NestedUploadsLayout(t *testing.T) {
 	}
 }
 
+// TestScanAttachmentRefs_BalancedParens covers the CommonMark §6.6 rule
+// that link destinations may contain literal parens as long as they're
+// balanced. Outline filenames like "Логин+пароль(2026).docx" or
+// "image (1).png" round-trip through the export markdown as
+// `[label](uploads/.../image (1).png)`, and the parser must capture the
+// full path through the closing `.png)` instead of truncating at the
+// first inner `)`.
+func TestScanAttachmentRefs_BalancedParens(t *testing.T) {
+	cases := []struct {
+		name string
+		body string
+		want []string
+	}{
+		{
+			name: "filename with single inner paren pair",
+			body: "see [report](uploads/u/a/image (1).png) end",
+			want: []string{"uploads/u/a/image (1).png"},
+		},
+		{
+			name: "filename with multiple paren pairs",
+			body: "[x](uploads/u/a/Отчет (27.01.2026 16-59-48).xls)",
+			want: []string{"uploads/u/a/Отчет (27.01.2026 16-59-48).xls"},
+		},
+		{
+			name: "image syntax also handled",
+			body: "![alt](uploads/u/a/img (2).png)",
+			want: []string{"uploads/u/a/img (2).png"},
+		},
+		{
+			name: "url-encoded space inside paren group",
+			body: "[x](uploads/u/a/Отчет%20об%20угрозах%20(27.01.2026%2016-59-48).xls)",
+			want: []string{"uploads/u/a/Отчет%20об%20угрозах%20(27.01.2026%2016-59-48).xls"},
+		},
+		{
+			name: "no inner parens — backwards-compatible with old regex",
+			body: "[x](uploads/u/a/plain.pdf)",
+			want: []string{"uploads/u/a/plain.pdf"},
+		},
+		{
+			name: "trailing title attribute on image link",
+			body: `![alt](uploads/u/a/img.png " =763x367")`,
+			want: []string{`uploads/u/a/img.png " =763x367"`},
+		},
+		{
+			name: "two refs in same body, second with parens",
+			body: "first [a](uploads/u/a/x.pdf) then [b](uploads/u/a/y(2).docx) done",
+			want: []string{"uploads/u/a/x.pdf", "uploads/u/a/y(2).docx"},
+		},
+		{
+			name: "dedupes repeated refs",
+			body: "[a](uploads/u/a/x.pdf) and [a again](uploads/u/a/x.pdf)",
+			want: []string{"uploads/u/a/x.pdf"},
+		},
+		{
+			name: "body without uploads/ returns nil",
+			body: "[ext](https://example.com/x.pdf)",
+			want: nil,
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			got := scanAttachmentRefs(tc.body)
+			if !sliceEq(got, tc.want) {
+				t.Errorf("got %#v want %#v", got, tc.want)
+			}
+		})
+	}
+}
+
 func TestParse_RealFixture_BodyDropsH1(t *testing.T) {
 	zr := openFixture(t)
 	got, _ := Parse(&zr.Reader)

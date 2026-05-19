@@ -15,7 +15,6 @@ import (
 	"fmt"
 	"io"
 	"path"
-	"regexp"
 	"sort"
 	"strings"
 )
@@ -378,29 +377,74 @@ func stripLeadingEmoji(s string) (emoji, rest string) {
 // orchestrator to determine which zip blobs need to be ingested per
 // document.
 //
-// We use a simple regex pass rather than a full markdown parse because we
-// only need the URLs, not their semantic position. The result is a
-// deduplicated list preserving first-occurrence order.
+// Returns a deduplicated list preserving first-occurrence order.
 func scanAttachmentRefs(body string) []string {
-	matches := uploadsRefPattern.FindAllStringSubmatch(body, -1)
-	if len(matches) == 0 {
+	targets := scanLinkTargetsWithPrefix(body, "uploads/")
+	if len(targets) == 0 {
 		return nil
 	}
 	seen := map[string]bool{}
-	var out []string
-	for _, m := range matches {
-		ref := m[1]
-		if seen[ref] {
+	out := make([]string, 0, len(targets))
+	for _, t := range targets {
+		if seen[t] {
 			continue
 		}
-		seen[ref] = true
-		out = append(out, ref)
+		seen[t] = true
+		out = append(out, t)
 	}
 	return out
 }
 
-// uploadsRefPattern catches both ![alt](uploads/...) image refs and
-// [label](uploads/...) link refs. The capture group is the path inside
-// the link target, with any URL-encoded characters left as-is — the
-// orchestrator decodes them when looking up the corresponding zip entry.
-var uploadsRefPattern = regexp.MustCompile(`\]\((uploads/[^)\s]+(?:\s+"[^"]*")?)\)`)
+// scanLinkTargetsWithPrefix finds every `](<target>)` link destination in
+// body where <target> starts with prefix. CommonMark §6.6 allows literal
+// `(` and `)` inside link destinations as long as they're balanced, so a
+// naïve `[^)]+` regex truncates Outline filenames like
+// "Логин+пароль(2026).docx" at the first inner `)`. This scanner tracks
+// paren depth and stops only at the unbalanced closing `)`.
+//
+// The returned string is the link destination verbatim as it appears in
+// body (URL plus any trailing `<space>"title"`), so the orchestrator can
+// pass it directly to strings.ReplaceAll when rewriting.
+func scanLinkTargetsWithPrefix(body, prefix string) []string {
+	needle := "](" + prefix
+	var out []string
+	i := 0
+	for i < len(body) {
+		hit := strings.Index(body[i:], needle)
+		if hit < 0 {
+			return out
+		}
+		start := i + hit + 2 // first byte of the link target, on the prefix
+		depth := 0
+		end := start
+		closed := false
+		for end < len(body) {
+			c := body[end]
+			if c == '\n' || c == '\r' {
+				// Markdown link destinations must stay on one line.
+				break
+			}
+			if c == '(' {
+				depth++
+			} else if c == ')' {
+				if depth == 0 {
+					closed = true
+					break
+				}
+				depth--
+			}
+			end++
+		}
+		if closed {
+			out = append(out, body[start:end])
+		}
+		// Advance past the closing paren (or the broken-link position) so we
+		// keep scanning for further matches.
+		if end < len(body) {
+			i = end + 1
+		} else {
+			i = end
+		}
+	}
+	return out
+}

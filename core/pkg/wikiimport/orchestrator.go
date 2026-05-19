@@ -8,6 +8,7 @@ import (
 	"io"
 	"net/url"
 	"path"
+	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -127,6 +128,25 @@ func (o *Orchestrator) Run(
 		return nil, fmt.Errorf("nil export")
 	}
 
+	// Diagnostic baseline: how many attachment blobs the parser indexed and
+	// a sorted sample of their keys. When refs fail to match, comparing the
+	// ref against this list is the fastest way to spot a path-prefix drift.
+	o.logger.Info("wiki import: orchestrator run starting",
+		zap.String("operation_id", operationID.String()),
+		zap.String("caller_id", callerID.String()),
+		zap.Int("collection_count", len(export.Collections)),
+		zap.Int("attachment_blob_count", len(export.AttachmentBlobs)),
+		zap.Strings("attachment_blob_keys_sample", sampleAttachmentKeys(export.AttachmentBlobs, 20)),
+	)
+	for _, coll := range export.Collections {
+		o.logger.Info("wiki import: collection summary",
+			zap.String("collection", coll.Name),
+			zap.Int("root_doc_count", len(coll.Documents)),
+			zap.Int("total_doc_count", countDocsRecursive(coll.Documents)),
+			zap.Int("total_attachment_refs", countRefsRecursive(coll.Documents)),
+		)
+	}
+
 	report := &Report{}
 
 	// Holding-pen folders: import/<ISO timestamp>/<collection>/...
@@ -214,6 +234,30 @@ func (o *Orchestrator) processDocs(
 		pctx.report.TotalDocs++
 
 		humanPath := pathPrefix + parsed.SortKey
+
+		// Per-doc trace: refs the parser captured + a count of literal
+		// "uploads/" substrings in the raw body. A mismatch points at a
+		// regex miss (e.g. ref contains an unescaped paren or space).
+		bodyUploadOccurrences := strings.Count(parsed.BodyMarkdown, "uploads/")
+		o.logger.Info("wiki import: processing doc",
+			zap.String("path", humanPath),
+			zap.String("title", parsed.Title),
+			zap.Int("body_bytes", len(parsed.BodyMarkdown)),
+			zap.Int("attachment_ref_count", len(parsed.AttachmentRefs)),
+			zap.Strings("attachment_refs", parsed.AttachmentRefs),
+			zap.Int("body_uploads_substring_count", bodyUploadOccurrences),
+		)
+		if bodyUploadOccurrences > len(parsed.AttachmentRefs) {
+			// More "uploads/" mentions in the body than refs the regex
+			// captured. Surface a sample of the raw body so we can inspect
+			// the exact markdown the parser failed to recognise.
+			o.logger.Warn("wiki import: body has more uploads/ mentions than parser captured refs — likely regex miss",
+				zap.String("path", humanPath),
+				zap.Int("uploads_substring_count", bodyUploadOccurrences),
+				zap.Int("captured_ref_count", len(parsed.AttachmentRefs)),
+				zap.Strings("uploads_context_snippets", uploadsContextSnippets(parsed.BodyMarkdown, 5, 120)),
+			)
+		}
 
 		// Title cap: truncate with warning rather than skip — losing a few
 		// characters is a much smaller fidelity loss than dropping the doc.
@@ -332,23 +376,39 @@ func (o *Orchestrator) ingestAttachmentsAndRewrite(
 		// inside a workspace export). Decode URL-escapes before lookup.
 		decoded := decodeURLPath(ref)
 		blob, ok := pctx.export.AttachmentBlobs[decoded]
+		lookupKey := decoded
 		if !ok {
 			// Older Outline exports may not URL-encode every character;
 			// retry with the as-written form.
 			blob, ok = pctx.export.AttachmentBlobs[ref]
+			if ok {
+				lookupKey = ref
+			}
 		}
 		if !ok {
-			o.logger.Warn("attachment blob not found in zip",
+			// Surface the candidate keys whose basename matches — that's
+			// what tells us whether the file is in the zip under a
+			// different prefix vs. genuinely missing.
+			refBase := path.Base(decoded)
+			o.logger.Warn("wiki import: attachment blob not found in zip",
 				zap.String("ref", ref),
+				zap.String("ref_decoded", decoded),
+				zap.String("ref_basename", refBase),
 				zap.String("document_id", owner.DocumentID.String()),
+				zap.String("document_path", parsed.SortKey),
+				zap.Strings("blob_keys_with_matching_basename", candidatesByBasename(refBase, pctx.export.AttachmentBlobs)),
+				zap.Strings("blob_keys_sample", sampleAttachmentKeys(pctx.export.AttachmentBlobs, 20)),
 			)
 			continue
 		}
 
 		newURL, ingested, err := o.ingestOneAttachment(ctx, pctx, owner, blob)
 		if err != nil {
-			o.logger.Warn("attachment ingest failed",
+			o.logger.Warn("wiki import: attachment ingest failed",
 				zap.String("ref", ref),
+				zap.String("lookup_key", lookupKey),
+				zap.String("blob_name", blob.Name),
+				zap.Uint64("blob_uncompressed_size", blob.UncompressedSize64),
 				zap.String("document_id", owner.DocumentID.String()),
 				zap.Error(err),
 			)
@@ -359,12 +419,47 @@ func (o *Orchestrator) ingestAttachmentsAndRewrite(
 		// inside the parentheses) with the new URL.
 		body = strings.ReplaceAll(body, ref, newURL)
 
+		// Did the substitution actually land? If body still contains the
+		// ref verbatim, the ReplaceAll silently did nothing (unlikely, but
+		// worth catching — a subtle whitespace mismatch between
+		// AttachmentRefs and the body would cause this).
+		substituted := !strings.Contains(body, ref)
+		o.logger.Info("wiki import: attachment ingested",
+			zap.String("ref", ref),
+			zap.String("lookup_key", lookupKey),
+			zap.String("blob_name", blob.Name),
+			zap.Uint64("blob_uncompressed_size", blob.UncompressedSize64),
+			zap.String("new_url", newURL),
+			zap.Bool("body_substituted", substituted),
+			zap.String("document_id", owner.DocumentID.String()),
+		)
+		if !substituted {
+			o.logger.Warn("wiki import: ingest succeeded but body still contains original ref — substitution missed",
+				zap.String("ref", ref),
+				zap.String("new_url", newURL),
+				zap.String("document_id", owner.DocumentID.String()),
+			)
+		}
+
 		switch ingested {
 		case ingestedImage:
 			pctx.report.ImagesIngested++
 		case ingestedFile:
 			pctx.report.FilesIngested++
 		}
+	}
+
+	// Orphan check: any `](uploads/...)` left in the body now points at a
+	// non-existent path. Either the parser's regex missed it, or the blob
+	// lookup / ingest above failed. Either way the rendered doc will show
+	// a broken link, so flag it here for the operator to see.
+	if leftovers := orphanUploadRefs(body); len(leftovers) > 0 {
+		o.logger.Warn("wiki import: doc body still references uploads/ paths after rewrite — these will render as broken links",
+			zap.String("document_id", owner.DocumentID.String()),
+			zap.String("document_path", parsed.SortKey),
+			zap.Int("orphan_count", len(leftovers)),
+			zap.Strings("orphan_refs", leftovers),
+		)
 	}
 	return body
 }
@@ -629,3 +724,95 @@ const (
 	maxContentSize       = 1 << 20 // 1 MiB
 	maxNestingDepth      = 10
 )
+
+// sampleAttachmentKeys returns up to limit attachment blob keys, sorted,
+// for diagnostic logging. The full map can be large for workspace exports,
+// so we cap output to keep log lines bounded.
+func sampleAttachmentKeys(attachments map[string]*zip.File, limit int) []string {
+	keys := make([]string, 0, len(attachments))
+	for k := range attachments {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	if len(keys) > limit {
+		keys = keys[:limit]
+	}
+	return keys
+}
+
+// candidatesByBasename returns the attachment blob keys whose final path
+// segment equals refBase. Used when a ref lookup misses — if the file is in
+// the zip but under a different prefix, this surfaces it immediately.
+func candidatesByBasename(refBase string, attachments map[string]*zip.File) []string {
+	if refBase == "" {
+		return nil
+	}
+	var out []string
+	for k := range attachments {
+		if path.Base(k) == refBase {
+			out = append(out, k)
+		}
+	}
+	sort.Strings(out)
+	return out
+}
+
+// countDocsRecursive returns the total number of documents in a tree,
+// including all descendants. Used in the per-collection start log.
+func countDocsRecursive(docs []*Doc) int {
+	n := 0
+	for _, d := range docs {
+		n++
+		n += countDocsRecursive(d.Children)
+	}
+	return n
+}
+
+// countRefsRecursive sums AttachmentRefs across every doc in a tree.
+func countRefsRecursive(docs []*Doc) int {
+	n := 0
+	for _, d := range docs {
+		n += len(d.AttachmentRefs)
+		n += countRefsRecursive(d.Children)
+	}
+	return n
+}
+
+// orphanUploadRefs runs the parser's own scanner over the rewritten body
+// and returns any `uploads/...` link targets still present. After a
+// successful orchestrator pass these should be empty — every ref the
+// parser saw was either substituted or logged as a miss. Anything that
+// surfaces here is a broken link in the resulting wiki page.
+func orphanUploadRefs(body string) []string {
+	return scanAttachmentRefs(body)
+}
+
+// uploadsContextSnippets pulls short slices of the body around each
+// "uploads/" substring. Used when the parser captured fewer refs than the
+// body's substring count suggests — the snippets show the exact characters
+// surrounding each occurrence so we can see why the regex missed.
+func uploadsContextSnippets(body string, maxSnippets, window int) []string {
+	if body == "" {
+		return nil
+	}
+	out := make([]string, 0, maxSnippets)
+	idx := 0
+	for len(out) < maxSnippets {
+		pos := strings.Index(body[idx:], "uploads/")
+		if pos < 0 {
+			break
+		}
+		abs := idx + pos
+		start := abs - window/2
+		if start < 0 {
+			start = 0
+		}
+		end := abs + window/2
+		if end > len(body) {
+			end = len(body)
+		}
+		out = append(out, body[start:end])
+		idx = abs + len("uploads/")
+	}
+	return out
+}
