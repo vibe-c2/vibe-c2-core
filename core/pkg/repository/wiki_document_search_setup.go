@@ -5,6 +5,7 @@ import (
 	"errors"
 	"log"
 
+	"github.com/google/uuid"
 	"github.com/vibe-c2/vibe-c2-core/core/pkg/database"
 	v1bson "go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/mongo"
@@ -40,6 +41,7 @@ func setupWikiSearchIndexes(coll database.Collection) {
 	dropLegacyBrokenIndex(ctx, raw)
 	createWikiTextIndex(ctx, raw)
 	backfillTitleLower(ctx, raw)
+	backfillPathIDs(ctx, raw)
 }
 
 func dropLegacyBrokenIndex(ctx context.Context, raw *mongo.Collection) {
@@ -105,4 +107,138 @@ func isIndexNotFound(err error) bool {
 		return cmdErr.Code == 27
 	}
 	return false
+}
+
+// backfillPathIDs populates path_ids on every wiki document that does not
+// already have it. Runs once at startup after deploy; no-op thereafter.
+//
+// Strategy: enumerate the operation_ids that contain at least one un-backfilled
+// doc, then for each such operation load the minimal metadata for ALL of its
+// docs (active + trashed — path_ids reflects structural ancestry regardless of
+// soft-delete) and rewrite path_ids top-down from the root. One BulkWrite per
+// operation. Per-operation memory is O(N_docs) of minimal metadata; far smaller
+// than reading content.
+//
+// Failure semantics: any failure for one operation is logged and the next is
+// attempted. We never block startup on this — the regex/text search paths still
+// work without the index; only scoped search degrades to "ignores scope" until
+// the backfill finishes on a subsequent boot.
+func backfillPathIDs(ctx context.Context, raw *mongo.Collection) {
+	cur, err := raw.Aggregate(ctx, []v1bson.M{
+		{"$match": v1bson.M{"path_ids": v1bson.M{"$exists": false}}},
+		{"$group": v1bson.M{"_id": "$operation_id"}},
+	})
+	if err != nil {
+		log.Printf("wiki search setup: path_ids backfill: list ops failed: %v", err)
+		return
+	}
+	var ops []struct {
+		ID uuid.UUID `bson:"_id"`
+	}
+	if err := cur.All(ctx, &ops); err != nil {
+		log.Printf("wiki search setup: path_ids backfill: decode ops failed: %v", err)
+		return
+	}
+	if len(ops) == 0 {
+		return
+	}
+
+	var total int64
+	for _, op := range ops {
+		n, err := backfillPathIDsForOperation(ctx, raw, op.ID)
+		if err != nil {
+			log.Printf("wiki search setup: path_ids backfill op %s failed: %v", op.ID, err)
+			continue
+		}
+		total += n
+	}
+	if total > 0 {
+		log.Printf("wiki search setup: backfilled path_ids on %d documents across %d operations", total, len(ops))
+	}
+}
+
+// pathDocMeta is the minimal projection we need to rebuild path_ids without
+// hauling document content into memory.
+type pathDocMeta struct {
+	DocumentID       uuid.UUID   `bson:"document_id"`
+	ParentDocumentID *uuid.UUID  `bson:"parent_document_id"`
+	PathIDs          []uuid.UUID `bson:"path_ids"`
+}
+
+func backfillPathIDsForOperation(ctx context.Context, raw *mongo.Collection, opID uuid.UUID) (int64, error) {
+	opt := options.Find().SetProjection(v1bson.M{
+		"document_id":        1,
+		"parent_document_id": 1,
+		"path_ids":           1,
+		"_id":                0,
+	})
+	cur, err := raw.Find(ctx, v1bson.M{"operation_id": opID}, opt)
+	if err != nil {
+		return 0, err
+	}
+	var docs []pathDocMeta
+	if err := cur.All(ctx, &docs); err != nil {
+		return 0, err
+	}
+	if len(docs) == 0 {
+		return 0, nil
+	}
+
+	// Build adjacency: parent → children. We BFS from each root and stamp
+	// each node with its computed path; orphans (parent missing from the
+	// operation) fall through to an empty path so the doc still indexes.
+	childrenOf := make(map[uuid.UUID][]uuid.UUID, len(docs))
+	for _, d := range docs {
+		if d.ParentDocumentID != nil {
+			childrenOf[*d.ParentDocumentID] = append(childrenOf[*d.ParentDocumentID], d.DocumentID)
+		}
+	}
+
+	type frontier struct {
+		id   uuid.UUID
+		path []uuid.UUID
+	}
+	pathByID := make(map[uuid.UUID][]uuid.UUID, len(docs))
+	var queue []frontier
+	for _, d := range docs {
+		if d.ParentDocumentID == nil {
+			queue = append(queue, frontier{id: d.DocumentID, path: []uuid.UUID{}})
+		}
+	}
+	for len(queue) > 0 {
+		node := queue[0]
+		queue = queue[1:]
+		if _, seen := pathByID[node.id]; seen {
+			continue // cycle guard for corrupt data
+		}
+		pathByID[node.id] = node.path
+		childPath := ComposePathIDs(node.path, node.id)
+		for _, childID := range childrenOf[node.id] {
+			queue = append(queue, frontier{id: childID, path: childPath})
+		}
+	}
+
+	var writes []mongo.WriteModel
+	for _, d := range docs {
+		newPath, ok := pathByID[d.DocumentID]
+		if !ok {
+			// Orphan or in a cycle: store empty path so the field exists and
+			// future scoped-search queries don't have to special-case missing.
+			newPath = []uuid.UUID{}
+		}
+		if pathSliceEqual(d.PathIDs, newPath) {
+			continue
+		}
+		writes = append(writes, mongo.NewUpdateOneModel().
+			SetFilter(v1bson.M{"document_id": d.DocumentID}).
+			SetUpdate(v1bson.M{"$set": v1bson.M{"path_ids": newPath}}))
+	}
+	if len(writes) == 0 {
+		return 0, nil
+	}
+	res, err := raw.BulkWrite(ctx, writes, options.BulkWrite().SetOrdered(false))
+	if err != nil {
+		return 0, err
+	}
+	return res.ModifiedCount, nil
 }

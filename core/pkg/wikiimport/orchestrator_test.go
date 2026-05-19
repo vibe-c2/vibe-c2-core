@@ -254,6 +254,7 @@ func (r *fakeDocRepo) FindDocumentsForRevealPath(context.Context, uuid.UUID, []u
 func (r *fakeDocRepo) FindDescendants(context.Context, uuid.UUID) ([]models.WikiDocument, error) {
 	return nil, nil
 }
+func (r *fakeDocRepo) RebuildPathIDsCascade(context.Context, uuid.UUID) error { return nil }
 func (r *fakeDocRepo) FindTrashedDescendants(context.Context, uuid.UUID) ([]models.WikiDocument, error) {
 	return nil, nil
 }

@@ -2,6 +2,7 @@ package repository
 
 import (
 	"context"
+	"fmt"
 	"regexp"
 	"strings"
 
@@ -10,6 +11,7 @@ import (
 	v1bson "go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/mongo"
 	"go.mongodb.org/mongo-driver/mongo/options"
+	"golang.org/x/sync/errgroup"
 )
 
 // MaxSearchOffset caps how deep the search result set is paginable. Past this,
@@ -94,52 +96,72 @@ func (r *wikiDocumentRepository) SearchByOperationID(
 		"deleted_at":   nil,
 	}
 	// Subtree scope: match the scope doc and all its descendants, not just
-	// direct children. The schema advertises `scope` as "limit to this parent's
-	// descendants" — filtering on parent_document_id alone would silently miss
-	// grandchildren and deeper. Resolving the descendant set up front lets all
-	// three search branches (prefix / substring / $text) share one filter, and
-	// the resulting {document_id: {$in: ids}} filter is index-backed via the
-	// unique document_id index.
+	// direct children. PathIDs is the materialized ancestor chain (root → …
+	// → immediate-parent) populated at Create and maintained by
+	// RebuildPathIDsCascade on every reparent. The {operation_id, path_ids}
+	// multikey index turns the scope filter into a single index probe —
+	// replacing the previous O(depth) FindDescendants BFS that shipped full
+	// documents just to extract IDs.
 	if scopeParentID != nil {
-		descendants, err := r.FindDescendants(ctx, *scopeParentID)
-		if err != nil {
-			return nil, 0, err
+		baseFilter["$or"] = v1bson.A{
+			v1bson.M{"document_id": *scopeParentID},
+			v1bson.M{"path_ids": *scopeParentID},
 		}
-		ids := make([]uuid.UUID, 0, len(descendants)+1)
-		ids = append(ids, *scopeParentID)
-		for _, d := range descendants {
-			ids = append(ids, d.DocumentID)
-		}
-		baseFilter["document_id"] = v1bson.M{"$in": ids}
 	}
 
+	// Run the three branches in parallel — they hit the same operation_id
+	// pre-filter but otherwise share no state. errgroup cancels siblings if
+	// any one fails so we don't waste work; capture results into pre-declared
+	// slices to keep the merge order deterministic (title-prefix outranks
+	// content-substring outranks $text).
+	g, gctx := errgroup.WithContext(ctx)
+	var (
+		prefixHits  []WikiDocumentSearchHit
+		contentHits []WikiDocumentSearchHit
+		textHits    []WikiDocumentSearchHit
+	)
+
 	// Branch 1: title-prefix (always runs, always cheap).
-	prefixHits, err := r.searchTitlePrefix(ctx, raw, baseFilter, query)
-	if err != nil {
-		return nil, 0, err
-	}
+	g.Go(func() error {
+		hits, err := r.searchTitlePrefix(gctx, raw, baseFilter, query)
+		if err != nil {
+			return err
+		}
+		prefixHits = hits
+		return nil
+	})
 
 	// Branch 2: content substring regex. Catches partial-word matches inside
 	// bodies that $text cannot. Unindexed but scoped to one operation's
 	// active docs and capped at mergeFetchCap. Skip for single-char queries
 	// where a substring scan returns noise — use the title prefix instead.
-	var contentHits []WikiDocumentSearchHit
 	if len([]rune(query)) >= 2 {
-		contentHits, err = r.searchContentSubstring(ctx, raw, baseFilter, query)
-		if err != nil {
-			return nil, 0, err
-		}
+		g.Go(func() error {
+			hits, err := r.searchContentSubstring(gctx, raw, baseFilter, query)
+			if err != nil {
+				return err
+			}
+			contentHits = hits
+			return nil
+		})
 	}
 
 	// Branch 3: $text. Only useful once the user has typed something that
 	// can tokenize to at least one whole word of length ≥ 2 — MongoDB's
 	// tokenizer drops single-character tokens.
-	var textHits []WikiDocumentSearchHit
 	if hasSearchableWord(query) {
-		textHits, err = r.searchFullText(ctx, raw, baseFilter, query)
-		if err != nil {
-			return nil, 0, err
-		}
+		g.Go(func() error {
+			hits, err := r.searchFullText(gctx, raw, baseFilter, query)
+			if err != nil {
+				return err
+			}
+			textHits = hits
+			return nil
+		})
+	}
+
+	if err := g.Wait(); err != nil {
+		return nil, 0, err
 	}
 
 	merged := mergeSearchHits(prefixHits, contentHits, textHits)
@@ -155,6 +177,14 @@ func (r *wikiDocumentRepository) SearchByOperationID(
 	}
 	page := merged[offset:end]
 
+	// The three branches each project away `content` to keep the merge
+	// payload small. Snippet extraction needs the body, so re-fetch content
+	// only for the docs that actually land on the page — at most `limit`
+	// docs (default 20) per request.
+	if err := r.hydratePageContent(ctx, page); err != nil {
+		return nil, 0, err
+	}
+
 	// Generate snippets lazily for the page only — snippet extraction scans
 	// full content per doc, so scoping to the page bounds the cost.
 	for i := range page {
@@ -164,6 +194,51 @@ func (r *wikiDocumentRepository) SearchByOperationID(
 	}
 
 	return page, total, nil
+}
+
+// hydratePageContent fetches the `content` field for the documents on the
+// current result page and populates page[i].Doc.Content in place. Search
+// branches project content away to avoid shipping ~30 KB × mergeFetchCap of
+// markdown that's only read for the page's snippets. One indexed Find by
+// document_id; the order of `page` is preserved.
+func (r *wikiDocumentRepository) hydratePageContent(ctx context.Context, page []WikiDocumentSearchHit) error {
+	if len(page) == 0 {
+		return nil
+	}
+	ids := make([]uuid.UUID, len(page))
+	for i, h := range page {
+		ids[i] = h.Doc.DocumentID
+	}
+
+	raw, err := r.coll.RawCollection()
+	if err != nil {
+		return err
+	}
+	opt := options.Find().SetProjection(v1bson.M{
+		"document_id": 1,
+		"content":     1,
+		"_id":         0,
+	})
+	cur, err := raw.Find(ctx, v1bson.M{"document_id": v1bson.M{"$in": ids}}, opt)
+	if err != nil {
+		return fmt.Errorf("hydrate page content: %w", err)
+	}
+	type contentRow struct {
+		DocumentID uuid.UUID `bson:"document_id"`
+		Content    string    `bson:"content"`
+	}
+	var rows []contentRow
+	if err := cur.All(ctx, &rows); err != nil {
+		return fmt.Errorf("hydrate page content: decode: %w", err)
+	}
+	byID := make(map[uuid.UUID]string, len(rows))
+	for _, row := range rows {
+		byID[row.DocumentID] = row.Content
+	}
+	for i := range page {
+		page[i].Doc.Content = byID[page[i].Doc.DocumentID]
+	}
+	return nil
 }
 
 // hasSearchableWord returns true if at least one whitespace-separated token
@@ -220,9 +295,13 @@ func (r *wikiDocumentRepository) searchTitlePrefix(
 		"$regex": "^" + regexp.QuoteMeta(strings.ToLower(query)),
 	}
 
+	// Project away `content` — snippets only render for the final page, and
+	// the page hydrates content separately. Shipping content for up to
+	// mergeFetchCap candidates was the dominant payload before this fix.
 	opt := options.Find().
 		SetSort(v1bson.D{{Key: "title_lower", Value: 1}}).
-		SetLimit(mergeFetchCap)
+		SetLimit(mergeFetchCap).
+		SetProjection(v1bson.M{"content": 0, "content_state": 0})
 
 	cur, err := raw.Find(ctx, filter, opt)
 	if err != nil {
@@ -265,9 +344,13 @@ func (r *wikiDocumentRepository) searchContentSubstring(
 		"$options": "i",
 	}
 
+	// Project away `content` from the response — the regex still has to scan
+	// content server-side (that's the match condition) but Mongo can return
+	// just the metadata. Saves the per-doc payload on the wire and in Go GC.
 	opt := options.Find().
 		SetSort(v1bson.D{{Key: "createAt", Value: -1}}).
-		SetLimit(mergeFetchCap)
+		SetLimit(mergeFetchCap).
+		SetProjection(v1bson.M{"content": 0, "content_state": 0})
 
 	cur, err := raw.Find(ctx, filter, opt)
 	if err != nil {
@@ -305,8 +388,16 @@ func (r *wikiDocumentRepository) searchFullText(
 	}
 	filter["$text"] = v1bson.M{"$search": query}
 
+	// Exclusion projection — keeps `content`/`content_state` off the wire while
+	// auto-including any future WikiDocument fields (no drift vs the other two
+	// branches which also exclude content). `$meta` may be combined with an
+	// exclusion projection since MongoDB 4.4.
 	opt := options.Find().
-		SetProjection(v1bson.M{"score": v1bson.M{"$meta": "textScore"}}).
+		SetProjection(v1bson.M{
+			"content":       0,
+			"content_state": 0,
+			"score":         v1bson.M{"$meta": "textScore"},
+		}).
 		SetSort(v1bson.D{
 			{Key: "score", Value: v1bson.M{"$meta": "textScore"}},
 			{Key: "createAt", Value: -1},

@@ -185,7 +185,10 @@ func (r *wikiDocumentResolver) CreateWikiDocument(ctx context.Context, operation
 	}
 
 	// Validate nesting depth
-	var parentDocID *uuid.UUID
+	var (
+		parentDocID *uuid.UUID
+		pathIDs     []uuid.UUID
+	)
 	if input.ParentDocumentID != nil {
 		pid, err := uuid.Parse(*input.ParentDocumentID)
 		if err != nil {
@@ -213,6 +216,13 @@ func (r *wikiDocumentResolver) CreateWikiDocument(ctx context.Context, operation
 		if depth >= maxNestingDepth {
 			return nil, fmt.Errorf("maximum nesting depth of %d levels exceeded", maxNestingDepth)
 		}
+
+		// Materialize the ancestor chain so scoped search is a single
+		// multikey-index probe (see WikiDocument.PathIDs). Repo helper builds
+		// the new slice without aliasing parent.PathIDs.
+		pathIDs = repository.ComposePathIDs(parent.PathIDs, parent.DocumentID)
+	} else {
+		pathIDs = []uuid.UUID{}
 	}
 
 	callerUID, err := uuid.Parse(auth.UserID)
@@ -245,6 +255,7 @@ func (r *wikiDocumentResolver) CreateWikiDocument(ctx context.Context, operation
 		DocumentID:       uuid.New(),
 		OperationID:      opUID,
 		ParentDocumentID: parentDocID,
+		PathIDs:          pathIDs,
 		Title:            input.Title,
 		TitleLower:       strings.ToLower(input.Title),
 		Content:          content,
@@ -365,6 +376,16 @@ func (r *wikiDocumentResolver) UpdateWikiDocument(ctx context.Context, id string
 		return nil, fmt.Errorf("failed to update wiki document: %w", err)
 	}
 
+	// A reparent invalidates path_ids for the moved doc AND all descendants;
+	// recompute before publishing the moved event so any downstream scoped
+	// search sees consistent state. Best-effort recovery is via the startup
+	// backfill if this fails mid-flight.
+	if moved {
+		if err := r.docRepo.RebuildPathIDsCascade(ctx, uid); err != nil {
+			return nil, fmt.Errorf("failed to rebuild path_ids after move: %w", err)
+		}
+	}
+
 	updated, err := r.docRepo.FindByID(ctx, uid)
 	if err != nil {
 		return nil, fmt.Errorf("failed to fetch updated document: %w", err)
@@ -483,6 +504,12 @@ func (r *wikiDocumentResolver) RestoreWikiDocument(ctx context.Context, id strin
 			stampLastUpdated(updates, callerUID)
 			if err := r.docRepo.Update(ctx, &doc, updates); err != nil {
 				return nil, fmt.Errorf("failed to reparent for restore: %w", err)
+			}
+			// Restore-time reparent invalidates path_ids for the doc and its
+			// (still-trashed at this moment) descendants. Rebuild so the
+			// search-scope multikey query reflects the new home immediately.
+			if err := r.docRepo.RebuildPathIDsCascade(ctx, uid); err != nil {
+				return nil, fmt.Errorf("failed to rebuild path_ids after restore-reparent: %w", err)
 			}
 		}
 	}
