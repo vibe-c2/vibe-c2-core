@@ -1,5 +1,6 @@
 import { useMemo, useTransition } from "react"
 import { useQueryClient } from "@tanstack/react-query"
+import { toast } from "sonner"
 import {
   ChevronsDownUpIcon,
   ChevronsUpDownIcon,
@@ -17,6 +18,7 @@ import {
   useDroppable,
   useSensor,
   useSensors,
+  type DragEndEvent,
   type DragMoveEvent,
   type DragStartEvent,
 } from "@dnd-kit/core"
@@ -90,6 +92,45 @@ function collectLoadedDescendantIds(
     }
   }
   return ids
+}
+
+/**
+ * Resolve the drop target (id + position) from a dnd-kit drag event.
+ *
+ * Single source of truth used by both pointermove (to drive the highlight)
+ * and dragend (to drive the actual mutation). Reading the store at dragend
+ * time was a race — pointerup can land before the latest pointermove tick
+ * flushes — so we always derive from the event itself.
+ *
+ * Zone split: 20/60/20 for expanded parents (leaves enough edge to drop
+ * "before"/"after" between rendered siblings), 5/90/5 for collapsed/leaf
+ * rows (where "inside" is overwhelmingly the user's intent — there's no
+ * children to insert between).
+ */
+function resolveDropTargetFromEvent(
+  event: DragMoveEvent | DragEndEvent,
+  excludedIds: Set<string>,
+  expandedNodes: Set<string>,
+): DropTarget | null {
+  const over = event.over
+  if (!over) return null
+  const id = over.id as string
+  if (excludedIds.has(id)) return null
+  if (id === "root") return { id, position: "inside" }
+
+  const activator = event.activatorEvent as PointerEvent
+  const pointerY = activator.clientY + event.delta.y
+  const rect = over.rect
+  const fraction = (pointerY - rect.top) / rect.height
+
+  const isExpanded = expandedNodes.has(id)
+  const beforeEdge = isExpanded ? 0.2 : 0.05
+  const afterEdge = isExpanded ? 0.8 : 0.95
+
+  let position: DropPosition = "inside"
+  if (fraction < beforeEdge) position = "before"
+  else if (fraction > afterEdge) position = "after"
+  return { id, position }
 }
 
 /**
@@ -203,46 +244,36 @@ export function WikiTreeSidebar({
 
   function handleDragMove(event: DragMoveEvent) {
     const dragStore = useWikiDragStore.getState()
-    const over = event.over
-    if (!over) {
-      if (dragStore.dropTarget) dragStore.setDropTarget(null)
-      return
-    }
+    const expandedNodes = useWikiStore.getState().expandedNodes
+    const next = resolveDropTargetFromEvent(event, excludedIds, expandedNodes)
 
-    const id = over.id as string
-    if (excludedIds.has(id)) {
-      if (dragStore.dropTarget) dragStore.setDropTarget(null)
-      return
-    }
-
-    // For root, always "inside".
-    let position: DropPosition = "inside"
-    if (id !== "root") {
-      // Compute pointer Y relative to the hovered node's rect.
-      const startEvent = event.activatorEvent as PointerEvent
-      const pointerY = startEvent.clientY + event.delta.y
-      const rect = over.rect
-      const fraction = (pointerY - rect.top) / rect.height
-      if (fraction < 0.25) position = "before"
-      else if (fraction > 0.75) position = "after"
-    }
-
-    // Only update state when target actually changes.
     const prev = dragStore.dropTarget
-    if (!prev || prev.id !== id || prev.position !== position) {
-      const next: DropTarget = { id, position }
+    if (next === null) {
+      if (prev) dragStore.setDropTarget(null)
+      return
+    }
+    if (!prev || prev.id !== next.id || prev.position !== next.position) {
       dragStore.setDropTarget(next)
     }
   }
 
-  function handleDragEnd() {
+  function handleDragEnd(event: DragEndEvent) {
     const dragStore = useWikiDragStore.getState()
-    const draggedId = dragStore.activeId
-    const target = dragStore.dropTarget
+    const draggedId = event.active.id as string
+    const expandedNodes = useWikiStore.getState().expandedNodes
+    // Derive the drop target from the event itself, not from our pointermove-
+    // populated store: pointerup can land between pointermove ticks and the
+    // store would carry a stale (or null) value, silently dropping the move.
+    const target = resolveDropTargetFromEvent(event, excludedIds, expandedNodes)
 
     dragStore.reset()
 
     if (!draggedId || !target) return
+
+    const mutationOptions = {
+      onError: (err: unknown) =>
+        toast.error(err instanceof Error ? err.message : "Failed to move document"),
+    }
 
     // Locate the dragged row by scanning loaded children slices. Drag is
     // only possible on visible rows, so it must be in at least one slice.
@@ -262,7 +293,6 @@ export function WikiTreeSidebar({
     // "After" an expanded node with children = visually "before its first child".
     let resolvedTarget = target
     if (target.position === "after" && target.id !== "root") {
-      const { expandedNodes } = useWikiStore.getState()
       if (expandedNodes.has(target.id)) {
         const firstChild = readChildrenFromCache(
           queryClient,
@@ -287,13 +317,16 @@ export function WikiTreeSidebar({
       const sorted = sortByOrder(siblings)
       const lastSort = sorted.length > 0 ? sorted[sorted.length - 1].sortOrder : null
 
-      updateDocument.mutate({
-        id: draggedId,
-        input: {
-          parentDocumentId: newParentId,
-          sortOrder: midSortOrder(lastSort, null),
+      updateDocument.mutate(
+        {
+          id: draggedId,
+          input: {
+            parentDocumentId: newParentId,
+            sortOrder: midSortOrder(lastSort, null),
+          },
         },
-      })
+        mutationOptions,
+      )
     } else {
       // Reorder: insert before/after the target among its siblings.
       // Locate the over-doc by scanning loaded slices (same shape as the
@@ -312,6 +345,8 @@ export function WikiTreeSidebar({
 
       const parentId = overDoc.parentDocumentId ?? ""
       const parentIdForFilter = overDoc.parentDocumentId ?? null
+      const parentChanged =
+        (draggedDoc.parentDocumentId ?? null) !== parentIdForFilter
 
       const allSiblings = sortByOrder(
         readChildrenFromCache(queryClient, operationId, parentIdForFilter),
@@ -328,17 +363,24 @@ export function WikiTreeSidebar({
       for (let i = 0; i < count; i++) {
         const fraction = (i + 1) / (count + 1)
         const newSort = String.fromCharCode(65 + Math.floor(fraction * 57))
-        if (reordered[i].sortOrder !== newSort) {
-          updateDocument.mutate({
+        const isDragged = reordered[i].id === draggedId
+        // The dragged row must always go through when its parent changes,
+        // even if its computed sortOrder happens to collide with the old
+        // value — the sortOrder guard alone used to silently swallow the
+        // reparent.
+        const sortChanged = reordered[i].sortOrder !== newSort
+        if (!sortChanged && !(isDragged && parentChanged)) continue
+
+        updateDocument.mutate(
+          {
             id: reordered[i].id,
             input: {
-              ...(reordered[i].id === draggedId
-                ? { parentDocumentId: parentId }
-                : {}),
-              sortOrder: newSort,
+              ...(isDragged ? { parentDocumentId: parentId } : {}),
+              ...(sortChanged ? { sortOrder: newSort } : {}),
             },
-          })
-        }
+          },
+          mutationOptions,
+        )
       }
     }
   }

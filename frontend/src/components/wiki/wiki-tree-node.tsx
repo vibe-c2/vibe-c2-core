@@ -90,8 +90,17 @@ function WikiTreeNodeImpl({
     [childrenData?.wikiDocumentChildren],
   )
 
-  // DnD: each node is both draggable (via handle) and a drop target.
-  const { attributes, listeners, setNodeRef: setDragRef } = useDraggable({ id: node.id })
+  // DnD: each node is both draggable and a drop target. The activator is the
+  // leading icon/chevron slot — NOT the whole row — so the title <Link> stays
+  // a normal clickable element. If listeners lived on the row, dnd-kit's
+  // sub-threshold pointerup (drag never activated) would fall through to a
+  // <Link> click and yank the user away to the dragged doc on every misclick.
+  const {
+    attributes,
+    listeners,
+    setNodeRef: setDragRef,
+    setActivatorNodeRef,
+  } = useDraggable({ id: node.id })
   const { setNodeRef: setDropRef } = useDroppable({ id: node.id })
 
   // When the row becomes the selected document — usually because the user
@@ -167,51 +176,58 @@ function WikiTreeNodeImpl({
           setDropRef(el)
           if (isEditor) setDragRef(el)
         }}
-        {...(isEditor ? attributes : {})}
-        {...(isEditor ? listeners : {})}
         style={{ paddingLeft: indent }}
         className={cn(
           "group flex h-7 items-center gap-0.5 rounded-md px-1 text-sm",
-          isEditor && "cursor-grab active:cursor-grabbing",
           isDropInside && "bg-primary/10 ring-1 ring-primary",
           !isDropInside && isSelected && "bg-accent text-accent-foreground",
           !isDropInside && !isSelected && "hover:bg-muted",
         )}
       >
         {/* Chevron/emoji shared slot: emoji by default, chevron on hover.
-            Leaves render just the emoji (no trigger). */}
-        {hasChildren ? (
-          <CollapsibleTrigger
-            render={
-              <button
-                className="flex size-5 shrink-0 items-center justify-center rounded hover:bg-muted-foreground/10"
-                aria-label={isExpanded ? "Collapse" : "Expand"}
+            Leaves render just the emoji (no trigger). This span is also the
+            drag activator — pointer listeners live here, NOT on the row, so
+            the <Link> below is a sibling rather than a descendant. */}
+        <span
+          ref={isEditor ? setActivatorNodeRef : undefined}
+          {...(isEditor ? attributes : {})}
+          {...(isEditor ? listeners : {})}
+          className={cn(
+            "flex size-5 shrink-0 items-center justify-center",
+            isEditor && "cursor-grab active:cursor-grabbing",
+          )}
+        >
+          {hasChildren ? (
+            <CollapsibleTrigger
+              render={
+                <button
+                  className="flex size-5 shrink-0 items-center justify-center rounded hover:bg-muted-foreground/10"
+                  aria-label={isExpanded ? "Collapse" : "Expand"}
+                />
+              }
+            >
+              <span className="flex size-5 items-center justify-center text-sm group-hover:hidden">
+                <DocumentIcon
+                  emoji={node.emoji}
+                  icon={node.icon}
+                  color={node.color}
+                />
+              </span>
+              <ChevronRightIcon
+                className={cn(
+                  "hidden size-3.5 transition-transform group-hover:block",
+                  isExpanded && "rotate-90",
+                )}
               />
-            }
-          >
-            <span className="flex size-5 items-center justify-center text-sm group-hover:hidden">
-              <DocumentIcon
-                emoji={node.emoji}
-                icon={node.icon}
-                color={node.color}
-              />
-            </span>
-            <ChevronRightIcon
-              className={cn(
-                "hidden size-3.5 transition-transform group-hover:block",
-                isExpanded && "rotate-90",
-              )}
-            />
-          </CollapsibleTrigger>
-        ) : (
-          <span className="flex size-5 shrink-0 items-center justify-center text-sm">
+            </CollapsibleTrigger>
+          ) : (
             <DocumentIcon
               emoji={node.emoji}
               icon={node.icon}
               color={node.color}
             />
-          </span>
-        )}
+          )}
+        </span>
 
         {/* Icon picker: opened via context menu, anchored to the row */}
         {iconPickerOpen && (
@@ -243,8 +259,9 @@ function WikiTreeNodeImpl({
           <Link
             to={`/wiki/${node.id}`}
             // draggable=false prevents the browser's native HTML5 link drag
-            // (which would let the user drag the URL as text); dnd-kit uses
-            // pointer events on the row, so this doesn't disable reordering.
+            // (which would let the user drag the URL as text). The dnd-kit
+            // activator is the leading icon slot, not this <Link>, so a
+            // plain click on the title always reaches react-router.
             draggable={false}
             className="flex h-full flex-1 items-center truncate px-1 text-left text-sm"
           >
