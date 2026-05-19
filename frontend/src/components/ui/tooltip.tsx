@@ -3,7 +3,7 @@ import { Tooltip as TooltipPrimitive } from "@base-ui/react/tooltip"
 import { cn } from "@/lib/utils"
 
 function TooltipProvider({
-  delay = 0,
+  delay = 150,
   ...props
 }: TooltipPrimitive.Provider.Props) {
   return (
@@ -43,7 +43,7 @@ function TooltipContent({
         alignOffset={alignOffset}
         side={side}
         sideOffset={sideOffset}
-        className="isolate z-50"
+        className="isolate z-50 data-[anchor-hidden]:hidden"
       >
         <TooltipPrimitive.Popup
           data-slot="tooltip-content"
