@@ -33,6 +33,7 @@ type IWikiDocumentResolver interface {
 	// Document mutations
 	CreateWikiDocument(ctx context.Context, operationID string, input model.CreateWikiDocumentInput) (*models.WikiDocument, error)
 	UpdateWikiDocument(ctx context.Context, id string, input model.UpdateWikiDocumentInput) (*models.WikiDocument, error)
+	ReorderWikiDocumentSiblings(ctx context.Context, input model.ReorderWikiDocumentSiblingsInput) ([]*models.WikiDocument, error)
 	DeleteWikiDocument(ctx context.Context, id string) (bool, error)
 	RestoreWikiDocument(ctx context.Context, id string, cascade *bool) (*models.WikiDocument, error)
 	PermanentlyDeleteWikiDocument(ctx context.Context, id string) (bool, error)
@@ -301,6 +302,7 @@ func (r *wikiDocumentResolver) UpdateWikiDocument(ctx context.Context, id string
 
 	updates := make(map[string]interface{})
 	moved := false
+	previousParentID := doc.ParentDocumentID
 
 	if input.Title != nil {
 		if len(*input.Title) > maxTitleLength {
@@ -322,13 +324,16 @@ func (r *wikiDocumentResolver) UpdateWikiDocument(ctx context.Context, id string
 		updates["sort_order"] = *input.SortOrder
 	}
 
-	// Reparent
+	// Reparent — only treated as a "move" if the new parent actually differs
+	// from the current parent. A client that redundantly echoes the current
+	// parent in the input must not trigger the cascade-rebuild or the moved
+	// event.
 	if input.ParentDocumentID != nil {
 		newParentStr := *input.ParentDocumentID
+		var newParent *uuid.UUID
 		if newParentStr == "" {
 			// Move to root
-			updates["parent_document_id"] = nil
-			moved = true
+			newParent = nil
 		} else {
 			newParentUID, err := uuid.Parse(newParentStr)
 			if err != nil {
@@ -357,7 +362,15 @@ func (r *wikiDocumentResolver) UpdateWikiDocument(ctx context.Context, id string
 			if depth >= maxNestingDepth {
 				return nil, fmt.Errorf("maximum nesting depth of %d levels exceeded", maxNestingDepth)
 			}
-			updates["parent_document_id"] = newParentUID
+			newParent = &newParentUID
+		}
+
+		if !sameParent(doc.ParentDocumentID, newParent) {
+			if newParent == nil {
+				updates["parent_document_id"] = nil
+			} else {
+				updates["parent_document_id"] = *newParent
+			}
 			moved = true
 		}
 	}
@@ -391,13 +404,244 @@ func (r *wikiDocumentResolver) UpdateWikiDocument(ctx context.Context, id string
 		return nil, fmt.Errorf("failed to fetch updated document: %w", err)
 	}
 
+	// Publish exactly one event per mutation. Both Moved and Updated map to
+	// EventActionUpdated on the wikiDocumentChanged subscription, so emitting
+	// both made every actor refetch twice. Pick the more specific topic so
+	// downstream subscribers can distinguish a reparent from a content edit.
 	payload := r.wikiDocPayload(&updated)
 	if moved {
+		if previousParentID != nil {
+			payload.PreviousParentDocumentID = previousParentID.String()
+		}
 		r.eventBus.Publish(eventbus.NewWikiDocumentMovedEvent(eventbus.UserActor(auth.UserID), payload))
+	} else {
+		r.eventBus.Publish(eventbus.NewWikiDocumentUpdatedEvent(eventbus.UserActor(auth.UserID), payload))
 	}
-	r.eventBus.Publish(eventbus.NewWikiDocumentUpdatedEvent(eventbus.UserActor(auth.UserID), payload))
 
 	return &updated, nil
+}
+
+// rebalancedSortOrderAt computes a single-letter sortOrder for the i-th of
+// `count` total siblings using the same A..z (65..122) bucketing the frontend
+// uses in wiki-tree-helpers.ts. The mutation and the optimistic client math
+// must agree byte-for-byte so a successful round trip leaves the cache
+// consistent without a refetch.
+func rebalancedSortOrderAt(index, count int) string {
+	fraction := float64(index+1) / float64(count+1)
+	return string(rune(65 + int(fraction*57)))
+}
+
+// ReorderWikiDocumentSiblings replaces the N-mutation rebalance loop the
+// drag-and-drop UI used to fire on every drop. The client computes the final
+// sibling order, including any document being moved in from another parent,
+// and ships the full ordering. The server validates membership and nesting,
+// rewrites sortOrders (and parents for incoming docs), and publishes one
+// wikiDocumentChanged event per *affected parent bucket* — i.e. the target
+// parent plus each unique previous parent. The frontend subscription
+// invalidates exactly those buckets.
+func (r *wikiDocumentResolver) ReorderWikiDocumentSiblings(
+	ctx context.Context,
+	input model.ReorderWikiDocumentSiblingsInput,
+) ([]*models.WikiDocument, error) {
+	auth := gqlctx.AuthFromContext(ctx)
+
+	opUID, err := uuid.Parse(input.OperationID)
+	if err != nil {
+		return nil, fmt.Errorf("invalid operation ID: %w", err)
+	}
+	if err := r.authorizeForOperation(ctx, opUID, models.OperationRoleOperator); err != nil {
+		return nil, err
+	}
+
+	if len(input.OrderedIds) == 0 {
+		return []*models.WikiDocument{}, nil
+	}
+
+	// Resolve the target parent (nil for root).
+	var targetParent *uuid.UUID
+	if input.ParentDocumentID != nil && *input.ParentDocumentID != "" {
+		pid, err := uuid.Parse(*input.ParentDocumentID)
+		if err != nil {
+			return nil, fmt.Errorf("invalid parent document ID: %w", err)
+		}
+		parent, err := r.docRepo.FindByID(ctx, pid)
+		if err != nil {
+			return nil, fmt.Errorf("parent document not found: %w", err)
+		}
+		if parent.OperationID != opUID {
+			return nil, fmt.Errorf("parent document belongs to a different operation")
+		}
+		if parent.DeletedAt != nil {
+			return nil, fmt.Errorf("cannot reorder under a deleted document")
+		}
+		targetParent = &pid
+	}
+
+	// Reject duplicate ids up front — the rebalance math depends on each
+	// position being unique.
+	seen := make(map[uuid.UUID]struct{}, len(input.OrderedIds))
+	docs := make([]models.WikiDocument, 0, len(input.OrderedIds))
+	for _, idStr := range input.OrderedIds {
+		docUID, err := uuid.Parse(idStr)
+		if err != nil {
+			return nil, fmt.Errorf("invalid document ID %q: %w", idStr, err)
+		}
+		if _, dup := seen[docUID]; dup {
+			return nil, fmt.Errorf("duplicate document ID in ordering: %s", idStr)
+		}
+		seen[docUID] = struct{}{}
+
+		doc, err := r.docRepo.FindByID(ctx, docUID)
+		if err != nil {
+			return nil, fmt.Errorf("document not found: %s: %w", idStr, err)
+		}
+		if doc.OperationID != opUID {
+			return nil, fmt.Errorf("document %s belongs to a different operation", idStr)
+		}
+		if doc.DeletedAt != nil {
+			return nil, fmt.Errorf("cannot reorder a trashed document: %s", idStr)
+		}
+		if targetParent != nil && *targetParent == doc.DocumentID {
+			return nil, fmt.Errorf("cannot make a document its own parent")
+		}
+		docs = append(docs, doc)
+	}
+
+	// If reparenting any document, enforce nesting depth once (the new
+	// parent's depth is the same for every incoming doc).
+	if targetParent != nil {
+		needsDepthCheck := false
+		for _, d := range docs {
+			if !sameParent(d.ParentDocumentID, targetParent) {
+				needsDepthCheck = true
+				break
+			}
+		}
+		if needsDepthCheck {
+			depth, err := r.docRepo.NestingDepth(ctx, *targetParent)
+			if err != nil {
+				return nil, fmt.Errorf("failed to check nesting depth: %w", err)
+			}
+			if depth >= maxNestingDepth {
+				return nil, fmt.Errorf("maximum nesting depth of %d levels exceeded", maxNestingDepth)
+			}
+		}
+	}
+
+	callerUID, err := uuid.Parse(auth.UserID)
+	if err != nil {
+		return nil, fmt.Errorf("invalid caller ID: %w", err)
+	}
+
+	// Pass 1: write the updates that actually change something. Track which
+	// docs got reparented (so the path_ids cascade only runs where needed)
+	// and which buckets lost children (for the event fan-out).
+	//
+	// `sourceBuckets` keys: *uuid.UUID parent id, or nil sentinel for "root".
+	// We store one representative doc per bucket so the published event
+	// carries a real document for that bucket.
+	count := len(docs)
+	reparented := make([]uuid.UUID, 0)
+	type bucketKey struct {
+		id     uuid.UUID
+		isRoot bool
+	}
+	sourceBuckets := make(map[bucketKey]uuid.UUID) // bucket -> representative doc id
+	for i, doc := range docs {
+		newSort := rebalancedSortOrderAt(i, count)
+		parentChanged := !sameParent(doc.ParentDocumentID, targetParent)
+		sortChanged := doc.SortOrder != newSort
+		if !parentChanged && !sortChanged {
+			continue
+		}
+
+		updates := make(map[string]interface{})
+		if sortChanged {
+			updates["sort_order"] = newSort
+		}
+		if parentChanged {
+			if targetParent == nil {
+				updates["parent_document_id"] = nil
+			} else {
+				updates["parent_document_id"] = *targetParent
+			}
+			key := bucketKey{isRoot: true}
+			if doc.ParentDocumentID != nil {
+				key = bucketKey{id: *doc.ParentDocumentID}
+			}
+			if _, seen := sourceBuckets[key]; !seen {
+				sourceBuckets[key] = doc.DocumentID
+			}
+			reparented = append(reparented, doc.DocumentID)
+		}
+		stampLastUpdated(updates, callerUID)
+
+		if err := r.docRepo.Update(ctx, &doc, updates); err != nil {
+			return nil, fmt.Errorf("failed to update document %s: %w", doc.DocumentID, err)
+		}
+	}
+
+	// Pass 2: rebuild path_ids for each reparented subtree. Done after all
+	// writes so descendants pick up the final parent chain.
+	for _, id := range reparented {
+		if err := r.docRepo.RebuildPathIDsCascade(ctx, id); err != nil {
+			return nil, fmt.Errorf("failed to rebuild path_ids for %s: %w", id, err)
+		}
+	}
+
+	// Pass 3: reload the docs in their final order so the response (and the
+	// optimistic client cache) reflect committed state.
+	resultsByID := make(map[uuid.UUID]*models.WikiDocument, count)
+	results := make([]*models.WikiDocument, 0, count)
+	for _, d := range docs {
+		updated, err := r.docRepo.FindByID(ctx, d.DocumentID)
+		if err != nil {
+			return nil, fmt.Errorf("failed to reload document %s: %w", d.DocumentID, err)
+		}
+		results = append(results, &updated)
+		resultsByID[d.DocumentID] = &updated
+	}
+
+	// Fan out one event per *affected parent bucket*. Each event sets
+	// `parentDocumentId` to the bucket id (empty for root) so the
+	// subscription handler knows exactly which per-parent children cache to
+	// drop. The event is an invalidation hint, not a single-doc state event
+	// — the doc body in the payload exists only to keep the payload type
+	// consistent with the single-doc update path.
+	actor := eventbus.UserActor(auth.UserID)
+
+	r.publishBucketEvent(actor, results[0], targetParent)
+
+	for bucket, repID := range sourceBuckets {
+		rep := resultsByID[repID]
+		var bucketID *uuid.UUID
+		if !bucket.isRoot {
+			b := bucket.id
+			bucketID = &b
+		}
+		r.publishBucketEvent(actor, rep, bucketID)
+	}
+
+	return results, nil
+}
+
+// publishBucketEvent emits a single wikiDocumentChanged event whose
+// `parentDocumentId` names the affected children bucket — `nil` for root,
+// a uuid pointer otherwise. The doc fields come from `rep`, which only
+// needs to belong to the same operation; the subscription uses the
+// bucket id, not the doc, to invalidate caches.
+func (r *wikiDocumentResolver) publishBucketEvent(
+	actor eventbus.Actor,
+	rep *models.WikiDocument,
+	bucket *uuid.UUID,
+) {
+	p := r.wikiDocPayload(rep)
+	if bucket == nil {
+		p.ParentDocumentID = ""
+	} else {
+		p.ParentDocumentID = bucket.String()
+	}
+	r.eventBus.Publish(eventbus.NewWikiDocumentUpdatedEvent(actor, p))
 }
 
 func (r *wikiDocumentResolver) DeleteWikiDocument(ctx context.Context, id string) (bool, error) {

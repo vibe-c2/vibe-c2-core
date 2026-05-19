@@ -110,6 +110,12 @@ type OperationMemberEvent struct {
 type Query struct {
 }
 
+type ReorderWikiDocumentSiblingsInput struct {
+	OperationID      string   `json:"operationId"`
+	ParentDocumentID *string  `json:"parentDocumentId,omitempty"`
+	OrderedIds       []string `json:"orderedIds"`
+}
+
 type SchemeNetworkPointConnection struct {
 	Edges      []*SchemeNetworkPointEdge `json:"edges"`
 	PageInfo   *pagination.PageInfo      `json:"pageInfo"`
@@ -247,11 +253,12 @@ type WikiDocumentEditor struct {
 }
 
 type WikiDocumentEvent struct {
-	Action           EventAction          `json:"action"`
-	DocumentID       string               `json:"documentId"`
-	OperationID      string               `json:"operationId"`
-	ParentDocumentID *string              `json:"parentDocumentId,omitempty"`
-	Document         *models.WikiDocument `json:"document,omitempty"`
+	Action                   EventAction          `json:"action"`
+	DocumentID               string               `json:"documentId"`
+	OperationID              string               `json:"operationId"`
+	ParentDocumentID         *string              `json:"parentDocumentId,omitempty"`
+	PreviousParentDocumentID *string              `json:"previousParentDocumentId,omitempty"`
+	Document                 *models.WikiDocument `json:"document,omitempty"`
 }
 
 type WikiDocumentPresence struct {

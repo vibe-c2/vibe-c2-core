@@ -87,6 +87,7 @@ type Documents = {
     "\n  query WikiDocumentHistory($operationId: ID!, $offset: Int, $limit: Int) {\n    wikiDocumentHistory(operationId: $operationId, offset: $offset, limit: $limit) {\n      edges {\n        node {\n          ...WikiDocumentVisitListFields\n        }\n      }\n      totalCount\n    }\n  }\n": typeof types.WikiDocumentHistoryDocument,
     "\n  mutation CreateWikiDocument($operationId: ID!, $input: CreateWikiDocumentInput!) {\n    createWikiDocument(operationId: $operationId, input: $input) {\n      id operationId title emoji color icon sortOrder\n      parentDocumentId\n      createdBy { id username }\n      createdAt updatedAt\n    }\n  }\n": typeof types.CreateWikiDocumentDocument,
     "\n  mutation UpdateWikiDocument($id: ID!, $input: UpdateWikiDocumentInput!) {\n    updateWikiDocument(id: $id, input: $input) {\n      id title emoji color icon sortOrder\n      parentDocumentId\n      updatedAt\n    }\n  }\n": typeof types.UpdateWikiDocumentDocument,
+    "\n  mutation ReorderWikiDocumentSiblings($input: ReorderWikiDocumentSiblingsInput!) {\n    reorderWikiDocumentSiblings(input: $input) {\n      id sortOrder parentDocumentId updatedAt\n    }\n  }\n": typeof types.ReorderWikiDocumentSiblingsDocument,
     "\n  mutation DeleteWikiDocument($id: ID!) {\n    deleteWikiDocument(id: $id)\n  }\n": typeof types.DeleteWikiDocumentDocument,
     "\n  mutation RestoreWikiDocument($id: ID!, $cascade: Boolean) {\n    restoreWikiDocument(id: $id, cascade: $cascade) {\n      id operationId title emoji icon color sortOrder\n      parentDocumentId\n    }\n  }\n": typeof types.RestoreWikiDocumentDocument,
     "\n  query WikiDocumentTrashedDescendants($documentId: ID!) {\n    wikiDocumentTrashedDescendants(documentId: $documentId) {\n      id title emoji icon color\n    }\n  }\n": typeof types.WikiDocumentTrashedDescendantsDocument,
@@ -96,7 +97,7 @@ type Documents = {
     "\n  mutation RestoreWikiDocumentBackup($documentId: ID!, $backupId: ID!) {\n    restoreWikiDocumentBackup(documentId: $documentId, backupId: $backupId) {\n      id title content\n    }\n  }\n": typeof types.RestoreWikiDocumentBackupDocument,
     "\n  mutation DeleteWikiDocumentBackup($id: ID!) {\n    deleteWikiDocumentBackup(id: $id)\n  }\n": typeof types.DeleteWikiDocumentBackupDocument,
     "\n  mutation TrackWikiDocumentVisit($documentId: ID!) {\n    trackWikiDocumentVisit(documentId: $documentId) {\n      id\n      visitedAt\n    }\n  }\n": typeof types.TrackWikiDocumentVisitDocument,
-    "\n  subscription WikiDocumentChanged($operationId: ID!) {\n    wikiDocumentChanged(operationId: $operationId) {\n      action\n      documentId\n      operationId\n      parentDocumentId\n      document { id title emoji icon color sortOrder parentDocument { id } }\n    }\n  }\n": typeof types.WikiDocumentChangedDocument,
+    "\n  subscription WikiDocumentChanged($operationId: ID!) {\n    wikiDocumentChanged(operationId: $operationId) {\n      action\n      documentId\n      operationId\n      parentDocumentId\n      previousParentDocumentId\n      document { id title emoji icon color sortOrder parentDocument { id } }\n    }\n  }\n": typeof types.WikiDocumentChangedDocument,
     "\n  subscription WikiDocumentPresenceChanged($operationId: ID!) {\n    wikiDocumentPresenceChanged(operationId: $operationId) {\n      documentId operationId userId username action\n    }\n  }\n": typeof types.WikiDocumentPresenceChangedDocument,
 };
 const documents: Documents = {
@@ -173,6 +174,7 @@ const documents: Documents = {
     "\n  query WikiDocumentHistory($operationId: ID!, $offset: Int, $limit: Int) {\n    wikiDocumentHistory(operationId: $operationId, offset: $offset, limit: $limit) {\n      edges {\n        node {\n          ...WikiDocumentVisitListFields\n        }\n      }\n      totalCount\n    }\n  }\n": types.WikiDocumentHistoryDocument,
     "\n  mutation CreateWikiDocument($operationId: ID!, $input: CreateWikiDocumentInput!) {\n    createWikiDocument(operationId: $operationId, input: $input) {\n      id operationId title emoji color icon sortOrder\n      parentDocumentId\n      createdBy { id username }\n      createdAt updatedAt\n    }\n  }\n": types.CreateWikiDocumentDocument,
     "\n  mutation UpdateWikiDocument($id: ID!, $input: UpdateWikiDocumentInput!) {\n    updateWikiDocument(id: $id, input: $input) {\n      id title emoji color icon sortOrder\n      parentDocumentId\n      updatedAt\n    }\n  }\n": types.UpdateWikiDocumentDocument,
+    "\n  mutation ReorderWikiDocumentSiblings($input: ReorderWikiDocumentSiblingsInput!) {\n    reorderWikiDocumentSiblings(input: $input) {\n      id sortOrder parentDocumentId updatedAt\n    }\n  }\n": types.ReorderWikiDocumentSiblingsDocument,
     "\n  mutation DeleteWikiDocument($id: ID!) {\n    deleteWikiDocument(id: $id)\n  }\n": types.DeleteWikiDocumentDocument,
     "\n  mutation RestoreWikiDocument($id: ID!, $cascade: Boolean) {\n    restoreWikiDocument(id: $id, cascade: $cascade) {\n      id operationId title emoji icon color sortOrder\n      parentDocumentId\n    }\n  }\n": types.RestoreWikiDocumentDocument,
     "\n  query WikiDocumentTrashedDescendants($documentId: ID!) {\n    wikiDocumentTrashedDescendants(documentId: $documentId) {\n      id title emoji icon color\n    }\n  }\n": types.WikiDocumentTrashedDescendantsDocument,
@@ -182,7 +184,7 @@ const documents: Documents = {
     "\n  mutation RestoreWikiDocumentBackup($documentId: ID!, $backupId: ID!) {\n    restoreWikiDocumentBackup(documentId: $documentId, backupId: $backupId) {\n      id title content\n    }\n  }\n": types.RestoreWikiDocumentBackupDocument,
     "\n  mutation DeleteWikiDocumentBackup($id: ID!) {\n    deleteWikiDocumentBackup(id: $id)\n  }\n": types.DeleteWikiDocumentBackupDocument,
     "\n  mutation TrackWikiDocumentVisit($documentId: ID!) {\n    trackWikiDocumentVisit(documentId: $documentId) {\n      id\n      visitedAt\n    }\n  }\n": types.TrackWikiDocumentVisitDocument,
-    "\n  subscription WikiDocumentChanged($operationId: ID!) {\n    wikiDocumentChanged(operationId: $operationId) {\n      action\n      documentId\n      operationId\n      parentDocumentId\n      document { id title emoji icon color sortOrder parentDocument { id } }\n    }\n  }\n": types.WikiDocumentChangedDocument,
+    "\n  subscription WikiDocumentChanged($operationId: ID!) {\n    wikiDocumentChanged(operationId: $operationId) {\n      action\n      documentId\n      operationId\n      parentDocumentId\n      previousParentDocumentId\n      document { id title emoji icon color sortOrder parentDocument { id } }\n    }\n  }\n": types.WikiDocumentChangedDocument,
     "\n  subscription WikiDocumentPresenceChanged($operationId: ID!) {\n    wikiDocumentPresenceChanged(operationId: $operationId) {\n      documentId operationId userId username action\n    }\n  }\n": types.WikiDocumentPresenceChangedDocument,
 };
 
@@ -495,6 +497,10 @@ export function graphql(source: "\n  mutation UpdateWikiDocument($id: ID!, $inpu
 /**
  * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
  */
+export function graphql(source: "\n  mutation ReorderWikiDocumentSiblings($input: ReorderWikiDocumentSiblingsInput!) {\n    reorderWikiDocumentSiblings(input: $input) {\n      id sortOrder parentDocumentId updatedAt\n    }\n  }\n"): (typeof documents)["\n  mutation ReorderWikiDocumentSiblings($input: ReorderWikiDocumentSiblingsInput!) {\n    reorderWikiDocumentSiblings(input: $input) {\n      id sortOrder parentDocumentId updatedAt\n    }\n  }\n"];
+/**
+ * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
+ */
 export function graphql(source: "\n  mutation DeleteWikiDocument($id: ID!) {\n    deleteWikiDocument(id: $id)\n  }\n"): (typeof documents)["\n  mutation DeleteWikiDocument($id: ID!) {\n    deleteWikiDocument(id: $id)\n  }\n"];
 /**
  * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
@@ -531,7 +537,7 @@ export function graphql(source: "\n  mutation TrackWikiDocumentVisit($documentId
 /**
  * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
  */
-export function graphql(source: "\n  subscription WikiDocumentChanged($operationId: ID!) {\n    wikiDocumentChanged(operationId: $operationId) {\n      action\n      documentId\n      operationId\n      parentDocumentId\n      document { id title emoji icon color sortOrder parentDocument { id } }\n    }\n  }\n"): (typeof documents)["\n  subscription WikiDocumentChanged($operationId: ID!) {\n    wikiDocumentChanged(operationId: $operationId) {\n      action\n      documentId\n      operationId\n      parentDocumentId\n      document { id title emoji icon color sortOrder parentDocument { id } }\n    }\n  }\n"];
+export function graphql(source: "\n  subscription WikiDocumentChanged($operationId: ID!) {\n    wikiDocumentChanged(operationId: $operationId) {\n      action\n      documentId\n      operationId\n      parentDocumentId\n      previousParentDocumentId\n      document { id title emoji icon color sortOrder parentDocument { id } }\n    }\n  }\n"): (typeof documents)["\n  subscription WikiDocumentChanged($operationId: ID!) {\n    wikiDocumentChanged(operationId: $operationId) {\n      action\n      documentId\n      operationId\n      parentDocumentId\n      previousParentDocumentId\n      document { id title emoji icon color sortOrder parentDocument { id } }\n    }\n  }\n"];
 /**
  * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
  */

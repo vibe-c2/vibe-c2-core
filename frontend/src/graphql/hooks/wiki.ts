@@ -2,7 +2,11 @@ import { useCallback } from "react"
 import { useQuery, useInfiniteQuery, useMutation, useQueryClient } from "@tanstack/react-query"
 import { graphqlClient } from "@/lib/graphql-client"
 import { useSubscription } from "@/hooks/use-subscription"
-import type { CreateWikiDocumentInput, UpdateWikiDocumentInput } from "@/graphql/gql/graphql"
+import type {
+  CreateWikiDocumentInput,
+  ReorderWikiDocumentSiblingsInput,
+  UpdateWikiDocumentInput,
+} from "@/graphql/gql/graphql"
 import {
   WikiDocumentTreeDocument,
   WikiDocumentChildrenDocument,
@@ -21,6 +25,7 @@ import {
   WikiDocumentHistoryDocument,
   CreateWikiDocumentDocument,
   UpdateWikiDocumentDocument,
+  ReorderWikiDocumentSiblingsDocument,
   DeleteWikiDocumentDocument,
   RestoreWikiDocumentDocument,
   PermanentlyDeleteWikiDocumentDocument,
@@ -434,6 +439,17 @@ export function useUpdateWikiDocument() {
   })
 }
 
+// Bulk sibling reorder — preferred over N parallel UpdateWikiDocument calls
+// from the DnD flow. The server publishes one wikiDocumentChanged event per
+// affected parent bucket, so a same-subtree reorder triggers exactly one
+// invalidation wave on the actor instead of one per row.
+export function useReorderWikiDocumentSiblings() {
+  return useMutation({
+    mutationFn: (vars: { input: ReorderWikiDocumentSiblingsInput }) =>
+      graphqlClient(ReorderWikiDocumentSiblingsDocument, vars),
+  })
+}
+
 export function useDeleteWikiDocument() {
   return useMutation({
     mutationFn: (id: string) =>
@@ -541,46 +557,80 @@ export function useWikiDocumentChangedSubscription(operationId: string) {
 
   useSubscription(WikiDocumentChangedDocument, { operationId }, {
     onData: (data) => {
-      const { action, documentId, document } = data.wikiDocumentChanged
+      const {
+        action,
+        documentId,
+        document,
+        parentDocumentId,
+        previousParentDocumentId,
+      } = data.wikiDocumentChanged
 
+      // DELETED is special: drop per-document caches outright AND invalidate
+      // the trash list and badge so the row reappears (soft-delete) or
+      // vanishes (hard-delete + empty-trash). The reverse path (restore)
+      // sends action=CREATED, so trash/trashCount also flip there.
       if (action === "DELETED") {
-        // Hard- or soft-delete: drop per-document caches so we don't keep
-        // stale data around. Backups and trashed-descendants are removed
-        // outright because the doc they describe is gone or in trash.
         queryClient.removeQueries({ queryKey: wikiKeys.detail(documentId) })
         queryClient.removeQueries({ queryKey: wikiKeys.lite(documentId) })
         queryClient.removeQueries({ queryKey: wikiKeys.backups(documentId) })
         queryClient.removeQueries({ queryKey: wikiKeys.trashedDescendants(documentId) })
+        queryClient.invalidateQueries({ queryKey: wikiKeys.trash(operationId) })
+        queryClient.invalidateQueries({ queryKey: wikiKeys.trashCount(operationId) })
       } else if (document) {
         // Seed detail cache on create/update so navigating to the doc is instant.
         queryClient.invalidateQueries({ queryKey: wikiKeys.detail(documentId) })
         queryClient.invalidateQueries({ queryKey: wikiKeys.lite(documentId) })
       }
 
-      // Operation-scoped lists that may include or reference this document.
-      // histories() and lists() are invalidated wholesale — invalidateQueries
-      // is a no-op for queries that aren't mounted, so the cost is just a
-      // stale-flag flip when those views are closed.
+      // Tree query — the move dialog and other full-tree consumers depend on
+      // it. Always refresh on document CRUD; invalidating an unmounted query
+      // is a no-op.
       queryClient.invalidateQueries({ queryKey: wikiKeys.tree(operationId) })
-      // Lazy sidebar: invalidate every per-parent children entry for this op.
-      // The event payload only carries the post-mutation parentDocumentId, so
-      // we can't surgically target old + new on a move — invalidating the op
-      // subtree is correct and cheap (unmounted entries are no-ops).
-      queryClient.invalidateQueries({ queryKey: wikiKeys.childrenByOp(operationId) })
-      queryClient.invalidateQueries({ queryKey: wikiKeys.trash(operationId) })
-      // Trash badge: delete/restore/empty-trash all shift the count.
-      queryClient.invalidateQueries({ queryKey: wikiKeys.trashCount(operationId) })
-      queryClient.invalidateQueries({ queryKey: wikiKeys.histories() })
-      queryClient.invalidateQueries({ queryKey: wikiKeys.lists() })
 
-      // Backlinks live on any document whose referrer set might have changed.
-      // We don't know server-side which targets were affected by this edit, so
-      // invalidate every cached backlinks query in the operation. The cap of
-      // ~5 open documents per user keeps this cheap; precise diffing can come
-      // later if needed.
+      // Lazy sidebar — surgically invalidate only the affected per-parent
+      // children buckets. Previously this refetched every expanded folder in
+      // the op (~15 queries per event in the production HAR); with the new
+      // event payload we know exactly which buckets need to refresh.
+      const targetParent: string | null = parentDocumentId ?? null
       queryClient.invalidateQueries({
-        queryKey: [...wikiKeys.all, "backlinks"],
+        queryKey: wikiKeys.children(operationId, targetParent),
       })
+      if (previousParentDocumentId !== null && previousParentDocumentId !== undefined) {
+        const previousParent: string | null = previousParentDocumentId
+        if (previousParent !== targetParent) {
+          queryClient.invalidateQueries({
+            queryKey: wikiKeys.children(operationId, previousParent),
+          })
+        }
+      }
+
+      // Cross-feature caches — only the actions that can actually change
+      // them. A sortOrder/parent change (UPDATED) doesn't touch trash,
+      // backlinks, history, or paginated lists.
+      if (action === "CREATED") {
+        // Restore-from-trash and create-document both surface as CREATED.
+        // Restore flips the trash list + badge; both shift paginated lists
+        // and history (CREATED is the only event flagged for new history
+        // rows from track-visit).
+        queryClient.invalidateQueries({ queryKey: wikiKeys.trash(operationId) })
+        queryClient.invalidateQueries({ queryKey: wikiKeys.trashCount(operationId) })
+        queryClient.invalidateQueries({ queryKey: wikiKeys.lists() })
+        queryClient.invalidateQueries({ queryKey: wikiKeys.histories() })
+        // Restoring a referenced doc can resurrect backlinks. Cap is ~5 open
+        // documents per user so the fan-out stays cheap.
+        queryClient.invalidateQueries({
+          queryKey: [...wikiKeys.all, "backlinks"],
+        })
+      } else if (action === "DELETED") {
+        // Soft/hard delete: paginated lists and backlinks can both change.
+        queryClient.invalidateQueries({ queryKey: wikiKeys.lists() })
+        queryClient.invalidateQueries({
+          queryKey: [...wikiKeys.all, "backlinks"],
+        })
+      }
+      // UPDATED (rename, recolor, sortOrder, reparent) does not touch
+      // trash/backlinks/history/lists. Skipping those invalidations is the
+      // bulk of the win in the drag-reorder hot path.
     },
     enabled: !!operationId,
   })

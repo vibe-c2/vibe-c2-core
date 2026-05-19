@@ -121,6 +121,7 @@ type ComplexityRoot struct {
 		PermanentlyDeleteWikiDocument func(childComplexity int, id string) int
 		RemoveOperationMember         func(childComplexity int, operationID string, userID string) int
 		RemoveSchemeNetworkPort       func(childComplexity int, pointID string, portID string) int
+		ReorderWikiDocumentSiblings   func(childComplexity int, input model.ReorderWikiDocumentSiblingsInput) int
 		RestoreWikiDocument           func(childComplexity int, id string, cascade *bool) int
 		RestoreWikiDocumentBackup     func(childComplexity int, documentID string, backupID string) int
 		RevokeAllMySessions           func(childComplexity int) int
@@ -400,11 +401,12 @@ type ComplexityRoot struct {
 	}
 
 	WikiDocumentEvent struct {
-		Action           func(childComplexity int) int
-		Document         func(childComplexity int) int
-		DocumentID       func(childComplexity int) int
-		OperationID      func(childComplexity int) int
-		ParentDocumentID func(childComplexity int) int
+		Action                   func(childComplexity int) int
+		Document                 func(childComplexity int) int
+		DocumentID               func(childComplexity int) int
+		OperationID              func(childComplexity int) int
+		ParentDocumentID         func(childComplexity int) int
+		PreviousParentDocumentID func(childComplexity int) int
 	}
 
 	WikiDocumentPresence struct {
@@ -502,6 +504,7 @@ type MutationResolver interface {
 	AdminRevokeAllUserSessions(ctx context.Context, userID string) (int, error)
 	CreateWikiDocument(ctx context.Context, operationID string, input model.CreateWikiDocumentInput) (*models.WikiDocument, error)
 	UpdateWikiDocument(ctx context.Context, id string, input model.UpdateWikiDocumentInput) (*models.WikiDocument, error)
+	ReorderWikiDocumentSiblings(ctx context.Context, input model.ReorderWikiDocumentSiblingsInput) ([]*models.WikiDocument, error)
 	DeleteWikiDocument(ctx context.Context, id string) (bool, error)
 	RestoreWikiDocument(ctx context.Context, id string, cascade *bool) (*models.WikiDocument, error)
 	PermanentlyDeleteWikiDocument(ctx context.Context, id string) (bool, error)
@@ -1069,6 +1072,17 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.Mutation.RemoveSchemeNetworkPort(childComplexity, args["pointId"].(string), args["portId"].(string)), true
+	case "Mutation.reorderWikiDocumentSiblings":
+		if e.ComplexityRoot.Mutation.ReorderWikiDocumentSiblings == nil {
+			break
+		}
+
+		args, err := ec.field_Mutation_reorderWikiDocumentSiblings_args(ctx, rawArgs)
+		if err != nil {
+			return 0, false
+		}
+
+		return e.ComplexityRoot.Mutation.ReorderWikiDocumentSiblings(childComplexity, args["input"].(model.ReorderWikiDocumentSiblingsInput)), true
 	case "Mutation.restoreWikiDocument":
 		if e.ComplexityRoot.Mutation.RestoreWikiDocument == nil {
 			break
@@ -2502,6 +2516,12 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.WikiDocumentEvent.ParentDocumentID(childComplexity), true
+	case "WikiDocumentEvent.previousParentDocumentId":
+		if e.ComplexityRoot.WikiDocumentEvent.PreviousParentDocumentID == nil {
+			break
+		}
+
+		return e.ComplexityRoot.WikiDocumentEvent.PreviousParentDocumentID(childComplexity), true
 
 	case "WikiDocumentPresence.activeEditors":
 		if e.ComplexityRoot.WikiDocumentPresence.ActiveEditors == nil {
@@ -2670,6 +2690,7 @@ func (e *executableSchema) Exec(ctx context.Context) graphql.ResponseHandler {
 		ec.unmarshalInputCreateUserInput,
 		ec.unmarshalInputCreateWikiDocumentInput,
 		ec.unmarshalInputCredentialKeyInput,
+		ec.unmarshalInputReorderWikiDocumentSiblingsInput,
 		ec.unmarshalInputUpdateCredentialInput,
 		ec.unmarshalInputUpdateOperationInput,
 		ec.unmarshalInputUpdateSchemeNetworkPointInput,
@@ -3786,6 +3807,11 @@ type WikiDocumentEvent {
   documentId: ID!
   operationId: ID!
   parentDocumentId: ID
+  # Populated only when this event represents a move; carries the parent the
+  # document just left. Clients use it (together with parentDocumentId) to
+  # invalidate exactly the two affected per-parent caches instead of the
+  # whole operation subtree.
+  previousParentDocumentId: ID
   document: WikiDocument
 }
 
@@ -3830,6 +3856,21 @@ input UpdateWikiDocumentInput {
   icon: String
   parentDocumentId: ID
   sortOrder: String
+}
+
+# Bulk sibling reorder. The client computes a complete ordering of the
+# parent's direct children (including any incoming document being inserted
+# from elsewhere) and ships the list in the desired order. The server
+# rebalances sortOrders across the list, reparents any incoming document
+# whose previous parent differs, and emits ONE wikiDocumentChanged event.
+input ReorderWikiDocumentSiblingsInput {
+  operationId: ID!
+  # Target parent for the reorder, or null for the root level.
+  parentDocumentId: ID
+  # All sibling ids in their final desired order. Must reference documents
+  # within ` + "`" + `operationId` + "`" + `. Documents not currently under ` + "`" + `parentDocumentId` + "`" + `
+  # are reparented as part of the reorder.
+  orderedIds: [ID!]!
 }
 
 # --- Queries ---
@@ -3953,6 +3994,14 @@ extend type Mutation {
     @hasPermission(permission: "operation:member")
 
   updateWikiDocument(id: ID!, input: UpdateWikiDocumentInput!): WikiDocument!
+    @hasPermission(permission: "operation:member")
+
+  # Reorder a parent's children (and optionally reparent incoming documents)
+  # in one round trip. Replaces the N-mutation rebalance loop the DnD UI
+  # used to perform on every drop. Returns the affected documents in their
+  # new order, freshly fetched. Emits exactly one wikiDocumentChanged event
+  # per affected previous-parent bucket plus one for the new parent.
+  reorderWikiDocumentSiblings(input: ReorderWikiDocumentSiblingsInput!): [WikiDocument!]!
     @hasPermission(permission: "operation:member")
 
   deleteWikiDocument(id: ID!): Boolean!
@@ -4310,6 +4359,17 @@ func (ec *executionContext) field_Mutation_removeSchemeNetworkPort_args(ctx cont
 		return nil, err
 	}
 	args["portId"] = arg1
+	return args, nil
+}
+
+func (ec *executionContext) field_Mutation_reorderWikiDocumentSiblings_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
+	var err error
+	args := map[string]any{}
+	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "input", ec.unmarshalNReorderWikiDocumentSiblingsInput2githubᚗcomᚋvibeᚑc2ᚋvibeᚑc2ᚑcoreᚋcoreᚋpkgᚋgraphqlᚋmodelᚐReorderWikiDocumentSiblingsInput)
+	if err != nil {
+		return nil, err
+	}
+	args["input"] = arg0
 	return args, nil
 }
 
@@ -8396,6 +8456,111 @@ func (ec *executionContext) fieldContext_Mutation_updateWikiDocument(ctx context
 	}()
 	ctx = graphql.WithFieldContext(ctx, fc)
 	if fc.Args, err = ec.field_Mutation_updateWikiDocument_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
+		ec.Error(ctx, err)
+		return fc, err
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Mutation_reorderWikiDocumentSiblings(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Mutation_reorderWikiDocumentSiblings,
+		func(ctx context.Context) (any, error) {
+			fc := graphql.GetFieldContext(ctx)
+			return ec.Resolvers.Mutation().ReorderWikiDocumentSiblings(ctx, fc.Args["input"].(model.ReorderWikiDocumentSiblingsInput))
+		},
+		func(ctx context.Context, next graphql.Resolver) graphql.Resolver {
+			directive0 := next
+
+			directive1 := func(ctx context.Context) (any, error) {
+				permission, err := ec.unmarshalNString2string(ctx, "operation:member")
+				if err != nil {
+					var zeroVal []*models.WikiDocument
+					return zeroVal, err
+				}
+				if ec.Directives.HasPermission == nil {
+					var zeroVal []*models.WikiDocument
+					return zeroVal, errors.New("directive hasPermission is not implemented")
+				}
+				return ec.Directives.HasPermission(ctx, nil, directive0, permission)
+			}
+
+			next = directive1
+			return next
+		},
+		ec.marshalNWikiDocument2ᚕᚖgithubᚗcomᚋvibeᚑc2ᚋvibeᚑc2ᚑcoreᚋcoreᚋpkgᚋmodelsᚐWikiDocumentᚄ,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_Mutation_reorderWikiDocumentSiblings(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Mutation",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "id":
+				return ec.fieldContext_WikiDocument_id(ctx, field)
+			case "operationId":
+				return ec.fieldContext_WikiDocument_operationId(ctx, field)
+			case "parentDocument":
+				return ec.fieldContext_WikiDocument_parentDocument(ctx, field)
+			case "parentDocumentId":
+				return ec.fieldContext_WikiDocument_parentDocumentId(ctx, field)
+			case "childDocuments":
+				return ec.fieldContext_WikiDocument_childDocuments(ctx, field)
+			case "title":
+				return ec.fieldContext_WikiDocument_title(ctx, field)
+			case "content":
+				return ec.fieldContext_WikiDocument_content(ctx, field)
+			case "emoji":
+				return ec.fieldContext_WikiDocument_emoji(ctx, field)
+			case "color":
+				return ec.fieldContext_WikiDocument_color(ctx, field)
+			case "icon":
+				return ec.fieldContext_WikiDocument_icon(ctx, field)
+			case "sortOrder":
+				return ec.fieldContext_WikiDocument_sortOrder(ctx, field)
+			case "childCount":
+				return ec.fieldContext_WikiDocument_childCount(ctx, field)
+			case "backlinks":
+				return ec.fieldContext_WikiDocument_backlinks(ctx, field)
+			case "ancestors":
+				return ec.fieldContext_WikiDocument_ancestors(ctx, field)
+			case "createdBy":
+				return ec.fieldContext_WikiDocument_createdBy(ctx, field)
+			case "lastUpdatedBy":
+				return ec.fieldContext_WikiDocument_lastUpdatedBy(ctx, field)
+			case "lastUpdatedAt":
+				return ec.fieldContext_WikiDocument_lastUpdatedAt(ctx, field)
+			case "lastBackupAt":
+				return ec.fieldContext_WikiDocument_lastBackupAt(ctx, field)
+			case "deletedAt":
+				return ec.fieldContext_WikiDocument_deletedAt(ctx, field)
+			case "deletedBy":
+				return ec.fieldContext_WikiDocument_deletedBy(ctx, field)
+			case "createdAt":
+				return ec.fieldContext_WikiDocument_createdAt(ctx, field)
+			case "updatedAt":
+				return ec.fieldContext_WikiDocument_updatedAt(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type WikiDocument", field.Name)
+		},
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			err = ec.Recover(ctx, r)
+			ec.Error(ctx, err)
+		}
+	}()
+	ctx = graphql.WithFieldContext(ctx, fc)
+	if fc.Args, err = ec.field_Mutation_reorderWikiDocumentSiblings_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
 		ec.Error(ctx, err)
 		return fc, err
 	}
@@ -14012,6 +14177,8 @@ func (ec *executionContext) fieldContext_Subscription_wikiDocumentChanged(ctx co
 				return ec.fieldContext_WikiDocumentEvent_operationId(ctx, field)
 			case "parentDocumentId":
 				return ec.fieldContext_WikiDocumentEvent_parentDocumentId(ctx, field)
+			case "previousParentDocumentId":
+				return ec.fieldContext_WikiDocumentEvent_previousParentDocumentId(ctx, field)
 			case "document":
 				return ec.fieldContext_WikiDocumentEvent_document(ctx, field)
 			}
@@ -16500,6 +16667,35 @@ func (ec *executionContext) _WikiDocumentEvent_parentDocumentId(ctx context.Cont
 }
 
 func (ec *executionContext) fieldContext_WikiDocumentEvent_parentDocumentId(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "WikiDocumentEvent",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type ID does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _WikiDocumentEvent_previousParentDocumentId(ctx context.Context, field graphql.CollectedField, obj *model.WikiDocumentEvent) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_WikiDocumentEvent_previousParentDocumentId,
+		func(ctx context.Context) (any, error) {
+			return obj.PreviousParentDocumentID, nil
+		},
+		nil,
+		ec.marshalOID2ᚖstring,
+		true,
+		false,
+	)
+}
+
+func (ec *executionContext) fieldContext_WikiDocumentEvent_previousParentDocumentId(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
 	fc = &graphql.FieldContext{
 		Object:     "WikiDocumentEvent",
 		Field:      field,
@@ -19237,6 +19433,50 @@ func (ec *executionContext) unmarshalInputCredentialKeyInput(ctx context.Context
 	return it, nil
 }
 
+func (ec *executionContext) unmarshalInputReorderWikiDocumentSiblingsInput(ctx context.Context, obj any) (model.ReorderWikiDocumentSiblingsInput, error) {
+	var it model.ReorderWikiDocumentSiblingsInput
+	if obj == nil {
+		return it, nil
+	}
+
+	asMap := map[string]any{}
+	for k, v := range obj.(map[string]any) {
+		asMap[k] = v
+	}
+
+	fieldsInOrder := [...]string{"operationId", "parentDocumentId", "orderedIds"}
+	for _, k := range fieldsInOrder {
+		v, ok := asMap[k]
+		if !ok {
+			continue
+		}
+		switch k {
+		case "operationId":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("operationId"))
+			data, err := ec.unmarshalNID2string(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.OperationID = data
+		case "parentDocumentId":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("parentDocumentId"))
+			data, err := ec.unmarshalOID2ᚖstring(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.ParentDocumentID = data
+		case "orderedIds":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("orderedIds"))
+			data, err := ec.unmarshalNID2ᚕstringᚄ(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.OrderedIds = data
+		}
+	}
+	return it, nil
+}
+
 func (ec *executionContext) unmarshalInputUpdateCredentialInput(ctx context.Context, obj any) (model.UpdateCredentialInput, error) {
 	var it model.UpdateCredentialInput
 	if obj == nil {
@@ -20462,6 +20702,13 @@ func (ec *executionContext) _Mutation(ctx context.Context, sel ast.SelectionSet)
 		case "updateWikiDocument":
 			out.Values[i] = ec.OperationContext.RootResolverMiddleware(innerCtx, func(ctx context.Context) (res graphql.Marshaler) {
 				return ec._Mutation_updateWikiDocument(ctx, field)
+			})
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "reorderWikiDocumentSiblings":
+			out.Values[i] = ec.OperationContext.RootResolverMiddleware(innerCtx, func(ctx context.Context) (res graphql.Marshaler) {
+				return ec._Mutation_reorderWikiDocumentSiblings(ctx, field)
 			})
 			if out.Values[i] == graphql.Null {
 				out.Invalids++
@@ -24252,6 +24499,8 @@ func (ec *executionContext) _WikiDocumentEvent(ctx context.Context, sel ast.Sele
 			}
 		case "parentDocumentId":
 			out.Values[i] = ec._WikiDocumentEvent_parentDocumentId(ctx, field, obj)
+		case "previousParentDocumentId":
+			out.Values[i] = ec._WikiDocumentEvent_previousParentDocumentId(ctx, field, obj)
 		case "document":
 			out.Values[i] = ec._WikiDocumentEvent_document(ctx, field, obj)
 		default:
@@ -25302,6 +25551,36 @@ func (ec *executionContext) marshalNID2string(ctx context.Context, sel ast.Selec
 	return res
 }
 
+func (ec *executionContext) unmarshalNID2ᚕstringᚄ(ctx context.Context, v any) ([]string, error) {
+	var vSlice []any
+	vSlice = graphql.CoerceList(v)
+	var err error
+	res := make([]string, len(vSlice))
+	for i := range vSlice {
+		ctx := graphql.WithPathContext(ctx, graphql.NewPathWithIndex(i))
+		res[i], err = ec.unmarshalNID2string(ctx, vSlice[i])
+		if err != nil {
+			return nil, err
+		}
+	}
+	return res, nil
+}
+
+func (ec *executionContext) marshalNID2ᚕstringᚄ(ctx context.Context, sel ast.SelectionSet, v []string) graphql.Marshaler {
+	ret := make(graphql.Array, len(v))
+	for i := range v {
+		ret[i] = ec.marshalNID2string(ctx, sel, v[i])
+	}
+
+	for _, e := range ret {
+		if e == graphql.Null {
+			return graphql.Null
+		}
+	}
+
+	return ret
+}
+
 func (ec *executionContext) unmarshalNInt2int(ctx context.Context, v any) (int, error) {
 	res, err := graphql.UnmarshalInt(v)
 	return res, graphql.ErrorOnPath(ctx, err)
@@ -25454,6 +25733,11 @@ func (ec *executionContext) unmarshalNPresenceAction2githubᚗcomᚋvibeᚑc2ᚋ
 
 func (ec *executionContext) marshalNPresenceAction2githubᚗcomᚋvibeᚑc2ᚋvibeᚑc2ᚑcoreᚋcoreᚋpkgᚋgraphqlᚋmodelᚐPresenceAction(ctx context.Context, sel ast.SelectionSet, v model.PresenceAction) graphql.Marshaler {
 	return v
+}
+
+func (ec *executionContext) unmarshalNReorderWikiDocumentSiblingsInput2githubᚗcomᚋvibeᚑc2ᚋvibeᚑc2ᚑcoreᚋcoreᚋpkgᚋgraphqlᚋmodelᚐReorderWikiDocumentSiblingsInput(ctx context.Context, v any) (model.ReorderWikiDocumentSiblingsInput, error) {
+	res, err := ec.unmarshalInputReorderWikiDocumentSiblingsInput(ctx, v)
+	return res, graphql.ErrorOnPath(ctx, err)
 }
 
 func (ec *executionContext) marshalNSchemeNetworkPoint2githubᚗcomᚋvibeᚑc2ᚋvibeᚑc2ᚑcoreᚋcoreᚋpkgᚋmodelsᚐSchemeNetworkPoint(ctx context.Context, sel ast.SelectionSet, v models.SchemeNetworkPoint) graphql.Marshaler {

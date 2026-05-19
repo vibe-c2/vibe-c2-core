@@ -23,6 +23,11 @@ func (r *mutationResolver) UpdateWikiDocument(ctx context.Context, id string, in
 	return r.WikiDocumentResolver.UpdateWikiDocument(ctx, id, input)
 }
 
+// ReorderWikiDocumentSiblings is the resolver for the reorderWikiDocumentSiblings field.
+func (r *mutationResolver) ReorderWikiDocumentSiblings(ctx context.Context, input model.ReorderWikiDocumentSiblingsInput) ([]*models.WikiDocument, error) {
+	return r.WikiDocumentResolver.ReorderWikiDocumentSiblings(ctx, input)
+}
+
 // DeleteWikiDocument is the resolver for the deleteWikiDocument field.
 func (r *mutationResolver) DeleteWikiDocument(ctx context.Context, id string) (bool, error) {
 	return r.WikiDocumentResolver.DeleteWikiDocument(ctx, id)

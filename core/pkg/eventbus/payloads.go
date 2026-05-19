@@ -129,12 +129,17 @@ func NewSessionTerminatedEvent(actor Actor, p SessionEventPayload) Event {
 // --- Wiki document event payloads ---
 
 // WikiDocumentEventPayload is the payload for wiki document events.
+//
+// PreviousParentDocumentID is populated only for moved events; it carries the
+// parent the document just moved out of so subscribers can surgically
+// invalidate exactly two parent buckets instead of an entire operation.
 type WikiDocumentEventPayload struct {
-	DocumentID       string
-	OperationID      string
-	ParentDocumentID string // empty if root
-	Title            string
-	DeletedAt        string // empty if active, ISO timestamp if soft-deleted
+	DocumentID               string
+	OperationID              string
+	ParentDocumentID         string // empty if root
+	PreviousParentDocumentID string // populated on moved events; empty otherwise
+	Title                    string
+	DeletedAt                string // empty if active, ISO timestamp if soft-deleted
 }
 
 // WikiPresencePayload is the payload for wiki presence events.

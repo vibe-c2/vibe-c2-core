@@ -163,6 +163,11 @@ type WikiDocumentEvent {
   documentId: ID!
   operationId: ID!
   parentDocumentId: ID
+  # Populated only when this event represents a move; carries the parent the
+  # document just left. Clients use it (together with parentDocumentId) to
+  # invalidate exactly the two affected per-parent caches instead of the
+  # whole operation subtree.
+  previousParentDocumentId: ID
   document: WikiDocument
 }
 
@@ -207,6 +212,21 @@ input UpdateWikiDocumentInput {
   icon: String
   parentDocumentId: ID
   sortOrder: String
+}
+
+# Bulk sibling reorder. The client computes a complete ordering of the
+# parent's direct children (including any incoming document being inserted
+# from elsewhere) and ships the list in the desired order. The server
+# rebalances sortOrders across the list, reparents any incoming document
+# whose previous parent differs, and emits ONE wikiDocumentChanged event.
+input ReorderWikiDocumentSiblingsInput {
+  operationId: ID!
+  # Target parent for the reorder, or null for the root level.
+  parentDocumentId: ID
+  # All sibling ids in their final desired order. Must reference documents
+  # within `operationId`. Documents not currently under `parentDocumentId`
+  # are reparented as part of the reorder.
+  orderedIds: [ID!]!
 }
 
 # --- Queries ---
@@ -330,6 +350,14 @@ extend type Mutation {
     @hasPermission(permission: "operation:member")
 
   updateWikiDocument(id: ID!, input: UpdateWikiDocumentInput!): WikiDocument!
+    @hasPermission(permission: "operation:member")
+
+  # Reorder a parent's children (and optionally reparent incoming documents)
+  # in one round trip. Replaces the N-mutation rebalance loop the DnD UI
+  # used to perform on every drop. Returns the affected documents in their
+  # new order, freshly fetched. Emits exactly one wikiDocumentChanged event
+  # per affected previous-parent bucket plus one for the new parent.
+  reorderWikiDocumentSiblings(input: ReorderWikiDocumentSiblingsInput!): [WikiDocument!]!
     @hasPermission(permission: "operation:member")
 
   deleteWikiDocument(id: ID!): Boolean!

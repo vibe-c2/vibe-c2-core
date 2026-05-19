@@ -14,11 +14,11 @@ import {
 } from "@/components/ui/suggestion-input"
 import { useWikiStore } from "@/stores/wiki"
 import {
-  useUpdateWikiDocument,
+  useReorderWikiDocumentSiblings,
   useWikiDocumentTree,
 } from "@/graphql/hooks/wiki"
 import { DocumentIcon } from "@/components/wiki/document-icon"
-import { computeTopPlacement } from "@/components/wiki/wiki-tree-helpers"
+import { sortByOrder } from "@/components/wiki/wiki-tree-helpers"
 import type { WikiDocumentTreeFieldsFragment } from "@/graphql/gql/graphql"
 
 interface MoveWikiDocumentDialogProps {
@@ -48,7 +48,7 @@ export function MoveWikiDocumentDialog({
   operationId,
 }: MoveWikiDocumentDialogProps) {
   const { moveDialogOpen, moveTarget, closeMoveDialog } = useWikiStore()
-  const updateDocument = useUpdateWikiDocument()
+  const reorderSiblings = useReorderWikiDocumentSiblings()
   const [search, setSearch] = useState("")
   const [selected, setSelected] = useState<SuggestionOption | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -124,34 +124,27 @@ export function MoveWikiDocumentDialog({
     setError(null)
 
     // Place the moved doc at the top of the destination subtree (matches the
-    // DnD "inside" drop behavior and the create-at-top flow).
+    // DnD "inside" drop behavior and the create-at-top flow). One bulk
+    // mutation handles the reparent + sortOrder rebalance atomically so the
+    // dialog can't catch a half-applied state.
     const destinationParentId = selected.value || null
-    const destinationSiblings = documents.filter(
-      (d) => (d.parentDocumentId ?? null) === destinationParentId,
+    const destinationSiblings = sortByOrder(
+      documents.filter(
+        (d) =>
+          (d.parentDocumentId ?? null) === destinationParentId &&
+          d.id !== moveTarget.id,
+      ),
     )
-    const { newSortOrder, siblingUpdates } = computeTopPlacement(
-      moveTarget.id,
-      destinationSiblings,
-    )
+    const orderedIds = [moveTarget.id, ...destinationSiblings.map((d) => d.id)]
 
     try {
-      await updateDocument.mutateAsync({
-        id: moveTarget.id,
+      await reorderSiblings.mutateAsync({
         input: {
-          parentDocumentId: selected.value,
-          sortOrder: newSortOrder,
+          operationId,
+          parentDocumentId: destinationParentId,
+          orderedIds,
         },
       })
-      // Rebalance legacy empty-"" siblings if needed so the moved doc's new
-      // sortOrder actually sits above them. Sequential — order doesn't matter,
-      // but awaiting keeps the dialog open until everything lands so a refresh
-      // can't catch a half-applied state.
-      for (const update of siblingUpdates) {
-        await updateDocument.mutateAsync({
-          id: update.id,
-          input: { sortOrder: update.sortOrder },
-        })
-      }
       handleClose()
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to move document")
@@ -195,9 +188,9 @@ export function MoveWikiDocumentDialog({
           </Button>
           <Button
             onClick={handleMove}
-            disabled={!selected || updateDocument.isPending}
+            disabled={!selected || reorderSiblings.isPending}
           >
-            {updateDocument.isPending ? "Moving..." : "Move"}
+            {reorderSiblings.isPending ? "Moving..." : "Move"}
           </Button>
         </DialogFooter>
       </DialogContent>

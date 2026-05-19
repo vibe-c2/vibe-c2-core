@@ -31,15 +31,13 @@ import { useWikiDragStore, type DropPosition, type DropTarget } from "@/stores/w
 import {
   useWikiDocumentChildren,
   useWikiDocumentTrashCount,
-  useUpdateWikiDocument,
+  useReorderWikiDocumentSiblings,
   wikiKeys,
 } from "@/graphql/hooks/wiki"
 import { WikiTreeNode } from "@/components/wiki/wiki-tree-node"
 import { DocumentIcon } from "@/components/wiki/document-icon"
 import { WikiHistoryDropdown } from "@/components/wiki/wiki-history-dropdown"
 import {
-  computeTopPlacement,
-  rebalancedSortOrderAt,
   rowToTreeNode,
   sortByOrder,
 } from "@/components/wiki/wiki-tree-helpers"
@@ -184,7 +182,7 @@ export function WikiTreeSidebar({
     useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
   )
 
-  const updateDocument = useUpdateWikiDocument()
+  const reorderSiblings = useReorderWikiDocumentSiblings()
 
   const activeId = useWikiDragStore((s) => s.activeId)
 
@@ -288,47 +286,24 @@ export function WikiTreeSidebar({
       }
     }
 
-    if (resolvedTarget.position === "inside") {
-      const newParentId = resolvedTarget.id === "root" ? "" : resolvedTarget.id
-      const parentIdForSiblings =
-        resolvedTarget.id === "root" ? null : resolvedTarget.id
-      const siblings = readChildrenFromCache(
-        queryClient,
-        operationId,
-        parentIdForSiblings,
-      )
-      const { newSortOrder, siblingUpdates } = computeTopPlacement(
-        draggedId,
-        siblings,
-      )
+    // Compute the final orderedIds for the destination parent in one place,
+    // then ship one bulk mutation. The server rebalances sortOrders, handles
+    // reparents, and fans out exactly one wikiDocumentChanged event per
+    // affected parent bucket — replacing the N-mutation rebalance loop that
+    // used to fire 18+ refetches per drop.
+    let destinationParentId: string | null
+    let destinationOrderedIds: string[]
 
-      updateDocument.mutate(
-        {
-          id: draggedId,
-          input: {
-            parentDocumentId: newParentId,
-            sortOrder: newSortOrder,
-          },
-        },
-        mutationOptions,
-      )
-      // Rebalance legacy empty-"" siblings only when the top slot is unreachable
-      // through plain lex-compare — for any sibling list that already has a
-      // non-empty first sortOrder, computeTopPlacement returns no sibling
-      // updates and this loop is a no-op.
-      for (const update of siblingUpdates) {
-        updateDocument.mutate(
-          {
-            id: update.id,
-            input: { sortOrder: update.sortOrder },
-          },
-          mutationOptions,
-        )
-      }
+    if (resolvedTarget.position === "inside") {
+      destinationParentId = resolvedTarget.id === "root" ? null : resolvedTarget.id
+      const siblings = sortByOrder(
+        readChildrenFromCache(queryClient, operationId, destinationParentId),
+      ).filter((d) => d.id !== draggedId)
+      // Drop-into-folder places the dragged row at the TOP of the
+      // destination — matches the historical computeTopPlacement behaviour.
+      destinationOrderedIds = [draggedId, ...siblings.map((d) => d.id)]
     } else {
       // Reorder: insert before/after the target among its siblings.
-      // Locate the over-doc by scanning loaded slices (same shape as the
-      // dragged-doc lookup above).
       let overDoc: WikiDocumentTreeFieldsFragment | null = null
       for (const [, data] of allSlices) {
         const hit = data?.wikiDocumentChildren.find(
@@ -341,45 +316,34 @@ export function WikiTreeSidebar({
       }
       if (!overDoc) return
 
-      const parentId = overDoc.parentDocumentId ?? ""
-      const parentIdForFilter = overDoc.parentDocumentId ?? null
-      const parentChanged =
-        (draggedDoc.parentDocumentId ?? null) !== parentIdForFilter
+      destinationParentId = overDoc.parentDocumentId ?? null
 
       const allSiblings = sortByOrder(
-        readChildrenFromCache(queryClient, operationId, parentIdForFilter),
+        readChildrenFromCache(queryClient, operationId, destinationParentId),
       )
       const withoutDragged = allSiblings.filter((d) => d.id !== draggedId)
       const insertAt =
         resolvedTarget.position === "before"
           ? withoutDragged.findIndex((d) => d.id === resolvedTarget.id)
           : withoutDragged.findIndex((d) => d.id === resolvedTarget.id) + 1
-      const reordered = [...withoutDragged]
-      reordered.splice(insertAt, 0, draggedDoc)
-
-      const count = reordered.length
-      for (let i = 0; i < count; i++) {
-        const newSort = rebalancedSortOrderAt(i, count)
-        const isDragged = reordered[i].id === draggedId
-        // The dragged row must always go through when its parent changes,
-        // even if its computed sortOrder happens to collide with the old
-        // value — the sortOrder guard alone used to silently swallow the
-        // reparent.
-        const sortChanged = reordered[i].sortOrder !== newSort
-        if (!sortChanged && !(isDragged && parentChanged)) continue
-
-        updateDocument.mutate(
-          {
-            id: reordered[i].id,
-            input: {
-              ...(isDragged ? { parentDocumentId: parentId } : {}),
-              ...(sortChanged ? { sortOrder: newSort } : {}),
-            },
-          },
-          mutationOptions,
-        )
-      }
+      const reordered = [
+        ...withoutDragged.slice(0, insertAt),
+        draggedDoc,
+        ...withoutDragged.slice(insertAt),
+      ]
+      destinationOrderedIds = reordered.map((d) => d.id)
     }
+
+    reorderSiblings.mutate(
+      {
+        input: {
+          operationId,
+          parentDocumentId: destinationParentId,
+          orderedIds: destinationOrderedIds,
+        },
+      },
+      mutationOptions,
+    )
   }
 
   function handleDragCancel() {
