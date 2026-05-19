@@ -10,6 +10,7 @@ import {
   useWikiDocumentTreeRevealPath,
   useTrackWikiDocumentVisit,
 } from "@/graphql/hooks/wiki"
+import { useCredentialChangedSubscription } from "@/graphql/hooks/credentials"
 import { usePageMetadata, type PageIcon } from "@/hooks/use-page-metadata"
 import { useWikiStore } from "@/stores/wiki"
 import { WikiTreeSidebar } from "@/components/wiki/wiki-tree-sidebar"
@@ -85,15 +86,18 @@ function WikiPageInner({
     icon: pageIcon,
   })
 
-  // Real-time subscriptions scoped to this operation.
+  // Real-time subscriptions scoped to this operation. All three share the
+  // single graphql-ws WebSocket transport (lib/graphql-ws-client.ts) so the
+  // page-level socket budget is one WS for graphql + one WS for hocuspocus,
+  // independent of how many subscriptions we mount.
+  //
+  // credentialChanged keeps the wiki-credential-chip live: when a colleague
+  // edits a credential referenced inline in a document, the subscription
+  // writes the fresh entity into the same React Query cache key the chip
+  // reads from, so the chip updates without manual refresh.
   useWikiDocumentChangedSubscription(operationId)
   useWikiDocumentPresenceChangedSubscription(operationId)
-  // Deliberately NOT subscribing to credentialChanged here. This page already
-  // holds ~5 long-lived SSE connections plus the hocuspocus WebSocket — over
-  // HTTP/1.1, Firefox caps a single origin at 6 concurrent sockets, and
-  // adding a 6th SSE starved the WS upgrade. Chips refresh via React Query's
-  // refetchOnWindowFocus and via the details dialog's explicit fetch on
-  // click; live cross-session updates only land in the Findings tab.
+  useCredentialChangedSubscription(operationId)
 
   // Reveal-path: when the URL points at a document, fetch every row the
   // sidebar needs to render itself expanded down to that doc — and shred
