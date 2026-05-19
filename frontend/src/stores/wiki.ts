@@ -2,19 +2,7 @@ import { create } from "zustand"
 
 const STORAGE_KEY_EXPANDED = "wiki_expanded_nodes"
 const STORAGE_KEY_WIDTH = "wiki_sidebar_width"
-const STORAGE_KEY_ICON_TAB = "wiki_icon_picker_tab"
 const DEFAULT_WIDTH = 256
-
-export type IconPickerTab = "emoji" | "icons"
-
-function loadIconPickerTab(): IconPickerTab {
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY_ICON_TAB)
-    return raw === "icons" ? "icons" : "emoji"
-  } catch {
-    return "emoji"
-  }
-}
 
 function loadExpandedNodes(): Set<string> {
   try {
@@ -120,10 +108,6 @@ interface WikiStoreState {
   editorZoomed: boolean
   toggleEditorZoom: () => void
   setEditorZoom: (zoomed: boolean) => void
-
-  // Icon picker — last-used tab, persisted across documents and sessions.
-  lastIconPickerTab: IconPickerTab
-  setLastIconPickerTab: (tab: IconPickerTab) => void
 
   // One-shot signal from the create flow to the editor: when the editor for
   // this document mounts, focus it at the start so the user can start typing
@@ -239,14 +223,6 @@ export const useWikiStore = create<WikiStoreState>((set, get) => ({
   editorZoomed: false,
   toggleEditorZoom: () => set((state) => ({ editorZoomed: !state.editorZoomed })),
   setEditorZoom: (zoomed) => set({ editorZoomed: zoomed }),
-
-  // Icon picker tab — persisted so re-opening the picker on the next doc
-  // shows whichever side the user used last.
-  lastIconPickerTab: loadIconPickerTab(),
-  setLastIconPickerTab: (tab) => {
-    localStorage.setItem(STORAGE_KEY_ICON_TAB, tab)
-    set({ lastIconPickerTab: tab })
-  },
 
   // Editor caret bootstrap — set by the create dialog right before it
   // navigates to the new doc.

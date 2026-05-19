@@ -23,8 +23,9 @@ import {
   WIKI_ICON_COLORS,
   type WikiIconColor,
 } from "@/components/wiki/icon-color-palette";
-import { useWikiStore, type IconPickerTab } from "@/stores/wiki";
 import { cn } from "@/lib/utils";
+
+type IconPickerTab = "emoji" | "icons";
 
 export interface DocumentIconValue {
   emoji: string;
@@ -65,22 +66,16 @@ export function DocumentIconPicker({
   const isOpen = controlledOpen ?? internalOpen;
   const setOpen = onOpenChange ?? setInternalOpen;
 
-  const lastIconPickerTab = useWikiStore((s) => s.lastIconPickerTab);
-  const setLastIconPickerTab = useWikiStore((s) => s.setLastIconPickerTab);
-
-  // Default tab on open: whichever side the current value is on, falling back
-  // to the user's last-used tab when both sides are empty.
-  const defaultTab: IconPickerTab = value.icon
-    ? "icons"
-    : value.emoji
-      ? "emoji"
-      : lastIconPickerTab;
+  // Default tab on open: emoji only when the doc already has one set, so the
+  // user lands on the side that reflects their current value. Otherwise the
+  // icons tab is the default — it's the richer surface (color + search +
+  // adaptive default) and the one we want users to discover first.
+  const defaultTab: IconPickerTab = value.emoji && !value.icon ? "emoji" : "icons";
 
   function handleEmojiPick(native: string) {
     // Switching to emoji clears color — color is meaningless for emojis and
     // a stale value would resurface if the user later swaps back to an icon.
     onSelect({ emoji: native, icon: "", color: "" });
-    setLastIconPickerTab("emoji");
     setOpen(false);
   }
 
@@ -88,7 +83,6 @@ export function DocumentIconPicker({
     // Preserve color across icon swaps so users can pick color first or change
     // their icon without losing the chosen color.
     onSelect({ emoji: "", icon: name, color: value.color });
-    setLastIconPickerTab("icons");
     setOpen(false);
   }
 
