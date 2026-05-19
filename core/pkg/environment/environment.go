@@ -112,7 +112,7 @@ func init() {
 	viper.SetDefault("AUTH_REFRESH_TTL", "168h")
 	viper.SetDefault("AUTH_REFRESH_GRACE_TTL", "10s")
 	viper.SetDefault("AUTH_CSRF_ENABLED", true)
-	viper.SetDefault("CORS_ALLOWED_ORIGINS", "http://localhost:5173,http://localhost:8080")
+	viper.SetDefault("CORS_ALLOWED_ORIGINS", "http://localhost:5173,http://localhost:8080,https://localhost:8443")
 
 	env = &EnvironmentSettings{
 		StageStatus: viper.GetString("APP_STAGE_STATUS"),

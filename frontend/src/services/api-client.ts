@@ -217,7 +217,7 @@ async function lockedRefresh(): Promise<boolean> {
  * layers: in-flight promise (same-tab), grace window (cross-tab via
  * BroadcastChannel), and Web Locks (cross-tab mutual exclusion).
  *
- * Used by apiFetch (on 401) and SSE reconnect.
+ * Used by apiFetch (on 401) and graphql-ws reconnect (on close).
  */
 export function tryRefresh(): Promise<boolean> {
   // Layer 1: same-tab in-flight dedup.

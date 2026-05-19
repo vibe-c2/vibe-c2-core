@@ -11,6 +11,9 @@
 package graphql
 
 import (
+	"context"
+	"fmt"
+	"net/http"
 	"time"
 
 	"github.com/99designs/gqlgen/graphql/handler"
@@ -19,6 +22,7 @@ import (
 	"github.com/99designs/gqlgen/graphql/handler/transport"
 	"github.com/99designs/gqlgen/graphql/playground"
 	"github.com/gin-gonic/gin"
+	gws "github.com/gorilla/websocket"
 	"github.com/vektah/gqlparser/v2/ast"
 	"github.com/vibe-c2/vibe-c2-core/core/pkg/eventbus"
 	"github.com/vibe-c2/vibe-c2-core/core/pkg/graphql/generated"
@@ -64,6 +68,7 @@ func NewHandler(
 	wikiDocumentRepo repository.IWikiDocumentRepository,
 	credentialRepo repository.ICredentialRepository,
 	presenceTracker *wiki.PresenceTracker,
+	allowedOrigins []string,
 ) gin.HandlerFunc {
 	// Create the resolver root with entity resolvers and subscription dependencies.
 	// The root resolver delegates to domain-specific resolvers for business logic.
@@ -103,10 +108,49 @@ func NewHandler(
 	// --- Transport configuration ---
 	// Transports define how GraphQL requests are sent over HTTP.
 	// gqlgen checks transports in order — the first one whose Supports() returns
-	// true handles the request. SSE must come before POST because SSE requests are
-	// also POST + JSON, but with an additional Accept: text/event-stream header.
+	// true handles the request.
 	//
-	// SSE (Server-Sent Events) is used for GraphQL subscriptions:
+	// WebSocket (graphql-ws / graphql-transport-ws) — the canonical subscription
+	// transport. Negotiated when the client sends an `Upgrade: websocket` header,
+	// so it has to come before SSE (which is also POST + JSON). All subscription
+	// operations from a single browser tab share this one connection, removing
+	// the HTTP/1.1 per-origin socket cap as a constraint on subscription design.
+	//
+	// Auth is handled out-of-band: the WS upgrade is a GET that carries the
+	// access_token httpOnly cookie, which the Gin JWTAuth middleware validates
+	// before this transport runs. By the time InitFunc fires, gqlctx.AuthInfo
+	// is already on the request context — we just sanity-check it.
+	//
+	// CheckOrigin defends against cross-origin WS hijacking. We allow the
+	// configured CORS origin set and same-origin (Origin == Host). Sec-WebSocket
+	// is not subject to CORS preflight, so this check is the only line of
+	// defense for the upgrade itself; the cookie auth that follows is also
+	// effective, but defense in depth is cheap here.
+	upgrader := gws.Upgrader{
+		ReadBufferSize:  1024,
+		WriteBufferSize: 1024,
+		CheckOrigin:     buildWSOriginCheck(allowedOrigins),
+	}
+	srv.AddTransport(transport.Websocket{
+		Upgrader:              upgrader,
+		KeepAlivePingInterval: 15 * time.Second,
+		// graphql-transport-ws ping/pong — server pings, expects pong inside
+		// 2x the interval or the connection dies (1006).
+		PingPongInterval: 20 * time.Second,
+		InitFunc: func(ctx context.Context, _ transport.InitPayload) (context.Context, *transport.InitPayload, error) {
+			auth := gqlctx.AuthFromContext(ctx)
+			if auth.UserID == "" {
+				return ctx, nil, fmt.Errorf("unauthorized")
+			}
+			return ctx, nil, nil
+		},
+	})
+
+	// SSE (Server-Sent Events) — kept alongside the WebSocket transport so old
+	// clients (any browser tab loaded before this deploy that's still holding
+	// onto the legacy hand-rolled SSE subscriber) keep working through a roll.
+	// New clients use the WebSocket transport above.
+	//
 	//   Client sends: POST with Accept: text/event-stream + Content-Type: application/json
 	//   Server streams: event: next\ndata: {"data": ...}\n\n  (one per event)
 	//   On completion: event: complete\n\n
@@ -161,6 +205,45 @@ func NewHandler(
 
 		// Let gqlgen handle the actual GraphQL execution.
 		srv.ServeHTTP(c.Writer, c.Request)
+	}
+}
+
+// buildWSOriginCheck returns a CheckOrigin function for the gorilla websocket
+// upgrader. It accepts:
+//   - empty Origin (non-browser clients like curl/wscat for debugging)
+//   - same-origin (Origin == request scheme://Host)
+//   - any origin in the configured allow-list
+//
+// The allow-list is fed from CORS_ALLOWED_ORIGINS so a single env var continues
+// to govern cross-origin policy across HTTP and WS.
+func buildWSOriginCheck(allowed []string) func(r *http.Request) bool {
+	allowSet := make(map[string]struct{}, len(allowed))
+	for _, o := range allowed {
+		allowSet[o] = struct{}{}
+	}
+	return func(r *http.Request) bool {
+		origin := r.Header.Get("Origin")
+		if origin == "" {
+			return true
+		}
+		if _, ok := allowSet[origin]; ok {
+			return true
+		}
+		// Same-origin: nginx forwards the scheme via X-Forwarded-Proto, so we
+		// trust that when present (we control the proxy) and fall back to
+		// inferring from the request when not.
+		scheme := r.Header.Get("X-Forwarded-Proto")
+		if scheme == "" {
+			if r.TLS != nil {
+				scheme = "https"
+			} else {
+				scheme = "http"
+			}
+		}
+		if origin == scheme+"://"+r.Host {
+			return true
+		}
+		return false
 	}
 }
 

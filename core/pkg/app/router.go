@@ -161,12 +161,21 @@ func (a *App) NewRouter() *gin.Engine {
 		// Authentication is handled by the JWTAuth middleware above (same as REST).
 		// Authorization (RBAC) is handled by the @hasPermission directive inside
 		// the GraphQL schema — each query/mutation declares what permission it needs.
-		v1.POST("/graphql", gql.NewHandler(
+		//
+		// /graphql (POST)     — queries, mutations, and legacy SSE subscriptions
+		// /graphql/ws (GET)   — graphql-transport-ws WebSocket transport. The
+		//                       Upgrade header routes it to the WS transport
+		//                       inside gqlgen; one socket multiplexes every
+		//                       active subscription on the page.
+		gqlHandler := gql.NewHandler(
 			userRes, opRes, snpRes, sessRes, wikiDocRes, wikiVisitRes, credRes,
 			a.eventBus,
 			a.repos.User, a.repos.Operation, a.repos.Session, a.repos.WikiDocument, a.repos.Credential,
 			a.presenceTracker,
-		))
+			a.env.CORSAllowedOrigins,
+		)
+		v1.POST("/graphql", gqlHandler)
+		v1.GET("/graphql/ws", gqlHandler)
 
 	}
 

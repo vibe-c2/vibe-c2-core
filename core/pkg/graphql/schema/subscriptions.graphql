@@ -2,21 +2,23 @@
 # GraphQL Subscriptions
 # =============================================================================
 #
-# Subscriptions provide real-time updates over Server-Sent Events (SSE).
-# Unlike queries (one-shot request/response), subscriptions keep the HTTP
-# connection open and stream events as they happen.
+# Subscriptions provide real-time updates. The primary transport is the
+# graphql-transport-ws protocol over a single WebSocket — every active
+# subscription on a browser tab is multiplexed onto one connection at
+# /api/v1/graphql/ws. The legacy SSE transport at POST /api/v1/graphql
+# (Accept: text/event-stream) is still mounted server-side for graceful
+# rollback and non-browser clients, but the SPA uses graphql-ws.
 #
-# How it works from the client side:
-#   1. Send a POST to /api/v1/graphql with:
-#      - Header: Accept: text/event-stream
-#      - Header: Content-Type: application/json
-#      - Header: Authorization: Bearer <jwt>
-#      - Body: {"query": "subscription { userChanged { action userId } }"}
-#   2. The server holds the connection open and sends SSE frames:
-#      event: next
-#      data: {"data": {"userChanged": {"action": "CREATED", "userId": "..."}}}
-#   3. When the server is done (or client disconnects):
-#      event: complete
+# How it works from the client side (modern WS path):
+#   1. Open a WebSocket to /api/v1/graphql/ws with Sec-WebSocket-Protocol:
+#      graphql-transport-ws. The `access_token` httpOnly cookie is sent on
+#      the upgrade and validated by Gin's JWTAuth middleware before gqlgen
+#      sees the connection.
+#   2. Send `{"type": "connection_init"}`; server replies `connection_ack`.
+#   3. Send `{"type": "subscribe", "id": "<op>", "payload": {"query": ...}}`
+#      for each subscription. Multiple subscribes share the one socket.
+#   4. Server streams `{"type": "next", "id": "<op>", "payload": {"data":...}}`
+#      frames; `complete` ends a single subscription.
 #
 # Each event wrapper type includes an "action" enum (CREATED/UPDATED/DELETED)
 # so the frontend knows what happened, plus the entity IDs and an optional
