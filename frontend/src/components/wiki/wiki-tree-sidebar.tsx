@@ -37,7 +37,12 @@ import {
 import { WikiTreeNode } from "@/components/wiki/wiki-tree-node"
 import { DocumentIcon } from "@/components/wiki/document-icon"
 import { WikiHistoryDropdown } from "@/components/wiki/wiki-history-dropdown"
-import { rowToTreeNode, sortByOrder } from "@/components/wiki/wiki-tree-helpers"
+import {
+  computeTopPlacement,
+  rebalancedSortOrderAt,
+  rowToTreeNode,
+  sortByOrder,
+} from "@/components/wiki/wiki-tree-helpers"
 import { useWikiSubtreeExpansion } from "@/components/wiki/use-wiki-subtree-expansion"
 import type {
   WikiDocumentChildrenQuery,
@@ -131,28 +136,6 @@ function resolveDropTargetFromEvent(
   if (fraction < beforeEdge) position = "before"
   else if (fraction > afterEdge) position = "after"
   return { id, position }
-}
-
-/**
- * Compute a sort string between two adjacent strings.
- * Uses simple midpoint character approach for fractional indexing.
- */
-function midSortOrder(before: string | null, after: string | null): string {
-  const a = before ?? ""
-  const b = after ?? ""
-  const maxLen = Math.max(a.length, b.length) + 1
-  let result = ""
-  for (let i = 0; i < maxLen; i++) {
-    const ca = i < a.length ? a.charCodeAt(i) : 64 // '@' — below 'A'
-    const cb = i < b.length ? b.charCodeAt(i) : 123 // '{' — above 'z'
-    const mid = Math.floor((ca + cb) / 2)
-    if (mid > ca) {
-      result += String.fromCharCode(mid)
-      return result
-    }
-    result += String.fromCharCode(ca)
-  }
-  return result + "V" // fallback: append midpoint char
 }
 
 interface WikiTreeSidebarProps {
@@ -313,20 +296,35 @@ export function WikiTreeSidebar({
         queryClient,
         operationId,
         parentIdForSiblings,
-      ).filter((d) => d.id !== draggedId)
-      const sorted = sortByOrder(siblings)
-      const lastSort = sorted.length > 0 ? sorted[sorted.length - 1].sortOrder : null
+      )
+      const { newSortOrder, siblingUpdates } = computeTopPlacement(
+        draggedId,
+        siblings,
+      )
 
       updateDocument.mutate(
         {
           id: draggedId,
           input: {
             parentDocumentId: newParentId,
-            sortOrder: midSortOrder(lastSort, null),
+            sortOrder: newSortOrder,
           },
         },
         mutationOptions,
       )
+      // Rebalance legacy empty-"" siblings only when the top slot is unreachable
+      // through plain lex-compare — for any sibling list that already has a
+      // non-empty first sortOrder, computeTopPlacement returns no sibling
+      // updates and this loop is a no-op.
+      for (const update of siblingUpdates) {
+        updateDocument.mutate(
+          {
+            id: update.id,
+            input: { sortOrder: update.sortOrder },
+          },
+          mutationOptions,
+        )
+      }
     } else {
       // Reorder: insert before/after the target among its siblings.
       // Locate the over-doc by scanning loaded slices (same shape as the
@@ -361,8 +359,7 @@ export function WikiTreeSidebar({
 
       const count = reordered.length
       for (let i = 0; i < count; i++) {
-        const fraction = (i + 1) / (count + 1)
-        const newSort = String.fromCharCode(65 + Math.floor(fraction * 57))
+        const newSort = rebalancedSortOrderAt(i, count)
         const isDragged = reordered[i].id === draggedId
         // The dragged row must always go through when its parent changes,
         // even if its computed sortOrder happens to collide with the old

@@ -38,11 +38,13 @@ type IWikiDocumentRepository interface {
 	FindAllByOperationID(ctx context.Context, opID uuid.UUID) ([]models.WikiDocument, error)
 	CountChildDocuments(ctx context.Context, parentID uuid.UUID) (int64, error)
 	// FindChildDocumentsWithCounts returns active children of `parentID` (or
-	// root documents in opID when parentID is nil), sorted by sort_order,
-	// alongside a map of grandchild counts keyed by each returned document's
-	// id. The grandchild counts are computed in one aggregation, so the entire
-	// call is two Mongo round trips regardless of the result size. Used by
-	// the lazy tree path to render expand carets without an N+1 Count storm.
+	// root documents in opID when parentID is nil), sorted by sort_order with
+	// -createAt as tiebreaker (so newer docs surface above older ones when
+	// sortOrder is unset), alongside a map of grandchild counts keyed by each
+	// returned document's id. The grandchild counts are computed in one
+	// aggregation, so the entire call is two Mongo round trips regardless of
+	// the result size. Used by the lazy tree path to render expand carets
+	// without an N+1 Count storm.
 	FindChildDocumentsWithCounts(ctx context.Context, opID uuid.UUID, parentID *uuid.UUID) ([]models.WikiDocument, map[uuid.UUID]int, error)
 	// FindDocumentsForRevealPath returns every active document needed to
 	// render the sidebar tree expanded down to a target document: root
@@ -205,7 +207,7 @@ func (r *wikiDocumentRepository) FindChildDocuments(ctx context.Context, parentI
 	err := r.coll.Find(ctx, bson.M{
 		"parent_document_id": parentID,
 		"deleted_at":         nil,
-	}).Sort("sort_order").All(&docs)
+	}).Sort("sort_order", "-createAt").All(&docs)
 	return docs, err
 }
 
@@ -214,7 +216,7 @@ func (r *wikiDocumentRepository) FindAllByOperationID(ctx context.Context, opID 
 	err := r.coll.Find(ctx, bson.M{
 		"operation_id": opID,
 		"deleted_at":   nil,
-	}).Sort("sort_order").All(&docs)
+	}).Sort("sort_order", "-createAt").All(&docs)
 	return docs, err
 }
 
@@ -234,7 +236,7 @@ func (r *wikiDocumentRepository) FindChildDocumentsWithCounts(ctx context.Contex
 	}
 
 	var docs []models.WikiDocument
-	if err := r.coll.Find(ctx, filter).Sort("sort_order").All(&docs); err != nil {
+	if err := r.coll.Find(ctx, filter).Sort("sort_order", "-createAt").All(&docs); err != nil {
 		return nil, nil, err
 	}
 	if len(docs) == 0 {
@@ -267,7 +269,7 @@ func (r *wikiDocumentRepository) FindDocumentsForRevealPath(ctx context.Context,
 	}
 
 	var docs []models.WikiDocument
-	if err := r.coll.Find(ctx, filter).Sort("sort_order").All(&docs); err != nil {
+	if err := r.coll.Find(ctx, filter).Sort("sort_order", "-createAt").All(&docs); err != nil {
 		return nil, nil, err
 	}
 	if len(docs) == 0 {

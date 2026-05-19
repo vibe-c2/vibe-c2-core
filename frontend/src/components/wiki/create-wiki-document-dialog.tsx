@@ -30,6 +30,7 @@ const DEFAULT_ICON_VALUE: DocumentIconValue = {
 export function CreateWikiDocumentDialog({ operationId }: CreateWikiDocumentDialogProps) {
   const { createDialogOpen, createParentId, closeCreateDialog } = useWikiStore()
   const expandNode = useWikiStore((s) => s.expandNode)
+  const setPendingFocusDocId = useWikiStore((s) => s.setPendingFocusDocId)
   const createDocument = useCreateWikiDocument()
   const navigate = useNavigate()
 
@@ -60,6 +61,10 @@ export function CreateWikiDocumentDialog({ operationId }: CreateWikiDocumentDial
       if (createParentId) expandNode(createParentId)
       closeCreateDialog()
       setIconValue(DEFAULT_ICON_VALUE)
+      // One-shot signal — the editor reads + clears this when it mounts for
+      // the new doc, so the caret lands inside the empty body without the
+      // user needing to click.
+      setPendingFocusDocId(result.createWikiDocument.id)
       navigate(`/wiki/${result.createWikiDocument.id}`)
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to create document")

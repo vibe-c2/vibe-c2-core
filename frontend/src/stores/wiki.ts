@@ -124,6 +124,13 @@ interface WikiStoreState {
   // Icon picker — last-used tab, persisted across documents and sessions.
   lastIconPickerTab: IconPickerTab
   setLastIconPickerTab: (tab: IconPickerTab) => void
+
+  // One-shot signal from the create flow to the editor: when the editor for
+  // this document mounts, focus it at the start so the user can start typing
+  // immediately. Consumed (cleared) by the editor on first apply so revisits
+  // don't keep stealing focus.
+  pendingFocusDocId: string | null
+  setPendingFocusDocId: (id: string | null) => void
 }
 
 export const useWikiStore = create<WikiStoreState>((set, get) => ({
@@ -240,4 +247,9 @@ export const useWikiStore = create<WikiStoreState>((set, get) => ({
     localStorage.setItem(STORAGE_KEY_ICON_TAB, tab)
     set({ lastIconPickerTab: tab })
   },
+
+  // Editor caret bootstrap — set by the create dialog right before it
+  // navigates to the new doc.
+  pendingFocusDocId: null,
+  setPendingFocusDocId: (id) => set({ pendingFocusDocId: id }),
 }))
