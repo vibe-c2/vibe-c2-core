@@ -16,7 +16,7 @@ export function ResizeHandle({
   onResize,
   sidebarRef,
   minWidth = 200,
-  maxWidth = 480,
+  maxWidth = 800,
 }: ResizeHandleProps) {
   const startXRef = useRef(0)
   const startWidthRef = useRef(0)
