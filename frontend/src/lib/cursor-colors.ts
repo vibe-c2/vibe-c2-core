@@ -20,17 +20,12 @@ export function getCursorColor(userId: string): string {
   return CURSOR_COLORS[Math.abs(hash) % CURSOR_COLORS.length]
 }
 
-/** Render a collaboration cursor caret + name label for CollaborationCursor. */
+/** Render a collaboration cursor caret for CollaborationCursor.
+ *  Caret only — no name label. The colored bar is enough to signal "another
+ *  user is editing here" without putting identity in everyone's prose. */
 export function renderCursor(user: { name: string; color: string }): HTMLElement {
   const caret = document.createElement("span")
   caret.classList.add("collaboration-cursor__caret")
   caret.style.borderColor = user.color
-
-  const label = document.createElement("div")
-  label.classList.add("collaboration-cursor__label")
-  label.style.backgroundColor = user.color
-  label.textContent = user.name
-
-  caret.appendChild(label)
   return caret
 }

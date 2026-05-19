@@ -304,9 +304,9 @@ export function WikiEditor({
   }, [editor, isEditor])
 
   // Hide cursor when the tab is not visible, restore when it returns.
-  // Only clear the cursor field — the user label stays in awareness so
-  // it's immediately available when the cursor reappears (avoids the
-  // "User: <id>" fallback from a race between user and cursor updates).
+  // Only clear the cursor field — the user identity (color) stays in
+  // awareness so the caret's color is immediately correct when the cursor
+  // reappears, with no flicker from a stale/missing user state.
   useEffect(() => {
     if (!provider || !editor) return
     const awareness = provider.awareness
