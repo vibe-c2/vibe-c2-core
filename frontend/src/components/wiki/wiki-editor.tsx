@@ -14,6 +14,7 @@ import { CodeBlock } from "@tiptap/extension-code-block"
 import { yCursorPlugin } from "@tiptap/y-tiptap"
 import { useHocuspocus } from "@/hooks/use-hocuspocus"
 import { useAuthStore } from "@/stores/auth"
+import { useWikiStore } from "@/stores/wiki"
 import { getCursorColor, renderCursor } from "@/lib/cursor-colors"
 import { lowlight } from "@/lib/wiki-lowlight"
 import { Skeleton } from "@/components/ui/skeleton"
@@ -61,6 +62,8 @@ export function WikiEditor({
 }: WikiEditorProps) {
   const { ydoc, provider, connectionStatus, isSynced, isReady } = useHocuspocus(documentId)
   const user = useAuthStore((s) => s.user)
+  const pendingFocusDocId = useWikiStore((s) => s.pendingFocusDocId)
+  const setPendingFocusDocId = useWikiStore((s) => s.setPendingFocusDocId)
 
   // Paste/drop handlers run long after the editor config is captured; route
   // through a ref so they always observe the current editor (not a stale
@@ -335,6 +338,18 @@ export function WikiEditor({
 
     editor.commands.setContent(legacyText)
   }, [isReady, editor, ydoc])
+
+  // Land the caret inside a freshly-created doc so the user can start typing
+  // immediately. The create dialog sets pendingFocusDocId right before it
+  // navigates here; we consume the flag on first apply so revisiting the doc
+  // later doesn't steal focus from wherever the user is.
+  useEffect(() => {
+    if (!isReady || !editor) return
+    if (!isEditor) return
+    if (pendingFocusDocId !== documentId) return
+    editor.chain().focus("start").run()
+    setPendingFocusDocId(null)
+  }, [isReady, editor, isEditor, pendingFocusDocId, documentId, setPendingFocusDocId])
 
   return (
     <>

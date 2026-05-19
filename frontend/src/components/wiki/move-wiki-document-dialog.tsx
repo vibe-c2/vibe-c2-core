@@ -18,6 +18,7 @@ import {
   useWikiDocumentTree,
 } from "@/graphql/hooks/wiki"
 import { DocumentIcon } from "@/components/wiki/document-icon"
+import { computeTopPlacement } from "@/components/wiki/wiki-tree-helpers"
 import type { WikiDocumentTreeFieldsFragment } from "@/graphql/gql/graphql"
 
 interface MoveWikiDocumentDialogProps {
@@ -122,11 +123,35 @@ export function MoveWikiDocumentDialog({
     if (!moveTarget || !selected) return
     setError(null)
 
+    // Place the moved doc at the top of the destination subtree (matches the
+    // DnD "inside" drop behavior and the create-at-top flow).
+    const destinationParentId = selected.value || null
+    const destinationSiblings = documents.filter(
+      (d) => (d.parentDocumentId ?? null) === destinationParentId,
+    )
+    const { newSortOrder, siblingUpdates } = computeTopPlacement(
+      moveTarget.id,
+      destinationSiblings,
+    )
+
     try {
       await updateDocument.mutateAsync({
         id: moveTarget.id,
-        input: { parentDocumentId: selected.value },
+        input: {
+          parentDocumentId: selected.value,
+          sortOrder: newSortOrder,
+        },
       })
+      // Rebalance legacy empty-"" siblings if needed so the moved doc's new
+      // sortOrder actually sits above them. Sequential — order doesn't matter,
+      // but awaiting keeps the dialog open until everything lands so a refresh
+      // can't catch a half-applied state.
+      for (const update of siblingUpdates) {
+        await updateDocument.mutateAsync({
+          id: update.id,
+          input: { sortOrder: update.sortOrder },
+        })
+      }
       handleClose()
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to move document")
