@@ -2,6 +2,7 @@ package repository
 
 import (
 	"context"
+	"fmt"
 	"regexp"
 	"time"
 
@@ -53,6 +54,12 @@ type IWikiDocumentRepository interface {
 	// aggregation. Counts cover every returned row.
 	FindDocumentsForRevealPath(ctx context.Context, opID uuid.UUID, parentIDs []uuid.UUID) ([]models.WikiDocument, map[uuid.UUID]int, error)
 	FindDescendants(ctx context.Context, docID uuid.UUID) ([]models.WikiDocument, error)
+	// RebuildPathIDsCascade recomputes path_ids for rootID and every descendant
+	// by walking parent_document_id chains breadth-first. Idempotent. Must be
+	// called after any reparent (move, restore-to-new-home) so the multikey
+	// index used by scoped search stays in sync. O(depth) round-trips; one
+	// bulk update per level.
+	RebuildPathIDsCascade(ctx context.Context, rootID uuid.UUID) error
 	// FindTrashedDescendants returns soft-deleted descendants of docID. Walks
 	// downward through parent_document_id, only following children whose
 	// deleted_at is set. Used for cascade-restore prompts.
@@ -102,6 +109,10 @@ func NewWikiDocumentRepository(db database.Database) IWikiDocumentRepository {
 		// Multikey index on the References array; deleted_at trails so the
 		// resolver can both match and filter trashed referrers in one scan.
 		{Key: []string{"operation_id", "references", "deleted_at"}},
+		// Scoped search ("find docs under this folder"). Multikey index on the
+		// materialized ancestor chain — one index probe replaces the previous
+		// O(depth) FindDescendants BFS in SearchByOperationID.
+		{Key: []string{"operation_id", "path_ids"}},
 	})
 
 	setupWikiSearchIndexes(coll)
@@ -110,8 +121,111 @@ func NewWikiDocumentRepository(db database.Database) IWikiDocumentRepository {
 }
 
 func (r *wikiDocumentRepository) Create(ctx context.Context, doc *models.WikiDocument) error {
+	// path_ids invariant: always serialize; never nil. Callers that already
+	// know the parent's path_ids (resolver, hot-path inserts) pre-populate;
+	// legacy callers that don't get one extra parent lookup here. Roots
+	// settle on an empty slice so multikey queries behave correctly.
+	//
+	// Callers using the fallback (e.g., wikiimport orchestrator) MUST insert
+	// parents before children — the fallback reads the parent's path_ids from
+	// Mongo, so a parent that hasn't been persisted yet would produce a
+	// truncated chain on the child. The orchestrator's depth-first recursion
+	// satisfies this; new callers should too.
+	if doc.PathIDs == nil {
+		if doc.ParentDocumentID == nil {
+			doc.PathIDs = []uuid.UUID{}
+		} else {
+			parent, err := r.FindByID(ctx, *doc.ParentDocumentID)
+			if err != nil {
+				return fmt.Errorf("resolve parent path_ids: %w", err)
+			}
+			doc.PathIDs = ComposePathIDs(parent.PathIDs, parent.DocumentID)
+		}
+	}
 	_, err := r.coll.InsertOne(ctx, doc)
 	return err
+}
+
+// RebuildPathIDsCascade walks the subtree rooted at rootID and rewrites
+// path_ids on every node. Order:
+//
+//  1. Load rootID; resolve its new path from the current parent_document_id
+//     chain (one parent lookup if not a root).
+//  2. Update root's path_ids.
+//  3. BFS children — one Find + one bulk UpdateAll per level. Each child's
+//     path is parent.path + [parent.id], composed in memory from the level
+//     we just wrote, so we never re-read what we just set.
+//
+// The cascade is best-effort with respect to the soft-deleted set: it
+// updates ALL descendants regardless of deleted_at so that trashed
+// branches retain a valid path chain (cheap correctness, helps restore).
+// Cycle-guarded via a visited set in case of corrupt data.
+func (r *wikiDocumentRepository) RebuildPathIDsCascade(ctx context.Context, rootID uuid.UUID) error {
+	root, err := r.FindByID(ctx, rootID)
+	if err != nil {
+		return fmt.Errorf("rebuild path_ids: load root: %w", err)
+	}
+
+	var rootPath []uuid.UUID
+	if root.ParentDocumentID != nil {
+		parent, err := r.FindByID(ctx, *root.ParentDocumentID)
+		if err != nil {
+			return fmt.Errorf("rebuild path_ids: load parent: %w", err)
+		}
+		rootPath = ComposePathIDs(parent.PathIDs, parent.DocumentID)
+	} else {
+		rootPath = []uuid.UUID{}
+	}
+
+	if err := r.coll.UpdateOne(ctx,
+		bson.M{"document_id": root.DocumentID},
+		bson.M{"$set": bson.M{"path_ids": rootPath}},
+	); err != nil {
+		return fmt.Errorf("rebuild path_ids: update root: %w", err)
+	}
+
+	type frontier struct {
+		id   uuid.UUID
+		path []uuid.UUID
+	}
+	queue := []frontier{{id: root.DocumentID, path: rootPath}}
+	visited := map[uuid.UUID]struct{}{root.DocumentID: {}}
+
+	for len(queue) > 0 {
+		node := queue[0]
+		queue = queue[1:]
+
+		var children []models.WikiDocument
+		if err := r.coll.Find(ctx, bson.M{"parent_document_id": node.id}).All(&children); err != nil {
+			return fmt.Errorf("rebuild path_ids: find children of %s: %w", node.id, err)
+		}
+		if len(children) == 0 {
+			continue
+		}
+
+		childPath := ComposePathIDs(node.path, node.id)
+		childIDs := make([]uuid.UUID, 0, len(children))
+		for _, c := range children {
+			if _, seen := visited[c.DocumentID]; seen {
+				continue
+			}
+			visited[c.DocumentID] = struct{}{}
+			childIDs = append(childIDs, c.DocumentID)
+			queue = append(queue, frontier{id: c.DocumentID, path: childPath})
+		}
+		if len(childIDs) == 0 {
+			continue
+		}
+
+		if _, err := r.coll.UpdateAll(ctx,
+			bson.M{"document_id": bson.M{"$in": childIDs}},
+			bson.M{"$set": bson.M{"path_ids": childPath}},
+		); err != nil {
+			return fmt.Errorf("rebuild path_ids: update level: %w", err)
+		}
+	}
+
+	return nil
 }
 
 func (r *wikiDocumentRepository) FindByID(ctx context.Context, id uuid.UUID) (models.WikiDocument, error) {

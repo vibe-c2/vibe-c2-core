@@ -75,7 +75,11 @@ function PaletteBody({ operationId, scope, onClose }: PaletteBodyProps) {
   const [activeIndex, setActiveIndex] = useState(0);
 
   useEffect(() => {
-    const t = setTimeout(() => setDebounced(query.trim()), 200);
+    // 300ms balances "feels responsive" with "fewer in-flight requests" for
+    // backend searches over large wikis. The server-side regex over content
+    // is the heaviest branch; we'd rather one full search than three
+    // partials during fast typing.
+    const t = setTimeout(() => setDebounced(query.trim()), 300);
     return () => clearTimeout(t);
   }, [query]);
 

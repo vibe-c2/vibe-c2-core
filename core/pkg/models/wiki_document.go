@@ -21,6 +21,13 @@ type WikiDocument struct {
 	DocumentID         uuid.UUID  `bson:"document_id" json:"documentId"`
 	OperationID        uuid.UUID  `bson:"operation_id" json:"operationId"`
 	ParentDocumentID   *uuid.UUID `bson:"parent_document_id,omitempty" json:"parentDocumentId,omitempty"`
+	// PathIDs is the materialized ancestor chain: root → … → immediate-parent.
+	// It excludes the document itself. Empty for root documents. Multikey-indexed
+	// on {operation_id, path_ids} so a scoped search ("find under this folder")
+	// is one index probe instead of an O(depth) BFS over parent_document_id.
+	// Maintained by Create (caller pre-populates) and by
+	// RebuildPathIDsCascade after any reparent. Never exposed via GraphQL.
+	PathIDs            []uuid.UUID `bson:"path_ids" json:"-"`
 	Title              string     `bson:"title" json:"title"`
 	// TitleLower is an ASCII-lowercased mirror of Title, indexed for anchored
 	// prefix search without the `$options:"i"` caveat (case-insensitive regex
