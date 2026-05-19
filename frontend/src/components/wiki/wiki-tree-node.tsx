@@ -140,7 +140,10 @@ function WikiTreeNodeImpl({
       id: node.id,
       input: { emoji: next.emoji, icon: next.icon, color: next.color },
     })
-    setIconPickerOpen(false)
+    // Don't force-close: the picker keeps itself open on color picks (so the
+    // user can browse icons in the new color) and closes itself on emoji/icon
+    // picks via onOpenChange. Closing here would collapse the popover the
+    // instant the user clicked a color swatch.
   }
 
   // Stable callbacks handed to the memoized quick-actions subcomponent.
@@ -156,6 +159,26 @@ function WikiTreeNodeImpl({
   }, [])
 
   const indent = depth * 16 + 4
+
+  // Tree connector lines: vertical guide for each ancestor depth + short
+  // horizontal stub joining the immediate parent's guide to this row's icon.
+  // Geometry: indent = depth*16 + 4, icon span is size-5 (20px) so icon centers
+  // fall at x = i*16 + 14. Vertical guide is a 1px line at x = 13-14 within
+  // each 16px slot; horizontal stub is 7px wide at y=50% from x=(depth-1)*16+14
+  // to x=(depth-1)*16+21 — meets the icon's left edge at indent.
+  // Done with layered backgrounds (no per-ancestor DOM) so memoized rows stay
+  // cheap on large trees. background-color from hover/select classes sits
+  // beneath and remains visible around the lines.
+  const treeLineStyle =
+    depth > 0
+      ? {
+          backgroundImage:
+            "repeating-linear-gradient(to right, transparent 0, transparent 13px, var(--border) 13px, var(--border) 14px, transparent 14px, transparent 16px), linear-gradient(var(--border), var(--border))",
+          backgroundSize: `${depth * 16}px 100%, 7px 1px`,
+          backgroundPosition: `0 0, ${(depth - 1) * 16 + 14}px 50%`,
+          backgroundRepeat: "no-repeat" as const,
+        }
+      : undefined
 
   return (
     <Collapsible
@@ -176,7 +199,7 @@ function WikiTreeNodeImpl({
           setDropRef(el)
           if (isEditor) setDragRef(el)
         }}
-        style={{ paddingLeft: indent }}
+        style={{ paddingLeft: indent, ...treeLineStyle }}
         className={cn(
           "group flex h-7 items-center gap-0.5 rounded-md px-1 text-sm",
           isDropInside && "bg-primary/10 ring-1 ring-primary",
