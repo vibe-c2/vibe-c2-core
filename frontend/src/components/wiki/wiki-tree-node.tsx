@@ -25,7 +25,6 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 import { Button } from "@/components/ui/button"
-import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
 import { Input } from "@/components/ui/input"
 import { Skeleton } from "@/components/ui/skeleton"
 import { useWikiStore } from "@/stores/wiki"
@@ -293,11 +292,10 @@ function WikiTreeNodeImpl({
         )}
 
         {/* Quick actions + context menu — extracted so this expensive subtree
-            (5 Tooltips + a DropdownMenu + buttons, ~6–8ms per row render)
-            bails out via memo when the row re-renders for unrelated reasons
-            (drag highlight flips, dnd-kit measurement passes, expansion
-            cascades). The profile showed this block dominated spike-commit
-            time; memoizing it here is the highest-leverage win. */}
+            (a DropdownMenu + buttons) bails out via memo when the row re-renders
+            for unrelated reasons (drag highlight flips, dnd-kit measurement
+            passes, expansion cascades). The profile showed this block dominated
+            spike-commit time; memoizing it here is the highest-leverage win. */}
         <WikiTreeRowQuickActions
           node={node}
           operationId={operationId}
@@ -395,90 +393,64 @@ function WikiTreeRowQuickActionsImpl({
     <>
       {hasChildren && (
         <>
-          <Tooltip>
-            <TooltipTrigger
-              render={
-                <Button
-                  variant="ghost"
-                  size="icon-xs"
-                  className={cn(
-                    "shrink-0",
-                    // Keep the spinner visible during the long-running case
-                    // even when the cursor is no longer hovering the row.
-                    subtreeLoading
-                      ? "inline-flex"
-                      : "hidden group-hover:inline-flex",
-                  )}
-                  disabled={subtreeLoading}
-                  onClick={(e) => {
-                    e.stopPropagation()
-                    void runSubtreeAction("expand", node.id)
-                  }}
-                />
-              }
-            >
-              {subtreeLoading ? (
-                <Loader2Icon className="size-3.5 animate-spin" />
-              ) : (
-                <ChevronsUpDownIcon className="size-3.5" />
-              )}
-            </TooltipTrigger>
-            <TooltipContent>
-              {subtreeLoading ? "Working…" : "Expand subtree"}
-            </TooltipContent>
-          </Tooltip>
-          <Tooltip>
-            <TooltipTrigger
-              render={
-                <Button
-                  variant="ghost"
-                  size="icon-xs"
-                  className="shrink-0 hidden group-hover:inline-flex"
-                  disabled={subtreeLoading}
-                  onClick={(e) => {
-                    e.stopPropagation()
-                    void runSubtreeAction("collapse", node.id)
-                  }}
-                />
-              }
-            >
-              <ChevronsDownUpIcon className="size-3.5" />
-            </TooltipTrigger>
-            <TooltipContent>Collapse subtree</TooltipContent>
-          </Tooltip>
+          <Button
+            variant="ghost"
+            size="icon-xs"
+            aria-label={subtreeLoading ? "Working" : "Expand subtree"}
+            className={cn(
+              "shrink-0",
+              // Keep the spinner visible during the long-running case
+              // even when the cursor is no longer hovering the row.
+              subtreeLoading
+                ? "inline-flex"
+                : "hidden group-hover:inline-flex",
+            )}
+            disabled={subtreeLoading}
+            onClick={(e) => {
+              e.stopPropagation()
+              void runSubtreeAction("expand", node.id)
+            }}
+          >
+            {subtreeLoading ? (
+              <Loader2Icon className="size-3.5 animate-spin" />
+            ) : (
+              <ChevronsUpDownIcon className="size-3.5" />
+            )}
+          </Button>
+          <Button
+            variant="ghost"
+            size="icon-xs"
+            aria-label="Collapse subtree"
+            className="shrink-0 hidden group-hover:inline-flex"
+            disabled={subtreeLoading}
+            onClick={(e) => {
+              e.stopPropagation()
+              void runSubtreeAction("collapse", node.id)
+            }}
+          >
+            <ChevronsDownUpIcon className="size-3.5" />
+          </Button>
         </>
       )}
-      <Tooltip>
-        <TooltipTrigger
-          render={
-            <Button
-              variant="ghost"
-              size="icon-xs"
-              className="shrink-0 hidden group-hover:inline-flex"
-              onClick={() => openContentSearch(node.id, node.title)}
-            />
-          }
-        >
-          <SearchIcon className="size-3.5" />
-        </TooltipTrigger>
-        <TooltipContent>Search in {node.title}</TooltipContent>
-      </Tooltip>
+      <Button
+        variant="ghost"
+        size="icon-xs"
+        aria-label={`Search in ${node.title}`}
+        className="shrink-0 hidden group-hover:inline-flex"
+        onClick={() => openContentSearch(node.id, node.title)}
+      >
+        <SearchIcon className="size-3.5" />
+      </Button>
       {isEditor && (
-        <Tooltip>
-          <TooltipTrigger
-            render={
-              <Button
-                variant="ghost"
-                size="icon-xs"
-                className="shrink-0 hidden group-hover:inline-flex"
-                onClick={() => openCreateDialog(node.id)}
-              />
-            }
-          >
-            <PlusIcon className="size-3.5" />
-          </TooltipTrigger>
-          <TooltipContent>New child document</TooltipContent>
-        </Tooltip>
+        <Button
+          variant="ghost"
+          size="icon-xs"
+          aria-label="New child document"
+          className="shrink-0 hidden group-hover:inline-flex"
+          onClick={() => openCreateDialog(node.id)}
+        >
+          <PlusIcon className="size-3.5" />
+        </Button>
       )}
 
       <DropdownMenu open={menuOpen} onOpenChange={setMenuOpen}>
