@@ -323,6 +323,9 @@ func toWikiDocumentEvent(event eventbus.Event) *model.WikiDocumentEvent {
 		if p.ParentDocumentID != "" {
 			evt.ParentDocumentID = &p.ParentDocumentID
 		}
+		if p.PreviousParentDocumentID != "" {
+			evt.PreviousParentDocumentID = &p.PreviousParentDocumentID
+		}
 	}
 	return evt
 }

@@ -30,6 +30,7 @@ import { Skeleton } from "@/components/ui/skeleton"
 import { useWikiStore } from "@/stores/wiki"
 import { useWikiDragStore } from "@/stores/wiki-drag"
 import {
+  useReorderWikiDocumentSiblings,
   useUpdateWikiDocument,
   useWikiDocumentChildren,
 } from "@/graphql/hooks/wiki"
@@ -364,7 +365,7 @@ function WikiTreeRowQuickActionsImpl({
   const openMoveDialog = useWikiStore((s) => s.openMoveDialog)
   const openDeleteDialog = useWikiStore((s) => s.openDeleteDialog)
   const openContentSearch = useWikiStore((s) => s.openContentSearch)
-  const updateDocument = useUpdateWikiDocument()
+  const reorderSiblings = useReorderWikiDocumentSiblings()
 
   // Menu-open state is local to this subtree — no reason to live in the
   // parent row, where it would force the row (and its dnd hooks) to
@@ -502,16 +503,19 @@ function WikiTreeRowQuickActionsImpl({
           {isEditor && hasChildren && loadedChildren.length > 0 && (
             <DropdownMenuItem
               onClick={() => {
+                // Sort children alphabetically by title. One bulk mutation
+                // replaces the N-update loop this used to fire, so the
+                // sidebar refetches the affected parent bucket exactly once.
                 const sorted = [...loadedChildren].sort((a, b) =>
                   a.title.localeCompare(b.title, undefined, { sensitivity: "base" }),
                 )
-                const count = sorted.length
-                for (let i = 0; i < count; i++) {
-                  const newSort = String.fromCharCode(65 + Math.floor(((i + 1) / (count + 1)) * 57))
-                  if (sorted[i].sortOrder !== newSort) {
-                    updateDocument.mutate({ id: sorted[i].id, input: { sortOrder: newSort } })
-                  }
-                }
+                reorderSiblings.mutate({
+                  input: {
+                    operationId,
+                    parentDocumentId: node.id,
+                    orderedIds: sorted.map((d) => d.id),
+                  },
+                })
               }}
             >
               <ArrowDownAZIcon className="mr-2 size-4" />

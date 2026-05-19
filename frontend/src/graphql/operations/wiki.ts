@@ -367,6 +367,18 @@ export const UpdateWikiDocumentMutation = graphql(`
   }
 `)
 
+// Bulk sibling reorder. Replaces the N-mutation rebalance loop in the DnD
+// flow with one round trip + one SSE invalidation wave per affected parent
+// bucket. Returns the new ordering as committed by the server so the
+// optimistic client cache can be reconciled in one setQueryData call.
+export const ReorderWikiDocumentSiblingsMutation = graphql(`
+  mutation ReorderWikiDocumentSiblings($input: ReorderWikiDocumentSiblingsInput!) {
+    reorderWikiDocumentSiblings(input: $input) {
+      id sortOrder parentDocumentId updatedAt
+    }
+  }
+`)
+
 export const DeleteWikiDocumentMutation = graphql(`
   mutation DeleteWikiDocument($id: ID!) {
     deleteWikiDocument(id: $id)
@@ -445,6 +457,7 @@ export const WikiDocumentChangedSubscription = graphql(`
       documentId
       operationId
       parentDocumentId
+      previousParentDocumentId
       document { id title emoji icon color sortOrder parentDocument { id } }
     }
   }
