@@ -2,7 +2,7 @@ import { useMemo, useState } from "react";
 import { useTheme } from "next-themes";
 import data from "@emoji-mart/data";
 import Picker from "@emoji-mart/react";
-import { BanIcon, SearchIcon, XIcon } from "lucide-react";
+import { BanIcon, FolderOpenIcon, SearchIcon, XIcon } from "lucide-react";
 import {
   Popover,
   PopoverTrigger,
@@ -12,6 +12,7 @@ import { Button } from "@/components/ui/button";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Input } from "@/components/ui/input";
 import {
+  ADAPTIVE_ICON_NAME,
   ALL_LUCIDE_NAMES,
   ICON_CATALOG,
   ICON_LOOKUP,
@@ -42,6 +43,11 @@ interface DocumentIconPickerProps {
   /** Controlled open state (used by tree node context menu). */
   open?: boolean;
   onOpenChange?: (open: boolean) => void;
+  /** Forwarded to the trigger's <DocumentIcon /> so the adaptive default
+   *  renders the correct variant (page / closed folder / open folder) when
+   *  the caller knows the doc's children + expansion state. */
+  hasChildren?: boolean;
+  isExpanded?: boolean;
 }
 
 export function DocumentIconPicker({
@@ -50,6 +56,8 @@ export function DocumentIconPicker({
   disabled,
   open: controlledOpen,
   onOpenChange,
+  hasChildren,
+  isExpanded,
 }: DocumentIconPickerProps) {
   const [internalOpen, setInternalOpen] = useState(false);
   const { resolvedTheme } = useTheme();
@@ -111,6 +119,8 @@ export function DocumentIconPicker({
           emoji={value.emoji}
           icon={value.icon}
           color={value.color}
+          hasChildren={hasChildren}
+          isExpanded={isExpanded}
         />
       </PopoverTrigger>
       <PopoverContent className="w-88 border-none p-2 shadow-lg" align="start">
@@ -163,11 +173,20 @@ interface IconGridProps {
 // hundreds of icons at once. Users can refine the search to narrow further.
 const EXTENDED_RESULTS_LIMIT = 64;
 
+// Keywords matched against the search query to surface the adaptive default.
+// "default"/"adaptive" are the discoverable terms; "folder"/"page"/"doc" are
+// the natural names users reach for since the icon morphs through all three.
+const ADAPTIVE_KEYWORDS = ["default", "adaptive", "auto", "folder", "page", "doc"];
+
 function IconGrid({ selectedName, previewColor, onPick }: IconGridProps) {
   const [search, setSearch] = useState("");
 
+  const q = search.trim().toLowerCase();
+  // Show the adaptive entry whenever the query is empty or matches any of
+  // its keywords, so users can find it either by browsing or by searching.
+  const showAdaptive = !q || ADAPTIVE_KEYWORDS.some((k) => k.includes(q));
+
   const filteredGroups = useMemo(() => {
-    const q = search.trim().toLowerCase();
     if (!q) return ICON_CATALOG;
     return ICON_CATALOG.map((group) => ({
       ...group,
@@ -177,13 +196,12 @@ function IconGrid({ selectedName, previewColor, onPick }: IconGridProps) {
           i.keywords.some((k) => k.includes(q)),
       ),
     })).filter((g) => g.icons.length > 0);
-  }, [search]);
+  }, [q]);
 
   // Extended results: full lucide set, search-only, capped, excluding curated
   // catalog hits already shown above. Each result lazy-loads on first render
   // via DocumentIcon's Suspense boundary.
   const extendedResults = useMemo(() => {
-    const q = search.trim().toLowerCase();
     if (!q) return { names: [] as string[], truncated: false };
     const names: string[] = [];
     let total = 0;
@@ -194,9 +212,10 @@ function IconGrid({ selectedName, previewColor, onPick }: IconGridProps) {
       if (names.length < EXTENDED_RESULTS_LIMIT) names.push(name);
     }
     return { names, truncated: total > names.length };
-  }, [search]);
+  }, [q]);
 
   const totalShown =
+    (showAdaptive ? 1 : 0) +
     filteredGroups.reduce((n, g) => n + g.icons.length, 0) +
     extendedResults.names.length;
 
@@ -222,13 +241,30 @@ function IconGrid({ selectedName, previewColor, onPick }: IconGridProps) {
           </button>
         )}
       </div>
-      <div className="max-h-72 overflow-y-auto pr-1">
+      {/* p-1 = 4px breathing room so the selected button's ring-1 isn't
+          clipped by overflow on the leftmost / rightmost / first / last
+          tiles, and so the scrollbar gutter doesn't crowd the right column. */}
+      <div className="max-h-72 overflow-y-auto p-1">
         {totalShown === 0 ? (
           <p className="px-1 py-6 text-center text-sm text-muted-foreground">
             No icons match "{search}".
           </p>
         ) : (
           <>
+            {showAdaptive && (
+              <div className="mb-3 last:mb-0">
+                <h4 className="mb-1 px-1 text-[11px] font-medium tracking-wide text-muted-foreground uppercase">
+                  Default
+                </h4>
+                <div className="grid grid-cols-8 gap-0.5">
+                  <AdaptiveIconButton
+                    selected={selectedName === ADAPTIVE_ICON_NAME}
+                    previewColor={previewColor}
+                    onPick={onPick}
+                  />
+                </div>
+              </div>
+            )}
             {filteredGroups.map((group) => (
               <div key={group.label} className="mb-3 last:mb-0">
                 <h4 className="mb-1 px-1 text-[11px] font-medium tracking-wide text-muted-foreground uppercase">
@@ -277,6 +313,41 @@ function IconGrid({ selectedName, previewColor, onPick }: IconGridProps) {
   );
 }
 
+interface PickerTileProps {
+  label: string;
+  /** Hover tooltip; defaults to `label`. Used by the adaptive tile to explain
+   *  the morphing behavior beyond what fits in an aria-label. */
+  title?: string;
+  selected: boolean;
+  onClick: () => void;
+  children: React.ReactNode;
+}
+
+/** Shared 32×32 tile shell for every picker entry (curated, extended, adaptive).
+ *  Centralizes the selected-state ring so all three stay visually identical. */
+function PickerTile({
+  label,
+  title,
+  selected,
+  onClick,
+  children,
+}: PickerTileProps) {
+  return (
+    <button
+      type="button"
+      aria-label={label}
+      title={title ?? label}
+      onClick={onClick}
+      className={cn(
+        "flex size-8 items-center justify-center rounded-md text-foreground transition-colors hover:bg-muted",
+        selected && "bg-primary/10 text-primary ring-1 ring-primary",
+      )}
+    >
+      {children}
+    </button>
+  );
+}
+
 interface IconButtonProps {
   entry: IconEntry;
   selected: boolean;
@@ -296,18 +367,44 @@ function IconButton({
   // still highlights with text-primary.
   const style = previewColor ? { color: previewColor } : undefined;
   return (
-    <button
-      type="button"
-      aria-label={entry.name}
-      title={entry.name}
+    <PickerTile
+      label={entry.name}
+      selected={selected}
       onClick={() => onPick(entry.name)}
-      className={cn(
-        "flex size-8 items-center justify-center rounded-md text-foreground transition-colors hover:bg-muted",
-        selected && "bg-primary/10 text-primary ring-1 ring-primary",
-      )}
     >
       <Icon size={20} style={style} />
-    </button>
+    </PickerTile>
+  );
+}
+
+interface AdaptiveIconButtonProps {
+  selected: boolean;
+  previewColor: string;
+  onPick: (name: string) => void;
+}
+
+/**
+ * Picker tile for the adaptive default icon. Visually shows the open-folder
+ * variant — it matches the legacy "📂" default and reads as the most
+ * feature-rich state of the morphing icon. The actual glyph displayed on the
+ * document switches at render time (FileText / Folder / FolderOpen) based on
+ * the row's children + expansion state — see DocumentIcon.
+ */
+function AdaptiveIconButton({
+  selected,
+  previewColor,
+  onPick,
+}: AdaptiveIconButtonProps) {
+  const style = previewColor ? { color: previewColor } : undefined;
+  return (
+    <PickerTile
+      label="Default (adapts to children)"
+      title="Default — page when empty, folder when it has children"
+      selected={selected}
+      onClick={() => onPick(ADAPTIVE_ICON_NAME)}
+    >
+      <FolderOpenIcon size={20} style={style} />
+    </PickerTile>
   );
 }
 
@@ -330,18 +427,9 @@ function ExtendedIconButton({
   onPick,
 }: ExtendedIconButtonProps) {
   return (
-    <button
-      type="button"
-      aria-label={name}
-      title={name}
-      onClick={() => onPick(name)}
-      className={cn(
-        "flex size-8 items-center justify-center rounded-md text-foreground transition-colors hover:bg-muted",
-        selected && "bg-primary/10 text-primary ring-1 ring-primary",
-      )}
-    >
+    <PickerTile label={name} selected={selected} onClick={() => onPick(name)}>
       <DocumentIcon icon={name} color={previewColor} size={20} />
-    </button>
+    </PickerTile>
   );
 }
 

@@ -69,6 +69,7 @@ export function WikiChildDocumentList({
                   emoji={child.emoji}
                   icon={child.icon}
                   color={child.color}
+                  hasChildren={child.childCount > 0}
                 />
                 <span className="min-w-0 flex-1 truncate">{child.title}</span>
                 {child.childCount > 0 && (

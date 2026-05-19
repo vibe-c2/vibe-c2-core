@@ -121,11 +121,16 @@ export function WikiEditorHeader({
 
   return (
     <div className="flex h-10 items-center gap-1 border-b px-3">
-      {/* Document icon — emoji or lucide */}
+      {/* Document icon — emoji or lucide. hasChildren keeps the adaptive
+          default in sync with the tree row (page glyph for leaves, folder
+          glyph once children exist). isExpanded stays true here: the user
+          is viewing the doc, so its content is "open" by definition. */}
       <DocumentIconPicker
         value={{ emoji: doc.emoji, icon: doc.icon, color: doc.color }}
         onSelect={handleIconSelect}
         disabled={!isEditor}
+        hasChildren={directChildren.length > 0}
+        isExpanded
       />
 
       {/* Breadcrumb: first ancestor */}
@@ -163,10 +168,13 @@ export function WikiEditorHeader({
                   to={`/wiki/${node.id}`}
                   className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-sm hover:bg-accent"
                 >
+                  {/* Ancestors are parents of the current doc — they all have
+                      children by definition, so adaptive resolves to folder. */}
                   <DocumentIcon
                     emoji={node.emoji}
                     icon={node.icon}
                     color={node.color}
+                    hasChildren
                   />
                   <span className="truncate">{node.title}</span>
                 </Link>
@@ -239,6 +247,7 @@ export function WikiEditorHeader({
                   emoji={child.emoji}
                   icon={child.icon}
                   color={child.color}
+                  hasChildren={child.childCount > 0}
                 />
                 <span className="min-w-0 flex-1 truncate">{child.title || "Untitled"}</span>
                 {child.childCount > 0 && (

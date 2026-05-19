@@ -1,5 +1,14 @@
 import { Suspense } from "react"
-import { resolveIcon } from "@/components/wiki/icon-catalog"
+import {
+  FileTextIcon,
+  FolderIcon,
+  FolderOpenIcon,
+  type LucideIcon,
+} from "lucide-react"
+import {
+  ADAPTIVE_ICON_NAME,
+  resolveIcon,
+} from "@/components/wiki/icon-catalog"
 import { cn } from "@/lib/utils"
 
 const DEFAULT_EMOJI = "\u{1F4C4}"
@@ -17,6 +26,23 @@ interface DocumentIconProps {
   className?: string
   /** Pixel size for the lucide icon variant; ignored for emoji glyphs (CSS sizes them via class). */
   size?: number
+  /**
+   * Adaptive-icon context. Used only when `icon === ADAPTIVE_ICON_NAME`:
+   * leaf → FileText, branch → Folder (closed) or FolderOpen (expanded).
+   * Both default to false, so non-tree call sites (chips, breadcrumbs,
+   * search results) render the leaf glyph without needing to plumb tree
+   * state through.
+   */
+  hasChildren?: boolean
+  isExpanded?: boolean
+}
+
+function resolveAdaptiveIcon(
+  hasChildren: boolean,
+  isExpanded: boolean,
+): LucideIcon {
+  if (!hasChildren) return FileTextIcon
+  return isExpanded ? FolderOpenIcon : FolderIcon
 }
 
 /**
@@ -39,8 +65,25 @@ export function DocumentIcon({
   color,
   className,
   size = 18,
+  hasChildren = false,
+  isExpanded = false,
 }: DocumentIconProps) {
   /* eslint-disable react-hooks/static-components */
+  // Adaptive default: render synchronously without going through the lazy
+  // lucide registry. Caught here (before resolveIcon) so the reserved name
+  // never leaks into ALL_LUCIDE_NAMES lookups.
+  if (icon === ADAPTIVE_ICON_NAME) {
+    const Icon = resolveAdaptiveIcon(hasChildren, isExpanded)
+    const style = color ? { color } : undefined
+    return (
+      <Icon
+        className={cn("shrink-0", className)}
+        size={size}
+        style={style}
+        aria-hidden
+      />
+    )
+  }
   const Lucide = resolveIcon(icon)
   if (Lucide) {
     // color || undefined keeps empty string from becoming an empty CSS value;
