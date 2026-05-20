@@ -10,7 +10,11 @@ import {
 } from "@/components/ui/dialog";
 import { Switch } from "@/components/ui/switch";
 import { useCredentialStore } from "@/stores/credentials";
-import { useCreateCredential } from "@/graphql/hooks/credentials";
+import {
+  useCreateCredential,
+  useCredentialTags,
+  useMyCredentialTags,
+} from "@/graphql/hooks/credentials";
 import {
   CredentialFormFields,
   type CredentialFormValues,
@@ -53,6 +57,22 @@ export function CreateCredentialDialog({
   // Resolve the target operation id at submit time. In scoped mode it's the
   // prop; in global mode the user must pick one via the dialog's picker.
   const targetOpId = operationId ?? pickedOp?.id ?? null;
+
+  // Tag suggestions: when we know the target operation, pull that op's tag set
+  // (cached alongside the toolbar's filter popover). Until the user picks an
+  // operation in global mode, fall back to the caller's full cross-op tag pool
+  // so the dropdown still offers something useful during composition. The
+  // fallback query is disabled once the picker resolves to a concrete op.
+  const scopedTags = useCredentialTags(targetOpId ?? "");
+  const myTagsFallback = useMyCredentialTags(null, {
+    enabled: isGlobalMode && !targetOpId,
+  });
+  const tagSuggestions = targetOpId
+    ? scopedTags.data?.credentialTags ?? []
+    : myTagsFallback.data?.myCredentialTags ?? [];
+  const tagSuggestionsLoading = targetOpId
+    ? scopedTags.isLoading
+    : myTagsFallback.isLoading;
 
   function reset() {
     setValues(emptyValues);
@@ -130,6 +150,8 @@ export function CreateCredentialDialog({
             idPrefix="create-cred"
             values={values}
             onChange={setValues}
+            tagSuggestions={tagSuggestions}
+            tagSuggestionsLoading={tagSuggestionsLoading}
           />
           <DialogFooter className="mt-4 flex-row items-center justify-between sm:justify-between">
             <label className="flex cursor-pointer items-center gap-2 text-sm">

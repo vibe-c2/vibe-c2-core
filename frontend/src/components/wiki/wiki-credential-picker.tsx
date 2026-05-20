@@ -15,6 +15,7 @@ import { Input } from "@/components/ui/input"
 import { Switch } from "@/components/ui/switch"
 import {
   useCreateCredential,
+  useCredentialTags,
   useInfiniteCredentials,
 } from "@/graphql/hooks/credentials"
 import {
@@ -387,6 +388,8 @@ function CreateView({
   onBack,
 }: CreateViewProps) {
   const createCredential = useCreateCredential()
+  const { data: tagsData, isLoading: tagsLoading } =
+    useCredentialTags(operationId)
   const [values, setValues] = useState<CredentialFormValues>(() => ({
     ...emptyFormValues,
     name: initialName,
@@ -432,6 +435,8 @@ function CreateView({
         idPrefix="wiki-cred-create"
         values={values}
         onChange={setValues}
+        tagSuggestions={tagsData?.credentialTags ?? []}
+        tagSuggestionsLoading={tagsLoading}
       />
       <div className="flex flex-row items-center justify-between gap-3">
         <div className="flex items-center gap-3">

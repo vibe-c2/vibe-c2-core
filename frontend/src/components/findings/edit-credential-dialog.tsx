@@ -12,6 +12,7 @@ import { Switch } from "@/components/ui/switch"
 import { useCredentialStore } from "@/stores/credentials"
 import {
   useCredential,
+  useCredentialTags,
   useUpdateCredential,
 } from "@/graphql/hooks/credentials"
 import {
@@ -68,6 +69,12 @@ interface EditCredentialFormProps {
 
 function EditCredentialForm({ credential, onSaved }: EditCredentialFormProps) {
   const updateCredential = useUpdateCredential()
+  // Tag suggestions are scoped to this credential's operation. React Query
+  // dedupes against the toolbar's tag query, so opening the dialog while the
+  // tab is mounted is a cache hit.
+  const { data: tagsData, isLoading: tagsLoading } = useCredentialTags(
+    credential.operationId,
+  )
   const [values, setValues] = useState<CredentialFormValues>({
     name: credential.name,
     type: credential.type,
@@ -112,6 +119,8 @@ function EditCredentialForm({ credential, onSaved }: EditCredentialFormProps) {
         idPrefix="edit-cred"
         values={values}
         onChange={setValues}
+        tagSuggestions={tagsData?.credentialTags ?? []}
+        tagSuggestionsLoading={tagsLoading}
       />
       <DialogFooter className="mt-4 flex-row items-center justify-between sm:justify-between">
         <label className="flex cursor-pointer items-center gap-2 text-sm">

@@ -1,5 +1,3 @@
-import { useState } from "react"
-import { XIcon } from "lucide-react"
 import { Field, FieldGroup, FieldLabel } from "@/components/ui/field"
 import { Input } from "@/components/ui/input"
 import {
@@ -9,15 +7,14 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
-import { Badge } from "@/components/ui/badge"
 import type { CredentialType } from "@/graphql/gql/graphql"
 import {
   CREDENTIAL_TYPES,
   credentialTypeLabel,
-  parseTagsText,
 } from "@/components/findings/credential-type-utils"
 import type { KeyDraft } from "@/components/findings/credential-key-drafts"
 import { CredentialKeysEditor } from "@/components/findings/credential-keys-editor"
+import { TagComboboxInput } from "@/components/findings/tag-combobox-input"
 
 export interface CredentialFormValues {
   name: string
@@ -33,28 +30,21 @@ interface CredentialFormFieldsProps {
   values: CredentialFormValues
   onChange: (next: CredentialFormValues) => void
   idPrefix: string
+  /** Existing tag pool used to populate the tag input dropdown. */
+  tagSuggestions: string[]
+  /** Suggestions query in-flight — drives the dropdown loading state. */
+  tagSuggestionsLoading?: boolean
 }
 
 export function CredentialFormFields({
   values,
   onChange,
   idPrefix,
+  tagSuggestions,
+  tagSuggestionsLoading = false,
 }: CredentialFormFieldsProps) {
-  const [tagInput, setTagInput] = useState("")
-
   function patch(p: Partial<CredentialFormValues>) {
     onChange({ ...values, ...p })
-  }
-
-  function addTagsFromInput() {
-    const next = new Set(values.tags)
-    for (const t of parseTagsText(tagInput)) next.add(t)
-    onChange({ ...values, tags: Array.from(next) })
-    setTagInput("")
-  }
-
-  function removeTag(t: string) {
-    onChange({ ...values, tags: values.tags.filter((x) => x !== t) })
   }
 
   return (
@@ -131,43 +121,13 @@ export function CredentialFormFields({
 
       <Field>
         <FieldLabel htmlFor={`${idPrefix}-tags-input`}>Tags</FieldLabel>
-        <div className="flex flex-wrap items-center gap-1.5">
-          {values.tags.map((t) => (
-            <Badge key={t} variant="secondary" className="gap-1">
-              {t}
-              <button
-                type="button"
-                onClick={() => removeTag(t)}
-                aria-label={`Remove tag ${t}`}
-                className="rounded-full hover:bg-muted-foreground/20"
-              >
-                <XIcon className="size-3" />
-              </button>
-            </Badge>
-          ))}
-          <Input
-            id={`${idPrefix}-tags-input`}
-            className="h-7 flex-1 min-w-[10rem]"
-            value={tagInput}
-            onChange={(e) => setTagInput(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === "Enter" || e.key === ",") {
-                e.preventDefault()
-                addTagsFromInput()
-              } else if (
-                e.key === "Backspace" &&
-                tagInput === "" &&
-                values.tags.length > 0
-              ) {
-                removeTag(values.tags[values.tags.length - 1])
-              }
-            }}
-            onBlur={() => {
-              if (tagInput.trim() !== "") addTagsFromInput()
-            }}
-            placeholder="Type and press Enter"
-          />
-        </div>
+        <TagComboboxInput
+          value={values.tags}
+          onChange={(tags) => onChange({ ...values, tags })}
+          suggestions={tagSuggestions}
+          loading={tagSuggestionsLoading}
+          inputId={`${idPrefix}-tags-input`}
+        />
       </Field>
     </FieldGroup>
   )
