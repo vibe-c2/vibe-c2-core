@@ -67,11 +67,19 @@ export const credentialKeys = {
 
 // --- Queries ---
 
-export function useCredential(id: string) {
+// `options.enabled` lets callers defer the fetch until the credential is
+// actually about to be displayed — wiki-credential-chip uses this to gate
+// queries on viewport intersection so a long doc with many inline chips
+// doesn't fan out one round trip per chip on mount. The `!!id` guard still
+// applies on top of the caller's flag so empty/broken refs are inert.
+export function useCredential(
+  id: string,
+  options?: { enabled?: boolean },
+) {
   return useQuery({
     queryKey: credentialKeys.detail(id),
     queryFn: () => graphqlClient(CredentialDocument, { id }),
-    enabled: !!id,
+    enabled: !!id && (options?.enabled ?? true),
   })
 }
 

@@ -37,7 +37,16 @@ export async function uploadAndInsertWikiImage(
 
   const toastId = toast.loading("Uploading image…")
   try {
-    const uploaded = await uploadWikiImage(file, documentId)
+    // Read intrinsic dimensions in parallel with the upload so the
+    // captured numbers can ride along on the inserted node. Failure to
+    // measure (e.g. SVGs without intrinsic size, decode errors) is
+    // non-fatal — the node just inserts without width/height and the
+    // browser falls back to its old decode-time layout. `Promise.all`
+    // here is bounded by the upload, which always dominates the wait.
+    const [uploaded, dimensions] = await Promise.all([
+      uploadWikiImage(file, documentId),
+      readImageDimensions(file),
+    ])
     // Re-resolve the insertion position at completion time. If the document
     // was edited during the upload, mapping through the editor state lets us
     // insert roughly where the user initiated the paste, not off the end.
@@ -54,7 +63,12 @@ export async function uploadAndInsertWikiImage(
       .focus()
       .insertContentAt(pos, {
         type: "image",
-        attrs: { src: uploaded.url, alt: "" },
+        attrs: {
+          src: uploaded.url,
+          alt: "",
+          width: dimensions?.width ?? null,
+          height: dimensions?.height ?? null,
+        },
       })
       .command(({ tr, dispatch }) => {
         if (!dispatch) return true
@@ -88,6 +102,34 @@ export async function uploadAndInsertWikiImages(
     await uploadAndInsertWikiImage(editor, documentId, file, insertAt)
     // Next image inserts after the one we just added.
     insertAt = { pos: editor.state.selection.from }
+  }
+}
+
+/**
+ * Read an image's natural pixel dimensions client-side. Used to stamp
+ * width/height onto the inserted node so the browser can reserve correct
+ * aspect ratio before the image decodes (no layout shift on first paint
+ * after scroll-into-view). Returns `null` for inputs the browser can't
+ * decode at all, or where `naturalWidth/Height` is 0 (some SVGs without
+ * intrinsic size, broken files, etc.) — the caller treats `null` as
+ * "fall back to no explicit dimensions".
+ */
+async function readImageDimensions(
+  file: File | Blob,
+): Promise<{ width: number; height: number } | null> {
+  const url = URL.createObjectURL(file)
+  try {
+    const img = new Image()
+    img.src = url
+    await img.decode()
+    const width = img.naturalWidth
+    const height = img.naturalHeight
+    if (width <= 0 || height <= 0) return null
+    return { width, height }
+  } catch {
+    return null
+  } finally {
+    URL.revokeObjectURL(url)
   }
 }
 

@@ -20,6 +20,12 @@ export function WikiImageNode({ node, editor, getPos }: ReactNodeViewProps) {
   const [isOpen, setIsOpen] = useState(false)
   const src: string = node.attrs.src ?? ""
   const alt: string = node.attrs.alt ?? ""
+  // Natural dimensions captured at upload time, persisted on the node so
+  // the browser can reserve aspect ratio before the image decodes.
+  // `null` for legacy nodes uploaded before this attribute existed —
+  // those render with no explicit dimensions (current behavior).
+  const width = typeof node.attrs.width === "number" ? node.attrs.width : null
+  const height = typeof node.attrs.height === "number" ? node.attrs.height : null
   const isEditable = editor.isEditable
 
   function handleDelete() {
@@ -46,6 +52,14 @@ export function WikiImageNode({ node, editor, getPos }: ReactNodeViewProps) {
         <img
           src={src}
           alt={alt}
+          width={width ?? undefined}
+          height={height ?? undefined}
+          // Defer decoding so a long doc full of images doesn't block the
+          // main thread on initial render. The intrinsic dimensions above
+          // give the browser everything it needs to lay the image out
+          // correctly before the bytes arrive.
+          loading="lazy"
+          decoding="async"
           className="wiki-image"
           draggable={false}
           onClick={() => setIsOpen(true)}

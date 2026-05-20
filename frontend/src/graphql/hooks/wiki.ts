@@ -257,11 +257,17 @@ export function useWikiDocument(documentId: string) {
 // the same doc many times — all chips for the same id share one cache entry,
 // so render cost stays flat. Long staleTime because chip data (title, icon)
 // changes rarely; live updates flow in via the wikiDocumentChanged subscription.
-export function useWikiDocumentLite(documentId: string) {
+// `options.enabled` lets callers defer the fetch — wiki-document-chip uses
+// this to gate queries on viewport intersection so a long doc with many
+// inline /doc chips doesn't fan out one round trip per chip on mount.
+export function useWikiDocumentLite(
+  documentId: string,
+  options?: { enabled?: boolean },
+) {
   return useQuery({
     queryKey: wikiKeys.lite(documentId),
     queryFn: () => graphqlClient(WikiDocumentLiteDocument, { id: documentId }),
-    enabled: !!documentId,
+    enabled: !!documentId && (options?.enabled ?? true),
     staleTime: 30_000,
   })
 }

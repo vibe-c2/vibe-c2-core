@@ -269,6 +269,42 @@ export function WikiEditor({
       TableHeader,
       TableCell,
       Image.extend({
+        // Persist intrinsic dimensions captured at upload time. The base
+        // Image extension only models src/alt/title, which means the <img>
+        // ships with no `width`/`height` attributes and the layout shifts
+        // on first decode — a problem that compounds across many images.
+        // Storing the natural dimensions lets the browser reserve the
+        // correct aspect ratio before pixels arrive (combined with the
+        // CSS `max-width: 100%; height: auto`), eliminating per-image
+        // decode-time reflows. Legacy nodes without these attrs render
+        // exactly as before.
+        addAttributes() {
+          return {
+            ...this.parent?.(),
+            width: {
+              default: null,
+              parseHTML: (el) => {
+                const raw = el.getAttribute("width")
+                if (raw === null) return null
+                const n = Number(raw)
+                return Number.isFinite(n) && n > 0 ? n : null
+              },
+              renderHTML: (attrs) =>
+                attrs.width ? { width: String(attrs.width) } : {},
+            },
+            height: {
+              default: null,
+              parseHTML: (el) => {
+                const raw = el.getAttribute("height")
+                if (raw === null) return null
+                const n = Number(raw)
+                return Number.isFinite(n) && n > 0 ? n : null
+              },
+              renderHTML: (attrs) =>
+                attrs.height ? { height: String(attrs.height) } : {},
+            },
+          }
+        },
         addNodeView() {
           return ReactNodeViewRenderer(WikiImageNode)
         },

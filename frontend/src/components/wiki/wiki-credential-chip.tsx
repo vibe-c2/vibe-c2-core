@@ -1,9 +1,10 @@
-import { useMemo } from "react"
+import { useMemo, type RefObject } from "react"
 import { NodeViewWrapper, type NodeViewProps } from "@tiptap/react"
 import { CheckCircle2Icon, KeyIcon, XCircleIcon } from "lucide-react"
 import { CredentialRowContextMenu } from "@/components/findings/credential-row-context-menu"
 import { useCredential } from "@/graphql/hooks/credentials"
 import { useCredentialStore } from "@/stores/credentials"
+import { useInViewport } from "@/hooks/use-in-viewport"
 import { GraphQLRequestError } from "@/lib/graphql-client"
 import { useSha1Hashes } from "@/lib/sha1"
 import { cn } from "@/lib/utils"
@@ -34,7 +35,17 @@ const KEY_HASH_DISPLAY_LEN = 12
  */
 export function WikiCredentialChip({ node, selected }: NodeViewProps) {
   const id = (node.attrs.credentialId as string | null) ?? ""
-  const { data, isLoading, error } = useCredential(id)
+  // Defer the GraphQL fetch until this chip is actually about to scroll
+  // into view. A long doc with many inline credential references used to
+  // fire one round trip per chip on mount and pulse every skeleton chip
+  // until each settled; gating on intersection turns that into a steady
+  // stream as the user scrolls. The 200px rootMargin (set inside the hook)
+  // pre-fetches one near-viewport chip ahead so the user rarely watches
+  // a skeleton swap to loaded.
+  // Use HTMLElement as the type parameter so the same ref can attach to a
+  // <span> (broken/loading/missing branches) or a <button> (loaded branch).
+  const { ref, isVisible } = useInViewport<HTMLElement>()
+  const { data, isLoading, error } = useCredential(id, { enabled: isVisible })
   const openDetails = useCredentialStore((s) => s.openDetailsPanel)
   const cred = data?.credential
 
@@ -50,6 +61,7 @@ export function WikiCredentialChip({ node, selected }: NodeViewProps) {
     return (
       <NodeViewWrapper as="span" className="wiki-credential-chip-wrapper">
         <span
+          ref={ref}
           className={cn(
             "wiki-credential-chip wiki-credential-chip--missing",
             selected && "is-selected",
@@ -63,10 +75,14 @@ export function WikiCredentialChip({ node, selected }: NodeViewProps) {
     )
   }
 
-  if (isLoading && !cred) {
+  // While offscreen (`!isVisible`) the query is gated off, so `cred` is
+  // undefined and `isLoading` is false. Render the same skeleton we show
+  // while the query is pending so the inline column-flow stays stable.
+  if ((isLoading && !cred) || (!isVisible && !cred)) {
     return (
       <NodeViewWrapper as="span" className="wiki-credential-chip-wrapper">
         <span
+          ref={ref}
           className={cn(
             "wiki-credential-chip wiki-credential-chip--loading",
             selected && "is-selected",
@@ -84,6 +100,7 @@ export function WikiCredentialChip({ node, selected }: NodeViewProps) {
     return (
       <NodeViewWrapper as="span" className="wiki-credential-chip-wrapper">
         <span
+          ref={ref}
           className={cn(
             "wiki-credential-chip wiki-credential-chip--missing",
             selected && "is-selected",
@@ -116,6 +133,7 @@ export function WikiCredentialChip({ node, selected }: NodeViewProps) {
     <NodeViewWrapper as="span" className="wiki-credential-chip-wrapper">
       <CredentialRowContextMenu credential={cred} triggerRender={<span />}>
         <button
+          ref={ref as RefObject<HTMLButtonElement | null>}
           type="button"
           onClick={(e) => {
             e.preventDefault()

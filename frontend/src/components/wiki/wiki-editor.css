@@ -171,6 +171,13 @@
 .tiptap .tableWrapper {
   overflow-x: auto;
   margin: 0.75em 0;
+  /* Skip layout + paint for offscreen tables. Tables can be tall and dense
+     (resize handles, selection overlays, many cells), and they have no
+     overhanging chrome that would be clipped by the implicit `contain: paint`.
+     The intrinsic-size hint keeps the scrollbar stable while a table is
+     unrendered — 300px is a reasonable average until the real layout lands. */
+  content-visibility: auto;
+  contain-intrinsic-size: auto 300px;
 }
 
 .tiptap table {
@@ -279,11 +286,19 @@
   border-radius: var(--radius-md);
   border: 1px solid var(--border);
   background: var(--wiki-code-bg);
-  /* overflow:visible (not hidden) so the toolbar can float above the block's
-     top edge and overlay the paragraph preceding it. The inner <pre> owns its
-     own horizontal scroll; the wrapper's background+radius still clip cleanly
-     because children have transparent backgrounds. */
-  overflow: visible;
+  /* Bound style + layout invalidation inside each code block — typing in
+     one block no longer triggers style recalc across the rest of the doc.
+     `paint` is deliberately omitted because it would force every code
+     block onto its own composite layer, which compounds with the inner
+     <pre>'s scroll-container layer. Stacking layers per block makes
+     scroll-time compositing bumpy on docs that are mostly code (every
+     block paints text runs + hljs spans, and per-layer texture work
+     scales with block count). Layer-light scroll over a stable, already-
+     painted document is cheaper here than `content-visibility: auto`'s
+     skip/render churn — that property buys low idle cost on docs full
+     of code but pays it back as scroll bumps when many tall blocks
+     transition in and out of view per scroll frame. */
+  contain: layout style;
 }
 
 /* When any node with a top-floating toolbar is the first element on the page,
@@ -300,18 +315,20 @@
 
 .tiptap .wiki-code-block__toolbar {
   position: absolute;
-  /* Sit just above the block's top edge. A 4px gap keeps it visually detached
-     so it reads as a contextual control, not part of the code chrome. */
-  bottom: calc(100% + 4px);
-  right: 0;
+  /* Sit inside the block at the top-right corner. Was previously
+     overhanging (`bottom: calc(100% + 4px)`); moved inside so the wrapper
+     can use `content-visibility: auto` without clipping the toolbar.
+     The translucent surface keeps the language label and copy/wrap
+     buttons legible against the first line of code they may briefly
+     overlap while visible (cursor-inside or hover). */
+  top: 4px;
+  right: 4px;
   display: flex;
   align-items: center;
   gap: 4px;
   opacity: 0;
   pointer-events: none;
   transition: opacity 120ms ease-out;
-  /* Above ordinary prose so it overlays (rather than hides behind) the
-     preceding paragraph text. */
   z-index: 5;
 }
 
@@ -553,6 +570,11 @@
 .tiptap figure.wiki-image-wrapper {
   margin: 0.5em 0;
   padding: 0;
+  /* Bound layout invalidation to the image. With many embedded images, a
+     resize/reflow inside one would otherwise propagate through the whole
+     document. No paint containment — image dimensions aren't known up front
+     and `content-visibility: auto` would jump the scroll on decode. */
+  contain: layout style;
 }
 
 .tiptap .wiki-image-frame {
@@ -586,23 +608,23 @@
 }
 
 /* Action cluster overlay: preview + delete, anchored to the image's top-right
-   corner. Hidden until the frame is hovered or a button receives focus. */
+   corner. Hidden until the frame is hovered or a button receives focus.
+   Uses `display: none` toggle rather than opacity/transform transitions —
+   the latter pair was forcing Chrome to keep every image's overlay on a
+   permanent composite layer (auto-promotion for animatable properties)
+   regardless of hover state, which compounded GPU cost on long docs. */
 .tiptap .wiki-image-actions {
   position: absolute;
   top: 8px;
   right: 8px;
-  display: inline-flex;
+  display: none;
   gap: 4px;
-  opacity: 0;
-  transform: translateY(-2px);
-  transition: opacity 120ms ease, transform 120ms ease;
   pointer-events: none;
 }
 
 .tiptap .wiki-image-frame:hover .wiki-image-actions,
 .tiptap .wiki-image-actions:focus-within {
-  opacity: 1;
-  transform: translateY(0);
+  display: inline-flex;
   pointer-events: auto;
 }
 
@@ -615,10 +637,14 @@
   padding: 0;
   border: none;
   border-radius: 6px;
-  background: rgba(17, 24, 39, 0.72);
+  /* Solid translucent surface in place of the previous backdrop-blur. The
+     blur was per-frame GPU shader work on a permanent composite layer for
+     EVERY image in the doc (the overlay is `opacity: 0` until hover but the
+     layer is still allocated); bumping alpha from 0.72 → 0.85 keeps the
+     glyph legible without the shader. */
+  background: rgba(17, 24, 39, 0.85);
   color: #fff;
   cursor: pointer;
-  backdrop-filter: blur(4px);
   transition: background-color 120ms ease;
 }
 
@@ -637,6 +663,9 @@
 .tiptap figure.wiki-file-wrapper {
   margin: 0.5em 0;
   padding: 0;
+  /* File cards have fixed-ish height; bound layout + paint so a per-card
+     hover/focus change doesn't ripple. No overhanging children to clip. */
+  contain: layout paint style;
 }
 
 .tiptap .wiki-file-card {
@@ -711,21 +740,19 @@
   margin-top: 2px;
 }
 
+/* See .wiki-image-actions — `display: none` toggle in place of the
+   opacity/transform transition that was forcing layer promotion. */
 .tiptap .wiki-file-actions {
-  display: flex;
+  display: none;
   align-items: center;
   gap: 4px;
-  opacity: 0;
-  transform: translateY(-2px);
-  transition: opacity 120ms ease, transform 120ms ease;
   pointer-events: none;
   flex-shrink: 0;
 }
 
 .tiptap .wiki-file-card:hover .wiki-file-actions,
 .tiptap .wiki-file-actions:focus-within {
-  opacity: 1;
-  transform: translateY(0);
+  display: flex;
   pointer-events: auto;
 }
 
@@ -738,11 +765,12 @@
   padding: 0;
   border: none;
   border-radius: 6px;
-  background: rgba(17, 24, 39, 0.72);
+  /* See .wiki-image-action-button — backdrop-filter dropped for the same
+     reason; alpha bumped from 0.72 → 0.85 to preserve glyph contrast. */
+  background: rgba(17, 24, 39, 0.85);
   color: #fff;
   cursor: pointer;
   text-decoration: none;
-  backdrop-filter: blur(4px);
   transition: background-color 120ms ease;
 }
 
@@ -1073,6 +1101,12 @@
   border-left: 3px solid var(--wiki-notice-rail);
   background: var(--wiki-notice-surface);
   color: var(--wiki-notice-fg);
+  /* Skip layout + paint + composite for offscreen notices. The variant
+     picker now lives inside the top-right corner (see
+     .wiki-notice__toolbar) so the implicit paint containment no longer
+     clips overhanging chrome. */
+  content-visibility: auto;
+  contain-intrinsic-size: auto 60px;
   /* Deliberately do NOT pin line-height here. The icon container's
      `min-height: 1lh` must resolve to the SAME value as the body's first
      line; the simplest way to guarantee that is to let both sides inherit
@@ -1198,12 +1232,14 @@
   --wiki-notice-surface: oklch(0.27 0.06 80);
 }
 
-/* Floating variant picker — same layering pattern as the HR / code-block
-   toolbars. Hidden until the cursor lives inside this notice. */
+/* Variant picker — same layering pattern as the code-block toolbar.
+   Hidden until the cursor lives inside this notice. Sits inside the
+   top-right corner so the wrapper can use `content-visibility: auto`
+   without clipping the toolbar. */
 .tiptap .wiki-notice__toolbar {
   position: absolute;
-  bottom: calc(100% + 4px);
-  right: 0;
+  top: 4px;
+  right: 4px;
   display: flex;
   align-items: center;
   gap: 2px;

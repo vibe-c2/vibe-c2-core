@@ -1,8 +1,10 @@
+import { type RefObject } from "react"
 import { NodeViewWrapper, type NodeViewProps } from "@tiptap/react"
 import { Link } from "react-router"
 import { FileTextIcon, LinkIcon } from "lucide-react"
 import { DocumentIcon } from "@/components/wiki/document-icon"
 import { useWikiDocumentLite } from "@/graphql/hooks/wiki"
+import { useInViewport } from "@/hooks/use-in-viewport"
 import { GraphQLRequestError } from "@/lib/graphql-client"
 import { cn } from "@/lib/utils"
 
@@ -16,13 +18,21 @@ import { cn } from "@/lib/utils"
  */
 export function WikiDocumentChip({ node, selected }: NodeViewProps) {
   const id = (node.attrs.documentId as string | null) ?? ""
-  const { data, isLoading, error } = useWikiDocumentLite(id)
+  // See wiki-credential-chip — IntersectionObserver gates the GraphQL fetch
+  // so a doc with many inline /doc chips doesn't fan out one round trip
+  // per chip on mount. `HTMLElement` lets the same ref attach to either
+  // the <span> (broken/loading/missing branches) or the <Link>'s anchor.
+  const { ref, isVisible } = useInViewport<HTMLElement>()
+  const { data, isLoading, error } = useWikiDocumentLite(id, {
+    enabled: isVisible,
+  })
   const doc = data?.wikiDocument
 
   if (!id) {
     return (
       <NodeViewWrapper as="span" className="wiki-document-chip-wrapper">
         <span
+          ref={ref}
           className={cn(
             "wiki-document-chip wiki-document-chip--missing",
             selected && "is-selected",
@@ -36,10 +46,11 @@ export function WikiDocumentChip({ node, selected }: NodeViewProps) {
     )
   }
 
-  if (isLoading && !doc) {
+  if ((isLoading && !doc) || (!isVisible && !doc)) {
     return (
       <NodeViewWrapper as="span" className="wiki-document-chip-wrapper">
         <span
+          ref={ref}
           className={cn(
             "wiki-document-chip wiki-document-chip--loading",
             selected && "is-selected",
@@ -57,6 +68,7 @@ export function WikiDocumentChip({ node, selected }: NodeViewProps) {
     return (
       <NodeViewWrapper as="span" className="wiki-document-chip-wrapper">
         <span
+          ref={ref}
           className={cn(
             "wiki-document-chip wiki-document-chip--missing",
             selected && "is-selected",
@@ -92,6 +104,7 @@ export function WikiDocumentChip({ node, selected }: NodeViewProps) {
     return (
       <NodeViewWrapper as="span" className="wiki-document-chip-wrapper">
         <span
+          ref={ref}
           className={cn(
             "wiki-document-chip wiki-document-chip--missing",
             selected && "is-selected",
@@ -108,6 +121,7 @@ export function WikiDocumentChip({ node, selected }: NodeViewProps) {
   return (
     <NodeViewWrapper as="span" className="wiki-document-chip-wrapper">
       <Link
+        ref={ref as RefObject<HTMLAnchorElement | null>}
         to={`/wiki/${doc.id}`}
         className={cn("wiki-document-chip", selected && "is-selected")}
         title={displayTitle}

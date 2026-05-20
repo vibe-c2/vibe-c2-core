@@ -63,7 +63,7 @@ export function WikiNoticeView({
 
   return (
     <NodeViewWrapper
-      className="wiki-notice wiki-node--toolbar-top"
+      className="wiki-notice"
       data-variant={variant}
       data-cursor-inside={cursorInside ? "true" : "false"}
     >
