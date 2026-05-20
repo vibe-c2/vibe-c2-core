@@ -171,7 +171,17 @@ export function WikiLinkPopover({ editor }: WikiLinkPopoverProps) {
       pluginKey="wikiLinkPopover"
       updateDelay={0}
       options={{ placement: "bottom-start", offset: 6 }}
-      shouldShow={({ editor }) => editor.isEditable && editor.isActive("link")}
+      // Focus guard mirrors Tiptap's default `shouldShow`: keep the popover
+      // open while the URL/Text inputs hold focus (BubbleMenu's blurHandler
+      // already sets `preventHide`, but `shouldShow` still runs on every
+      // transaction and would otherwise close the form mid-edit), and avoid
+      // auto-rendering on document open when the doc's first text run carries
+      // an inclusive `link` mark.
+      shouldShow={({ editor, view, element }) =>
+        editor.isEditable &&
+        (view.hasFocus() || element.contains(document.activeElement)) &&
+        editor.isActive("link")
+      }
       className="z-50 flex w-88 flex-col gap-2 rounded-lg bg-popover p-2 text-popover-foreground shadow-md ring-1 ring-foreground/10"
     >
       <div className="flex items-center gap-1.5">
