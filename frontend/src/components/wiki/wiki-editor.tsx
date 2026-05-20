@@ -43,6 +43,10 @@ import {
   extractDropFiles,
   uploadAndInsertWikiFiles,
 } from "@/components/wiki/wiki-file-upload"
+import {
+  extractMarkdownFromClipboard,
+  markdownToSlice,
+} from "@/components/wiki/wiki-markdown-paste"
 import "./wiki-editor.css"
 
 interface WikiEditorProps {
@@ -96,18 +100,36 @@ export function WikiEditor({
         if (!isEditor) return false
         const images = extractClipboardImages(event.clipboardData)
         const attachments = extractClipboardFiles(event.clipboardData)
-        if (images.length === 0 && attachments.length === 0) return false
-        const currentEditor = editorRef.current
-        if (!currentEditor) return false
-        event.preventDefault()
-        const pos = view.state.selection.from
-        if (images.length > 0) {
-          void uploadAndInsertWikiImages(currentEditor, documentId, images, { pos })
+        if (images.length > 0 || attachments.length > 0) {
+          const currentEditor = editorRef.current
+          if (!currentEditor) return false
+          event.preventDefault()
+          const pos = view.state.selection.from
+          if (images.length > 0) {
+            void uploadAndInsertWikiImages(currentEditor, documentId, images, { pos })
+          }
+          if (attachments.length > 0) {
+            void uploadAndInsertWikiFiles(currentEditor, documentId, attachments, { pos })
+          }
+          return true
         }
-        if (attachments.length > 0) {
-          void uploadAndInsertWikiFiles(currentEditor, documentId, attachments, { pos })
+
+        // Markdown source paste — StarterKit only registers *typed* input
+        // rules, so pasted headings/lists/fences/links would otherwise land
+        // as flat plaintext. See wiki-markdown-paste.ts for the conversion
+        // pipeline. Pastes inside a code block stay literal so the markers
+        // remain part of the source the user is copying in.
+        if (view.state.selection.$from.parent.type.name !== "codeBlock") {
+          const markdown = extractMarkdownFromClipboard(event.clipboardData)
+          if (markdown !== null) {
+            event.preventDefault()
+            const slice = markdownToSlice(markdown, view.state.schema)
+            view.dispatch(view.state.tr.replaceSelection(slice))
+            return true
+          }
         }
-        return true
+
+        return false
       },
       handleDrop: (view, event) => {
         if (!isEditor) return false
