@@ -1,4 +1,4 @@
-import { type FormEvent, useEffect, useMemo, useState } from "react"
+import { type FormEvent, useEffect, useMemo, useRef, useState } from "react"
 import { create } from "zustand"
 import type { Editor } from "@tiptap/core"
 import { ArrowLeftIcon, KeyIcon, PlusIcon, SearchIcon } from "lucide-react"
@@ -219,11 +219,20 @@ function ListView({
 }: ListViewProps) {
   const [debounced, setDebounced] = useState(search.trim())
   const [activeIndex, setActiveIndex] = useState(0)
+  // Tracks the DOM node for the currently highlighted row so we can scroll
+  // it into view when keyboard navigation moves the cursor past the visible
+  // window. `block: "nearest"` keeps scrolling minimal — no jump when the
+  // row is already on-screen.
+  const activeItemRef = useRef<HTMLButtonElement | null>(null)
 
   useEffect(() => {
     const t = setTimeout(() => setDebounced(search.trim()), 180)
     return () => clearTimeout(t)
   }, [search])
+
+  useEffect(() => {
+    activeItemRef.current?.scrollIntoView({ block: "nearest" })
+  }, [activeIndex])
 
   // Reset cursor when results change. Prev-value pattern (react.dev/.../useState
   // #storing-information-from-previous-renders) so the React Hooks lint doesn't
@@ -309,6 +318,9 @@ function ListView({
             return (
               <button
                 key={c.id}
+                ref={(el) => {
+                  if (isActive) activeItemRef.current = el
+                }}
                 type="button"
                 onMouseEnter={() => setActiveIndex(i)}
                 onMouseDown={(e) => e.preventDefault()}

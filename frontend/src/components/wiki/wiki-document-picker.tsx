@@ -1,4 +1,12 @@
-import { Component, type ErrorInfo, type ReactNode, useMemo, useState } from "react"
+import {
+  Component,
+  type ErrorInfo,
+  type ReactNode,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react"
 import { create } from "zustand"
 import type { Editor } from "@tiptap/core"
 import { FileTextIcon, SearchIcon } from "lucide-react"
@@ -11,6 +19,10 @@ import {
 } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
 import { DocumentIcon } from "@/components/wiki/document-icon"
+import {
+  WikiAncestorBreadcrumb,
+  type AncestorCrumb,
+} from "@/components/wiki/wiki-ancestor-breadcrumb"
 import { useWikiDocumentTree } from "@/graphql/hooks/wiki"
 import type { WikiDocumentTreeFieldsFragment } from "@/graphql/gql/graphql"
 import { cn } from "@/lib/utils"
@@ -129,6 +141,11 @@ function PickerBody({ search, setSearch }: PickerBodyProps) {
   // so a shrinking filtered set never points past the end — no setState
   // during render, no cascading-update edge cases on transitions to/from 0.
   const [rawActiveIndex, setRawActiveIndex] = useState(0)
+  // Tracks the DOM node for the currently highlighted row so we can scroll
+  // it into view when keyboard navigation moves the cursor past the visible
+  // window. `block: "nearest"` keeps scrolling minimal — no jump when the
+  // row is already on-screen.
+  const activeItemRef = useRef<HTMLButtonElement | null>(null)
 
   const { data, isLoading } = useWikiDocumentTree(operationId)
   const allDocs = useMemo(
@@ -137,6 +154,44 @@ function PickerBody({ search, setSearch }: PickerBodyProps) {
   )
 
   const excludeSet = useMemo(() => new Set(excludeIds), [excludeIds])
+
+  // id -> doc lookup over the loaded tree. Used to walk `parentDocumentId`
+  // chains so we can render an ancestor path under each row — same
+  // disambiguation affordance the search palette and history dropdown use
+  // for same-titled docs in different locations. Built locally to avoid an
+  // extra `ancestors { … }` selection on the tree fragment (the tree query
+  // is already loaded and may be large).
+  const docById = useMemo(() => {
+    const m = new Map<string, WikiDocumentTreeFieldsFragment>()
+    for (const d of allDocs) m.set(d.id, d)
+    return m
+  }, [allDocs])
+
+  // Ancestors of `doc`, root-first, excluding the doc itself. `isDeleted`
+  // is always false here because `wikiDocumentTree` only returns live docs
+  // (the server filters `deleted_at: nil`). The walk bounds at the tree
+  // size to defend against any cyclic data slipping in.
+  function getAncestors(
+    doc: WikiDocumentTreeFieldsFragment,
+  ): AncestorCrumb[] {
+    const chain: AncestorCrumb[] = []
+    let parentId = doc.parentDocumentId
+    let guard = docById.size
+    while (parentId && guard-- > 0) {
+      const parent = docById.get(parentId)
+      if (!parent) break
+      chain.push({
+        id: parent.id,
+        title: parent.title ?? "Untitled",
+        emoji: parent.emoji,
+        icon: parent.icon,
+        color: parent.color,
+        isDeleted: false,
+      })
+      parentId = parent.parentDocumentId
+    }
+    return chain.reverse()
+  }
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase()
@@ -162,6 +217,10 @@ function PickerBody({ search, setSearch }: PickerBodyProps) {
     filtered.length === 0
       ? 0
       : Math.min(Math.max(0, rawActiveIndex), filtered.length - 1)
+
+  useEffect(() => {
+    activeItemRef.current?.scrollIntoView({ block: "nearest" })
+  }, [activeIndex])
 
   function insertDocument(doc: WikiDocumentTreeFieldsFragment) {
     if (excludeSet.has(doc.id)) return
@@ -250,9 +309,13 @@ function PickerBody({ search, setSearch }: PickerBodyProps) {
           filtered.map((d, i) => {
             const isActive = i === activeIndex
             const isExcluded = excludeSet.has(d.id)
+            const ancestors = getAncestors(d)
             return (
               <button
                 key={d.id}
+                ref={(el) => {
+                  if (isActive) activeItemRef.current = el
+                }}
                 type="button"
                 disabled={isExcluded}
                 onMouseEnter={() => !isExcluded && setRawActiveIndex(i)}
@@ -260,7 +323,7 @@ function PickerBody({ search, setSearch }: PickerBodyProps) {
                 onClick={() => insertDocument(d)}
                 aria-selected={isActive}
                 className={cn(
-                  "flex w-full min-w-0 items-center gap-2 border-b px-3 py-2 text-left text-sm outline-hidden last:border-b-0",
+                  "flex w-full min-w-0 items-start gap-2 border-b px-3 py-2 text-left text-sm outline-hidden last:border-b-0",
                   isExcluded
                     ? "cursor-not-allowed text-muted-foreground"
                     : isActive
@@ -268,16 +331,27 @@ function PickerBody({ search, setSearch }: PickerBodyProps) {
                       : "hover:bg-accent/60",
                 )}
               >
-                <DocumentIcon emoji={d.emoji} icon={d.icon} color={d.color} />
-                <span className="min-w-0 flex-1 truncate font-medium">
-                  {(d.title ?? "") || "Untitled"}
+                <DocumentIcon
+                  emoji={d.emoji}
+                  icon={d.icon}
+                  color={d.color}
+                  className="mt-0.5 shrink-0"
+                />
+                <span className="flex min-w-0 flex-1 flex-col gap-0.5">
+                  <span className="truncate font-medium">
+                    {(d.title ?? "") || "Untitled"}
+                  </span>
+                  <WikiAncestorBreadcrumb
+                    ancestors={ancestors}
+                    className="truncate"
+                  />
                 </span>
                 {isExcluded ? (
-                  <span className="shrink-0 text-xs text-muted-foreground">
+                  <span className="mt-0.5 shrink-0 text-xs text-muted-foreground">
                     current document
                   </span>
                 ) : d.childCount > 0 ? (
-                  <span className="shrink-0 text-xs text-muted-foreground">
+                  <span className="mt-0.5 shrink-0 text-xs text-muted-foreground">
                     {d.childCount}
                   </span>
                 ) : null}

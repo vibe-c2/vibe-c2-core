@@ -26,8 +26,11 @@ export function WikiAncestorBreadcrumb({
   className,
 }: WikiAncestorBreadcrumbProps) {
   if (ancestors.length === 0) return null
+  // Block-rendered <span> instead of <p> so callers can drop the breadcrumb
+  // inside any container — including <button>, where <p> would be invalid
+  // HTML (button only accepts phrasing content).
   return (
-    <p className={cn("text-[11px] text-muted-foreground", className)}>
+    <span className={cn("block text-[11px] text-muted-foreground", className)}>
       {ancestors.map((a, i) => (
         <span key={a.id}>
           {i > 0 && <span className="mx-0.5 opacity-60">›</span>}
@@ -47,6 +50,6 @@ export function WikiAncestorBreadcrumb({
           </span>
         </span>
       ))}
-    </p>
+    </span>
   )
 }
