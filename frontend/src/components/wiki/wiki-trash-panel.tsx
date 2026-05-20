@@ -22,9 +22,9 @@ import { Button } from "@/components/ui/button"
 import { Skeleton } from "@/components/ui/skeleton"
 import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip"
 import { useWikiStore } from "@/stores/wiki"
-import { cn } from "@/lib/utils"
 import { graphqlClient } from "@/lib/graphql-client"
 import { DocumentIcon } from "@/components/wiki/document-icon"
+import { WikiAncestorBreadcrumb } from "@/components/wiki/wiki-ancestor-breadcrumb"
 import {
   WikiDocumentTrashedDescendantsDocument,
   type WikiDocumentTrashQuery,
@@ -339,29 +339,10 @@ function TrashItem({ doc, onRestore, onPermanentDelete, restorePending }: TrashI
             </TooltipContent>
           </Tooltip>
         </div>
-        {doc.ancestors.length > 0 && (
-          <p className="line-clamp-2 text-[11px] text-muted-foreground">
-            {doc.ancestors.map((a, i) => (
-              <span key={a.id}>
-                {i > 0 && <span className="mx-0.5 opacity-60">›</span>}
-                <span
-                  className={cn(
-                    "inline-flex items-center gap-1",
-                    a.isDeleted && "text-muted-foreground/70 line-through",
-                  )}
-                >
-                  <DocumentIcon
-                    emoji={a.emoji}
-                    icon={a.icon}
-                    size={12}
-                    className="text-[11px]"
-                  />
-                  {a.title}
-                </span>
-              </span>
-            ))}
-          </p>
-        )}
+        <WikiAncestorBreadcrumb
+          ancestors={doc.ancestors}
+          className="line-clamp-2"
+        />
       </div>
       <div className="invisible flex shrink-0 items-center gap-0.5 group-hover:visible">
         <Tooltip>

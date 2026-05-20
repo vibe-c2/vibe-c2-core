@@ -17,6 +17,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { useWikiStore } from "@/stores/wiki";
 import { useWikiSearch } from "@/graphql/hooks/wiki";
 import { DocumentIcon } from "@/components/wiki/document-icon";
+import { WikiAncestorBreadcrumb } from "@/components/wiki/wiki-ancestor-breadcrumb";
 import { cn, isPlainLeftClick } from "@/lib/utils";
 
 interface WikiCommandPaletteProps {
@@ -222,6 +223,10 @@ function PaletteBody({ operationId, scope, onClose }: PaletteBodyProps) {
                       {hit.document.title}
                     </span>
                   </div>
+                  <WikiAncestorBreadcrumb
+                    ancestors={hit.document.ancestors}
+                    className="truncate pl-6"
+                  />
                   {hit.snippet && (
                     <p className="truncate text-xs text-muted-foreground">
                       <HighlightedText

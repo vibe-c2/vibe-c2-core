@@ -114,8 +114,9 @@ export const WikiDocumentBackupDetailFields = graphql(`
 
 // Visit-history list row. The `document` relation is resolved server-side so
 // renames/icon updates flow into the dropdown without a separate invalidate
-// cycle. The doc projection is minimal — only the fields the dropdown row
-// renders (icon trio + title) — to keep the history payload small.
+// cycle. `ancestors` is included so the dropdown can render the full breadcrumb
+// path beneath the title, disambiguating same-named documents in different
+// locations.
 export const WikiDocumentVisitListFields = graphql(`
   fragment WikiDocumentVisitListFields on WikiDocumentVisit {
     id
@@ -126,6 +127,7 @@ export const WikiDocumentVisitListFields = graphql(`
       emoji
       icon
       color
+      ancestors { id title emoji icon color isDeleted }
     }
   }
 `)
@@ -239,6 +241,7 @@ export const WikiSearchQuery = graphql(`
           icon
           color
           parentDocumentId
+          ancestors { id title emoji icon color isDeleted }
           createdBy { id username }
         }
         snippet

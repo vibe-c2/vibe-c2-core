@@ -10,6 +10,7 @@ import {
 import { Skeleton } from "@/components/ui/skeleton"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
 import { DocumentIcon } from "@/components/wiki/document-icon"
+import { WikiAncestorBreadcrumb } from "@/components/wiki/wiki-ancestor-breadcrumb"
 import { useWikiDocumentHistory } from "@/graphql/hooks/wiki"
 import { historyGroup, relativeTime } from "@/lib/relative-time"
 import { isPlainLeftClick } from "@/lib/utils"
@@ -60,7 +61,7 @@ export function WikiHistoryDropdown({ operationId }: WikiHistoryDropdownProps) {
 
       <PopoverContent
         align="start"
-        className="w-80 gap-0 p-0"
+        className="w-[26rem] gap-0 p-0"
       >
         <div className="flex items-center gap-2 border-b px-3 py-2">
           <HistoryIcon className="size-4 text-muted-foreground" />
@@ -158,7 +159,7 @@ function HistoryRow({ visit, now, onClose }: HistoryRowProps) {
       onClick={(e) => {
         if (isPlainLeftClick(e)) onClose()
       }}
-      className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-sm hover:bg-accent"
+      className="flex w-full items-start gap-2 px-3 py-1.5 text-left text-sm hover:bg-accent"
       title={visit.document.title}
     >
       <DocumentIcon
@@ -166,9 +167,16 @@ function HistoryRow({ visit, now, onClose }: HistoryRowProps) {
         icon={visit.document.icon}
         color={visit.document.color}
         size={16}
+        className="mt-0.5 shrink-0"
       />
-      <span className="flex-1 truncate">{visit.document.title}</span>
-      <span className="shrink-0 text-[11px] text-muted-foreground tabular-nums">
+      <div className="min-w-0 flex-1">
+        <span className="block truncate">{visit.document.title}</span>
+        <WikiAncestorBreadcrumb
+          ancestors={visit.document.ancestors}
+          className="truncate"
+        />
+      </div>
+      <span className="mt-0.5 shrink-0 text-[11px] text-muted-foreground tabular-nums">
         {relativeTime(visit.visitedAt, now)}
       </span>
     </Link>
