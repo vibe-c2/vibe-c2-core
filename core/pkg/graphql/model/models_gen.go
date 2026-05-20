@@ -414,3 +414,58 @@ func (e PresenceAction) MarshalJSON() ([]byte, error) {
 	e.MarshalGQL(&buf)
 	return buf.Bytes(), nil
 }
+
+type WikiDocumentSort string
+
+const (
+	WikiDocumentSortRecentlyCreated WikiDocumentSort = "RECENTLY_CREATED"
+	WikiDocumentSortRecentlyUpdated WikiDocumentSort = "RECENTLY_UPDATED"
+)
+
+var AllWikiDocumentSort = []WikiDocumentSort{
+	WikiDocumentSortRecentlyCreated,
+	WikiDocumentSortRecentlyUpdated,
+}
+
+func (e WikiDocumentSort) IsValid() bool {
+	switch e {
+	case WikiDocumentSortRecentlyCreated, WikiDocumentSortRecentlyUpdated:
+		return true
+	}
+	return false
+}
+
+func (e WikiDocumentSort) String() string {
+	return string(e)
+}
+
+func (e *WikiDocumentSort) UnmarshalGQL(v any) error {
+	str, ok := v.(string)
+	if !ok {
+		return fmt.Errorf("enums must be strings")
+	}
+
+	*e = WikiDocumentSort(str)
+	if !e.IsValid() {
+		return fmt.Errorf("%s is not a valid WikiDocumentSort", str)
+	}
+	return nil
+}
+
+func (e WikiDocumentSort) MarshalGQL(w io.Writer) {
+	fmt.Fprint(w, strconv.Quote(e.String()))
+}
+
+func (e *WikiDocumentSort) UnmarshalJSON(b []byte) error {
+	s, err := strconv.Unquote(string(b))
+	if err != nil {
+		return err
+	}
+	return e.UnmarshalGQL(s)
+}
+
+func (e WikiDocumentSort) MarshalJSON() ([]byte, error) {
+	var buf bytes.Buffer
+	e.MarshalGQL(&buf)
+	return buf.Bytes(), nil
+}

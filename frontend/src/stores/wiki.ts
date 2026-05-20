@@ -1,8 +1,21 @@
 import { create } from "zustand"
+import type { WikiDocumentSort } from "@/graphql/gql/graphql"
 
 const STORAGE_KEY_EXPANDED = "wiki_expanded_nodes"
 const STORAGE_KEY_WIDTH = "wiki_sidebar_width"
+const STORAGE_KEY_RECENT_SORT = "wiki_recent_docs_sort"
 const DEFAULT_WIDTH = 256
+const DEFAULT_RECENT_SORT: WikiDocumentSort = "RECENTLY_CREATED"
+
+function loadRecentSort(): WikiDocumentSort {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY_RECENT_SORT)
+    if (raw === "RECENTLY_CREATED" || raw === "RECENTLY_UPDATED") return raw
+    return DEFAULT_RECENT_SORT
+  } catch {
+    return DEFAULT_RECENT_SORT
+  }
+}
 
 function loadExpandedNodes(): Set<string> {
   try {
@@ -99,6 +112,14 @@ interface WikiStoreState {
   searchScope: { parentDocumentId: string | null; parentTitle: string } | null
   openContentSearch: (parentDocumentId: string | null, parentTitle: string) => void
   closeContentSearch: () => void
+
+  // Recent documents modal — sort preference persists across sessions so
+  // the user's last toggle choice survives a reload.
+  recentDocsOpen: boolean
+  recentDocsSort: WikiDocumentSort
+  openRecentDocs: () => void
+  closeRecentDocs: () => void
+  setRecentDocsSort: (sort: WikiDocumentSort) => void
 
   // Sidebar width
   sidebarWidth: number
@@ -211,6 +232,16 @@ export const useWikiStore = create<WikiStoreState>((set, get) => ({
   openContentSearch: (parentDocumentId, parentTitle) =>
     set({ searchScope: { parentDocumentId, parentTitle } }),
   closeContentSearch: () => set({ searchScope: null }),
+
+  // Recent documents modal
+  recentDocsOpen: false,
+  recentDocsSort: loadRecentSort(),
+  openRecentDocs: () => set({ recentDocsOpen: true }),
+  closeRecentDocs: () => set({ recentDocsOpen: false }),
+  setRecentDocsSort: (sort) => {
+    localStorage.setItem(STORAGE_KEY_RECENT_SORT, sort)
+    set({ recentDocsSort: sort })
+  },
 
   // Sidebar width — persisted to localStorage
   sidebarWidth: loadSidebarWidth(),

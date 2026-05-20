@@ -105,6 +105,16 @@ func ParseArgs(first *int, after *string, last *int, before *string) (Args, erro
 //
 //	{$or: [{createAt: {$gt: t}}, {createAt: t, _id: {$gt: id}}]}
 func BuildCursorFilter(cursor *Cursor, forward bool) bson.M {
+	return BuildCursorFilterOn(cursor, forward, "createAt")
+}
+
+// BuildCursorFilterOn is the field-name-parameterized form of BuildCursorFilter.
+// `field` is the Mongo column that holds the cursor's time component (e.g.
+// "createAt", "last_updated_at"). The cursor's CreateAt value is interpreted
+// against `field` — the field name is the only thing that changes between
+// sort modes; the encoded shape is identical so cursors stay
+// interchange-stable across single-mode lists.
+func BuildCursorFilterOn(cursor *Cursor, forward bool, field string) bson.M {
 	if cursor == nil {
 		return bson.M{}
 	}
@@ -115,18 +125,24 @@ func BuildCursorFilter(cursor *Cursor, forward bool) bson.M {
 	}
 
 	return bson.M{"$or": bson.A{
-		bson.M{"createAt": bson.M{op: cursor.CreateAt}},
+		bson.M{field: bson.M{op: cursor.CreateAt}},
 		bson.M{
-			"createAt": cursor.CreateAt,
-			"_id":      bson.M{op: cursor.ID},
+			field: cursor.CreateAt,
+			"_id": bson.M{op: cursor.ID},
 		},
 	}}
 }
 
 // SortFields returns the MongoDB sort fields for the given direction.
 func SortFields(forward bool) []string {
+	return SortFieldsOn(forward, "createAt")
+}
+
+// SortFieldsOn is the field-name-parameterized form of SortFields. Pairs with
+// BuildCursorFilterOn so the cursor filter and sort agree on the column.
+func SortFieldsOn(forward bool, field string) []string {
 	if forward {
-		return []string{"-createAt", "-_id"}
+		return []string{"-" + field, "-_id"}
 	}
-	return []string{"createAt", "_id"}
+	return []string{field, "_id"}
 }

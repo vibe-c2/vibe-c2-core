@@ -16,6 +16,7 @@ import {
   WikiDocumentLiteDocument,
   WikiDocumentBacklinksDocument,
   WikiDocumentsDocument,
+  WikiRecentDocumentsDocument,
   WikiSearchDocument,
   WikiDocumentTrashDocument,
   WikiDocumentBackupsDocument,
@@ -38,6 +39,7 @@ import {
   WikiDocumentPresenceChangedDocument,
   type WikiDocumentTreeFieldsFragment,
   type WikiDocumentChildrenQuery,
+  type WikiDocumentSort,
 } from "@/graphql/gql/graphql"
 
 // Query key factory for consistent cache keys and targeted invalidation.
@@ -66,6 +68,13 @@ export const wikiKeys = {
     [...wikiKeys.lists(), "infinite", params] as const,
   search: (params: { operationId: string; scope?: string | null; query: string }) =>
     [...wikiKeys.all, "search", params] as const,
+  // Recent-documents modal feed. Keyed on (operationId, sort) so the cache
+  // splits cleanly between "Recently created" and "Recently updated" — the
+  // wikiDocumentChanged subscription invalidates the whole subtree via the
+  // matching `recents` prefix.
+  recents: () => [...wikiKeys.all, "recent"] as const,
+  recent: (operationId: string, sort: WikiDocumentSort) =>
+    [...wikiKeys.recents(), operationId, sort] as const,
   trash: (operationId: string) => [...wikiKeys.all, "trash", operationId] as const,
   trashCount: (operationId: string) =>
     [...wikiKeys.all, "trashCount", operationId] as const,
@@ -305,6 +314,37 @@ export function useWikiDocuments(params: {
         ? lastPage.wikiDocuments.pageInfo.endCursor ?? undefined
         : undefined,
     enabled: !!params.operationId,
+  })
+}
+
+// Recent-documents feed for the "Latest documents" sidebar modal. Same
+// cursor pagination as useWikiDocuments under the hood, but a tighter row
+// projection (ancestors + lastUpdatedAt for the breadcrumb / timestamp
+// column) and a larger page size since the modal renders virtualized.
+// `enabled` gates the fetch on modal visibility so closed-modal sessions
+// pay zero round-trips.
+export function useWikiRecentDocuments(params: {
+  operationId: string
+  sort: WikiDocumentSort
+  pageSize?: number
+  enabled?: boolean
+}) {
+  const pageSize = params.pageSize ?? 50
+  return useInfiniteQuery({
+    queryKey: wikiKeys.recent(params.operationId, params.sort),
+    queryFn: ({ pageParam }) =>
+      graphqlClient(WikiRecentDocumentsDocument, {
+        operationId: params.operationId,
+        sort: params.sort,
+        first: pageSize,
+        after: pageParam,
+      }),
+    initialPageParam: undefined as string | undefined,
+    getNextPageParam: (lastPage) =>
+      lastPage.wikiDocuments.pageInfo.hasNextPage
+        ? lastPage.wikiDocuments.pageInfo.endCursor ?? undefined
+        : undefined,
+    enabled: !!params.operationId && (params.enabled ?? true),
   })
 }
 
@@ -592,6 +632,13 @@ export function useWikiDocumentChangedSubscription(operationId: string) {
       // it. Always refresh on document CRUD; invalidating an unmounted query
       // is a no-op.
       queryClient.invalidateQueries({ queryKey: wikiKeys.tree(operationId) })
+
+      // Recent-documents modal feed. CREATED/DELETED both shift the list;
+      // UPDATED (rename, content edit via Hocuspocus) reorders the
+      // "Recently updated" sort and changes the timestamp badge for the
+      // affected row. Invalidate the whole `recents` subtree so both
+      // sort-mode caches refresh — the closed-modal case is a no-op.
+      queryClient.invalidateQueries({ queryKey: wikiKeys.recents() })
 
       // Lazy sidebar — surgically invalidate only the affected per-parent
       // children buckets. Previously this refetched every expanded folder in

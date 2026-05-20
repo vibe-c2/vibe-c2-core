@@ -213,7 +213,7 @@ type ComplexityRoot struct {
 		WikiDocumentTrashedDescendants func(childComplexity int, documentID string) int
 		WikiDocumentTree               func(childComplexity int, operationID string) int
 		WikiDocumentTreeRevealPath     func(childComplexity int, documentID string) int
-		WikiDocuments                  func(childComplexity int, operationID string, parentDocumentID *string, search *string, first *int, after *string, last *int, before *string) int
+		WikiDocuments                  func(childComplexity int, operationID string, parentDocumentID *string, search *string, sort *model.WikiDocumentSort, first *int, after *string, last *int, before *string) int
 		WikiOperationPresence          func(childComplexity int, operationID string) int
 		WikiSearch                     func(childComplexity int, operationID string, scope *string, query string, offset *int, limit *int) int
 	}
@@ -543,7 +543,7 @@ type QueryResolver interface {
 	Sessions(ctx context.Context, userID *string, search *string, activeOnly *bool, first *int, after *string, last *int, before *string) (*model.SessionConnection, error)
 	Session(ctx context.Context, id string) (*models.Session, error)
 	WikiDocument(ctx context.Context, id string) (*models.WikiDocument, error)
-	WikiDocuments(ctx context.Context, operationID string, parentDocumentID *string, search *string, first *int, after *string, last *int, before *string) (*model.WikiDocumentConnection, error)
+	WikiDocuments(ctx context.Context, operationID string, parentDocumentID *string, search *string, sort *model.WikiDocumentSort, first *int, after *string, last *int, before *string) (*model.WikiDocumentConnection, error)
 	WikiDocumentTree(ctx context.Context, operationID string) ([]*models.WikiDocument, error)
 	WikiDocumentChildren(ctx context.Context, operationID string, parentDocumentID *string) ([]*models.WikiDocument, error)
 	WikiDocumentTreeRevealPath(ctx context.Context, documentID string) ([]*models.WikiDocument, error)
@@ -1709,7 +1709,7 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 			return 0, false
 		}
 
-		return e.ComplexityRoot.Query.WikiDocuments(childComplexity, args["operationId"].(string), args["parentDocumentId"].(*string), args["search"].(*string), args["first"].(*int), args["after"].(*string), args["last"].(*int), args["before"].(*string)), true
+		return e.ComplexityRoot.Query.WikiDocuments(childComplexity, args["operationId"].(string), args["parentDocumentId"].(*string), args["search"].(*string), args["sort"].(*model.WikiDocumentSort), args["first"].(*int), args["after"].(*string), args["last"].(*int), args["before"].(*string)), true
 	case "Query.wikiOperationPresence":
 		if e.ComplexityRoot.Query.WikiOperationPresence == nil {
 			break
@@ -3573,21 +3573,23 @@ extend type Subscription {
 # GraphQL Subscriptions
 # =============================================================================
 #
-# Subscriptions provide real-time updates over Server-Sent Events (SSE).
-# Unlike queries (one-shot request/response), subscriptions keep the HTTP
-# connection open and stream events as they happen.
+# Subscriptions provide real-time updates. The primary transport is the
+# graphql-transport-ws protocol over a single WebSocket — every active
+# subscription on a browser tab is multiplexed onto one connection at
+# /api/v1/graphql/ws. The legacy SSE transport at POST /api/v1/graphql
+# (Accept: text/event-stream) is still mounted server-side for graceful
+# rollback and non-browser clients, but the SPA uses graphql-ws.
 #
-# How it works from the client side:
-#   1. Send a POST to /api/v1/graphql with:
-#      - Header: Accept: text/event-stream
-#      - Header: Content-Type: application/json
-#      - Header: Authorization: Bearer <jwt>
-#      - Body: {"query": "subscription { userChanged { action userId } }"}
-#   2. The server holds the connection open and sends SSE frames:
-#      event: next
-#      data: {"data": {"userChanged": {"action": "CREATED", "userId": "..."}}}
-#   3. When the server is done (or client disconnects):
-#      event: complete
+# How it works from the client side (modern WS path):
+#   1. Open a WebSocket to /api/v1/graphql/ws with Sec-WebSocket-Protocol:
+#      graphql-transport-ws. The ` + "`" + `access_token` + "`" + ` httpOnly cookie is sent on
+#      the upgrade and validated by Gin's JWTAuth middleware before gqlgen
+#      sees the connection.
+#   2. Send ` + "`" + `{"type": "connection_init"}` + "`" + `; server replies ` + "`" + `connection_ack` + "`" + `.
+#   3. Send ` + "`" + `{"type": "subscribe", "id": "<op>", "payload": {"query": ...}}` + "`" + `
+#      for each subscription. Multiple subscribes share the one socket.
+#   4. Server streams ` + "`" + `{"type": "next", "id": "<op>", "payload": {"data":...}}` + "`" + `
+#      frames; ` + "`" + `complete` + "`" + ` ends a single subscription.
 #
 # Each event wrapper type includes an "action" enum (CREATED/UPDATED/DELETED)
 # so the frontend knows what happened, plus the entity IDs and an optional
@@ -3664,6 +3666,16 @@ enum WikiDocumentBackupTrigger {
 enum PresenceAction {
   JOINED
   LEFT
+}
+
+# Sort order for wikiDocuments list queries. Default RECENTLY_CREATED matches
+# the legacy behaviour (newest createdAt first). RECENTLY_UPDATED sorts by
+# last_updated_at — the explicit attribution stamp set by metadata mutations
+# and Hocuspocus content persists — falling back to createdAt for legacy rows
+# that predate the field.
+enum WikiDocumentSort {
+  RECENTLY_CREATED
+  RECENTLY_UPDATED
 }
 
 # --- Types ---
@@ -3883,6 +3895,7 @@ extend type Query {
     operationId: ID!
     parentDocumentId: ID
     search: String
+    sort: WikiDocumentSort = RECENTLY_CREATED
     first: Int = 20
     after: String
     last: Int
@@ -5178,26 +5191,31 @@ func (ec *executionContext) field_Query_wikiDocuments_args(ctx context.Context, 
 		return nil, err
 	}
 	args["search"] = arg2
-	arg3, err := graphql.ProcessArgField(ctx, rawArgs, "first", ec.unmarshalOInt2ᚖint)
+	arg3, err := graphql.ProcessArgField(ctx, rawArgs, "sort", ec.unmarshalOWikiDocumentSort2ᚖgithubᚗcomᚋvibeᚑc2ᚋvibeᚑc2ᚑcoreᚋcoreᚋpkgᚋgraphqlᚋmodelᚐWikiDocumentSort)
 	if err != nil {
 		return nil, err
 	}
-	args["first"] = arg3
-	arg4, err := graphql.ProcessArgField(ctx, rawArgs, "after", ec.unmarshalOString2ᚖstring)
+	args["sort"] = arg3
+	arg4, err := graphql.ProcessArgField(ctx, rawArgs, "first", ec.unmarshalOInt2ᚖint)
 	if err != nil {
 		return nil, err
 	}
-	args["after"] = arg4
-	arg5, err := graphql.ProcessArgField(ctx, rawArgs, "last", ec.unmarshalOInt2ᚖint)
+	args["first"] = arg4
+	arg5, err := graphql.ProcessArgField(ctx, rawArgs, "after", ec.unmarshalOString2ᚖstring)
 	if err != nil {
 		return nil, err
 	}
-	args["last"] = arg5
-	arg6, err := graphql.ProcessArgField(ctx, rawArgs, "before", ec.unmarshalOString2ᚖstring)
+	args["after"] = arg5
+	arg6, err := graphql.ProcessArgField(ctx, rawArgs, "last", ec.unmarshalOInt2ᚖint)
 	if err != nil {
 		return nil, err
 	}
-	args["before"] = arg6
+	args["last"] = arg6
+	arg7, err := graphql.ProcessArgField(ctx, rawArgs, "before", ec.unmarshalOString2ᚖstring)
+	if err != nil {
+		return nil, err
+	}
+	args["before"] = arg7
 	return args, nil
 }
 
@@ -11167,7 +11185,7 @@ func (ec *executionContext) _Query_wikiDocuments(ctx context.Context, field grap
 		ec.fieldContext_Query_wikiDocuments,
 		func(ctx context.Context) (any, error) {
 			fc := graphql.GetFieldContext(ctx)
-			return ec.Resolvers.Query().WikiDocuments(ctx, fc.Args["operationId"].(string), fc.Args["parentDocumentId"].(*string), fc.Args["search"].(*string), fc.Args["first"].(*int), fc.Args["after"].(*string), fc.Args["last"].(*int), fc.Args["before"].(*string))
+			return ec.Resolvers.Query().WikiDocuments(ctx, fc.Args["operationId"].(string), fc.Args["parentDocumentId"].(*string), fc.Args["search"].(*string), fc.Args["sort"].(*model.WikiDocumentSort), fc.Args["first"].(*int), fc.Args["after"].(*string), fc.Args["last"].(*int), fc.Args["before"].(*string))
 		},
 		func(ctx context.Context, next graphql.Resolver) graphql.Resolver {
 			directive0 := next
@@ -26874,6 +26892,22 @@ func (ec *executionContext) unmarshalOWikiDocumentBackupTrigger2ᚖgithubᚗcom�
 }
 
 func (ec *executionContext) marshalOWikiDocumentBackupTrigger2ᚖgithubᚗcomᚋvibeᚑc2ᚋvibeᚑc2ᚑcoreᚋcoreᚋpkgᚋmodelsᚐWikiDocumentBackupTrigger(ctx context.Context, sel ast.SelectionSet, v *models.WikiDocumentBackupTrigger) graphql.Marshaler {
+	if v == nil {
+		return graphql.Null
+	}
+	return v
+}
+
+func (ec *executionContext) unmarshalOWikiDocumentSort2ᚖgithubᚗcomᚋvibeᚑc2ᚋvibeᚑc2ᚑcoreᚋcoreᚋpkgᚋgraphqlᚋmodelᚐWikiDocumentSort(ctx context.Context, v any) (*model.WikiDocumentSort, error) {
+	if v == nil {
+		return nil, nil
+	}
+	var res = new(model.WikiDocumentSort)
+	err := res.UnmarshalGQL(v)
+	return res, graphql.ErrorOnPath(ctx, err)
+}
+
+func (ec *executionContext) marshalOWikiDocumentSort2ᚖgithubᚗcomᚋvibeᚑc2ᚋvibeᚑc2ᚑcoreᚋcoreᚋpkgᚋgraphqlᚋmodelᚐWikiDocumentSort(ctx context.Context, sel ast.SelectionSet, v *model.WikiDocumentSort) graphql.Marshaler {
 	if v == nil {
 		return graphql.Null
 	}

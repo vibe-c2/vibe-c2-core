@@ -22,6 +22,7 @@ import { WikiTreeSidebar } from "@/components/wiki/wiki-tree-sidebar"
 import { ResizeHandle } from "@/components/wiki/resize-handle"
 import { WikiContentArea } from "@/components/wiki/wiki-content-area"
 import { WikiCommandPalette } from "@/components/wiki/wiki-command-palette"
+import { WikiRecentDocsModal } from "@/components/wiki/wiki-recent-docs-modal"
 import { CreateWikiDocumentDialog } from "@/components/wiki/create-wiki-document-dialog"
 import { DeleteWikiDocumentDialog } from "@/components/wiki/delete-wiki-document-dialog"
 import { ImportOutlineDialog } from "@/components/wiki/import-outline-dialog"
@@ -225,6 +226,7 @@ function WikiPageInner({
       <WikiTrashPanel operationId={operationId} />
       <WikiBackupPanel />
       <WikiCommandPalette operationId={operationId} />
+      <WikiRecentDocsModal operationId={operationId} />
 
       {/* Credential surface mounted at the page level so chip-driven flows
           (details / edit / delete / picker) survive navigation between

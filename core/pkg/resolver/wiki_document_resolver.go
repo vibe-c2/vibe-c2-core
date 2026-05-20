@@ -46,7 +46,7 @@ type IWikiDocumentResolver interface {
 
 	// Document queries
 	WikiDocument(ctx context.Context, id string) (*models.WikiDocument, error)
-	WikiDocuments(ctx context.Context, operationID string, parentDocumentID *string, search *string, first *int, after *string, last *int, before *string) (*model.WikiDocumentConnection, error)
+	WikiDocuments(ctx context.Context, operationID string, parentDocumentID *string, search *string, sort *model.WikiDocumentSort, first *int, after *string, last *int, before *string) (*model.WikiDocumentConnection, error)
 	WikiDocumentTree(ctx context.Context, operationID string) ([]*models.WikiDocument, error)
 	WikiDocumentChildren(ctx context.Context, operationID string, parentDocumentID *string) ([]*models.WikiDocument, error)
 	WikiDocumentTreeRevealPath(ctx context.Context, documentID string) ([]*models.WikiDocument, error)
@@ -1088,7 +1088,7 @@ func (r *wikiDocumentResolver) WikiDocument(ctx context.Context, id string) (*mo
 	return &doc, nil
 }
 
-func (r *wikiDocumentResolver) WikiDocuments(ctx context.Context, operationID string, parentDocumentID *string, search *string, first *int, after *string, last *int, before *string) (*model.WikiDocumentConnection, error) {
+func (r *wikiDocumentResolver) WikiDocuments(ctx context.Context, operationID string, parentDocumentID *string, search *string, sort *model.WikiDocumentSort, first *int, after *string, last *int, before *string) (*model.WikiDocumentConnection, error) {
 	opUID, err := uuid.Parse(operationID)
 	if err != nil {
 		return nil, fmt.Errorf("invalid operation ID: %w", err)
@@ -1118,6 +1118,9 @@ func (r *wikiDocumentResolver) WikiDocuments(ctx context.Context, operationID st
 		}
 		filter.Search = trimmed
 	}
+	if sort != nil && *sort == model.WikiDocumentSortRecentlyUpdated {
+		filter.Sort = repository.SortByLastUpdatedAt
+	}
 
 	total, err := r.docRepo.CountByOperationID(ctx, opUID, filter)
 	if err != nil {
@@ -1136,7 +1139,16 @@ func (r *wikiDocumentResolver) WikiDocuments(ctx context.Context, operationID st
 
 	edges := make([]*model.WikiDocumentEdge, len(docs))
 	for i := range docs {
-		cursor := pagination.EncodeCursor(docs[i].CreateAt, docs[i].Id)
+		// Cursor encodes the timestamp from the sort column so pagination
+		// stays correct in both sort modes. The encoded shape is identical;
+		// the resolver/repo agree on the field via filter.Sort.
+		var cursorTime time.Time
+		if filter.Sort == repository.SortByLastUpdatedAt && docs[i].LastUpdatedAt != nil {
+			cursorTime = *docs[i].LastUpdatedAt
+		} else {
+			cursorTime = docs[i].CreateAt
+		}
+		cursor := pagination.EncodeCursor(cursorTime, docs[i].Id)
 		edges[i] = &model.WikiDocumentEdge{
 			Node:   &docs[i],
 			Cursor: cursor,

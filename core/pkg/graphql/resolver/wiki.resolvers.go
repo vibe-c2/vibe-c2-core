@@ -74,8 +74,8 @@ func (r *queryResolver) WikiDocument(ctx context.Context, id string) (*models.Wi
 }
 
 // WikiDocuments is the resolver for the wikiDocuments field.
-func (r *queryResolver) WikiDocuments(ctx context.Context, operationID string, parentDocumentID *string, search *string, first *int, after *string, last *int, before *string) (*model.WikiDocumentConnection, error) {
-	return r.WikiDocumentResolver.WikiDocuments(ctx, operationID, parentDocumentID, search, first, after, last, before)
+func (r *queryResolver) WikiDocuments(ctx context.Context, operationID string, parentDocumentID *string, search *string, sort *model.WikiDocumentSort, first *int, after *string, last *int, before *string) (*model.WikiDocumentConnection, error) {
+	return r.WikiDocumentResolver.WikiDocuments(ctx, operationID, parentDocumentID, search, sort, first, after, last, before)
 }
 
 // WikiDocumentTree is the resolver for the wikiDocumentTree field.

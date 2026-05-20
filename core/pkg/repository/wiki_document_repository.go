@@ -17,12 +17,40 @@ import (
 
 const wikiDocumentCollection = "wiki_documents"
 
+// WikiDocumentSort selects the column used for cursor pagination in
+// FindByOperationIDWithCursor and the matching index. The zero value is
+// SortByCreatedAt, which matches the legacy behaviour.
+type WikiDocumentSort int
+
+const (
+	// SortByCreatedAt orders by createAt DESC, _id DESC (the qmgo
+	// DefaultField creation timestamp, immutable after Create).
+	SortByCreatedAt WikiDocumentSort = iota
+	// SortByLastUpdatedAt orders by last_updated_at DESC, _id DESC. Documents
+	// where last_updated_at is null (legacy rows that predate the field, or
+	// docs that were never edited after creation) are excluded — they would
+	// have nothing to sort against.
+	SortByLastUpdatedAt
+)
+
+// SortField returns the Mongo column this sort orders by. Pairs with the
+// generic cursor helpers in pkg/pagination.
+func (s WikiDocumentSort) SortField() string {
+	switch s {
+	case SortByLastUpdatedAt:
+		return "last_updated_at"
+	default:
+		return "createAt"
+	}
+}
+
 // WikiDocumentFilter controls which documents are returned by list queries.
 type WikiDocumentFilter struct {
 	ParentDocumentID *uuid.UUID // set = children of that doc
 	RootsOnly        bool       // true = only root documents (parentDocumentID is nil)
 	Search           string
-	Trashed          bool // true = only soft-deleted docs, false = only active docs
+	Trashed          bool             // true = only soft-deleted docs, false = only active docs
+	Sort             WikiDocumentSort // zero value = SortByCreatedAt
 }
 
 // IWikiDocumentRepository defines the interface for WikiDocument database operations.
@@ -100,6 +128,20 @@ func NewWikiDocumentRepository(db database.Database) IWikiDocumentRepository {
 		{Key: []string{"operation_id", "parent_document_id", "deleted_at"}},
 		{Key: []string{"-createAt", "-_id"}},
 		{Key: []string{"last_backup_at", "updateAt"}},
+		// Recently-updated list ordering. Partial index on documents that have
+		// been touched at least once after creation — Create stamps
+		// last_updated_at, but legacy rows predate the field and are excluded
+		// here so the index stays tight. The {operation_id, deleted_at} prefix
+		// on the partial filter is intentional: the list query always scopes
+		// to a single operation and filters trashed docs out, so the index
+		// matches the actual query shape.
+		{
+			Key: []string{"operation_id", "-last_updated_at", "-_id"},
+			IndexOptions: new(options.IndexOptions).SetPartialFilterExpression(bson.M{
+				"last_updated_at": bson.M{"$exists": true, "$ne": nil},
+				"deleted_at":      nil,
+			}),
+		},
 		// Anchored prefix search on title ("find doc by name" palette UX).
 		// $text can't do prefix; regex on a pre-lowercased field uses the
 		// index as long as the pattern is anchored and does NOT use $options:"i".
@@ -237,7 +279,14 @@ func (r *wikiDocumentRepository) FindByID(ctx context.Context, id uuid.UUID) (mo
 func (r *wikiDocumentRepository) FindByOperationIDWithCursor(ctx context.Context, opID uuid.UUID, filter WikiDocumentFilter, cursor *pagination.Cursor, limit int64, forward bool) ([]models.WikiDocument, error) {
 	mongoFilter := buildWikiDocumentFilter(opID, filter)
 
-	if cursorFilter := pagination.BuildCursorFilter(cursor, forward); len(cursorFilter) > 0 {
+	sortField := filter.Sort.SortField()
+	if filter.Sort == SortByLastUpdatedAt {
+		// Match the partial index filter — rows without last_updated_at have
+		// nothing to sort against and must be excluded from this list mode.
+		mongoFilter["last_updated_at"] = bson.M{"$exists": true, "$ne": nil}
+	}
+
+	if cursorFilter := pagination.BuildCursorFilterOn(cursor, forward, sortField); len(cursorFilter) > 0 {
 		for k, v := range cursorFilter {
 			mongoFilter[k] = v
 		}
@@ -245,7 +294,7 @@ func (r *wikiDocumentRepository) FindByOperationIDWithCursor(ctx context.Context
 
 	var docs []models.WikiDocument
 	err := r.coll.Find(ctx, mongoFilter).
-		Sort(pagination.SortFields(forward)...).
+		Sort(pagination.SortFieldsOn(forward, sortField)...).
 		Limit(limit).
 		All(&docs)
 
@@ -313,7 +362,11 @@ func (r *wikiDocumentRepository) FindTrashedByOperationIDWithCursor(ctx context.
 }
 
 func (r *wikiDocumentRepository) CountByOperationID(ctx context.Context, opID uuid.UUID, filter WikiDocumentFilter) (int64, error) {
-	return r.coll.Count(ctx, buildWikiDocumentFilter(opID, filter))
+	mongoFilter := buildWikiDocumentFilter(opID, filter)
+	if filter.Sort == SortByLastUpdatedAt {
+		mongoFilter["last_updated_at"] = bson.M{"$exists": true, "$ne": nil}
+	}
+	return r.coll.Count(ctx, mongoFilter)
 }
 
 func (r *wikiDocumentRepository) FindChildDocuments(ctx context.Context, parentID uuid.UUID) ([]models.WikiDocument, error) {

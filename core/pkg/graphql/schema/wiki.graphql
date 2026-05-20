@@ -22,6 +22,16 @@ enum PresenceAction {
   LEFT
 }
 
+# Sort order for wikiDocuments list queries. Default RECENTLY_CREATED matches
+# the legacy behaviour (newest createdAt first). RECENTLY_UPDATED sorts by
+# last_updated_at — the explicit attribution stamp set by metadata mutations
+# and Hocuspocus content persists — falling back to createdAt for legacy rows
+# that predate the field.
+enum WikiDocumentSort {
+  RECENTLY_CREATED
+  RECENTLY_UPDATED
+}
+
 # --- Types ---
 
 type WikiDocument {
@@ -239,6 +249,7 @@ extend type Query {
     operationId: ID!
     parentDocumentId: ID
     search: String
+    sort: WikiDocumentSort = RECENTLY_CREATED
     first: Int = 20
     after: String
     last: Int

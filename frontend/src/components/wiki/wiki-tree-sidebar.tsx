@@ -4,6 +4,7 @@ import { toast } from "sonner"
 import {
   ChevronsDownUpIcon,
   ChevronsUpDownIcon,
+  ClockIcon,
   DownloadIcon,
   Loader2Icon,
   PlusIcon,
@@ -154,6 +155,7 @@ export function WikiTreeSidebar({
   const openImportOutlineDialog = useWikiStore((s) => s.openImportOutlineDialog)
   const openTrashPanel = useWikiStore((s) => s.openTrashPanel)
   const openContentSearch = useWikiStore((s) => s.openContentSearch)
+  const openRecentDocs = useWikiStore((s) => s.openRecentDocs)
   // expandMany lives inside useWikiSubtreeExpansion; only collapseMany is
   // used directly here, by the no-fetch Collapse-all handler.
   const collapseMany = useWikiStore((s) => s.collapseMany)
@@ -434,6 +436,21 @@ export function WikiTreeSidebar({
             <SearchIcon className="size-3.5" />
           </TooltipTrigger>
           <TooltipContent>Search documents</TooltipContent>
+        </Tooltip>
+        <Tooltip>
+          <TooltipTrigger
+            render={
+              <Button
+                variant="ghost"
+                size="icon-xs"
+                onClick={openRecentDocs}
+                aria-label="Latest documents"
+              />
+            }
+          >
+            <ClockIcon className="size-3.5" />
+          </TooltipTrigger>
+          <TooltipContent>Latest documents</TooltipContent>
         </Tooltip>
         <WikiHistoryDropdown operationId={operationId} />
         {isEditor && (

@@ -218,6 +218,47 @@ export const WikiDocumentsQuery = graphql(`
   }
 `)
 
+// Recent-documents modal feed. Sort defaults to RECENTLY_CREATED on the
+// server; clients pass RECENTLY_UPDATED for the "Recently updated" toggle.
+// The row projection mirrors what wiki-recent-docs-modal.tsx needs: icon
+// fields for the row glyph, ancestors for the breadcrumb, and both
+// createdAt + lastUpdatedAt so the timestamp shown next to the row matches
+// the active sort.
+export const WikiRecentDocumentsQuery = graphql(`
+  query WikiRecentDocuments(
+    $operationId: ID!
+    $sort: WikiDocumentSort
+    $first: Int
+    $after: String
+  ) {
+    wikiDocuments(
+      operationId: $operationId
+      sort: $sort
+      first: $first
+      after: $after
+    ) {
+      edges {
+        node {
+          id
+          title
+          emoji
+          icon
+          color
+          parentDocumentId
+          ancestors { id title emoji icon color isDeleted }
+          createdAt
+          updatedAt
+          lastUpdatedAt
+          createdBy { id username }
+        }
+        cursor
+      }
+      pageInfo { hasNextPage endCursor }
+      totalCount
+    }
+  }
+`)
+
 export const WikiSearchQuery = graphql(`
   query WikiSearch(
     $operationId: ID!
