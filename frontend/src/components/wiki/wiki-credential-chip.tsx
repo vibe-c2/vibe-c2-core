@@ -114,7 +114,7 @@ export function WikiCredentialChip({ node, selected }: NodeViewProps) {
 
   return (
     <NodeViewWrapper as="span" className="wiki-credential-chip-wrapper">
-      <CredentialRowContextMenu credential={cred}>
+      <CredentialRowContextMenu credential={cred} triggerRender={<span />}>
         <button
           type="button"
           onClick={(e) => {

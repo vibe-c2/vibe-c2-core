@@ -1,4 +1,4 @@
-import type { ReactNode } from "react"
+import type { ReactElement, ReactNode } from "react"
 import { toast } from "sonner"
 import {
   CheckCircle2Icon,
@@ -24,6 +24,11 @@ import type { CredentialFieldsFragment } from "@/graphql/gql/graphql"
 interface CredentialRowContextMenuProps {
   credential: CredentialFieldsFragment
   children: ReactNode
+  // Optional override for the trigger's host element. Base UI's
+  // ContextMenu.Trigger defaults to a <div>, which is fine for full-width row
+  // buttons but breaks inline placement (e.g. the wiki credential chip sitting
+  // between prose tokens). Pass `<span />` from inline call sites.
+  triggerRender?: ReactElement
 }
 
 // Right-click context menu wrapper for a single credentials row. Holds all
@@ -32,6 +37,7 @@ interface CredentialRowContextMenuProps {
 export function CredentialRowContextMenu({
   credential,
   children,
+  triggerRender,
 }: CredentialRowContextMenuProps) {
   const openEdit = useCredentialStore((s) => s.openEditDialog)
   const openDelete = useCredentialStore((s) => s.openDeleteDialog)
@@ -68,7 +74,7 @@ export function CredentialRowContextMenu({
 
   return (
     <ContextMenu>
-      <ContextMenuTrigger>{children}</ContextMenuTrigger>
+      <ContextMenuTrigger render={triggerRender}>{children}</ContextMenuTrigger>
       <ContextMenuContent>
         <ContextMenuItem onClick={toggleValidity}>
           {credential.isValid ? (
