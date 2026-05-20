@@ -1,12 +1,7 @@
 import { Suspense } from "react"
 import {
-  FileTextIcon,
-  FolderIcon,
-  FolderOpenIcon,
-  type LucideIcon,
-} from "lucide-react"
-import {
   ADAPTIVE_ICON_NAME,
+  resolveAdaptiveIcon,
   resolveIcon,
 } from "@/components/wiki/icon-catalog"
 import { cn } from "@/lib/utils"
@@ -35,14 +30,6 @@ interface DocumentIconProps {
    */
   hasChildren?: boolean
   isExpanded?: boolean
-}
-
-function resolveAdaptiveIcon(
-  hasChildren: boolean,
-  isExpanded: boolean,
-): LucideIcon {
-  if (!hasChildren) return FileTextIcon
-  return isExpanded ? FolderOpenIcon : FolderIcon
 }
 
 /**

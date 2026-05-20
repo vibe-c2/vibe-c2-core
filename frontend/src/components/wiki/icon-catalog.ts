@@ -145,6 +145,19 @@ import {
  */
 export const ADAPTIVE_ICON_NAME = "Adaptive"
 
+/**
+ * Adaptive default → concrete lucide icon. Shared by DocumentIcon (in-tree
+ * render) and the page-level favicon resolver so both paths agree on which
+ * glyph represents an "Adaptive" doc.
+ */
+export function resolveAdaptiveIcon(
+  hasChildren: boolean,
+  isExpanded: boolean,
+): LucideIcon {
+  if (!hasChildren) return FileTextIcon
+  return isExpanded ? FolderOpenIcon : FolderIcon
+}
+
 export interface IconEntry {
   /** Stable key persisted in WikiDocument.icon. Never rename without a migration. */
   name: string

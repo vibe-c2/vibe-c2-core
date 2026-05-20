@@ -6,11 +6,16 @@ import { useMyOperationRole } from "@/graphql/hooks/operations"
 import {
   useWikiDocument,
   useWikiDocumentChangedSubscription,
+  useWikiDocumentChildren,
   useWikiDocumentPresenceChangedSubscription,
   useWikiDocumentTreeRevealPath,
   useTrackWikiDocumentVisit,
 } from "@/graphql/hooks/wiki"
 import { useCredentialChangedSubscription } from "@/graphql/hooks/credentials"
+import {
+  ADAPTIVE_ICON_NAME,
+  resolveAdaptiveIcon,
+} from "@/components/wiki/icon-catalog"
 import { usePageMetadata, type PageIcon } from "@/hooks/use-page-metadata"
 import { useWikiStore } from "@/stores/wiki"
 import { WikiTreeSidebar } from "@/components/wiki/wiki-tree-sidebar"
@@ -68,9 +73,31 @@ function WikiPageInner({
   // there's at most one transition per navigation.
   const { data: docData } = useWikiDocument(documentId ?? "")
   const doc = documentId ? docData?.wikiDocument : null
+  // The adaptive default needs to know whether this doc has children to pick
+  // between file/folder glyphs (mirrors wiki-editor-header.tsx:132). Gate the
+  // children fetch behind that — uncurated/explicit icons don't need it. The
+  // same cache key feeds the sidebar lazy-expand and editor-header dropdown,
+  // so this is a cache hit in the common case.
+  const isAdaptive = !!doc && doc.icon === ADAPTIVE_ICON_NAME
+  const { data: childrenData } = useWikiDocumentChildren(
+    operationId,
+    doc?.id ?? null,
+    { enabled: isAdaptive },
+  )
+  const adaptiveHasChildren =
+    (childrenData?.wikiDocumentChildren?.length ?? 0) > 0
   const wikiDefaultIcon: PageIcon = { kind: "lucide", component: BookOpenIcon }
   const pageIcon: PageIcon = (() => {
     if (!doc) return wikiDefaultIcon
+    if (doc.icon === ADAPTIVE_ICON_NAME) {
+      // isExpanded=true: the user is viewing this doc, so the branch glyph
+      // should match the editor header (open folder, not collapsed).
+      return {
+        kind: "lucide",
+        component: resolveAdaptiveIcon(adaptiveHasChildren, true),
+        color: doc.color,
+      }
+    }
     if (doc.icon)
       return {
         kind: "lucide-name",
