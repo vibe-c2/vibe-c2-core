@@ -581,6 +581,7 @@
   position: relative;
   display: inline-block;
   max-width: 100%;
+  border: 1px solid var(--border);
   border-radius: 6px;
   overflow: hidden;
   /* Collapse the font-based inline strut so the frame hugs the image pixel-
