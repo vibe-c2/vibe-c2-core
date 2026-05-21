@@ -32,9 +32,9 @@ export function WikiEditorToc({ editor }: WikiEditorTocProps) {
   // Walk the doc on every transaction and collect headings. The custom
   // equalityFn avoids re-rendering on unrelated edits (typing inside a
   // paragraph, cursor moves) by shallow-comparing the heading triples.
-  const items = useEditorState<TocItem[], Editor>({
+  const items = useEditorState({
     editor,
-    selector: ({ editor: e }) => {
+    selector: ({ editor: e }): TocItem[] => {
       const out: TocItem[] = []
       if (!e) return out
       e.state.doc.descendants((node, pos) => {
