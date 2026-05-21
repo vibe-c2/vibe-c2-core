@@ -147,6 +147,13 @@ interface WikiStoreState {
   toggleEditorZoom: () => void
   setEditorZoom: (zoomed: boolean) => void
 
+  // Editor table-of-contents overlay (floats over the editor's upper-right
+  // corner). Transient view state — not persisted; reverts to hidden on each
+  // navigation/load so the panel doesn't surprise users who never opened it.
+  editorTocVisible: boolean
+  toggleEditorToc: () => void
+  setEditorTocVisible: (visible: boolean) => void
+
   // One-shot signal from the create flow to the editor: when the editor for
   // this document mounts, focus it at the start so the user can start typing
   // immediately. Consumed (cleared) by the editor on first apply so revisits
@@ -287,6 +294,11 @@ export const useWikiStore = create<WikiStoreState>((set, get) => ({
   editorZoomed: false,
   toggleEditorZoom: () => set((state) => ({ editorZoomed: !state.editorZoomed })),
   setEditorZoom: (zoomed) => set({ editorZoomed: zoomed }),
+
+  // Editor TOC — transient view state, not persisted.
+  editorTocVisible: false,
+  toggleEditorToc: () => set((state) => ({ editorTocVisible: !state.editorTocVisible })),
+  setEditorTocVisible: (visible) => set({ editorTocVisible: visible }),
 
   // Editor caret bootstrap — set by the create dialog right before it
   // navigates to the new doc.

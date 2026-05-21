@@ -5,6 +5,7 @@ import {
   ChevronRightIcon,
   ClockIcon,
   EllipsisIcon,
+  ListTreeIcon,
   Maximize2Icon,
   Minimize2Icon,
 } from "lucide-react"
@@ -52,7 +53,10 @@ export function WikiEditorHeader({
   const openBackupPanel = useWikiStore((s) => s.openBackupPanel)
   const editorZoomed = useWikiStore((s) => s.editorZoomed)
   const toggleEditorZoom = useWikiStore((s) => s.toggleEditorZoom)
+  const editorTocVisible = useWikiStore((s) => s.editorTocVisible)
+  const toggleEditorToc = useWikiStore((s) => s.toggleEditorToc)
   const zoomLabel = editorZoomed ? "Exit fullscreen" : "Zoom in"
+  const tocLabel = editorTocVisible ? "Hide outline" : "Show outline"
 
   const { data: presenceData } = useWikiDocumentPresence(doc.id)
   const activeEditors = presenceData?.wikiDocumentPresence.activeEditors ?? []
@@ -340,6 +344,25 @@ export function WikiEditorHeader({
             )}
           </div>
         )}
+
+        {/* TOC toggle — surfaces the floating outline panel anchored to
+            the editor's upper-right corner. Like zoom, it's read-only safe. */}
+        <Tooltip>
+          <TooltipTrigger
+            render={
+              <Button
+                variant="ghost"
+                size="icon-sm"
+                onClick={toggleEditorToc}
+                aria-label={tocLabel}
+                aria-pressed={editorTocVisible}
+              />
+            }
+          >
+            <ListTreeIcon className="size-4" />
+          </TooltipTrigger>
+          <TooltipContent>{tocLabel}</TooltipContent>
+        </Tooltip>
 
         {/* Zoom toggle — not gated on isEditor (focus reading is useful
             without edit rights). */}

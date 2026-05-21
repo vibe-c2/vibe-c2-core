@@ -28,6 +28,7 @@ import { WikiCredentialReferenceExtension } from "@/components/wiki/wiki-credent
 import { WikiDocumentReferenceExtension } from "@/components/wiki/wiki-document-reference-node"
 import { WikiEditorBubbleMenu } from "@/components/wiki/wiki-editor-bubble-menu"
 import { WikiEditorTableMenu } from "@/components/wiki/wiki-editor-table-menu"
+import { WikiEditorToc } from "@/components/wiki/wiki-editor-toc"
 import { WikiLinkPopover, startLinkInsert } from "@/components/wiki/wiki-link-popover"
 import { WikiInlineCodePopover } from "@/components/wiki/wiki-inline-code-popover"
 import { WikiSlashCommand } from "@/components/wiki/wiki-slash-command/extension"
@@ -68,6 +69,7 @@ export function WikiEditor({
   const user = useAuthStore((s) => s.user)
   const pendingFocusDocId = useWikiStore((s) => s.pendingFocusDocId)
   const setPendingFocusDocId = useWikiStore((s) => s.setPendingFocusDocId)
+  const tocVisible = useWikiStore((s) => s.editorTocVisible)
 
   // Paste/drop handlers run long after the editor config is captured; route
   // through a ref so they always observe the current editor (not a stale
@@ -433,12 +435,17 @@ export function WikiEditor({
   }, [isReady, editor, isEditor, pendingFocusDocId, documentId, setPendingFocusDocId])
 
   return (
-    <>
+    // The relative wrapper anchors the floating TOC overlay so it pins to
+    // the editor area's upper-right corner instead of scrolling with the
+    // document body. min-h-0 + flex-col lets the inner scroll container
+    // claim the remaining height under the (optional) connection banner.
+    <div className="relative flex min-h-0 flex-1 flex-col">
       <ConnectionBanner connectionStatus={connectionStatus} isSynced={isSynced} isReady={isReady} />
       {isEditor && <WikiEditorBubbleMenu editor={editor} />}
       {isEditor && <WikiEditorTableMenu editor={editor} />}
       {isEditor && <WikiInlineCodePopover editor={editor} />}
       {isEditor && <WikiLinkPopover editor={editor} />}
+      {tocVisible && isReady && <WikiEditorToc editor={editor} />}
       <div
         className="flex-1 overflow-y-auto px-4 py-2"
         onMouseDown={(e) => {
@@ -522,6 +529,6 @@ export function WikiEditor({
         )}
         {isReady && footer}
       </div>
-    </>
+    </div>
   )
 }
