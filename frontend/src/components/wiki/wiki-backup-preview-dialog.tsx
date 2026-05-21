@@ -18,9 +18,11 @@ import { getBackupVisual } from "./wiki-backup-visual";
 
 // Unified line-level diff between a backup and the current document. Uses
 // jsdiff's `diffLines` so context + added + removed lines render in one
-// scrollable column (code-review style). Side-by-side was dropped because
-// a diff dialog's job is to answer "what changed", which a unified view
-// does in a fraction of the width.
+// scrollable column (code-review style). Unchanged regions are collapsed
+// to CONTEXT_LINES around every change block; the elided span is replaced
+// with a "··· N lines hidden ···" gap row, GitHub-style.
+const CONTEXT_LINES = 5;
+
 export function WikiBackupPreviewDialog() {
   const { backupPreviewId, closeBackupPreview, openBackupConfirm } =
     useWikiStore();
@@ -43,11 +45,22 @@ export function WikiBackupPreviewDialog() {
   );
 }
 
-type DiffKind = "context" | "add" | "remove";
+type ChangeKind = "context" | "add" | "remove";
 
-interface DiffLine {
-  kind: DiffKind;
-  text: string;
+type DiffRow =
+  | { kind: "context"; text: string; oldLine: number; newLine: number }
+  | { kind: "add"; text: string; newLine: number }
+  | { kind: "remove"; text: string; oldLine: number }
+  | { kind: "gap"; hidden: number };
+
+type ChangeRow = Exclude<DiffRow, { kind: "gap" }>;
+
+interface DiffResult {
+  rows: DiffRow[];
+  adds: number;
+  removes: number;
+  maxOldLine: number;
+  maxNewLine: number;
 }
 
 function PreviewBody({
@@ -68,7 +81,7 @@ function PreviewBody({
   );
   const current = docData?.wikiDocument;
 
-  const diff = useMemo(() => {
+  const diff = useMemo<DiffResult | null>(() => {
     if (!backup || !current) return null;
     return computeDiff(backup.content ?? "", current.content ?? "");
   }, [backup, current]);
@@ -93,6 +106,14 @@ function PreviewBody({
   const currentSize = current
     ? formatBytes(new TextEncoder().encode(current.content ?? "").byteLength)
     : null;
+
+  // Line-number gutter width sized to the largest line number we'll render.
+  // Min 2ch so single-digit files still get a stable column.
+  const lineNumDigits = diff
+    ? Math.max(2, String(Math.max(diff.maxOldLine, diff.maxNewLine, 1)).length)
+    : 2;
+
+  const bothEmpty = !(backup.content ?? "") && !(current?.content ?? "");
 
   return (
     <>
@@ -138,12 +159,10 @@ function PreviewBody({
             <Skeleton className="h-3 w-5/6" />
             <Skeleton className="h-3 w-2/3" />
           </div>
-        ) : diff && diff.lines.length > 0 ? (
-          <DiffBody lines={diff.lines} />
+        ) : !diff || diff.rows.length === 0 ? (
+          <EmptyState bothEmpty={bothEmpty} />
         ) : (
-          <p className="px-3 py-6 text-center italic text-muted-foreground">
-            Both versions are empty.
-          </p>
+          <DiffBody rows={diff.rows} digits={lineNumDigits} />
         )}
       </div>
 
@@ -195,27 +214,80 @@ function DiffSummary({
   );
 }
 
-function DiffBody({ lines }: { lines: DiffLine[] }) {
+function EmptyState({ bothEmpty }: { bothEmpty: boolean }) {
+  return (
+    <p className="px-3 py-6 text-center italic text-muted-foreground">
+      {bothEmpty
+        ? "Both versions are empty."
+        : "No differences between this snapshot and the current document."}
+    </p>
+  );
+}
+
+function DiffBody({ rows, digits }: { rows: DiffRow[]; digits: number }) {
   return (
     <div className="divide-y divide-border/40">
-      {lines.map((line, i) => (
-        <div key={i} className={rowClass(line.kind)}>
-          <span className="w-6 shrink-0 select-none text-center text-muted-foreground/50">
-            {prefix(line.kind)}
-          </span>
-          <span className="min-w-0 flex-1 whitespace-pre-wrap wrap-break-word px-2">
-            {isVisuallyBlank(line.text) ? (
-              // Newline glyph (U+21B5) for blank lines so the row isn't an
-              // empty box. Muted + non-selectable so it doesn't bleed into
-              // copy-paste.
-              <span className="select-none text-muted-foreground/40">↵</span>
-            ) : (
-              renderLine(line.text)
-            )}
-          </span>
-        </div>
-      ))}
+      {rows.map((row, i) =>
+        row.kind === "gap" ? (
+          <GapRow key={i} hidden={row.hidden} />
+        ) : (
+          <ChangeLine key={i} row={row} digits={digits} />
+        ),
+      )}
     </div>
+  );
+}
+
+function GapRow({ hidden }: { hidden: number }) {
+  return (
+    <div className="select-none bg-muted/40 px-3 py-1 text-center text-[11px] italic text-muted-foreground/80">
+      <span aria-hidden>···</span>{" "}
+      <span>
+        {hidden} unchanged {hidden === 1 ? "line" : "lines"} hidden
+      </span>{" "}
+      <span aria-hidden>···</span>
+    </div>
+  );
+}
+
+function ChangeLine({ row, digits }: { row: ChangeRow; digits: number }) {
+  const oldLine = row.kind === "add" ? undefined : row.oldLine;
+  const newLine = row.kind === "remove" ? undefined : row.newLine;
+  return (
+    <div className={rowClass(row.kind)}>
+      <LineNumCell value={oldLine} digits={digits} />
+      <LineNumCell value={newLine} digits={digits} />
+      <span className="w-5 shrink-0 select-none text-center text-muted-foreground/60">
+        {prefix(row.kind)}
+      </span>
+      <span className="min-w-0 flex-1 whitespace-pre-wrap wrap-break-word py-0.5 pr-2 pl-1">
+        {isVisuallyBlank(row.text) ? (
+          // Newline glyph (U+21B5) for blank lines so the row isn't an
+          // empty box. Muted + non-selectable so it doesn't bleed into
+          // copy-paste.
+          <span className="select-none text-muted-foreground/40">↵</span>
+        ) : (
+          renderLine(row.text)
+        )}
+      </span>
+    </div>
+  );
+}
+
+function LineNumCell({
+  value,
+  digits,
+}: {
+  value: number | undefined;
+  digits: number;
+}) {
+  return (
+    <span
+      className="shrink-0 select-none border-r border-border/40 px-2 py-0.5 text-right tabular-nums text-muted-foreground/60"
+      style={{ width: `${digits + 2}ch` }}
+    >
+      {value ?? ""}
+    </span>
   );
 }
 
@@ -267,18 +339,18 @@ function renderLine(text: string): React.ReactNode {
   );
 }
 
-function rowClass(kind: DiffKind): string {
+function rowClass(kind: ChangeKind): string {
   switch (kind) {
     case "add":
-      return "flex bg-emerald-500/10 text-emerald-900 dark:text-emerald-200";
+      return "flex items-start bg-emerald-500/10 text-emerald-900 dark:text-emerald-200";
     case "remove":
-      return "flex bg-rose-500/10 text-rose-900 dark:text-rose-200";
+      return "flex items-start bg-rose-500/10 text-rose-900 dark:text-rose-200";
     default:
-      return "flex";
+      return "flex items-start";
   }
 }
 
-function prefix(kind: DiffKind): string {
+function prefix(kind: ChangeKind): string {
   switch (kind) {
     case "add":
       return "+";
@@ -289,34 +361,105 @@ function prefix(kind: DiffKind): string {
   }
 }
 
-function computeDiff(
-  before: string,
-  after: string,
-): { lines: DiffLine[]; adds: number; removes: number } {
+function computeDiff(before: string, after: string): DiffResult {
   // Normalize CRLF / CR-only line endings before diffing. CSS
   // `white-space: pre-wrap` renders a lone `\r` as a hard line break,
   // so a stray `\r` left on a row would double its visual height.
   const a = before.replace(/\r\n?/g, "\n");
   const b = after.replace(/\r\n?/g, "\n");
   const parts = diffLines(a, b);
-  const out: DiffLine[] = [];
+  const full: DiffRow[] = [];
   let adds = 0;
   let removes = 0;
+  let oldNum = 0;
+  let newNum = 0;
   for (const part of parts) {
     // Split the chunk back into per-line entries, dropping the trailing
     // empty string that comes from a chunk that ends in "\n".
     const raw = part.value.split("\n");
     if (raw.length > 0 && raw[raw.length - 1] === "") raw.pop();
-    const kind: DiffKind = part.added
-      ? "add"
-      : part.removed
-        ? "remove"
-        : "context";
-    for (const text of raw) {
-      out.push({ kind, text });
-      if (kind === "add") adds++;
-      else if (kind === "remove") removes++;
+    if (part.added) {
+      for (const text of raw) {
+        newNum++;
+        full.push({ kind: "add", text, newLine: newNum });
+        adds++;
+      }
+    } else if (part.removed) {
+      for (const text of raw) {
+        oldNum++;
+        full.push({ kind: "remove", text, oldLine: oldNum });
+        removes++;
+      }
+    } else {
+      for (const text of raw) {
+        oldNum++;
+        newNum++;
+        full.push({ kind: "context", text, oldLine: oldNum, newLine: newNum });
+      }
     }
   }
-  return { lines: out, adds, removes };
+  return {
+    rows: collapseContext(full),
+    adds,
+    removes,
+    maxOldLine: oldNum,
+    maxNewLine: newNum,
+  };
+}
+
+// Collapse runs of unchanged ("context") rows so only CONTEXT_LINES survive
+// on each side of every change. Leading context (before the first change)
+// keeps only the last CONTEXT_LINES; trailing context keeps only the first
+// CONTEXT_LINES; mid-file runs keep both edges. A "gap" row records how many
+// lines were elided so the reader can still gauge document scale. If the
+// whole file is context (no changes at all), drop everything — the caller
+// renders a friendlier "no differences" message instead of a lone gap.
+function collapseContext(rows: DiffRow[]): DiffRow[] {
+  if (rows.length === 0) return rows;
+  const out: DiffRow[] = [];
+  let i = 0;
+  while (i < rows.length) {
+    if (rows[i].kind !== "context") {
+      out.push(rows[i]);
+      i++;
+      continue;
+    }
+    let j = i;
+    while (j < rows.length && rows[j].kind === "context") j++;
+    const run = rows.slice(i, j);
+    const isStart = i === 0;
+    const isEnd = j === rows.length;
+    if (isStart && isEnd) {
+      // Identical content — no change to anchor context against. Drop it.
+    } else if (isStart) {
+      out.push(...trimEdgeContext(run, "leading"));
+    } else if (isEnd) {
+      out.push(...trimEdgeContext(run, "trailing"));
+    } else {
+      out.push(...trimMiddleContext(run));
+    }
+    i = j;
+  }
+  return out;
+}
+
+function trimEdgeContext(
+  run: DiffRow[],
+  side: "leading" | "trailing",
+): DiffRow[] {
+  if (run.length <= CONTEXT_LINES) return run;
+  const gap: DiffRow = { kind: "gap", hidden: run.length - CONTEXT_LINES };
+  return side === "leading"
+    ? [gap, ...run.slice(-CONTEXT_LINES)]
+    : [...run.slice(0, CONTEXT_LINES), gap];
+}
+
+function trimMiddleContext(run: DiffRow[]): DiffRow[] {
+  if (run.length <= CONTEXT_LINES * 2) return run;
+  const gap: DiffRow = { kind: "gap", hidden: run.length - CONTEXT_LINES * 2 };
+  return [
+    ...run.slice(0, CONTEXT_LINES),
+    gap,
+    ...run.slice(-CONTEXT_LINES),
+  ];
 }
