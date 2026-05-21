@@ -51,10 +51,33 @@ export const WikiSlashCommand = Extension.create<SlashCommandOptions>({
   },
 })
 
+function itemsEqual(a: SlashItem[], b: SlashItem[]): boolean {
+  if (a === b) return true
+  if (a.length !== b.length) return false
+  for (let i = 0; i < a.length; i++) {
+    if (a[i].title !== b[i].title) return false
+  }
+  return true
+}
+
+function rectsEqual(a: DOMRect | null, b: DOMRect | null): boolean {
+  if (a === b) return true
+  if (!a || !b) return false
+  return a.left === b.left && a.top === b.top && a.right === b.right && a.bottom === b.bottom
+}
+
 function renderSlashMenu() {
   let container: HTMLDivElement | null = null
   let root: Root | null = null
   const handleRef = { current: null as SlashMenuHandle | null }
+  // Cache last-rendered inputs so remote-collaborator transactions that shift
+  // the suggestion range but don't change the query (and therefore don't
+  // change items or screen position) skip the React render + DOM reposition
+  // entirely. Without this guard, every remote keystroke caused @tiptap/suggestion
+  // to call onUpdate, which reconciled the React tree even when nothing
+  // visible changed.
+  let lastItems: SlashItem[] | null = null
+  let lastRect: DOMRect | null = null
 
   function mount() {
     if (container) return
@@ -73,6 +96,8 @@ function renderSlashMenu() {
     container?.remove()
     container = null
     handleRef.current = null
+    lastItems = null
+    lastRect = null
   }
 
   function position(rect: DOMRect | null) {
@@ -87,32 +112,40 @@ function renderSlashMenu() {
     container.style.left = `${rect.left + window.scrollX}px`
   }
 
+  function render(props: SuggestionProps<SlashItem, SlashItem>) {
+    root?.render(
+      createElement(SlashMenu, {
+        ref: (handle: SlashMenuHandle | null) => {
+          handleRef.current = handle
+        },
+        items: props.items,
+        onSelect: (item) => props.command(item),
+      }),
+    )
+    lastItems = props.items
+  }
+
   return {
     onStart: (props: SuggestionProps<SlashItem, SlashItem>) => {
       mount()
-      root?.render(
-        createElement(SlashMenu, {
-          ref: (handle: SlashMenuHandle | null) => {
-            handleRef.current = handle
-          },
-          items: props.items,
-          onSelect: (item) => props.command(item),
-        }),
-      )
-      position(props.clientRect?.() ?? null)
+      render(props)
+      const rect = props.clientRect?.() ?? null
+      position(rect)
+      lastRect = rect
     },
 
     onUpdate: (props: SuggestionProps<SlashItem, SlashItem>) => {
-      root?.render(
-        createElement(SlashMenu, {
-          ref: (handle: SlashMenuHandle | null) => {
-            handleRef.current = handle
-          },
-          items: props.items,
-          onSelect: (item) => props.command(item),
-        }),
-      )
-      position(props.clientRect?.() ?? null)
+      const itemsSame = lastItems !== null && itemsEqual(lastItems, props.items)
+      const rect = props.clientRect?.() ?? null
+      const rectSame = rectsEqual(lastRect, rect)
+      // Identical inputs from the previous render (typical of remote-typing
+      // transactions): no-op.
+      if (itemsSame && rectSame) return
+      if (!itemsSame) render(props)
+      if (!rectSame) {
+        position(rect)
+        lastRect = rect
+      }
     },
 
     onKeyDown: (props: SuggestionKeyDownProps) => {

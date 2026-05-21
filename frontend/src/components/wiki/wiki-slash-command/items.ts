@@ -277,11 +277,24 @@ export const SLASH_ITEMS: SlashItem[] = [
   },
 ]
 
+// Memoize filtered results so repeated calls with the same query return the
+// SAME array reference. @tiptap/suggestion calls `items({query})` on every
+// transaction where the trigger range shifted (e.g. a remote collaborator
+// typed before the local caret), even when the query string is unchanged.
+// Without this cache, `.filter()` would allocate a fresh array each time and
+// downstream React code that uses reference equality (SlashMenu's
+// selectedIndex guard) would reset state on every remote keystroke.
+const filterCache = new Map<string, SlashItem[]>()
+
 export function filterItems(query: string): SlashItem[] {
   const q = query.trim().toLowerCase()
   if (!q) return SLASH_ITEMS
-  return SLASH_ITEMS.filter((item) => {
+  const cached = filterCache.get(q)
+  if (cached) return cached
+  const filtered = SLASH_ITEMS.filter((item) => {
     if (item.title.toLowerCase().includes(q)) return true
     return item.keywords.some((k) => k.toLowerCase().includes(q))
   })
+  filterCache.set(q, filtered)
+  return filtered
 }

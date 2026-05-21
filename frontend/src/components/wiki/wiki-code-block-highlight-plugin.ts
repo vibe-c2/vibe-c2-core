@@ -5,26 +5,35 @@ import { Decoration, DecorationSet } from "@tiptap/pm/view"
 import type { createLowlight } from "lowlight"
 
 // Drop-in replacement for the LowlightPlugin shipped by
-// @tiptap/extension-code-block-lowlight. Two layers of optimization:
+// @tiptap/extension-code-block-lowlight. Three layers of optimization:
 //
 //   1. Per-block memoization. The plugin tracks each code block's textContent
-//      and language alongside its decorations. On every doc-changing
-//      transaction we forward-map old block positions, then for each new
-//      block: hit (textContent + language unchanged) → reuse mapped
-//      decorations, no highlight.js call. Miss → mark the block "dirty" and
-//      keep its previous decorations, mapped through tr.mapping, as a stale
-//      visual approximation.
+//      and language. On every doc-changing transaction we forward-map old
+//      block positions, then for each new block: hit (textContent + language
+//      unchanged) → just preserve the entry, no highlight.js call. Miss →
+//      mark the block "dirty"; previous decorations stay (mapped) as a stale
+//      visual approximation until the async refresh fires.
 //
-//   2. Async refresh of dirty blocks. The synchronous typing path NEVER
+//   2. Stable DecorationSet across transactions. The plugin no longer rebuilds
+//      the entire decoration set from a flat block-list on every transaction —
+//      instead it carries a single DecorationSet forward via PM's `.map()`
+//      and only mutates it surgically when async refresh lands. PM's
+//      DecorationSet.map preserves per-decoration identity for ranges that
+//      didn't shift, which means innerDecorations passed to unchanged code
+//      blocks' NodeViews keeps the same identity → Tiptap's reference-based
+//      `update` check skips the React re-render. This is the fix for the
+//      "syntax colors re-render whenever any user types anywhere" bug.
+//
+//   3. Async refresh of dirty blocks. The synchronous typing path NEVER
 //      calls highlight.js — it only does mapping. A debounced view-side timer
 //      walks dirty blocks in idle time, runs lowlight.highlight on each, and
 //      dispatches a META_REFRESH transaction with the fresh decorations.
 //      Every doc-changing transaction cancels and reschedules the timer, so
 //      the highlight pass only runs once the user pauses.
 //
-// Net effect: per-keystroke cost is independent of any code block's size.
-// Token coloring lags the cursor by one debounce window (~50 ms) inside the
-// edited block; everywhere else it stays exact.
+// Net effect: per-keystroke cost is independent of any code block's size,
+// and untouched code blocks don't pay any React/PM render cost when a
+// collaborator types elsewhere in the document.
 
 type Lowlight = ReturnType<typeof createLowlight>
 
@@ -49,11 +58,10 @@ interface BlockEntry {
   readonly pos: number
   readonly textContent: string
   readonly language: string | null
-  readonly decorations: ReadonlyArray<DecorationData>
   /**
-   * True when `decorations` is a stale (mapped) approximation that does not
-   * yet reflect the current `textContent` / `language`. Cleared when the
-   * async refresh task replaces the decorations.
+   * True when this block's decorations in the live DecorationSet are stale
+   * (either never highlighted, or carried over from a content/language
+   * change). Cleared when the async refresh task replaces them.
    */
   readonly dirty: boolean
 }
@@ -137,69 +145,26 @@ function highlightBlock(
   return decorations
 }
 
-function buildDecorationSet(
-  doc: PMNode,
-  blocks: ReadonlyArray<BlockEntry>,
-): DecorationSet {
-  const all: Decoration[] = []
-  for (const block of blocks) {
-    for (const d of block.decorations) {
-      all.push(Decoration.inline(d.from, d.to, { class: d.classes }))
-    }
-  }
-  return DecorationSet.create(doc, all)
-}
-
-function freshEntry(
-  node: PMNode,
-  pos: number,
-  opts: NormalizedOptions,
-): BlockEntry {
-  return {
-    pos,
-    textContent: node.textContent,
-    language: node.attrs.language || opts.defaultLanguage,
-    decorations: highlightBlock(node, pos, opts),
-    dirty: false,
-  }
+function toDecorations(data: ReadonlyArray<DecorationData>): Decoration[] {
+  return data.map((d) => Decoration.inline(d.from, d.to, { class: d.classes }))
 }
 
 function initState(doc: PMNode, opts: NormalizedOptions): PluginState {
   const blocks: BlockEntry[] = []
+  const allDecorations: Decoration[] = []
   findChildren(doc, (n) => n.type.name === opts.name).forEach(({ node, pos }) => {
-    blocks.push(freshEntry(node, pos, opts))
-  })
-  return { blocks, decorationSet: buildDecorationSet(doc, blocks) }
-}
-
-function mapDecorations(
-  decorations: ReadonlyArray<DecorationData>,
-  mapping: Transaction["mapping"],
-): DecorationData[] {
-  return decorations.map((d) => ({
-    from: mapping.map(d.from, 1),
-    to: mapping.map(d.to, -1),
-    classes: d.classes,
-  }))
-}
-
-function applyRefresh(
-  doc: PMNode,
-  prev: PluginState,
-  updates: RefreshUpdates,
-): PluginState {
-  const newBlocks: BlockEntry[] = prev.blocks.map((block) => {
-    const fresh = updates.get(block.pos)
-    if (!fresh) return block
-    return {
-      pos: block.pos,
-      textContent: block.textContent,
-      language: block.language,
-      decorations: fresh,
+    blocks.push({
+      pos,
+      textContent: node.textContent,
+      language: node.attrs.language || opts.defaultLanguage,
       dirty: false,
-    }
+    })
+    allDecorations.push(...toDecorations(highlightBlock(node, pos, opts)))
   })
-  return { blocks: newBlocks, decorationSet: buildDecorationSet(doc, newBlocks) }
+  return {
+    blocks,
+    decorationSet: DecorationSet.create(doc, allDecorations),
+  }
 }
 
 function applyDocChange(
@@ -209,7 +174,7 @@ function applyDocChange(
 ): PluginState {
   // Forward-map old block positions. The mapped position is where the block
   // *would* be in the new doc if its boundaries survived. Whether it's still
-  // a code block is decided by the textContent / language check below.
+  // a code block is decided by the content/language check below.
   const oldByMappedPos = new Map<number, BlockEntry>()
   for (const entry of prev.blocks) {
     oldByMappedPos.set(tr.mapping.map(entry.pos, 1), entry)
@@ -222,14 +187,15 @@ function applyDocChange(
     const newLanguage: string | null = node.attrs.language || opts.defaultLanguage
 
     if (oldEntry == null) {
-      // Brand-new block (initial sync, paste, slash command, split). Show
-      // plain text until the async refresh fires; users typically aren't
-      // typing into a block they just created in the same frame.
+      // Brand-new block (initial sync, paste, slash command, split). Marked
+      // dirty so the async refresh produces decorations; until then PM's
+      // mapped decorationSet has nothing for this block range, which renders
+      // as plain text — correct, since there were no prior decorations to
+      // stale-map.
       newBlocks.push({
         pos,
         textContent: newTextContent,
         language: newLanguage,
-        decorations: [],
         dirty: true,
       })
       return
@@ -239,35 +205,73 @@ function applyDocChange(
     const languageSame = oldEntry.language === newLanguage
 
     if (contentSame && languageSame) {
-      // True cache hit. Reuse decorations, mapped through the transaction.
-      // Preserve dirty so a block awaiting refresh stays queued.
       newBlocks.push({
         pos,
         textContent: newTextContent,
         language: newLanguage,
-        decorations: mapDecorations(oldEntry.decorations, tr.mapping),
         dirty: oldEntry.dirty,
       })
       return
     }
 
     // Content or language changed. Don't run highlight.js synchronously —
-    // mapping the old decorations is a usable visual stand-in (typed chars
-    // inherit their neighbors' classes), and the async refresh will replace
-    // them within the debounce window.
+    // PM's DecorationSet.map below leaves the previous decorations in place
+    // as a stale visual approximation (typed chars inherit their neighbors'
+    // classes), and the async refresh will replace them within the debounce
+    // window.
     newBlocks.push({
       pos,
       textContent: newTextContent,
       language: newLanguage,
-      decorations: mapDecorations(oldEntry.decorations, tr.mapping),
       dirty: true,
     })
   })
 
-  return {
-    blocks: newBlocks,
-    decorationSet: buildDecorationSet(tr.doc, newBlocks),
-  }
+  // PM's DecorationSet.map carries decorations forward through tr.mapping
+  // without rebuilding from scratch. Critically, for ranges where the
+  // mapping is identity (every code block when a collaborator types in an
+  // unrelated paragraph), the inner Decoration objects come through with the
+  // same attrs and class spec — PM's view-layer diff via `dec.eq` then
+  // becomes a no-op, and no DOM updates are emitted for those blocks.
+  const decorationSet = prev.decorationSet.map(tr.mapping, tr.doc)
+
+  return { blocks: newBlocks, decorationSet }
+}
+
+function applyRefresh(
+  doc: PMNode,
+  prev: PluginState,
+  updates: RefreshUpdates,
+): PluginState {
+  let decorationSet = prev.decorationSet
+  const newBlocks: BlockEntry[] = prev.blocks.map((block) => {
+    const fresh = updates.get(block.pos)
+    if (!fresh) return block
+    const node = doc.nodeAt(block.pos)
+    if (!node) {
+      // Block disappeared between dirty-mark and refresh (e.g. deleted by a
+      // collaborator). Drop the dirty flag and skip decoration mutation —
+      // the map() in applyDocChange already cleaned up its decorations.
+      return { ...block, dirty: false }
+    }
+    const blockFrom = block.pos
+    const blockTo = block.pos + node.nodeSize
+    const toRemove = decorationSet.find(blockFrom, blockTo)
+    if (toRemove.length > 0) {
+      decorationSet = decorationSet.remove(toRemove)
+    }
+    const adds = toDecorations(fresh)
+    if (adds.length > 0) {
+      decorationSet = decorationSet.add(doc, adds)
+    }
+    return {
+      pos: block.pos,
+      textContent: block.textContent,
+      language: block.language,
+      dirty: false,
+    }
+  })
+  return { blocks: newBlocks, decorationSet }
 }
 
 export function createIncrementalLowlightPlugin(

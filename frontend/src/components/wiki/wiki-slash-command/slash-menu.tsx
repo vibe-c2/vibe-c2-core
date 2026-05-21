@@ -11,6 +11,15 @@ interface SlashMenuProps {
   onSelect: (item: SlashItem) => void
 }
 
+function itemsEqual(a: SlashItem[], b: SlashItem[]): boolean {
+  if (a === b) return true
+  if (a.length !== b.length) return false
+  for (let i = 0; i < a.length; i++) {
+    if (a[i].title !== b[i].title) return false
+  }
+  return true
+}
+
 export const SlashMenu = forwardRef<SlashMenuHandle, SlashMenuProps>(function SlashMenu(
   { items, onSelect },
   ref,
@@ -21,8 +30,14 @@ export const SlashMenu = forwardRef<SlashMenuHandle, SlashMenuProps>(function Sl
   // Reset cursor when the result list changes. Done during render via the
   // prev-value pattern (react.dev/reference/react/useState#storing-information-from-previous-renders)
   // rather than a setState-in-effect, which the React Hooks lint flags.
+  //
+  // Compares by *content* (length + title sequence), not reference. A remote
+  // collaborator typing before the local caret causes @tiptap/suggestion to
+  // re-fetch items every transaction; even with a memoized filter the menu
+  // would otherwise lose the user's keyboard selection on every remote
+  // keystroke whenever the items array identity drifted for any reason.
   const [lastItems, setLastItems] = useState(items)
-  if (lastItems !== items) {
+  if (!itemsEqual(lastItems, items)) {
     setLastItems(items)
     setSelectedIndex(0)
   }

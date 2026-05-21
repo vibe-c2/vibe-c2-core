@@ -238,7 +238,30 @@ export function WikiEditor({
           }
         },
         addNodeView() {
-          return ReactNodeViewRenderer(WikiCodeBlock)
+          return ReactNodeViewRenderer(WikiCodeBlock, {
+            // Custom update guard so a remote collaborator typing in some
+            // unrelated paragraph doesn't re-render every code block in the
+            // doc. Tiptap's default update returns true (triggering a React
+            // render) whenever node/decorations/innerDecorations are a new
+            // reference — true on every transaction, since both PM and our
+            // lowlight plugin can produce fresh DecorationSet references
+            // even when nothing observable changed for THIS block. The
+            // WikiCodeBlock component only reads node.attrs.language,
+            // node.attrs.wrap, and node.textContent (via marks recompute),
+            // plus a cursorInside boolean from useEditorState — none of
+            // which are derivable from the new decoration set. So when none
+            // of those changed, skip the React render and let PM's view
+            // layer reconcile the (no-op) decoration diff on its own.
+            update: ({ oldNode, newNode, updateProps }) => {
+              if (oldNode.type !== newNode.type) return false
+              const renderInputsSame =
+                oldNode.attrs.language === newNode.attrs.language &&
+                oldNode.attrs.wrap === newNode.attrs.wrap &&
+                oldNode.textContent === newNode.textContent
+              if (!renderInputsSame) updateProps()
+              return true
+            },
+          })
         },
         addProseMirrorPlugins() {
           return [
