@@ -250,6 +250,7 @@ export const WikiRecentDocumentsQuery = graphql(`
           updatedAt
           lastUpdatedAt
           createdBy { id username }
+          lastUpdatedBy { id username }
         }
         cursor
       }

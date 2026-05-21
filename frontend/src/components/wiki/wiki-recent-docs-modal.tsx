@@ -74,9 +74,9 @@ interface ModalBodyProps {
 }
 
 // Row height estimate used by the virtualizer. The actual row renders icon +
-// title + breadcrumb + timestamp at ~56px; the estimate just needs to be
+// title + breadcrumb + attribution at ~72px; the estimate just needs to be
 // in the ballpark, react-virtual measures real heights via the row's ref.
-const ROW_HEIGHT = 56
+const ROW_HEIGHT = 72
 // How many rows from the bottom of the rendered window trigger the next
 // page fetch. Small enough to feel responsive on fast scroll, large enough
 // that the user doesn't see the loading-skeleton row.
@@ -222,6 +222,15 @@ function ModalBody({ operationId, isOpen, onClose }: ModalBodyProps) {
                 sort === "RECENTLY_UPDATED"
                   ? hit.lastUpdatedAt ?? hit.updatedAt
                   : hit.createdAt
+              // Attribution mirrors the active sort tab. lastUpdatedBy falls
+              // back to createdBy for legacy documents that predate the
+              // attribution field (see wiki.graphql comment on lastUpdatedBy).
+              const attributionUser =
+                sort === "RECENTLY_UPDATED"
+                  ? hit.lastUpdatedBy ?? hit.createdBy
+                  : hit.createdBy
+              const attributionLabel =
+                sort === "RECENTLY_UPDATED" ? "Updated by" : "Created by"
               return (
                 <div
                   key={hit.id}
@@ -260,6 +269,9 @@ function ModalBody({ operationId, isOpen, onClose }: ModalBodyProps) {
                         ancestors={hit.ancestors}
                         className="truncate"
                       />
+                      <span className="block truncate text-[11px] text-muted-foreground">
+                        {attributionLabel} {attributionUser.username}
+                      </span>
                     </div>
                     <span className="mt-0.5 shrink-0 text-[11px] tabular-nums text-muted-foreground">
                       {relativeTime(timestampSource, now)}
