@@ -6,6 +6,7 @@ import {
   ChevronRightIcon,
   ChevronsDownUpIcon,
   ChevronsUpDownIcon,
+  CopyIcon,
   EllipsisIcon,
   FilePlusIcon,
   FolderInputIcon,
@@ -30,6 +31,7 @@ import { Skeleton } from "@/components/ui/skeleton"
 import { useWikiStore } from "@/stores/wiki"
 import { useWikiDragStore } from "@/stores/wiki-drag"
 import {
+  useDuplicateWikiDocument,
   useReorderWikiDocumentSiblings,
   useUpdateWikiDocument,
   useWikiDocumentChildren,
@@ -364,8 +366,10 @@ function WikiTreeRowQuickActionsImpl({
   const openCreateDialog = useWikiStore((s) => s.openCreateDialog)
   const openMoveDialog = useWikiStore((s) => s.openMoveDialog)
   const openDeleteDialog = useWikiStore((s) => s.openDeleteDialog)
+  const openDuplicateDialog = useWikiStore((s) => s.openDuplicateDialog)
   const openContentSearch = useWikiStore((s) => s.openContentSearch)
   const reorderSiblings = useReorderWikiDocumentSiblings()
+  const duplicateDocument = useDuplicateWikiDocument()
 
   // Menu-open state is local to this subtree — no reason to live in the
   // parent row, where it would force the row (and its dnd hooks) to
@@ -488,6 +492,28 @@ function WikiTreeRowQuickActionsImpl({
             <DropdownMenuItem onClick={onStartIconPicker}>
               <SmileIcon className="mr-2 size-4" />
               Change icon
+            </DropdownMenuItem>
+          )}
+          {isEditor && (
+            <DropdownMenuItem
+              onClick={() => {
+                // Documents with children prompt for shallow vs deep copy via
+                // the dialog. Leaves bypass it — there's nothing to ask, so we
+                // fire the mutation directly.
+                if (hasChildren) {
+                  openDuplicateDialog({
+                    id: node.id,
+                    title: node.title,
+                    childCount: node.childCount,
+                  })
+                } else {
+                  duplicateDocument.mutate({ id: node.id, withChildren: false })
+                }
+              }}
+              disabled={duplicateDocument.isPending}
+            >
+              <CopyIcon className="mr-2 size-4" />
+              Duplicate
             </DropdownMenuItem>
           )}
           {isEditor && (

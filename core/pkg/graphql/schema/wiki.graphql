@@ -374,6 +374,14 @@ extend type Mutation {
   deleteWikiDocument(id: ID!): Boolean!
     @hasPermission(permission: "operation:member")
 
+  # Duplicates a wiki document as a sibling of the source, placed immediately
+  # after it in sort order. The duplicate's title is prefixed with "Copy of ".
+  # When `withChildren` is true the entire active subtree is cloned (descendants
+  # keep their original titles); when false only the document itself is cloned.
+  # Trashed descendants are skipped — they stay in trash. Returns the new root.
+  duplicateWikiDocument(id: ID!, withChildren: Boolean = false): WikiDocument!
+    @hasPermission(permission: "operation:member")
+
   # Restores a soft-deleted document. When `cascade` is true, also restores
   # every currently-trashed descendant of the document (children, grand-
   # children, etc.). Defaults to false: the document itself comes back but

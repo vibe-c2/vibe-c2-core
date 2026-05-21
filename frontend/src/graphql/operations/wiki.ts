@@ -429,6 +429,19 @@ export const DeleteWikiDocumentMutation = graphql(`
   }
 `)
 
+// Duplicate a document as a sibling. When `withChildren` is true the entire
+// active subtree is cloned. The duplicate is placed immediately after the
+// source in sortOrder.
+export const DuplicateWikiDocumentMutation = graphql(`
+  mutation DuplicateWikiDocument($id: ID!, $withChildren: Boolean) {
+    duplicateWikiDocument(id: $id, withChildren: $withChildren) {
+      id operationId title emoji color icon sortOrder
+      parentDocumentId
+      createdAt updatedAt
+    }
+  }
+`)
+
 export const RestoreWikiDocumentMutation = graphql(`
   mutation RestoreWikiDocument($id: ID!, $cascade: Boolean) {
     restoreWikiDocument(id: $id, cascade: $cascade) {

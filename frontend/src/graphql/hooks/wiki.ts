@@ -28,6 +28,7 @@ import {
   UpdateWikiDocumentDocument,
   ReorderWikiDocumentSiblingsDocument,
   DeleteWikiDocumentDocument,
+  DuplicateWikiDocumentDocument,
   RestoreWikiDocumentDocument,
   PermanentlyDeleteWikiDocumentDocument,
   EmptyWikiDocumentTrashDocument,
@@ -500,6 +501,16 @@ export function useDeleteWikiDocument() {
   return useMutation({
     mutationFn: (id: string) =>
       graphqlClient(DeleteWikiDocumentDocument, { id }),
+  })
+}
+
+// Duplicate a document as a sibling. The server publishes one create event for
+// the new root; the wikiDocumentChanged subscription invalidates the parent
+// bucket and children re-render lazily — no extra onSuccess invalidation here.
+export function useDuplicateWikiDocument() {
+  return useMutation({
+    mutationFn: (vars: { id: string; withChildren: boolean }) =>
+      graphqlClient(DuplicateWikiDocumentDocument, vars),
   })
 }
 

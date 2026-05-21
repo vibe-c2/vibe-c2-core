@@ -90,6 +90,7 @@ type Documents = {
     "\n  mutation UpdateWikiDocument($id: ID!, $input: UpdateWikiDocumentInput!) {\n    updateWikiDocument(id: $id, input: $input) {\n      id title emoji color icon sortOrder\n      parentDocumentId\n      updatedAt\n    }\n  }\n": typeof types.UpdateWikiDocumentDocument,
     "\n  mutation ReorderWikiDocumentSiblings($input: ReorderWikiDocumentSiblingsInput!) {\n    reorderWikiDocumentSiblings(input: $input) {\n      id sortOrder parentDocumentId updatedAt\n    }\n  }\n": typeof types.ReorderWikiDocumentSiblingsDocument,
     "\n  mutation DeleteWikiDocument($id: ID!) {\n    deleteWikiDocument(id: $id)\n  }\n": typeof types.DeleteWikiDocumentDocument,
+    "\n  mutation DuplicateWikiDocument($id: ID!, $withChildren: Boolean) {\n    duplicateWikiDocument(id: $id, withChildren: $withChildren) {\n      id operationId title emoji color icon sortOrder\n      parentDocumentId\n      createdAt updatedAt\n    }\n  }\n": typeof types.DuplicateWikiDocumentDocument,
     "\n  mutation RestoreWikiDocument($id: ID!, $cascade: Boolean) {\n    restoreWikiDocument(id: $id, cascade: $cascade) {\n      id operationId title emoji icon color sortOrder\n      parentDocumentId\n    }\n  }\n": typeof types.RestoreWikiDocumentDocument,
     "\n  query WikiDocumentTrashedDescendants($documentId: ID!) {\n    wikiDocumentTrashedDescendants(documentId: $documentId) {\n      id title emoji icon color\n    }\n  }\n": typeof types.WikiDocumentTrashedDescendantsDocument,
     "\n  mutation PermanentlyDeleteWikiDocument($id: ID!) {\n    permanentlyDeleteWikiDocument(id: $id)\n  }\n": typeof types.PermanentlyDeleteWikiDocumentDocument,
@@ -178,6 +179,7 @@ const documents: Documents = {
     "\n  mutation UpdateWikiDocument($id: ID!, $input: UpdateWikiDocumentInput!) {\n    updateWikiDocument(id: $id, input: $input) {\n      id title emoji color icon sortOrder\n      parentDocumentId\n      updatedAt\n    }\n  }\n": types.UpdateWikiDocumentDocument,
     "\n  mutation ReorderWikiDocumentSiblings($input: ReorderWikiDocumentSiblingsInput!) {\n    reorderWikiDocumentSiblings(input: $input) {\n      id sortOrder parentDocumentId updatedAt\n    }\n  }\n": types.ReorderWikiDocumentSiblingsDocument,
     "\n  mutation DeleteWikiDocument($id: ID!) {\n    deleteWikiDocument(id: $id)\n  }\n": types.DeleteWikiDocumentDocument,
+    "\n  mutation DuplicateWikiDocument($id: ID!, $withChildren: Boolean) {\n    duplicateWikiDocument(id: $id, withChildren: $withChildren) {\n      id operationId title emoji color icon sortOrder\n      parentDocumentId\n      createdAt updatedAt\n    }\n  }\n": types.DuplicateWikiDocumentDocument,
     "\n  mutation RestoreWikiDocument($id: ID!, $cascade: Boolean) {\n    restoreWikiDocument(id: $id, cascade: $cascade) {\n      id operationId title emoji icon color sortOrder\n      parentDocumentId\n    }\n  }\n": types.RestoreWikiDocumentDocument,
     "\n  query WikiDocumentTrashedDescendants($documentId: ID!) {\n    wikiDocumentTrashedDescendants(documentId: $documentId) {\n      id title emoji icon color\n    }\n  }\n": types.WikiDocumentTrashedDescendantsDocument,
     "\n  mutation PermanentlyDeleteWikiDocument($id: ID!) {\n    permanentlyDeleteWikiDocument(id: $id)\n  }\n": types.PermanentlyDeleteWikiDocumentDocument,
@@ -508,6 +510,10 @@ export function graphql(source: "\n  mutation ReorderWikiDocumentSiblings($input
  * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
  */
 export function graphql(source: "\n  mutation DeleteWikiDocument($id: ID!) {\n    deleteWikiDocument(id: $id)\n  }\n"): (typeof documents)["\n  mutation DeleteWikiDocument($id: ID!) {\n    deleteWikiDocument(id: $id)\n  }\n"];
+/**
+ * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
+ */
+export function graphql(source: "\n  mutation DuplicateWikiDocument($id: ID!, $withChildren: Boolean) {\n    duplicateWikiDocument(id: $id, withChildren: $withChildren) {\n      id operationId title emoji color icon sortOrder\n      parentDocumentId\n      createdAt updatedAt\n    }\n  }\n"): (typeof documents)["\n  mutation DuplicateWikiDocument($id: ID!, $withChildren: Boolean) {\n    duplicateWikiDocument(id: $id, withChildren: $withChildren) {\n      id operationId title emoji color icon sortOrder\n      parentDocumentId\n      createdAt updatedAt\n    }\n  }\n"];
 /**
  * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
  */

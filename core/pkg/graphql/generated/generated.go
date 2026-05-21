@@ -117,6 +117,7 @@ type ComplexityRoot struct {
 		DeleteUser                    func(childComplexity int, id string) int
 		DeleteWikiDocument            func(childComplexity int, id string) int
 		DeleteWikiDocumentBackup      func(childComplexity int, id string) int
+		DuplicateWikiDocument         func(childComplexity int, id string, withChildren *bool) int
 		EmptyWikiDocumentTrash        func(childComplexity int, operationID string) int
 		PermanentlyDeleteWikiDocument func(childComplexity int, id string) int
 		RemoveOperationMember         func(childComplexity int, operationID string, userID string) int
@@ -506,6 +507,7 @@ type MutationResolver interface {
 	UpdateWikiDocument(ctx context.Context, id string, input model.UpdateWikiDocumentInput) (*models.WikiDocument, error)
 	ReorderWikiDocumentSiblings(ctx context.Context, input model.ReorderWikiDocumentSiblingsInput) ([]*models.WikiDocument, error)
 	DeleteWikiDocument(ctx context.Context, id string) (bool, error)
+	DuplicateWikiDocument(ctx context.Context, id string, withChildren *bool) (*models.WikiDocument, error)
 	RestoreWikiDocument(ctx context.Context, id string, cascade *bool) (*models.WikiDocument, error)
 	PermanentlyDeleteWikiDocument(ctx context.Context, id string) (bool, error)
 	EmptyWikiDocumentTrash(ctx context.Context, operationID string) (bool, error)
@@ -1028,6 +1030,17 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.Mutation.DeleteWikiDocumentBackup(childComplexity, args["id"].(string)), true
+	case "Mutation.duplicateWikiDocument":
+		if e.ComplexityRoot.Mutation.DuplicateWikiDocument == nil {
+			break
+		}
+
+		args, err := ec.field_Mutation_duplicateWikiDocument_args(ctx, rawArgs)
+		if err != nil {
+			return 0, false
+		}
+
+		return e.ComplexityRoot.Mutation.DuplicateWikiDocument(childComplexity, args["id"].(string), args["withChildren"].(*bool)), true
 	case "Mutation.emptyWikiDocumentTrash":
 		if e.ComplexityRoot.Mutation.EmptyWikiDocumentTrash == nil {
 			break
@@ -4020,6 +4033,14 @@ extend type Mutation {
   deleteWikiDocument(id: ID!): Boolean!
     @hasPermission(permission: "operation:member")
 
+  # Duplicates a wiki document as a sibling of the source, placed immediately
+  # after it in sort order. The duplicate's title is prefixed with "Copy of ".
+  # When ` + "`" + `withChildren` + "`" + ` is true the entire active subtree is cloned (descendants
+  # keep their original titles); when false only the document itself is cloned.
+  # Trashed descendants are skipped — they stay in trash. Returns the new root.
+  duplicateWikiDocument(id: ID!, withChildren: Boolean = false): WikiDocument!
+    @hasPermission(permission: "operation:member")
+
   # Restores a soft-deleted document. When ` + "`" + `cascade` + "`" + ` is true, also restores
   # every currently-trashed descendant of the document (children, grand-
   # children, etc.). Defaults to false: the document itself comes back but
@@ -4318,6 +4339,22 @@ func (ec *executionContext) field_Mutation_deleteWikiDocument_args(ctx context.C
 		return nil, err
 	}
 	args["id"] = arg0
+	return args, nil
+}
+
+func (ec *executionContext) field_Mutation_duplicateWikiDocument_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
+	var err error
+	args := map[string]any{}
+	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "id", ec.unmarshalNID2string)
+	if err != nil {
+		return nil, err
+	}
+	args["id"] = arg0
+	arg1, err := graphql.ProcessArgField(ctx, rawArgs, "withChildren", ec.unmarshalOBoolean2ᚖbool)
+	if err != nil {
+		return nil, err
+	}
+	args["withChildren"] = arg1
 	return args, nil
 }
 
@@ -8638,6 +8675,111 @@ func (ec *executionContext) fieldContext_Mutation_deleteWikiDocument(ctx context
 	}()
 	ctx = graphql.WithFieldContext(ctx, fc)
 	if fc.Args, err = ec.field_Mutation_deleteWikiDocument_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
+		ec.Error(ctx, err)
+		return fc, err
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Mutation_duplicateWikiDocument(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Mutation_duplicateWikiDocument,
+		func(ctx context.Context) (any, error) {
+			fc := graphql.GetFieldContext(ctx)
+			return ec.Resolvers.Mutation().DuplicateWikiDocument(ctx, fc.Args["id"].(string), fc.Args["withChildren"].(*bool))
+		},
+		func(ctx context.Context, next graphql.Resolver) graphql.Resolver {
+			directive0 := next
+
+			directive1 := func(ctx context.Context) (any, error) {
+				permission, err := ec.unmarshalNString2string(ctx, "operation:member")
+				if err != nil {
+					var zeroVal *models.WikiDocument
+					return zeroVal, err
+				}
+				if ec.Directives.HasPermission == nil {
+					var zeroVal *models.WikiDocument
+					return zeroVal, errors.New("directive hasPermission is not implemented")
+				}
+				return ec.Directives.HasPermission(ctx, nil, directive0, permission)
+			}
+
+			next = directive1
+			return next
+		},
+		ec.marshalNWikiDocument2ᚖgithubᚗcomᚋvibeᚑc2ᚋvibeᚑc2ᚑcoreᚋcoreᚋpkgᚋmodelsᚐWikiDocument,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_Mutation_duplicateWikiDocument(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Mutation",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "id":
+				return ec.fieldContext_WikiDocument_id(ctx, field)
+			case "operationId":
+				return ec.fieldContext_WikiDocument_operationId(ctx, field)
+			case "parentDocument":
+				return ec.fieldContext_WikiDocument_parentDocument(ctx, field)
+			case "parentDocumentId":
+				return ec.fieldContext_WikiDocument_parentDocumentId(ctx, field)
+			case "childDocuments":
+				return ec.fieldContext_WikiDocument_childDocuments(ctx, field)
+			case "title":
+				return ec.fieldContext_WikiDocument_title(ctx, field)
+			case "content":
+				return ec.fieldContext_WikiDocument_content(ctx, field)
+			case "emoji":
+				return ec.fieldContext_WikiDocument_emoji(ctx, field)
+			case "color":
+				return ec.fieldContext_WikiDocument_color(ctx, field)
+			case "icon":
+				return ec.fieldContext_WikiDocument_icon(ctx, field)
+			case "sortOrder":
+				return ec.fieldContext_WikiDocument_sortOrder(ctx, field)
+			case "childCount":
+				return ec.fieldContext_WikiDocument_childCount(ctx, field)
+			case "backlinks":
+				return ec.fieldContext_WikiDocument_backlinks(ctx, field)
+			case "ancestors":
+				return ec.fieldContext_WikiDocument_ancestors(ctx, field)
+			case "createdBy":
+				return ec.fieldContext_WikiDocument_createdBy(ctx, field)
+			case "lastUpdatedBy":
+				return ec.fieldContext_WikiDocument_lastUpdatedBy(ctx, field)
+			case "lastUpdatedAt":
+				return ec.fieldContext_WikiDocument_lastUpdatedAt(ctx, field)
+			case "lastBackupAt":
+				return ec.fieldContext_WikiDocument_lastBackupAt(ctx, field)
+			case "deletedAt":
+				return ec.fieldContext_WikiDocument_deletedAt(ctx, field)
+			case "deletedBy":
+				return ec.fieldContext_WikiDocument_deletedBy(ctx, field)
+			case "createdAt":
+				return ec.fieldContext_WikiDocument_createdAt(ctx, field)
+			case "updatedAt":
+				return ec.fieldContext_WikiDocument_updatedAt(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type WikiDocument", field.Name)
+		},
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			err = ec.Recover(ctx, r)
+			ec.Error(ctx, err)
+		}
+	}()
+	ctx = graphql.WithFieldContext(ctx, fc)
+	if fc.Args, err = ec.field_Mutation_duplicateWikiDocument_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
 		ec.Error(ctx, err)
 		return fc, err
 	}
@@ -20734,6 +20876,13 @@ func (ec *executionContext) _Mutation(ctx context.Context, sel ast.SelectionSet)
 		case "deleteWikiDocument":
 			out.Values[i] = ec.OperationContext.RootResolverMiddleware(innerCtx, func(ctx context.Context) (res graphql.Marshaler) {
 				return ec._Mutation_deleteWikiDocument(ctx, field)
+			})
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "duplicateWikiDocument":
+			out.Values[i] = ec.OperationContext.RootResolverMiddleware(innerCtx, func(ctx context.Context) (res graphql.Marshaler) {
+				return ec._Mutation_duplicateWikiDocument(ctx, field)
 			})
 			if out.Values[i] == graphql.Null {
 				out.Invalids++

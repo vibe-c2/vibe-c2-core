@@ -33,6 +33,11 @@ func (r *mutationResolver) DeleteWikiDocument(ctx context.Context, id string) (b
 	return r.WikiDocumentResolver.DeleteWikiDocument(ctx, id)
 }
 
+// DuplicateWikiDocument is the resolver for the duplicateWikiDocument field.
+func (r *mutationResolver) DuplicateWikiDocument(ctx context.Context, id string, withChildren *bool) (*models.WikiDocument, error) {
+	return r.WikiDocumentResolver.DuplicateWikiDocument(ctx, id, withChildren)
+}
+
 // RestoreWikiDocument is the resolver for the restoreWikiDocument field.
 func (r *mutationResolver) RestoreWikiDocument(ctx context.Context, id string, cascade *bool) (*models.WikiDocument, error) {
 	return r.WikiDocumentResolver.RestoreWikiDocument(ctx, id, cascade)

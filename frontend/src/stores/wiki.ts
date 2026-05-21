@@ -81,6 +81,14 @@ interface WikiStoreState {
   openDeleteDialog: (target: { id: string; title: string }) => void
   closeDeleteDialog: () => void
 
+  // Duplicate dialog — only opens for documents with children, so the user
+  // can choose whether the clone is shallow or deep. Leaf documents bypass
+  // the dialog entirely.
+  duplicateDialogOpen: boolean
+  duplicateTarget: { id: string; title: string; childCount: number } | null
+  openDuplicateDialog: (target: { id: string; title: string; childCount: number }) => void
+  closeDuplicateDialog: () => void
+
   // Permanent delete dialog
   permanentDeleteDialogOpen: boolean
   permanentDeleteTarget: { id: string; title: string } | null
@@ -195,6 +203,14 @@ export const useWikiStore = create<WikiStoreState>((set, get) => ({
     set({ deleteDialogOpen: true, deleteTarget: target }),
   closeDeleteDialog: () =>
     set({ deleteDialogOpen: false, deleteTarget: null }),
+
+  // Duplicate dialog
+  duplicateDialogOpen: false,
+  duplicateTarget: null,
+  openDuplicateDialog: (target) =>
+    set({ duplicateDialogOpen: true, duplicateTarget: target }),
+  closeDuplicateDialog: () =>
+    set({ duplicateDialogOpen: false, duplicateTarget: null }),
 
   // Permanent delete dialog
   permanentDeleteDialogOpen: false,

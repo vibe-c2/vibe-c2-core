@@ -25,6 +25,7 @@ import { WikiCommandPalette } from "@/components/wiki/wiki-command-palette"
 import { WikiRecentDocsModal } from "@/components/wiki/wiki-recent-docs-modal"
 import { CreateWikiDocumentDialog } from "@/components/wiki/create-wiki-document-dialog"
 import { DeleteWikiDocumentDialog } from "@/components/wiki/delete-wiki-document-dialog"
+import { DuplicateWikiDocumentDialog } from "@/components/wiki/duplicate-wiki-document-dialog"
 import { ImportOutlineDialog } from "@/components/wiki/import-outline-dialog"
 import { MoveWikiDocumentDialog } from "@/components/wiki/move-wiki-document-dialog"
 import { PermanentDeleteWikiDocumentDialog } from "@/components/wiki/permanent-delete-wiki-document-dialog"
@@ -222,6 +223,7 @@ function WikiPageInner({
       <ImportOutlineDialog operationId={operationId} />
       <MoveWikiDocumentDialog operationId={operationId} />
       <DeleteWikiDocumentDialog documentId={documentId} />
+      <DuplicateWikiDocumentDialog />
       <PermanentDeleteWikiDocumentDialog />
       <WikiTrashPanel operationId={operationId} />
       <WikiBackupPanel />

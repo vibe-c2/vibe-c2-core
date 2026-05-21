@@ -35,6 +35,7 @@ type IWikiDocumentResolver interface {
 	UpdateWikiDocument(ctx context.Context, id string, input model.UpdateWikiDocumentInput) (*models.WikiDocument, error)
 	ReorderWikiDocumentSiblings(ctx context.Context, input model.ReorderWikiDocumentSiblingsInput) ([]*models.WikiDocument, error)
 	DeleteWikiDocument(ctx context.Context, id string) (bool, error)
+	DuplicateWikiDocument(ctx context.Context, id string, withChildren *bool) (*models.WikiDocument, error)
 	RestoreWikiDocument(ctx context.Context, id string, cascade *bool) (*models.WikiDocument, error)
 	PermanentlyDeleteWikiDocument(ctx context.Context, id string) (bool, error)
 	EmptyWikiDocumentTrash(ctx context.Context, operationID string) (bool, error)
@@ -702,6 +703,183 @@ func (r *wikiDocumentResolver) DeleteWikiDocument(ctx context.Context, id string
 	))
 
 	return true, nil
+}
+
+// DuplicateWikiDocument clones a document as a sibling immediately following
+// the source. When withChildren is true the entire active subtree is cloned;
+// trashed descendants are skipped (they stay in trash). The new root's title
+// is prefixed "Copy of "; descendants keep their original titles. The sibling
+// list under the source's parent is rebalanced so the duplicate sits right
+// after the source in sortOrder. One create event is published for the root —
+// frontend subscribers invalidate the parent's children bucket once and
+// re-render the whole new subtree from one round trip.
+func (r *wikiDocumentResolver) DuplicateWikiDocument(ctx context.Context, id string, withChildren *bool) (*models.WikiDocument, error) {
+	auth := gqlctx.AuthFromContext(ctx)
+
+	uid, err := uuid.Parse(id)
+	if err != nil {
+		return nil, fmt.Errorf("invalid document ID: %w", err)
+	}
+
+	source, err := r.docRepo.FindByID(ctx, uid)
+	if err != nil {
+		return nil, fmt.Errorf("document not found: %w", err)
+	}
+	if source.DeletedAt != nil {
+		return nil, fmt.Errorf("cannot duplicate a trashed document")
+	}
+
+	if err := r.authorizeForOperation(ctx, source.OperationID, models.OperationRoleOperator); err != nil {
+		return nil, err
+	}
+
+	callerUID, err := uuid.Parse(auth.UserID)
+	if err != nil {
+		return nil, fmt.Errorf("invalid caller ID: %w", err)
+	}
+
+	cascade := withChildren != nil && *withChildren
+
+	// "Copy of " prefix on the root only; descendants keep their original
+	// titles. Truncate so the prefixed title still respects the cap.
+	rootTitle := "Copy of " + source.Title
+	if len(rootTitle) > maxTitleLength {
+		rootTitle = rootTitle[:maxTitleLength]
+	}
+
+	now := time.Now().UTC()
+
+	// Sibling shares the source's parent and therefore its ancestor chain.
+	siblingPath := append([]uuid.UUID(nil), source.PathIDs...)
+
+	rootDup := &models.WikiDocument{
+		DocumentID:       uuid.New(),
+		OperationID:      source.OperationID,
+		ParentDocumentID: source.ParentDocumentID,
+		PathIDs:          siblingPath,
+		Title:            rootTitle,
+		TitleLower:       strings.ToLower(rootTitle),
+		Content:          source.Content,
+		ContentState:     source.ContentState,
+		Emoji:            source.Emoji,
+		Color:            source.Color,
+		Icon:             source.Icon,
+		CreatedByID:      callerUID,
+		LastUpdatedByID:  &callerUID,
+		LastUpdatedAt:    &now,
+	}
+
+	if err := r.docRepo.Create(ctx, rootDup); err != nil {
+		return nil, fmt.Errorf("failed to create duplicate: %w", err)
+	}
+
+	if cascade {
+		// BFS clone active descendants. Parents are always inserted before
+		// children — Create's path_ids fallback reads from the just-written
+		// parent if path_ids isn't pre-populated, but we pre-populate anyway
+		// to keep the multikey index immediately accurate.
+		idMap := map[uuid.UUID]uuid.UUID{source.DocumentID: rootDup.DocumentID}
+		pathByNewID := map[uuid.UUID][]uuid.UUID{
+			rootDup.DocumentID: repository.ComposePathIDs(rootDup.PathIDs, rootDup.DocumentID),
+		}
+		queue := []uuid.UUID{source.DocumentID}
+
+		for len(queue) > 0 {
+			oldParentID := queue[0]
+			queue = queue[1:]
+			newParentID := idMap[oldParentID]
+			newParentPath := pathByNewID[newParentID]
+
+			children, err := r.docRepo.FindChildDocuments(ctx, oldParentID)
+			if err != nil {
+				return nil, fmt.Errorf("failed to fetch children of %s: %w", oldParentID, err)
+			}
+
+			// Pin parent id to a stack slot the loop won't overwrite — the new
+			// child holds a pointer into it.
+			parentID := newParentID
+			for _, child := range children {
+				newID := uuid.New()
+				newChild := &models.WikiDocument{
+					DocumentID:       newID,
+					OperationID:      child.OperationID,
+					ParentDocumentID: &parentID,
+					PathIDs:          append([]uuid.UUID(nil), newParentPath...),
+					Title:            child.Title,
+					TitleLower:       child.TitleLower,
+					Content:          child.Content,
+					ContentState:     child.ContentState,
+					Emoji:            child.Emoji,
+					Color:            child.Color,
+					Icon:             child.Icon,
+					SortOrder:        child.SortOrder,
+					CreatedByID:      callerUID,
+					LastUpdatedByID:  &callerUID,
+					LastUpdatedAt:    &now,
+				}
+
+				if err := r.docRepo.Create(ctx, newChild); err != nil {
+					return nil, fmt.Errorf("failed to clone descendant %s: %w", child.DocumentID, err)
+				}
+
+				idMap[child.DocumentID] = newID
+				pathByNewID[newID] = repository.ComposePathIDs(newParentPath, newID)
+				queue = append(queue, child.DocumentID)
+			}
+		}
+	}
+
+	// Rebalance the sibling order so the duplicate sits immediately after the
+	// source. Reuses FindChildDocumentsWithCounts to cover both root-level
+	// (parentDocumentID == nil) and nested cases in one call.
+	siblings, _, err := r.docRepo.FindChildDocumentsWithCounts(ctx, source.OperationID, source.ParentDocumentID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to load siblings for reorder: %w", err)
+	}
+
+	ordered := make([]models.WikiDocument, 0, len(siblings))
+	for _, s := range siblings {
+		if s.DocumentID == rootDup.DocumentID {
+			// Skip the duplicate's current placement; we'll splice it in
+			// right after the source below.
+			continue
+		}
+		ordered = append(ordered, s)
+		if s.DocumentID == source.DocumentID {
+			ordered = append(ordered, *rootDup)
+		}
+	}
+
+	total := len(ordered)
+	for i, doc := range ordered {
+		newSort := rebalancedSortOrderAt(i, total)
+		if doc.SortOrder == newSort {
+			continue
+		}
+		updates := map[string]interface{}{"sort_order": newSort}
+		stampLastUpdated(updates, callerUID)
+		docCopy := doc
+		if err := r.docRepo.Update(ctx, &docCopy, updates); err != nil {
+			return nil, fmt.Errorf("failed to rebalance sibling %s: %w", doc.DocumentID, err)
+		}
+		if doc.DocumentID == rootDup.DocumentID {
+			rootDup.SortOrder = newSort
+		}
+	}
+
+	// One create event covers the whole new subtree — frontend subscribers
+	// invalidate the parent bucket and refetch its children, which lazily pulls
+	// in the duplicate's descendants on demand. Matches the cascade-delete
+	// pattern (one event per root, not per descendant).
+	r.eventBus.Publish(eventbus.NewWikiDocumentCreatedEvent(
+		eventbus.UserActor(auth.UserID), r.wikiDocPayload(rootDup),
+	))
+
+	reloaded, err := r.docRepo.FindByID(ctx, rootDup.DocumentID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to reload duplicate: %w", err)
+	}
+	return &reloaded, nil
 }
 
 func (r *wikiDocumentResolver) RestoreWikiDocument(ctx context.Context, id string, cascade *bool) (*models.WikiDocument, error) {
