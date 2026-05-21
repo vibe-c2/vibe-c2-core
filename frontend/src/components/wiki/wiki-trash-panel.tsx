@@ -326,18 +326,9 @@ function TrashItem({ doc, onRestore, onPermanentDelete, restorePending }: TrashI
       <div className="min-w-0 flex-1">
         <div className="flex items-baseline gap-2">
           <p className="truncate text-sm font-medium">{doc.title}</p>
-          <Tooltip>
-            <TooltipTrigger
-              render={
-                <span className="shrink-0 text-[11px] text-muted-foreground">
-                  {formatRelativeTime(doc.deletedAt)}
-                </span>
-              }
-            />
-            <TooltipContent>
-              Deleted by {doc.deletedBy?.username ?? "unknown"}
-            </TooltipContent>
-          </Tooltip>
+          <span className="shrink-0 text-[11px] text-muted-foreground">
+            {doc.deletedBy?.username ?? "unknown"} · {formatRelativeTime(doc.deletedAt)}
+          </span>
         </div>
         <WikiAncestorBreadcrumb
           ancestors={doc.ancestors}
