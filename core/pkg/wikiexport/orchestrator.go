@@ -345,7 +345,7 @@ func (o *Orchestrator) writeBranch(
 
 	*bctx.totalBody += int64(len(rewritten))
 
-	full := renderDocMarkdown(doc.Emoji, doc.Title, rewritten)
+	full := renderDocMarkdown(doc.Emoji, doc.Title, doc.Icon, doc.Color, rewritten)
 	if err := writeZipFile(bctx.zw, docZipPath, []byte(full)); err != nil {
 		o.logger.Warn("write doc to zip failed",
 			zap.String("path", docZipPath),

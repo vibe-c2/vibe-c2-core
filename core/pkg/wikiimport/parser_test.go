@@ -298,6 +298,65 @@ func TestParse_EmojiVariants(t *testing.T) {
 	}
 }
 
+func TestParse_VibeMetaIcon(t *testing.T) {
+	cases := []struct {
+		name      string
+		body      string
+		wantIcon  string
+		wantColor string
+		wantBody  string
+	}{
+		{
+			name:     "icon only",
+			body:     "# Notes\n<!-- vibe:meta icon=\"Adaptive\" -->\n\nbody\n",
+			wantIcon: "Adaptive",
+			wantBody: "body\n",
+		},
+		{
+			name:      "icon and color",
+			body:      "# Notes\n<!-- vibe:meta icon=\"FileText\" color=\"#1f2937\" -->\n\nhello\n",
+			wantIcon:  "FileText",
+			wantColor: "#1f2937",
+			wantBody:  "hello\n",
+		},
+		{
+			name:     "meta after blank line",
+			body:     "# Notes\n\n<!-- vibe:meta icon=\"Adaptive\" -->\n\nhello\n",
+			wantIcon: "Adaptive",
+			wantBody: "hello\n",
+		},
+		{
+			name:     "no meta — body preserved verbatim",
+			body:     "# Notes\n\nhello\n",
+			wantBody: "hello\n",
+		},
+		{
+			name:     "unknown meta comment ignored, treated as body",
+			body:     "# Notes\n<!-- not vibe meta -->\n\nhello\n",
+			wantBody: "<!-- not vibe meta -->\n\nhello\n",
+		},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			zr := buildZip(t, map[string]string{"col/doc.md": c.body})
+			got, err := Parse(zr)
+			if err != nil {
+				t.Fatalf("Parse: %v", err)
+			}
+			d := got.Collections[0].Documents[0]
+			if d.Icon != c.wantIcon {
+				t.Errorf("icon: got %q want %q", d.Icon, c.wantIcon)
+			}
+			if d.Color != c.wantColor {
+				t.Errorf("color: got %q want %q", d.Color, c.wantColor)
+			}
+			if d.BodyMarkdown != c.wantBody {
+				t.Errorf("body: got %q want %q", d.BodyMarkdown, c.wantBody)
+			}
+		})
+	}
+}
+
 func TestParse_NestedHierarchy(t *testing.T) {
 	// "col/a.md" + "col/a/b.md" → b is a child of a.
 	zr := buildZip(t, map[string]string{

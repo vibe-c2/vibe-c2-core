@@ -18,10 +18,18 @@ var (
 )
 
 // renderDocMarkdown builds the full markdown content of one exported .md
-// file: the H1 (with optional emoji) followed by a blank line and the
+// file: the H1 (with optional emoji), an optional `vibe:meta` comment that
+// carries icon and color across the round-trip, then a blank line and the
 // body. The body has already had its attachment refs rewritten by
 // rewriteAttachmentRefs.
-func renderDocMarkdown(emoji, title, body string) string {
+//
+// The meta comment is the Vibe-specific extension on top of the Outline
+// markdown format — Outline can't carry our Icon/Color fields, so we
+// emit them as an HTML comment that the import parser recognises and
+// strips. CommonMark and every off-the-shelf markdown viewer renders the
+// comment as nothing, so plain-text consumers see the H1 + body as
+// expected.
+func renderDocMarkdown(emoji, title, icon, color, body string) string {
 	var b strings.Builder
 	b.WriteString("# ")
 	if emoji != "" {
@@ -29,7 +37,14 @@ func renderDocMarkdown(emoji, title, body string) string {
 		b.WriteString(" ")
 	}
 	b.WriteString(title)
-	b.WriteString("\n\n")
+	b.WriteString("\n")
+
+	if meta := renderVibeMeta(icon, color); meta != "" {
+		b.WriteString(meta)
+		b.WriteString("\n")
+	}
+
+	b.WriteString("\n")
 	if body != "" {
 		b.WriteString(body)
 		// Always end with a newline so re-import's blank-line splitter
@@ -39,6 +54,40 @@ func renderDocMarkdown(emoji, title, body string) string {
 		}
 	}
 	return b.String()
+}
+
+// renderVibeMeta builds the metadata comment that round-trips icon and
+// color. Returns the empty string when both are empty so the export
+// stays clean for docs that use the defaults. Keys are emitted in a
+// stable order so the same input always produces the same output (handy
+// for diffing exports across runs).
+func renderVibeMeta(icon, color string) string {
+	if icon == "" && color == "" {
+		return ""
+	}
+	var b strings.Builder
+	b.WriteString("<!-- vibe:meta")
+	if icon != "" {
+		b.WriteString(` icon="`)
+		b.WriteString(escapeMetaValue(icon))
+		b.WriteString(`"`)
+	}
+	if color != "" {
+		b.WriteString(` color="`)
+		b.WriteString(escapeMetaValue(color))
+		b.WriteString(`"`)
+	}
+	b.WriteString(" -->")
+	return b.String()
+}
+
+// escapeMetaValue defends against any double-quote that snuck into an
+// icon or color value. Icon names are lucide identifiers (alphanumeric)
+// and colors are hex strings, so in practice this is belt-and-braces —
+// but emitting a value with an unescaped " would break the parser's
+// key="value" grammar silently.
+func escapeMetaValue(s string) string {
+	return strings.ReplaceAll(s, `"`, `\"`)
 }
 
 // rewriteAttachmentRefs walks the body markdown, finds every reference to

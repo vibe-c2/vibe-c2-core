@@ -15,9 +15,29 @@ import (
 	"fmt"
 	"io"
 	"path"
+	"regexp"
 	"sort"
 	"strings"
 )
+
+// vibeMetaPattern matches the optional metadata comment the exporter emits
+// directly after the H1 line. The comment is intentionally kept on one line
+// so it survives CommonMark passthrough cleanly. Round-trips
+// WikiDocument.Icon and Color, which Outline's markdown dialect can't carry.
+//
+//	<!-- vibe:meta icon="Adaptive" color="#1f2937" -->
+//
+// Both fields are optional; missing keys are treated as empty. Other markdown
+// tools render this as nothing (HTML comment), so it degrades gracefully when
+// the export is opened in non-Vibe viewers.
+var vibeMetaPattern = regexp.MustCompile(
+	`^<!--\s*vibe:meta(?:\s+([^>]*?))?\s*-->\s*$`,
+)
+
+// vibeMetaField pulls key="value" pairs out of the matched metadata content.
+// Values are double-quoted; embedded quotes aren't supported (icon and color
+// values are always alphanumeric / hex in practice).
+var vibeMetaField = regexp.MustCompile(`(\w+)\s*=\s*"([^"]*)"`)
 
 // ParsedExport is the in-memory shape of an Outline markdown export.
 type ParsedExport struct {
@@ -48,6 +68,15 @@ type Doc struct {
 	// Emoji is the leading emoji on the H1 line, if any. Empty string
 	// when no leading emoji was found.
 	Emoji string
+
+	// Icon is the WikiDocument.Icon value carried in the optional
+	// `<!-- vibe:meta icon="..." color="..." -->` comment a Vibe export
+	// emits right after the H1. Empty for plain Outline exports.
+	Icon string
+
+	// Color is the WikiDocument.Color value carried in the same vibe-meta
+	// comment as Icon. Empty for plain Outline exports.
+	Color string
 
 	// BodyMarkdown is the document body with the H1 line removed and any
 	// leading blank line stripped. Attachment URLs are NOT yet rewritten
@@ -286,9 +315,13 @@ func parseDoc(file *zip.File, base string) *Doc {
 		title = base
 	}
 
+	icon, color, rest := stripVibeMeta(rest)
+
 	return &Doc{
 		Title:          title,
 		Emoji:          emoji,
+		Icon:           icon,
+		Color:          color,
 		BodyMarkdown:   rest,
 		SortKey:        base,
 		AttachmentRefs: scanAttachmentRefs(rest),
@@ -326,6 +359,64 @@ func splitH1(body string) (title, emoji, rest string) {
 		rest = strings.TrimLeft(lines[1], "\n")
 	}
 	return titleLine, emoji, rest
+}
+
+// stripVibeMeta scans the first non-empty line of body for the optional
+// `<!-- vibe:meta icon="..." color="..." -->` comment the exporter emits
+// to carry WikiDocument.Icon and Color across the round-trip. If found,
+// the comment line plus any surrounding blank lines are consumed from the
+// body. Returns ("", "", body) for plain Outline-format exports.
+//
+// We tolerate any blank lines between the H1 and the meta comment so an
+// exporter that pads for readability doesn't drop the metadata silently.
+func stripVibeMeta(body string) (icon, color, rest string) {
+	// Find the first non-empty line. Track its start/end so we can splice
+	// it out cleanly when it's a meta line.
+	i := 0
+	for i < len(body) {
+		// Walk past whitespace-only lines.
+		lineEnd := strings.IndexByte(body[i:], '\n')
+		if lineEnd < 0 {
+			lineEnd = len(body) - i
+		}
+		line := strings.TrimSpace(body[i : i+lineEnd])
+		if line != "" {
+			m := vibeMetaPattern.FindStringSubmatch(line)
+			if m == nil {
+				return "", "", body
+			}
+			// Parse key="value" pairs.
+			if len(m) > 1 {
+				for _, kv := range vibeMetaField.FindAllStringSubmatch(m[1], -1) {
+					switch kv[1] {
+					case "icon":
+						icon = kv[2]
+					case "color":
+						color = kv[2]
+					}
+				}
+			}
+			// Splice out the meta line. Consume the trailing newline too,
+			// plus one further blank line if present, so the editor's
+			// first paragraph doesn't carry a leading empty line.
+			cut := i + lineEnd
+			if cut < len(body) && body[cut] == '\n' {
+				cut++
+			}
+			if cut < len(body) && body[cut] == '\n' {
+				cut++
+			}
+			rest = body[:i] + body[cut:]
+			rest = strings.TrimLeft(rest, "\n")
+			return icon, color, rest
+		}
+		// Empty line — advance past it.
+		if lineEnd >= len(body)-i {
+			break
+		}
+		i += lineEnd + 1
+	}
+	return "", "", body
 }
 
 // stripLeadingEmoji extracts the leading emoji codepoint sequence (if any)

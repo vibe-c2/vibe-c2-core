@@ -306,6 +306,8 @@ func (o *Orchestrator) processDocs(
 			parent:      &parentID,
 			title:       title,
 			emoji:       parsed.Emoji,
+			icon:        parsed.Icon,
+			color:       parsed.Color,
 			sortOrder:   fractionalIndex(i),
 		})
 		if err != nil {
@@ -580,6 +582,7 @@ type docCreateInput struct {
 	title       string
 	emoji       string
 	icon        string
+	color       string
 	sortOrder   string
 }
 
@@ -604,14 +607,16 @@ func (o *Orchestrator) createDoc(
 		}
 	}
 
-	// Default to the open-folder emoji when neither emoji nor icon was
-	// supplied — matches the Create Document dialog's DEFAULT_EMOJI on
-	// the frontend so imported docs visually line up with hand-created
-	// ones instead of falling through to the generic 📄 placeholder the
-	// tree node renders for empty-emoji docs.
+	// Default to the adaptive lucide icon when nothing was supplied —
+	// mirrors DEFAULT_ICON_VALUE in create-wiki-document-dialog.tsx so an
+	// imported doc reads as a page-or-folder glyph rather than the legacy
+	// 📂 emoji (which surprised users who'd never picked an emoji on the
+	// source side). Emojis already attached to the doc on import flow
+	// through unchanged, including the optional vibe-meta icon override.
 	emoji := in.emoji
-	if emoji == "" && in.icon == "" {
-		emoji = defaultDocumentEmoji
+	icon := in.icon
+	if emoji == "" && icon == "" {
+		icon = defaultDocumentIcon
 	}
 
 	now := time.Now().UTC()
@@ -622,7 +627,8 @@ func (o *Orchestrator) createDoc(
 		Title:            in.title,
 		TitleLower:       strings.ToLower(in.title),
 		Emoji:            emoji,
-		Icon:             in.icon,
+		Icon:             icon,
+		Color:            in.color,
 		SortOrder:        in.sortOrder,
 		CreatedByID:      in.callerID,
 		LastUpdatedByID:  &in.callerID,
@@ -738,16 +744,20 @@ func sanitizeImportFilename(raw string) string {
 const (
 	importParentTitle = "import"
 	// importParentEmoji visually distinguishes the singleton import holding
-	// pen from the per-import timestamp/collection folders that share the
-	// generic folder emoji below.
+	// pen from the per-import timestamp/collection folders that pick up the
+	// adaptive default icon. Kept as an emoji (not a lucide icon) so the
+	// "import" root reads as a system folder rather than a regular doc.
 	importParentEmoji = "⬇️"
-	// defaultDocumentEmoji mirrors DEFAULT_EMOJI in
-	// frontend/src/components/wiki/create-wiki-document-dialog.tsx so docs
-	// minted by the importer match docs created via the dialog.
-	defaultDocumentEmoji = "📂"
-	maxTitleLength       = 200
-	maxContentSize       = 1 << 20 // 1 MiB
-	maxNestingDepth      = 10
+	// defaultDocumentIcon mirrors DEFAULT_ICON_VALUE in
+	// create-wiki-document-dialog.tsx: the reserved "Adaptive" lucide icon
+	// that renders as FileText / Folder / FolderOpen depending on the
+	// row's state. Used for every imported doc the user didn't pick a
+	// glyph for (the H1 emoji and the vibe-meta override both still
+	// win when present).
+	defaultDocumentIcon = "Adaptive"
+	maxTitleLength      = 200
+	maxContentSize      = 1 << 20 // 1 MiB
+	maxNestingDepth     = 10
 )
 
 // sampleAttachmentKeys returns up to limit attachment blob keys, sorted,
