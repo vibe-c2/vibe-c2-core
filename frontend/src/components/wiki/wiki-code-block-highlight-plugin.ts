@@ -109,16 +109,36 @@ const DEFAULT_REFRESH_DELAY_MS = 50
 
 function parseNodes(
   nodes: HastNode[],
-  inheritedClasses: ReadonlyArray<string> = [],
+  parentClasses: ReadonlyArray<string> = [],
 ): { text: string; classes: string }[] {
+  // Leaf-only flattening: each text leaf inherits only its *immediate parent*
+  // element's classes, not the accumulation of every ancestor wrapper.
+  //
+  // highlight.js emits nested span structures for several grammars — XML
+  // wraps `hljs-name`/`hljs-attr`/`hljs-string` in `hljs-tag`; template
+  // literals wrap inner spans in `hljs-string`/`hljs-subst`; function
+  // signatures wrap `hljs-type`/`hljs-string` in `hljs-params`; and so on.
+  // In a real browser those inner spans win the CSS cascade because each
+  // child element carries its own explicit color. Accumulating ancestor
+  // classes onto every leaf collapses that into a flat multi-class string
+  // where the only tiebreaker is CSS declaration order — which silently
+  // turned every XML token green, every `def foo(name = "x")` default-value
+  // string orange, every JS template subst the string color, etc.
+  //
+  // Carrying only the leaf's direct parent classes mirrors the nested-DOM
+  // cascade: text directly under `<span class="hljs-tag">` (brackets) gets
+  // `hljs-tag`; text under an inner `<span class="hljs-name">` (the tag
+  // name) gets only `hljs-name`. Compound classes on a single element
+  // (e.g. `hljs-title function_`) are still preserved because they come
+  // from the same `properties.className` array.
   const out: { text: string; classes: string }[] = []
   for (const node of nodes) {
-    const own = node.properties?.className ?? []
-    const classes = own.length ? [...inheritedClasses, ...own] : inheritedClasses
     if (node.children) {
-      out.push(...parseNodes(node.children, classes))
+      const own = node.properties?.className ?? []
+      const childParent = own.length ? own : parentClasses
+      out.push(...parseNodes(node.children, childParent))
     } else {
-      out.push({ text: node.value ?? "", classes: classes.join(" ") })
+      out.push({ text: node.value ?? "", classes: parentClasses.join(" ") })
     }
   }
   return out
