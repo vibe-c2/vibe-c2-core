@@ -574,8 +574,11 @@ func (r *wikiDocumentResolver) ReorderWikiDocumentSiblings(
 				sourceBuckets[key] = doc.DocumentID
 			}
 			reparented = append(reparented, doc.DocumentID)
+			// Reparenting is a meaningful edit; attribute it to the caller.
+			// Sort-order-only changes (drag-to-resort within the same parent)
+			// are bookkeeping and must not bump last_updated_*.
+			stampLastUpdated(updates, callerUID)
 		}
-		stampLastUpdated(updates, callerUID)
 
 		if err := r.docRepo.Update(ctx, &doc, updates); err != nil {
 			return nil, fmt.Errorf("failed to update document %s: %w", doc.DocumentID, err)
@@ -856,8 +859,10 @@ func (r *wikiDocumentResolver) DuplicateWikiDocument(ctx context.Context, id str
 		if doc.SortOrder == newSort {
 			continue
 		}
+		// Sort-order rebalance only — no last_updated stamp. Siblings weren't
+		// edited by the caller; their position shifted to make room for the
+		// duplicate.
 		updates := map[string]interface{}{"sort_order": newSort}
-		stampLastUpdated(updates, callerUID)
 		docCopy := doc
 		if err := r.docRepo.Update(ctx, &docCopy, updates); err != nil {
 			return nil, fmt.Errorf("failed to rebalance sibling %s: %w", doc.DocumentID, err)
