@@ -2,7 +2,13 @@ import { useMemo, useState } from "react";
 import { useTheme } from "next-themes";
 import data from "@emoji-mart/data";
 import Picker from "@emoji-mart/react";
-import { BanIcon, FolderOpenIcon, SearchIcon, XIcon } from "lucide-react";
+import {
+  BanIcon,
+  FolderIcon,
+  SearchIcon,
+  SparklesIcon,
+  XIcon,
+} from "lucide-react";
 import {
   Popover,
   PopoverTrigger,
@@ -19,6 +25,10 @@ import {
   type IconEntry,
 } from "@/components/wiki/icon-catalog";
 import { DocumentIcon } from "@/components/wiki/document-icon";
+import {
+  loadFrequentIconNames,
+  recordFrequentIconUsage,
+} from "@/components/wiki/frequent-icons";
 import {
   WIKI_ICON_COLORS,
   type WikiIconColor,
@@ -83,6 +93,7 @@ export function DocumentIconPicker({
     // Preserve color across icon swaps so users can pick color first or change
     // their icon without losing the chosen color.
     onSelect({ emoji: "", icon: name, color: value.color });
+    recordFrequentIconUsage(name);
     setOpen(false);
   }
 
@@ -174,11 +185,20 @@ const ADAPTIVE_KEYWORDS = ["default", "adaptive", "auto", "folder", "page", "doc
 
 function IconGrid({ selectedName, previewColor, onPick }: IconGridProps) {
   const [search, setSearch] = useState("");
+  // Snapshot frequent icons on mount. The picker remounts each time the
+  // popover opens, so freshly-recorded picks appear on the next open without
+  // needing reactive state during a single open session.
+  const [frequentNames] = useState<readonly string[]>(() =>
+    loadFrequentIconNames(),
+  );
 
   const q = search.trim().toLowerCase();
   // Show the adaptive entry whenever the query is empty or matches any of
   // its keywords, so users can find it either by browsing or by searching.
   const showAdaptive = !q || ADAPTIVE_KEYWORDS.some((k) => k.includes(q));
+  // Frequently-used row appears only on the empty-query state — it would
+  // duplicate the search results below otherwise.
+  const showFrequent = !q && frequentNames.length > 0;
 
   const filteredGroups = useMemo(() => {
     if (!q) return ICON_CATALOG;
@@ -209,6 +229,7 @@ function IconGrid({ selectedName, previewColor, onPick }: IconGridProps) {
   }, [q]);
 
   const totalShown =
+    (showFrequent ? frequentNames.length : 0) +
     (showAdaptive ? 1 : 0) +
     filteredGroups.reduce((n, g) => n + g.icons.length, 0) +
     extendedResults.names.length;
@@ -245,64 +266,86 @@ function IconGrid({ selectedName, previewColor, onPick }: IconGridProps) {
           </p>
         ) : (
           <>
-            {showAdaptive && (
-              <div className="mb-3 last:mb-0">
-                <h4 className="mb-1 px-1 text-[11px] font-medium tracking-wide text-muted-foreground uppercase">
-                  Default
-                </h4>
-                <div className="grid grid-cols-8 gap-0.5">
-                  <AdaptiveIconButton
-                    selected={selectedName === ADAPTIVE_ICON_NAME}
+            {showFrequent && (
+              <GridSection heading="Frequently used">
+                {frequentNames.map((name) => (
+                  <ExtendedIconButton
+                    key={name}
+                    name={name}
+                    selected={name === selectedName}
                     previewColor={previewColor}
                     onPick={onPick}
                   />
-                </div>
-              </div>
+                ))}
+              </GridSection>
+            )}
+            {showAdaptive && (
+              <GridSection heading="Default">
+                <AdaptiveIconButton
+                  selected={selectedName === ADAPTIVE_ICON_NAME}
+                  previewColor={previewColor}
+                  onPick={onPick}
+                />
+              </GridSection>
             )}
             {filteredGroups.map((group) => (
-              <div key={group.label} className="mb-3 last:mb-0">
-                <h4 className="mb-1 px-1 text-[11px] font-medium tracking-wide text-muted-foreground uppercase">
-                  {group.label}
-                </h4>
-                <div className="grid grid-cols-8 gap-0.5">
-                  {group.icons.map((entry) => (
-                    <IconButton
-                      key={entry.name}
-                      entry={entry}
-                      selected={entry.name === selectedName}
-                      previewColor={previewColor}
-                      onPick={onPick}
-                    />
-                  ))}
-                </div>
-              </div>
+              <GridSection key={group.label} heading={group.label}>
+                {group.icons.map((entry) => (
+                  <IconButton
+                    key={entry.name}
+                    entry={entry}
+                    selected={entry.name === selectedName}
+                    previewColor={previewColor}
+                    onPick={onPick}
+                  />
+                ))}
+              </GridSection>
             ))}
             {extendedResults.names.length > 0 && (
-              <div className="mb-3 last:mb-0">
-                <h4 className="mb-1 px-1 text-[11px] font-medium tracking-wide text-muted-foreground uppercase">
-                  More icons
-                  {extendedResults.truncated && (
-                    <span className="ml-1.5 normal-case text-muted-foreground/70">
-                      (top {EXTENDED_RESULTS_LIMIT} — refine to see more)
-                    </span>
-                  )}
-                </h4>
-                <div className="grid grid-cols-8 gap-0.5">
-                  {extendedResults.names.map((name) => (
-                    <ExtendedIconButton
-                      key={name}
-                      name={name}
-                      selected={name === selectedName}
-                      previewColor={previewColor}
-                      onPick={onPick}
-                    />
-                  ))}
-                </div>
-              </div>
+              <GridSection
+                heading={
+                  <>
+                    More icons
+                    {extendedResults.truncated && (
+                      <span className="ml-1.5 normal-case text-muted-foreground/70">
+                        (top {EXTENDED_RESULTS_LIMIT} — refine to see more)
+                      </span>
+                    )}
+                  </>
+                }
+              >
+                {extendedResults.names.map((name) => (
+                  <ExtendedIconButton
+                    key={name}
+                    name={name}
+                    selected={name === selectedName}
+                    previewColor={previewColor}
+                    onPick={onPick}
+                  />
+                ))}
+              </GridSection>
             )}
           </>
         )}
       </div>
+    </div>
+  );
+}
+
+interface GridSectionProps {
+  heading: React.ReactNode;
+  children: React.ReactNode;
+}
+
+/** Shared chrome for each picker section — uppercase heading + 8-column grid.
+ *  Centralizes spacing/typography so all sections stay visually aligned. */
+function GridSection({ heading, children }: GridSectionProps) {
+  return (
+    <div className="mb-3 last:mb-0">
+      <h4 className="mb-1 px-1 text-[11px] font-medium tracking-wide text-muted-foreground uppercase">
+        {heading}
+      </h4>
+      <div className="grid grid-cols-8 gap-0.5">{children}</div>
     </div>
   );
 }
@@ -378,18 +421,18 @@ interface AdaptiveIconButtonProps {
 }
 
 /**
- * Picker tile for the adaptive default icon. Visually shows the open-folder
- * variant — it matches the legacy "📂" default and reads as the most
- * feature-rich state of the morphing icon. The actual glyph displayed on the
- * document switches at render time (FileText / Folder / FolderOpen) based on
- * the row's children + expansion state — see DocumentIcon.
+ * Picker tile for the adaptive default icon. Renders a folder with a small
+ * sparkles badge in the top-right — the badge reads as "smart / automatic"
+ * and signals that this tile is special compared to the concrete-icon tiles
+ * around it. The actual glyph displayed on the document still switches at
+ * render time (FileText / Folder / FolderOpen) based on the row's children
+ * + expansion state — see DocumentIcon.
  */
 function AdaptiveIconButton({
   selected,
   previewColor,
   onPick,
 }: AdaptiveIconButtonProps) {
-  const style = previewColor ? { color: previewColor } : undefined;
   return (
     <PickerTile
       label="Default (adapts to children)"
@@ -397,8 +440,60 @@ function AdaptiveIconButton({
       selected={selected}
       onClick={() => onPick(ADAPTIVE_ICON_NAME)}
     >
-      <FolderOpenIcon size={20} style={style} />
+      <AdaptiveDefaultIcon size={20} color={previewColor} />
     </PickerTile>
+  );
+}
+
+interface AdaptiveDefaultIconProps {
+  size: number;
+  /** Empty string = inherit currentColor (matches sibling tiles). */
+  color: string;
+}
+
+/**
+ * Folder base glyph plus a sparkles badge in the top-right corner. The badge
+ * uses a popover-colored fill with a hairline border so it stays legible
+ * regardless of the previewed color, and the sparkles stroke is painted in
+ * the primary color so the "this is the smart default" affordance reads
+ * even at 32px tile size.
+ */
+function AdaptiveDefaultIcon({ size, color }: AdaptiveDefaultIconProps) {
+  const wrapperStyle: React.CSSProperties = {
+    width: size,
+    height: size,
+    ...(color ? { color } : undefined),
+  };
+  // Badge is sized ~65% of the base glyph and offset so a quarter of it sits
+  // outside the icon bounds — keeps the folder's silhouette intact while the
+  // badge stays unambiguously a "decoration on top of" mark, not part of the
+  // folder itself.
+  const badgeSize = Math.round(size * 0.65);
+  const sparkleSize = Math.round(size * 0.45);
+  const badgeOffset = -Math.round(badgeSize / 4);
+  return (
+    <span
+      aria-hidden
+      className="relative inline-block shrink-0"
+      style={wrapperStyle}
+    >
+      <FolderIcon size={size} className="absolute inset-0" />
+      <span
+        className="absolute flex items-center justify-center rounded-full bg-popover ring-1 ring-border"
+        style={{
+          width: badgeSize,
+          height: badgeSize,
+          top: badgeOffset,
+          right: badgeOffset,
+        }}
+      >
+        <SparklesIcon
+          className="text-primary"
+          size={sparkleSize}
+          strokeWidth={2.5}
+        />
+      </span>
+    </span>
   );
 }
 
