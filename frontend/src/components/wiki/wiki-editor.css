@@ -554,8 +554,7 @@
 .tiptap .wiki-code-block__pre code.hljs .hljs-title,
 .tiptap .wiki-code-block__pre code.hljs .hljs-title.class_,
 .tiptap .wiki-code-block__pre code.hljs .hljs-title.function_,
-.tiptap .wiki-code-block__pre code.hljs .hljs-section,
-.tiptap .wiki-code-block__pre code.hljs .hljs-name {
+.tiptap .wiki-code-block__pre code.hljs .hljs-section {
   color: var(--hljs-entity);
 }
 
@@ -581,7 +580,13 @@
   color: var(--hljs-variable);
 }
 
-.tiptap .wiki-code-block__pre code.hljs .hljs-tag,
+/* `.hljs-tag` is the XML/HTML tag *wrapper* — it contains the brackets plus
+   nested `.hljs-name`, `.hljs-attr`, `.hljs-string` spans. We flatten that
+   nested tree into ProseMirror inline decorations, so a tag-name leaf ends
+   up with `class="hljs-tag hljs-name"`. Coloring `.hljs-tag` here would
+   override every nested class because of CSS declaration order. Leave it
+   to the default fg; color the leaves below instead. */
+.tiptap .wiki-code-block__pre code.hljs .hljs-name,
 .tiptap .wiki-code-block__pre code.hljs .hljs-selector-id,
 .tiptap .wiki-code-block__pre code.hljs .hljs-selector-class {
   color: var(--hljs-tag);
