@@ -10,10 +10,15 @@
 import crypto from "node:crypto";
 import type { Express, Request, Response } from "express";
 import { markdownToYjsUpdate } from "./markdown-to-yjs.js";
+import { yjsUpdateToMarkdown } from "./yjs-to-markdown.js";
 
 const internalSecret = process.env.HOCUSPOCUS_WEBHOOK_SECRET || "";
 const SIGNATURE_HEADER = "x-internal-signature-256";
 const MAX_MARKDOWN_BYTES = 1024 * 1024; // 1 MB — matches WikiDocument.Content cap.
+// Y.js updates can be larger than the markdown they encode (CRDT metadata
+// overhead), but Mongo's BSON binary cap and our import cap give a natural
+// ceiling. 4 MB is generous; anything larger is almost certainly corrupt.
+const MAX_YJS_BYTES = 4 * 1024 * 1024;
 
 interface MarkdownRequestBody {
   markdown?: unknown;
@@ -108,5 +113,76 @@ export function setupInternalApi(app: Express): void {
         res.status(500).json({ error: message });
       }
     }
+  );
+
+  // Inverse direction: a Y.js update binary in, markdown out. Used by the
+  // wiki export flow on the Go backend to render each document's stored
+  // content_state back to Outline-flavored markdown for the export zip.
+  app.post(
+    "/internal/yjs-to-markdown",
+    (req: Request, res: Response, next: () => void) => {
+      const chunks: Buffer[] = [];
+      req.on("data", (chunk: Buffer) => {
+        chunks.push(chunk);
+        const total = chunks.reduce((n, c) => n + c.length, 0);
+        if (total > MAX_YJS_BYTES + 1024) {
+          res.status(413).json({ error: "request too large" });
+          req.destroy();
+        }
+      });
+      req.on("end", () => {
+        if (res.headersSent) return;
+        (req as Request & { rawBody?: Buffer }).rawBody = Buffer.concat(chunks);
+        next();
+      });
+      req.on("error", (err: Error) => {
+        if (res.headersSent) return;
+        res.status(400).json({ error: err.message });
+      });
+    },
+    (req: Request, res: Response) => {
+      const rawBody = (req as Request & { rawBody?: Buffer }).rawBody;
+      if (!rawBody) {
+        res.status(400).json({ error: "empty body" });
+        return;
+      }
+
+      const sigHeader = req.headers[SIGNATURE_HEADER];
+      const sig = Array.isArray(sigHeader) ? sigHeader[0] : sigHeader;
+      if (!verifySignature(rawBody, sig)) {
+        res.status(401).json({ error: "invalid or missing signature" });
+        return;
+      }
+
+      if (rawBody.length === 0) {
+        res
+          .status(200)
+          .setHeader("Content-Type", "text/markdown; charset=utf-8")
+          .send("");
+        return;
+      }
+      if (rawBody.length > MAX_YJS_BYTES) {
+        res.status(413).json({ error: "yjs update exceeds 4 MB" });
+        return;
+      }
+
+      try {
+        const markdown = yjsUpdateToMarkdown(
+          new Uint8Array(
+            rawBody.buffer,
+            rawBody.byteOffset,
+            rawBody.byteLength,
+          ),
+        );
+        res
+          .status(200)
+          .setHeader("Content-Type", "text/markdown; charset=utf-8")
+          .send(markdown);
+      } catch (err) {
+        const message = err instanceof Error ? err.message : "conversion failed";
+        console.error("yjs-to-markdown conversion error:", err);
+        res.status(500).json({ error: message });
+      }
+    },
   );
 }

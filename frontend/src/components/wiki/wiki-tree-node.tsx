@@ -16,6 +16,7 @@ import {
   SearchIcon,
   SmileIcon,
   Trash2Icon,
+  UploadIcon,
 } from "lucide-react"
 import { Collapsible, CollapsibleTrigger, CollapsibleContent } from "@/components/ui/collapsible"
 import {
@@ -367,6 +368,7 @@ function WikiTreeRowQuickActionsImpl({
   const openMoveDialog = useWikiStore((s) => s.openMoveDialog)
   const openDeleteDialog = useWikiStore((s) => s.openDeleteDialog)
   const openDuplicateDialog = useWikiStore((s) => s.openDuplicateDialog)
+  const openExportDialog = useWikiStore((s) => s.openExportDialog)
   const openContentSearch = useWikiStore((s) => s.openContentSearch)
   const reorderSiblings = useReorderWikiDocumentSiblings()
   const duplicateDocument = useDuplicateWikiDocument()
@@ -554,6 +556,18 @@ function WikiTreeRowQuickActionsImpl({
           >
             <SearchIcon className="mr-2 size-4" />
             Search in {node.title}...
+          </DropdownMenuItem>
+          <DropdownMenuItem
+            onClick={() =>
+              openExportDialog({
+                id: node.id,
+                title: node.title,
+                childCount: node.childCount,
+              })
+            }
+          >
+            <UploadIcon className="mr-2 size-4" />
+            Export…
           </DropdownMenuItem>
           {isEditor && (
             <>

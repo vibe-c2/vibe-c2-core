@@ -13,6 +13,7 @@ import (
 	"github.com/vibe-c2/vibe-c2-core/core/pkg/resolver"
 	"github.com/vibe-c2/vibe-c2-core/core/pkg/responses"
 	"github.com/vibe-c2/vibe-c2-core/core/pkg/wiki"
+	"github.com/vibe-c2/vibe-c2-core/core/pkg/wikiexport"
 	"github.com/vibe-c2/vibe-c2-core/core/pkg/wikiimport"
 
 	_ "github.com/vibe-c2/vibe-c2-core/core/docs"
@@ -97,6 +98,23 @@ func (a *App) NewRouter() *gin.Engine {
 		controller.WikiImportControllerConfig{MaxZipSize: a.env.WikiImportZipMaxSize},
 	)
 
+	// Outline-flavored markdown exporter. Inverse of the importer above:
+	// renders an operation's wiki (or a subtree) to a zip whose layout
+	// matches the importer's input contract, so the result round-trips.
+	wikiExportOrch := wikiexport.NewOrchestrator(
+		a.repos.WikiDocument,
+		a.repos.WikiImage,
+		a.repos.WikiFile,
+		a.imageStore,
+		a.fileStore,
+		a.hpClient,
+		a.logger,
+		wikiexport.Config{},
+	)
+	wikiExportCtrl := controller.NewWikiExportController(
+		wikiExportOrch, a.repos.WikiDocument, a.repos.Operation, a.logger,
+	)
+
 	// Wiki webhook handler (Hocuspocus callbacks — internal, HMAC-validated, not behind JWTAuth)
 	webhookHandler := wiki.NewWebhookHandler(a.presenceTracker, a.eventBus, a.env.HocuspocusWebhookSecret, a.logger)
 
@@ -156,6 +174,10 @@ func (a *App) NewRouter() *gin.Engine {
 		// Outline-export importer (operator+ only; auth check is inside
 		// the handler since it depends on the operationId query param).
 		wikiGroup.POST("/import/outline", wikiImportCtrl.UploadOutlineExport)
+
+		// Outline-format markdown exporter. Reader+ on the operation;
+		// the GET method is exempt from CSRF by the middleware above.
+		wikiGroup.GET("/export", wikiExportCtrl.Export)
 
 		// GraphQL endpoint — all queries, mutations, and subscriptions.
 		// Authentication is handled by the JWTAuth middleware above (same as REST).

@@ -69,6 +69,15 @@ interface WikiStoreState {
   openImportOutlineDialog: () => void
   closeImportOutlineDialog: () => void
 
+  // Export dialog. `target` is null for tree-wide exports, populated for
+  // subtree exports triggered from the 3-dots menu on a tree row.
+  exportDialogOpen: boolean
+  exportTarget: { id: string; title: string; childCount: number } | null
+  openExportDialog: (
+    target?: { id: string; title: string; childCount: number },
+  ) => void
+  closeExportDialog: () => void
+
   // Move dialog
   moveDialogOpen: boolean
   moveTarget: { id: string; title: string } | null
@@ -187,6 +196,14 @@ export const useWikiStore = create<WikiStoreState>((set, get) => ({
   importOutlineDialogOpen: false,
   openImportOutlineDialog: () => set({ importOutlineDialogOpen: true }),
   closeImportOutlineDialog: () => set({ importOutlineDialogOpen: false }),
+
+  // Export dialog
+  exportDialogOpen: false,
+  exportTarget: null,
+  openExportDialog: (target) =>
+    set({ exportDialogOpen: true, exportTarget: target ?? null }),
+  closeExportDialog: () =>
+    set({ exportDialogOpen: false, exportTarget: null }),
 
   // Move dialog
   moveDialogOpen: false,

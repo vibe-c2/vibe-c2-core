@@ -20,10 +20,10 @@ import (
 // or their role is demoted below operator, and to convert markdown into Y.js
 // document updates during the Outline import flow.
 type HocuspocusClient struct {
-	baseURL      string
+	baseURL        string
 	internalSecret string
-	httpClient   *http.Client
-	logger       *zap.Logger
+	httpClient     *http.Client
+	logger         *zap.Logger
 }
 
 // NewHocuspocusClient creates a new client for the Hocuspocus internal API.
@@ -143,4 +143,50 @@ func (c *HocuspocusClient) MarkdownToYjs(ctx context.Context, markdown string) (
 		return nil, fmt.Errorf("read markdown-to-yjs response: %w", err)
 	}
 	return bytesOut, nil
+}
+
+// YjsToMarkdown is the inverse of MarkdownToYjs: it sends a document's Y.js
+// content_state to the Hocuspocus sidecar and returns the Outline-flavored
+// markdown that round-trips back through MarkdownToYjs.
+//
+// Used by the wiki export flow to render each document's stored binary
+// state into a .md file. Empty input bytes return an empty string without
+// calling the sidecar — an unopened document has no content to render.
+func (c *HocuspocusClient) YjsToMarkdown(ctx context.Context, contentState []byte) (string, error) {
+	if len(contentState) == 0 {
+		return "", nil
+	}
+	if c.internalSecret == "" {
+		return "", fmt.Errorf("yjs-to-markdown: no internal secret configured")
+	}
+
+	mac := hmac.New(sha256.New, []byte(c.internalSecret))
+	mac.Write(contentState)
+	signature := "sha256=" + hex.EncodeToString(mac.Sum(nil))
+
+	url := c.baseURL + "/internal/yjs-to-markdown"
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewReader(contentState))
+	if err != nil {
+		return "", fmt.Errorf("build yjs-to-markdown request: %w", err)
+	}
+	req.Header.Set("Content-Type", "application/octet-stream")
+	req.Header.Set("X-Internal-Signature-256", signature)
+
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return "", fmt.Errorf("call hocuspocus yjs-to-markdown: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		errBody, _ := io.ReadAll(io.LimitReader(resp.Body, 4096))
+		return "", fmt.Errorf("yjs-to-markdown returned %d: %s",
+			resp.StatusCode, string(errBody))
+	}
+
+	bytesOut, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return "", fmt.Errorf("read yjs-to-markdown response: %w", err)
+	}
+	return string(bytesOut), nil
 }

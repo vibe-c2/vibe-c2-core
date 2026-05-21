@@ -150,7 +150,7 @@ func (o *Orchestrator) Run(
 	report := &Report{}
 
 	// Holding-pen folders: import/<ISO timestamp>/<collection>/...
-	importParent, err := o.findOrCreateImportParent(ctx, operationID, callerID)
+	importParent, importParentCreated, err := o.findOrCreateImportParent(ctx, operationID, callerID)
 	if err != nil {
 		return nil, fmt.Errorf("find-or-create import parent: %w", err)
 	}
@@ -193,13 +193,32 @@ func (o *Orchestrator) Run(
 		}, coll.Documents, collectionParent.DocumentID, coll.Name+"/")
 	}
 
-	// Single wikiDocumentChanged event for the freshly-created timestamp
-	// parent. The frontend's SSE handler invalidates the op's whole tree
-	// and per-parent children caches on any wiki event, so one notification
-	// covers every newly-created descendant. Actor = the importing user so
-	// the subscription filter passes the event back to their own stream
-	// (see core/pkg/graphql/resolver/subscription_helpers.go).
+	// Notify subscribers. Two events:
+	//
+	//   1. If the singleton "import" parent was freshly created during this
+	//      run, fire a CREATED for it with no ParentDocumentID so the
+	//      frontend's root-children cache invalidates and the new top-level
+	//      "import" folder appears in the sidebar tree. Skipped on repeat
+	//      imports — the folder is already there.
+	//
+	//   2. Always fire a CREATED for this run's <timestamp> parent (under
+	//      "import") so the children-of-import cache invalidates and the
+	//      new dated folder appears whenever "import" is expanded.
+	//
+	// The frontend's wikiDocumentChanged handler is idempotent, so the two
+	// events compose safely; together they cover both the first-import and
+	// repeat-import cases without forcing a global refetch.
 	if o.eventBus != nil {
+		if importParentCreated {
+			o.eventBus.Publish(eventbus.NewWikiDocumentCreatedEvent(
+				eventbus.UserActor(callerID.String()),
+				eventbus.WikiDocumentEventPayload{
+					DocumentID:  importParent.DocumentID.String(),
+					OperationID: operationID.String(),
+					Title:       importParent.Title,
+				},
+			))
+		}
 		o.eventBus.Publish(eventbus.NewWikiDocumentCreatedEvent(
 			eventbus.UserActor(callerID.String()),
 			eventbus.WikiDocumentEventPayload{
@@ -514,7 +533,9 @@ func (o *Orchestrator) ingestOneAttachment(
 // findOrCreateImportParent looks up the singleton "import" root document
 // for an operation, or creates it if missing. Concurrent imports for the
 // same operation are serialised on a process-local mutex so the lookup-
-// or-create is atomic.
+// or-create is atomic. Returns the document, a flag indicating whether
+// it was created in this call (so the caller can emit a one-time CREATED
+// event for it), and any error.
 //
 // v1 operates without a Mongo unique index; the follow-up note in the
 // implementation plan calls for adding `(operation_id, parent_document_id,
@@ -522,30 +543,34 @@ func (o *Orchestrator) ingestOneAttachment(
 func (o *Orchestrator) findOrCreateImportParent(
 	ctx context.Context,
 	operationID, callerID uuid.UUID,
-) (*models.WikiDocument, error) {
+) (*models.WikiDocument, bool, error) {
 	o.importParentMu.Lock()
 	defer o.importParentMu.Unlock()
 
 	all, err := o.docRepo.FindAllByOperationID(ctx, operationID)
 	if err != nil {
-		return nil, err
+		return nil, false, err
 	}
 	for i := range all {
 		d := &all[i]
 		if d.ParentDocumentID == nil &&
 			d.DeletedAt == nil &&
 			strings.EqualFold(d.Title, importParentTitle) {
-			return d, nil
+			return d, false, nil
 		}
 	}
 
-	return o.createDoc(ctx, docCreateInput{
+	doc, err := o.createDoc(ctx, docCreateInput{
 		operationID: operationID,
 		callerID:    callerID,
 		title:       importParentTitle,
 		emoji:       importParentEmoji,
 		sortOrder:   "0", // sort early relative to imported timestamps
 	})
+	if err != nil {
+		return nil, false, err
+	}
+	return doc, true, nil
 }
 
 type docCreateInput struct {

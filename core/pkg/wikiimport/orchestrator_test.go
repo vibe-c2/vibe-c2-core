@@ -79,10 +79,17 @@ func TestOrchestrator_Run_Smoke(t *testing.T) {
 	}
 }
 
-// TestOrchestrator_PublishesSingleEvent verifies that one wikiDocumentCreated
-// event is published on successful import — the frontend's SSE-driven tree
-// invalidation depends on it to refresh without a manual page reload.
-func TestOrchestrator_PublishesSingleEvent(t *testing.T) {
+// TestOrchestrator_PublishesEvents verifies the event-emit contract that
+// drives the frontend's SSE-driven tree invalidation:
+//
+//   - First import (fresh op): two events — one for the just-created
+//     "import" parent (no ParentDocumentID, so root-children refreshes)
+//     and one for the new <timestamp> parent (parented at "import", so
+//     the children-of-import bucket refreshes).
+//   - Subsequent imports: one event — just the <timestamp> parent. The
+//     "import" parent already exists, so re-emitting CREATED for it would
+//     be misleading and trigger unneeded root-children refetches.
+func TestOrchestrator_PublishesEvents(t *testing.T) {
 	zr := openFixture(t)
 	parsed, _ := Parse(&zr.Reader)
 
@@ -98,28 +105,62 @@ func TestOrchestrator_PublishesSingleEvent(t *testing.T) {
 		t.Fatalf("Run: %v", err)
 	}
 
-	if got := len(bus.published); got != 1 {
-		t.Fatalf("published %d events, want exactly 1", got)
+	// First import: import parent was freshly created → 2 events.
+	if got := len(bus.published); got != 2 {
+		t.Fatalf("first import: published %d events, want 2 (import parent + timestamp parent)", got)
 	}
-	evt := bus.published[0]
-	if evt.Topic != eventbus.TopicWikiDocumentCreated {
-		t.Errorf("topic = %s, want %s", evt.Topic, eventbus.TopicWikiDocumentCreated)
+
+	// Event 0 = import parent (root-level — no ParentDocumentID).
+	importEvt := bus.published[0]
+	if importEvt.Topic != eventbus.TopicWikiDocumentCreated {
+		t.Errorf("first event topic = %s, want %s", importEvt.Topic, eventbus.TopicWikiDocumentCreated)
 	}
-	if evt.Actor.Type != eventbus.ActorUser || evt.Actor.ID != callerID.String() {
-		t.Errorf("actor = %+v, want user %s", evt.Actor, callerID)
-	}
-	p, ok := evt.Payload.(eventbus.WikiDocumentEventPayload)
+	importPayload, ok := importEvt.Payload.(eventbus.WikiDocumentEventPayload)
 	if !ok {
-		t.Fatalf("payload type = %T, want WikiDocumentEventPayload", evt.Payload)
+		t.Fatalf("first event payload type = %T, want WikiDocumentEventPayload", importEvt.Payload)
 	}
-	if p.DocumentID != report.TimestampParentID.String() {
-		t.Errorf("DocumentID = %s, want timestamp parent %s", p.DocumentID, report.TimestampParentID)
+	if importPayload.DocumentID != report.ImportParentID.String() {
+		t.Errorf("first event DocumentID = %s, want import parent %s", importPayload.DocumentID, report.ImportParentID)
 	}
-	if p.OperationID != opID.String() {
-		t.Errorf("OperationID = %s, want %s", p.OperationID, opID)
+	if importPayload.ParentDocumentID != "" {
+		t.Errorf("first event ParentDocumentID = %q, want empty (root)", importPayload.ParentDocumentID)
 	}
-	if p.ParentDocumentID != report.ImportParentID.String() {
-		t.Errorf("ParentDocumentID = %s, want import parent %s", p.ParentDocumentID, report.ImportParentID)
+
+	// Event 1 = timestamp parent (under "import").
+	tsEvt := bus.published[1]
+	if tsEvt.Topic != eventbus.TopicWikiDocumentCreated {
+		t.Errorf("second event topic = %s, want %s", tsEvt.Topic, eventbus.TopicWikiDocumentCreated)
+	}
+	if tsEvt.Actor.Type != eventbus.ActorUser || tsEvt.Actor.ID != callerID.String() {
+		t.Errorf("second event actor = %+v, want user %s", tsEvt.Actor, callerID)
+	}
+	tsPayload, ok := tsEvt.Payload.(eventbus.WikiDocumentEventPayload)
+	if !ok {
+		t.Fatalf("second event payload type = %T, want WikiDocumentEventPayload", tsEvt.Payload)
+	}
+	if tsPayload.DocumentID != report.TimestampParentID.String() {
+		t.Errorf("second event DocumentID = %s, want timestamp parent %s", tsPayload.DocumentID, report.TimestampParentID)
+	}
+	if tsPayload.OperationID != opID.String() {
+		t.Errorf("second event OperationID = %s, want %s", tsPayload.OperationID, opID)
+	}
+	if tsPayload.ParentDocumentID != report.ImportParentID.String() {
+		t.Errorf("second event ParentDocumentID = %s, want import parent %s", tsPayload.ParentDocumentID, report.ImportParentID)
+	}
+
+	// Reset the bus and run a second import — the import parent is now
+	// already there, so only the timestamp-parent event should fire.
+	bus.published = nil
+	if _, err := orch.Run(context.Background(), opID, callerID, parsed); err != nil {
+		t.Fatalf("second Run: %v", err)
+	}
+	if got := len(bus.published); got != 1 {
+		t.Fatalf("second import: published %d events, want 1 (timestamp parent only)", got)
+	}
+	if p, ok := bus.published[0].Payload.(eventbus.WikiDocumentEventPayload); ok {
+		if p.ParentDocumentID == "" {
+			t.Errorf("second import: stray root-level event published — import parent should not re-emit")
+		}
 	}
 }
 

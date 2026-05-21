@@ -10,6 +10,7 @@ import {
   PlusIcon,
   SearchIcon,
   Trash2Icon,
+  UploadIcon,
 } from "lucide-react"
 import {
   DndContext,
@@ -153,6 +154,7 @@ export function WikiTreeSidebar({
   const sidebarWidth = useWikiStore((s) => s.sidebarWidth)
   const openCreateDialog = useWikiStore((s) => s.openCreateDialog)
   const openImportOutlineDialog = useWikiStore((s) => s.openImportOutlineDialog)
+  const openExportDialog = useWikiStore((s) => s.openExportDialog)
   const openTrashPanel = useWikiStore((s) => s.openTrashPanel)
   const openContentSearch = useWikiStore((s) => s.openContentSearch)
   const openRecentDocs = useWikiStore((s) => s.openRecentDocs)
@@ -485,6 +487,21 @@ export function WikiTreeSidebar({
             <TooltipContent>Import markdown</TooltipContent>
           </Tooltip>
         )}
+        <Tooltip>
+          <TooltipTrigger
+            render={
+              <Button
+                variant="ghost"
+                size="icon-xs"
+                onClick={() => openExportDialog()}
+                aria-label="Export wiki"
+              />
+            }
+          >
+            <UploadIcon className="size-3.5" />
+          </TooltipTrigger>
+          <TooltipContent>Export wiki</TooltipContent>
+        </Tooltip>
         <Tooltip>
           <TooltipTrigger
             render={

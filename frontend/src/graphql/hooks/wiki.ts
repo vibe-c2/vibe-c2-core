@@ -532,9 +532,32 @@ export function usePermanentlyDeleteWikiDocument() {
 }
 
 export function useEmptyWikiDocumentTrash() {
+  const queryClient = useQueryClient()
   return useMutation({
     mutationFn: (operationId: string) =>
       graphqlClient(EmptyWikiDocumentTrashDocument, { operationId }),
+    // The backend publishes a wikiDocumentChanged event with no DocumentID,
+    // so the SSE handler can refresh the trash list but can't surgically
+    // drop every per-doc cache that referenced the now-purged docs.
+    // Invalidate locally as a safety net — TanStack Query dedupes against
+    // the SSE-driven invalidation that follows.
+    onSuccess: (_data, operationId) => {
+      queryClient.invalidateQueries({ queryKey: wikiKeys.trash(operationId) })
+      queryClient.invalidateQueries({ queryKey: wikiKeys.trashCount(operationId) })
+      // All per-doc trashedDescendants entries became stale; drop them so
+      // the trash panel re-fetches when a row re-expands.
+      queryClient.removeQueries({
+        queryKey: [...wikiKeys.all, "trashedDescendants"],
+      })
+      // Paginated lists, backlinks, and history all included the trashed
+      // docs — refresh them now rather than waiting for the per-event
+      // SSE handler that can't target them precisely.
+      queryClient.invalidateQueries({ queryKey: wikiKeys.lists() })
+      queryClient.invalidateQueries({
+        queryKey: [...wikiKeys.all, "backlinks"],
+      })
+      queryClient.invalidateQueries({ queryKey: wikiKeys.histories() })
+    },
   })
 }
 
@@ -626,11 +649,25 @@ export function useWikiDocumentChangedSubscription(operationId: string) {
       // the trash list and badge so the row reappears (soft-delete) or
       // vanishes (hard-delete + empty-trash). The reverse path (restore)
       // sends action=CREATED, so trash/trashCount also flip there.
+      //
+      // Empty-trash events arrive with documentId="" (the backend can't
+      // name a single doc — the whole trash was purged). In that case the
+      // per-doc removeQueries calls would be no-ops, so we sweep every
+      // per-doc cache family that the purged docs could have populated.
       if (action === "DELETED") {
-        queryClient.removeQueries({ queryKey: wikiKeys.detail(documentId) })
-        queryClient.removeQueries({ queryKey: wikiKeys.lite(documentId) })
-        queryClient.removeQueries({ queryKey: wikiKeys.backups(documentId) })
-        queryClient.removeQueries({ queryKey: wikiKeys.trashedDescendants(documentId) })
+        if (documentId) {
+          queryClient.removeQueries({ queryKey: wikiKeys.detail(documentId) })
+          queryClient.removeQueries({ queryKey: wikiKeys.lite(documentId) })
+          queryClient.removeQueries({ queryKey: wikiKeys.backups(documentId) })
+          queryClient.removeQueries({ queryKey: wikiKeys.trashedDescendants(documentId) })
+        } else {
+          // Empty-trash: blanket-clear the per-doc caches that referenced
+          // any of the purged docs. removeQueries with a prefix matches
+          // every keyed entry under the family.
+          queryClient.removeQueries({
+            queryKey: [...wikiKeys.all, "trashedDescendants"],
+          })
+        }
         queryClient.invalidateQueries({ queryKey: wikiKeys.trash(operationId) })
         queryClient.invalidateQueries({ queryKey: wikiKeys.trashCount(operationId) })
       } else if (document) {
