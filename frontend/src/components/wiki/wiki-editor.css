@@ -424,9 +424,49 @@
   background: var(--accent);
 }
 
+/* Two-column layout: gutter (line numbers + wrap markers) on the left, the
+   scrollable <pre> on the right. Both share the wrapper's background — the
+   gutter has no chrome and no separator, it just sits on the left edge with
+   the numbers right-aligned. `min-width: 0` on the <pre> lets it shrink
+   inside the flex row so its horizontal scroll bar appears instead of
+   overflowing the wrapper. The gutter stays fixed — it must not scroll
+   horizontally with the code. */
+.tiptap .wiki-code-block__body {
+  display: flex;
+  align-items: stretch;
+}
+
+.tiptap .wiki-code-block__gutter {
+  flex: 0 0 auto;
+  min-width: 2.25rem;
+  padding: 12px 8px 12px 12px;
+  font-family: var(--font-mono);
+  font-size: 0.8125rem;
+  color: var(--muted-foreground);
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+/* Each gutter row mirrors a single visual line of code. Matching the code's
+   `line-height: 1.55` is what keeps numbers aligned with their lines even
+   when wrap re-flows the content; if these diverge the gutter desyncs. */
+.tiptap .wiki-code-block__line {
+  display: block;
+  line-height: 1.55;
+  opacity: 0.55;
+}
+
+.tiptap .wiki-code-block__line--wrap {
+  opacity: 0.3;
+}
+
 .tiptap .wiki-code-block__pre {
+  flex: 1 1 auto;
+  min-width: 0;
   margin: 0;
-  padding: 12px 14px;
+  padding: 12px 14px 12px 4px;
   background: transparent;
   overflow-x: auto;
 }
