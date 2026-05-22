@@ -14,8 +14,7 @@ declare module "@tiptap/core" {
 // L≈0.65) reads as a readable highlight tint instead of a fully saturated
 // fill. The data-color attribute is what round-trips through markdown —
 // CSS derives the actual background on render.
-function buildBackgroundStyle(color: string): string | null {
-  if (!color) return null
+function highlightBackgroundStyle(color: string): string {
   return `background-color: color-mix(in oklch, ${color} 28%, transparent);`
 }
 
@@ -31,10 +30,10 @@ export const WikiHighlightMark = Mark.create({
         renderHTML: (attrs) => {
           const color = typeof attrs.color === "string" ? attrs.color : ""
           if (!color) return {}
-          const style = buildBackgroundStyle(color)
-          return style
-            ? { "data-color": color, style }
-            : { "data-color": color }
+          return {
+            "data-color": color,
+            style: highlightBackgroundStyle(color),
+          }
         },
       },
     }

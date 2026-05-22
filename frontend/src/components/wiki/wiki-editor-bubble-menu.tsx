@@ -22,6 +22,12 @@ interface WikiEditorBubbleMenuProps {
   editor: Editor | null
 }
 
+// Skip the "Default" sentinel (value === "") from the icon palette —
+// highlight has no "inherit" concept; the swatch row exposes a dedicated
+// Remove action instead. Lifted to module scope so the filter doesn't
+// re-run on every HighlightButton render.
+const HIGHLIGHT_SWATCHES = WIKI_ICON_COLORS.filter((c) => c.value !== "")
+
 export function WikiEditorBubbleMenu({ editor }: WikiEditorBubbleMenuProps) {
   if (!editor) return null
 
@@ -114,14 +120,11 @@ function HighlightButton({ editor }: { editor: Editor }) {
   // otherwise stay open and obscure the result the user just applied.
   const [open, setOpen] = useState(false)
   const active = editor.isActive("wikiHighlight")
-  const currentColor = active
-    ? (editor.getAttributes("wikiHighlight").color as string | undefined) ?? ""
-    : ""
-
-  // Skip the "Default" sentinel (value === "") from the icon palette —
-  // highlight has no "inherit" concept; instead we expose a dedicated
-  // Remove action below.
-  const swatches = WIKI_ICON_COLORS.filter((c) => c.value !== "")
+  // getAttributes returns {} when the mark isn't active, so the optional
+  // chain plus empty-string fallback covers both the inactive case and
+  // legacy marks stored without a color attribute.
+  const currentColor =
+    (editor.getAttributes("wikiHighlight").color as string | undefined) ?? ""
 
   return (
     <Popover open={open} onOpenChange={setOpen}>
@@ -158,7 +161,7 @@ function HighlightButton({ editor }: { editor: Editor }) {
         // formatting row. tailwind-merge lets these classes override the
         // base widths/padding/shadow without re-spelling the whole list.
         className="flex w-auto min-w-0 flex-row items-center gap-1 rounded-lg bg-popover p-1 text-popover-foreground shadow-sm ring-1 ring-foreground/10">
-        {swatches.map((c) => (
+        {HIGHLIGHT_SWATCHES.map((c) => (
           <button
             key={c.value}
             type="button"
@@ -173,9 +176,13 @@ function HighlightButton({ editor }: { editor: Editor }) {
               "size-5 rounded-full ring-1 ring-border transition-transform hover:scale-110",
               currentColor === c.value && "ring-2 ring-foreground",
             )}
-            style={{
-              backgroundColor: `color-mix(in oklch, ${c.value} 35%, transparent)`,
-            }}
+            // Paint the swatch at full saturation so its identity reads
+            // clearly against the dark popover surface. The on-text
+            // highlight applies the same OKLCH literal at ~28% mix; the
+            // swatch is a picker, not a faithful preview, and matching
+            // the rendered tint here just made every color read as
+            // muddy gray-on-gray.
+            style={{ backgroundColor: c.value }}
           />
         ))}
         <button
