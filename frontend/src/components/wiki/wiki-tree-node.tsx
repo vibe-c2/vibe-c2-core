@@ -2,23 +2,22 @@ import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { Link, useParams } from "react-router"
 import { useDraggable, useDroppable } from "@dnd-kit/core"
 import {
-  ArrowDownAZIcon,
   ChevronRightIcon,
   ChevronsDownUpIcon,
   ChevronsUpDownIcon,
-  CopyIcon,
   EllipsisIcon,
-  FilePlusIcon,
-  FolderInputIcon,
   Loader2Icon,
-  PencilIcon,
   PlusIcon,
   SearchIcon,
-  SmileIcon,
-  Trash2Icon,
-  UploadIcon,
 } from "lucide-react"
 import { Collapsible, CollapsibleTrigger, CollapsibleContent } from "@/components/ui/collapsible"
+import {
+  ContextMenu,
+  ContextMenuContent,
+  ContextMenuItem,
+  ContextMenuSeparator,
+  ContextMenuTrigger,
+} from "@/components/ui/context-menu"
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -26,14 +25,13 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
+import { WikiTreeRowMenuItems } from "@/components/wiki/wiki-tree-row-menu-items"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Skeleton } from "@/components/ui/skeleton"
 import { useWikiStore } from "@/stores/wiki"
 import { useWikiDragStore } from "@/stores/wiki-drag"
 import {
-  useDuplicateWikiDocument,
-  useReorderWikiDocumentSiblings,
   useUpdateWikiDocument,
   useWikiDocumentChildren,
 } from "@/graphql/hooks/wiki"
@@ -196,120 +194,139 @@ function WikiTreeNodeImpl({
         </div>
       )}
 
-      <div
-        ref={(el) => {
-          rowRef.current = el
-          setDropRef(el)
-          if (isEditor) setDragRef(el)
-        }}
-        style={{ paddingLeft: indent, ...treeLineStyle }}
-        className={cn(
-          "group flex h-7 items-center gap-0.5 rounded-md px-1 text-sm",
-          isDropInside && "bg-primary/10 ring-1 ring-primary",
-          !isDropInside && isSelected && "bg-accent text-accent-foreground",
-          !isDropInside && !isSelected && "hover:bg-muted",
-        )}
-      >
-        {/* Chevron/emoji shared slot: emoji by default, chevron on hover.
-            Leaves render just the emoji (no trigger). This span is also the
-            drag activator — pointer listeners live here, NOT on the row, so
-            the <Link> below is a sibling rather than a descendant. */}
-        <span
-          ref={isEditor ? setActivatorNodeRef : undefined}
-          {...(isEditor ? attributes : {})}
-          {...(isEditor ? listeners : {})}
-          className={cn(
-            "flex size-5 shrink-0 items-center justify-center",
-            isEditor && "cursor-grab active:cursor-grabbing",
-          )}
-        >
-          {hasChildren ? (
-            <CollapsibleTrigger
-              render={
-                <button
-                  className="flex size-5 shrink-0 items-center justify-center rounded hover:bg-muted-foreground/10"
-                  aria-label={isExpanded ? "Collapse" : "Expand"}
-                />
-              }
+      {/* ContextMenu wraps the row so right-click anywhere on it opens the
+          same actions as the 3-dots dropdown. The trigger is rendered with
+          `display: contents` so the row's flex layout is unaffected — events
+          still bubble to the wrapper for Base UI's contextmenu handler. */}
+      <ContextMenu>
+        <ContextMenuTrigger className="contents">
+          <div
+            ref={(el) => {
+              rowRef.current = el
+              setDropRef(el)
+              if (isEditor) setDragRef(el)
+            }}
+            style={{ paddingLeft: indent, ...treeLineStyle }}
+            className={cn(
+              "group flex h-7 items-center gap-0.5 rounded-md px-1 text-sm",
+              isDropInside && "bg-primary/10 ring-1 ring-primary",
+              !isDropInside && isSelected && "bg-accent text-accent-foreground",
+              !isDropInside && !isSelected && "hover:bg-muted",
+            )}
+          >
+            {/* Chevron/emoji shared slot: emoji by default, chevron on hover.
+                Leaves render just the emoji (no trigger). This span is also the
+                drag activator — pointer listeners live here, NOT on the row, so
+                the <Link> below is a sibling rather than a descendant. */}
+            <span
+              ref={isEditor ? setActivatorNodeRef : undefined}
+              {...(isEditor ? attributes : {})}
+              {...(isEditor ? listeners : {})}
+              className={cn(
+                "flex size-5 shrink-0 items-center justify-center",
+                isEditor && "cursor-grab active:cursor-grabbing",
+              )}
             >
-              <span className="flex size-5 items-center justify-center text-sm group-hover:hidden">
+              {hasChildren ? (
+                <CollapsibleTrigger
+                  render={
+                    <button
+                      className="flex size-5 shrink-0 items-center justify-center rounded hover:bg-muted-foreground/10"
+                      aria-label={isExpanded ? "Collapse" : "Expand"}
+                    />
+                  }
+                >
+                  <span className="flex size-5 items-center justify-center text-sm group-hover:hidden">
+                    <DocumentIcon
+                      emoji={node.emoji}
+                      icon={node.icon}
+                      color={node.color}
+                      hasChildren
+                      isExpanded={isExpanded}
+                    />
+                  </span>
+                  <ChevronRightIcon
+                    className={cn(
+                      "hidden size-3.5 transition-transform group-hover:block",
+                      isExpanded && "rotate-90",
+                    )}
+                  />
+                </CollapsibleTrigger>
+              ) : (
                 <DocumentIcon
                   emoji={node.emoji}
                   icon={node.icon}
                   color={node.color}
-                  hasChildren
-                  isExpanded={isExpanded}
                 />
-              </span>
-              <ChevronRightIcon
-                className={cn(
-                  "hidden size-3.5 transition-transform group-hover:block",
-                  isExpanded && "rotate-90",
-                )}
+              )}
+            </span>
+
+            {/* Icon picker: opened via context menu, anchored to the row */}
+            {iconPickerOpen && (
+              <DocumentIconPicker
+                value={{ emoji: node.emoji, icon: node.icon, color: node.color }}
+                onSelect={handleIconSelect}
+                open={iconPickerOpen}
+                onOpenChange={setIconPickerOpen}
               />
-            </CollapsibleTrigger>
-          ) : (
-            <DocumentIcon
-              emoji={node.emoji}
-              icon={node.icon}
-              color={node.color}
+            )}
+
+            {/* Title */}
+            {renaming ? (
+              <Input
+                autoFocus
+                value={renameValue}
+                onChange={(e) => setRenameValue(e.target.value)}
+                onBlur={handleRenameSubmit}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") handleRenameSubmit()
+                  if (e.key === "Escape") {
+                    setRenameValue(node.title)
+                    setRenaming(false)
+                  }
+                }}
+                className="h-5 flex-1 border-none bg-transparent px-1 py-0 text-sm shadow-none focus-visible:ring-0"
+              />
+            ) : (
+              <Link
+                to={`/wiki/${node.id}`}
+                // draggable=false prevents the browser's native HTML5 link drag
+                // (which would let the user drag the URL as text). The dnd-kit
+                // activator is the leading icon slot, not this <Link>, so a
+                // plain click on the title always reaches react-router.
+                draggable={false}
+                className="flex h-full flex-1 items-center truncate px-1 text-left text-sm"
+              >
+                {node.title}
+              </Link>
+            )}
+
+            {/* Quick actions + context menu — extracted so this expensive subtree
+                (a DropdownMenu + buttons) bails out via memo when the row re-renders
+                for unrelated reasons (drag highlight flips, dnd-kit measurement
+                passes, expansion cascades). The profile showed this block dominated
+                spike-commit time; memoizing it here is the highest-leverage win. */}
+            <WikiTreeRowQuickActions
+              node={node}
+              operationId={operationId}
+              isEditor={isEditor}
+              onStartRename={handleStartRename}
+              onStartIconPicker={handleStartIconPicker}
             />
-          )}
-        </span>
-
-        {/* Icon picker: opened via context menu, anchored to the row */}
-        {iconPickerOpen && (
-          <DocumentIconPicker
-            value={{ emoji: node.emoji, icon: node.icon, color: node.color }}
-            onSelect={handleIconSelect}
-            open={iconPickerOpen}
-            onOpenChange={setIconPickerOpen}
+          </div>
+        </ContextMenuTrigger>
+        <ContextMenuContent>
+          <WikiTreeRowMenuItems
+            Item={ContextMenuItem}
+            Separator={ContextMenuSeparator}
+            node={node}
+            operationId={operationId}
+            isEditor={isEditor}
+            onStartRename={handleStartRename}
+            onStartIconPicker={handleStartIconPicker}
           />
-        )}
-
-        {/* Title */}
-        {renaming ? (
-          <Input
-            autoFocus
-            value={renameValue}
-            onChange={(e) => setRenameValue(e.target.value)}
-            onBlur={handleRenameSubmit}
-            onKeyDown={(e) => {
-              if (e.key === "Enter") handleRenameSubmit()
-              if (e.key === "Escape") {
-                setRenameValue(node.title)
-                setRenaming(false)
-              }
-            }}
-            className="h-5 flex-1 border-none bg-transparent px-1 py-0 text-sm shadow-none focus-visible:ring-0"
-          />
-        ) : (
-          <Link
-            to={`/wiki/${node.id}`}
-            // draggable=false prevents the browser's native HTML5 link drag
-            // (which would let the user drag the URL as text). The dnd-kit
-            // activator is the leading icon slot, not this <Link>, so a
-            // plain click on the title always reaches react-router.
-            draggable={false}
-            className="flex h-full flex-1 items-center truncate px-1 text-left text-sm"
-          >
-            {node.title}
-          </Link>
-        )}
-
-        {/* Quick actions + context menu — extracted so this expensive subtree
-            (a DropdownMenu + buttons) bails out via memo when the row re-renders
-            for unrelated reasons (drag highlight flips, dnd-kit measurement
-            passes, expansion cascades). The profile showed this block dominated
-            spike-commit time; memoizing it here is the highest-leverage win. */}
-        <WikiTreeRowQuickActions
-          node={node}
-          operationId={operationId}
-          isEditor={isEditor}
-          onStartRename={handleStartRename}
-          onStartIconPicker={handleStartIconPicker}
-        />
-      </div>
+        </ContextMenuContent>
+      </ContextMenu>
 
       {/* Drop-after divider */}
       {isDropAfter && (
@@ -365,18 +382,49 @@ function WikiTreeRowQuickActionsImpl({
   onStartIconPicker,
 }: WikiTreeRowQuickActionsProps) {
   const openCreateDialog = useWikiStore((s) => s.openCreateDialog)
-  const openMoveDialog = useWikiStore((s) => s.openMoveDialog)
-  const openDeleteDialog = useWikiStore((s) => s.openDeleteDialog)
-  const openDuplicateDialog = useWikiStore((s) => s.openDuplicateDialog)
-  const openExportDialog = useWikiStore((s) => s.openExportDialog)
   const openContentSearch = useWikiStore((s) => s.openContentSearch)
-  const reorderSiblings = useReorderWikiDocumentSiblings()
-  const duplicateDocument = useDuplicateWikiDocument()
 
-  // Menu-open state is local to this subtree — no reason to live in the
-  // parent row, where it would force the row (and its dnd hooks) to
-  // re-render whenever the menu opens or closes.
+  // Menu state tracks both `open` (Base UI's controlled state) AND `closing`
+  // — a brief tail that stays true while the popup animates out. Without the
+  // tail, `menuOpen` flips false the moment the user dismisses the menu and
+  // the trigger button immediately collapses to `display:none` (hover lost).
+  // Base UI's positioner, still running the exit animation, loses its anchor
+  // mid-frame and re-anchors to (0,0) — visible as the "blink in the upper
+  // corner" the user reported. Keeping the trigger laid out for ~exit-duration
+  // gives the positioner a stable anchor through the animation.
   const [menuOpen, setMenuOpen] = useState(false)
+  const [closing, setClosing] = useState(false)
+  const closeTimerRef = useRef<number | null>(null)
+
+  useEffect(
+    () => () => {
+      if (closeTimerRef.current !== null) {
+        window.clearTimeout(closeTimerRef.current)
+      }
+    },
+    [],
+  )
+
+  const handleMenuOpenChange = useCallback((open: boolean) => {
+    if (closeTimerRef.current !== null) {
+      window.clearTimeout(closeTimerRef.current)
+      closeTimerRef.current = null
+    }
+    setMenuOpen(open)
+    if (open) {
+      setClosing(false)
+      return
+    }
+    setClosing(true)
+    // dropdown-menu.tsx uses duration-100 on the exit animation; 200ms is
+    // a safety margin in case the browser delays the timer under load.
+    closeTimerRef.current = window.setTimeout(() => {
+      setClosing(false)
+      closeTimerRef.current = null
+    }, 200)
+  }, [])
+
+  const triggerVisible = menuOpen || closing
 
   // One loading flag shared across Expand/Collapse subtree: they hit the
   // same tree-fetch + transition pipeline and only one runs at a time.
@@ -387,16 +435,6 @@ function WikiTreeRowQuickActionsImpl({
   // from the server). The "Expand/Collapse subtree" buttons prime the full
   // operation tree on click so they cover unloaded branches.
   const hasChildren = node.childCount > 0
-  // Cached children for this node, if its branch was ever expanded. Used by
-  // the "Sort" action; we don't trigger a fetch from here, so unloaded
-  // branches show no Sort row (acceptable — the user only sorts what they
-  // can see).
-  const { data: cachedChildren } = useWikiDocumentChildren(
-    operationId,
-    node.id,
-    { enabled: false },
-  )
-  const loadedChildren = cachedChildren?.wikiDocumentChildren ?? []
 
   return (
     <>
@@ -462,7 +500,7 @@ function WikiTreeRowQuickActionsImpl({
         </Button>
       )}
 
-      <DropdownMenu open={menuOpen} onOpenChange={setMenuOpen}>
+      <DropdownMenu open={menuOpen} onOpenChange={handleMenuOpenChange}>
         <DropdownMenuTrigger
           render={
             <Button
@@ -470,7 +508,9 @@ function WikiTreeRowQuickActionsImpl({
               size="icon-xs"
               className={cn(
                 "shrink-0",
-                menuOpen ? "inline-flex" : "hidden group-hover:inline-flex",
+                triggerVisible
+                  ? "inline-flex"
+                  : "hidden group-hover:inline-flex",
               )}
             />
           }
@@ -478,111 +518,15 @@ function WikiTreeRowQuickActionsImpl({
           <EllipsisIcon className="size-3.5" />
         </DropdownMenuTrigger>
         <DropdownMenuContent align="start" className="min-w-48">
-          {isEditor && (
-            <DropdownMenuItem onClick={() => openCreateDialog(node.id)}>
-              <FilePlusIcon className="mr-2 size-4" />
-              New child document
-            </DropdownMenuItem>
-          )}
-          {isEditor && (
-            <DropdownMenuItem onClick={onStartRename}>
-              <PencilIcon className="mr-2 size-4" />
-              Rename
-            </DropdownMenuItem>
-          )}
-          {isEditor && (
-            <DropdownMenuItem onClick={onStartIconPicker}>
-              <SmileIcon className="mr-2 size-4" />
-              Change icon
-            </DropdownMenuItem>
-          )}
-          {isEditor && (
-            <DropdownMenuItem
-              onClick={() => {
-                // Documents with children prompt for shallow vs deep copy via
-                // the dialog. Leaves bypass it — there's nothing to ask, so we
-                // fire the mutation directly.
-                if (hasChildren) {
-                  openDuplicateDialog({
-                    id: node.id,
-                    title: node.title,
-                    childCount: node.childCount,
-                  })
-                } else {
-                  duplicateDocument.mutate({ id: node.id, withChildren: false })
-                }
-              }}
-              disabled={duplicateDocument.isPending}
-            >
-              <CopyIcon className="mr-2 size-4" />
-              Duplicate
-            </DropdownMenuItem>
-          )}
-          {isEditor && (
-            <DropdownMenuItem
-              onClick={() =>
-                openMoveDialog({ id: node.id, title: node.title })
-              }
-            >
-              <FolderInputIcon className="mr-2 size-4" />
-              Move to
-            </DropdownMenuItem>
-          )}
-          {isEditor && hasChildren && loadedChildren.length > 0 && (
-            <DropdownMenuItem
-              onClick={() => {
-                // Sort children alphabetically by title. One bulk mutation
-                // replaces the N-update loop this used to fire, so the
-                // sidebar refetches the affected parent bucket exactly once.
-                const sorted = [...loadedChildren].sort((a, b) =>
-                  a.title.localeCompare(b.title, undefined, { sensitivity: "base" }),
-                )
-                reorderSiblings.mutate({
-                  input: {
-                    operationId,
-                    parentDocumentId: node.id,
-                    orderedIds: sorted.map((d) => d.id),
-                  },
-                })
-              }}
-            >
-              <ArrowDownAZIcon className="mr-2 size-4" />
-              Sort
-            </DropdownMenuItem>
-          )}
-          <DropdownMenuSeparator />
-          <DropdownMenuItem
-            onClick={() => openContentSearch(node.id, node.title)}
-          >
-            <SearchIcon className="mr-2 size-4" />
-            Search in {node.title}...
-          </DropdownMenuItem>
-          <DropdownMenuItem
-            onClick={() =>
-              openExportDialog({
-                id: node.id,
-                title: node.title,
-                childCount: node.childCount,
-              })
-            }
-          >
-            <UploadIcon className="mr-2 size-4" />
-            Export…
-          </DropdownMenuItem>
-          {isEditor && (
-            <>
-              <DropdownMenuSeparator />
-              <DropdownMenuItem
-                className="text-destructive"
-                onClick={() =>
-                  openDeleteDialog({ id: node.id, title: node.title })
-                }
-              >
-                <Trash2Icon className="mr-2 size-4" />
-                Delete
-              </DropdownMenuItem>
-            </>
-          )}
+          <WikiTreeRowMenuItems
+            Item={DropdownMenuItem}
+            Separator={DropdownMenuSeparator}
+            node={node}
+            operationId={operationId}
+            isEditor={isEditor}
+            onStartRename={onStartRename}
+            onStartIconPicker={onStartIconPicker}
+          />
         </DropdownMenuContent>
       </DropdownMenu>
     </>
