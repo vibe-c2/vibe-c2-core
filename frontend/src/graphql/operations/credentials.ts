@@ -34,6 +34,7 @@ export const CredentialFields = graphql(`
       id
       username
     }
+    backlinkCount
     createdAt
     updatedAt
   }
@@ -98,6 +99,18 @@ export const CredentialsQuery = graphql(`
 export const CredentialTagsQuery = graphql(`
   query CredentialTags($operationId: ID!) {
     credentialTags(operationId: $operationId)
+  }
+`)
+
+// Wiki documents that reference the given credential via the inline
+// /credential chip. Powers the "Referenced in" section in the credential
+// details dialog. Mirrors WikiDocumentBacklinksQuery and reuses the same
+// row fragment so both surfaces render identically.
+export const CredentialBacklinksQuery = graphql(`
+  query CredentialBacklinks($credentialId: ID!) {
+    wikiDocumentsReferencingCredential(credentialId: $credentialId) {
+      ...WikiDocumentBacklinkFields
+    }
   }
 `)
 

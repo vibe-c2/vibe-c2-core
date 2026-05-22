@@ -1,7 +1,10 @@
 import { Database } from "@hocuspocus/extension-database";
 import { Binary, MongoClient, type Db } from "mongodb";
 import * as Y from "yjs";
-import { collectReferenceIds } from "./references.js";
+import {
+  collectCredentialReferenceIds,
+  collectDocReferenceIds,
+} from "./references.js";
 
 /**
  * Convert a UUID string to a BSON Binary matching how the Go backend (qmgo)
@@ -147,9 +150,13 @@ export function createDatabaseExtension(): Database {
       const xmlFragment = ydoc.getXmlFragment("default");
       let markdown: string;
       let referenceBinaries: Binary[] = [];
+      let credentialReferenceBinaries: Binary[] = [];
       if (xmlFragment.length > 0) {
         markdown = extractTextFromFragment(xmlFragment);
-        referenceBinaries = collectReferenceBinaries(xmlFragment);
+        referenceBinaries = idsToBinaries(collectDocReferenceIds(xmlFragment));
+        credentialReferenceBinaries = idsToBinaries(
+          collectCredentialReferenceIds(xmlFragment),
+        );
       } else {
         markdown = ydoc.getText("content").toString();
       }
@@ -174,6 +181,10 @@ export function createDatabaseExtension(): Database {
         // last /doc chip leaves an empty array (not absent), so the
         // backlinks resolver immediately stops returning this doc.
         references: referenceBinaries,
+        // Parallel index for credential backlinks. Same rewrite semantics:
+        // removing the last /credential chip clears the array, so the
+        // Findings page's backlinks list updates on the next persist.
+        credential_references: credentialReferenceBinaries,
       };
 
       if (ctx?.userId) {
@@ -216,22 +227,20 @@ function extractTextFromFragment(node: Y.XmlFragment | Y.XmlElement): string {
 }
 
 /**
- * Wrap collectReferenceIds with the BSON Binary conversion that Mongo needs.
- * Pure ID extraction lives in references.ts; persistence only owns the I/O
- * boundary (Mongo Binary, Y.js round-trip, webhook dispatch).
+ * Convert a set of UUID strings to BSON Binaries matching the qmgo (Go)
+ * serialisation. Pure ID extraction lives in references.ts; persistence only
+ * owns the I/O boundary (Mongo Binary, Y.js round-trip, webhook dispatch).
+ *
+ * uuidToBinary validates hex length — defense in depth on top of the UUID
+ * regex inside the walker. A single bad ID never blocks the save.
  */
-function collectReferenceBinaries(
-  node: Y.XmlFragment | Y.XmlElement
-): Binary[] {
-  const ids = collectReferenceIds(node);
+function idsToBinaries(ids: Iterable<string>): Binary[] {
   const out: Binary[] = [];
   for (const id of ids) {
     try {
       out.push(uuidToBinary(id));
     } catch {
-      // uuidToBinary validates hex length — defense in depth on top of the
-      // UUID regex inside collectReferenceIds. A single bad ID never blocks
-      // the save.
+      // skip malformed
     }
   }
   return out;

@@ -13,9 +13,11 @@ import (
 	"github.com/vibe-c2/vibe-c2-core/core/pkg/eventbus"
 	"github.com/vibe-c2/vibe-c2-core/core/pkg/graphql/gqlctx"
 	"github.com/vibe-c2/vibe-c2-core/core/pkg/graphql/model"
+	"github.com/vibe-c2/vibe-c2-core/core/pkg/logger"
 	"github.com/vibe-c2/vibe-c2-core/core/pkg/models"
 	"github.com/vibe-c2/vibe-c2-core/core/pkg/pagination"
 	"github.com/vibe-c2/vibe-c2-core/core/pkg/repository"
+	"go.uber.org/zap"
 )
 
 // errCommentNotFound signals a commentId that doesn't exist on the target credential.
@@ -61,6 +63,8 @@ type ICredentialResolver interface {
 	Operation(ctx context.Context, obj *models.Credential) (*models.Operation, error)
 	Comments(ctx context.Context, obj *models.Credential) ([]*models.CredentialComment, error)
 	CreatedBy(ctx context.Context, obj *models.Credential) (*models.User, error)
+	BacklinkCount(ctx context.Context, obj *models.Credential) (int, error)
+	Backlinks(ctx context.Context, obj *models.Credential) ([]*models.WikiDocument, error)
 	CreatedAt(ctx context.Context, obj *models.Credential) (string, error)
 	UpdatedAt(ctx context.Context, obj *models.Credential) (string, error)
 
@@ -75,7 +79,13 @@ type credentialResolver struct {
 	credRepo      repository.ICredentialRepository
 	operationRepo repository.IOperationRepository
 	userRepo      repository.IUserRepository
-	eventBus      eventbus.IEventBus
+	// wikiDocRes owns the wiki side of the cross-domain backlinks join.
+	// Credential.backlinks / Credential.backlinkCount delegate to it. The
+	// dependency arrow intentionally points from credentials → wiki — the
+	// inverse index lives in `wiki_documents.credential_references`, so the
+	// query naturally belongs in wiki land.
+	wikiDocRes IWikiDocumentResolver
+	eventBus   eventbus.IEventBus
 }
 
 // NewCredentialResolver creates a new credential resolver with the given dependencies.
@@ -83,6 +93,7 @@ func NewCredentialResolver(
 	credRepo repository.ICredentialRepository,
 	operationRepo repository.IOperationRepository,
 	userRepo repository.IUserRepository,
+	wikiDocRes IWikiDocumentResolver,
 	bus eventbus.IEventBus,
 ) ICredentialResolver {
 	if bus == nil {
@@ -92,6 +103,7 @@ func NewCredentialResolver(
 		credRepo:      credRepo,
 		operationRepo: operationRepo,
 		userRepo:      userRepo,
+		wikiDocRes:    wikiDocRes,
 		eventBus:      bus,
 	}
 }
@@ -251,6 +263,20 @@ func (r *credentialResolver) DeleteCredential(ctx context.Context, id string) (b
 
 	if err := r.credRepo.Delete(ctx, &cred); err != nil {
 		return false, fmt.Errorf("failed to delete credential: %w", err)
+	}
+
+	// Strip this credential id from credential_references on every wiki doc
+	// in the operation so the inverse index doesn't carry dangling UUIDs.
+	// Best-effort — a failed cleanup leaves a stale pointer but does not
+	// undo the user-visible delete. The chip render path already handles
+	// "credential not found" gracefully.
+	if r.wikiDocRes != nil {
+		if err := r.wikiDocRes.CleanupCredentialReferences(ctx, cred.OperationID, cred.CredentialID); err != nil {
+			logger.From(ctx).Warn("cleanup of credential backlinks failed",
+				zap.String("credential_id", cred.CredentialID.String()),
+				zap.Error(err),
+			)
+		}
 	}
 
 	auth := gqlctx.AuthFromContext(ctx)
@@ -761,6 +787,27 @@ func (r *credentialResolver) CreatedBy(ctx context.Context, obj *models.Credenti
 		return nil, nil
 	}
 	return &user, nil
+}
+
+// BacklinkCount resolves the cheap count form of Credential.backlinks. Used
+// by the credentials table to render a per-row badge without pulling the full
+// document list. Delegates to the wiki resolver so the query lives in the
+// package that owns the inverse index.
+func (r *credentialResolver) BacklinkCount(ctx context.Context, obj *models.Credential) (int, error) {
+	if r.wikiDocRes == nil || obj == nil {
+		return 0, nil
+	}
+	return r.wikiDocRes.CredentialBacklinkCount(ctx, obj)
+}
+
+// Backlinks resolves the full Credential.backlinks list. Loaded on demand
+// (e.g. when the credential details dialog opens). Delegates to the wiki
+// resolver — see BacklinkCount for the dependency-direction rationale.
+func (r *credentialResolver) Backlinks(ctx context.Context, obj *models.Credential) ([]*models.WikiDocument, error) {
+	if r.wikiDocRes == nil || obj == nil {
+		return []*models.WikiDocument{}, nil
+	}
+	return r.wikiDocRes.CredentialBacklinks(ctx, obj)
 }
 
 // CreatedAt converts the qmgo DefaultField timestamp to an ISO 8601 string.

@@ -15,6 +15,7 @@ import {
   CredentialDocument,
   CredentialsDocument,
   CredentialTagsDocument,
+  CredentialBacklinksDocument,
   CreateCredentialDocument,
   UpdateCredentialDocument,
   DeleteCredentialDocument,
@@ -63,6 +64,8 @@ export const credentialKeys = {
   tagSet: (operationId: string) => [...credentialKeys.tagSets(), operationId] as const,
   myTagSet: (operationIds: string[] | null) =>
     [...credentialKeys.tagSets(), "my", operationIds] as const,
+  backlinks: (credentialId: string) =>
+    [...credentialKeys.all, "backlinks", credentialId] as const,
 }
 
 // --- Queries ---
@@ -110,6 +113,20 @@ export function useCredentialTags(operationId: string) {
     queryKey: credentialKeys.tagSet(operationId),
     queryFn: () => graphqlClient(CredentialTagsDocument, { operationId }),
     enabled: !!operationId,
+  })
+}
+
+// Wiki documents that reference this credential inline. Loaded on demand by
+// the details dialog — capped at 200 server-side and filtered to active
+// documents. Live-invalidation runs through the existing credentialChanged
+// and wikiDocumentChanged subscriptions, which both blanket-invalidate the
+// backlinks prefix.
+export function useCredentialBacklinks(credentialId: string) {
+  return useQuery({
+    queryKey: credentialKeys.backlinks(credentialId),
+    queryFn: () =>
+      graphqlClient(CredentialBacklinksDocument, { credentialId }),
+    enabled: !!credentialId,
   })
 }
 
@@ -267,6 +284,13 @@ export function useCredentialChangedSubscription(operationId: string) {
 
       queryClient.invalidateQueries({ queryKey: credentialKeys.lists() })
       queryClient.invalidateQueries({ queryKey: credentialKeys.tagSet(operationId) })
+      // A credential delete strips its id from wiki credential_references;
+      // a rename surfaces in backlink list titles. Either way the cached
+      // backlinks rows can drift, so refresh them all — the data is light
+      // and the prefix matches every per-credential entry.
+      queryClient.invalidateQueries({
+        queryKey: [...credentialKeys.all, "backlinks"],
+      })
     },
     enabled: !!operationId,
   })
@@ -306,6 +330,11 @@ export function useMyCredentialChangedSubscription(
 
         queryClient.invalidateQueries({ queryKey: credentialKeys.lists() })
         queryClient.invalidateQueries({ queryKey: credentialKeys.tagSets() })
+        // Same rationale as the scoped subscription — see the comment in
+        // useCredentialChangedSubscription.
+        queryClient.invalidateQueries({
+          queryKey: [...credentialKeys.all, "backlinks"],
+        })
       },
       enabled: options.enabled ?? true,
     },

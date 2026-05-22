@@ -123,6 +123,11 @@ func (r *queryResolver) WikiDocumentBacklinks(ctx context.Context, documentID st
 	return r.WikiDocumentResolver.WikiDocumentBacklinks(ctx, documentID)
 }
 
+// WikiDocumentsReferencingCredential is the resolver for the wikiDocumentsReferencingCredential field.
+func (r *queryResolver) WikiDocumentsReferencingCredential(ctx context.Context, credentialID string) ([]*models.WikiDocument, error) {
+	return r.WikiDocumentResolver.WikiDocumentsReferencingCredential(ctx, credentialID)
+}
+
 // WikiDocumentBackups is the resolver for the wikiDocumentBackups field.
 func (r *queryResolver) WikiDocumentBackups(ctx context.Context, documentID string, trigger *models.WikiDocumentBackupTrigger, first *int, after *string, last *int, before *string) (*model.WikiDocumentBackupConnection, error) {
 	return r.WikiDocumentResolver.WikiDocumentBackups(ctx, documentID, trigger, first, after, last, before)

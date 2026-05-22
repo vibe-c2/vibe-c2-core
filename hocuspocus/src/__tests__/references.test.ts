@@ -1,13 +1,16 @@
-// Unit tests for the /doc reference extractor that drives backlinks. Run
-// via `npm test`. The function is pure — we build Y.XmlElement trees by
-// hand instead of round-tripping through TipTap/ProseMirror so the tests
-// stay focused on the walk semantics.
+// Unit tests for the /doc and /credential reference extractors that drive
+// backlinks. Run via `npm test`. The functions are pure — we build
+// Y.XmlElement trees by hand instead of round-tripping through TipTap /
+// ProseMirror so the tests stay focused on the walk semantics.
 
 import test from "node:test";
 import assert from "node:assert/strict";
 import { Doc } from "yjs";
 import * as Y from "yjs";
-import { collectReferenceIds } from "../references.js";
+import {
+  collectCredentialReferenceIds,
+  collectDocReferenceIds,
+} from "../references.js";
 
 // Helper — must be attached to a live Doc before setAttribute will persist.
 function withDoc(build: (frag: Y.XmlFragment) => void): Y.XmlFragment {
@@ -25,6 +28,12 @@ function chip(documentId: string): Y.XmlElement {
   return el;
 }
 
+function credChip(credentialId: string): Y.XmlElement {
+  const el = new Y.XmlElement("wikiCredentialReference");
+  el.setAttribute("credentialId", credentialId);
+  return el;
+}
+
 function block(name: string, ...children: Y.XmlElement[]): Y.XmlElement {
   const el = new Y.XmlElement(name);
   if (children.length > 0) el.insert(0, children);
@@ -39,7 +48,7 @@ test("collects a single inline reference", () => {
   const frag = withDoc((f) => {
     f.insert(0, [block("paragraph", chip(ID_A))]);
   });
-  const ids = collectReferenceIds(frag);
+  const ids = collectDocReferenceIds(frag);
   assert.deepEqual([...ids], [ID_A]);
 });
 
@@ -50,7 +59,7 @@ test("deduplicates repeated references to the same doc", () => {
       block("paragraph", chip(ID_A)),
     ]);
   });
-  const ids = collectReferenceIds(frag);
+  const ids = collectDocReferenceIds(frag);
   assert.equal(ids.size, 1);
   assert.ok(ids.has(ID_A));
 });
@@ -69,7 +78,7 @@ test("collects references nested deep inside other blocks", () => {
       block("blockquote", block("paragraph", chip(ID_C))),
     ]);
   });
-  const ids = collectReferenceIds(frag);
+  const ids = collectDocReferenceIds(frag);
   assert.equal(ids.size, 3);
   assert.ok(ids.has(ID_A));
   assert.ok(ids.has(ID_B));
@@ -87,7 +96,7 @@ test("ignores chips with malformed documentId", () => {
       ),
     ]);
   });
-  const ids = collectReferenceIds(frag);
+  const ids = collectDocReferenceIds(frag);
   assert.deepEqual([...ids], [ID_A]);
 });
 
@@ -101,7 +110,7 @@ test("normalizes ids to lowercase so case variants dedupe", () => {
       ),
     ]);
   });
-  const ids = collectReferenceIds(frag);
+  const ids = collectDocReferenceIds(frag);
   assert.equal(ids.size, 1);
   assert.ok(ids.has(ID_A));
 });
@@ -111,7 +120,7 @@ test("skips chips that lack a documentId attribute entirely", () => {
     const ghost = new Y.XmlElement("wikiDocumentReference");
     f.insert(0, [block("paragraph", ghost, chip(ID_A))]);
   });
-  const ids = collectReferenceIds(frag);
+  const ids = collectDocReferenceIds(frag);
   assert.deepEqual([...ids], [ID_A]);
 });
 
@@ -124,12 +133,95 @@ test("does not pick up unrelated node types", () => {
     cred.setAttribute("credentialId", ID_A);
     f.insert(0, [block("paragraph", cred)]);
   });
-  const ids = collectReferenceIds(frag);
+  const ids = collectDocReferenceIds(frag);
   assert.equal(ids.size, 0);
 });
 
 test("returns an empty set for an empty document", () => {
   const frag = withDoc(() => {});
-  const ids = collectReferenceIds(frag);
+  const ids = collectDocReferenceIds(frag);
+  assert.equal(ids.size, 0);
+});
+
+// --- Credential reference walker — sibling of the doc walker. ---
+
+test("credential walker collects a single inline credential reference", () => {
+  const frag = withDoc((f) => {
+    f.insert(0, [block("paragraph", credChip(ID_A))]);
+  });
+  const ids = collectCredentialReferenceIds(frag);
+  assert.deepEqual([...ids], [ID_A]);
+});
+
+test("credential walker dedupes repeated credential references", () => {
+  const frag = withDoc((f) => {
+    f.insert(0, [
+      block("paragraph", credChip(ID_A), credChip(ID_A)),
+      block("paragraph", credChip(ID_A)),
+    ]);
+  });
+  const ids = collectCredentialReferenceIds(frag);
+  assert.equal(ids.size, 1);
+  assert.ok(ids.has(ID_A));
+});
+
+test("credential walker collects references nested deep inside blocks", () => {
+  const frag = withDoc((f) => {
+    f.insert(0, [
+      block(
+        "bulletList",
+        block(
+          "listItem",
+          block("paragraph", credChip(ID_A)),
+          block("paragraph", credChip(ID_B)),
+        ),
+      ),
+      block("blockquote", block("paragraph", credChip(ID_C))),
+    ]);
+  });
+  const ids = collectCredentialReferenceIds(frag);
+  assert.equal(ids.size, 3);
+});
+
+test("credential walker ignores malformed credentialId", () => {
+  const frag = withDoc((f) => {
+    f.insert(0, [
+      block(
+        "paragraph",
+        credChip("not-a-uuid"),
+        credChip(""),
+        credChip(ID_A),
+      ),
+    ]);
+  });
+  const ids = collectCredentialReferenceIds(frag);
+  assert.deepEqual([...ids], [ID_A]);
+});
+
+test("credential walker normalises ids to lowercase", () => {
+  const frag = withDoc((f) => {
+    f.insert(0, [
+      block("paragraph", credChip(ID_A.toUpperCase()), credChip(ID_A)),
+    ]);
+  });
+  const ids = collectCredentialReferenceIds(frag);
+  assert.equal(ids.size, 1);
+  assert.ok(ids.has(ID_A));
+});
+
+test("credential walker does NOT pick up wikiDocumentReference nodes", () => {
+  // Symmetry guard: the doc walker explicitly ignores credential chips
+  // (asserted above) and the credential walker must explicitly ignore doc
+  // chips. The two indexes stay disjoint.
+  const frag = withDoc((f) => {
+    f.insert(0, [block("paragraph", chip(ID_A), credChip(ID_B))]);
+  });
+  assert.deepEqual([...collectCredentialReferenceIds(frag)], [ID_B]);
+  assert.deepEqual([...collectDocReferenceIds(frag)], [ID_A]);
+});
+
+test("credential walker returns an empty set for an empty document", () => {
+  const frag = withDoc(() => {});
+  const ids = collectCredentialReferenceIds(frag);
   assert.equal(ids.size, 0);
 });

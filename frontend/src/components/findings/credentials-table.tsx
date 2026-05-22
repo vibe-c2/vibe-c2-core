@@ -5,6 +5,7 @@ import {
   CheckCircle2Icon,
   XCircleIcon,
   KeyIcon,
+  LinkIcon,
   SwordsIcon,
 } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
@@ -33,9 +34,9 @@ interface CredentialsTableProps {
 }
 
 const GRID_COLS_SCOPED =
-  "grid-cols-[32px_1.6fr_1fr_1.2fr_1.2fr_60px_1.4fr_60px_140px]"
+  "grid-cols-[32px_1.6fr_1fr_1.2fr_1.2fr_60px_1.4fr_60px_60px_140px]"
 const GRID_COLS_GLOBAL =
-  "grid-cols-[32px_1.6fr_1.2fr_1fr_1.2fr_1.2fr_60px_1.4fr_60px_140px]"
+  "grid-cols-[32px_1.6fr_1.2fr_1fr_1.2fr_1.2fr_60px_1.4fr_60px_60px_140px]"
 
 export function CredentialsTable({
   credentials,
@@ -69,6 +70,9 @@ export function CredentialsTable({
           <div>Tags</div>
           <div className="text-center" title="Comments">
             <MessageSquareIcon className="mx-auto size-3.5" />
+          </div>
+          <div className="text-center" title="Backlinks (wiki references)">
+            <LinkIcon className="mx-auto size-3.5" />
           </div>
           <div>Created</div>
         </div>
@@ -154,6 +158,7 @@ export function CredentialsTable({
                   <div className="text-center text-muted-foreground">
                     {cred.comments.length || "—"}
                   </div>
+                  <BacklinkCountCell count={cred.backlinkCount} />
                   <div className="text-muted-foreground">
                     <FormattedDateTimeText date={cred.createdAt} />
                   </div>
@@ -195,6 +200,24 @@ function KeysCountCell({ count }: { count: number }) {
       <Badge variant="default" className="px-1.5 tabular-nums">
         {count}
       </Badge>
+    </div>
+  )
+}
+
+// Mirrors KeysCountCell but uses a subdued variant so the visual weight
+// matches Comments (which renders a muted number, not a badge). The full
+// list opens in the credential details dialog — the table cell is a hint,
+// not an interactive target.
+function BacklinkCountCell({ count }: { count: number }) {
+  if (count === 0) {
+    return <div className="text-center text-muted-foreground">—</div>
+  }
+  return (
+    <div
+      className="text-center tabular-nums text-muted-foreground"
+      title={`${count} wiki reference${count === 1 ? "" : "s"}`}
+    >
+      {count}
     </div>
   )
 }

@@ -9,8 +9,11 @@
 
 import crypto from "node:crypto";
 import type { Express, Request, Response } from "express";
+import { Binary, MongoClient, type Db } from "mongodb";
+import * as Y from "yjs";
 import { markdownToYjsUpdate } from "./markdown-to-yjs.js";
 import { yjsUpdateToMarkdown } from "./yjs-to-markdown.js";
+import { collectCredentialReferenceIds } from "./references.js";
 
 const internalSecret = process.env.HOCUSPOCUS_WEBHOOK_SECRET || "";
 const SIGNATURE_HEADER = "x-internal-signature-256";
@@ -22,6 +25,18 @@ const MAX_YJS_BYTES = 4 * 1024 * 1024;
 
 interface MarkdownRequestBody {
   markdown?: unknown;
+}
+
+// Match the qmgo (Go) `uuid.UUID` BSON serialisation — Binary subtype 0 with
+// the raw 16 bytes. Mongo filters keyed on a JS string never match the docs
+// the Go backend wrote, so the backfill must produce the same encoding the
+// persistence layer uses.
+function uuidStringToBinary(value: string): Binary {
+  const hex = value.replace(/-/g, "");
+  if (hex.length !== 32) {
+    throw new Error(`invalid uuid: ${value}`);
+  }
+  return new Binary(Buffer.from(hex, "hex"), Binary.SUBTYPE_DEFAULT);
 }
 
 function verifySignature(rawBody: Buffer, headerValue: string | undefined): boolean {
@@ -40,6 +55,82 @@ function verifySignature(rawBody: Buffer, headerValue: string | undefined): bool
     Buffer.from(provided, "hex"),
     Buffer.from(expected, "hex")
   );
+}
+
+const mongoUri = process.env.MONGO_URI || "mongodb://localhost:27017";
+const mongoDatabase = process.env.MONGO_DATABASE || "vibec2";
+
+let backfillDb: Db | undefined;
+
+async function getBackfillDb(): Promise<Db> {
+  if (!backfillDb) {
+    const client = new MongoClient(mongoUri);
+    await client.connect();
+    backfillDb = client.db(mongoDatabase);
+  }
+  return backfillDb;
+}
+
+interface BackfillSummary {
+  scanned: number;
+  updated: number;
+  failed: number;
+}
+
+// Sweep every wiki document, decode content_state into a transient Y.Doc, run
+// the credential walker, and write the result to credential_references. The
+// sweep loads docs in batches and operates on a per-doc transient Y.Doc — it
+// does NOT touch the live Hocuspocus open-document map, so concurrent editing
+// sessions are unaffected.
+//
+// Idempotent: re-running just rewrites the same array.
+async function runCredentialReferenceBackfill(): Promise<BackfillSummary> {
+  const db = await getBackfillDb();
+  const collection = db.collection("wiki_documents");
+
+  const summary: BackfillSummary = { scanned: 0, updated: 0, failed: 0 };
+  const batchSize = 200;
+
+  const cursor = collection.find(
+    { content_state: { $ne: null } },
+    { projection: { document_id: 1, content_state: 1 }, batchSize },
+  );
+
+  for await (const doc of cursor) {
+    summary.scanned += 1;
+    const state = doc.content_state as Binary | undefined;
+    if (!state?.buffer) continue;
+
+    try {
+      const ydoc = new Y.Doc();
+      Y.applyUpdate(ydoc, new Uint8Array(state.buffer));
+      const fragment = ydoc.getXmlFragment("default");
+      const ids = collectCredentialReferenceIds(fragment);
+
+      const binaries: Binary[] = [];
+      for (const id of ids) {
+        try {
+          binaries.push(uuidStringToBinary(id));
+        } catch {
+          // Bad UUID; skip without aborting the doc.
+        }
+      }
+
+      await collection.updateOne(
+        { _id: doc._id },
+        { $set: { credential_references: binaries } },
+      );
+      summary.updated += 1;
+    } catch (err) {
+      summary.failed += 1;
+      console.error(
+        `backfill: doc ${doc.document_id?.toString?.() ?? "?"} failed:`,
+        err,
+      );
+    }
+  }
+
+  return summary;
 }
 
 export function setupInternalApi(app: Express): void {
@@ -181,6 +272,59 @@ export function setupInternalApi(app: Express): void {
       } catch (err) {
         const message = err instanceof Error ? err.message : "conversion failed";
         console.error("yjs-to-markdown conversion error:", err);
+        res.status(500).json({ error: message });
+      }
+    },
+  );
+
+  // One-shot backfill for credential backlinks. Sweeps every wiki document,
+  // decodes content_state into a transient Y.Doc, runs the credential walker,
+  // and writes credential_references. Idempotent — safe to re-run. Body is
+  // empty (the HMAC signs the empty string); the response is a JSON summary.
+  //
+  // Required after deploying the credential backlinks feature so docs that
+  // already embed /credential chips populate the inverse index without
+  // waiting for the next editing session.
+  app.post(
+    "/internal/backfill-credential-references",
+    (req: Request, res: Response, next: () => void) => {
+      const chunks: Buffer[] = [];
+      req.on("data", (chunk: Buffer) => {
+        chunks.push(chunk);
+        if (chunks.reduce((n, c) => n + c.length, 0) > 1024) {
+          // Backfill takes no body; reject anything over 1 KB outright.
+          res.status(413).json({ error: "request too large" });
+          req.destroy();
+        }
+      });
+      req.on("end", () => {
+        if (res.headersSent) return;
+        (req as Request & { rawBody?: Buffer }).rawBody = Buffer.concat(chunks);
+        next();
+      });
+      req.on("error", (err: Error) => {
+        if (res.headersSent) return;
+        res.status(400).json({ error: err.message });
+      });
+    },
+    async (req: Request, res: Response) => {
+      const rawBody =
+        (req as Request & { rawBody?: Buffer }).rawBody ?? Buffer.alloc(0);
+
+      const sigHeader = req.headers[SIGNATURE_HEADER];
+      const sig = Array.isArray(sigHeader) ? sigHeader[0] : sigHeader;
+      if (!verifySignature(rawBody, sig)) {
+        res.status(401).json({ error: "invalid or missing signature" });
+        return;
+      }
+
+      try {
+        const summary = await runCredentialReferenceBackfill();
+        res.status(200).json(summary);
+      } catch (err) {
+        const message =
+          err instanceof Error ? err.message : "backfill failed";
+        console.error("backfill-credential-references error:", err);
         res.status(500).json({ error: message });
       }
     },

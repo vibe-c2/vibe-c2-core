@@ -57,13 +57,17 @@ func (a *App) NewRouter() *gin.Engine {
 		a.repos.WikiDocument, a.repos.WikiDocumentBackup,
 		a.repos.Operation, a.repos.User,
 		a.repos.WikiDocumentVisit,
+		a.repos.Credential,
 		a.eventBus, a.presenceTracker,
 	)
 	wikiVisitRes := resolver.NewWikiDocumentVisitResolver(
 		a.repos.WikiDocumentVisit, a.repos.WikiDocument, a.repos.Operation,
 	)
+	// credRes depends on wikiDocRes for the backlinks field resolvers — the
+	// cross-domain join lives on wikiDocRes (where the wiki repo lives) so
+	// the dependency arrow points from credentials → wiki, not the other way.
 	credRes := resolver.NewCredentialResolver(
-		a.repos.Credential, a.repos.Operation, a.repos.User, a.eventBus,
+		a.repos.Credential, a.repos.Operation, a.repos.User, wikiDocRes, a.eventBus,
 	)
 
 	// Wiki controller (REST endpoints)

@@ -113,6 +113,23 @@ type IWikiDocumentRepository interface {
 	// excluded. Ordered by most recently updated; capped at limit (caller
 	// supplies a sane cap, e.g. 200).
 	FindReferrers(ctx context.Context, opID, documentID uuid.UUID, limit int64) ([]models.WikiDocument, error)
+	// FindCredentialReferrers returns active documents in opID whose
+	// CredentialReferences array contains credentialID. Trashed referrers are
+	// excluded. Ordered by most recently updated; capped at limit (caller
+	// supplies a sane cap, e.g. 200). Powers the Findings page's "Backlinks"
+	// section per credential.
+	FindCredentialReferrers(ctx context.Context, opID, credentialID uuid.UUID, limit int64) ([]models.WikiDocument, error)
+	// CountCredentialReferrersBatch returns a map of credentialID → count of
+	// active documents in opID whose CredentialReferences contains that id.
+	// Single aggregation regardless of the size of credentialIDs; credentials
+	// with zero referrers are absent from the map. Drives the cheap backlink
+	// count badge in the Findings credentials table without an N+1 storm.
+	CountCredentialReferrersBatch(ctx context.Context, opID uuid.UUID, credentialIDs []uuid.UUID) (map[uuid.UUID]int64, error)
+	// PullCredentialReference removes credentialID from every document's
+	// credential_references array in opID. Used on credential hard-delete to
+	// clear dangling pointers from the inverse index. No-op when the credential
+	// was never referenced.
+	PullCredentialReference(ctx context.Context, opID, credentialID uuid.UUID) error
 }
 
 type wikiDocumentRepository struct {
@@ -151,6 +168,11 @@ func NewWikiDocumentRepository(db database.Database) IWikiDocumentRepository {
 		// Multikey index on the References array; deleted_at trails so the
 		// resolver can both match and filter trashed referrers in one scan.
 		{Key: []string{"operation_id", "references", "deleted_at"}},
+		// Credential backlinks: "documents in this operation that reference
+		// credential X". Same shape as the doc backlinks index above — multikey
+		// on the credential_references array with deleted_at trailing so the
+		// resolver can match and filter trashed referrers in one scan.
+		{Key: []string{"operation_id", "credential_references", "deleted_at"}},
 		// Scoped search ("find docs under this folder"). Multikey index on the
 		// materialized ancestor chain — one index probe replaces the previous
 		// O(depth) FindDescendants BFS in SearchByOperationID.
@@ -739,6 +761,75 @@ func (r *wikiDocumentRepository) FindReferrers(ctx context.Context, opID, docume
 		"document_id":  bson.M{"$ne": documentID},
 	}).Sort("-updateAt", "-_id").Limit(limit).All(&docs)
 	return docs, err
+}
+
+// FindCredentialReferrers lists active documents in opID whose
+// CredentialReferences array contains credentialID — the inverse of the
+// inline /credential reference. Trashed referrers are excluded. Sorted by
+// most recently updated.
+func (r *wikiDocumentRepository) FindCredentialReferrers(ctx context.Context, opID, credentialID uuid.UUID, limit int64) ([]models.WikiDocument, error) {
+	var docs []models.WikiDocument
+	err := r.coll.Find(ctx, bson.M{
+		"operation_id":          opID,
+		"credential_references": credentialID,
+		"deleted_at":            nil,
+	}).Sort("-updateAt", "-_id").Limit(limit).All(&docs)
+	return docs, err
+}
+
+// CountCredentialReferrersBatch groups active documents in opID by each
+// credential id they reference, restricted to the supplied credentialIDs.
+// Returns a map keyed on credential id with the referrer count; credentials
+// with zero referrers are absent. Empty input short-circuits to an empty map.
+func (r *wikiDocumentRepository) CountCredentialReferrersBatch(ctx context.Context, opID uuid.UUID, credentialIDs []uuid.UUID) (map[uuid.UUID]int64, error) {
+	if len(credentialIDs) == 0 {
+		return map[uuid.UUID]int64{}, nil
+	}
+	pipeline := bson.A{
+		bson.M{"$match": bson.M{
+			"operation_id":          opID,
+			"deleted_at":            nil,
+			"credential_references": bson.M{"$in": credentialIDs},
+		}},
+		bson.M{"$unwind": "$credential_references"},
+		bson.M{"$match": bson.M{
+			"credential_references": bson.M{"$in": credentialIDs},
+		}},
+		bson.M{"$group": bson.M{
+			"_id":   "$credential_references",
+			"count": bson.M{"$sum": 1},
+		}},
+	}
+	var rows []struct {
+		ID    uuid.UUID `bson:"_id"`
+		Count int64     `bson:"count"`
+	}
+	if err := r.coll.Aggregate(ctx, pipeline).All(&rows); err != nil {
+		return nil, fmt.Errorf("failed to aggregate credential referrers: %w", err)
+	}
+	out := make(map[uuid.UUID]int64, len(rows))
+	for _, row := range rows {
+		out[row.ID] = row.Count
+	}
+	return out, nil
+}
+
+// PullCredentialReference removes credentialID from credential_references on
+// every document in opID. Called on credential hard-delete so dangling UUIDs
+// don't accumulate in the inverse index. A miss (the credential was never
+// referenced) is fine — the update silently affects zero rows.
+func (r *wikiDocumentRepository) PullCredentialReference(ctx context.Context, opID, credentialID uuid.UUID) error {
+	_, err := r.coll.UpdateAll(ctx,
+		bson.M{
+			"operation_id":          opID,
+			"credential_references": credentialID,
+		},
+		bson.M{"$pull": bson.M{"credential_references": credentialID}},
+	)
+	if err != nil {
+		return fmt.Errorf("failed to pull credential reference: %w", err)
+	}
+	return nil
 }
 
 func buildWikiDocumentFilter(opID uuid.UUID, filter WikiDocumentFilter) bson.M {

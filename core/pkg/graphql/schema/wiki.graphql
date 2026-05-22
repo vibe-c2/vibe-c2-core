@@ -322,6 +322,14 @@ extend type Query {
   wikiDocumentBacklinks(documentId: ID!): [WikiDocument!]!
     @hasPermission(permission: "operation:member")
 
+  # Wiki documents in the credential's operation that reference the given
+  # credential via the /credential slash command. Same data as
+  # Credential.backlinks; exposed standalone so the credential details
+  # dialog can refetch independently without re-pulling the credential.
+  # Trashed referrers are excluded. Capped at 200 most recently updated.
+  wikiDocumentsReferencingCredential(credentialId: ID!): [WikiDocument!]!
+    @hasPermission(permission: "operation:member")
+
   wikiDocumentBackups(
     documentId: ID!
     trigger: WikiDocumentBackupTrigger

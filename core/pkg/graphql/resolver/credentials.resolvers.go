@@ -42,6 +42,16 @@ func (r *credentialResolver) CreatedBy(ctx context.Context, obj *models.Credenti
 	return r.CredentialResolver.CreatedBy(ctx, obj)
 }
 
+// BacklinkCount is the resolver for the backlinkCount field.
+func (r *credentialResolver) BacklinkCount(ctx context.Context, obj *models.Credential) (int, error) {
+	return r.CredentialResolver.BacklinkCount(ctx, obj)
+}
+
+// Backlinks is the resolver for the backlinks field.
+func (r *credentialResolver) Backlinks(ctx context.Context, obj *models.Credential) ([]*models.WikiDocument, error) {
+	return r.CredentialResolver.Backlinks(ctx, obj)
+}
+
 // CreatedAt is the resolver for the createdAt field.
 func (r *credentialResolver) CreatedAt(ctx context.Context, obj *models.Credential) (string, error) {
 	return r.CredentialResolver.CreatedAt(ctx, obj)

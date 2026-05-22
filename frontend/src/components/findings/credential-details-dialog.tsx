@@ -29,6 +29,7 @@ import {
   useDeleteCredentialComment,
 } from "@/graphql/hooks/credentials"
 import { credentialTypeLabel } from "@/components/findings/credential-type-utils"
+import { CredentialBacklinkList } from "@/components/findings/credential-backlink-list"
 import type { CredentialCommentFieldsFragment } from "@/graphql/gql/graphql"
 
 export function CredentialDetailsDialog() {
@@ -162,6 +163,8 @@ export function CredentialDetailsDialog() {
                 <FormattedDateTimeText date={credential.createdAt} />
               </div>
             </section>
+
+            <CredentialBacklinkList credentialId={credential.id} />
 
             <CommentsSection
               credentialId={credential.id}

@@ -57,4 +57,10 @@ type WikiDocument struct {
 	// source of truth. Used to drive the backlinks resolver. Plain markdown
 	// links (<a href="/wiki/…">) are intentionally not tracked here.
 	References []uuid.UUID `bson:"references,omitempty" json:"-"`
+	// CredentialReferences lists the credential IDs that this document cites
+	// inline via the /credential slash command (wikiCredentialReference nodes).
+	// Same rewrite semantics as References — populated by the Hocuspocus
+	// sidecar on every persist and used to power the inverse "which wiki docs
+	// cite this credential" lookup for the Findings page.
+	CredentialReferences []uuid.UUID `bson:"credential_references,omitempty" json:"-"`
 }

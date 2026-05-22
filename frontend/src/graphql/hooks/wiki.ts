@@ -722,11 +722,29 @@ export function useWikiDocumentChangedSubscription(operationId: string) {
         queryClient.invalidateQueries({
           queryKey: [...wikiKeys.all, "backlinks"],
         })
+        // Same restore can surface a wiki doc on the credential side, so
+        // invalidate the credential-backlinks cache too. Cheap prefix sweep.
+        queryClient.invalidateQueries({
+          queryKey: ["credentials", "backlinks"],
+        })
       } else if (action === "DELETED") {
         // Soft/hard delete: paginated lists and backlinks can both change.
         queryClient.invalidateQueries({ queryKey: wikiKeys.lists() })
         queryClient.invalidateQueries({
           queryKey: [...wikiKeys.all, "backlinks"],
+        })
+        // A doc that referenced credentials just disappeared from the
+        // credential backlinks view too.
+        queryClient.invalidateQueries({
+          queryKey: ["credentials", "backlinks"],
+        })
+      } else if (action === "UPDATED" && document) {
+        // Wiki content edits (via Hocuspocus) can add/remove credential
+        // chips, which shifts the credential backlinks list — though not
+        // the wiki-doc backlinks. The list contents are small and writes
+        // are debounced, so the invalidation cost is negligible.
+        queryClient.invalidateQueries({
+          queryKey: ["credentials", "backlinks"],
         })
       }
       // UPDATED (rename, recolor, sortOrder, reparent) does not touch

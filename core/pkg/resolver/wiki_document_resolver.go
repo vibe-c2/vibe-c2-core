@@ -55,6 +55,24 @@ type IWikiDocumentResolver interface {
 	WikiDocumentTrashCount(ctx context.Context, operationID string) (int, error)
 	WikiDocumentTrashedDescendants(ctx context.Context, documentID string) ([]*models.WikiDocument, error)
 	WikiDocumentBacklinks(ctx context.Context, documentID string) ([]*models.WikiDocument, error)
+	// WikiDocumentsReferencingCredential is the standalone counterpart of
+	// Credential.backlinks — the cross-domain join that powers the
+	// "Referenced in" section on the Findings credentials details dialog.
+	WikiDocumentsReferencingCredential(ctx context.Context, credentialID string) ([]*models.WikiDocument, error)
+	// CredentialBacklinks resolves Credential.backlinks. Same data as the
+	// standalone query above; pulled out so the field resolver in the
+	// credential resolver can delegate here without re-authorizing.
+	CredentialBacklinks(ctx context.Context, cred *models.Credential) ([]*models.WikiDocument, error)
+	// CredentialBacklinkCount resolves Credential.backlinkCount as a single
+	// Mongo countDocuments. Cheap enough to call per-row from the list
+	// resolver; the batched variant below is preferred when a page of
+	// credentials is being rendered.
+	CredentialBacklinkCount(ctx context.Context, cred *models.Credential) (int, error)
+	// CleanupCredentialReferences strips a deleted credential's id from
+	// credential_references across the operation's wiki documents. Called
+	// from the credential delete path so dangling UUIDs don't accumulate
+	// in the inverse index.
+	CleanupCredentialReferences(ctx context.Context, operationID, credentialID uuid.UUID) error
 	WikiSearch(ctx context.Context, operationID string, scope *string, query string, offset *int, limit *int) (*model.WikiSearchConnection, error)
 
 	// Backup queries
@@ -97,8 +115,14 @@ type wikiDocumentResolver struct {
 	operationRepo repository.IOperationRepository
 	userRepo      repository.IUserRepository
 	visitRepo     repository.IWikiDocumentVisitRepository
-	eventBus      eventbus.IEventBus
-	presence      *wiki.PresenceTracker
+	// credRepo is only consulted by the credential-backlinks join — it lets
+	// the standalone `wikiDocumentsReferencingCredential` query resolve the
+	// credential's operation_id before authorizing and querying referrers.
+	// The field resolvers on Credential never need it because gqlgen passes
+	// the parent credential as `obj`.
+	credRepo repository.ICredentialRepository
+	eventBus eventbus.IEventBus
+	presence *wiki.PresenceTracker
 }
 
 // NewWikiDocumentResolver creates a new wiki document resolver with the given dependencies.
@@ -108,6 +132,7 @@ func NewWikiDocumentResolver(
 	operationRepo repository.IOperationRepository,
 	userRepo repository.IUserRepository,
 	visitRepo repository.IWikiDocumentVisitRepository,
+	credRepo repository.ICredentialRepository,
 	eventBus eventbus.IEventBus,
 	presence *wiki.PresenceTracker,
 ) IWikiDocumentResolver {
@@ -117,6 +142,7 @@ func NewWikiDocumentResolver(
 		operationRepo: operationRepo,
 		userRepo:      userRepo,
 		visitRepo:     visitRepo,
+		credRepo:      credRepo,
 		eventBus:      eventBus,
 		presence:      presence,
 	}
@@ -1687,6 +1713,76 @@ func (r *wikiDocumentResolver) WikiDocumentBacklinks(ctx context.Context, docume
 	}
 
 	return r.fetchBacklinks(ctx, &doc)
+}
+
+// WikiDocumentsReferencingCredential returns the active wiki documents in the
+// credential's operation that cite it via the inline /credential chip. The
+// query is operation-scoped at the repo level so there's no cross-tenant
+// leak path even if the same credential id existed in another op.
+func (r *wikiDocumentResolver) WikiDocumentsReferencingCredential(ctx context.Context, credentialID string) ([]*models.WikiDocument, error) {
+	cUID, err := uuid.Parse(credentialID)
+	if err != nil {
+		return nil, fmt.Errorf("invalid credential ID: %w", err)
+	}
+
+	cred, err := r.credRepo.FindByID(ctx, cUID)
+	if err != nil {
+		return nil, fmt.Errorf("credential not found: %w", err)
+	}
+
+	if err := r.authorizeForOperation(ctx, cred.OperationID, models.OperationRoleViewer); err != nil {
+		return nil, err
+	}
+
+	return r.fetchCredentialBacklinks(ctx, cred.OperationID, cred.CredentialID)
+}
+
+// CredentialBacklinks is the field resolver body for Credential.backlinks.
+// Auth happens upstream — gqlgen has already resolved the parent credential
+// from an authorized query.
+func (r *wikiDocumentResolver) CredentialBacklinks(ctx context.Context, cred *models.Credential) ([]*models.WikiDocument, error) {
+	if cred == nil {
+		return []*models.WikiDocument{}, nil
+	}
+	return r.fetchCredentialBacklinks(ctx, cred.OperationID, cred.CredentialID)
+}
+
+// CredentialBacklinkCount is the field resolver body for
+// Credential.backlinkCount. Single Mongo countDocuments per call — the
+// batched repo method is used by list resolvers that page through credentials.
+func (r *wikiDocumentResolver) CredentialBacklinkCount(ctx context.Context, cred *models.Credential) (int, error) {
+	if cred == nil {
+		return 0, nil
+	}
+	counts, err := r.docRepo.CountCredentialReferrersBatch(ctx, cred.OperationID, []uuid.UUID{cred.CredentialID})
+	if err != nil {
+		return 0, fmt.Errorf("failed to count credential backlinks: %w", err)
+	}
+	return int(counts[cred.CredentialID]), nil
+}
+
+// CleanupCredentialReferences pulls credentialID from credential_references
+// across every active or trashed document in operationID. Best-effort: a
+// failed cleanup leaves dangling pointers but never blocks the credential
+// delete itself. Callers log on error.
+func (r *wikiDocumentResolver) CleanupCredentialReferences(ctx context.Context, operationID, credentialID uuid.UUID) error {
+	return r.docRepo.PullCredentialReference(ctx, operationID, credentialID)
+}
+
+// fetchCredentialBacklinks is the shared body of the standalone query and the
+// Credential.backlinks field resolver. Capped at maxBacklinks for the same
+// reason as the document → document path: past that, refining the source
+// documents beats paginating the list.
+func (r *wikiDocumentResolver) fetchCredentialBacklinks(ctx context.Context, opID, credentialID uuid.UUID) ([]*models.WikiDocument, error) {
+	referrers, err := r.docRepo.FindCredentialReferrers(ctx, opID, credentialID, maxBacklinks)
+	if err != nil {
+		return nil, fmt.Errorf("failed to list credential backlinks: %w", err)
+	}
+	out := make([]*models.WikiDocument, len(referrers))
+	for i := range referrers {
+		out[i] = &referrers[i]
+	}
+	return out, nil
 }
 
 // fetchBacklinks is the shared body of the standalone query and the
