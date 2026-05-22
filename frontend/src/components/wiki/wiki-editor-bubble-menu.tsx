@@ -150,8 +150,14 @@ function HighlightButton({ editor }: { editor: Editor }) {
       <PopoverContent
         side="top"
         align="center"
-        sideOffset={8}
-        className="w-auto min-w-0 flex-row items-center gap-1 p-1.5">
+        sideOffset={6}
+        // Reach back to the bubble menu's own ring/shadow weight here —
+        // the default PopoverContent class ships with shadow-md + extra
+        // padding that, when stacked over the bubble menu's own shadow,
+        // reads as a heavy floating chip rather than a peer of the
+        // formatting row. tailwind-merge lets these classes override the
+        // base widths/padding/shadow without re-spelling the whole list.
+        className="flex w-auto min-w-0 flex-row items-center gap-1 rounded-lg bg-popover p-1 text-popover-foreground shadow-sm ring-1 ring-foreground/10">
         {swatches.map((c) => (
           <button
             key={c.value}
