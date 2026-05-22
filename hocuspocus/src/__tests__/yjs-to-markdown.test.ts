@@ -104,6 +104,35 @@ test("link round-trips", () => {
   assert.ok(structurallyEqual(md, roundTripDirect(md)));
 });
 
+test("highlight mark with color round-trips", () => {
+  const md =
+    'pre <mark data-color="oklch(0.65 0.16 245)">highlighted blue</mark> post';
+  const out = roundTripDirect(md);
+  assert.match(
+    out,
+    /<mark data-color="oklch\(0\.65 0\.16 245\)">highlighted blue<\/mark>/,
+    `expected highlight to round-trip with color: ${out}`,
+  );
+  assert.ok(structurallyEqual(md, out));
+});
+
+test("highlight mark without color round-trips", () => {
+  const md = "untinted <mark>just a mark</mark> tail";
+  const out = roundTripDirect(md);
+  assert.match(out, /<mark>just a mark<\/mark>/);
+  assert.ok(structurallyEqual(md, out));
+});
+
+test("highlight mark survives the yjs pipeline", () => {
+  const md =
+    'red <mark data-color="oklch(0.65 0.18 25)">danger</mark> tail';
+  const out = roundTripViaYjs(md);
+  assert.ok(
+    structurallyEqual(md, out),
+    `expected structural equality after yjs round-trip: ${out}`,
+  );
+});
+
 test("task list (from the editor schema) serializes to GFM task syntax", () => {
   // The Outline markdown importer does not have a taskList/taskItem token
   // mapping, so we can't test this through parseOutlineMarkdown. Construct

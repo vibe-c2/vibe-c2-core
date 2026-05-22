@@ -33,6 +33,7 @@ import { WikiLinkPopover, startLinkInsert } from "@/components/wiki/wiki-link-po
 import { WikiInlineCodePopover } from "@/components/wiki/wiki-inline-code-popover"
 import { WikiSlashCommand } from "@/components/wiki/wiki-slash-command/extension"
 import { WikiNoticeExtension } from "@/components/wiki/wiki-notice-node"
+import { WikiHighlightMark } from "@/components/wiki/wiki-highlight-mark"
 import { WikiEscapeEdgeBlock } from "@/components/wiki/wiki-escape-edge-block"
 import {
   extractClipboardImages,
@@ -366,6 +367,7 @@ export function WikiEditor({
       WikiCredentialReferenceExtension,
       WikiDocumentReferenceExtension,
       WikiNoticeExtension,
+      WikiHighlightMark,
       WikiSlashCommand.configure({
         context: { documentId, operationId },
       }),

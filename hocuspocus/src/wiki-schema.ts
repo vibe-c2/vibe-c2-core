@@ -320,5 +320,27 @@ export const wikiSchema = new Schema({
       parseDOM: [{ tag: "s" }, { tag: "strike" }, { tag: "del" }],
       toDOM: () => ["s", 0],
     },
+
+    wikiHighlight: {
+      attrs: {
+        // OKLCH literal from frontend/src/components/wiki/icon-color-palette.
+        // Empty string = legacy/unconfigured highlight (renders with the
+        // editor's default amber tint).
+        color: { default: "" },
+      },
+      inclusive: true,
+      parseDOM: [
+        {
+          tag: "mark",
+          getAttrs: (el) => ({
+            color: (el as HTMLElement).getAttribute("data-color") ?? "",
+          }),
+        },
+      ],
+      toDOM: (mark) =>
+        mark.attrs.color
+          ? ["mark", { "data-color": mark.attrs.color }, 0]
+          : ["mark", 0],
+    },
   },
 });

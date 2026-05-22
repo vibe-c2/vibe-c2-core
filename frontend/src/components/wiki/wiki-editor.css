@@ -285,6 +285,29 @@
   cursor: pointer;
 }
 
+/* Text highlight mark (WikiHighlightMark). The data-color attribute carries
+   an OKLCH literal from icon-color-palette; the renderHTML hook emits a
+   matching `background-color: color-mix(...)` inline style so the tinted
+   highlight survives copy/paste-as-HTML and SSR rendering. The class only
+   handles shape and the cross-line offsets so the swatch reads as a
+   highlighter pass rather than a hard-edged box. */
+.tiptap mark.wiki-highlight {
+  background-color: transparent;
+  color: inherit;
+  border-radius: 3px;
+  padding: 0.05em 0.2em;
+  margin: 0 -0.05em;
+  box-decoration-break: clone;
+  -webkit-box-decoration-break: clone;
+}
+/* Legacy / unconfigured highlight (no data-color) — render as a soft amber
+   highlight so an imported `<mark>` from an older doc or external paste
+   doesn't render invisibly. */
+.tiptap mark.wiki-highlight:not([data-color]),
+.tiptap mark.wiki-highlight[data-color=""] {
+  background-color: color-mix(in oklch, oklch(0.78 0.14 85) 28%, transparent);
+}
+
 /* Code block — NodeView wrapper around <pre><code>. The hljs token
    colors below are scoped to :root vs .dark so both themes look right. */
 .tiptap .wiki-code-block {

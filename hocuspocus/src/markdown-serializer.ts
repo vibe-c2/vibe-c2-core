@@ -276,6 +276,25 @@ function buildSerializer(): MarkdownSerializer {
         return `](${href}${title})`;
       },
     },
+    // Custom inline highlight mark. Emitted as `<mark>` (no color) or
+    // `<mark data-color="oklch(...)">` so the importer's matching inline
+    // rule in markdown-parser.ts can pull it back into a wikiHighlight
+    // mark with the original color attribute. CommonMark renderers ignore
+    // unrecognised attributes and render the bare `<mark>` element, so the
+    // round-trip is bit-stable AND the export still reads as plain
+    // highlighted text in any markdown viewer that supports raw HTML.
+    wikiHighlight: {
+      open(_state, mark) {
+        const color =
+          typeof mark.attrs.color === "string" ? mark.attrs.color : "";
+        return color
+          ? `<mark data-color="${escapeMarkAttr(color)}">`
+          : "<mark>";
+      },
+      close: "</mark>",
+      mixable: true,
+      expelEnclosingWhitespace: true,
+    },
   };
 
   serializer = new MarkdownSerializer(nodes, marks, {
@@ -283,6 +302,18 @@ function buildSerializer(): MarkdownSerializer {
     strict: false,
   });
   return serializer;
+}
+
+// Escape attribute values for the `<mark>` open tag the highlight mark
+// emits. The OKLCH literals in the icon palette never contain HTML-special
+// characters, but the parser allows arbitrary `data-color` strings (e.g.
+// imported docs) so we defend against `"`, `&`, `<`, `>` regardless.
+function escapeMarkAttr(s: string): string {
+  return s
+    .replace(/&/g, "&amp;")
+    .replace(/"/g, "&quot;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;");
 }
 
 function backticksFor(node: Node, side: number): string {

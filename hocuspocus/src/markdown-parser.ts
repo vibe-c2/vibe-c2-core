@@ -16,6 +16,7 @@ import MarkdownIt, { type PluginWithParams } from "markdown-it";
 import MarkdownItContainer from "markdown-it-container";
 import Token from "markdown-it/lib/token.mjs";
 import type StateCore from "markdown-it/lib/rules_core/state_core.mjs";
+import type StateInline from "markdown-it/lib/rules_inline/state_inline.mjs";
 import { MarkdownParser } from "prosemirror-markdown";
 import { Node, type Attrs } from "prosemirror-model";
 import { wikiSchema } from "./wiki-schema.js";
@@ -151,6 +152,59 @@ function collectStandaloneImages(
   return images.length > 0 ? images : null;
 }
 
+// Inverse of markdown-serializer's wikiHighlight emitter. Matches:
+//   `<mark>`                                  →  open token, color=""
+//   `<mark data-color="oklch(...)">`          →  open token, color attr
+//   `</mark>`                                 →  close token
+// markdown-it default has html=false, so raw HTML otherwise lands as text;
+// this rule re-claims `<mark>` specifically so the import round-trip
+// preserves the highlight mark + color. Unmatched pairs short-circuit
+// through prosemirror-markdown's existing failure path (fallback paragraph)
+// rather than producing partial marks.
+const HIGHLIGHT_OPEN_RE = /^<mark(?:\s+data-color="([^"]*)")?\s*>/;
+const HIGHLIGHT_CLOSE = "</mark>";
+
+function decodeMarkAttr(s: string): string {
+  return s
+    .replace(/&quot;/g, '"')
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
+    .replace(/&amp;/g, "&");
+}
+
+function highlightInlineRule(state: StateInline, silent: boolean): boolean {
+  if (state.src.charCodeAt(state.pos) !== 0x3c /* < */) return false;
+  const rest = state.src.slice(state.pos);
+
+  const openMatch = HIGHLIGHT_OPEN_RE.exec(rest);
+  if (openMatch) {
+    if (!silent) {
+      const token = state.push("wiki_highlight_open", "mark", 1);
+      token.markup = "<mark>";
+      const rawColor = openMatch[1] ?? "";
+      const color = rawColor ? decodeMarkAttr(rawColor) : "";
+      // Always attach the data-color attribute so prosemirror-markdown's
+      // getAttrs can read it back via tok.attrGet — even when empty, so the
+      // mark serializes consistently. Omitting it produced "undefined" on
+      // the editor side via the attribute reader's null check.
+      token.attrs = [["data-color", color]];
+    }
+    state.pos += openMatch[0].length;
+    return true;
+  }
+
+  if (rest.startsWith(HIGHLIGHT_CLOSE)) {
+    if (!silent) {
+      const token = state.push("wiki_highlight_close", "mark", -1);
+      token.markup = "</mark>";
+    }
+    state.pos += HIGHLIGHT_CLOSE.length;
+    return true;
+  }
+
+  return false;
+}
+
 // Build a markdown-it instance with notice-block containers registered.
 function buildTokenizer(): MarkdownIt {
   const md = new MarkdownIt("default", {
@@ -167,6 +221,12 @@ function buildTokenizer(): MarkdownIt {
   // We slot in just before `linkify` to see fully-resolved inline tokens.
   md.core.ruler.before("linkify", "lift_standalone_images", liftStandaloneImagesRule);
   md.core.ruler.before("linkify", "wrap_table_cell_inline", wrapTableCellInlineRule);
+
+  // Inline rule for `<mark>` highlight tags. Slot before `autolink` so the
+  // opening `<` doesn't get consumed by the bare-URL auto-linker (which
+  // expects `<scheme:...>` and wouldn't actually match `<mark>`, but
+  // ordering it first keeps the contract obvious if autolink ever loosens).
+  md.inline.ruler.before("autolink", "wiki_highlight", highlightInlineRule);
 
   for (const variant of NOTICE_VARIANTS) {
     // Type-cast: @types/markdown-it-container expects the legacy
@@ -289,6 +349,12 @@ function buildTokenMap() {
       }),
     },
     code_inline: { mark: "code", noCloseToken: true },
+    wiki_highlight: {
+      mark: "wikiHighlight",
+      getAttrs: (tok: { attrGet: (name: string) => string | null }) => ({
+        color: tok.attrGet("data-color") ?? "",
+      }),
+    },
   };
 
   for (const variant of NOTICE_VARIANTS) {
