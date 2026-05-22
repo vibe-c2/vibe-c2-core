@@ -11,6 +11,7 @@ import { ClockIcon, XIcon } from "lucide-react"
 import { Dialog as DialogPrimitive } from "@base-ui/react/dialog"
 import { useVirtualizer } from "@tanstack/react-virtual"
 import { Button } from "@/components/ui/button"
+import { DialogOverlay } from "@/components/ui/dialog"
 import { Skeleton } from "@/components/ui/skeleton"
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { DocumentIcon } from "@/components/wiki/document-icon"
@@ -52,7 +53,7 @@ export function WikiRecentDocsModal({ operationId }: WikiRecentDocsModalProps) {
       }}
     >
       <DialogPrimitive.Portal>
-        <DialogPrimitive.Backdrop className="fixed inset-0 z-50 bg-black/10 duration-100 data-open:animate-in data-open:fade-in-0 data-closed:animate-out data-closed:fade-out-0" />
+        <DialogOverlay />
         <DialogPrimitive.Popup className="fixed left-1/2 top-[15%] z-50 flex max-h-[70vh] w-[calc(100%-2rem)] max-w-2xl -translate-x-1/2 flex-col rounded-xl bg-popover ring-1 ring-foreground/10 outline-none shadow-xl duration-100 data-open:animate-in data-open:fade-in-0 data-open:zoom-in-95 data-closed:animate-out data-closed:fade-out-0">
           {wasOpen && (
             <ModalBody
