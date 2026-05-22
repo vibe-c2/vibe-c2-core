@@ -12,6 +12,7 @@ import { DashboardPage } from "@/pages/dashboard"
 import { OperationsPage } from "@/pages/operations"
 import { UsersPage } from "@/pages/users"
 import { WikiPage } from "@/pages/wiki"
+import { WikiPrintPage } from "@/pages/wiki-print"
 import { FindingsPage } from "@/pages/findings"
 import { useAuthStore } from "@/stores/auth"
 import { useConnectivityStore } from "@/stores/connectivity"
@@ -55,6 +56,15 @@ function App() {
               <Route path="wiki/:documentId" element={<WikiPage />} />
               <Route path="findings" element={<FindingsPage />} />
             </Route>
+            {/* Chromeless print view — sits inside ProtectedRoute so the
+                auth guard still applies, but outside AppLayout so it
+                renders without the sidebar / top nav. The browser's print
+                dialog opens automatically once the document loads; the
+                user picks "Save as PDF" from there. */}
+            <Route
+              path="wiki/:documentId/print"
+              element={<WikiPrintPage />}
+            />
           </Route>
         </Routes>
         </BrowserRouter>

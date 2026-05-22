@@ -5,6 +5,7 @@ import {
   ChevronRightIcon,
   ClockIcon,
   EllipsisIcon,
+  FileDownIcon,
   ListTreeIcon,
   Maximize2Icon,
   Minimize2Icon,
@@ -362,6 +363,34 @@ export function WikiEditorHeader({
             <ListTreeIcon className="size-4" />
           </TooltipTrigger>
           <TooltipContent>{tocLabel}</TooltipContent>
+        </Tooltip>
+
+        {/* Export as PDF — opens the chromeless print route in a new tab.
+            That page mounts the same WikiEditor in read-only mode and
+            auto-triggers window.print() once the document loads. The user
+            picks "Save as PDF" from the browser's print dialog. Cookies
+            travel automatically on the new tab, so the protected route
+            still authenticates. Not gated on isEditor. */}
+        <Tooltip>
+          <TooltipTrigger
+            render={
+              <Button
+                variant="ghost"
+                size="icon-sm"
+                onClick={() =>
+                  window.open(
+                    `/wiki/${encodeURIComponent(doc.id)}/print`,
+                    "_blank",
+                    "noopener,noreferrer",
+                  )
+                }
+                aria-label="Export as PDF"
+              />
+            }
+          >
+            <FileDownIcon className="size-4" />
+          </TooltipTrigger>
+          <TooltipContent>Export as PDF</TooltipContent>
         </Tooltip>
 
         {/* Zoom toggle — not gated on isEditor (focus reading is useful

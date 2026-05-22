@@ -58,6 +58,11 @@ interface WikiEditorProps {
   // Rendered inside the scroll container after the editor content so it
   // scrolls together with the document body (Notion-style "Sub-pages" block).
   footer?: ReactNode
+  // Fires once when the Y.js doc has finished its initial sync and the
+  // editor view is mounted with that content. The print page uses it as
+  // the "safe to call window.print()" signal — printing before this fires
+  // would capture the skeleton placeholder.
+  onReady?: () => void
 }
 
 export function WikiEditor({
@@ -65,6 +70,7 @@ export function WikiEditor({
   operationId,
   isEditor,
   footer,
+  onReady,
 }: WikiEditorProps) {
   const { ydoc, provider, connectionStatus, isSynced, isReady } = useHocuspocus(documentId)
   const user = useAuthStore((s) => s.user)
@@ -435,6 +441,15 @@ export function WikiEditor({
     editor.chain().focus("start").run()
     setPendingFocusDocId(null)
   }, [isReady, editor, isEditor, pendingFocusDocId, documentId, setPendingFocusDocId])
+
+  // Fire the optional ready signal once the editor has its content. Used
+  // by the print page to trigger window.print() at the right moment.
+  // Guarded on editor too so the callback doesn't fire against a half-built
+  // view in development with strict-mode double mounts.
+  useEffect(() => {
+    if (!isReady || !editor || !onReady) return
+    onReady()
+  }, [isReady, editor, onReady])
 
   return (
     // The relative wrapper anchors the floating TOC overlay so it pins to
