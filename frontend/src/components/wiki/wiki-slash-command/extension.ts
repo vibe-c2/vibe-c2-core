@@ -70,12 +70,24 @@ function renderSlashMenu() {
   let container: HTMLDivElement | null = null
   let root: Root | null = null
   const handleRef = { current: null as SlashMenuHandle | null }
-  // Cache last-rendered inputs so remote-collaborator transactions that shift
-  // the suggestion range but don't change the query (and therefore don't
-  // change items or screen position) skip the React render + DOM reposition
-  // entirely. Without this guard, every remote keystroke caused @tiptap/suggestion
-  // to call onUpdate, which reconciled the React tree even when nothing
-  // visible changed.
+  // Always points at the current `props.command` from @tiptap/suggestion.
+  // The plugin rebuilds `command` on every update with the *current* range
+  // captured in its closure, so we must refresh this ref on every onUpdate.
+  // SlashMenu's onSelect calls through this ref instead of capturing
+  // `props.command` at render time — otherwise the render-skip optimization
+  // below would leave onSelect pointing at a stale range, deleting too few
+  // characters when the user keeps typing into an already-narrow filter
+  // (e.g. `/cred` narrows to one item at `/cr` already, so typing `ed`
+  // produces no re-render — the captured command would still target `/cr`).
+  const commandRef = {
+    current: null as ((item: SlashItem) => void) | null,
+  }
+  // Cache last-rendered inputs so transactions that don't change the items
+  // list or screen position skip the React render + DOM reposition entirely.
+  // Without this guard, every remote keystroke caused @tiptap/suggestion to
+  // call onUpdate, which reconciled the React tree even when nothing visible
+  // changed. The `command` ref above keeps this safe across local typing
+  // that narrows the filter to a stable set.
   let lastItems: SlashItem[] | null = null
   let lastRect: DOMRect | null = null
 
@@ -96,6 +108,7 @@ function renderSlashMenu() {
     container?.remove()
     container = null
     handleRef.current = null
+    commandRef.current = null
     lastItems = null
     lastRect = null
   }
@@ -119,7 +132,10 @@ function renderSlashMenu() {
           handleRef.current = handle
         },
         items: props.items,
-        onSelect: (item) => props.command(item),
+        // Read through commandRef so subsequent transactions that update the
+        // range can keep onSelect pointing at the fresh command without
+        // forcing a React re-render.
+        onSelect: (item) => commandRef.current?.(item),
       }),
     )
     lastItems = props.items
@@ -128,6 +144,7 @@ function renderSlashMenu() {
   return {
     onStart: (props: SuggestionProps<SlashItem, SlashItem>) => {
       mount()
+      commandRef.current = props.command
       render(props)
       const rect = props.clientRect?.() ?? null
       position(rect)
@@ -135,6 +152,11 @@ function renderSlashMenu() {
     },
 
     onUpdate: (props: SuggestionProps<SlashItem, SlashItem>) => {
+      // Always refresh the command — its closure carries the suggestion's
+      // current range, so dropping this stales the deletion range whenever
+      // items happen to match (e.g. user keeps typing into a filter that
+      // already narrowed to one item).
+      commandRef.current = props.command
       const itemsSame = lastItems !== null && itemsEqual(lastItems, props.items)
       const rect = props.clientRect?.() ?? null
       const rectSame = rectsEqual(lastRect, rect)
