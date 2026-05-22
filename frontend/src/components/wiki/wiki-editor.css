@@ -148,6 +148,13 @@
   gap: 0.5rem;
 }
 
+/* Inter-item spacing lives on the li, not the inner <p>. The <p>'s prose
+   margins are zeroed below — margins on flex items don't collapse and
+   would otherwise inflate each row and break checkbox/text alignment. */
+.tiptap ul[data-type="taskList"] li + li {
+  margin-top: 0.25rem;
+}
+
 .tiptap ul[data-type="taskList"] li > label {
   flex-shrink: 0;
   display: inline-flex;
@@ -156,14 +163,14 @@
 
 .tiptap ul[data-type="taskList"] li > label input[type="checkbox"] {
   margin: 0;
-  /* Tailwind preflight / typography plugin sets align-self on <input>
+  /* Tailwind preflight / typography plugin sets align-self on <input>,
      which overrides the label's align-items. Force-center the checkbox
-     inside its label with !important. */
+     inside its 1lh-tall label so it lines up with the text optical mid. */
   align-self: center !important;
-  /* Empirically calibrated shift to place the checkbox center on the
-     text optical midline at prose-sm. If prose size changes, this
-     value will need to be retuned. */
-  transform: translateY(16px);
+}
+
+.tiptap ul[data-type="taskList"] li > div > p {
+  margin: 0;
 }
 
 /* Tables — prosemirror-tables requires positioned, fixed-layout cells
