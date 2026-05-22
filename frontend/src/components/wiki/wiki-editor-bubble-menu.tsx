@@ -133,12 +133,11 @@ function HighlightButton({ editor }: { editor: Editor }) {
                 <Button
                   variant={active ? "secondary" : "ghost"}
                   size="icon-xs"
-                  onMouseDown={(e) => {
-                    // Preserve the editor selection across the popover open —
-                    // letting the default focus shift would collapse it.
-                    e.preventDefault()
-                    setOpen((prev) => !prev)
-                  }}
+                  // Preserve the editor selection across the popover open —
+                  // contentEditable would otherwise collapse it on focus
+                  // shift. preventDefault on mousedown still allows the
+                  // click that PopoverTrigger uses to toggle open state.
+                  onMouseDown={(e) => e.preventDefault()}
                 />
               }
             />
@@ -152,13 +151,7 @@ function HighlightButton({ editor }: { editor: Editor }) {
         side="top"
         align="center"
         sideOffset={8}
-        className="w-auto min-w-0 flex-row items-center gap-1 p-1.5"
-        // The bubble menu sits inside the editor's contentEditable region.
-        // Without explicitly preventing the popover's mousedown bubbling,
-        // base-ui's outside-press logic and the editor's caret handling
-        // would both fight over the click target.
-        onMouseDown={(e) => e.preventDefault()}
-      >
+        className="w-auto min-w-0 flex-row items-center gap-1 p-1.5">
         {swatches.map((c) => (
           <button
             key={c.value}
