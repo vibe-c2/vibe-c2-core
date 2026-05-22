@@ -1,6 +1,7 @@
 import { Link } from "react-router"
 import { ChevronRightIcon } from "lucide-react"
 import { DocumentIcon } from "@/components/wiki/document-icon"
+import { WikiAncestorBreadcrumb } from "@/components/wiki/wiki-ancestor-breadcrumb"
 import { cn } from "@/lib/utils"
 import type { WikiDocumentBacklinkFieldsFragment } from "@/graphql/gql/graphql"
 
@@ -19,6 +20,12 @@ interface BacklinkListProps {
   // editor footer sits on a naturally scrolling page and leaves this off
   // so the whole list flows with the document.
   scrollable?: boolean
+  // When true, render rows as two lines with the full ancestor breadcrumb
+  // (`Root › Folder › Parent`) under the title — matches the search
+  // palette layout. Defaults to false: the wiki editor footer keeps its
+  // tighter single-line "Title in Parent" treatment since the surrounding
+  // tree already gives operators that context.
+  showFullPath?: boolean
   isLoading?: boolean
 }
 
@@ -36,6 +43,7 @@ export function BacklinkList({
   title = "Backlinks",
   showWhenEmpty = false,
   scrollable = false,
+  showFullPath = false,
   isLoading = false,
 }: BacklinkListProps) {
   if (isLoading && documents.length === 0) return null
@@ -76,29 +84,57 @@ export function BacklinkList({
               <li key={doc.id} className="min-w-0">
                 <Link
                   to={`/wiki/${doc.id}`}
-                  className="group/row flex w-full min-w-0 items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm hover:bg-muted"
+                  className={cn(
+                    "group/row flex w-full min-w-0 gap-2 rounded-md px-2 py-1.5 text-left text-sm hover:bg-muted",
+                    // Two-line rows need top-aligned chrome so the icon and
+                    // chevron sit next to the title, not centered over the
+                    // breadcrumb. Single-line rows stay vertically centered.
+                    showFullPath ? "items-start" : "items-center",
+                  )}
                 >
                   <DocumentIcon
                     emoji={doc.emoji}
                     icon={doc.icon}
                     color={doc.color}
+                    // Nudge the icon down a hair so it baselines with the
+                    // title text on multi-line rows.
+                    className={cn(showFullPath && "mt-0.5")}
                   />
-                  <span className="min-w-0 flex-1 truncate">
-                    {doc.title || "Untitled"}
-                    {parent && (
-                      <span
-                        className={cn(
-                          "ml-1.5 text-xs",
-                          parent.isDeleted
-                            ? "text-muted-foreground/50 line-through"
-                            : "text-muted-foreground/70",
-                        )}
-                      >
-                        in {parent.title || "Untitled"}
+                  {showFullPath ? (
+                    <span className="flex min-w-0 flex-1 flex-col">
+                      <span className="truncate">
+                        {doc.title || "Untitled"}
                       </span>
+                      {doc.ancestors.length > 0 && (
+                        <WikiAncestorBreadcrumb
+                          ancestors={doc.ancestors}
+                          className="truncate"
+                        />
+                      )}
+                    </span>
+                  ) : (
+                    <span className="min-w-0 flex-1 truncate">
+                      {doc.title || "Untitled"}
+                      {parent && (
+                        <span
+                          className={cn(
+                            "ml-1.5 text-xs",
+                            parent.isDeleted
+                              ? "text-muted-foreground/50 line-through"
+                              : "text-muted-foreground/70",
+                          )}
+                        >
+                          in {parent.title || "Untitled"}
+                        </span>
+                      )}
+                    </span>
+                  )}
+                  <ChevronRightIcon
+                    className={cn(
+                      "size-3.5 shrink-0 text-muted-foreground opacity-0 transition-opacity group-hover/row:opacity-100",
+                      showFullPath && "mt-0.5",
                     )}
-                  </span>
-                  <ChevronRightIcon className="size-3.5 shrink-0 text-muted-foreground opacity-0 transition-opacity group-hover/row:opacity-100" />
+                  />
                 </Link>
               </li>
             )

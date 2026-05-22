@@ -27,6 +27,7 @@ export function CredentialBacklinkList({
       isLoading={isLoading}
       showWhenEmpty
       scrollable
+      showFullPath
     />
   )
 }
