@@ -5,6 +5,7 @@ import Lightbox from "yet-another-react-lightbox"
 import Zoom from "yet-another-react-lightbox/plugins/zoom"
 import Fullscreen from "yet-another-react-lightbox/plugins/fullscreen"
 import Counter from "yet-another-react-lightbox/plugins/counter"
+import { usePrintMode } from "@/hooks/use-print-mode"
 import "yet-another-react-lightbox/styles.css"
 import "yet-another-react-lightbox/plugins/counter.css"
 
@@ -27,6 +28,10 @@ export function WikiImageNode({ node, editor, getPos }: ReactNodeViewProps) {
   const width = typeof node.attrs.width === "number" ? node.attrs.width : null
   const height = typeof node.attrs.height === "number" ? node.attrs.height : null
   const isEditable = editor.isEditable
+  // The print page never scrolls — lazy loading would leave every image
+  // below the initial viewport un-fetched when window.print() fires.
+  // Switch to eager+sync so the PDF captures actual pixels, not blanks.
+  const isPrintMode = usePrintMode()
 
   function handleDelete() {
     // getPos() can return undefined briefly during transitions (node view
@@ -57,9 +62,10 @@ export function WikiImageNode({ node, editor, getPos }: ReactNodeViewProps) {
           // Defer decoding so a long doc full of images doesn't block the
           // main thread on initial render. The intrinsic dimensions above
           // give the browser everything it needs to lay the image out
-          // correctly before the bytes arrive.
-          loading="lazy"
-          decoding="async"
+          // correctly before the bytes arrive. Print mode overrides this
+          // because the page is captured in a single non-scrolled pass.
+          loading={isPrintMode ? "eager" : "lazy"}
+          decoding={isPrintMode ? "sync" : "async"}
           className="wiki-image"
           draggable={false}
           onClick={() => setIsOpen(true)}

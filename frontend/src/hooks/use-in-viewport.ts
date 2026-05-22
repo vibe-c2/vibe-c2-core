@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, type RefObject } from "react"
+import { usePrintMode } from "./use-print-mode"
 
 interface Options {
   /**
@@ -30,7 +31,11 @@ export function useInViewport<T extends Element>(
   options?: Options,
 ): Result<T> {
   const ref = useRef<T | null>(null)
-  const [isVisible, setIsVisible] = useState(false)
+  // Under print mode every gated element needs to hydrate immediately,
+  // even ones below the initial viewport — the print page never scrolls
+  // and the browser captures the whole document height in one pass.
+  const isPrintMode = usePrintMode()
+  const [isVisible, setIsVisible] = useState(isPrintMode)
   const rootMargin = options?.rootMargin ?? "200px"
 
   useEffect(() => {
