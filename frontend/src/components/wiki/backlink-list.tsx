@@ -14,6 +14,11 @@ interface BacklinkListProps {
   // keeps the legacy "hide on empty" behaviour; the credential dialog uses
   // this to make the section visible while editing wiki docs.
   showWhenEmpty?: boolean
+  // When true, cap the list height and let it scroll internally. Used by
+  // surfaces with constrained vertical space (e.g. modals). The wiki
+  // editor footer sits on a naturally scrolling page and leaves this off
+  // so the whole list flows with the document.
+  scrollable?: boolean
   isLoading?: boolean
 }
 
@@ -30,13 +35,16 @@ export function BacklinkList({
   documents,
   title = "Backlinks",
   showWhenEmpty = false,
+  scrollable = false,
   isLoading = false,
 }: BacklinkListProps) {
   if (isLoading && documents.length === 0) return null
   if (documents.length === 0 && !showWhenEmpty) return null
 
   return (
-    <div>
+    // min-w-0 lets the section sit inside a flex parent without long row
+    // titles forcing the column wider than the modal.
+    <div className="min-w-0">
       <div className="mb-2 flex items-center justify-between">
         <h3 className="text-xs font-medium tracking-wide text-muted-foreground uppercase">
           {title}
@@ -51,17 +59,24 @@ export function BacklinkList({
           No wiki documents reference this yet.
         </p>
       ) : (
-        <ul className="flex flex-col gap-0.5">
+        <ul
+          className={cn(
+            "flex flex-col gap-0.5",
+            // ~6 rows visible (≈ 240px) before the list scrolls internally.
+            // `pr-1` keeps the scrollbar from overlapping the chevron column.
+            scrollable && "max-h-60 overflow-y-auto pr-1",
+          )}
+        >
           {documents.map((doc) => {
             const parent =
               doc.ancestors.length > 0
                 ? doc.ancestors[doc.ancestors.length - 1]
                 : null
             return (
-              <li key={doc.id}>
+              <li key={doc.id} className="min-w-0">
                 <Link
                   to={`/wiki/${doc.id}`}
-                  className="group/row flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm hover:bg-muted"
+                  className="group/row flex w-full min-w-0 items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm hover:bg-muted"
                 >
                   <DocumentIcon
                     emoji={doc.emoji}

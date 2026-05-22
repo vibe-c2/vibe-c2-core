@@ -26,6 +26,7 @@ export function CredentialBacklinkList({
       title="Referenced in"
       isLoading={isLoading}
       showWhenEmpty
+      scrollable
     />
   )
 }
