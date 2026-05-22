@@ -92,7 +92,13 @@ export async function uploadAndInsertWikiFiles(
   }
 }
 
-/** Pull non-image File entries out of a ClipboardEvent's clipboardData. */
+/**
+ * Pull non-image File entries out of a ClipboardEvent's clipboardData.
+ *
+ * Mirrors extractClipboardImages: prefer `clipboardData.items`, fall back to
+ * `clipboardData.files` when items reports no kind="file" entries. macOS
+ * Safari and some Chromium builds expose pasted attachments only via .files.
+ */
 export function extractClipboardFiles(
   clipboardData: DataTransfer | null,
 ): File[] {
@@ -104,6 +110,12 @@ export function extractClipboardFiles(
     if (!f) continue
     if (isImageFile(f)) continue
     out.push(f)
+  }
+  if (out.length === 0) {
+    for (const f of Array.from(clipboardData.files)) {
+      if (isImageFile(f)) continue
+      out.push(f)
+    }
   }
   return out
 }

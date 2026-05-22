@@ -146,7 +146,16 @@ function formatSize(bytes: number): string {
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
 }
 
-/** Pull image File entries out of a ClipboardEvent's clipboardData. */
+/**
+ * Pull image File entries out of a ClipboardEvent's clipboardData.
+ *
+ * macOS pastes get TWO codepaths: `clipboardData.items` is the modern view
+ * (kind + MIME), but Safari and some Chromium versions populate only
+ * `clipboardData.files` for screenshot/Preview pastes — the items list comes
+ * back with kind="string" entries (HTML representation) and no kind="file".
+ * Fall back to .files when items yields nothing so Cmd+V works regardless of
+ * which surface the OS exposed.
+ */
 export function extractClipboardImages(
   clipboardData: DataTransfer | null,
 ): File[] {
@@ -157,6 +166,11 @@ export function extractClipboardImages(
     if (!item.type.startsWith("image/")) continue
     const f = item.getAsFile()
     if (f) out.push(f)
+  }
+  if (out.length === 0) {
+    for (const f of Array.from(clipboardData.files)) {
+      if (f.type.startsWith("image/")) out.push(f)
+    }
   }
   return out
 }

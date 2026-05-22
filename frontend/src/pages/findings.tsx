@@ -1,4 +1,4 @@
-import { SearchCheckIcon } from "lucide-react"
+import { GemIcon } from "lucide-react"
 import { useScopedOperation } from "@/hooks/use-scoped-operation"
 import { usePageMetadata } from "@/hooks/use-page-metadata"
 import { useFindingsStore } from "@/stores/findings"
@@ -24,7 +24,7 @@ export function FindingsPage() {
 function FindingsPageInner({ mode }: { mode: FindingsMode }) {
   usePageMetadata({
     title: mode.kind === "scoped" ? "Findings" : "Findings · Global",
-    icon: { kind: "lucide", component: SearchCheckIcon },
+    icon: { kind: "lucide", component: GemIcon },
   })
 
   const activeTab = useFindingsStore((s) => s.activeTab)
