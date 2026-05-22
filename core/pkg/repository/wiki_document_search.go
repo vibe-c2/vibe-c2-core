@@ -52,10 +52,13 @@ type searchScoredDoc struct {
 //     No index (would need an n-gram index); the operation_id + deleted_at
 //     filter reduces the scan to one operation's active docs, capped at
 //     mergeFetchCap results.
-//  3. $text search on the title+content text index. Adds scoring (title
-//     matches weighted 10x) and multi-word AND matching. Redundant with (2)
-//     for single-word queries but catches e.g. "search index" semantics
-//     that a naive substring regex does not.
+//  3. $text phrase search on the title+content text index. Adds scoring
+//     (title matches weighted 10x) and surfaces docs where the query
+//     appears as an exact tokenized phrase. The query is phrase-quoted
+//     before being handed to $text — see buildTextSearchPhrase for why
+//     raw user input cannot be passed through ($text treats `-token` as
+//     negation and OR-splits on punctuation, which causes noisy queries
+//     to return unrelated documents).
 //
 // Ranking: title-prefix hits first (strongest "user is typing a title"
 // signal), then content-substring hits, then remaining $text hits. Duplicates
@@ -254,6 +257,31 @@ func hasSearchableWord(query string) bool {
 	return false
 }
 
+// buildTextSearchPhrase converts a user query into a $text $search payload
+// that searches for the input as a single exact phrase. Returns ("", false)
+// when the cleaned query has nothing usable to search for.
+//
+// Why phrase quoting: $text treats `-token` as a negation operator and
+// tokenizes on punctuation, OR'ing the resulting fragments. A noisy query
+// like "U-DCuf+kxjESV7%YES&FRx5%4+daZzH..." gets split into many short
+// terms (`d`, `4`, `YES`, ...) that broadly OR-match unrelated documents,
+// and the stray `-` flips parts of the query into "must NOT contain"
+// constraints. Wrapping the whole input in `"..."` collapses that into
+// "match this exact phrase", which is the natural search-palette UX —
+// title-prefix and content-substring branches already cover partial
+// matches that fall outside the phrase.
+//
+// MongoDB's phrase delimiter is the literal double-quote character with no
+// documented backslash escape, so we strip embedded `"` to keep the phrase
+// well-formed.
+func buildTextSearchPhrase(query string) (string, bool) {
+	sanitized := strings.TrimSpace(strings.ReplaceAll(query, `"`, ""))
+	if sanitized == "" {
+		return "", false
+	}
+	return `"` + sanitized + `"`, true
+}
+
 // mergeSearchHits concatenates hit lists in the provided order, deduping on
 // document ID so the first occurrence wins. Callers pass higher-signal branches
 // first (title-prefix before content-substring before $text).
@@ -382,11 +410,16 @@ func (r *wikiDocumentRepository) searchFullText(
 	baseFilter v1bson.M,
 	query string,
 ) ([]WikiDocumentSearchHit, error) {
+	search, ok := buildTextSearchPhrase(query)
+	if !ok {
+		return nil, nil
+	}
+
 	filter := v1bson.M{}
 	for k, v := range baseFilter {
 		filter[k] = v
 	}
-	filter["$text"] = v1bson.M{"$search": query}
+	filter["$text"] = v1bson.M{"$search": search}
 
 	// Exclusion projection — keeps `content`/`content_state` off the wire while
 	// auto-including any future WikiDocument fields (no drift vs the other two
