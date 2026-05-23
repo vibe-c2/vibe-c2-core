@@ -39,6 +39,8 @@ import {
 import { WikiTreeNode } from "@/components/wiki/wiki-tree-node"
 import { DocumentIcon } from "@/components/wiki/document-icon"
 import { WikiHistoryDropdown } from "@/components/wiki/wiki-history-dropdown"
+import { WikiTreeModeToggle } from "@/components/wiki/wiki-tree-mode-toggle"
+import { useScopedOperation } from "@/hooks/use-scoped-operation"
 import {
   rowToTreeNode,
   sortByOrder,
@@ -141,6 +143,14 @@ function resolveDropTargetFromEvent(
 interface WikiTreeSidebarProps {
   operationId: string
   isEditor: boolean
+  /**
+   * True when the tree is rendering against the synthetic Public operation
+   * (either because no operation is scoped, or because the user toggled to
+   * Public while a scope exists). Drives the mode toggle's selected state.
+   */
+  isPublicMode: boolean
+  /** True when there's a real scoped operation (independent of mode). */
+  hasRealScope: boolean
   // Forwarded to the wrapper div so ResizeHandle can imperatively mutate
   // `--wiki-sidebar-width` during a drag without going through React.
   ref?: React.Ref<HTMLDivElement>
@@ -149,8 +159,13 @@ interface WikiTreeSidebarProps {
 export function WikiTreeSidebar({
   operationId,
   isEditor,
+  isPublicMode,
+  hasRealScope,
   ref,
 }: WikiTreeSidebarProps) {
+  // Operation name for the toggle's "Operation" segment. Read directly here so
+  // the toggle stays a presentational component.
+  const scopedOperation = useScopedOperation()
   const sidebarWidth = useWikiStore((s) => s.sidebarWidth)
   const openCreateDialog = useWikiStore((s) => s.openCreateDialog)
   const openImportOutlineDialog = useWikiStore((s) => s.openImportOutlineDialog)
@@ -380,9 +395,16 @@ export function WikiTreeSidebar({
       } as React.CSSProperties}
       className="flex shrink-0 flex-col rounded-lg border bg-card overflow-hidden"
     >
-      {/* Header */}
-      <div className="flex h-10 items-center gap-1 border-b px-2">
-        <span className="flex-1 truncate px-1 text-sm font-medium">Wiki</span>
+      {/* Header — mode toggle/pill on the left (acts as the title), action
+          icons on the right. Toggle takes the title slot so the row stays a
+          single line; the "Operation"/"Public" segment selection itself
+          communicates which tree the user is looking at. */}
+      <div className="flex h-10 items-center gap-0.5 border-b px-2">
+        <WikiTreeModeToggle
+          hasRealScope={hasRealScope}
+          operationName={scopedOperation?.name}
+        />
+        <span className="flex-1 min-w-1" />
         <Tooltip>
           <TooltipTrigger
             render={
@@ -537,7 +559,9 @@ export function WikiTreeSidebar({
           </div>
         ) : roots.length === 0 ? (
           <p className="px-2 py-4 text-center text-xs text-muted-foreground">
-            No documents yet
+            {isPublicMode
+              ? "No public documents yet"
+              : "No documents yet"}
           </p>
         ) : (
           <DndContext

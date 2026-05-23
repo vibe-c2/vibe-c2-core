@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -15,6 +16,19 @@ import (
 	"github.com/vibe-c2/vibe-c2-core/core/pkg/pagination"
 	"github.com/vibe-c2/vibe-c2-core/core/pkg/repository"
 )
+
+// refuseIfPublic blocks mutations targeted at the synthetic Public operation.
+// Public is read-only at the resolver layer: its name, description, and
+// membership are hardcoded and there is no Mongo row to mutate. The
+// authorization layer would also refuse admin-level requests against Public
+// (see authorization.AuthorizeOperationRole), but this check fires earlier
+// and gives a clearer error message.
+func refuseIfPublic(id uuid.UUID) error {
+	if models.IsPublicOperation(id) {
+		return fmt.Errorf("the Public operation is read-only")
+	}
+	return nil
+}
 
 // IOperationResolver defines the business logic methods for the Operation entity.
 // These map 1:1 to the GraphQL query, mutation, and field resolvers for Operation.
@@ -129,6 +143,13 @@ func (r *operationResolver) CreateOperation(ctx context.Context, input model.Cre
 		return nil, fmt.Errorf("invalid caller ID: %w", err)
 	}
 
+	// Reserve the "Public" name (case-insensitive) for the synthetic Public
+	// operation. The Mongo unique-name index can't catch this collision
+	// because the synthetic op is never stored — guard at the resolver.
+	if strings.EqualFold(strings.TrimSpace(input.Name), models.PublicOperationName) {
+		return nil, fmt.Errorf("the name %q is reserved", models.PublicOperationName)
+	}
+
 	description := ""
 	if input.Description != nil {
 		description = *input.Description
@@ -160,6 +181,10 @@ func (r *operationResolver) UpdateOperation(ctx context.Context, id string, inpu
 	uid, err := uuid.Parse(id)
 	if err != nil {
 		return nil, fmt.Errorf("invalid operation ID: %w", err)
+	}
+
+	if err := refuseIfPublic(uid); err != nil {
+		return nil, err
 	}
 
 	op, err := r.operationRepo.FindByID(ctx, uid)
@@ -206,6 +231,10 @@ func (r *operationResolver) DeleteOperation(ctx context.Context, id string) (boo
 	uid, err := uuid.Parse(id)
 	if err != nil {
 		return false, fmt.Errorf("invalid operation ID: %w", err)
+	}
+
+	if err := refuseIfPublic(uid); err != nil {
+		return false, err
 	}
 
 	op, err := r.operationRepo.FindByID(ctx, uid)
@@ -263,6 +292,10 @@ func (r *operationResolver) AddOperationMember(ctx context.Context, operationID 
 		return nil, fmt.Errorf("invalid operation ID: %w", err)
 	}
 
+	if err := refuseIfPublic(opUID); err != nil {
+		return nil, err
+	}
+
 	userUID, err := uuid.Parse(userID)
 	if err != nil {
 		return nil, fmt.Errorf("invalid user ID: %w", err)
@@ -316,6 +349,10 @@ func (r *operationResolver) RemoveOperationMember(ctx context.Context, operation
 		return nil, fmt.Errorf("invalid operation ID: %w", err)
 	}
 
+	if err := refuseIfPublic(opUID); err != nil {
+		return nil, err
+	}
+
 	userUID, err := uuid.Parse(userID)
 	if err != nil {
 		return nil, fmt.Errorf("invalid user ID: %w", err)
@@ -362,6 +399,10 @@ func (r *operationResolver) UpdateOperationMemberRole(ctx context.Context, opera
 	opUID, err := uuid.Parse(operationID)
 	if err != nil {
 		return nil, fmt.Errorf("invalid operation ID: %w", err)
+	}
+
+	if err := refuseIfPublic(opUID); err != nil {
+		return nil, err
 	}
 
 	userUID, err := uuid.Parse(userID)
@@ -494,21 +535,31 @@ func (r *operationResolver) Operations(ctx context.Context, search *string, firs
 
 // MyOperationRole returns the caller's role in a specific operation,
 // or nil if the caller is not a member.
+//
+// Public operation: any authenticated caller is treated as an operator —
+// mirrors the implicit-membership rule in authorization.AuthorizeOperationRole
+// so the frontend can render edit affordances for the Public wiki tab
+// without doing role math itself.
 func (r *operationResolver) MyOperationRole(ctx context.Context, operationID string) (*models.OperationRole, error) {
 	uid, err := uuid.Parse(operationID)
 	if err != nil {
 		return nil, fmt.Errorf("invalid operation ID: %w", err)
 	}
 
-	op, err := r.operationRepo.FindByID(ctx, uid)
-	if err != nil {
-		return nil, fmt.Errorf("operation not found: %w", err)
-	}
-
 	auth := gqlctx.AuthFromContext(ctx)
 	callerUID, err := uuid.Parse(auth.UserID)
 	if err != nil {
 		return nil, nil
+	}
+
+	if models.IsPublicOperation(uid) {
+		role := models.OperationRoleOperator
+		return &role, nil
+	}
+
+	op, err := r.operationRepo.FindByID(ctx, uid)
+	if err != nil {
+		return nil, fmt.Errorf("operation not found: %w", err)
 	}
 
 	for _, m := range op.Members {

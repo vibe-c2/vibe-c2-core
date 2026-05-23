@@ -64,6 +64,13 @@ func (r *operationRepository) Create(ctx context.Context, op *models.Operation) 
 }
 
 func (r *operationRepository) FindByID(ctx context.Context, id uuid.UUID) (models.Operation, error) {
+	// Public is a synthetic operation — no Mongo row exists. Return the
+	// in-memory struct so downstream callers (authorization, resolvers,
+	// wiki paths) can treat it like any other operation without a special
+	// case at every call site. See models.PublicOperationID.
+	if models.IsPublicOperation(id) {
+		return models.SynthesizePublicOperation(), nil
+	}
 	var op models.Operation
 	err := r.coll.FindOne(ctx, bson.M{"operation_id": id}).One(&op)
 	return op, err

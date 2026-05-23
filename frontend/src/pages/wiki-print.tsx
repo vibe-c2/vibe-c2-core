@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react"
 import { Navigate, useParams } from "react-router"
 import { useIsFetching } from "@tanstack/react-query"
-import { useScopedOperation } from "@/hooks/use-scoped-operation"
 import { useMyOperationRole } from "@/graphql/hooks/operations"
 import { useWikiDocument } from "@/graphql/hooks/wiki"
 import { PrintModeProvider } from "@/hooks/use-print-mode"
@@ -38,43 +37,38 @@ const READINESS_TIMEOUT_MS = 8000
 // PDF" from there. The result is a PDF that matches the in-app document
 // exactly because the same browser engine is rendering both.
 export function WikiPrintPage() {
-  const scopedOperation = useScopedOperation()
   const { documentId } = useParams<{ documentId: string }>()
 
-  if (!scopedOperation) {
-    return <Navigate to="/operations" replace />
-  }
   if (!documentId) {
     return <Navigate to="/wiki" replace />
   }
 
   return (
     <PrintModeProvider value={true}>
-      <WikiPrintPageInner
-        operationId={scopedOperation.id}
-        documentId={documentId}
-      />
+      <WikiPrintPageInner documentId={documentId} />
     </PrintModeProvider>
   )
 }
 
 function WikiPrintPageInner({
-  operationId,
   documentId,
 }: {
-  operationId: string
   documentId: string
 }) {
+  // Source of truth for which operation this print belongs to is the doc
+  // itself — works uniformly for operation-scoped and Public docs without
+  // depending on whatever the user currently has scoped.
+  const { data: docData, isLoading: isDocLoading } = useWikiDocument(documentId)
+  const doc = docData?.wikiDocument ?? null
+  const operationId = doc?.operationId ?? null
+
   const { data: roleData, isLoading: isRoleLoading } =
-    useMyOperationRole(operationId)
+    useMyOperationRole(operationId ?? "")
   // We mount the editor as read-only regardless of role — even editors are
   // viewing a print snapshot here, not editing — but we still wait for the
   // role query to settle so we don't kick off the Hocuspocus connection
   // before knowing the user is a member.
   const canRead = !isRoleLoading && roleData?.myOperationRole != null
-
-  const { data: docData, isLoading: isDocLoading } = useWikiDocument(documentId)
-  const doc = docData?.wikiDocument ?? null
 
   // True after WikiEditor calls onReady — Y.js has synced its initial
   // state and the editor view is mounted. ProseMirror's custom node views
@@ -165,14 +159,13 @@ function WikiPrintPageInner({
     }
   }, [doc?.title])
 
-  if (!canRead && !isRoleLoading) {
-    // No permission to view — bounce. We don't render the print surface
-    // for unauthorized requests, so the user just sees the operations
-    // page instead of an empty print dialog.
-    return <Navigate to="/operations" replace />
-  }
-
-  if (isRoleLoading || isDocLoading || !doc) {
+  // Show the skeleton until both the doc and the role query have settled.
+  // operationId stays null until the doc loads, which keeps the role query
+  // disabled (useMyOperationRole gates on `!!operationId`) — so its
+  // isRoleLoading is false during that window even though we have no role
+  // answer yet. The `!operationId` clause is what prevents bouncing through
+  // the `!canRead` redirect during that gap; do not relax it.
+  if (isDocLoading || !doc || !operationId || isRoleLoading) {
     return (
       <div className="wiki-print-shell">
         <div className="flex flex-col gap-3 p-8">
@@ -182,6 +175,12 @@ function WikiPrintPageInner({
         </div>
       </div>
     )
+  }
+
+  if (!canRead) {
+    // No permission to view — bounce. The role query has settled with no
+    // role for this user on this operation.
+    return <Navigate to="/operations" replace />
   }
 
   // The wrapper class scopes the print stylesheet. Width is clamped so the

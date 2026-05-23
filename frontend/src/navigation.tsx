@@ -23,18 +23,18 @@ export const navigationItems: NavigationItem[] = [
     permission: null,
     icon: LayoutDashboardIcon,
   },
+];
+
+// Navigation entries that work even when no operation is scoped. Findings
+// has a "global / cross-operation" mode for cross-op credential search; Wiki
+// falls back to the synthetic Public operation tree when no scope is set.
+export const navigationGlobalItems: NavigationItem[] = [
   {
     title: "Wiki",
     url: "/wiki",
     permission: null,
     icon: BookOpenIcon,
   },
-];
-
-// Navigation entries that work even when no operation is scoped. Findings
-// has a "global / cross-operation" mode that lets the user search credentials
-// (and future finding types) across the operations they belong to.
-export const navigationGlobalItems: NavigationItem[] = [
   {
     title: "Findings",
     url: "/findings",

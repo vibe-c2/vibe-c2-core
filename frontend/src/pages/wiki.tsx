@@ -1,7 +1,9 @@
 import { useEffect, useRef } from "react"
-import { Navigate, useParams } from "react-router"
+import { useParams } from "react-router"
 import { BookOpenIcon } from "lucide-react"
-import { useScopedOperation } from "@/hooks/use-scoped-operation"
+import { useEffectiveWikiOperation } from "@/hooks/use-effective-wiki-operation-id"
+import { useWikiTreeModeStore } from "@/stores/wiki-tree-mode"
+import { isPublicOperation } from "@/lib/public-operation"
 import { useMyOperationRole } from "@/graphql/hooks/operations"
 import {
   useWikiDocument,
@@ -39,18 +41,20 @@ import { EditCredentialDialog } from "@/components/findings/edit-credential-dial
 import { DeleteCredentialDialog } from "@/components/findings/delete-credential-dialog"
 
 export function WikiPage() {
-  const scopedOperation = useScopedOperation()
+  const { effectiveOperationId, isPublicMode, hasRealScope } =
+    useEffectiveWikiOperation()
   const { documentId } = useParams<{ documentId: string }>()
 
-  // Redirect if no operation is scoped.
-  if (!scopedOperation) {
-    return <Navigate to="/operations" replace />
-  }
-
+  // The wiki page is reachable with or without a scoped operation. With no
+  // scope (or with the user's mode toggle set to "public"), the tree targets
+  // the synthetic Public operation. Backend authorization grants implicit
+  // operator access on PublicOperationID to every authenticated caller.
   return (
     <WikiPageInner
-      operationId={scopedOperation.id}
+      operationId={effectiveOperationId}
       documentId={documentId ?? null}
+      isPublicMode={isPublicMode}
+      hasRealScope={hasRealScope}
     />
   )
 }
@@ -58,13 +62,18 @@ export function WikiPage() {
 function WikiPageInner({
   operationId,
   documentId,
+  isPublicMode,
+  hasRealScope,
 }: {
   operationId: string
   documentId: string | null
+  isPublicMode: boolean
+  hasRealScope: boolean
 }) {
   // Note: Dropping the open document on scope change is handled at the
   // route-guard level (ProtectedRoute) so it works across both same-tab and
   // cross-tab switches — the latter unmounts this page during validation.
+  // Public mode is scope-independent so the route guard skips it.
 
   const { data: roleData, isLoading: isRoleLoading } = useMyOperationRole(operationId)
   // Default to false while loading to avoid premature WebSocket connections.
@@ -76,6 +85,37 @@ function WikiPageInner({
   // there's at most one transition per navigation.
   const { data: docData } = useWikiDocument(documentId ?? "")
   const doc = documentId ? docData?.wikiDocument : null
+
+  // URL → tree-mode sync. If the URL points at a doc whose operation differs
+  // from the current effective operation, flip the mode so the sidebar tree
+  // matches the open doc. Without this, sharing a Public-doc link while a
+  // recipient has a scope set leaves the tree showing the operation while the
+  // editor renders a doc from a different tree. Only meaningful when a real
+  // scope exists — without one, mode is forced to "public" already.
+  //
+  // Dedupe per-documentId via a ref so this only auto-syncs on the *first*
+  // load of a given doc. Without that, manually toggling back to the
+  // operation tree while a public doc is still open re-fires this effect
+  // (operationId changed) and immediately flips mode back to "public",
+  // making the toggle button look dead.
+  const setWikiTreeMode = useWikiTreeModeStore((s) => s.setMode)
+  const docOperationId = doc?.operationId ?? null
+  const lastSyncedDocId = useRef<string | null>(null)
+  useEffect(() => {
+    if (!hasRealScope) {
+      lastSyncedDocId.current = null
+      return
+    }
+    if (!documentId) {
+      lastSyncedDocId.current = null
+      return
+    }
+    if (!docOperationId) return
+    if (lastSyncedDocId.current === documentId) return
+    lastSyncedDocId.current = documentId
+    if (docOperationId === operationId) return
+    setWikiTreeMode(isPublicOperation(docOperationId) ? "public" : "operation")
+  }, [documentId, docOperationId, operationId, hasRealScope, setWikiTreeMode])
   // The adaptive default needs to know whether this doc has children to pick
   // between file/folder glyphs (mirrors wiki-editor-header.tsx:132). Gate the
   // children fetch behind that — uncurated/explicit icons don't need it. The
@@ -205,6 +245,8 @@ function WikiPageInner({
         ref={sidebarRef}
         operationId={operationId}
         isEditor={isEditor}
+        isPublicMode={isPublicMode}
+        hasRealScope={hasRealScope}
       />
       <ResizeHandle
         currentWidth={sidebarWidth}

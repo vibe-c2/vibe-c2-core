@@ -30,6 +30,16 @@ const webhookUrl = process.env.HOCUSPOCUS_WEBHOOK_URL || "";
 const webhookSecret = process.env.HOCUSPOCUS_WEBHOOK_SECRET || "";
 const debounceMs = parseInt(process.env.HOCUSPOCUS_DEBOUNCE_MS || "2000", 10);
 
+// Hardcoded UUID of the synthetic Public operation. Mirrors
+// `models.PublicOperationID` in the Go backend (core/pkg/models/public_operation.go).
+// Wiki documents under this operation are world-readable, so credential
+// references must never be written into them — credentials are
+// operation-private and a /credential chip in a public doc would surface
+// credential metadata to every authenticated user. Kept as a code-level
+// constant rather than a required env var because the value is fixed and
+// must match the Go side exactly.
+const PUBLIC_OPERATION_ID = "00000000-0000-0000-0000-000000000001";
+
 let db: Db;
 
 async function getDb(): Promise<Db> {
@@ -166,6 +176,17 @@ export function createDatabaseExtension(): Database {
       const ctx = context as
         | { userId?: string; operationId?: string }
         | undefined;
+
+      // Security boundary: public wiki documents cannot hold credential
+      // references. Credentials are operation-private; a /credential chip
+      // persisted into a public doc would surface credential metadata to
+      // any authenticated user. Drop the references silently so the save
+      // itself still completes — the editor JSON may still contain the
+      // chip nodes, but the inverse index that powers credential
+      // backlinks (and any cross-domain leak path) stays empty.
+      if (ctx?.operationId === PUBLIC_OPERATION_ID) {
+        credentialReferenceBinaries = [];
+      }
 
       const now = new Date();
       const updates: Record<string, unknown> = {

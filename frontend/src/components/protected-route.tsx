@@ -5,6 +5,7 @@ import { useConnectivityStore } from "@/stores/connectivity"
 import { useSessionGuard } from "@/hooks/use-session-guard"
 import { useScopedOperationGuard } from "@/hooks/use-scoped-operation-guard"
 import { useScopedOperationStore } from "@/stores/scoped-operation"
+import { useWikiTreeModeStore } from "@/stores/wiki-tree-mode"
 
 export function ProtectedRoute({ permission }: { permission?: string }) {
   const isAuthenticated = useAuthStore((s) => s.isAuthenticated)
@@ -24,9 +25,13 @@ export function ProtectedRoute({ permission }: { permission?: string }) {
   // setState-in-effect cascading-render that lint flags.
   const hydrate = useScopedOperationStore((s) => s.hydrate)
   const hydrated = useScopedOperationStore((s) => s.hydrated)
+  const hydrateWikiTreeMode = useWikiTreeModeStore((s) => s.hydrate)
   useEffect(() => {
-    if (userId) hydrate(userId)
-  }, [userId, hydrate])
+    if (userId) {
+      hydrate(userId)
+      hydrateWikiTreeMode(userId)
+    }
+  }, [userId, hydrate, hydrateWikiTreeMode])
 
   // Validate the restored scope and subscribe to real-time changes.
   useScopedOperationGuard()
@@ -39,20 +44,26 @@ export function ProtectedRoute({ permission }: { permission?: string }) {
   // (not inside WikiPage) because cross-tab sync sets `isValidating: true`,
   // which unmounts the wiki page during validation; a per-page ref-based
   // comparison would be reset on remount and miss the change.
+  //
+  // Public-mode caveat: Public wiki docs are scope-independent, so a scope
+  // change while viewing Public must not drop the URL. The wiki page handles
+  // the inverse (URL doc belongs to a different operation than the current
+  // mode) via its own URL→mode sync effect.
+  const wikiTreeMode = useWikiTreeModeStore((s) => s.mode)
   const navigate = useNavigate()
   const location = useLocation()
   const prevScopedIdRef = useRef<string | null>(scopedId)
   useEffect(() => {
     const prev = prevScopedIdRef.current
     prevScopedIdRef.current = scopedId
-    // Only react to a transition between two non-null operations.
-    // Initial hydrate (null → X) keeps the existing URL; unscope (X → null)
-    // is handled by WikiPage's redirect to /operations.
-    if (prev === null || scopedId === null || prev === scopedId) return
+    // Initial hydrate (null → X) keeps the existing URL.
+    if (prev === null || prev === scopedId) return
+    // Public mode is scope-independent — nothing in the URL to invalidate.
+    if (wikiTreeMode === "public") return
     if (location.pathname.startsWith("/wiki/")) {
       navigate("/wiki", { replace: true })
     }
-  }, [scopedId, location.pathname, navigate])
+  }, [scopedId, wikiTreeMode, location.pathname, navigate])
 
   // Still validating the session via /login/me on page reload
   if (isLoading) {

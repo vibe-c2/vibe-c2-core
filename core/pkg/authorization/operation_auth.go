@@ -14,6 +14,10 @@ import (
 //
 // This is the shared authorization check used by all resolvers that need
 // operation-level role enforcement (operations, wiki, scheme network points, etc.).
+//
+// Public operation special case: any authenticated caller is implicitly an
+// operator on the synthetic Public operation. Admin-level requests against
+// Public are forbidden — Public has no admins, by design.
 func AuthorizeOperationRole(ctx context.Context, op *models.Operation, minRole models.OperationRole) error {
 	auth := gqlctx.AuthFromContext(ctx)
 
@@ -24,10 +28,21 @@ func AuthorizeOperationRole(ctx context.Context, op *models.Operation, minRole m
 		}
 	}
 
-	// Check operation-level role
 	callerUID, err := uuid.Parse(auth.UserID)
 	if err != nil {
 		return fmt.Errorf("forbidden: invalid caller ID")
+	}
+
+	// Public operation: implicit operator for any authenticated caller.
+	// Operator satisfies both viewer and operator role requirements; admin
+	// requirements are refused because Public has no admins. The Operation
+	// mutation resolvers refuse Public-targeted writes up front so this
+	// branch should only ever be hit by read paths and wiki mutations.
+	if models.IsPublicOperation(op.OperationID) {
+		if minRole == models.OperationRoleAdmin {
+			return fmt.Errorf("forbidden: public operation has no admins")
+		}
+		return nil
 	}
 
 	for _, m := range op.Members {
