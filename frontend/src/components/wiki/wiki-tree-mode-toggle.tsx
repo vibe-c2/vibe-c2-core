@@ -1,4 +1,4 @@
-import { GlobeIcon, FolderIcon } from "lucide-react"
+import { GlobeIcon, SwordsIcon } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import {
@@ -80,7 +80,7 @@ export function WikiTreeModeToggle({
               />
             }
           >
-            <FolderIcon className="size-3.5" />
+            <SwordsIcon className="size-3.5" />
           </TooltipTrigger>
           <TooltipContent>{operationLabel}</TooltipContent>
         </Tooltip>
