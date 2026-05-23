@@ -23,7 +23,7 @@ export function OperationSwitcher() {
   const scopedOperation = useScopedOperationStore((s) => s.scopedOperation);
   const scopeOperation = useScopedOperationStore((s) => s.scopeOperation);
   const unscopeOperation = useScopedOperationStore((s) => s.unscopeOperation);
-  const { toggleSidebar } = useSidebar();
+  const { state: sidebarState } = useSidebar();
 
   const [open, setOpen] = useState(false);
   const [search, setSearch] = useState("");
@@ -130,13 +130,7 @@ export function OperationSwitcher() {
       >
         {scopedOperation ? (
           <>
-            <div
-              className="flex aspect-square size-8 items-center justify-center rounded-lg bg-sidebar-primary text-sidebar-primary-foreground cursor-pointer"
-              onClick={(e) => {
-                e.stopPropagation();
-                toggleSidebar();
-              }}
-            >
+            <div className="flex aspect-square size-8 items-center justify-center rounded-lg bg-sidebar-primary text-sidebar-primary-foreground">
               <SwordsIcon className="size-4" />
             </div>
             <div className="grid flex-1 text-left text-sm leading-tight">
@@ -168,13 +162,7 @@ export function OperationSwitcher() {
           </>
         ) : (
           <>
-            <div
-              className="flex aspect-square size-8 items-center justify-center rounded-lg bg-sidebar-primary text-sidebar-primary-foreground cursor-pointer"
-              onClick={(e) => {
-                e.stopPropagation();
-                toggleSidebar();
-              }}
-            >
+            <div className="flex aspect-square size-8 items-center justify-center rounded-lg bg-sidebar-primary text-sidebar-primary-foreground">
               <TerminalSquareIcon className="size-4" />
             </div>
             <div className="grid flex-1 text-left text-sm leading-tight">
@@ -188,7 +176,10 @@ export function OperationSwitcher() {
       </PopoverTrigger>
 
       <PopoverContent
-        className="w-(--anchor-width)! p-1.5 overflow-hidden"
+        className={cn(
+          "p-1.5 overflow-hidden",
+          sidebarState === "collapsed" ? "w-64" : "w-(--anchor-width)!",
+        )}
         side="bottom"
         align="start"
         sideOffset={4}
