@@ -148,6 +148,21 @@ type SessionEvent struct {
 type Subscription struct {
 }
 
+type TimelineBucket struct {
+	BucketStart string `json:"bucketStart"`
+	Count       int    `json:"count"`
+}
+
+type TimelineEventConnection struct {
+	Edges    []*TimelineEventEdge `json:"edges"`
+	PageInfo *pagination.PageInfo `json:"pageInfo"`
+}
+
+type TimelineEventEdge struct {
+	Node   *models.OperationEvent `json:"node"`
+	Cursor string                 `json:"cursor"`
+}
+
 type UpdateCredentialInput struct {
 	Name     *string                `json:"name,omitempty"`
 	Type     *models.CredentialType `json:"type,omitempty"`

@@ -14,6 +14,7 @@ import { UsersPage } from "@/pages/users"
 import { WikiPage } from "@/pages/wiki"
 import { WikiPrintPage } from "@/pages/wiki-print"
 import { FindingsPage } from "@/pages/findings"
+import { TimelinePage } from "@/pages/timeline"
 import { useAuthStore } from "@/stores/auth"
 import { useConnectivityStore } from "@/stores/connectivity"
 
@@ -55,6 +56,7 @@ function App() {
               <Route path="wiki" element={<WikiPage />} />
               <Route path="wiki/:documentId" element={<WikiPage />} />
               <Route path="findings" element={<FindingsPage />} />
+              <Route path="timeline" element={<TimelinePage />} />
             </Route>
             {/* Chromeless print view — sits inside ProtectedRoute so the
                 auth guard still applies, but outside AppLayout so it

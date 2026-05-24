@@ -15,6 +15,7 @@ import (
 	"github.com/vibe-c2/vibe-c2-core/core/pkg/database"
 	"github.com/vibe-c2/vibe-c2-core/core/pkg/environment"
 	"github.com/vibe-c2/vibe-c2-core/core/pkg/eventbus"
+	"github.com/vibe-c2/vibe-c2-core/core/pkg/events"
 	"github.com/vibe-c2/vibe-c2-core/core/pkg/logger"
 	"github.com/vibe-c2/vibe-c2-core/core/pkg/repository"
 	"github.com/vibe-c2/vibe-c2-core/core/pkg/wiki"
@@ -43,6 +44,7 @@ type Repositories struct {
 	WikiImage          repository.IWikiImageRepository
 	WikiFile           repository.IWikiFileRepository
 	Credential         repository.ICredentialRepository
+	OperationEvent     repository.IOperationEventRepository
 }
 
 type App struct {
@@ -101,6 +103,7 @@ func NewApp() (*App, error) {
 		WikiImage:          repository.NewWikiImageRepository(db),
 		WikiFile:           repository.NewWikiFileRepository(db),
 		Credential:         repository.NewCredentialRepository(db),
+		OperationEvent:     repository.NewOperationEventRepository(db),
 	}
 
 	// Initialize cache (noop fallback is acceptable for caching)
@@ -215,6 +218,18 @@ func NewApp() (*App, error) {
 	// Condition checker (requires setup manager):
 	//   cc := setupmanager.NewConditionChecker(repos..., sm, bus, l)
 	// ------------------------------------
+
+	// Persist domain events into operation_events so the Timeline page can
+	// render historical activity. New event types are added by appending to
+	// events.Logger.Topics(), no further wiring required here.
+	eventLogger := events.NewLogger(repos.OperationEvent, repos.Operation, repos.Credential, repos.WikiDocument, bus, l)
+	bus.Subscribe(eventLogger.Topics(), eventLogger.Handle)
+
+	// Backfill once on first deploy. Idempotent via deterministic event IDs;
+	// non-blocking on partial failure so a slow seed never blocks startup.
+	if err := eventLogger.BackfillIfEmpty(ctx); err != nil {
+		l.Warn("event logger: backfill failed", zap.Error(err))
+	}
 
 	// Subscribe to operation membership changes for wiki role enforcement.
 	// When a user is removed from an operation or demoted below operator,

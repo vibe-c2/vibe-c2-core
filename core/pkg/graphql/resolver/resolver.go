@@ -39,6 +39,7 @@ type Resolver struct {
 	WikiDocumentResolver       resolver.IWikiDocumentResolver
 	WikiDocumentVisitResolver  resolver.IWikiDocumentVisitResolver
 	CredentialResolver         resolver.ICredentialResolver
+	TimelineResolver           resolver.ITimelineResolver
 
 	// Subscription dependencies — event bus for real-time events,
 	// repos for fetching full entities to include in event payloads.

@@ -1,0 +1,118 @@
+# =============================================================================
+# Timeline — Operation Event History
+# =============================================================================
+#
+# The Timeline page renders an operation's full activity history as a
+# horizontal axis from operation creation through today, with vertical event
+# stacks above each active day. Rows are persisted by the in-process event
+# bus subscriber (core/pkg/events) into the operation_events collection.
+#
+# Two read paths:
+#   - timelineBuckets   — bucket counts for the axis (cheap, one row per day/
+#                         week/month at the requested granularity).
+#   - timelineEventsByDay — full event list for a single bucket, used by the
+#                           vertical stack above that day.
+#
+# One subscription path:
+#   - timelineEventAdded — real-time append of new events for the operation
+#                          the viewer currently has open.
+#
+# Time bucketing happens server-side in MongoDB via $dateTrunc using the
+# viewer's IANA timezone. The frontend passes that timezone with every query
+# so day boundaries match the viewer's working day, not UTC.
+#
+# The Timeline's "OperationEvent" type clashes by name with the operation
+# domain-event wrapper used by operationChanged. To avoid renaming the
+# existing subscription type, timeline rows ship as `TimelineEvent`.
+
+# Granularity of axis buckets. Maps 1:1 to MongoDB $dateTrunc units.
+enum TimelineGranularity {
+  DAY
+  WEEK
+  MONTH
+}
+
+# A single event row. SubjectName is captured at write time so events
+# survive deletion of their subject — a credential deleted six months ago
+# still renders with its original name. Metadata is a JSON-encoded string
+# of topic-specific fields (e.g. parent_document_id on wiki events).
+type TimelineEvent {
+  id: ID!
+  operationId: ID!
+  topic: String!
+  subjectKind: String!
+  subjectId: ID!
+  subjectName: String!
+  # Null for system / service actors, or when the actor account was deleted.
+  actor: User
+  occurredAt: String!
+  # JSON-encoded payload of topic-specific fields. Empty string when no
+  # metadata was captured. A typed scalar can replace this later if it
+  # becomes inconvenient on the client.
+  metadata: String!
+}
+
+type TimelineEventEdge {
+  node: TimelineEvent!
+  cursor: String!
+}
+
+type TimelineEventConnection {
+  edges: [TimelineEventEdge!]!
+  pageInfo: PageInfo!
+}
+
+# One bucket on the timeline axis. The bucket is "active" iff count > 0;
+# the server only returns buckets that have events. Empty stretches are
+# computed client-side by walking from operation creation through today.
+type TimelineBucket {
+  # Start of the bucket in the requested timezone (RFC3339 with offset).
+  bucketStart: String!
+  count: Int!
+}
+
+extend type Query {
+  # Bucket counts for the timeline axis. Returns one entry per non-empty
+  # bucket at the given granularity, sorted ascending by bucketStart.
+  #
+  # The timezone argument is the viewer's IANA name
+  # (e.g. "Europe/Berlin"). Day/week/month boundaries are computed in that
+  # zone, so day buckets line up with the operator's local day.
+  #
+  # types and actorIds are optional filters: types lists subject_kind
+  # values (e.g. ["credential", "wiki_document"]); actorIds restricts to
+  # events originated by those users.
+  timelineBuckets(
+    operationId: ID!
+    granularity: TimelineGranularity = DAY
+    timezone: String!
+    from: String
+    to: String
+    types: [String!]
+    actorIds: [ID!]
+  ): [TimelineBucket!]!
+    @hasPermission(permission: "operation:member")
+
+  # Events that fall within a single bucket. `date` is any timestamp inside
+  # the bucket (typically the bucketStart returned by timelineBuckets); the
+  # resolver truncates it to the granularity's start boundary in the given
+  # timezone. Cursor-paginated newest-first.
+  timelineEventsByDay(
+    operationId: ID!
+    date: String!
+    timezone: String!
+    granularity: TimelineGranularity = DAY
+    types: [String!]
+    actorIds: [ID!]
+    first: Int = 100
+    after: String
+  ): TimelineEventConnection!
+    @hasPermission(permission: "operation:member")
+}
+
+extend type Subscription {
+  # Real-time append of new persisted events for an operation. Fires once
+  # per event after the persistence subscriber has stored it.
+  timelineEventAdded(operationId: ID!): TimelineEvent!
+    @hasPermission(permission: "operation:member")
+}

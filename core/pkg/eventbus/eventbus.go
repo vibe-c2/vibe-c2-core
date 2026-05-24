@@ -55,6 +55,13 @@ const (
 	TopicCredentialCommentAdded   Topic = "credential.comment.added"
 	TopicCredentialCommentUpdated Topic = "credential.comment.updated"
 	TopicCredentialCommentRemoved Topic = "credential.comment.removed"
+
+	// Timeline events — emitted by pkg/events.Logger after a row has been
+	// persisted to the operation_events collection. Carries only the
+	// (event_id, operation_id) primitives so the eventbus package stays
+	// decoupled from the models package; subscribers refetch the row via
+	// the operation_event repository.
+	TopicOperationEventLogged Topic = "operation_event.logged"
 )
 
 // ActorType identifies who originated an event.

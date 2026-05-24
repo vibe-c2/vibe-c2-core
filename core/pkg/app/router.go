@@ -69,6 +69,9 @@ func (a *App) NewRouter() *gin.Engine {
 	credRes := resolver.NewCredentialResolver(
 		a.repos.Credential, a.repos.Operation, a.repos.User, wikiDocRes, a.eventBus,
 	)
+	timelineRes := resolver.NewTimelineResolver(
+		a.repos.OperationEvent, a.repos.Operation, a.repos.User,
+	)
 
 	// Wiki controller (REST endpoints)
 	wikiCtrl := controller.NewWikiController(a.repos.WikiDocument, a.repos.Operation, a.env.HocuspocusTicketSecret, a.logger)
@@ -194,7 +197,7 @@ func (a *App) NewRouter() *gin.Engine {
 		//                       inside gqlgen; one socket multiplexes every
 		//                       active subscription on the page.
 		gqlHandler := gql.NewHandler(
-			userRes, opRes, snpRes, sessRes, wikiDocRes, wikiVisitRes, credRes,
+			userRes, opRes, snpRes, sessRes, wikiDocRes, wikiVisitRes, credRes, timelineRes,
 			a.eventBus,
 			a.repos.User, a.repos.Operation, a.repos.Session, a.repos.WikiDocument, a.repos.Credential,
 			a.presenceTracker,

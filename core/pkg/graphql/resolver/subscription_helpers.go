@@ -249,6 +249,8 @@ func extractOperationID(event eventbus.Event) string {
 		return p.OperationID
 	case eventbus.CredentialEventPayload:
 		return p.OperationID
+	case eventbus.OperationEventLoggedPayload:
+		return p.OperationID
 	}
 	return ""
 }

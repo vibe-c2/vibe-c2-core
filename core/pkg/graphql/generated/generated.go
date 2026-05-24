@@ -17,6 +17,7 @@ import (
 	"github.com/vibe-c2/vibe-c2-core/core/pkg/graphql/model"
 	"github.com/vibe-c2/vibe-c2-core/core/pkg/models"
 	"github.com/vibe-c2/vibe-c2-core/core/pkg/pagination"
+	"github.com/vibe-c2/vibe-c2-core/core/pkg/repository"
 )
 
 // region    ************************** generated!.gotpl **************************
@@ -39,6 +40,7 @@ type ResolverRoot interface {
 	SchemeNetworkPort() SchemeNetworkPortResolver
 	Session() SessionResolver
 	Subscription() SubscriptionResolver
+	TimelineEvent() TimelineEventResolver
 	User() UserResolver
 	WikiDocument() WikiDocumentResolver
 	WikiDocumentBackup() WikiDocumentBackupResolver
@@ -201,6 +203,8 @@ type ComplexityRoot struct {
 		SchemeNetworkPoints                func(childComplexity int, operationID string, search *string, first *int, after *string, last *int, before *string) int
 		Session                            func(childComplexity int, id string) int
 		Sessions                           func(childComplexity int, userID *string, search *string, activeOnly *bool, first *int, after *string, last *int, before *string) int
+		TimelineBuckets                    func(childComplexity int, operationID string, granularity *repository.TimelineGranularity, timezone string, from *string, to *string, types []string, actorIds []string) int
+		TimelineEventsByDay                func(childComplexity int, operationID string, date string, timezone string, granularity *repository.TimelineGranularity, types []string, actorIds []string, first *int, after *string) int
 		User                               func(childComplexity int, id string) int
 		UserSuggestions                    func(childComplexity int, search string, first *int) int
 		Users                              func(childComplexity int, search *string, first *int, after *string, last *int, before *string) int
@@ -293,9 +297,37 @@ type ComplexityRoot struct {
 		OperationChanged            func(childComplexity int, operationID *string) int
 		OperationMemberChanged      func(childComplexity int, operationID *string) int
 		SessionChanged              func(childComplexity int, userID *string) int
+		TimelineEventAdded          func(childComplexity int, operationID string) int
 		UserChanged                 func(childComplexity int) int
 		WikiDocumentChanged         func(childComplexity int, operationID string) int
 		WikiDocumentPresenceChanged func(childComplexity int, operationID string) int
+	}
+
+	TimelineBucket struct {
+		BucketStart func(childComplexity int) int
+		Count       func(childComplexity int) int
+	}
+
+	TimelineEvent struct {
+		Actor       func(childComplexity int) int
+		ID          func(childComplexity int) int
+		Metadata    func(childComplexity int) int
+		OccurredAt  func(childComplexity int) int
+		OperationID func(childComplexity int) int
+		SubjectID   func(childComplexity int) int
+		SubjectKind func(childComplexity int) int
+		SubjectName func(childComplexity int) int
+		Topic       func(childComplexity int) int
+	}
+
+	TimelineEventConnection struct {
+		Edges    func(childComplexity int) int
+		PageInfo func(childComplexity int) int
+	}
+
+	TimelineEventEdge struct {
+		Cursor func(childComplexity int) int
+		Node   func(childComplexity int) int
 	}
 
 	User struct {
@@ -549,6 +581,8 @@ type QueryResolver interface {
 	MySessions(ctx context.Context, activeOnly *bool, first *int, after *string, last *int, before *string) (*model.SessionConnection, error)
 	Sessions(ctx context.Context, userID *string, search *string, activeOnly *bool, first *int, after *string, last *int, before *string) (*model.SessionConnection, error)
 	Session(ctx context.Context, id string) (*models.Session, error)
+	TimelineBuckets(ctx context.Context, operationID string, granularity *repository.TimelineGranularity, timezone string, from *string, to *string, types []string, actorIds []string) ([]*model.TimelineBucket, error)
+	TimelineEventsByDay(ctx context.Context, operationID string, date string, timezone string, granularity *repository.TimelineGranularity, types []string, actorIds []string, first *int, after *string) (*model.TimelineEventConnection, error)
 	WikiDocument(ctx context.Context, id string) (*models.WikiDocument, error)
 	WikiDocuments(ctx context.Context, operationID string, parentDocumentID *string, search *string, sort *model.WikiDocumentSort, first *int, after *string, last *int, before *string) (*model.WikiDocumentConnection, error)
 	WikiDocumentTree(ctx context.Context, operationID string) ([]*models.WikiDocument, error)
@@ -596,8 +630,20 @@ type SubscriptionResolver interface {
 	MyCredentialChanged(ctx context.Context, operationIds []string) (<-chan *model.CredentialEvent, error)
 	MySessionChanged(ctx context.Context) (<-chan *model.SessionEvent, error)
 	SessionChanged(ctx context.Context, userID *string) (<-chan *model.SessionEvent, error)
+	TimelineEventAdded(ctx context.Context, operationID string) (<-chan *models.OperationEvent, error)
 	WikiDocumentChanged(ctx context.Context, operationID string) (<-chan *model.WikiDocumentEvent, error)
 	WikiDocumentPresenceChanged(ctx context.Context, operationID string) (<-chan *model.WikiDocumentPresenceEvent, error)
+}
+type TimelineEventResolver interface {
+	ID(ctx context.Context, obj *models.OperationEvent) (string, error)
+	OperationID(ctx context.Context, obj *models.OperationEvent) (string, error)
+
+	SubjectKind(ctx context.Context, obj *models.OperationEvent) (string, error)
+	SubjectID(ctx context.Context, obj *models.OperationEvent) (string, error)
+
+	Actor(ctx context.Context, obj *models.OperationEvent) (*models.User, error)
+	OccurredAt(ctx context.Context, obj *models.OperationEvent) (string, error)
+	Metadata(ctx context.Context, obj *models.OperationEvent) (string, error)
 }
 type UserResolver interface {
 	ID(ctx context.Context, obj *models.User) (string, error)
@@ -1565,6 +1611,28 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.Query.Sessions(childComplexity, args["userId"].(*string), args["search"].(*string), args["activeOnly"].(*bool), args["first"].(*int), args["after"].(*string), args["last"].(*int), args["before"].(*string)), true
+	case "Query.timelineBuckets":
+		if e.ComplexityRoot.Query.TimelineBuckets == nil {
+			break
+		}
+
+		args, err := ec.field_Query_timelineBuckets_args(ctx, rawArgs)
+		if err != nil {
+			return 0, false
+		}
+
+		return e.ComplexityRoot.Query.TimelineBuckets(childComplexity, args["operationId"].(string), args["granularity"].(*repository.TimelineGranularity), args["timezone"].(string), args["from"].(*string), args["to"].(*string), args["types"].([]string), args["actorIds"].([]string)), true
+	case "Query.timelineEventsByDay":
+		if e.ComplexityRoot.Query.TimelineEventsByDay == nil {
+			break
+		}
+
+		args, err := ec.field_Query_timelineEventsByDay_args(ctx, rawArgs)
+		if err != nil {
+			return 0, false
+		}
+
+		return e.ComplexityRoot.Query.TimelineEventsByDay(childComplexity, args["operationId"].(string), args["date"].(string), args["timezone"].(string), args["granularity"].(*repository.TimelineGranularity), args["types"].([]string), args["actorIds"].([]string), args["first"].(*int), args["after"].(*string)), true
 	case "Query.user":
 		if e.ComplexityRoot.Query.User == nil {
 			break
@@ -2084,6 +2152,17 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.Subscription.SessionChanged(childComplexity, args["userId"].(*string)), true
+	case "Subscription.timelineEventAdded":
+		if e.ComplexityRoot.Subscription.TimelineEventAdded == nil {
+			break
+		}
+
+		args, err := ec.field_Subscription_timelineEventAdded_args(ctx, rawArgs)
+		if err != nil {
+			return 0, false
+		}
+
+		return e.ComplexityRoot.Subscription.TimelineEventAdded(childComplexity, args["operationId"].(string)), true
 	case "Subscription.userChanged":
 		if e.ComplexityRoot.Subscription.UserChanged == nil {
 			break
@@ -2112,6 +2191,100 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.Subscription.WikiDocumentPresenceChanged(childComplexity, args["operationId"].(string)), true
+
+	case "TimelineBucket.bucketStart":
+		if e.ComplexityRoot.TimelineBucket.BucketStart == nil {
+			break
+		}
+
+		return e.ComplexityRoot.TimelineBucket.BucketStart(childComplexity), true
+	case "TimelineBucket.count":
+		if e.ComplexityRoot.TimelineBucket.Count == nil {
+			break
+		}
+
+		return e.ComplexityRoot.TimelineBucket.Count(childComplexity), true
+
+	case "TimelineEvent.actor":
+		if e.ComplexityRoot.TimelineEvent.Actor == nil {
+			break
+		}
+
+		return e.ComplexityRoot.TimelineEvent.Actor(childComplexity), true
+	case "TimelineEvent.id":
+		if e.ComplexityRoot.TimelineEvent.ID == nil {
+			break
+		}
+
+		return e.ComplexityRoot.TimelineEvent.ID(childComplexity), true
+	case "TimelineEvent.metadata":
+		if e.ComplexityRoot.TimelineEvent.Metadata == nil {
+			break
+		}
+
+		return e.ComplexityRoot.TimelineEvent.Metadata(childComplexity), true
+	case "TimelineEvent.occurredAt":
+		if e.ComplexityRoot.TimelineEvent.OccurredAt == nil {
+			break
+		}
+
+		return e.ComplexityRoot.TimelineEvent.OccurredAt(childComplexity), true
+	case "TimelineEvent.operationId":
+		if e.ComplexityRoot.TimelineEvent.OperationID == nil {
+			break
+		}
+
+		return e.ComplexityRoot.TimelineEvent.OperationID(childComplexity), true
+	case "TimelineEvent.subjectId":
+		if e.ComplexityRoot.TimelineEvent.SubjectID == nil {
+			break
+		}
+
+		return e.ComplexityRoot.TimelineEvent.SubjectID(childComplexity), true
+	case "TimelineEvent.subjectKind":
+		if e.ComplexityRoot.TimelineEvent.SubjectKind == nil {
+			break
+		}
+
+		return e.ComplexityRoot.TimelineEvent.SubjectKind(childComplexity), true
+	case "TimelineEvent.subjectName":
+		if e.ComplexityRoot.TimelineEvent.SubjectName == nil {
+			break
+		}
+
+		return e.ComplexityRoot.TimelineEvent.SubjectName(childComplexity), true
+	case "TimelineEvent.topic":
+		if e.ComplexityRoot.TimelineEvent.Topic == nil {
+			break
+		}
+
+		return e.ComplexityRoot.TimelineEvent.Topic(childComplexity), true
+
+	case "TimelineEventConnection.edges":
+		if e.ComplexityRoot.TimelineEventConnection.Edges == nil {
+			break
+		}
+
+		return e.ComplexityRoot.TimelineEventConnection.Edges(childComplexity), true
+	case "TimelineEventConnection.pageInfo":
+		if e.ComplexityRoot.TimelineEventConnection.PageInfo == nil {
+			break
+		}
+
+		return e.ComplexityRoot.TimelineEventConnection.PageInfo(childComplexity), true
+
+	case "TimelineEventEdge.cursor":
+		if e.ComplexityRoot.TimelineEventEdge.Cursor == nil {
+			break
+		}
+
+		return e.ComplexityRoot.TimelineEventEdge.Cursor(childComplexity), true
+	case "TimelineEventEdge.node":
+		if e.ComplexityRoot.TimelineEventEdge.Node == nil {
+			break
+		}
+
+		return e.ComplexityRoot.TimelineEventEdge.Node(childComplexity), true
 
 	case "User.active":
 		if e.ComplexityRoot.User.Active == nil {
@@ -3697,6 +3870,125 @@ type Subscription {
     @hasPermission(permission: "operation:member")
 }
 `, BuiltIn: false},
+	{Name: "../schema/timeline.graphql", Input: `# =============================================================================
+# Timeline — Operation Event History
+# =============================================================================
+#
+# The Timeline page renders an operation's full activity history as a
+# horizontal axis from operation creation through today, with vertical event
+# stacks above each active day. Rows are persisted by the in-process event
+# bus subscriber (core/pkg/events) into the operation_events collection.
+#
+# Two read paths:
+#   - timelineBuckets   — bucket counts for the axis (cheap, one row per day/
+#                         week/month at the requested granularity).
+#   - timelineEventsByDay — full event list for a single bucket, used by the
+#                           vertical stack above that day.
+#
+# One subscription path:
+#   - timelineEventAdded — real-time append of new events for the operation
+#                          the viewer currently has open.
+#
+# Time bucketing happens server-side in MongoDB via $dateTrunc using the
+# viewer's IANA timezone. The frontend passes that timezone with every query
+# so day boundaries match the viewer's working day, not UTC.
+#
+# The Timeline's "OperationEvent" type clashes by name with the operation
+# domain-event wrapper used by operationChanged. To avoid renaming the
+# existing subscription type, timeline rows ship as ` + "`" + `TimelineEvent` + "`" + `.
+
+# Granularity of axis buckets. Maps 1:1 to MongoDB $dateTrunc units.
+enum TimelineGranularity {
+  DAY
+  WEEK
+  MONTH
+}
+
+# A single event row. SubjectName is captured at write time so events
+# survive deletion of their subject — a credential deleted six months ago
+# still renders with its original name. Metadata is a JSON-encoded string
+# of topic-specific fields (e.g. parent_document_id on wiki events).
+type TimelineEvent {
+  id: ID!
+  operationId: ID!
+  topic: String!
+  subjectKind: String!
+  subjectId: ID!
+  subjectName: String!
+  # Null for system / service actors, or when the actor account was deleted.
+  actor: User
+  occurredAt: String!
+  # JSON-encoded payload of topic-specific fields. Empty string when no
+  # metadata was captured. A typed scalar can replace this later if it
+  # becomes inconvenient on the client.
+  metadata: String!
+}
+
+type TimelineEventEdge {
+  node: TimelineEvent!
+  cursor: String!
+}
+
+type TimelineEventConnection {
+  edges: [TimelineEventEdge!]!
+  pageInfo: PageInfo!
+}
+
+# One bucket on the timeline axis. The bucket is "active" iff count > 0;
+# the server only returns buckets that have events. Empty stretches are
+# computed client-side by walking from operation creation through today.
+type TimelineBucket {
+  # Start of the bucket in the requested timezone (RFC3339 with offset).
+  bucketStart: String!
+  count: Int!
+}
+
+extend type Query {
+  # Bucket counts for the timeline axis. Returns one entry per non-empty
+  # bucket at the given granularity, sorted ascending by bucketStart.
+  #
+  # The timezone argument is the viewer's IANA name
+  # (e.g. "Europe/Berlin"). Day/week/month boundaries are computed in that
+  # zone, so day buckets line up with the operator's local day.
+  #
+  # types and actorIds are optional filters: types lists subject_kind
+  # values (e.g. ["credential", "wiki_document"]); actorIds restricts to
+  # events originated by those users.
+  timelineBuckets(
+    operationId: ID!
+    granularity: TimelineGranularity = DAY
+    timezone: String!
+    from: String
+    to: String
+    types: [String!]
+    actorIds: [ID!]
+  ): [TimelineBucket!]!
+    @hasPermission(permission: "operation:member")
+
+  # Events that fall within a single bucket. ` + "`" + `date` + "`" + ` is any timestamp inside
+  # the bucket (typically the bucketStart returned by timelineBuckets); the
+  # resolver truncates it to the granularity's start boundary in the given
+  # timezone. Cursor-paginated newest-first.
+  timelineEventsByDay(
+    operationId: ID!
+    date: String!
+    timezone: String!
+    granularity: TimelineGranularity = DAY
+    types: [String!]
+    actorIds: [ID!]
+    first: Int = 100
+    after: String
+  ): TimelineEventConnection!
+    @hasPermission(permission: "operation:member")
+}
+
+extend type Subscription {
+  # Real-time append of new persisted events for an operation. Fires once
+  # per event after the persistence subscriber has stored it.
+  timelineEventAdded(operationId: ID!): TimelineEvent!
+    @hasPermission(permission: "operation:member")
+}
+`, BuiltIn: false},
 	{Name: "../schema/wiki.graphql", Input: `# =============================================================================
 # Wiki — Operation-Scoped Knowledge Base with Real-Time Collaborative Editing
 # =============================================================================
@@ -5008,6 +5300,93 @@ func (ec *executionContext) field_Query_sessions_args(ctx context.Context, rawAr
 	return args, nil
 }
 
+func (ec *executionContext) field_Query_timelineBuckets_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
+	var err error
+	args := map[string]any{}
+	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "operationId", ec.unmarshalNID2string)
+	if err != nil {
+		return nil, err
+	}
+	args["operationId"] = arg0
+	arg1, err := graphql.ProcessArgField(ctx, rawArgs, "granularity", ec.unmarshalOTimelineGranularity2ᚖgithubᚗcomᚋvibeᚑc2ᚋvibeᚑc2ᚑcoreᚋcoreᚋpkgᚋrepositoryᚐTimelineGranularity)
+	if err != nil {
+		return nil, err
+	}
+	args["granularity"] = arg1
+	arg2, err := graphql.ProcessArgField(ctx, rawArgs, "timezone", ec.unmarshalNString2string)
+	if err != nil {
+		return nil, err
+	}
+	args["timezone"] = arg2
+	arg3, err := graphql.ProcessArgField(ctx, rawArgs, "from", ec.unmarshalOString2ᚖstring)
+	if err != nil {
+		return nil, err
+	}
+	args["from"] = arg3
+	arg4, err := graphql.ProcessArgField(ctx, rawArgs, "to", ec.unmarshalOString2ᚖstring)
+	if err != nil {
+		return nil, err
+	}
+	args["to"] = arg4
+	arg5, err := graphql.ProcessArgField(ctx, rawArgs, "types", ec.unmarshalOString2ᚕstringᚄ)
+	if err != nil {
+		return nil, err
+	}
+	args["types"] = arg5
+	arg6, err := graphql.ProcessArgField(ctx, rawArgs, "actorIds", ec.unmarshalOID2ᚕstringᚄ)
+	if err != nil {
+		return nil, err
+	}
+	args["actorIds"] = arg6
+	return args, nil
+}
+
+func (ec *executionContext) field_Query_timelineEventsByDay_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
+	var err error
+	args := map[string]any{}
+	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "operationId", ec.unmarshalNID2string)
+	if err != nil {
+		return nil, err
+	}
+	args["operationId"] = arg0
+	arg1, err := graphql.ProcessArgField(ctx, rawArgs, "date", ec.unmarshalNString2string)
+	if err != nil {
+		return nil, err
+	}
+	args["date"] = arg1
+	arg2, err := graphql.ProcessArgField(ctx, rawArgs, "timezone", ec.unmarshalNString2string)
+	if err != nil {
+		return nil, err
+	}
+	args["timezone"] = arg2
+	arg3, err := graphql.ProcessArgField(ctx, rawArgs, "granularity", ec.unmarshalOTimelineGranularity2ᚖgithubᚗcomᚋvibeᚑc2ᚋvibeᚑc2ᚑcoreᚋcoreᚋpkgᚋrepositoryᚐTimelineGranularity)
+	if err != nil {
+		return nil, err
+	}
+	args["granularity"] = arg3
+	arg4, err := graphql.ProcessArgField(ctx, rawArgs, "types", ec.unmarshalOString2ᚕstringᚄ)
+	if err != nil {
+		return nil, err
+	}
+	args["types"] = arg4
+	arg5, err := graphql.ProcessArgField(ctx, rawArgs, "actorIds", ec.unmarshalOID2ᚕstringᚄ)
+	if err != nil {
+		return nil, err
+	}
+	args["actorIds"] = arg5
+	arg6, err := graphql.ProcessArgField(ctx, rawArgs, "first", ec.unmarshalOInt2ᚖint)
+	if err != nil {
+		return nil, err
+	}
+	args["first"] = arg6
+	arg7, err := graphql.ProcessArgField(ctx, rawArgs, "after", ec.unmarshalOString2ᚖstring)
+	if err != nil {
+		return nil, err
+	}
+	args["after"] = arg7
+	return args, nil
+}
+
 func (ec *executionContext) field_Query_userSuggestions_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
 	var err error
 	args := map[string]any{}
@@ -5409,6 +5788,17 @@ func (ec *executionContext) field_Subscription_sessionChanged_args(ctx context.C
 		return nil, err
 	}
 	args["userId"] = arg0
+	return args, nil
+}
+
+func (ec *executionContext) field_Subscription_timelineEventAdded_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
+	var err error
+	args := map[string]any{}
+	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "operationId", ec.unmarshalNID2string)
+	if err != nil {
+		return nil, err
+	}
+	args["operationId"] = arg0
 	return args, nil
 }
 
@@ -11409,6 +11799,136 @@ func (ec *executionContext) fieldContext_Query_session(ctx context.Context, fiel
 	return fc, nil
 }
 
+func (ec *executionContext) _Query_timelineBuckets(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Query_timelineBuckets,
+		func(ctx context.Context) (any, error) {
+			fc := graphql.GetFieldContext(ctx)
+			return ec.Resolvers.Query().TimelineBuckets(ctx, fc.Args["operationId"].(string), fc.Args["granularity"].(*repository.TimelineGranularity), fc.Args["timezone"].(string), fc.Args["from"].(*string), fc.Args["to"].(*string), fc.Args["types"].([]string), fc.Args["actorIds"].([]string))
+		},
+		func(ctx context.Context, next graphql.Resolver) graphql.Resolver {
+			directive0 := next
+
+			directive1 := func(ctx context.Context) (any, error) {
+				permission, err := ec.unmarshalNString2string(ctx, "operation:member")
+				if err != nil {
+					var zeroVal []*model.TimelineBucket
+					return zeroVal, err
+				}
+				if ec.Directives.HasPermission == nil {
+					var zeroVal []*model.TimelineBucket
+					return zeroVal, errors.New("directive hasPermission is not implemented")
+				}
+				return ec.Directives.HasPermission(ctx, nil, directive0, permission)
+			}
+
+			next = directive1
+			return next
+		},
+		ec.marshalNTimelineBucket2ᚕᚖgithubᚗcomᚋvibeᚑc2ᚋvibeᚑc2ᚑcoreᚋcoreᚋpkgᚋgraphqlᚋmodelᚐTimelineBucketᚄ,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_Query_timelineBuckets(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Query",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "bucketStart":
+				return ec.fieldContext_TimelineBucket_bucketStart(ctx, field)
+			case "count":
+				return ec.fieldContext_TimelineBucket_count(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type TimelineBucket", field.Name)
+		},
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			err = ec.Recover(ctx, r)
+			ec.Error(ctx, err)
+		}
+	}()
+	ctx = graphql.WithFieldContext(ctx, fc)
+	if fc.Args, err = ec.field_Query_timelineBuckets_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
+		ec.Error(ctx, err)
+		return fc, err
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Query_timelineEventsByDay(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Query_timelineEventsByDay,
+		func(ctx context.Context) (any, error) {
+			fc := graphql.GetFieldContext(ctx)
+			return ec.Resolvers.Query().TimelineEventsByDay(ctx, fc.Args["operationId"].(string), fc.Args["date"].(string), fc.Args["timezone"].(string), fc.Args["granularity"].(*repository.TimelineGranularity), fc.Args["types"].([]string), fc.Args["actorIds"].([]string), fc.Args["first"].(*int), fc.Args["after"].(*string))
+		},
+		func(ctx context.Context, next graphql.Resolver) graphql.Resolver {
+			directive0 := next
+
+			directive1 := func(ctx context.Context) (any, error) {
+				permission, err := ec.unmarshalNString2string(ctx, "operation:member")
+				if err != nil {
+					var zeroVal *model.TimelineEventConnection
+					return zeroVal, err
+				}
+				if ec.Directives.HasPermission == nil {
+					var zeroVal *model.TimelineEventConnection
+					return zeroVal, errors.New("directive hasPermission is not implemented")
+				}
+				return ec.Directives.HasPermission(ctx, nil, directive0, permission)
+			}
+
+			next = directive1
+			return next
+		},
+		ec.marshalNTimelineEventConnection2ᚖgithubᚗcomᚋvibeᚑc2ᚋvibeᚑc2ᚑcoreᚋcoreᚋpkgᚋgraphqlᚋmodelᚐTimelineEventConnection,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_Query_timelineEventsByDay(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Query",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "edges":
+				return ec.fieldContext_TimelineEventConnection_edges(ctx, field)
+			case "pageInfo":
+				return ec.fieldContext_TimelineEventConnection_pageInfo(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type TimelineEventConnection", field.Name)
+		},
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			err = ec.Recover(ctx, r)
+			ec.Error(ctx, err)
+		}
+	}()
+	ctx = graphql.WithFieldContext(ctx, fc)
+	if fc.Args, err = ec.field_Query_timelineEventsByDay_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
+		ec.Error(ctx, err)
+		return fc, err
+	}
+	return fc, nil
+}
+
 func (ec *executionContext) _Query_wikiDocument(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
@@ -14586,6 +15106,85 @@ func (ec *executionContext) fieldContext_Subscription_sessionChanged(ctx context
 	return fc, nil
 }
 
+func (ec *executionContext) _Subscription_timelineEventAdded(ctx context.Context, field graphql.CollectedField) (ret func(ctx context.Context) graphql.Marshaler) {
+	return graphql.ResolveFieldStream(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Subscription_timelineEventAdded,
+		func(ctx context.Context) (any, error) {
+			fc := graphql.GetFieldContext(ctx)
+			return ec.Resolvers.Subscription().TimelineEventAdded(ctx, fc.Args["operationId"].(string))
+		},
+		func(ctx context.Context, next graphql.Resolver) graphql.Resolver {
+			directive0 := next
+
+			directive1 := func(ctx context.Context) (any, error) {
+				permission, err := ec.unmarshalNString2string(ctx, "operation:member")
+				if err != nil {
+					var zeroVal *models.OperationEvent
+					return zeroVal, err
+				}
+				if ec.Directives.HasPermission == nil {
+					var zeroVal *models.OperationEvent
+					return zeroVal, errors.New("directive hasPermission is not implemented")
+				}
+				return ec.Directives.HasPermission(ctx, nil, directive0, permission)
+			}
+
+			next = directive1
+			return next
+		},
+		ec.marshalNTimelineEvent2ᚖgithubᚗcomᚋvibeᚑc2ᚋvibeᚑc2ᚑcoreᚋcoreᚋpkgᚋmodelsᚐOperationEvent,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_Subscription_timelineEventAdded(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Subscription",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "id":
+				return ec.fieldContext_TimelineEvent_id(ctx, field)
+			case "operationId":
+				return ec.fieldContext_TimelineEvent_operationId(ctx, field)
+			case "topic":
+				return ec.fieldContext_TimelineEvent_topic(ctx, field)
+			case "subjectKind":
+				return ec.fieldContext_TimelineEvent_subjectKind(ctx, field)
+			case "subjectId":
+				return ec.fieldContext_TimelineEvent_subjectId(ctx, field)
+			case "subjectName":
+				return ec.fieldContext_TimelineEvent_subjectName(ctx, field)
+			case "actor":
+				return ec.fieldContext_TimelineEvent_actor(ctx, field)
+			case "occurredAt":
+				return ec.fieldContext_TimelineEvent_occurredAt(ctx, field)
+			case "metadata":
+				return ec.fieldContext_TimelineEvent_metadata(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type TimelineEvent", field.Name)
+		},
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			err = ec.Recover(ctx, r)
+			ec.Error(ctx, err)
+		}
+	}()
+	ctx = graphql.WithFieldContext(ctx, fc)
+	if fc.Args, err = ec.field_Subscription_timelineEventAdded_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
+		ec.Error(ctx, err)
+		return fc, err
+	}
+	return fc, nil
+}
+
 func (ec *executionContext) _Subscription_wikiDocumentChanged(ctx context.Context, field graphql.CollectedField) (ret func(ctx context.Context) graphql.Marshaler) {
 	return graphql.ResolveFieldStream(
 		ctx,
@@ -14726,6 +15325,491 @@ func (ec *executionContext) fieldContext_Subscription_wikiDocumentPresenceChange
 	if fc.Args, err = ec.field_Subscription_wikiDocumentPresenceChanged_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
 		ec.Error(ctx, err)
 		return fc, err
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _TimelineBucket_bucketStart(ctx context.Context, field graphql.CollectedField, obj *model.TimelineBucket) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_TimelineBucket_bucketStart,
+		func(ctx context.Context) (any, error) {
+			return obj.BucketStart, nil
+		},
+		nil,
+		ec.marshalNString2string,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_TimelineBucket_bucketStart(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "TimelineBucket",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _TimelineBucket_count(ctx context.Context, field graphql.CollectedField, obj *model.TimelineBucket) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_TimelineBucket_count,
+		func(ctx context.Context) (any, error) {
+			return obj.Count, nil
+		},
+		nil,
+		ec.marshalNInt2int,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_TimelineBucket_count(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "TimelineBucket",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Int does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _TimelineEvent_id(ctx context.Context, field graphql.CollectedField, obj *models.OperationEvent) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_TimelineEvent_id,
+		func(ctx context.Context) (any, error) {
+			return ec.Resolvers.TimelineEvent().ID(ctx, obj)
+		},
+		nil,
+		ec.marshalNID2string,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_TimelineEvent_id(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "TimelineEvent",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type ID does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _TimelineEvent_operationId(ctx context.Context, field graphql.CollectedField, obj *models.OperationEvent) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_TimelineEvent_operationId,
+		func(ctx context.Context) (any, error) {
+			return ec.Resolvers.TimelineEvent().OperationID(ctx, obj)
+		},
+		nil,
+		ec.marshalNID2string,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_TimelineEvent_operationId(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "TimelineEvent",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type ID does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _TimelineEvent_topic(ctx context.Context, field graphql.CollectedField, obj *models.OperationEvent) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_TimelineEvent_topic,
+		func(ctx context.Context) (any, error) {
+			return obj.Topic, nil
+		},
+		nil,
+		ec.marshalNString2string,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_TimelineEvent_topic(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "TimelineEvent",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _TimelineEvent_subjectKind(ctx context.Context, field graphql.CollectedField, obj *models.OperationEvent) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_TimelineEvent_subjectKind,
+		func(ctx context.Context) (any, error) {
+			return ec.Resolvers.TimelineEvent().SubjectKind(ctx, obj)
+		},
+		nil,
+		ec.marshalNString2string,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_TimelineEvent_subjectKind(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "TimelineEvent",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _TimelineEvent_subjectId(ctx context.Context, field graphql.CollectedField, obj *models.OperationEvent) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_TimelineEvent_subjectId,
+		func(ctx context.Context) (any, error) {
+			return ec.Resolvers.TimelineEvent().SubjectID(ctx, obj)
+		},
+		nil,
+		ec.marshalNID2string,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_TimelineEvent_subjectId(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "TimelineEvent",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type ID does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _TimelineEvent_subjectName(ctx context.Context, field graphql.CollectedField, obj *models.OperationEvent) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_TimelineEvent_subjectName,
+		func(ctx context.Context) (any, error) {
+			return obj.SubjectName, nil
+		},
+		nil,
+		ec.marshalNString2string,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_TimelineEvent_subjectName(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "TimelineEvent",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _TimelineEvent_actor(ctx context.Context, field graphql.CollectedField, obj *models.OperationEvent) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_TimelineEvent_actor,
+		func(ctx context.Context) (any, error) {
+			return ec.Resolvers.TimelineEvent().Actor(ctx, obj)
+		},
+		nil,
+		ec.marshalOUser2ᚖgithubᚗcomᚋvibeᚑc2ᚋvibeᚑc2ᚑcoreᚋcoreᚋpkgᚋmodelsᚐUser,
+		true,
+		false,
+	)
+}
+
+func (ec *executionContext) fieldContext_TimelineEvent_actor(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "TimelineEvent",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "id":
+				return ec.fieldContext_User_id(ctx, field)
+			case "username":
+				return ec.fieldContext_User_username(ctx, field)
+			case "roles":
+				return ec.fieldContext_User_roles(ctx, field)
+			case "active":
+				return ec.fieldContext_User_active(ctx, field)
+			case "createdAt":
+				return ec.fieldContext_User_createdAt(ctx, field)
+			case "updatedAt":
+				return ec.fieldContext_User_updatedAt(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type User", field.Name)
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _TimelineEvent_occurredAt(ctx context.Context, field graphql.CollectedField, obj *models.OperationEvent) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_TimelineEvent_occurredAt,
+		func(ctx context.Context) (any, error) {
+			return ec.Resolvers.TimelineEvent().OccurredAt(ctx, obj)
+		},
+		nil,
+		ec.marshalNString2string,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_TimelineEvent_occurredAt(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "TimelineEvent",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _TimelineEvent_metadata(ctx context.Context, field graphql.CollectedField, obj *models.OperationEvent) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_TimelineEvent_metadata,
+		func(ctx context.Context) (any, error) {
+			return ec.Resolvers.TimelineEvent().Metadata(ctx, obj)
+		},
+		nil,
+		ec.marshalNString2string,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_TimelineEvent_metadata(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "TimelineEvent",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _TimelineEventConnection_edges(ctx context.Context, field graphql.CollectedField, obj *model.TimelineEventConnection) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_TimelineEventConnection_edges,
+		func(ctx context.Context) (any, error) {
+			return obj.Edges, nil
+		},
+		nil,
+		ec.marshalNTimelineEventEdge2ᚕᚖgithubᚗcomᚋvibeᚑc2ᚋvibeᚑc2ᚑcoreᚋcoreᚋpkgᚋgraphqlᚋmodelᚐTimelineEventEdgeᚄ,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_TimelineEventConnection_edges(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "TimelineEventConnection",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "node":
+				return ec.fieldContext_TimelineEventEdge_node(ctx, field)
+			case "cursor":
+				return ec.fieldContext_TimelineEventEdge_cursor(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type TimelineEventEdge", field.Name)
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _TimelineEventConnection_pageInfo(ctx context.Context, field graphql.CollectedField, obj *model.TimelineEventConnection) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_TimelineEventConnection_pageInfo,
+		func(ctx context.Context) (any, error) {
+			return obj.PageInfo, nil
+		},
+		nil,
+		ec.marshalNPageInfo2ᚖgithubᚗcomᚋvibeᚑc2ᚋvibeᚑc2ᚑcoreᚋcoreᚋpkgᚋpaginationᚐPageInfo,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_TimelineEventConnection_pageInfo(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "TimelineEventConnection",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "hasNextPage":
+				return ec.fieldContext_PageInfo_hasNextPage(ctx, field)
+			case "hasPreviousPage":
+				return ec.fieldContext_PageInfo_hasPreviousPage(ctx, field)
+			case "startCursor":
+				return ec.fieldContext_PageInfo_startCursor(ctx, field)
+			case "endCursor":
+				return ec.fieldContext_PageInfo_endCursor(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type PageInfo", field.Name)
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _TimelineEventEdge_node(ctx context.Context, field graphql.CollectedField, obj *model.TimelineEventEdge) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_TimelineEventEdge_node,
+		func(ctx context.Context) (any, error) {
+			return obj.Node, nil
+		},
+		nil,
+		ec.marshalNTimelineEvent2ᚖgithubᚗcomᚋvibeᚑc2ᚋvibeᚑc2ᚑcoreᚋcoreᚋpkgᚋmodelsᚐOperationEvent,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_TimelineEventEdge_node(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "TimelineEventEdge",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "id":
+				return ec.fieldContext_TimelineEvent_id(ctx, field)
+			case "operationId":
+				return ec.fieldContext_TimelineEvent_operationId(ctx, field)
+			case "topic":
+				return ec.fieldContext_TimelineEvent_topic(ctx, field)
+			case "subjectKind":
+				return ec.fieldContext_TimelineEvent_subjectKind(ctx, field)
+			case "subjectId":
+				return ec.fieldContext_TimelineEvent_subjectId(ctx, field)
+			case "subjectName":
+				return ec.fieldContext_TimelineEvent_subjectName(ctx, field)
+			case "actor":
+				return ec.fieldContext_TimelineEvent_actor(ctx, field)
+			case "occurredAt":
+				return ec.fieldContext_TimelineEvent_occurredAt(ctx, field)
+			case "metadata":
+				return ec.fieldContext_TimelineEvent_metadata(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type TimelineEvent", field.Name)
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _TimelineEventEdge_cursor(ctx context.Context, field graphql.CollectedField, obj *model.TimelineEventEdge) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_TimelineEventEdge_cursor,
+		func(ctx context.Context) (any, error) {
+			return obj.Cursor, nil
+		},
+		nil,
+		ec.marshalNString2string,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_TimelineEventEdge_cursor(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "TimelineEventEdge",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
 	}
 	return fc, nil
 }
@@ -22222,6 +23306,50 @@ func (ec *executionContext) _Query(ctx context.Context, sel ast.SelectionSet) gr
 			}
 
 			out.Concurrently(i, func(ctx context.Context) graphql.Marshaler { return rrm(innerCtx) })
+		case "timelineBuckets":
+			field := field
+
+			innerFunc := func(ctx context.Context, fs *graphql.FieldSet) (res graphql.Marshaler) {
+				defer func() {
+					if r := recover(); r != nil {
+						ec.Error(ctx, ec.Recover(ctx, r))
+					}
+				}()
+				res = ec._Query_timelineBuckets(ctx, field)
+				if res == graphql.Null {
+					atomic.AddUint32(&fs.Invalids, 1)
+				}
+				return res
+			}
+
+			rrm := func(ctx context.Context) graphql.Marshaler {
+				return ec.OperationContext.RootResolverMiddleware(ctx,
+					func(ctx context.Context) graphql.Marshaler { return innerFunc(ctx, out) })
+			}
+
+			out.Concurrently(i, func(ctx context.Context) graphql.Marshaler { return rrm(innerCtx) })
+		case "timelineEventsByDay":
+			field := field
+
+			innerFunc := func(ctx context.Context, fs *graphql.FieldSet) (res graphql.Marshaler) {
+				defer func() {
+					if r := recover(); r != nil {
+						ec.Error(ctx, ec.Recover(ctx, r))
+					}
+				}()
+				res = ec._Query_timelineEventsByDay(ctx, field)
+				if res == graphql.Null {
+					atomic.AddUint32(&fs.Invalids, 1)
+				}
+				return res
+			}
+
+			rrm := func(ctx context.Context) graphql.Marshaler {
+				return ec.OperationContext.RootResolverMiddleware(ctx,
+					func(ctx context.Context) graphql.Marshaler { return innerFunc(ctx, out) })
+			}
+
+			out.Concurrently(i, func(ctx context.Context) graphql.Marshaler { return rrm(innerCtx) })
 		case "wikiDocument":
 			field := field
 
@@ -23532,6 +24660,8 @@ func (ec *executionContext) _Subscription(ctx context.Context, sel ast.Selection
 		return ec._Subscription_mySessionChanged(ctx, fields[0])
 	case "sessionChanged":
 		return ec._Subscription_sessionChanged(ctx, fields[0])
+	case "timelineEventAdded":
+		return ec._Subscription_timelineEventAdded(ctx, fields[0])
 	case "wikiDocumentChanged":
 		return ec._Subscription_wikiDocumentChanged(ctx, fields[0])
 	case "wikiDocumentPresenceChanged":
@@ -23539,6 +24669,431 @@ func (ec *executionContext) _Subscription(ctx context.Context, sel ast.Selection
 	default:
 		panic("unknown field " + strconv.Quote(fields[0].Name))
 	}
+}
+
+var timelineBucketImplementors = []string{"TimelineBucket"}
+
+func (ec *executionContext) _TimelineBucket(ctx context.Context, sel ast.SelectionSet, obj *model.TimelineBucket) graphql.Marshaler {
+	fields := graphql.CollectFields(ec.OperationContext, sel, timelineBucketImplementors)
+
+	out := graphql.NewFieldSet(fields)
+	deferred := make(map[string]*graphql.FieldSet)
+	for i, field := range fields {
+		switch field.Name {
+		case "__typename":
+			out.Values[i] = graphql.MarshalString("TimelineBucket")
+		case "bucketStart":
+			out.Values[i] = ec._TimelineBucket_bucketStart(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "count":
+			out.Values[i] = ec._TimelineBucket_count(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		default:
+			panic("unknown field " + strconv.Quote(field.Name))
+		}
+	}
+	out.Dispatch(ctx)
+	if out.Invalids > 0 {
+		return graphql.Null
+	}
+
+	atomic.AddInt32(&ec.Deferred, int32(len(deferred)))
+
+	for label, dfs := range deferred {
+		ec.ProcessDeferredGroup(graphql.DeferredGroup{
+			Label:    label,
+			Path:     graphql.GetPath(ctx),
+			FieldSet: dfs,
+			Context:  ctx,
+		})
+	}
+
+	return out
+}
+
+var timelineEventImplementors = []string{"TimelineEvent"}
+
+func (ec *executionContext) _TimelineEvent(ctx context.Context, sel ast.SelectionSet, obj *models.OperationEvent) graphql.Marshaler {
+	fields := graphql.CollectFields(ec.OperationContext, sel, timelineEventImplementors)
+
+	out := graphql.NewFieldSet(fields)
+	deferred := make(map[string]*graphql.FieldSet)
+	for i, field := range fields {
+		switch field.Name {
+		case "__typename":
+			out.Values[i] = graphql.MarshalString("TimelineEvent")
+		case "id":
+			field := field
+
+			innerFunc := func(ctx context.Context, fs *graphql.FieldSet) (res graphql.Marshaler) {
+				defer func() {
+					if r := recover(); r != nil {
+						ec.Error(ctx, ec.Recover(ctx, r))
+					}
+				}()
+				res = ec._TimelineEvent_id(ctx, field, obj)
+				if res == graphql.Null {
+					atomic.AddUint32(&fs.Invalids, 1)
+				}
+				return res
+			}
+
+			if field.Deferrable != nil {
+				dfs, ok := deferred[field.Deferrable.Label]
+				di := 0
+				if ok {
+					dfs.AddField(field)
+					di = len(dfs.Values) - 1
+				} else {
+					dfs = graphql.NewFieldSet([]graphql.CollectedField{field})
+					deferred[field.Deferrable.Label] = dfs
+				}
+				dfs.Concurrently(di, func(ctx context.Context) graphql.Marshaler {
+					return innerFunc(ctx, dfs)
+				})
+
+				// don't run the out.Concurrently() call below
+				out.Values[i] = graphql.Null
+				continue
+			}
+
+			out.Concurrently(i, func(ctx context.Context) graphql.Marshaler { return innerFunc(ctx, out) })
+		case "operationId":
+			field := field
+
+			innerFunc := func(ctx context.Context, fs *graphql.FieldSet) (res graphql.Marshaler) {
+				defer func() {
+					if r := recover(); r != nil {
+						ec.Error(ctx, ec.Recover(ctx, r))
+					}
+				}()
+				res = ec._TimelineEvent_operationId(ctx, field, obj)
+				if res == graphql.Null {
+					atomic.AddUint32(&fs.Invalids, 1)
+				}
+				return res
+			}
+
+			if field.Deferrable != nil {
+				dfs, ok := deferred[field.Deferrable.Label]
+				di := 0
+				if ok {
+					dfs.AddField(field)
+					di = len(dfs.Values) - 1
+				} else {
+					dfs = graphql.NewFieldSet([]graphql.CollectedField{field})
+					deferred[field.Deferrable.Label] = dfs
+				}
+				dfs.Concurrently(di, func(ctx context.Context) graphql.Marshaler {
+					return innerFunc(ctx, dfs)
+				})
+
+				// don't run the out.Concurrently() call below
+				out.Values[i] = graphql.Null
+				continue
+			}
+
+			out.Concurrently(i, func(ctx context.Context) graphql.Marshaler { return innerFunc(ctx, out) })
+		case "topic":
+			out.Values[i] = ec._TimelineEvent_topic(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				atomic.AddUint32(&out.Invalids, 1)
+			}
+		case "subjectKind":
+			field := field
+
+			innerFunc := func(ctx context.Context, fs *graphql.FieldSet) (res graphql.Marshaler) {
+				defer func() {
+					if r := recover(); r != nil {
+						ec.Error(ctx, ec.Recover(ctx, r))
+					}
+				}()
+				res = ec._TimelineEvent_subjectKind(ctx, field, obj)
+				if res == graphql.Null {
+					atomic.AddUint32(&fs.Invalids, 1)
+				}
+				return res
+			}
+
+			if field.Deferrable != nil {
+				dfs, ok := deferred[field.Deferrable.Label]
+				di := 0
+				if ok {
+					dfs.AddField(field)
+					di = len(dfs.Values) - 1
+				} else {
+					dfs = graphql.NewFieldSet([]graphql.CollectedField{field})
+					deferred[field.Deferrable.Label] = dfs
+				}
+				dfs.Concurrently(di, func(ctx context.Context) graphql.Marshaler {
+					return innerFunc(ctx, dfs)
+				})
+
+				// don't run the out.Concurrently() call below
+				out.Values[i] = graphql.Null
+				continue
+			}
+
+			out.Concurrently(i, func(ctx context.Context) graphql.Marshaler { return innerFunc(ctx, out) })
+		case "subjectId":
+			field := field
+
+			innerFunc := func(ctx context.Context, fs *graphql.FieldSet) (res graphql.Marshaler) {
+				defer func() {
+					if r := recover(); r != nil {
+						ec.Error(ctx, ec.Recover(ctx, r))
+					}
+				}()
+				res = ec._TimelineEvent_subjectId(ctx, field, obj)
+				if res == graphql.Null {
+					atomic.AddUint32(&fs.Invalids, 1)
+				}
+				return res
+			}
+
+			if field.Deferrable != nil {
+				dfs, ok := deferred[field.Deferrable.Label]
+				di := 0
+				if ok {
+					dfs.AddField(field)
+					di = len(dfs.Values) - 1
+				} else {
+					dfs = graphql.NewFieldSet([]graphql.CollectedField{field})
+					deferred[field.Deferrable.Label] = dfs
+				}
+				dfs.Concurrently(di, func(ctx context.Context) graphql.Marshaler {
+					return innerFunc(ctx, dfs)
+				})
+
+				// don't run the out.Concurrently() call below
+				out.Values[i] = graphql.Null
+				continue
+			}
+
+			out.Concurrently(i, func(ctx context.Context) graphql.Marshaler { return innerFunc(ctx, out) })
+		case "subjectName":
+			out.Values[i] = ec._TimelineEvent_subjectName(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				atomic.AddUint32(&out.Invalids, 1)
+			}
+		case "actor":
+			field := field
+
+			innerFunc := func(ctx context.Context, _ *graphql.FieldSet) (res graphql.Marshaler) {
+				defer func() {
+					if r := recover(); r != nil {
+						ec.Error(ctx, ec.Recover(ctx, r))
+					}
+				}()
+				res = ec._TimelineEvent_actor(ctx, field, obj)
+				return res
+			}
+
+			if field.Deferrable != nil {
+				dfs, ok := deferred[field.Deferrable.Label]
+				di := 0
+				if ok {
+					dfs.AddField(field)
+					di = len(dfs.Values) - 1
+				} else {
+					dfs = graphql.NewFieldSet([]graphql.CollectedField{field})
+					deferred[field.Deferrable.Label] = dfs
+				}
+				dfs.Concurrently(di, func(ctx context.Context) graphql.Marshaler {
+					return innerFunc(ctx, dfs)
+				})
+
+				// don't run the out.Concurrently() call below
+				out.Values[i] = graphql.Null
+				continue
+			}
+
+			out.Concurrently(i, func(ctx context.Context) graphql.Marshaler { return innerFunc(ctx, out) })
+		case "occurredAt":
+			field := field
+
+			innerFunc := func(ctx context.Context, fs *graphql.FieldSet) (res graphql.Marshaler) {
+				defer func() {
+					if r := recover(); r != nil {
+						ec.Error(ctx, ec.Recover(ctx, r))
+					}
+				}()
+				res = ec._TimelineEvent_occurredAt(ctx, field, obj)
+				if res == graphql.Null {
+					atomic.AddUint32(&fs.Invalids, 1)
+				}
+				return res
+			}
+
+			if field.Deferrable != nil {
+				dfs, ok := deferred[field.Deferrable.Label]
+				di := 0
+				if ok {
+					dfs.AddField(field)
+					di = len(dfs.Values) - 1
+				} else {
+					dfs = graphql.NewFieldSet([]graphql.CollectedField{field})
+					deferred[field.Deferrable.Label] = dfs
+				}
+				dfs.Concurrently(di, func(ctx context.Context) graphql.Marshaler {
+					return innerFunc(ctx, dfs)
+				})
+
+				// don't run the out.Concurrently() call below
+				out.Values[i] = graphql.Null
+				continue
+			}
+
+			out.Concurrently(i, func(ctx context.Context) graphql.Marshaler { return innerFunc(ctx, out) })
+		case "metadata":
+			field := field
+
+			innerFunc := func(ctx context.Context, fs *graphql.FieldSet) (res graphql.Marshaler) {
+				defer func() {
+					if r := recover(); r != nil {
+						ec.Error(ctx, ec.Recover(ctx, r))
+					}
+				}()
+				res = ec._TimelineEvent_metadata(ctx, field, obj)
+				if res == graphql.Null {
+					atomic.AddUint32(&fs.Invalids, 1)
+				}
+				return res
+			}
+
+			if field.Deferrable != nil {
+				dfs, ok := deferred[field.Deferrable.Label]
+				di := 0
+				if ok {
+					dfs.AddField(field)
+					di = len(dfs.Values) - 1
+				} else {
+					dfs = graphql.NewFieldSet([]graphql.CollectedField{field})
+					deferred[field.Deferrable.Label] = dfs
+				}
+				dfs.Concurrently(di, func(ctx context.Context) graphql.Marshaler {
+					return innerFunc(ctx, dfs)
+				})
+
+				// don't run the out.Concurrently() call below
+				out.Values[i] = graphql.Null
+				continue
+			}
+
+			out.Concurrently(i, func(ctx context.Context) graphql.Marshaler { return innerFunc(ctx, out) })
+		default:
+			panic("unknown field " + strconv.Quote(field.Name))
+		}
+	}
+	out.Dispatch(ctx)
+	if out.Invalids > 0 {
+		return graphql.Null
+	}
+
+	atomic.AddInt32(&ec.Deferred, int32(len(deferred)))
+
+	for label, dfs := range deferred {
+		ec.ProcessDeferredGroup(graphql.DeferredGroup{
+			Label:    label,
+			Path:     graphql.GetPath(ctx),
+			FieldSet: dfs,
+			Context:  ctx,
+		})
+	}
+
+	return out
+}
+
+var timelineEventConnectionImplementors = []string{"TimelineEventConnection"}
+
+func (ec *executionContext) _TimelineEventConnection(ctx context.Context, sel ast.SelectionSet, obj *model.TimelineEventConnection) graphql.Marshaler {
+	fields := graphql.CollectFields(ec.OperationContext, sel, timelineEventConnectionImplementors)
+
+	out := graphql.NewFieldSet(fields)
+	deferred := make(map[string]*graphql.FieldSet)
+	for i, field := range fields {
+		switch field.Name {
+		case "__typename":
+			out.Values[i] = graphql.MarshalString("TimelineEventConnection")
+		case "edges":
+			out.Values[i] = ec._TimelineEventConnection_edges(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "pageInfo":
+			out.Values[i] = ec._TimelineEventConnection_pageInfo(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		default:
+			panic("unknown field " + strconv.Quote(field.Name))
+		}
+	}
+	out.Dispatch(ctx)
+	if out.Invalids > 0 {
+		return graphql.Null
+	}
+
+	atomic.AddInt32(&ec.Deferred, int32(len(deferred)))
+
+	for label, dfs := range deferred {
+		ec.ProcessDeferredGroup(graphql.DeferredGroup{
+			Label:    label,
+			Path:     graphql.GetPath(ctx),
+			FieldSet: dfs,
+			Context:  ctx,
+		})
+	}
+
+	return out
+}
+
+var timelineEventEdgeImplementors = []string{"TimelineEventEdge"}
+
+func (ec *executionContext) _TimelineEventEdge(ctx context.Context, sel ast.SelectionSet, obj *model.TimelineEventEdge) graphql.Marshaler {
+	fields := graphql.CollectFields(ec.OperationContext, sel, timelineEventEdgeImplementors)
+
+	out := graphql.NewFieldSet(fields)
+	deferred := make(map[string]*graphql.FieldSet)
+	for i, field := range fields {
+		switch field.Name {
+		case "__typename":
+			out.Values[i] = graphql.MarshalString("TimelineEventEdge")
+		case "node":
+			out.Values[i] = ec._TimelineEventEdge_node(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "cursor":
+			out.Values[i] = ec._TimelineEventEdge_cursor(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		default:
+			panic("unknown field " + strconv.Quote(field.Name))
+		}
+	}
+	out.Dispatch(ctx)
+	if out.Invalids > 0 {
+		return graphql.Null
+	}
+
+	atomic.AddInt32(&ec.Deferred, int32(len(deferred)))
+
+	for label, dfs := range deferred {
+		ec.ProcessDeferredGroup(graphql.DeferredGroup{
+			Label:    label,
+			Path:     graphql.GetPath(ctx),
+			FieldSet: dfs,
+			Context:  ctx,
+		})
+	}
+
+	return out
 }
 
 var userImplementors = []string{"User"}
@@ -26505,6 +28060,86 @@ func (ec *executionContext) marshalNString2ᚕstringᚄ(ctx context.Context, sel
 	return ret
 }
 
+func (ec *executionContext) marshalNTimelineBucket2ᚕᚖgithubᚗcomᚋvibeᚑc2ᚋvibeᚑc2ᚑcoreᚋcoreᚋpkgᚋgraphqlᚋmodelᚐTimelineBucketᚄ(ctx context.Context, sel ast.SelectionSet, v []*model.TimelineBucket) graphql.Marshaler {
+	ret := graphql.MarshalSliceConcurrently(ctx, len(v), 0, false, func(ctx context.Context, i int) graphql.Marshaler {
+		fc := graphql.GetFieldContext(ctx)
+		fc.Result = &v[i]
+		return ec.marshalNTimelineBucket2ᚖgithubᚗcomᚋvibeᚑc2ᚋvibeᚑc2ᚑcoreᚋcoreᚋpkgᚋgraphqlᚋmodelᚐTimelineBucket(ctx, sel, v[i])
+	})
+
+	for _, e := range ret {
+		if e == graphql.Null {
+			return graphql.Null
+		}
+	}
+
+	return ret
+}
+
+func (ec *executionContext) marshalNTimelineBucket2ᚖgithubᚗcomᚋvibeᚑc2ᚋvibeᚑc2ᚑcoreᚋcoreᚋpkgᚋgraphqlᚋmodelᚐTimelineBucket(ctx context.Context, sel ast.SelectionSet, v *model.TimelineBucket) graphql.Marshaler {
+	if v == nil {
+		if !graphql.HasFieldError(ctx, graphql.GetFieldContext(ctx)) {
+			graphql.AddErrorf(ctx, "the requested element is null which the schema does not allow")
+		}
+		return graphql.Null
+	}
+	return ec._TimelineBucket(ctx, sel, v)
+}
+
+func (ec *executionContext) marshalNTimelineEvent2githubᚗcomᚋvibeᚑc2ᚋvibeᚑc2ᚑcoreᚋcoreᚋpkgᚋmodelsᚐOperationEvent(ctx context.Context, sel ast.SelectionSet, v models.OperationEvent) graphql.Marshaler {
+	return ec._TimelineEvent(ctx, sel, &v)
+}
+
+func (ec *executionContext) marshalNTimelineEvent2ᚖgithubᚗcomᚋvibeᚑc2ᚋvibeᚑc2ᚑcoreᚋcoreᚋpkgᚋmodelsᚐOperationEvent(ctx context.Context, sel ast.SelectionSet, v *models.OperationEvent) graphql.Marshaler {
+	if v == nil {
+		if !graphql.HasFieldError(ctx, graphql.GetFieldContext(ctx)) {
+			graphql.AddErrorf(ctx, "the requested element is null which the schema does not allow")
+		}
+		return graphql.Null
+	}
+	return ec._TimelineEvent(ctx, sel, v)
+}
+
+func (ec *executionContext) marshalNTimelineEventConnection2githubᚗcomᚋvibeᚑc2ᚋvibeᚑc2ᚑcoreᚋcoreᚋpkgᚋgraphqlᚋmodelᚐTimelineEventConnection(ctx context.Context, sel ast.SelectionSet, v model.TimelineEventConnection) graphql.Marshaler {
+	return ec._TimelineEventConnection(ctx, sel, &v)
+}
+
+func (ec *executionContext) marshalNTimelineEventConnection2ᚖgithubᚗcomᚋvibeᚑc2ᚋvibeᚑc2ᚑcoreᚋcoreᚋpkgᚋgraphqlᚋmodelᚐTimelineEventConnection(ctx context.Context, sel ast.SelectionSet, v *model.TimelineEventConnection) graphql.Marshaler {
+	if v == nil {
+		if !graphql.HasFieldError(ctx, graphql.GetFieldContext(ctx)) {
+			graphql.AddErrorf(ctx, "the requested element is null which the schema does not allow")
+		}
+		return graphql.Null
+	}
+	return ec._TimelineEventConnection(ctx, sel, v)
+}
+
+func (ec *executionContext) marshalNTimelineEventEdge2ᚕᚖgithubᚗcomᚋvibeᚑc2ᚋvibeᚑc2ᚑcoreᚋcoreᚋpkgᚋgraphqlᚋmodelᚐTimelineEventEdgeᚄ(ctx context.Context, sel ast.SelectionSet, v []*model.TimelineEventEdge) graphql.Marshaler {
+	ret := graphql.MarshalSliceConcurrently(ctx, len(v), 0, false, func(ctx context.Context, i int) graphql.Marshaler {
+		fc := graphql.GetFieldContext(ctx)
+		fc.Result = &v[i]
+		return ec.marshalNTimelineEventEdge2ᚖgithubᚗcomᚋvibeᚑc2ᚋvibeᚑc2ᚑcoreᚋcoreᚋpkgᚋgraphqlᚋmodelᚐTimelineEventEdge(ctx, sel, v[i])
+	})
+
+	for _, e := range ret {
+		if e == graphql.Null {
+			return graphql.Null
+		}
+	}
+
+	return ret
+}
+
+func (ec *executionContext) marshalNTimelineEventEdge2ᚖgithubᚗcomᚋvibeᚑc2ᚋvibeᚑc2ᚑcoreᚋcoreᚋpkgᚋgraphqlᚋmodelᚐTimelineEventEdge(ctx context.Context, sel ast.SelectionSet, v *model.TimelineEventEdge) graphql.Marshaler {
+	if v == nil {
+		if !graphql.HasFieldError(ctx, graphql.GetFieldContext(ctx)) {
+			graphql.AddErrorf(ctx, "the requested element is null which the schema does not allow")
+		}
+		return graphql.Null
+	}
+	return ec._TimelineEventEdge(ctx, sel, v)
+}
+
 func (ec *executionContext) unmarshalNUpdateCredentialInput2githubᚗcomᚋvibeᚑc2ᚋvibeᚑc2ᚑcoreᚋcoreᚋpkgᚋgraphqlᚋmodelᚐUpdateCredentialInput(ctx context.Context, v any) (model.UpdateCredentialInput, error) {
 	res, err := ec.unmarshalInputUpdateCredentialInput(ctx, v)
 	return res, graphql.ErrorOnPath(ctx, err)
@@ -27409,6 +29044,22 @@ func (ec *executionContext) marshalOString2ᚖstring(ctx context.Context, sel as
 	_ = ctx
 	res := graphql.MarshalString(*v)
 	return res
+}
+
+func (ec *executionContext) unmarshalOTimelineGranularity2ᚖgithubᚗcomᚋvibeᚑc2ᚋvibeᚑc2ᚑcoreᚋcoreᚋpkgᚋrepositoryᚐTimelineGranularity(ctx context.Context, v any) (*repository.TimelineGranularity, error) {
+	if v == nil {
+		return nil, nil
+	}
+	var res = new(repository.TimelineGranularity)
+	err := res.UnmarshalGQL(v)
+	return res, graphql.ErrorOnPath(ctx, err)
+}
+
+func (ec *executionContext) marshalOTimelineGranularity2ᚖgithubᚗcomᚋvibeᚑc2ᚋvibeᚑc2ᚑcoreᚋcoreᚋpkgᚋrepositoryᚐTimelineGranularity(ctx context.Context, sel ast.SelectionSet, v *repository.TimelineGranularity) graphql.Marshaler {
+	if v == nil {
+		return graphql.Null
+	}
+	return v
 }
 
 func (ec *executionContext) marshalOUser2ᚖgithubᚗcomᚋvibeᚑc2ᚋvibeᚑc2ᚑcoreᚋcoreᚋpkgᚋmodelsᚐUser(ctx context.Context, sel ast.SelectionSet, v *models.User) graphql.Marshaler {

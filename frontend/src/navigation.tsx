@@ -1,5 +1,6 @@
 import {
   BookOpenIcon,
+  RouteIcon,
   LayoutDashboardIcon,
   GemIcon,
   SwordsIcon,
@@ -14,8 +15,8 @@ export interface NavigationItem {
   icon?: React.ComponentType<{ className?: string }>;
 }
 
-// Navigation entries that require an operation to be scoped. The sidebar
-// hides this block until the user picks an operation via the switcher.
+// Operation-scoped entries rendered ABOVE the global block. Hidden until
+// the user picks an operation via the switcher.
 export const navigationItems: NavigationItem[] = [
   {
     title: "Dashboard",
@@ -40,6 +41,17 @@ export const navigationGlobalItems: NavigationItem[] = [
     url: "/findings",
     permission: null,
     icon: GemIcon,
+  },
+];
+
+// Operation-scoped entries rendered BELOW the global block. Hidden until
+// the user picks an operation via the switcher.
+export const navigationOperationItems: NavigationItem[] = [
+  {
+    title: "Timeline",
+    url: "/timeline",
+    permission: null,
+    icon: RouteIcon,
   },
 ];
 

@@ -6,6 +6,7 @@ import { OperationSwitcher } from "@/components/layout/operation-switcher"
 import {
   navigationItems,
   navigationGlobalItems,
+  navigationOperationItems,
   navigationAdminItems,
 } from "@/navigation"
 import {
@@ -50,7 +51,11 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
         <NavMain
           items={
             scopedOperation
-              ? [...navigationItems, ...navigationGlobalItems]
+              ? [
+                  ...navigationItems,
+                  ...navigationGlobalItems,
+                  ...navigationOperationItems,
+                ]
               : navigationGlobalItems
           }
         />

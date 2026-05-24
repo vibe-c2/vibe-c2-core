@@ -271,3 +271,35 @@ models:
         resolver: true         # time.Time -> RFC3339 string
       updatedAt:
         resolver: true         # time.Time -> RFC3339 string
+
+  # --- Timeline ---
+
+  # TimelineGranularity is mapped to the repository's TimelineGranularity
+  # so the resolver can pass the query argument straight through to Mongo
+  # without re-encoding it as a string. The Go side has IsValid().
+  TimelineGranularity:
+    model:
+      - github.com/vibe-c2/vibe-c2-core/core/pkg/repository.TimelineGranularity
+
+  # Map the GraphQL "TimelineEvent" type to our persisted OperationEvent
+  # model. Most fields need resolvers because UUIDs need to be stringified,
+  # the actor is fetched from the user repo, and metadata is JSON-encoded
+  # on demand (no dedicated JSON scalar yet).
+  TimelineEvent:
+    model:
+      - github.com/vibe-c2/vibe-c2-core/core/pkg/models.OperationEvent
+    fields:
+      id:
+        resolver: true         # EventID (uuid.UUID) -> ID (string)
+      operationId:
+        resolver: true         # OperationID (uuid.UUID) -> ID (string)
+      subjectId:
+        resolver: true         # SubjectID (uuid.UUID) -> ID (string)
+      subjectKind:
+        resolver: true         # SubjectKind (typed) -> string
+      actor:
+        resolver: true         # ActorID (*uuid.UUID) -> User (fetched from DB)
+      occurredAt:
+        resolver: true         # time.Time -> RFC3339 string
+      metadata:
+        resolver: true         # map[string]any -> JSON-encoded string

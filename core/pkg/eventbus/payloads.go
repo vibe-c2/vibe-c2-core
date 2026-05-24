@@ -213,3 +213,18 @@ func NewCredentialCommentUpdatedEvent(actor Actor, p CredentialEventPayload) Eve
 func NewCredentialCommentRemovedEvent(actor Actor, p CredentialEventPayload) Event {
 	return NewEvent(TopicCredentialCommentRemoved, actor, p)
 }
+
+// --- Timeline event payload ---
+
+// OperationEventLoggedPayload is the payload for TopicOperationEventLogged.
+// It carries only the primitives needed for routing — subscribers refetch
+// the full OperationEvent from the operation_event repository so the
+// eventbus stays decoupled from the models package.
+type OperationEventLoggedPayload struct {
+	EventID     string
+	OperationID string
+}
+
+func NewOperationEventLoggedEvent(actor Actor, p OperationEventLoggedPayload) Event {
+	return NewEvent(TopicOperationEventLogged, actor, p)
+}
