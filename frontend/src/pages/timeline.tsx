@@ -3,8 +3,11 @@ import { Navigate, useSearchParams } from "react-router"
 import { RouteIcon } from "lucide-react"
 import { useScopedOperation } from "@/hooks/use-scoped-operation"
 import { usePageMetadata } from "@/hooks/use-page-metadata"
-import { useOperation } from "@/graphql/hooks/operations"
-import { useTimelineBuckets } from "@/graphql/hooks/timeline"
+import {
+  useMyOperationRole,
+  useOperation,
+} from "@/graphql/hooks/operations"
+import { useTimelineBucketsWindowed } from "@/graphql/hooks/timeline"
 import type {
   TimelineEventFieldsFragment,
   TimelineGranularity,
@@ -15,6 +18,7 @@ import { TimelineDayPanel } from "@/components/timeline/timeline-day-panel"
 import { dayjs } from "@/components/timeline/dayjs-setup"
 import { truncateToGranularity } from "@/components/timeline/piecewise-axis"
 import { EventDetailsDialog } from "@/components/timeline/event-details-dialog"
+import { CustomTimelineEventDialog } from "@/components/timeline/custom-timeline-event-dialog"
 import type { ActorChip } from "@/components/timeline/timeline-filters"
 
 // Resolve the viewer's IANA timezone once per mount. Browsers without
@@ -48,7 +52,11 @@ const VALID_GRANULARITIES: ReadonlySet<TimelineGranularity> = new Set([
   "WEEK",
   "MONTH",
 ])
-const VALID_TYPES: ReadonlySet<string> = new Set(["credential", "wiki_document"])
+const VALID_TYPES: ReadonlySet<string> = new Set([
+  "credential",
+  "wiki_document",
+  "custom_event",
+])
 // Bare YYYY-MM-DD — matches the resolver's parseTime fallback.
 const DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/
 
@@ -267,32 +275,37 @@ function TimelinePageInner({ operationId }: { operationId: string }) {
     })
   }, [mutateParams])
 
-  // --- Bucket data for auto-selecting the most recent active day -------
+  // --- Windowed bucket data --------------------------------------------
   //
-  // We call useTimelineBuckets here in addition to inside TimelineCanvas;
-  // React Query dedupes against the canvas hook (same key) so there's no
-  // second network call. The page uses it solely to derive a sensible
-  // default selection when the URL doesn't pin one.
-  const { data: bucketsData, isLoading: bucketsLoading } = useTimelineBuckets({
+  // The page owns the bucket fetch and threads buckets + the load-older
+  // controls into TimelineCanvas. Previously each side fetched its own
+  // copy and relied on React Query dedup; centralising here lets the
+  // canvas trigger loadOlder against the same windows the page reads.
+  const {
+    buckets: loadedBuckets,
+    earliestLoaded,
+    hasMoreOlder,
+    isLoadingInitial: bucketsLoading,
+    isLoadingOlder,
+    loadOlder,
+  } = useTimelineBucketsWindowed({
     operationId,
     granularity,
     timezone,
     types: types.length > 0 ? types : null,
     actorIds: actorIds.length > 0 ? actorIds : null,
-    from,
-    to,
+    userFrom: from,
+    userTo: to,
+    pinnedDay: selectedDay,
   })
 
-  // Buckets come from the resolver in ascending order; the most recent
-  // active bucket is the last entry. Memoized so it can drive both the
-  // auto-select effect and the Clear button's visibility (clearing while
-  // already on the latest bucket would be a no-op since the effect would
-  // immediately re-select it).
+  // Latest active bucket drives the auto-select default. Buckets are sorted
+  // ascending across all loaded windows, so the most recent active bucket
+  // is the last entry.
   const latestBucketStart = useMemo(() => {
-    const buckets = bucketsData?.timelineBuckets
-    if (!buckets || buckets.length === 0) return null
-    return buckets[buckets.length - 1].bucketStart
-  }, [bucketsData])
+    if (loadedBuckets.length === 0) return null
+    return loadedBuckets[loadedBuckets.length - 1].bucketStart
+  }, [loadedBuckets])
 
   useEffect(() => {
     if (selectedDay) return
@@ -316,6 +329,35 @@ function TimelinePageInner({ operationId }: { operationId: string }) {
     setSelectedEvent(event)
     setEventDialogOpen(true)
   }, [])
+
+  // --- Custom timeline event dialog (create + edit) --------------------
+  //
+  // Single dialog drives both flows; `customEventBeingEdited` is the row
+  // being edited, or null for create. The "Add event" button in the
+  // toolbar opens it in create mode; EventDetailsDialog opens it in edit
+  // mode after the user clicks "Edit" on a custom event.
+
+  const { data: roleData } = useMyOperationRole(operationId)
+  const myRole = roleData?.myOperationRole ?? null
+  const canEditTimeline = myRole === "ADMIN" || myRole === "OPERATOR"
+
+  const [customDialogOpen, setCustomDialogOpen] = useState(false)
+  const [customEventBeingEdited, setCustomEventBeingEdited] =
+    useState<TimelineEventFieldsFragment | null>(null)
+
+  const openCreateCustomEvent = useCallback(() => {
+    setCustomEventBeingEdited(null)
+    setCustomDialogOpen(true)
+  }, [])
+
+  const openEditCustomEvent = useCallback(
+    (event: TimelineEventFieldsFragment) => {
+      setCustomEventBeingEdited(event)
+      setCustomDialogOpen(true)
+      setEventDialogOpen(false)
+    },
+    [],
+  )
 
   if (opLoading || !operationData) {
     return (
@@ -345,6 +387,8 @@ function TimelinePageInner({ operationId }: { operationId: string }) {
         onRangeChange={setRange}
         hasActiveFilters={hasActiveFilters}
         onReset={reset}
+        onAddEvent={openCreateCustomEvent}
+        canAddEvent={canEditTimeline}
       />
 
       <TimelineCanvas
@@ -352,13 +396,16 @@ function TimelinePageInner({ operationId }: { operationId: string }) {
         operationCreatedAt={op.createdAt}
         granularity={granularity}
         timezone={timezone}
-        types={types.length > 0 ? types : null}
-        actorIds={actorIds.length > 0 ? actorIds : null}
         from={from}
         to={to}
+        buckets={loadedBuckets}
+        earliestLoaded={earliestLoaded}
+        isLoadingInitial={bucketsLoading}
+        isLoadingOlder={isLoadingOlder}
+        hasMoreOlder={hasMoreOlder}
+        onLoadOlder={loadOlder}
         selectedBucketStart={selectedDay}
         onSelectBucket={setSelectedDay}
-        onEventClick={handleEventClick}
       />
 
       <TimelineDayPanel
@@ -381,6 +428,16 @@ function TimelinePageInner({ operationId }: { operationId: string }) {
         open={eventDialogOpen}
         onOpenChange={setEventDialogOpen}
         event={selectedEvent}
+        canEditCustomEvent={canEditTimeline}
+        onEditCustomEvent={openEditCustomEvent}
+      />
+
+      <CustomTimelineEventDialog
+        open={customDialogOpen}
+        onOpenChange={setCustomDialogOpen}
+        operationId={op.id}
+        timezone={timezone}
+        event={customEventBeingEdited}
       />
     </div>
   )

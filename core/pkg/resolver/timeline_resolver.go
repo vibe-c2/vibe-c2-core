@@ -4,10 +4,13 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
 	"github.com/vibe-c2/vibe-c2-core/core/pkg/authorization"
+	"github.com/vibe-c2/vibe-c2-core/core/pkg/eventbus"
+	"github.com/vibe-c2/vibe-c2-core/core/pkg/graphql/gqlctx"
 	"github.com/vibe-c2/vibe-c2-core/core/pkg/graphql/model"
 	"github.com/vibe-c2/vibe-c2-core/core/pkg/logger"
 	"github.com/vibe-c2/vibe-c2-core/core/pkg/models"
@@ -24,6 +27,11 @@ type ITimelineResolver interface {
 	// Queries
 	TimelineBuckets(ctx context.Context, operationID string, granularity *repository.TimelineGranularity, timezone string, from *string, to *string, types []string, actorIDs []string) ([]*model.TimelineBucket, error)
 	TimelineEventsByDay(ctx context.Context, operationID string, date string, timezone string, granularity *repository.TimelineGranularity, types []string, actorIDs []string, first *int, after *string) (*model.TimelineEventConnection, error)
+
+	// Mutations — custom timeline events
+	CreateCustomTimelineEvent(ctx context.Context, operationID string, input model.CreateCustomTimelineEventInput) (*models.OperationEvent, error)
+	UpdateCustomTimelineEvent(ctx context.Context, id string, input model.UpdateCustomTimelineEventInput) (*models.OperationEvent, error)
+	DeleteCustomTimelineEvent(ctx context.Context, id string) (bool, error)
 
 	// Field resolvers for TimelineEvent
 	ID(ctx context.Context, obj *models.OperationEvent) (string, error)
@@ -43,16 +51,28 @@ type timelineResolver struct {
 	repo          repository.IOperationEventRepository
 	operationRepo repository.IOperationRepository
 	userRepo      repository.IUserRepository
+	bus           eventbus.IEventBus
 }
 
 // NewTimelineResolver wires the timeline resolver. The operation repo is used
-// for membership checks; the user repo resolves actors.
+// for membership checks; the user repo resolves actors. The event bus is used
+// to republish TopicOperationEventLogged after custom event mutations so the
+// live subscription stays in sync without going through pkg/events.Logger.
 func NewTimelineResolver(
 	repo repository.IOperationEventRepository,
 	operationRepo repository.IOperationRepository,
 	userRepo repository.IUserRepository,
+	bus eventbus.IEventBus,
 ) ITimelineResolver {
-	return &timelineResolver{repo: repo, operationRepo: operationRepo, userRepo: userRepo}
+	if bus == nil {
+		bus = eventbus.NewNopEventBus()
+	}
+	return &timelineResolver{
+		repo:          repo,
+		operationRepo: operationRepo,
+		userRepo:      userRepo,
+		bus:           bus,
+	}
 }
 
 // --- Queries ---
@@ -110,9 +130,18 @@ func (r *timelineResolver) TimelineBuckets(
 
 	out := make([]*model.TimelineBucket, 0, len(buckets))
 	for _, b := range buckets {
+		topicCounts := make([]*model.TimelineTopicCount, 0, len(b.Topics))
+		for _, t := range b.Topics {
+			topicCounts = append(topicCounts, &model.TimelineTopicCount{
+				Topic:       t.Topic,
+				SubjectKind: string(t.SubjectKind),
+				Count:       t.Count,
+			})
+		}
 		out = append(out, &model.TimelineBucket{
 			BucketStart: b.BucketStart.Format(time.RFC3339),
 			Count:       b.Count,
+			TopicCounts: topicCounts,
 		})
 	}
 	return out, nil
@@ -189,6 +218,200 @@ func (r *timelineResolver) TimelineEventsByDay(
 	}, nil
 }
 
+// --- Mutations (custom timeline events) ---
+
+// customEventTopic is the topic value stored on every custom-event row.
+// Kept private to the resolver — the frontend matches on subject_kind for
+// rendering, so the topic is only used for log-grep and future analytics.
+const customEventTopic = "timeline.custom.created"
+
+// CreateCustomTimelineEvent persists a user-authored annotation as a row in
+// operation_events with subject_kind=custom_event. event_id and subject_id
+// are identical (the row IS the subject). The caller must be at least an
+// operator in the operation; on the synthetic Public operation any
+// authenticated caller qualifies via authorization.AuthorizeOperationRole.
+func (r *timelineResolver) CreateCustomTimelineEvent(
+	ctx context.Context,
+	operationID string,
+	input model.CreateCustomTimelineEventInput,
+) (*models.OperationEvent, error) {
+	opUID, _, err := r.authorizeOperationOperator(ctx, operationID)
+	if err != nil {
+		return nil, err
+	}
+
+	name := strings.TrimSpace(input.Name)
+	if name == "" {
+		return nil, fmt.Errorf("name is required")
+	}
+
+	occurred, err := parseTime(input.OccurredAt)
+	if err != nil {
+		return nil, fmt.Errorf("invalid occurredAt: %w", err)
+	}
+
+	auth := gqlctx.AuthFromContext(ctx)
+	callerUID, err := uuid.Parse(auth.UserID)
+	if err != nil {
+		return nil, fmt.Errorf("forbidden: invalid caller ID")
+	}
+
+	var description string
+	if input.Description != nil {
+		description = *input.Description
+	}
+
+	eventID := uuid.New()
+	row := &models.OperationEvent{
+		EventID:     eventID,
+		OperationID: opUID,
+		Topic:       customEventTopic,
+		SubjectKind: models.SubjectKindCustomEvent,
+		// subject_id == event_id: a custom event has no underlying entity.
+		SubjectID:   eventID,
+		SubjectName: name,
+		ActorType:   models.EventActorUser,
+		ActorID:     &callerUID,
+		Metadata:    customEventMetadata(description),
+		OccurredAt:  occurred.UTC(),
+	}
+
+	if err := r.repo.Insert(ctx, row); err != nil {
+		return nil, fmt.Errorf("failed to create custom event: %w", err)
+	}
+
+	r.publishLogged(auth.UserID, row)
+	return row, nil
+}
+
+// UpdateCustomTimelineEvent mutates the editable fields of a custom event.
+// Only the original author or an app-level admin may edit. The repository
+// guard prevents this method from mutating a system-generated row even if
+// the caller forges an event_id of one.
+func (r *timelineResolver) UpdateCustomTimelineEvent(
+	ctx context.Context,
+	id string,
+	input model.UpdateCustomTimelineEventInput,
+) (*models.OperationEvent, error) {
+	row, err := r.loadEditableCustomEvent(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+
+	upd := repository.CustomEventUpdate{}
+	if input.Name != nil {
+		trimmed := strings.TrimSpace(*input.Name)
+		if trimmed == "" {
+			return nil, fmt.Errorf("name cannot be empty")
+		}
+		upd.Name = &trimmed
+	}
+	if input.Description != nil {
+		desc := *input.Description
+		upd.Description = &desc
+	}
+	if input.OccurredAt != nil {
+		t, err := parseTime(*input.OccurredAt)
+		if err != nil {
+			return nil, fmt.Errorf("invalid occurredAt: %w", err)
+		}
+		u := t.UTC()
+		upd.OccurredAt = &u
+	}
+
+	updated, err := r.repo.UpdateCustomEvent(ctx, row.EventID, upd)
+	if err != nil {
+		return nil, fmt.Errorf("failed to update custom event: %w", err)
+	}
+
+	auth := gqlctx.AuthFromContext(ctx)
+	r.publishLogged(auth.UserID, &updated)
+	return &updated, nil
+}
+
+// DeleteCustomTimelineEvent removes a custom event. Hard delete — there is
+// no soft-delete tombstone for annotations. Author-or-admin only.
+func (r *timelineResolver) DeleteCustomTimelineEvent(ctx context.Context, id string) (bool, error) {
+	row, err := r.loadEditableCustomEvent(ctx, id)
+	if err != nil {
+		return false, err
+	}
+
+	if err := r.repo.DeleteCustomEvent(ctx, row.EventID); err != nil {
+		return false, fmt.Errorf("failed to delete custom event: %w", err)
+	}
+
+	// Publish a delete-flavoured logged event so connected clients
+	// invalidate their timeline cache. The subscription helper refetches
+	// the row by id and silently skips when missing (deleted), which is
+	// the exact behaviour we want — clients pick up the deletion via the
+	// cache invalidation triggered upstream of the lookup.
+	auth := gqlctx.AuthFromContext(ctx)
+	r.publishLogged(auth.UserID, row)
+	return true, nil
+}
+
+// loadEditableCustomEvent finds a custom-event row by id and verifies the
+// caller may edit it (operator role + author or app admin). Returns the
+// loaded row on success.
+func (r *timelineResolver) loadEditableCustomEvent(ctx context.Context, id string) (*models.OperationEvent, error) {
+	eventUID, err := uuid.Parse(id)
+	if err != nil {
+		return nil, fmt.Errorf("invalid event ID: %w", err)
+	}
+
+	row, err := r.repo.FindByEventID(ctx, eventUID)
+	if err != nil {
+		return nil, fmt.Errorf("event not found: %w", err)
+	}
+	if row.SubjectKind != models.SubjectKindCustomEvent {
+		// System-generated rows are not editable. Surface as not-found so
+		// the existence of foreign rows is not leaked to non-members.
+		return nil, fmt.Errorf("event not found")
+	}
+
+	// Operator role is required to mutate anything in the operation;
+	// authorship narrows the edit window so a peer operator cannot
+	// rewrite someone else's annotation.
+	if _, _, err := r.authorizeOperationOperator(ctx, row.OperationID.String()); err != nil {
+		return nil, err
+	}
+
+	auth := gqlctx.AuthFromContext(ctx)
+	if !authorization.IsAppAdmin(auth) {
+		callerUID, err := uuid.Parse(auth.UserID)
+		if err != nil {
+			return nil, fmt.Errorf("forbidden: invalid caller ID")
+		}
+		if row.ActorID == nil || *row.ActorID != callerUID {
+			return nil, fmt.Errorf("forbidden: only the author or an admin can edit this event")
+		}
+	}
+	return &row, nil
+}
+
+// publishLogged re-uses the existing live-subscription channel so frontends
+// invalidate the timeline cache after a custom event create/update.
+func (r *timelineResolver) publishLogged(userID string, row *models.OperationEvent) {
+	r.bus.Publish(eventbus.NewOperationEventLoggedEvent(
+		eventbus.UserActor(userID),
+		eventbus.OperationEventLoggedPayload{
+			EventID:     row.EventID.String(),
+			OperationID: row.OperationID.String(),
+		},
+	))
+}
+
+// customEventMetadata builds the metadata bag for a custom event. Empty
+// descriptions are omitted so the JSON serialised on the wire stays "{}",
+// not '{"description": ""}'.
+func customEventMetadata(description string) map[string]any {
+	if description == "" {
+		return nil
+	}
+	return map[string]any{"description": description}
+}
+
 // --- Field resolvers ---
 
 func (r *timelineResolver) ID(_ context.Context, obj *models.OperationEvent) (string, error) {
@@ -252,6 +475,20 @@ func (r *timelineResolver) FindByEventID(ctx context.Context, eventID uuid.UUID)
 // authorizeOperationViewer enforces "viewer or above in the operation" and
 // returns the parsed operation UUID alongside the loaded operation row.
 func (r *timelineResolver) authorizeOperationViewer(ctx context.Context, operationID string) (uuid.UUID, *models.Operation, error) {
+	return r.authorizeOperationRole(ctx, operationID, models.OperationRoleViewer)
+}
+
+// authorizeOperationOperator is the write-path counterpart of
+// authorizeOperationViewer. Custom event mutations require operator role.
+func (r *timelineResolver) authorizeOperationOperator(ctx context.Context, operationID string) (uuid.UUID, *models.Operation, error) {
+	return r.authorizeOperationRole(ctx, operationID, models.OperationRoleOperator)
+}
+
+// authorizeOperationRole resolves the operation id and enforces the minimum
+// role. The Public operation special-case keeps custom events working on
+// the synthetic operation: any authenticated caller is implicitly an
+// operator there, mirroring AuthorizeOperationRole's own contract.
+func (r *timelineResolver) authorizeOperationRole(ctx context.Context, operationID string, minRole models.OperationRole) (uuid.UUID, *models.Operation, error) {
 	opUID, err := uuid.Parse(operationID)
 	if err != nil {
 		return uuid.Nil, nil, fmt.Errorf("invalid operation ID: %w", err)
@@ -259,15 +496,16 @@ func (r *timelineResolver) authorizeOperationViewer(ctx context.Context, operati
 	if models.IsPublicOperation(opUID) {
 		// Public operation is synthetic and has no Mongo row; any authenticated
 		// caller is implicitly an operator (see authorization.AuthorizeOperationRole).
-		// The timeline simply returns whatever events the persistence subscriber
-		// has logged against the public operation id.
+		if minRole == models.OperationRoleAdmin {
+			return uuid.Nil, nil, fmt.Errorf("forbidden: public operation has no admins")
+		}
 		return opUID, nil, nil
 	}
 	op, err := r.operationRepo.FindByID(ctx, opUID)
 	if err != nil {
 		return uuid.Nil, nil, fmt.Errorf("operation not found: %w", err)
 	}
-	if err := authorization.AuthorizeOperationRole(ctx, &op, models.OperationRoleViewer); err != nil {
+	if err := authorization.AuthorizeOperationRole(ctx, &op, minRole); err != nil {
 		return uuid.Nil, nil, err
 	}
 	return opUID, &op, nil
@@ -290,7 +528,9 @@ func parseSubjectKinds(in []string) ([]models.SubjectKind, error) {
 	for _, s := range in {
 		sk := models.SubjectKind(s)
 		switch sk {
-		case models.SubjectKindCredential, models.SubjectKindWikiDocument:
+		case models.SubjectKindCredential,
+			models.SubjectKindWikiDocument,
+			models.SubjectKindCustomEvent:
 			out = append(out, sk)
 		default:
 			return nil, fmt.Errorf("unknown subject kind: %q", s)

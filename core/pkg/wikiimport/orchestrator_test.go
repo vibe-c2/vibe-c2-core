@@ -34,7 +34,7 @@ func TestOrchestrator_Run_Smoke(t *testing.T) {
 	fileIn := &fakeFileIngestor{}
 	converter := &fakeConverter{}
 
-	orch := NewOrchestrator(docRepo, imageIn, fileIn, converter, nil, zap.NewNop())
+	orch := NewOrchestrator(docRepo, nil, imageIn, fileIn, converter, nil, zap.NewNop())
 
 	opID := uuid.New()
 	callerID := uuid.New()
@@ -95,7 +95,8 @@ func TestOrchestrator_PublishesEvents(t *testing.T) {
 
 	docRepo := newFakeDocRepo()
 	bus := &fakeEventBus{}
-	orch := NewOrchestrator(docRepo, &fakeImageIngestor{}, &fakeFileIngestor{}, &fakeConverter{}, bus, zap.NewNop())
+	eventRepo := &fakeOperationEventRepo{}
+	orch := NewOrchestrator(docRepo, eventRepo, &fakeImageIngestor{}, &fakeFileIngestor{}, &fakeConverter{}, bus, zap.NewNop())
 
 	opID := uuid.New()
 	callerID := uuid.New()
@@ -105,9 +106,11 @@ func TestOrchestrator_PublishesEvents(t *testing.T) {
 		t.Fatalf("Run: %v", err)
 	}
 
-	// First import: import parent was freshly created → 2 events.
-	if got := len(bus.published); got != 2 {
-		t.Fatalf("first import: published %d events, want 2 (import parent + timestamp parent)", got)
+	// First import: import parent was freshly created → 2 wiki bus
+	// events + 1 trailing TopicOperationEventLogged (the import always
+	// publishes one logged-event so live timeline subscribers refetch).
+	if got := len(bus.published); got != 3 {
+		t.Fatalf("first import: published %d events, want 3 (import parent + timestamp parent + one OperationEventLogged)", got)
 	}
 
 	// Event 0 = import parent (root-level — no ParentDocumentID).
@@ -149,18 +152,93 @@ func TestOrchestrator_PublishesEvents(t *testing.T) {
 	}
 
 	// Reset the bus and run a second import — the import parent is now
-	// already there, so only the timestamp-parent event should fire.
+	// already there, so only the timestamp-parent wiki event + the
+	// trailing OperationEventLogged should fire (2 events total).
 	bus.published = nil
 	if _, err := orch.Run(context.Background(), opID, callerID, parsed); err != nil {
 		t.Fatalf("second Run: %v", err)
 	}
-	if got := len(bus.published); got != 1 {
-		t.Fatalf("second import: published %d events, want 1 (timestamp parent only)", got)
+	if got := len(bus.published); got != 2 {
+		t.Fatalf("second import: published %d events, want 2 (timestamp parent + OperationEventLogged)", got)
 	}
 	if p, ok := bus.published[0].Payload.(eventbus.WikiDocumentEventPayload); ok {
 		if p.ParentDocumentID == "" {
 			t.Errorf("second import: stray root-level event published — import parent should not re-emit")
 		}
+	}
+	if bus.published[1].Topic != eventbus.TopicOperationEventLogged {
+		t.Errorf("second import: trailing event topic = %s, want %s",
+			bus.published[1].Topic, eventbus.TopicOperationEventLogged)
+	}
+}
+
+// TestOrchestrator_LogsTimelineRowPerImportedDoc verifies the orchestrator
+// inserts one operation_event row for every collection-parent + nested
+// doc it creates (the two wrapper folders are excluded — they ride on the
+// bus events that the persistence subscriber already logs). The follow-up
+// TopicOperationEventLogged event is published once, regardless of how
+// many rows landed.
+//
+// Regression for the "I imported a whole branch but only saw 2 events on
+// the timeline" report.
+func TestOrchestrator_LogsTimelineRowPerImportedDoc(t *testing.T) {
+	zr := openFixture(t)
+	parsed, _ := Parse(&zr.Reader)
+
+	docRepo := newFakeDocRepo()
+	bus := &fakeEventBus{}
+	eventRepo := &fakeOperationEventRepo{}
+	orch := NewOrchestrator(docRepo, eventRepo, &fakeImageIngestor{}, &fakeFileIngestor{}, &fakeConverter{}, bus, zap.NewNop())
+
+	opID := uuid.New()
+	callerID := uuid.New()
+
+	report, err := orch.Run(context.Background(), opID, callerID, parsed)
+	if err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+
+	if report.CreatedDocs == 0 {
+		t.Fatalf("fixture produced 0 nested docs — this test needs a non-empty hierarchy")
+	}
+
+	// Expected timeline rows = collection parents + nested docs.
+	// Wrapper folders (import + timestamp parents) are logged via the
+	// existing bus path, so they are NOT in eventRepo.inserted.
+	wantRows := len(parsed.Collections) + report.CreatedDocs
+	if got := len(eventRepo.inserted); got != wantRows {
+		t.Fatalf("InsertMany rows = %d, want %d (collections=%d + nested=%d)",
+			got, wantRows, len(parsed.Collections), report.CreatedDocs)
+	}
+
+	// Every row must be a custom-event-shaped operation_event:
+	//   - subject_kind = wiki_document
+	//   - subject_id is the doc id
+	//   - actor is the caller
+	for i, row := range eventRepo.inserted {
+		if row.SubjectKind != models.SubjectKindWikiDocument {
+			t.Errorf("row[%d] subject_kind = %q, want wiki_document", i, row.SubjectKind)
+		}
+		if row.OperationID != opID {
+			t.Errorf("row[%d] operation_id = %s, want %s", i, row.OperationID, opID)
+		}
+		if row.ActorID == nil || *row.ActorID != callerID {
+			t.Errorf("row[%d] actor_id = %v, want %s", i, row.ActorID, callerID)
+		}
+		if row.SubjectName == "" {
+			t.Errorf("row[%d] subject_name empty — title was not snapshotted", i)
+		}
+	}
+
+	// Exactly one TopicOperationEventLogged should follow the two
+	// WikiDocumentCreated wrapper events, so we expect 3 bus events total
+	// on a first-time import.
+	if got := len(bus.published); got != 3 {
+		t.Fatalf("bus.published = %d events, want 3 (importParent + timestampParent + one OperationEventLogged)", got)
+	}
+	last := bus.published[2]
+	if last.Topic != eventbus.TopicOperationEventLogged {
+		t.Errorf("trailing event topic = %s, want %s", last.Topic, eventbus.TopicOperationEventLogged)
 	}
 }
 
@@ -172,7 +250,7 @@ func TestOrchestrator_ReusesImportParent(t *testing.T) {
 	parsed, _ := Parse(&zr.Reader)
 
 	docRepo := newFakeDocRepo()
-	orch := NewOrchestrator(docRepo, &fakeImageIngestor{}, &fakeFileIngestor{}, &fakeConverter{}, nil, zap.NewNop())
+	orch := NewOrchestrator(docRepo, nil, &fakeImageIngestor{}, &fakeFileIngestor{}, &fakeConverter{}, nil, zap.NewNop())
 
 	opID := uuid.New()
 	callerID := uuid.New()
@@ -375,3 +453,38 @@ func (b *fakeEventBus) Subscribe([]eventbus.Topic, eventbus.Handler, ...eventbus
 }
 func (b *fakeEventBus) Start()                 {}
 func (b *fakeEventBus) Stop(_ context.Context) {}
+
+// fakeOperationEventRepo captures InsertMany payloads so tests can assert
+// the orchestrator wrote a timeline row per imported doc. The other repo
+// methods panic — orchestrator never calls them.
+type fakeOperationEventRepo struct {
+	inserted []*models.OperationEvent
+}
+
+func (r *fakeOperationEventRepo) Insert(_ context.Context, _ *models.OperationEvent) error {
+	panic("not used")
+}
+func (r *fakeOperationEventRepo) InsertMany(_ context.Context, rows []*models.OperationEvent) error {
+	r.inserted = append(r.inserted, rows...)
+	return nil
+}
+func (r *fakeOperationEventRepo) FindByEventID(_ context.Context, _ uuid.UUID) (models.OperationEvent, error) {
+	panic("not used")
+}
+func (r *fakeOperationEventRepo) Buckets(_ context.Context, _ repository.BucketQuery) ([]repository.Bucket, error) {
+	panic("not used")
+}
+func (r *fakeOperationEventRepo) ListByDay(_ context.Context, _ repository.DayQuery) ([]models.OperationEvent, pagination.PageInfo, error) {
+	panic("not used")
+}
+func (r *fakeOperationEventRepo) IsEmpty(_ context.Context) (bool, error) {
+	panic("not used")
+}
+func (r *fakeOperationEventRepo) UpdateCustomEvent(_ context.Context, _ uuid.UUID, _ repository.CustomEventUpdate) (models.OperationEvent, error) {
+	panic("not used")
+}
+func (r *fakeOperationEventRepo) DeleteCustomEvent(_ context.Context, _ uuid.UUID) error {
+	panic("not used")
+}
+
+var _ repository.IOperationEventRepository = (*fakeOperationEventRepo)(nil)

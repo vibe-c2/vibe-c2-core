@@ -26,6 +26,7 @@ export const SUBJECT_KIND_OPTIONS: ReadonlyArray<{
 }> = [
   { value: "credential", label: "Credentials" },
   { value: "wiki_document", label: "Wiki documents" },
+  { value: "custom_event", label: "Custom events" },
 ]
 
 // --- Types filter --------------------------------------------------------

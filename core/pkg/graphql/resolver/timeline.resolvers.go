@@ -18,6 +18,21 @@ import (
 	"github.com/vibe-c2/vibe-c2-core/core/pkg/repository"
 )
 
+// CreateCustomTimelineEvent is the resolver for the createCustomTimelineEvent field.
+func (r *mutationResolver) CreateCustomTimelineEvent(ctx context.Context, operationID string, input model.CreateCustomTimelineEventInput) (*models.OperationEvent, error) {
+	return r.TimelineResolver.CreateCustomTimelineEvent(ctx, operationID, input)
+}
+
+// UpdateCustomTimelineEvent is the resolver for the updateCustomTimelineEvent field.
+func (r *mutationResolver) UpdateCustomTimelineEvent(ctx context.Context, id string, input model.UpdateCustomTimelineEventInput) (*models.OperationEvent, error) {
+	return r.TimelineResolver.UpdateCustomTimelineEvent(ctx, id, input)
+}
+
+// DeleteCustomTimelineEvent is the resolver for the deleteCustomTimelineEvent field.
+func (r *mutationResolver) DeleteCustomTimelineEvent(ctx context.Context, id string) (bool, error) {
+	return r.TimelineResolver.DeleteCustomTimelineEvent(ctx, id)
+}
+
 // TimelineBuckets is the resolver for the timelineBuckets field.
 func (r *queryResolver) TimelineBuckets(ctx context.Context, operationID string, granularity *repository.TimelineGranularity, timezone string, from *string, to *string, types []string, actorIds []string) ([]*model.TimelineBucket, error) {
 	return r.TimelineResolver.TimelineBuckets(ctx, operationID, granularity, timezone, from, to, types, actorIds)

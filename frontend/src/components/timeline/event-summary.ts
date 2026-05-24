@@ -16,6 +16,11 @@ export function renderEventSummary(event: TimelineEventFieldsFragment): string {
       return `${actor} added credential "${name}"`
     case "wiki.document.created":
       return `${actor} created wiki document "${name}"`
+    case "timeline.custom.created":
+      // Custom annotations carry the name as the primary content; the actor
+      // is surfaced via the dialog's "Actor" row, so we keep the headline
+      // focused on what was annotated rather than who did it.
+      return name
     default:
       return `${actor} ${humaniseTopic(event.topic)} ${humaniseKind(
         event.subjectKind,
@@ -32,6 +37,8 @@ export function renderGroupSummary(topic: string, count: number): string {
       return `${count} credentials added`
     case "wiki.document.created":
       return `${count} wiki documents created`
+    case "timeline.custom.created":
+      return `${count} custom events`
     default: {
       const verb = humaniseTopic(topic)
       return `${count} × ${verb}`
@@ -46,4 +53,19 @@ function humaniseTopic(topic: string): string {
 
 function humaniseKind(kind: string): string {
   return kind.replace(/_/g, " ")
+}
+
+// parseCustomEventDescription pulls the description string out of a custom
+// event row's JSON metadata bag, tolerating missing or malformed payloads.
+export function parseCustomEventDescription(
+  metadata: string | null | undefined,
+): string {
+  if (!metadata) return ""
+  try {
+    const parsed = JSON.parse(metadata) as Record<string, unknown>
+    const desc = parsed.description
+    return typeof desc === "string" ? desc : ""
+  } catch {
+    return ""
+  }
 }

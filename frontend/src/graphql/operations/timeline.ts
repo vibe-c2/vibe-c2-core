@@ -38,6 +38,11 @@ export const TimelineBucketsQuery = graphql(`
     ) {
       bucketStart
       count
+      topicCounts {
+        topic
+        subjectKind
+        count
+      }
     }
   }
 `)
@@ -84,5 +89,42 @@ export const TimelineEventAddedSubscription = graphql(`
     timelineEventAdded(operationId: $operationId) {
       ...TimelineEventFields
     }
+  }
+`)
+
+// --- Custom timeline event mutations -------------------------------------
+//
+// Mutations targeting user-authored annotation events. The resolver
+// publishes TopicOperationEventLogged after every successful write, so
+// the live subscription already invalidates the timeline cache — these
+// mutations only need to invalidate locally as a belt-and-braces measure
+// for the originating client (the round-trip subscription may not have
+// fired yet when the mutation resolves).
+
+export const CreateCustomTimelineEventMutation = graphql(`
+  mutation CreateCustomTimelineEvent(
+    $operationId: ID!
+    $input: CreateCustomTimelineEventInput!
+  ) {
+    createCustomTimelineEvent(operationId: $operationId, input: $input) {
+      ...TimelineEventFields
+    }
+  }
+`)
+
+export const UpdateCustomTimelineEventMutation = graphql(`
+  mutation UpdateCustomTimelineEvent(
+    $id: ID!
+    $input: UpdateCustomTimelineEventInput!
+  ) {
+    updateCustomTimelineEvent(id: $id, input: $input) {
+      ...TimelineEventFields
+    }
+  }
+`)
+
+export const DeleteCustomTimelineEventMutation = graphql(`
+  mutation DeleteCustomTimelineEvent($id: ID!) {
+    deleteCustomTimelineEvent(id: $id)
   }
 `)

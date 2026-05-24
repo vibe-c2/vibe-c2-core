@@ -109,6 +109,7 @@ type ComplexityRoot struct {
 		AdminRevokeAllUserSessions    func(childComplexity int, userID string) int
 		AdminRevokeSession            func(childComplexity int, id string) int
 		CreateCredential              func(childComplexity int, operationID string, input model.CreateCredentialInput) int
+		CreateCustomTimelineEvent     func(childComplexity int, operationID string, input model.CreateCustomTimelineEventInput) int
 		CreateOperation               func(childComplexity int, input model.CreateOperationInput) int
 		CreateSchemeNetworkPoint      func(childComplexity int, operationID string, input model.CreateSchemeNetworkPointInput) int
 		CreateUser                    func(childComplexity int, input model.CreateUserInput) int
@@ -116,6 +117,7 @@ type ComplexityRoot struct {
 		CreateWikiDocumentBackup      func(childComplexity int, documentID string, description *string) int
 		DeleteCredential              func(childComplexity int, id string) int
 		DeleteCredentialComment       func(childComplexity int, credentialID string, commentID string) int
+		DeleteCustomTimelineEvent     func(childComplexity int, id string) int
 		DeleteOperation               func(childComplexity int, id string) int
 		DeleteSchemeNetworkPoint      func(childComplexity int, id string) int
 		DeleteUser                    func(childComplexity int, id string) int
@@ -134,6 +136,7 @@ type ComplexityRoot struct {
 		TrackWikiDocumentVisit        func(childComplexity int, documentID string) int
 		UpdateCredential              func(childComplexity int, id string, input model.UpdateCredentialInput) int
 		UpdateCredentialComment       func(childComplexity int, credentialID string, commentID string, text string) int
+		UpdateCustomTimelineEvent     func(childComplexity int, id string, input model.UpdateCustomTimelineEventInput) int
 		UpdateOperation               func(childComplexity int, id string, input model.UpdateOperationInput) int
 		UpdateOperationMemberRole     func(childComplexity int, operationID string, userID string, role models.OperationRole) int
 		UpdateOwnProfile              func(childComplexity int, input model.UpdateUserInput) int
@@ -306,6 +309,7 @@ type ComplexityRoot struct {
 	TimelineBucket struct {
 		BucketStart func(childComplexity int) int
 		Count       func(childComplexity int) int
+		TopicCounts func(childComplexity int) int
 	}
 
 	TimelineEvent struct {
@@ -328,6 +332,12 @@ type ComplexityRoot struct {
 	TimelineEventEdge struct {
 		Cursor func(childComplexity int) int
 		Node   func(childComplexity int) int
+	}
+
+	TimelineTopicCount struct {
+		Count       func(childComplexity int) int
+		SubjectKind func(childComplexity int) int
+		Topic       func(childComplexity int) int
 	}
 
 	User struct {
@@ -540,6 +550,9 @@ type MutationResolver interface {
 	RevokeAllMySessions(ctx context.Context) (int, error)
 	AdminRevokeSession(ctx context.Context, id string) (bool, error)
 	AdminRevokeAllUserSessions(ctx context.Context, userID string) (int, error)
+	CreateCustomTimelineEvent(ctx context.Context, operationID string, input model.CreateCustomTimelineEventInput) (*models.OperationEvent, error)
+	UpdateCustomTimelineEvent(ctx context.Context, id string, input model.UpdateCustomTimelineEventInput) (*models.OperationEvent, error)
+	DeleteCustomTimelineEvent(ctx context.Context, id string) (bool, error)
 	CreateWikiDocument(ctx context.Context, operationID string, input model.CreateWikiDocumentInput) (*models.WikiDocument, error)
 	UpdateWikiDocument(ctx context.Context, id string, input model.UpdateWikiDocumentInput) (*models.WikiDocument, error)
 	ReorderWikiDocumentSiblings(ctx context.Context, input model.ReorderWikiDocumentSiblingsInput) ([]*models.WikiDocument, error)
@@ -962,6 +975,17 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.Mutation.CreateCredential(childComplexity, args["operationId"].(string), args["input"].(model.CreateCredentialInput)), true
+	case "Mutation.createCustomTimelineEvent":
+		if e.ComplexityRoot.Mutation.CreateCustomTimelineEvent == nil {
+			break
+		}
+
+		args, err := ec.field_Mutation_createCustomTimelineEvent_args(ctx, rawArgs)
+		if err != nil {
+			return 0, false
+		}
+
+		return e.ComplexityRoot.Mutation.CreateCustomTimelineEvent(childComplexity, args["operationId"].(string), args["input"].(model.CreateCustomTimelineEventInput)), true
 	case "Mutation.createOperation":
 		if e.ComplexityRoot.Mutation.CreateOperation == nil {
 			break
@@ -1039,6 +1063,17 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.Mutation.DeleteCredentialComment(childComplexity, args["credentialId"].(string), args["commentId"].(string)), true
+	case "Mutation.deleteCustomTimelineEvent":
+		if e.ComplexityRoot.Mutation.DeleteCustomTimelineEvent == nil {
+			break
+		}
+
+		args, err := ec.field_Mutation_deleteCustomTimelineEvent_args(ctx, rawArgs)
+		if err != nil {
+			return 0, false
+		}
+
+		return e.ComplexityRoot.Mutation.DeleteCustomTimelineEvent(childComplexity, args["id"].(string)), true
 	case "Mutation.deleteOperation":
 		if e.ComplexityRoot.Mutation.DeleteOperation == nil {
 			break
@@ -1232,6 +1267,17 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.Mutation.UpdateCredentialComment(childComplexity, args["credentialId"].(string), args["commentId"].(string), args["text"].(string)), true
+	case "Mutation.updateCustomTimelineEvent":
+		if e.ComplexityRoot.Mutation.UpdateCustomTimelineEvent == nil {
+			break
+		}
+
+		args, err := ec.field_Mutation_updateCustomTimelineEvent_args(ctx, rawArgs)
+		if err != nil {
+			return 0, false
+		}
+
+		return e.ComplexityRoot.Mutation.UpdateCustomTimelineEvent(childComplexity, args["id"].(string), args["input"].(model.UpdateCustomTimelineEventInput)), true
 	case "Mutation.updateOperation":
 		if e.ComplexityRoot.Mutation.UpdateOperation == nil {
 			break
@@ -2204,6 +2250,12 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.TimelineBucket.Count(childComplexity), true
+	case "TimelineBucket.topicCounts":
+		if e.ComplexityRoot.TimelineBucket.TopicCounts == nil {
+			break
+		}
+
+		return e.ComplexityRoot.TimelineBucket.TopicCounts(childComplexity), true
 
 	case "TimelineEvent.actor":
 		if e.ComplexityRoot.TimelineEvent.Actor == nil {
@@ -2285,6 +2337,25 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.TimelineEventEdge.Node(childComplexity), true
+
+	case "TimelineTopicCount.count":
+		if e.ComplexityRoot.TimelineTopicCount.Count == nil {
+			break
+		}
+
+		return e.ComplexityRoot.TimelineTopicCount.Count(childComplexity), true
+	case "TimelineTopicCount.subjectKind":
+		if e.ComplexityRoot.TimelineTopicCount.SubjectKind == nil {
+			break
+		}
+
+		return e.ComplexityRoot.TimelineTopicCount.SubjectKind(childComplexity), true
+	case "TimelineTopicCount.topic":
+		if e.ComplexityRoot.TimelineTopicCount.Topic == nil {
+			break
+		}
+
+		return e.ComplexityRoot.TimelineTopicCount.Topic(childComplexity), true
 
 	case "User.active":
 		if e.ComplexityRoot.User.Active == nil {
@@ -2899,6 +2970,7 @@ func (e *executableSchema) Exec(ctx context.Context) graphql.ResponseHandler {
 	ec := newExecutionContext(opCtx, e, make(chan graphql.DeferredResult))
 	inputUnmarshalMap := graphql.BuildUnmarshalerMap(
 		ec.unmarshalInputCreateCredentialInput,
+		ec.unmarshalInputCreateCustomTimelineEventInput,
 		ec.unmarshalInputCreateOperationInput,
 		ec.unmarshalInputCreateSchemeNetworkPointInput,
 		ec.unmarshalInputCreateSchemeNetworkPortInput,
@@ -2907,6 +2979,7 @@ func (e *executableSchema) Exec(ctx context.Context) graphql.ResponseHandler {
 		ec.unmarshalInputCredentialKeyInput,
 		ec.unmarshalInputReorderWikiDocumentSiblingsInput,
 		ec.unmarshalInputUpdateCredentialInput,
+		ec.unmarshalInputUpdateCustomTimelineEventInput,
 		ec.unmarshalInputUpdateOperationInput,
 		ec.unmarshalInputUpdateSchemeNetworkPointInput,
 		ec.unmarshalInputUpdateSchemeNetworkPortInput,
@@ -3941,6 +4014,20 @@ type TimelineBucket {
   # Start of the bucket in the requested timezone (RFC3339 with offset).
   bucketStart: String!
   count: Int!
+  # Per-topic breakdown of the bucket. Lets the axis render the topic-grouped
+  # dot stack without fetching the underlying events — the previous design
+  # fired one timelineEventsByDay query per active bucket on page load.
+  # Sorted by count desc, then topic asc, to match the canvas render order.
+  topicCounts: [TimelineTopicCount!]!
+}
+
+# Per-topic count inside a TimelineBucket. subjectKind is included because
+# the axis dot icon is keyed off subject_kind (events with the same topic
+# always share the same subject_kind, so server-side grouping is safe).
+type TimelineTopicCount {
+  topic: String!
+  subjectKind: String!
+  count: Int!
 }
 
 extend type Query {
@@ -3986,6 +4073,58 @@ extend type Subscription {
   # Real-time append of new persisted events for an operation. Fires once
   # per event after the persistence subscriber has stored it.
   timelineEventAdded(operationId: ID!): TimelineEvent!
+    @hasPermission(permission: "operation:member")
+}
+
+# -----------------------------------------------------------------------------
+# Custom timeline events
+# -----------------------------------------------------------------------------
+# Custom events are user-authored timeline annotations. They are stored as
+# rows in the operation_events collection with subject_kind="custom_event"
+# and event_id == subject_id (the row is its own subject). The description
+# lives in metadata["description"].
+#
+# Unlike system-generated topics, custom events are NOT routed through the
+# pkg/events.Logger subscriber — the resolver writes the row inline and
+# publishes TopicOperationEventLogged so the live subscription reaches
+# connected clients.
+
+input CreateCustomTimelineEventInput {
+  # Short title shown on the timeline. Required, trimmed, non-empty.
+  name: String!
+  # Free-form context surfaced in the event detail dialog. Optional.
+  description: String
+  # When the event happened, in RFC3339. May be in the past or the future —
+  # the operator decides what the event represents.
+  occurredAt: String!
+}
+
+input UpdateCustomTimelineEventInput {
+  name: String
+  description: String
+  occurredAt: String
+}
+
+extend type Mutation {
+  # Create a custom timeline event annotation on an operation.
+  # Requires at least operator role in the operation.
+  createCustomTimelineEvent(
+    operationId: ID!
+    input: CreateCustomTimelineEventInput!
+  ): TimelineEvent!
+    @hasPermission(permission: "operation:member")
+
+  # Update a custom timeline event in place. Only the original author or
+  # an operation admin may edit; resolver enforces the check.
+  updateCustomTimelineEvent(
+    id: ID!
+    input: UpdateCustomTimelineEventInput!
+  ): TimelineEvent!
+    @hasPermission(permission: "operation:member")
+
+  # Delete a custom timeline event. Hard delete; no soft-delete tombstone
+  # (the row never existed for any other purpose). Author-or-admin only.
+  deleteCustomTimelineEvent(id: ID!): Boolean!
     @hasPermission(permission: "operation:member")
 }
 `, BuiltIn: false},
@@ -4530,6 +4669,22 @@ func (ec *executionContext) field_Mutation_createCredential_args(ctx context.Con
 	return args, nil
 }
 
+func (ec *executionContext) field_Mutation_createCustomTimelineEvent_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
+	var err error
+	args := map[string]any{}
+	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "operationId", ec.unmarshalNID2string)
+	if err != nil {
+		return nil, err
+	}
+	args["operationId"] = arg0
+	arg1, err := graphql.ProcessArgField(ctx, rawArgs, "input", ec.unmarshalNCreateCustomTimelineEventInput2githubᚗcomᚋvibeᚑc2ᚋvibeᚑc2ᚑcoreᚋcoreᚋpkgᚋgraphqlᚋmodelᚐCreateCustomTimelineEventInput)
+	if err != nil {
+		return nil, err
+	}
+	args["input"] = arg1
+	return args, nil
+}
+
 func (ec *executionContext) field_Mutation_createOperation_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
 	var err error
 	args := map[string]any{}
@@ -4617,6 +4772,17 @@ func (ec *executionContext) field_Mutation_deleteCredentialComment_args(ctx cont
 }
 
 func (ec *executionContext) field_Mutation_deleteCredential_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
+	var err error
+	args := map[string]any{}
+	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "id", ec.unmarshalNID2string)
+	if err != nil {
+		return nil, err
+	}
+	args["id"] = arg0
+	return args, nil
+}
+
+func (ec *executionContext) field_Mutation_deleteCustomTimelineEvent_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
 	var err error
 	args := map[string]any{}
 	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "id", ec.unmarshalNID2string)
@@ -4847,6 +5013,22 @@ func (ec *executionContext) field_Mutation_updateCredential_args(ctx context.Con
 	}
 	args["id"] = arg0
 	arg1, err := graphql.ProcessArgField(ctx, rawArgs, "input", ec.unmarshalNUpdateCredentialInput2githubᚗcomᚋvibeᚑc2ᚋvibeᚑc2ᚑcoreᚋcoreᚋpkgᚋgraphqlᚋmodelᚐUpdateCredentialInput)
+	if err != nil {
+		return nil, err
+	}
+	args["input"] = arg1
+	return args, nil
+}
+
+func (ec *executionContext) field_Mutation_updateCustomTimelineEvent_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
+	var err error
+	args := map[string]any{}
+	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "id", ec.unmarshalNID2string)
+	if err != nil {
+		return nil, err
+	}
+	args["id"] = arg0
+	arg1, err := graphql.ProcessArgField(ctx, rawArgs, "input", ec.unmarshalNUpdateCustomTimelineEventInput2githubᚗcomᚋvibeᚑc2ᚋvibeᚑc2ᚑcoreᚋcoreᚋpkgᚋgraphqlᚋmodelᚐUpdateCustomTimelineEventInput)
 	if err != nil {
 		return nil, err
 	}
@@ -8888,6 +9070,223 @@ func (ec *executionContext) fieldContext_Mutation_adminRevokeAllUserSessions(ctx
 	return fc, nil
 }
 
+func (ec *executionContext) _Mutation_createCustomTimelineEvent(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Mutation_createCustomTimelineEvent,
+		func(ctx context.Context) (any, error) {
+			fc := graphql.GetFieldContext(ctx)
+			return ec.Resolvers.Mutation().CreateCustomTimelineEvent(ctx, fc.Args["operationId"].(string), fc.Args["input"].(model.CreateCustomTimelineEventInput))
+		},
+		func(ctx context.Context, next graphql.Resolver) graphql.Resolver {
+			directive0 := next
+
+			directive1 := func(ctx context.Context) (any, error) {
+				permission, err := ec.unmarshalNString2string(ctx, "operation:member")
+				if err != nil {
+					var zeroVal *models.OperationEvent
+					return zeroVal, err
+				}
+				if ec.Directives.HasPermission == nil {
+					var zeroVal *models.OperationEvent
+					return zeroVal, errors.New("directive hasPermission is not implemented")
+				}
+				return ec.Directives.HasPermission(ctx, nil, directive0, permission)
+			}
+
+			next = directive1
+			return next
+		},
+		ec.marshalNTimelineEvent2ᚖgithubᚗcomᚋvibeᚑc2ᚋvibeᚑc2ᚑcoreᚋcoreᚋpkgᚋmodelsᚐOperationEvent,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_Mutation_createCustomTimelineEvent(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Mutation",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "id":
+				return ec.fieldContext_TimelineEvent_id(ctx, field)
+			case "operationId":
+				return ec.fieldContext_TimelineEvent_operationId(ctx, field)
+			case "topic":
+				return ec.fieldContext_TimelineEvent_topic(ctx, field)
+			case "subjectKind":
+				return ec.fieldContext_TimelineEvent_subjectKind(ctx, field)
+			case "subjectId":
+				return ec.fieldContext_TimelineEvent_subjectId(ctx, field)
+			case "subjectName":
+				return ec.fieldContext_TimelineEvent_subjectName(ctx, field)
+			case "actor":
+				return ec.fieldContext_TimelineEvent_actor(ctx, field)
+			case "occurredAt":
+				return ec.fieldContext_TimelineEvent_occurredAt(ctx, field)
+			case "metadata":
+				return ec.fieldContext_TimelineEvent_metadata(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type TimelineEvent", field.Name)
+		},
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			err = ec.Recover(ctx, r)
+			ec.Error(ctx, err)
+		}
+	}()
+	ctx = graphql.WithFieldContext(ctx, fc)
+	if fc.Args, err = ec.field_Mutation_createCustomTimelineEvent_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
+		ec.Error(ctx, err)
+		return fc, err
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Mutation_updateCustomTimelineEvent(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Mutation_updateCustomTimelineEvent,
+		func(ctx context.Context) (any, error) {
+			fc := graphql.GetFieldContext(ctx)
+			return ec.Resolvers.Mutation().UpdateCustomTimelineEvent(ctx, fc.Args["id"].(string), fc.Args["input"].(model.UpdateCustomTimelineEventInput))
+		},
+		func(ctx context.Context, next graphql.Resolver) graphql.Resolver {
+			directive0 := next
+
+			directive1 := func(ctx context.Context) (any, error) {
+				permission, err := ec.unmarshalNString2string(ctx, "operation:member")
+				if err != nil {
+					var zeroVal *models.OperationEvent
+					return zeroVal, err
+				}
+				if ec.Directives.HasPermission == nil {
+					var zeroVal *models.OperationEvent
+					return zeroVal, errors.New("directive hasPermission is not implemented")
+				}
+				return ec.Directives.HasPermission(ctx, nil, directive0, permission)
+			}
+
+			next = directive1
+			return next
+		},
+		ec.marshalNTimelineEvent2ᚖgithubᚗcomᚋvibeᚑc2ᚋvibeᚑc2ᚑcoreᚋcoreᚋpkgᚋmodelsᚐOperationEvent,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_Mutation_updateCustomTimelineEvent(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Mutation",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "id":
+				return ec.fieldContext_TimelineEvent_id(ctx, field)
+			case "operationId":
+				return ec.fieldContext_TimelineEvent_operationId(ctx, field)
+			case "topic":
+				return ec.fieldContext_TimelineEvent_topic(ctx, field)
+			case "subjectKind":
+				return ec.fieldContext_TimelineEvent_subjectKind(ctx, field)
+			case "subjectId":
+				return ec.fieldContext_TimelineEvent_subjectId(ctx, field)
+			case "subjectName":
+				return ec.fieldContext_TimelineEvent_subjectName(ctx, field)
+			case "actor":
+				return ec.fieldContext_TimelineEvent_actor(ctx, field)
+			case "occurredAt":
+				return ec.fieldContext_TimelineEvent_occurredAt(ctx, field)
+			case "metadata":
+				return ec.fieldContext_TimelineEvent_metadata(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type TimelineEvent", field.Name)
+		},
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			err = ec.Recover(ctx, r)
+			ec.Error(ctx, err)
+		}
+	}()
+	ctx = graphql.WithFieldContext(ctx, fc)
+	if fc.Args, err = ec.field_Mutation_updateCustomTimelineEvent_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
+		ec.Error(ctx, err)
+		return fc, err
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Mutation_deleteCustomTimelineEvent(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Mutation_deleteCustomTimelineEvent,
+		func(ctx context.Context) (any, error) {
+			fc := graphql.GetFieldContext(ctx)
+			return ec.Resolvers.Mutation().DeleteCustomTimelineEvent(ctx, fc.Args["id"].(string))
+		},
+		func(ctx context.Context, next graphql.Resolver) graphql.Resolver {
+			directive0 := next
+
+			directive1 := func(ctx context.Context) (any, error) {
+				permission, err := ec.unmarshalNString2string(ctx, "operation:member")
+				if err != nil {
+					var zeroVal bool
+					return zeroVal, err
+				}
+				if ec.Directives.HasPermission == nil {
+					var zeroVal bool
+					return zeroVal, errors.New("directive hasPermission is not implemented")
+				}
+				return ec.Directives.HasPermission(ctx, nil, directive0, permission)
+			}
+
+			next = directive1
+			return next
+		},
+		ec.marshalNBoolean2bool,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_Mutation_deleteCustomTimelineEvent(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Mutation",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Boolean does not have child fields")
+		},
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			err = ec.Recover(ctx, r)
+			ec.Error(ctx, err)
+		}
+	}()
+	ctx = graphql.WithFieldContext(ctx, fc)
+	if fc.Args, err = ec.field_Mutation_deleteCustomTimelineEvent_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
+		ec.Error(ctx, err)
+		return fc, err
+	}
+	return fc, nil
+}
+
 func (ec *executionContext) _Mutation_createWikiDocument(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
@@ -11846,6 +12245,8 @@ func (ec *executionContext) fieldContext_Query_timelineBuckets(ctx context.Conte
 				return ec.fieldContext_TimelineBucket_bucketStart(ctx, field)
 			case "count":
 				return ec.fieldContext_TimelineBucket_count(ctx, field)
+			case "topicCounts":
+				return ec.fieldContext_TimelineBucket_topicCounts(ctx, field)
 			}
 			return nil, fmt.Errorf("no field named %q was found under type TimelineBucket", field.Name)
 		},
@@ -15387,6 +15788,43 @@ func (ec *executionContext) fieldContext_TimelineBucket_count(_ context.Context,
 	return fc, nil
 }
 
+func (ec *executionContext) _TimelineBucket_topicCounts(ctx context.Context, field graphql.CollectedField, obj *model.TimelineBucket) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_TimelineBucket_topicCounts,
+		func(ctx context.Context) (any, error) {
+			return obj.TopicCounts, nil
+		},
+		nil,
+		ec.marshalNTimelineTopicCount2ᚕᚖgithubᚗcomᚋvibeᚑc2ᚋvibeᚑc2ᚑcoreᚋcoreᚋpkgᚋgraphqlᚋmodelᚐTimelineTopicCountᚄ,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_TimelineBucket_topicCounts(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "TimelineBucket",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "topic":
+				return ec.fieldContext_TimelineTopicCount_topic(ctx, field)
+			case "subjectKind":
+				return ec.fieldContext_TimelineTopicCount_subjectKind(ctx, field)
+			case "count":
+				return ec.fieldContext_TimelineTopicCount_count(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type TimelineTopicCount", field.Name)
+		},
+	}
+	return fc, nil
+}
+
 func (ec *executionContext) _TimelineEvent_id(ctx context.Context, field graphql.CollectedField, obj *models.OperationEvent) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
@@ -15809,6 +16247,93 @@ func (ec *executionContext) fieldContext_TimelineEventEdge_cursor(_ context.Cont
 		IsResolver: false,
 		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
 			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _TimelineTopicCount_topic(ctx context.Context, field graphql.CollectedField, obj *model.TimelineTopicCount) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_TimelineTopicCount_topic,
+		func(ctx context.Context) (any, error) {
+			return obj.Topic, nil
+		},
+		nil,
+		ec.marshalNString2string,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_TimelineTopicCount_topic(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "TimelineTopicCount",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _TimelineTopicCount_subjectKind(ctx context.Context, field graphql.CollectedField, obj *model.TimelineTopicCount) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_TimelineTopicCount_subjectKind,
+		func(ctx context.Context) (any, error) {
+			return obj.SubjectKind, nil
+		},
+		nil,
+		ec.marshalNString2string,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_TimelineTopicCount_subjectKind(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "TimelineTopicCount",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _TimelineTopicCount_count(ctx context.Context, field graphql.CollectedField, obj *model.TimelineTopicCount) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_TimelineTopicCount_count,
+		func(ctx context.Context) (any, error) {
+			return obj.Count, nil
+		},
+		nil,
+		ec.marshalNInt2int,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_TimelineTopicCount_count(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "TimelineTopicCount",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Int does not have child fields")
 		},
 	}
 	return fc, nil
@@ -20681,6 +21206,50 @@ func (ec *executionContext) unmarshalInputCreateCredentialInput(ctx context.Cont
 	return it, nil
 }
 
+func (ec *executionContext) unmarshalInputCreateCustomTimelineEventInput(ctx context.Context, obj any) (model.CreateCustomTimelineEventInput, error) {
+	var it model.CreateCustomTimelineEventInput
+	if obj == nil {
+		return it, nil
+	}
+
+	asMap := map[string]any{}
+	for k, v := range obj.(map[string]any) {
+		asMap[k] = v
+	}
+
+	fieldsInOrder := [...]string{"name", "description", "occurredAt"}
+	for _, k := range fieldsInOrder {
+		v, ok := asMap[k]
+		if !ok {
+			continue
+		}
+		switch k {
+		case "name":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("name"))
+			data, err := ec.unmarshalNString2string(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.Name = data
+		case "description":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("description"))
+			data, err := ec.unmarshalOString2ᚖstring(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.Description = data
+		case "occurredAt":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("occurredAt"))
+			data, err := ec.unmarshalNString2string(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.OccurredAt = data
+		}
+	}
+	return it, nil
+}
+
 func (ec *executionContext) unmarshalInputCreateOperationInput(ctx context.Context, obj any) (model.CreateOperationInput, error) {
 	var it model.CreateOperationInput
 	if obj == nil {
@@ -21088,6 +21657,50 @@ func (ec *executionContext) unmarshalInputUpdateCredentialInput(ctx context.Cont
 				return it, err
 			}
 			it.Tags = data
+		}
+	}
+	return it, nil
+}
+
+func (ec *executionContext) unmarshalInputUpdateCustomTimelineEventInput(ctx context.Context, obj any) (model.UpdateCustomTimelineEventInput, error) {
+	var it model.UpdateCustomTimelineEventInput
+	if obj == nil {
+		return it, nil
+	}
+
+	asMap := map[string]any{}
+	for k, v := range obj.(map[string]any) {
+		asMap[k] = v
+	}
+
+	fieldsInOrder := [...]string{"name", "description", "occurredAt"}
+	for _, k := range fieldsInOrder {
+		v, ok := asMap[k]
+		if !ok {
+			continue
+		}
+		switch k {
+		case "name":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("name"))
+			data, err := ec.unmarshalOString2ᚖstring(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.Name = data
+		case "description":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("description"))
+			data, err := ec.unmarshalOString2ᚖstring(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.Description = data
+		case "occurredAt":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("occurredAt"))
+			data, err := ec.unmarshalOString2ᚖstring(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.OccurredAt = data
 		}
 	}
 	return it, nil
@@ -22304,6 +22917,27 @@ func (ec *executionContext) _Mutation(ctx context.Context, sel ast.SelectionSet)
 		case "adminRevokeAllUserSessions":
 			out.Values[i] = ec.OperationContext.RootResolverMiddleware(innerCtx, func(ctx context.Context) (res graphql.Marshaler) {
 				return ec._Mutation_adminRevokeAllUserSessions(ctx, field)
+			})
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "createCustomTimelineEvent":
+			out.Values[i] = ec.OperationContext.RootResolverMiddleware(innerCtx, func(ctx context.Context) (res graphql.Marshaler) {
+				return ec._Mutation_createCustomTimelineEvent(ctx, field)
+			})
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "updateCustomTimelineEvent":
+			out.Values[i] = ec.OperationContext.RootResolverMiddleware(innerCtx, func(ctx context.Context) (res graphql.Marshaler) {
+				return ec._Mutation_updateCustomTimelineEvent(ctx, field)
+			})
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "deleteCustomTimelineEvent":
+			out.Values[i] = ec.OperationContext.RootResolverMiddleware(innerCtx, func(ctx context.Context) (res graphql.Marshaler) {
+				return ec._Mutation_deleteCustomTimelineEvent(ctx, field)
 			})
 			if out.Values[i] == graphql.Null {
 				out.Invalids++
@@ -24692,6 +25326,11 @@ func (ec *executionContext) _TimelineBucket(ctx context.Context, sel ast.Selecti
 			if out.Values[i] == graphql.Null {
 				out.Invalids++
 			}
+		case "topicCounts":
+			out.Values[i] = ec._TimelineBucket_topicCounts(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
 		default:
 			panic("unknown field " + strconv.Quote(field.Name))
 		}
@@ -25070,6 +25709,55 @@ func (ec *executionContext) _TimelineEventEdge(ctx context.Context, sel ast.Sele
 			}
 		case "cursor":
 			out.Values[i] = ec._TimelineEventEdge_cursor(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		default:
+			panic("unknown field " + strconv.Quote(field.Name))
+		}
+	}
+	out.Dispatch(ctx)
+	if out.Invalids > 0 {
+		return graphql.Null
+	}
+
+	atomic.AddInt32(&ec.Deferred, int32(len(deferred)))
+
+	for label, dfs := range deferred {
+		ec.ProcessDeferredGroup(graphql.DeferredGroup{
+			Label:    label,
+			Path:     graphql.GetPath(ctx),
+			FieldSet: dfs,
+			Context:  ctx,
+		})
+	}
+
+	return out
+}
+
+var timelineTopicCountImplementors = []string{"TimelineTopicCount"}
+
+func (ec *executionContext) _TimelineTopicCount(ctx context.Context, sel ast.SelectionSet, obj *model.TimelineTopicCount) graphql.Marshaler {
+	fields := graphql.CollectFields(ec.OperationContext, sel, timelineTopicCountImplementors)
+
+	out := graphql.NewFieldSet(fields)
+	deferred := make(map[string]*graphql.FieldSet)
+	for i, field := range fields {
+		switch field.Name {
+		case "__typename":
+			out.Values[i] = graphql.MarshalString("TimelineTopicCount")
+		case "topic":
+			out.Values[i] = ec._TimelineTopicCount_topic(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "subjectKind":
+			out.Values[i] = ec._TimelineTopicCount_subjectKind(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "count":
+			out.Values[i] = ec._TimelineTopicCount_count(ctx, field, obj)
 			if out.Values[i] == graphql.Null {
 				out.Invalids++
 			}
@@ -27480,6 +28168,11 @@ func (ec *executionContext) unmarshalNCreateCredentialInput2githubᚗcomᚋvibe�
 	return res, graphql.ErrorOnPath(ctx, err)
 }
 
+func (ec *executionContext) unmarshalNCreateCustomTimelineEventInput2githubᚗcomᚋvibeᚑc2ᚋvibeᚑc2ᚑcoreᚋcoreᚋpkgᚋgraphqlᚋmodelᚐCreateCustomTimelineEventInput(ctx context.Context, v any) (model.CreateCustomTimelineEventInput, error) {
+	res, err := ec.unmarshalInputCreateCustomTimelineEventInput(ctx, v)
+	return res, graphql.ErrorOnPath(ctx, err)
+}
+
 func (ec *executionContext) unmarshalNCreateOperationInput2githubᚗcomᚋvibeᚑc2ᚋvibeᚑc2ᚑcoreᚋcoreᚋpkgᚋgraphqlᚋmodelᚐCreateOperationInput(ctx context.Context, v any) (model.CreateOperationInput, error) {
 	res, err := ec.unmarshalInputCreateOperationInput(ctx, v)
 	return res, graphql.ErrorOnPath(ctx, err)
@@ -28140,8 +28833,39 @@ func (ec *executionContext) marshalNTimelineEventEdge2ᚖgithubᚗcomᚋvibeᚑc
 	return ec._TimelineEventEdge(ctx, sel, v)
 }
 
+func (ec *executionContext) marshalNTimelineTopicCount2ᚕᚖgithubᚗcomᚋvibeᚑc2ᚋvibeᚑc2ᚑcoreᚋcoreᚋpkgᚋgraphqlᚋmodelᚐTimelineTopicCountᚄ(ctx context.Context, sel ast.SelectionSet, v []*model.TimelineTopicCount) graphql.Marshaler {
+	ret := graphql.MarshalSliceConcurrently(ctx, len(v), 0, false, func(ctx context.Context, i int) graphql.Marshaler {
+		fc := graphql.GetFieldContext(ctx)
+		fc.Result = &v[i]
+		return ec.marshalNTimelineTopicCount2ᚖgithubᚗcomᚋvibeᚑc2ᚋvibeᚑc2ᚑcoreᚋcoreᚋpkgᚋgraphqlᚋmodelᚐTimelineTopicCount(ctx, sel, v[i])
+	})
+
+	for _, e := range ret {
+		if e == graphql.Null {
+			return graphql.Null
+		}
+	}
+
+	return ret
+}
+
+func (ec *executionContext) marshalNTimelineTopicCount2ᚖgithubᚗcomᚋvibeᚑc2ᚋvibeᚑc2ᚑcoreᚋcoreᚋpkgᚋgraphqlᚋmodelᚐTimelineTopicCount(ctx context.Context, sel ast.SelectionSet, v *model.TimelineTopicCount) graphql.Marshaler {
+	if v == nil {
+		if !graphql.HasFieldError(ctx, graphql.GetFieldContext(ctx)) {
+			graphql.AddErrorf(ctx, "the requested element is null which the schema does not allow")
+		}
+		return graphql.Null
+	}
+	return ec._TimelineTopicCount(ctx, sel, v)
+}
+
 func (ec *executionContext) unmarshalNUpdateCredentialInput2githubᚗcomᚋvibeᚑc2ᚋvibeᚑc2ᚑcoreᚋcoreᚋpkgᚋgraphqlᚋmodelᚐUpdateCredentialInput(ctx context.Context, v any) (model.UpdateCredentialInput, error) {
 	res, err := ec.unmarshalInputUpdateCredentialInput(ctx, v)
+	return res, graphql.ErrorOnPath(ctx, err)
+}
+
+func (ec *executionContext) unmarshalNUpdateCustomTimelineEventInput2githubᚗcomᚋvibeᚑc2ᚋvibeᚑc2ᚑcoreᚋcoreᚋpkgᚋgraphqlᚋmodelᚐUpdateCustomTimelineEventInput(ctx context.Context, v any) (model.UpdateCustomTimelineEventInput, error) {
+	res, err := ec.unmarshalInputUpdateCustomTimelineEventInput(ctx, v)
 	return res, graphql.ErrorOnPath(ctx, err)
 }
 

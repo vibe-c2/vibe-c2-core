@@ -50,5 +50,13 @@ gqlgen: ## Regenerate GraphQL code from schema (resolvers, models, runtime)
 gqlcodegen: ## Regenerate frontend GraphQL types from schema
 	$(MAKE) -C frontend codegen
 
+seed-timeline: ## Seed the timeline with mock events (vars: OP, YEARS, EVENTS_PER_DAY, DRY_RUN)
+	@echo "Seeding timeline (op=$(or $(OP),test) years=$(or $(YEARS),2) events/day=$(or $(EVENTS_PER_DAY),50))"
+	cd core && go run ./cmd/seed-timeline \
+		-op $(or $(OP),test) \
+		-years $(or $(YEARS),2) \
+		-events-per-day $(or $(EVENTS_PER_DAY),50) \
+		$(if $(DRY_RUN),-dry-run,)
+
 help: ## help: Displays all available targets with their descriptions.
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' Makefile | sort | awk 'BEGIN {FS = ":.*?## "}; {printf "\033[36m%-25s\033[0m %s\n", $$1, $$2}'

@@ -69,6 +69,20 @@ type TimelineBucket {
   # Start of the bucket in the requested timezone (RFC3339 with offset).
   bucketStart: String!
   count: Int!
+  # Per-topic breakdown of the bucket. Lets the axis render the topic-grouped
+  # dot stack without fetching the underlying events — the previous design
+  # fired one timelineEventsByDay query per active bucket on page load.
+  # Sorted by count desc, then topic asc, to match the canvas render order.
+  topicCounts: [TimelineTopicCount!]!
+}
+
+# Per-topic count inside a TimelineBucket. subjectKind is included because
+# the axis dot icon is keyed off subject_kind (events with the same topic
+# always share the same subject_kind, so server-side grouping is safe).
+type TimelineTopicCount {
+  topic: String!
+  subjectKind: String!
+  count: Int!
 }
 
 extend type Query {
@@ -114,5 +128,57 @@ extend type Subscription {
   # Real-time append of new persisted events for an operation. Fires once
   # per event after the persistence subscriber has stored it.
   timelineEventAdded(operationId: ID!): TimelineEvent!
+    @hasPermission(permission: "operation:member")
+}
+
+# -----------------------------------------------------------------------------
+# Custom timeline events
+# -----------------------------------------------------------------------------
+# Custom events are user-authored timeline annotations. They are stored as
+# rows in the operation_events collection with subject_kind="custom_event"
+# and event_id == subject_id (the row is its own subject). The description
+# lives in metadata["description"].
+#
+# Unlike system-generated topics, custom events are NOT routed through the
+# pkg/events.Logger subscriber — the resolver writes the row inline and
+# publishes TopicOperationEventLogged so the live subscription reaches
+# connected clients.
+
+input CreateCustomTimelineEventInput {
+  # Short title shown on the timeline. Required, trimmed, non-empty.
+  name: String!
+  # Free-form context surfaced in the event detail dialog. Optional.
+  description: String
+  # When the event happened, in RFC3339. May be in the past or the future —
+  # the operator decides what the event represents.
+  occurredAt: String!
+}
+
+input UpdateCustomTimelineEventInput {
+  name: String
+  description: String
+  occurredAt: String
+}
+
+extend type Mutation {
+  # Create a custom timeline event annotation on an operation.
+  # Requires at least operator role in the operation.
+  createCustomTimelineEvent(
+    operationId: ID!
+    input: CreateCustomTimelineEventInput!
+  ): TimelineEvent!
+    @hasPermission(permission: "operation:member")
+
+  # Update a custom timeline event in place. Only the original author or
+  # an operation admin may edit; resolver enforces the check.
+  updateCustomTimelineEvent(
+    id: ID!
+    input: UpdateCustomTimelineEventInput!
+  ): TimelineEvent!
+    @hasPermission(permission: "operation:member")
+
+  # Delete a custom timeline event. Hard delete; no soft-delete tombstone
+  # (the row never existed for any other purpose). Author-or-admin only.
+  deleteCustomTimelineEvent(id: ID!): Boolean!
     @hasPermission(permission: "operation:member")
 }

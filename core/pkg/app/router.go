@@ -70,7 +70,7 @@ func (a *App) NewRouter() *gin.Engine {
 		a.repos.Credential, a.repos.Operation, a.repos.User, wikiDocRes, a.eventBus,
 	)
 	timelineRes := resolver.NewTimelineResolver(
-		a.repos.OperationEvent, a.repos.Operation, a.repos.User,
+		a.repos.OperationEvent, a.repos.Operation, a.repos.User, a.eventBus,
 	)
 
 	// Wiki controller (REST endpoints)
@@ -94,6 +94,7 @@ func (a *App) NewRouter() *gin.Engine {
 	// Hocuspocus sidecar via the existing HocuspocusClient.
 	wikiImportOrch := wikiimport.NewOrchestrator(
 		a.repos.WikiDocument,
+		a.repos.OperationEvent,
 		wikiImageCtrl,
 		wikiFileCtrl,
 		a.hpClient,

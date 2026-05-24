@@ -1,4 +1,9 @@
-import { BookOpenIcon, KeyRoundIcon, type LucideIcon } from "lucide-react"
+import {
+  BookOpenIcon,
+  KeyRoundIcon,
+  PinIcon,
+  type LucideIcon,
+} from "lucide-react"
 
 // subjectKindIcon picks an icon for an event dot based on the entity it
 // concerns. Falls back to KeyRoundIcon so a new subject kind from the
@@ -9,6 +14,8 @@ export function subjectKindIcon(subjectKind: string): LucideIcon {
       return KeyRoundIcon
     case "wiki_document":
       return BookOpenIcon
+    case "custom_event":
+      return PinIcon
     default:
       return KeyRoundIcon
   }
@@ -23,6 +30,8 @@ export function subjectKindAccent(subjectKind: string): string {
       return "text-amber-500"
     case "wiki_document":
       return "text-sky-500"
+    case "custom_event":
+      return "text-emerald-500"
     default:
       return "text-muted-foreground"
   }

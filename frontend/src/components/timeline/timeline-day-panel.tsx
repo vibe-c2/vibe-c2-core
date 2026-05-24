@@ -25,9 +25,9 @@ interface Props {
 }
 
 // TimelineDayPanel fills the page below the (now fixed-height) canvas with the
-// events for the bucket selected on the axis. Reuses useTimelineEventsByDay so
-// React Query dedupes against the per-segment hook in ActiveDaySegment when
-// the same bucket is hovered/expanded — opening this panel does not re-fetch.
+// events for the bucket selected on the axis. This is the single surface that
+// loads events — the canvas no longer fans out one query per active bucket,
+// rendering its dot stack from the topicCounts on timelineBuckets instead.
 export function TimelineDayPanel({
   operationId,
   bucketStart,

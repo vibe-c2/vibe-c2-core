@@ -54,12 +54,13 @@ type MarkdownConverter interface {
 // lived dependencies; the per-import state lives entirely on the stack of
 // Run.
 type Orchestrator struct {
-	docRepo   repository.IWikiDocumentRepository
-	imageIn   ImageIngestor
-	fileIn    FileIngestor
-	converter MarkdownConverter
-	eventBus  eventbus.IEventBus
-	logger    *zap.Logger
+	docRepo     repository.IWikiDocumentRepository
+	eventRepo   repository.IOperationEventRepository
+	imageIn     ImageIngestor
+	fileIn      FileIngestor
+	converter   MarkdownConverter
+	eventBus    eventbus.IEventBus
+	logger      *zap.Logger
 
 	// importParentMu serialises the lookup-or-create of the singleton
 	// "import" parent per operation. Without this, two concurrent imports
@@ -71,9 +72,14 @@ type Orchestrator struct {
 
 // NewOrchestrator constructs an orchestrator wired up to the live
 // repository and ingest helpers. eventBus may be nil in tests — when nil,
-// the orchestrator skips post-import event publication.
+// the orchestrator skips post-import event publication. eventRepo may
+// likewise be nil in tests; when set, the orchestrator writes per-doc
+// rows directly into operation_events so the timeline reflects every
+// imported document (firing N WikiDocumentCreated bus events would
+// thrash the wiki sidebar cache subscription — see Run's design comment).
 func NewOrchestrator(
 	docRepo repository.IWikiDocumentRepository,
+	eventRepo repository.IOperationEventRepository,
 	imageIn ImageIngestor,
 	fileIn FileIngestor,
 	converter MarkdownConverter,
@@ -82,6 +88,7 @@ func NewOrchestrator(
 ) *Orchestrator {
 	return &Orchestrator{
 		docRepo:   docRepo,
+		eventRepo: eventRepo,
 		imageIn:   imageIn,
 		fileIn:    fileIn,
 		converter: converter,
@@ -149,7 +156,19 @@ func (o *Orchestrator) Run(
 
 	report := &Report{}
 
+	// timelineRows accumulates operation_event rows for every document
+	// created during this import (wrapper folders + collection parents +
+	// nested docs). We write them in one InsertMany at the end rather than
+	// firing N bus events because each WikiDocumentCreated event
+	// invalidates several frontend caches; flooding the sidebar
+	// subscription with hundreds of invalidations during a large import
+	// would be visible jank for no real gain.
+	var timelineRows []*models.OperationEvent
+
 	// Holding-pen folders: import/<ISO timestamp>/<collection>/...
+	// Both the import parent (when freshly created) and the timestamp parent
+	// fire WikiDocumentCreated bus events below; events.Logger writes their
+	// timeline rows, so we deliberately skip appending them to timelineRows.
 	importParent, importParentCreated, err := o.findOrCreateImportParent(ctx, operationID, callerID)
 	if err != nil {
 		return nil, fmt.Errorf("find-or-create import parent: %w", err)
@@ -184,12 +203,17 @@ func (o *Orchestrator) Run(
 			})
 			continue
 		}
+		// Collection-parent docs are real, user-meaningful wiki nodes
+		// (named after the source collection). They never fire bus events,
+		// so log them straight to the timeline.
+		timelineRows = append(timelineRows, newImportTimelineRow(collectionParent, &timestampParent.DocumentID))
 
 		o.processDocs(ctx, processCtx{
-			export:      export,
-			operationID: operationID,
-			callerID:    callerID,
-			report:      report,
+			export:       export,
+			operationID:  operationID,
+			callerID:     callerID,
+			report:       report,
+			timelineRows: &timelineRows,
 		}, coll.Documents, collectionParent.DocumentID, coll.Name+"/")
 	}
 
@@ -230,16 +254,50 @@ func (o *Orchestrator) Run(
 		))
 	}
 
+	// Flush per-doc timeline rows. Failure here is logged but never
+	// propagated — the documents are already on disk and the user got a
+	// successful import; a missing audit trail row is the right thing to
+	// degrade away from. Skipped entirely when no event repo is wired
+	// (tests with the simple constructor or when no docs were created).
+	if o.eventRepo != nil && len(timelineRows) > 0 {
+		if err := o.eventRepo.InsertMany(ctx, timelineRows); err != nil {
+			o.logger.Warn("wiki import: timeline row insert failed",
+				zap.Int("row_count", len(timelineRows)),
+				zap.Error(err))
+		} else if o.eventBus != nil {
+			// Wake up live timeline subscribers with a single
+			// TopicOperationEventLogged. The frontend handler invalidates
+			// the entire timeline namespace, so one event is enough to
+			// pull all the just-inserted rows on the next refetch — N
+			// events would just trigger N redundant invalidations.
+			last := timelineRows[len(timelineRows)-1]
+			o.eventBus.Publish(eventbus.NewOperationEventLoggedEvent(
+				eventbus.UserActor(callerID.String()),
+				eventbus.OperationEventLoggedPayload{
+					EventID:     last.EventID.String(),
+					OperationID: last.OperationID.String(),
+				},
+			))
+		}
+	}
+
 	return report, nil
 }
 
 // processCtx bundles the per-import context that recursive document
 // processing needs. Avoids passing seven scalars through every recursion.
+//
+// timelineRows accumulates operation_event rows for the documents created
+// during this import. Bus-side WikiDocumentCreated events are fired only
+// for the two wrapper folders to keep the wiki sidebar cache subscription
+// happy (see Run), so per-doc timeline coverage has to be filled in here.
+// The slice is bulk-flushed at the end of Run.
 type processCtx struct {
-	export      *ParsedExport
-	operationID uuid.UUID
-	callerID    uuid.UUID
-	report      *Report
+	export       *ParsedExport
+	operationID  uuid.UUID
+	callerID     uuid.UUID
+	report       *Report
+	timelineRows *[]*models.OperationEvent
 }
 
 func (o *Orchestrator) processDocs(
@@ -372,10 +430,43 @@ func (o *Orchestrator) processDocs(
 
 		pctx.report.CreatedDocs++
 
+		// Stamp a timeline row for this doc. We avoid the eventbus
+		// publish-per-doc path on purpose; see the comment on
+		// processCtx.timelineRows.
+		if pctx.timelineRows != nil {
+			parentID := &parentID
+			*pctx.timelineRows = append(*pctx.timelineRows, newImportTimelineRow(created, parentID))
+		}
+
 		// Recurse into children with the new doc as their parent.
 		if len(parsed.Children) > 0 {
 			o.processDocs(ctx, pctx, parsed.Children, created.DocumentID, humanPath+"/")
 		}
+	}
+}
+
+// newImportTimelineRow builds an operation_event row mirroring what
+// pkg/events.Logger would have written if a WikiDocumentCreated bus event
+// had been published for this doc. parentID may be nil for root-level
+// docs (though the importer never produces those — every imported doc
+// lives under at least the collection parent).
+func newImportTimelineRow(doc *models.WikiDocument, parentID *uuid.UUID) *models.OperationEvent {
+	var meta map[string]any
+	if parentID != nil {
+		meta = map[string]any{"parent_document_id": parentID.String()}
+	}
+	actor := doc.CreatedByID
+	return &models.OperationEvent{
+		EventID:     uuid.New(),
+		OperationID: doc.OperationID,
+		Topic:       string(eventbus.TopicWikiDocumentCreated),
+		SubjectKind: models.SubjectKindWikiDocument,
+		SubjectID:   doc.DocumentID,
+		SubjectName: doc.Title,
+		ActorType:   models.EventActorUser,
+		ActorID:     &actor,
+		Metadata:    meta,
+		OccurredAt:  time.Now().UTC(),
 	}
 }
 

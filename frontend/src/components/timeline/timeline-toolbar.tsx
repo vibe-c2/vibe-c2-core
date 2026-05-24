@@ -1,5 +1,6 @@
-import { Loader2Icon } from "lucide-react"
+import { Loader2Icon, PlusIcon } from "lucide-react"
 import { cn } from "@/lib/utils"
+import { Button } from "@/components/ui/button"
 import { Separator } from "@/components/ui/separator"
 import type { TimelineGranularity } from "@/graphql/gql/graphql"
 import {
@@ -33,6 +34,12 @@ interface Props {
   // True when any filter is set; surfaces a Reset affordance.
   hasActiveFilters: boolean
   onReset: () => void
+
+  // Adds a primary "Add event" action. Disabled when the viewer lacks
+  // operator role — keeping the button visible but inert prevents the
+  // toolbar from reflowing for viewers vs. operators.
+  onAddEvent: () => void
+  canAddEvent: boolean
 }
 
 const OPTIONS: Array<{ key: TimelineGranularity; label: string }> = [
@@ -58,6 +65,8 @@ export function TimelineToolbar({
   onRangeChange,
   hasActiveFilters,
   onReset,
+  onAddEvent,
+  canAddEvent,
 }: Props) {
   return (
     <div className="sticky top-0 z-10 flex flex-wrap items-center gap-2 rounded-md border bg-card/95 px-2 py-1.5 backdrop-blur">
@@ -97,6 +106,22 @@ export function TimelineToolbar({
       <DateRangeFilter from={from} to={to} onChange={onRangeChange} />
 
       <ResetFiltersButton visible={hasActiveFilters} onClick={onReset} />
+
+      <Button
+        type="button"
+        size="sm"
+        onClick={onAddEvent}
+        disabled={!canAddEvent}
+        className="ml-auto h-7"
+        title={
+          canAddEvent
+            ? "Add a custom timeline event"
+            : "Operator role required to add events"
+        }
+      >
+        <PlusIcon className="size-3.5" />
+        Add event
+      </Button>
     </div>
   )
 }

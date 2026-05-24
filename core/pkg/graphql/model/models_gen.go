@@ -22,6 +22,12 @@ type CreateCredentialInput struct {
 	Tags     []string              `json:"tags,omitempty"`
 }
 
+type CreateCustomTimelineEventInput struct {
+	Name        string  `json:"name"`
+	Description *string `json:"description,omitempty"`
+	OccurredAt  string  `json:"occurredAt"`
+}
+
 type CreateOperationInput struct {
 	Name        string  `json:"name"`
 	Description *string `json:"description,omitempty"`
@@ -149,8 +155,9 @@ type Subscription struct {
 }
 
 type TimelineBucket struct {
-	BucketStart string `json:"bucketStart"`
-	Count       int    `json:"count"`
+	BucketStart string                `json:"bucketStart"`
+	Count       int                   `json:"count"`
+	TopicCounts []*TimelineTopicCount `json:"topicCounts"`
 }
 
 type TimelineEventConnection struct {
@@ -163,6 +170,12 @@ type TimelineEventEdge struct {
 	Cursor string                 `json:"cursor"`
 }
 
+type TimelineTopicCount struct {
+	Topic       string `json:"topic"`
+	SubjectKind string `json:"subjectKind"`
+	Count       int    `json:"count"`
+}
+
 type UpdateCredentialInput struct {
 	Name     *string                `json:"name,omitempty"`
 	Type     *models.CredentialType `json:"type,omitempty"`
@@ -171,6 +184,12 @@ type UpdateCredentialInput struct {
 	Keys     []*CredentialKeyInput  `json:"keys,omitempty"`
 	IsValid  *bool                  `json:"isValid,omitempty"`
 	Tags     []string               `json:"tags,omitempty"`
+}
+
+type UpdateCustomTimelineEventInput struct {
+	Name        *string `json:"name,omitempty"`
+	Description *string `json:"description,omitempty"`
+	OccurredAt  *string `json:"occurredAt,omitempty"`
 }
 
 type UpdateOperationInput struct {

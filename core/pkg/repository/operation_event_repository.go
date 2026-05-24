@@ -81,10 +81,22 @@ type BucketQuery struct {
 }
 
 // Bucket is one element of the axis: the start-of-bucket timestamp
-// (in the requested timezone) and the count of events in it.
+// (in the requested timezone), the count of events in it, and the
+// per-topic breakdown used by the axis to render the dot stack without
+// fetching the underlying events.
 type Bucket struct {
-	BucketStart time.Time `bson:"_id"`
-	Count       int       `bson:"count"`
+	BucketStart time.Time     `bson:"_id"`
+	Count       int           `bson:"count"`
+	Topics      []TopicBucket `bson:"topics"`
+}
+
+// TopicBucket is the per-(topic, subject_kind) tally inside a Bucket.
+// Events with the same topic always share the same subject_kind, so the
+// pair is stable and server-side grouping by both is safe.
+type TopicBucket struct {
+	Topic       string             `bson:"topic"`
+	SubjectKind models.SubjectKind `bson:"subject_kind"`
+	Count       int                `bson:"count"`
 }
 
 // DayQuery selects the events that fall within a single bucket at the
@@ -102,6 +114,14 @@ type DayQuery struct {
 	After       string
 }
 
+// CustomEventUpdate carries the editable subset of a custom-event row.
+// Pointer fields are partial-update semantics: nil = leave unchanged.
+type CustomEventUpdate struct {
+	Name        *string
+	Description *string
+	OccurredAt  *time.Time
+}
+
 // IOperationEventRepository defines persistence and read operations for
 // the timeline event log.
 type IOperationEventRepository interface {
@@ -111,6 +131,16 @@ type IOperationEventRepository interface {
 	Buckets(ctx context.Context, q BucketQuery) ([]Bucket, error)
 	ListByDay(ctx context.Context, q DayQuery) ([]models.OperationEvent, pagination.PageInfo, error)
 	IsEmpty(ctx context.Context) (bool, error)
+
+	// UpdateCustomEvent mutates the editable fields of a custom-event row
+	// in place. The filter pins subject_kind=custom_event so the method
+	// cannot mutate a system-generated row even if a forged event_id is
+	// supplied. Returns the post-update document.
+	UpdateCustomEvent(ctx context.Context, eventID uuid.UUID, upd CustomEventUpdate) (models.OperationEvent, error)
+
+	// DeleteCustomEvent removes a custom-event row. Same subject_kind
+	// guard as UpdateCustomEvent — only custom events are deletable.
+	DeleteCustomEvent(ctx context.Context, eventID uuid.UUID) error
 }
 
 type operationEventRepository struct {
@@ -186,11 +216,29 @@ func (r *operationEventRepository) Buckets(ctx context.Context, q BucketQuery) (
 		trunc["startOfWeek"] = "monday"
 	}
 
+	// Two-stage $group: first by (bucket, topic, subject_kind), then fold
+	// per-bucket so each output row carries the bucket total plus the
+	// per-topic breakdown. Scanning the operation_events match set twice
+	// in-pipeline is still far cheaper than the previous frontend N+1
+	// (one timelineEventsByDay query per active bucket on page load).
 	pipeline := bson.A{
 		bson.M{"$match": match},
 		bson.M{"$group": bson.M{
-			"_id":   bson.M{"$dateTrunc": trunc},
+			"_id": bson.M{
+				"bucket":       bson.M{"$dateTrunc": trunc},
+				"topic":        "$topic",
+				"subject_kind": "$subject_kind",
+			},
 			"count": bson.M{"$sum": 1},
+		}},
+		bson.M{"$group": bson.M{
+			"_id":   "$_id.bucket",
+			"count": bson.M{"$sum": "$count"},
+			"topics": bson.M{"$push": bson.M{
+				"topic":        "$_id.topic",
+				"subject_kind": "$_id.subject_kind",
+				"count":        "$count",
+			}},
 		}},
 		bson.M{"$sort": bson.M{"_id": 1}},
 	}
@@ -199,7 +247,42 @@ func (r *operationEventRepository) Buckets(ctx context.Context, q BucketQuery) (
 	if err := r.coll.Aggregate(ctx, pipeline).All(&rows); err != nil {
 		return nil, fmt.Errorf("aggregate buckets: %w", err)
 	}
+	// Sort each bucket's topic list deterministically: count desc, then
+	// topic asc. Mirrors the frontend's previous client-side sort so the
+	// dot stack order stays stable when we drop the per-bucket event fetch.
+	for i := range rows {
+		topics := rows[i].Topics
+		sortTopicBuckets(topics)
+	}
 	return rows, nil
+}
+
+// sortTopicBuckets orders a topic breakdown by count desc, then topic asc.
+// Pulled out for readability and so the test suite can exercise the order
+// without spinning up a Mongo aggregation.
+func sortTopicBuckets(ts []TopicBucket) {
+	if len(ts) < 2 {
+		return
+	}
+	// Simple insertion sort — topic counts per bucket are small (one entry
+	// per distinct (topic, subject_kind) pair), so allocating a sort.Slice
+	// closure would be more overhead than the sort itself.
+	for i := 1; i < len(ts); i++ {
+		cur := ts[i]
+		j := i - 1
+		for j >= 0 && lessTopicBucket(cur, ts[j]) {
+			ts[j+1] = ts[j]
+			j--
+		}
+		ts[j+1] = cur
+	}
+}
+
+func lessTopicBucket(a, b TopicBucket) bool {
+	if a.Count != b.Count {
+		return a.Count > b.Count
+	}
+	return a.Topic < b.Topic
 }
 
 // ListByDay returns the events in a single bucket, newest first.
@@ -268,6 +351,60 @@ func (r *operationEventRepository) ListByDay(ctx context.Context, q DayQuery) ([
 	}
 
 	return events, pageInfo, nil
+}
+
+// UpdateCustomEvent updates the editable fields of a custom-event row.
+// The subject_kind guard makes this method a no-op (mongo.ErrNoDocuments
+// wrapped) on system-generated rows, so it is safe to call with any
+// caller-supplied event id.
+func (r *operationEventRepository) UpdateCustomEvent(
+	ctx context.Context,
+	eventID uuid.UUID,
+	upd CustomEventUpdate,
+) (models.OperationEvent, error) {
+	set := bson.M{}
+	if upd.Name != nil {
+		set["subject_name"] = *upd.Name
+	}
+	if upd.Description != nil {
+		// Metadata is a sub-document; using dotted path so we don't
+		// blow away unrelated metadata keys a future schema may add.
+		set["metadata.description"] = *upd.Description
+	}
+	if upd.OccurredAt != nil {
+		set["occurred_at"] = upd.OccurredAt.UTC()
+	}
+	if len(set) == 0 {
+		// No-op update — just return the current row.
+		return r.FindByEventID(ctx, eventID)
+	}
+
+	filter := bson.M{
+		"event_id":     eventID,
+		"subject_kind": models.SubjectKindCustomEvent,
+	}
+	if err := r.coll.UpdateOne(ctx, filter, bson.M{"$set": set}); err != nil {
+		return models.OperationEvent{}, fmt.Errorf("update custom event: %w", err)
+	}
+
+	var out models.OperationEvent
+	if err := r.coll.FindOne(ctx, filter).One(&out); err != nil {
+		return models.OperationEvent{}, fmt.Errorf("fetch updated custom event: %w", err)
+	}
+	return out, nil
+}
+
+// DeleteCustomEvent removes a custom-event row. The subject_kind guard
+// prevents a forged event_id from deleting a system-generated row.
+func (r *operationEventRepository) DeleteCustomEvent(ctx context.Context, eventID uuid.UUID) error {
+	filter := bson.M{
+		"event_id":     eventID,
+		"subject_kind": models.SubjectKindCustomEvent,
+	}
+	if err := r.coll.Remove(ctx, filter); err != nil {
+		return fmt.Errorf("delete custom event: %w", err)
+	}
+	return nil
 }
 
 // IsEmpty reports whether the collection has zero rows. Used by the
