@@ -2,6 +2,7 @@ import { useMemo, useTransition } from "react"
 import { useQueryClient } from "@tanstack/react-query"
 import { toast } from "sonner"
 import {
+  ArrowDownAZIcon,
   ChevronsDownUpIcon,
   ChevronsUpDownIcon,
   ClockIcon,
@@ -386,6 +387,28 @@ export function WikiTreeSidebar({
     startCollapseTransition(() => collapseMany(ids))
   }
 
+  // Sort the root documents alphabetically. Mirrors the per-node "Sort" action
+  // in wiki-tree-row-menu-items.tsx but targets parentDocumentId: null.
+  function handleSortRoots() {
+    if (roots.length < 2) return
+    const sorted = [...roots].sort((a, b) =>
+      a.title.localeCompare(b.title, undefined, { sensitivity: "base" }),
+    )
+    reorderSiblings.mutate(
+      {
+        input: {
+          operationId,
+          parentDocumentId: null,
+          orderedIds: sorted.map((n) => n.id),
+        },
+      },
+      {
+        onError: (err) =>
+          toast.error(err instanceof Error ? err.message : "Failed to sort"),
+      },
+    )
+  }
+
   return (
     <div
       ref={ref}
@@ -447,6 +470,24 @@ export function WikiTreeSidebar({
             {isCollapsing ? "Collapsing…" : "Collapse all"}
           </TooltipContent>
         </Tooltip>
+        {isEditor && roots.length >= 2 && (
+          <Tooltip>
+            <TooltipTrigger
+              render={
+                <Button
+                  variant="ghost"
+                  size="icon-xs"
+                  onClick={handleSortRoots}
+                  disabled={reorderSiblings.isPending}
+                  aria-label="Sort root documents alphabetically"
+                />
+              }
+            >
+              <ArrowDownAZIcon className="size-3.5" />
+            </TooltipTrigger>
+            <TooltipContent>Sort root documents A–Z</TooltipContent>
+          </Tooltip>
+        )}
         <Tooltip>
           <TooltipTrigger
             render={
