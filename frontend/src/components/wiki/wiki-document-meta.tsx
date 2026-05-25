@@ -7,6 +7,11 @@ interface WikiDocumentMetaProps {
   document: WikiDocumentFieldsFragment
 }
 
+interface Actor {
+  id: string
+  username: string
+}
+
 // Thresholds for cheap "just now" collapsing — avoids "0 seconds ago"
 // churn for freshly saved docs where clock skew can produce negative deltas.
 const JUST_NOW_THRESHOLD_MS = 30_000
@@ -28,29 +33,52 @@ export function WikiDocumentMeta({ document }: WikiDocumentMetaProps) {
     return () => window.clearInterval(id)
   }, [])
 
-  // Prefer last-updated attribution. Fall back to creator/createdAt for legacy
-  // rows (pre-feature) and any row whose attribution column is still null.
+  // Last-updated attribution is null on legacy rows (pre-feature) and on docs
+  // that haven't been edited since creation — only render it when present.
   const hasUpdate = !!(document.lastUpdatedAt && document.lastUpdatedBy)
-  const actor = hasUpdate ? document.lastUpdatedBy : document.createdBy
-  const timestamp = hasUpdate ? document.lastUpdatedAt! : document.createdAt
-  const verb = hasUpdate ? "updated" : "created"
 
+  return (
+    <div className="flex flex-wrap gap-x-3 gap-y-0.5 px-6 pt-4 pb-1 text-xs text-muted-foreground">
+      <MetaEntry
+        verb="Created"
+        actor={document.createdBy}
+        timestamp={document.createdAt}
+        currentUserId={currentUserId}
+      />
+      {hasUpdate && (
+        <MetaEntry
+          verb="Updated"
+          actor={document.lastUpdatedBy!}
+          timestamp={document.lastUpdatedAt!}
+          currentUserId={currentUserId}
+        />
+      )}
+    </div>
+  )
+}
+
+interface MetaEntryProps {
+  verb: string
+  actor: Actor | null | undefined
+  timestamp: string
+  currentUserId: string | undefined
+}
+
+function MetaEntry({ verb, actor, timestamp, currentUserId }: MetaEntryProps) {
   const isSelf = actor?.id === currentUserId
-  const actorLabel = isSelf ? "You" : (actor?.username ?? "Unknown user")
+  const actorLabel = isSelf ? "you" : (actor?.username ?? "unknown user")
 
   const parsed = new Date(timestamp)
   const relative = formatRelativeTime(parsed)
   const absolute = formatAbsolute(parsed)
 
   return (
-    <div className="px-6 pt-4 pb-1 text-xs text-muted-foreground">
-      <Tooltip>
-        <TooltipTrigger render={<span className="cursor-default" />}>
-          {actorLabel} {verb} {relative}
-        </TooltipTrigger>
-        <TooltipContent>{absolute}</TooltipContent>
-      </Tooltip>
-    </div>
+    <Tooltip>
+      <TooltipTrigger render={<span className="cursor-default" />}>
+        {verb} by {actorLabel} {relative}
+      </TooltipTrigger>
+      <TooltipContent>{absolute}</TooltipContent>
+    </Tooltip>
   )
 }
 
