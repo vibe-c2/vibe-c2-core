@@ -106,28 +106,9 @@ func (wc *WikiController) CollabTicket(c *gin.Context) {
 		return
 	}
 
-	// Determine write capability: operator+ in the operation, or app-admin.
-	// App-admins always get write access regardless of membership.
-	canWrite := false
-	for _, r := range rolesSlice {
-		if r == "admin" {
-			canWrite = true
-			break
-		}
-	}
-	if !canWrite {
-		callerUID, err := uuid.Parse(c.GetString("userID"))
-		if err == nil {
-			for _, m := range op.Members {
-				if m.UserID == callerUID {
-					if m.Role.HasAtLeast(models.OperationRoleOperator) {
-						canWrite = true
-					}
-					break
-				}
-			}
-		}
-	}
+	// Write capability == operator+ in the operation (app-admin and Public-op
+	// implicit-operator are both handled inside AuthorizeOperationRole).
+	canWrite := authorization.AuthorizeOperationRole(ctx, &op, models.OperationRoleOperator) == nil
 
 	// Sign a short-lived collab ticket. The readOnly claim is read by
 	// Hocuspocus onAuthenticate to set connection.readOnly, so even a
