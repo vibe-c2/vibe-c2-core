@@ -17,8 +17,21 @@ export function NavMain({ items }: { items: NavigationItem[] }) {
           <SidebarMenuItem key={item.title}>
             <SidebarMenuButton
               tooltip={item.title}
-              isActive={pathname === item.url || pathname.startsWith(item.url + "/")}
-              render={<Link to={item.url} />}
+              isActive={
+                !item.externalUrl &&
+                (pathname === item.url || pathname.startsWith(item.url + "/"))
+              }
+              render={
+                item.externalUrl ? (
+                  <a
+                    href={item.externalUrl}
+                    target="_blank"
+                    rel="noreferrer noopener"
+                  />
+                ) : (
+                  <Link to={item.url} />
+                )
+              }
             >
               {item.icon && <item.icon className="size-4" />}
               <span>{item.title}</span>

@@ -1,5 +1,6 @@
 import {
   BookOpenIcon,
+  FileCode2Icon,
   RouteIcon,
   LayoutDashboardIcon,
   GemIcon,
@@ -13,6 +14,9 @@ export interface NavigationItem {
   url: string;
   permission?: Permission | null;
   icon?: React.ComponentType<{ className?: string }>;
+  // When set, render an external <a target="_blank"> instead of a SPA <Link>.
+  // The `url` field is ignored for routing-active-state matching in this case.
+  externalUrl?: string;
 }
 
 // Operation-scoped entries rendered ABOVE the global block. Hidden until
@@ -67,5 +71,12 @@ export const navigationAdminItems: NavigationItem[] = [
     url: "/users",
     permission: Permissions.USER_READ,
     icon: UsersIcon,
+  },
+  {
+    title: "API Docs",
+    url: "/swagger/index.html",
+    externalUrl: "/swagger/index.html",
+    permission: Permissions.USER_READ,
+    icon: FileCode2Icon,
   },
 ];
