@@ -25,10 +25,12 @@ import {
   SidebarMenuItem,
   useSidebar,
 } from "@/components/ui/sidebar"
-import { ChevronsUpDownIcon, LogOutIcon, MonitorIcon, MonitorSmartphoneIcon, MoonIcon, SunIcon, UserIcon } from "lucide-react"
+import { ChevronsUpDownIcon, KeyIcon, LogOutIcon, MonitorIcon, MonitorSmartphoneIcon, MoonIcon, SunIcon, UserIcon } from "lucide-react"
 import { useAuthStore } from "@/stores/auth"
 import { useSessionStore } from "@/stores/sessions"
+import { useAPIKeyStore } from "@/stores/api-keys"
 import { MySessionsDialog } from "@/components/sessions/my-sessions-dialog"
+import { MyAPIKeyDialog } from "@/components/api-keys/my-api-key-dialog"
 
 export function NavUser({
   user,
@@ -43,6 +45,7 @@ export function NavUser({
   const navigate = useNavigate()
   const logout = useAuthStore((s) => s.logout)
   const openMySessionsDialog = useSessionStore((s) => s.openMySessionsDialog)
+  const openAPIKeysDialog = useAPIKeyStore((s) => s.openAPIKeysDialog)
   const { setTheme } = useTheme()
 
   async function handleLogout() {
@@ -60,6 +63,7 @@ export function NavUser({
   return (
     <>
     <MySessionsDialog />
+    <MyAPIKeyDialog />
     <SidebarMenu>
       <SidebarMenuItem>
         <DropdownMenu>
@@ -127,6 +131,10 @@ export function NavUser({
             <DropdownMenuItem onClick={openMySessionsDialog}>
               <MonitorSmartphoneIcon className="size-4" />
               Sessions
+            </DropdownMenuItem>
+            <DropdownMenuItem onClick={openAPIKeysDialog}>
+              <KeyIcon className="size-4" />
+              API Key
             </DropdownMenuItem>
             <DropdownMenuSeparator />
             <DropdownMenuItem onClick={handleLogout}>

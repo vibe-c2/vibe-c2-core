@@ -1,0 +1,61 @@
+# =============================================================================
+# API Keys
+# =============================================================================
+#
+# Long-lived programmatic credentials for a user. One key per user; the same
+# key works across every operation the user is a member of, with the user's
+# current role/permission set resolved per-request (no snapshot).
+#
+# The raw token is shown exactly once at creation/regeneration and never
+# stored on the server — only the public key_id prefix and a SHA-256 of the
+# random tail. Clients send it as `Authorization: Bearer vc2_<key_id>_<secret>`.
+# Requests using an API key bypass CSRF (no cookie surface to defend).
+#
+# Disable/regenerate/delete are the entire lifecycle — no TTL, no rotation
+# schedule, no scope checkboxes (yet). If the user is removed from an
+# operation or has their roles stripped, their key's effective access shrinks
+# on the next request because permissions are resolved live from the user row.
+
+# APIKey is the public, listable representation. The secret is never on it.
+type APIKey {
+  id: ID!                  # Mongo row UUID
+  keyId: String!           # Public prefix carried in the raw token, e.g. "vc2_a1b2c3d4e5f6"
+  enabled: Boolean!        # Disabled keys return 401 on use
+  lastUsedAt: String       # ISO 8601 — null if never used
+  createdAt: String!
+  updatedAt: String!
+}
+
+# APIKeyWithSecret is returned ONLY by create/regenerate mutations. The token
+# field contains the full raw token and is the only chance the client has to
+# capture it — there is no "show the token again" endpoint.
+type APIKeyWithSecret {
+  apiKey: APIKey!
+  token: String!           # vc2_<key_id>_<secret> — show once, then discard
+}
+
+extend type Query {
+  # myAPIKey returns the caller's API key if one exists, null otherwise.
+  # Any authenticated user can read their own key metadata; the secret is
+  # never exposed by this field.
+  myAPIKey: APIKey @hasPermission(permission: "*")
+}
+
+extend type Mutation {
+  # createMyAPIKey mints a new key for the caller. Fails if the caller
+  # already has one — use regenerateMyAPIKey to rotate.
+  createMyAPIKey: APIKeyWithSecret! @hasPermission(permission: "*")
+
+  # regenerateMyAPIKey overwrites the caller's existing key's secret in
+  # place (keeps the same id, bumps version). Any scripts using the old
+  # token will immediately get 401.
+  regenerateMyAPIKey: APIKeyWithSecret! @hasPermission(permission: "*")
+
+  # setMyAPIKeyEnabled toggles the key off (or back on) without destroying
+  # it. Lets the user pause a script without losing the token.
+  setMyAPIKeyEnabled(enabled: Boolean!): APIKey! @hasPermission(permission: "*")
+
+  # deleteMyAPIKey removes the caller's key entirely. Any scripts will
+  # 401 immediately and the user can mint a fresh one with createMyAPIKey.
+  deleteMyAPIKey: Boolean! @hasPermission(permission: "*")
+}

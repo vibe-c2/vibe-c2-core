@@ -12,6 +12,11 @@ import (
 	"github.com/vibe-c2/vibe-c2-core/core/pkg/pagination"
 )
 
+type APIKeyWithSecret struct {
+	APIKey *models.APIKey `json:"apiKey"`
+	Token  string         `json:"token"`
+}
+
 type CreateCredentialInput struct {
 	Name     string                `json:"name"`
 	Type     models.CredentialType `json:"type"`

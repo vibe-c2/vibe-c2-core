@@ -72,6 +72,7 @@ func (a *App) NewRouter() *gin.Engine {
 	timelineRes := resolver.NewTimelineResolver(
 		a.repos.OperationEvent, a.repos.Operation, a.repos.User, a.eventBus,
 	)
+	apiKeyRes := resolver.NewAPIKeyResolver(a.repos.APIKey)
 
 	// Wiki controller (REST endpoints)
 	wikiCtrl := controller.NewWikiController(a.repos.WikiDocument, a.repos.Operation, a.env.HocuspocusTicketSecret, a.logger)
@@ -154,11 +155,12 @@ func (a *App) NewRouter() *gin.Engine {
 			v1.GET("/graphql", gql.NewPlaygroundHandler("/api/v1/graphql"))
 		}
 
-		// Protected routes (JWT + CSRF required for state-changing methods).
-		// CSRF middleware no-ops on GET/HEAD/OPTIONS, so listing endpoints
-		// are unaffected.
+		// Protected routes. Authentication runs first: either Authorization:
+		// Bearer vc2_... resolves to an API key, or the access_token cookie
+		// is validated as a JWT. CSRF then runs against the resolved identity
+		// — API-key callers skip it because they have no cookie surface.
+		v1.Use(middleware.AuthN(a.authProvider, a.repos.APIKey, a.repos.User, a.cache))
 		v1.Use(middleware.CSRF(a.authCfg.csrfEnabled))
-		v1.Use(middleware.JWTAuth(a.authProvider))
 
 		v1.GET("/login/me", middleware.RBAC(permissions.BasicPermission), authCtrl.Me)
 		v1.POST("/logout", middleware.RBAC(permissions.BasicPermission), authCtrl.Logout)
@@ -198,7 +200,7 @@ func (a *App) NewRouter() *gin.Engine {
 		//                       inside gqlgen; one socket multiplexes every
 		//                       active subscription on the page.
 		gqlHandler := gql.NewHandler(
-			userRes, opRes, snpRes, sessRes, wikiDocRes, wikiVisitRes, credRes, timelineRes,
+			userRes, opRes, snpRes, sessRes, wikiDocRes, wikiVisitRes, credRes, timelineRes, apiKeyRes,
 			a.eventBus,
 			a.repos.User, a.repos.Operation, a.repos.Session, a.repos.WikiDocument, a.repos.Credential,
 			a.presenceTracker,

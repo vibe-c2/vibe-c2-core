@@ -36,6 +36,14 @@ func CSRF(enabled bool) gin.HandlerFunc {
 			return
 		}
 
+		// API-key auth has no cookie surface, so the double-submit pattern
+		// doesn't apply. AuthN sets the flag; we trust it here because this
+		// middleware runs after auth.
+		if HasAPIKeyAuth(c) {
+			c.Next()
+			return
+		}
+
 		cookieVal, err := c.Cookie(cookies.CSRFCookie)
 		if err != nil || cookieVal == "" {
 			c.AbortWithStatusJSON(http.StatusForbidden, responses.ErrForbidden)

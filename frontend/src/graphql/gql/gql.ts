@@ -14,6 +14,12 @@ import type { TypedDocumentNode as DocumentNode } from '@graphql-typed-document-
  * Learn more about it here: https://the-guild.dev/graphql/codegen/plugins/presets/preset-client#reducing-bundle-size
  */
 type Documents = {
+    "\n  fragment APIKeyFields on APIKey {\n    id\n    keyId\n    enabled\n    lastUsedAt\n    createdAt\n    updatedAt\n  }\n": typeof types.ApiKeyFieldsFragmentDoc,
+    "\n  query MyAPIKey {\n    myAPIKey {\n      ...APIKeyFields\n    }\n  }\n": typeof types.MyApiKeyDocument,
+    "\n  mutation CreateMyAPIKey {\n    createMyAPIKey {\n      apiKey {\n        ...APIKeyFields\n      }\n      token\n    }\n  }\n": typeof types.CreateMyApiKeyDocument,
+    "\n  mutation RegenerateMyAPIKey {\n    regenerateMyAPIKey {\n      apiKey {\n        ...APIKeyFields\n      }\n      token\n    }\n  }\n": typeof types.RegenerateMyApiKeyDocument,
+    "\n  mutation SetMyAPIKeyEnabled($enabled: Boolean!) {\n    setMyAPIKeyEnabled(enabled: $enabled) {\n      ...APIKeyFields\n    }\n  }\n": typeof types.SetMyApiKeyEnabledDocument,
+    "\n  mutation DeleteMyAPIKey {\n    deleteMyAPIKey\n  }\n": typeof types.DeleteMyApiKeyDocument,
     "\n  fragment CredentialCommentFields on CredentialComment {\n    id\n    text\n    createdAt\n    updatedAt\n    author {\n      id\n      username\n    }\n  }\n": typeof types.CredentialCommentFieldsFragmentDoc,
     "\n  fragment CredentialFields on Credential {\n    id\n    operationId\n    name\n    type\n    username\n    password\n    keys {\n      name\n      content\n    }\n    isValid\n    tags\n    comments {\n      ...CredentialCommentFields\n    }\n    createdBy {\n      id\n      username\n    }\n    backlinkCount\n    createdAt\n    updatedAt\n  }\n": typeof types.CredentialFieldsFragmentDoc,
     "\n  fragment CredentialFieldsWithOperation on Credential {\n    ...CredentialFields\n    operation {\n      id\n      name\n    }\n  }\n": typeof types.CredentialFieldsWithOperationFragmentDoc,
@@ -111,6 +117,12 @@ type Documents = {
     "\n  subscription WikiDocumentPresenceChanged($operationId: ID!) {\n    wikiDocumentPresenceChanged(operationId: $operationId) {\n      documentId operationId userId username action\n    }\n  }\n": typeof types.WikiDocumentPresenceChangedDocument,
 };
 const documents: Documents = {
+    "\n  fragment APIKeyFields on APIKey {\n    id\n    keyId\n    enabled\n    lastUsedAt\n    createdAt\n    updatedAt\n  }\n": types.ApiKeyFieldsFragmentDoc,
+    "\n  query MyAPIKey {\n    myAPIKey {\n      ...APIKeyFields\n    }\n  }\n": types.MyApiKeyDocument,
+    "\n  mutation CreateMyAPIKey {\n    createMyAPIKey {\n      apiKey {\n        ...APIKeyFields\n      }\n      token\n    }\n  }\n": types.CreateMyApiKeyDocument,
+    "\n  mutation RegenerateMyAPIKey {\n    regenerateMyAPIKey {\n      apiKey {\n        ...APIKeyFields\n      }\n      token\n    }\n  }\n": types.RegenerateMyApiKeyDocument,
+    "\n  mutation SetMyAPIKeyEnabled($enabled: Boolean!) {\n    setMyAPIKeyEnabled(enabled: $enabled) {\n      ...APIKeyFields\n    }\n  }\n": types.SetMyApiKeyEnabledDocument,
+    "\n  mutation DeleteMyAPIKey {\n    deleteMyAPIKey\n  }\n": types.DeleteMyApiKeyDocument,
     "\n  fragment CredentialCommentFields on CredentialComment {\n    id\n    text\n    createdAt\n    updatedAt\n    author {\n      id\n      username\n    }\n  }\n": types.CredentialCommentFieldsFragmentDoc,
     "\n  fragment CredentialFields on Credential {\n    id\n    operationId\n    name\n    type\n    username\n    password\n    keys {\n      name\n      content\n    }\n    isValid\n    tags\n    comments {\n      ...CredentialCommentFields\n    }\n    createdBy {\n      id\n      username\n    }\n    backlinkCount\n    createdAt\n    updatedAt\n  }\n": types.CredentialFieldsFragmentDoc,
     "\n  fragment CredentialFieldsWithOperation on Credential {\n    ...CredentialFields\n    operation {\n      id\n      name\n    }\n  }\n": types.CredentialFieldsWithOperationFragmentDoc,
@@ -222,6 +234,30 @@ const documents: Documents = {
  */
 export function graphql(source: string): unknown;
 
+/**
+ * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
+ */
+export function graphql(source: "\n  fragment APIKeyFields on APIKey {\n    id\n    keyId\n    enabled\n    lastUsedAt\n    createdAt\n    updatedAt\n  }\n"): (typeof documents)["\n  fragment APIKeyFields on APIKey {\n    id\n    keyId\n    enabled\n    lastUsedAt\n    createdAt\n    updatedAt\n  }\n"];
+/**
+ * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
+ */
+export function graphql(source: "\n  query MyAPIKey {\n    myAPIKey {\n      ...APIKeyFields\n    }\n  }\n"): (typeof documents)["\n  query MyAPIKey {\n    myAPIKey {\n      ...APIKeyFields\n    }\n  }\n"];
+/**
+ * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
+ */
+export function graphql(source: "\n  mutation CreateMyAPIKey {\n    createMyAPIKey {\n      apiKey {\n        ...APIKeyFields\n      }\n      token\n    }\n  }\n"): (typeof documents)["\n  mutation CreateMyAPIKey {\n    createMyAPIKey {\n      apiKey {\n        ...APIKeyFields\n      }\n      token\n    }\n  }\n"];
+/**
+ * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
+ */
+export function graphql(source: "\n  mutation RegenerateMyAPIKey {\n    regenerateMyAPIKey {\n      apiKey {\n        ...APIKeyFields\n      }\n      token\n    }\n  }\n"): (typeof documents)["\n  mutation RegenerateMyAPIKey {\n    regenerateMyAPIKey {\n      apiKey {\n        ...APIKeyFields\n      }\n      token\n    }\n  }\n"];
+/**
+ * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
+ */
+export function graphql(source: "\n  mutation SetMyAPIKeyEnabled($enabled: Boolean!) {\n    setMyAPIKeyEnabled(enabled: $enabled) {\n      ...APIKeyFields\n    }\n  }\n"): (typeof documents)["\n  mutation SetMyAPIKeyEnabled($enabled: Boolean!) {\n    setMyAPIKeyEnabled(enabled: $enabled) {\n      ...APIKeyFields\n    }\n  }\n"];
+/**
+ * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
+ */
+export function graphql(source: "\n  mutation DeleteMyAPIKey {\n    deleteMyAPIKey\n  }\n"): (typeof documents)["\n  mutation DeleteMyAPIKey {\n    deleteMyAPIKey\n  }\n"];
 /**
  * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
  */

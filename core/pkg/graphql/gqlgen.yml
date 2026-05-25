@@ -272,6 +272,24 @@ models:
       updatedAt:
         resolver: true         # time.Time -> RFC3339 string
 
+  # --- API Keys ---
+
+  # Map the GraphQL "APIKey" type to our existing model. Field resolvers
+  # bridge UUID->string (the Mongo row's _id), timestamp->RFC3339, and
+  # *time.Time -> *string for the nullable lastUsedAt.
+  APIKey:
+    model:
+      - github.com/vibe-c2/vibe-c2-core/core/pkg/models.APIKey
+    fields:
+      id:
+        resolver: true         # qmgo ObjectID -> ID (string)
+      lastUsedAt:
+        resolver: true         # *time.Time -> *string (RFC3339 or null)
+      createdAt:
+        resolver: true         # field.DefaultField.CreateAt -> string
+      updatedAt:
+        resolver: true         # field.DefaultField.UpdateAt -> string
+
   # --- Timeline ---
 
   # TimelineGranularity is mapped to the repository's TimelineGranularity

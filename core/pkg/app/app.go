@@ -45,6 +45,7 @@ type Repositories struct {
 	WikiFile           repository.IWikiFileRepository
 	Credential         repository.ICredentialRepository
 	OperationEvent     repository.IOperationEventRepository
+	APIKey             repository.IAPIKeyRepository
 }
 
 type App struct {
@@ -104,6 +105,7 @@ func NewApp() (*App, error) {
 		WikiFile:           repository.NewWikiFileRepository(db),
 		Credential:         repository.NewCredentialRepository(db),
 		OperationEvent:     repository.NewOperationEventRepository(db),
+		APIKey:             repository.NewAPIKeyRepository(db),
 	}
 
 	// Initialize cache (noop fallback is acceptable for caching)
