@@ -9,6 +9,7 @@ import {
 } from "react"
 import { create } from "zustand"
 import type { Editor } from "@tiptap/core"
+import { useVirtualizer } from "@tanstack/react-virtual"
 import { FileTextIcon, SearchIcon } from "lucide-react"
 import {
   Dialog,
@@ -132,6 +133,11 @@ interface PickerBodyProps {
   setSearch: (s: string) => void
 }
 
+// Row height estimate used by the virtualizer. Real rows are measured via
+// `measureElement` so this only matters for the initial scrollbar sizing —
+// icon + title + breadcrumb lands at ~52px in practice.
+const ROW_HEIGHT = 52
+
 function PickerBody({ search, setSearch }: PickerBodyProps) {
   const operationId = useWikiDocumentPickerStore((s) => s.operationId)
   const excludeIds = useWikiDocumentPickerStore((s) => s.excludeIds)
@@ -141,11 +147,6 @@ function PickerBody({ search, setSearch }: PickerBodyProps) {
   // so a shrinking filtered set never points past the end — no setState
   // during render, no cascading-update edge cases on transitions to/from 0.
   const [rawActiveIndex, setRawActiveIndex] = useState(0)
-  // Tracks the DOM node for the currently highlighted row so we can scroll
-  // it into view when keyboard navigation moves the cursor past the visible
-  // window. `block: "nearest"` keeps scrolling minimal — no jump when the
-  // row is already on-screen.
-  const activeItemRef = useRef<HTMLButtonElement | null>(null)
 
   const { data, isLoading } = useWikiDocumentTree(operationId)
   const allDocs = useMemo(
@@ -167,31 +168,36 @@ function PickerBody({ search, setSearch }: PickerBodyProps) {
     return m
   }, [allDocs])
 
-  // Ancestors of `doc`, root-first, excluding the doc itself. `isDeleted`
-  // is always false here because `wikiDocumentTree` only returns live docs
-  // (the server filters `deleted_at: nil`). The walk bounds at the tree
-  // size to defend against any cyclic data slipping in.
-  function getAncestors(
-    doc: WikiDocumentTreeFieldsFragment,
-  ): AncestorCrumb[] {
-    const chain: AncestorCrumb[] = []
-    let parentId = doc.parentDocumentId
-    let guard = docById.size
-    while (parentId && guard-- > 0) {
-      const parent = docById.get(parentId)
-      if (!parent) break
-      chain.push({
-        id: parent.id,
-        title: parent.title ?? "Untitled",
-        emoji: parent.emoji,
-        icon: parent.icon,
-        color: parent.color,
-        isDeleted: false,
-      })
-      parentId = parent.parentDocumentId
+  // Precompute the ancestor chain for every doc once per tree load. Without
+  // this, each keystroke filter or arrow-key nav rebuilt N chains inline
+  // inside the render loop — a measurable hit on large operations.
+  // `isDeleted` is always false here because `wikiDocumentTree` only returns
+  // live docs (server filters `deleted_at: nil`). The walk bounds at the
+  // tree size to defend against any cyclic data slipping in.
+  const ancestorsByDocId = useMemo(() => {
+    const out = new Map<string, AncestorCrumb[]>()
+    for (const doc of allDocs) {
+      const chain: AncestorCrumb[] = []
+      let parentId = doc.parentDocumentId
+      let guard = docById.size
+      while (parentId && guard-- > 0) {
+        const parent = docById.get(parentId)
+        if (!parent) break
+        chain.push({
+          id: parent.id,
+          title: parent.title ?? "Untitled",
+          emoji: parent.emoji,
+          icon: parent.icon,
+          color: parent.color,
+          isDeleted: false,
+        })
+        parentId = parent.parentDocumentId
+      }
+      chain.reverse()
+      out.set(doc.id, chain)
     }
-    return chain.reverse()
-  }
+    return out
+  }, [allDocs, docById])
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase()
@@ -202,13 +208,18 @@ function PickerBody({ search, setSearch }: PickerBodyProps) {
       // crash the whole picker (and the page, with no boundary).
       return (d.title ?? "").toLowerCase().includes(q)
     })
-    // Stable order: title ASC; preserves a predictable picker even if the
-    // underlying tree is sorted by `sortOrder` (fractional index).
-    return [...matches].sort((a, b) =>
-      (a.title ?? "").localeCompare(b.title ?? "", undefined, {
+    // Recency-first ordering mirrors the "Latest documents" modal: pick the
+    // most recently touched timestamp (content edit via Hocuspocus, or
+    // metadata change via GraphQL), newest first. Title is the tiebreaker so
+    // same-timestamp rows stay deterministic.
+    return [...matches].sort((a, b) => {
+      const ta = a.lastUpdatedAt ?? a.updatedAt ?? ""
+      const tb = b.lastUpdatedAt ?? b.updatedAt ?? ""
+      if (ta !== tb) return ta < tb ? 1 : -1
+      return (a.title ?? "").localeCompare(b.title ?? "", undefined, {
         sensitivity: "base",
-      }),
-    )
+      })
+    })
   }, [allDocs, search])
 
   // Bound the cursor for rendering. `filtered.length === 0` keeps it at 0;
@@ -218,9 +229,22 @@ function PickerBody({ search, setSearch }: PickerBodyProps) {
       ? 0
       : Math.min(Math.max(0, rawActiveIndex), filtered.length - 1)
 
+  const scrollRef = useRef<HTMLDivElement>(null)
+  const virtualizer = useVirtualizer({
+    count: filtered.length,
+    getScrollElement: () => scrollRef.current,
+    estimateSize: () => ROW_HEIGHT,
+    overscan: 6,
+  })
+
+  // Keep the keyboard-active row in view via the virtualizer (DOM-level
+  // scrollIntoView doesn't work for rows that aren't in the rendered window
+  // yet — they don't exist as nodes). `align: "auto"` is a no-op when the
+  // row is already visible.
   useEffect(() => {
-    activeItemRef.current?.scrollIntoView({ block: "nearest" })
-  }, [activeIndex])
+    if (filtered.length === 0) return
+    virtualizer.scrollToIndex(activeIndex, { align: "auto" })
+  }, [activeIndex, filtered.length, virtualizer])
 
   function insertDocument(doc: WikiDocumentTreeFieldsFragment) {
     if (excludeSet.has(doc.id)) return
@@ -276,6 +300,8 @@ function PickerBody({ search, setSearch }: PickerBodyProps) {
     }
   }
 
+  const virtualItems = virtualizer.getVirtualItems()
+
   return (
     // min-w-0 propagates down the flex/grid chain so a long, unbreakable
     // title can shrink past its intrinsic size and `truncate` actually
@@ -296,7 +322,10 @@ function PickerBody({ search, setSearch }: PickerBodyProps) {
       {/* overflow-x-hidden is a defensive clip: even if a single token in
           a title has no break opportunity and refuses to truncate, the row
           gets visually contained inside the bordered list area. */}
-      <div className="max-h-72 min-w-0 overflow-x-hidden overflow-y-auto rounded-md border bg-card">
+      <div
+        ref={scrollRef}
+        className="max-h-72 min-w-0 overflow-x-hidden overflow-y-auto rounded-md border bg-card"
+      >
         {isLoading && filtered.length === 0 ? (
           <div className="p-3 text-sm text-muted-foreground">Loading…</div>
         ) : filtered.length === 0 ? (
@@ -306,58 +335,73 @@ function PickerBody({ search, setSearch }: PickerBodyProps) {
               : "No documents in this operation yet."}
           </div>
         ) : (
-          filtered.map((d, i) => {
-            const isActive = i === activeIndex
-            const isExcluded = excludeSet.has(d.id)
-            const ancestors = getAncestors(d)
-            return (
-              <button
-                key={d.id}
-                ref={(el) => {
-                  if (isActive) activeItemRef.current = el
-                }}
-                type="button"
-                disabled={isExcluded}
-                onMouseEnter={() => !isExcluded && setRawActiveIndex(i)}
-                onMouseDown={(e) => e.preventDefault()}
-                onClick={() => insertDocument(d)}
-                aria-selected={isActive}
-                className={cn(
-                  "flex w-full min-w-0 items-start gap-2 border-b px-3 py-2 text-left text-sm outline-hidden last:border-b-0",
-                  isExcluded
-                    ? "cursor-not-allowed text-muted-foreground"
-                    : isActive
-                      ? "bg-accent text-accent-foreground"
-                      : "hover:bg-accent/60",
-                )}
-              >
-                <DocumentIcon
-                  emoji={d.emoji}
-                  icon={d.icon}
-                  color={d.color}
-                  className="mt-0.5 shrink-0"
-                />
-                <span className="flex min-w-0 flex-1 flex-col gap-0.5">
-                  <span className="truncate font-medium">
-                    {(d.title ?? "") || "Untitled"}
-                  </span>
-                  <WikiAncestorBreadcrumb
-                    ancestors={ancestors}
-                    className="truncate"
+          <div
+            style={{ height: virtualizer.getTotalSize() }}
+            className="relative w-full"
+          >
+            {virtualItems.map((item) => {
+              const d = filtered[item.index]
+              if (!d) return null
+              const isActive = item.index === activeIndex
+              const isExcluded = excludeSet.has(d.id)
+              const ancestors = ancestorsByDocId.get(d.id) ?? []
+              return (
+                <button
+                  key={d.id}
+                  ref={virtualizer.measureElement}
+                  data-index={item.index}
+                  type="button"
+                  disabled={isExcluded}
+                  onMouseEnter={() =>
+                    !isExcluded && setRawActiveIndex(item.index)
+                  }
+                  onMouseDown={(e) => e.preventDefault()}
+                  onClick={() => insertDocument(d)}
+                  aria-selected={isActive}
+                  style={{
+                    position: "absolute",
+                    top: 0,
+                    left: 0,
+                    right: 0,
+                    transform: `translateY(${item.start}px)`,
+                  }}
+                  className={cn(
+                    "flex w-full min-w-0 items-start gap-2 border-b px-3 py-2 text-left text-sm outline-hidden last:border-b-0",
+                    isExcluded
+                      ? "cursor-not-allowed text-muted-foreground"
+                      : isActive
+                        ? "bg-accent text-accent-foreground"
+                        : "hover:bg-accent/60",
+                  )}
+                >
+                  <DocumentIcon
+                    emoji={d.emoji}
+                    icon={d.icon}
+                    color={d.color}
+                    className="mt-0.5 shrink-0"
                   />
-                </span>
-                {isExcluded ? (
-                  <span className="mt-0.5 shrink-0 text-xs text-muted-foreground">
-                    current document
+                  <span className="flex min-w-0 flex-1 flex-col gap-0.5">
+                    <span className="truncate font-medium">
+                      {(d.title ?? "") || "Untitled"}
+                    </span>
+                    <WikiAncestorBreadcrumb
+                      ancestors={ancestors}
+                      className="truncate"
+                    />
                   </span>
-                ) : d.childCount > 0 ? (
-                  <span className="mt-0.5 shrink-0 text-xs text-muted-foreground">
-                    {d.childCount}
-                  </span>
-                ) : null}
-              </button>
-            )
-          })
+                  {isExcluded ? (
+                    <span className="mt-0.5 shrink-0 text-xs text-muted-foreground">
+                      current document
+                    </span>
+                  ) : d.childCount > 0 ? (
+                    <span className="mt-0.5 shrink-0 text-xs text-muted-foreground">
+                      {d.childCount}
+                    </span>
+                  ) : null}
+                </button>
+              )
+            })}
+          </div>
         )}
       </div>
     </div>

@@ -10,6 +10,11 @@ import { graphql } from "@/graphql/gql"
 // query resolvers (aggregation pipeline) so it's a constant-time read on
 // the wire, no N+1.
 //
+// `lastUpdatedAt` + `updatedAt` are carried so the document-reference picker
+// can sort its full-tree result by recency (latest-first) without a separate
+// query. The sidebar/reveal-path consumers don't read them — two extra
+// timestamp strings per row is negligible wire size.
+//
 // Shared by the lazy-children query (wikiDocumentChildren), the reveal-path
 // query (wikiDocumentTreeRevealPath), and the legacy full-tree query
 // (wikiDocumentTree) — the latter is still used by the move dialog, which
@@ -24,6 +29,8 @@ export const WikiDocumentTreeFields = graphql(`
     color
     sortOrder
     childCount
+    lastUpdatedAt
+    updatedAt
   }
 `)
 
