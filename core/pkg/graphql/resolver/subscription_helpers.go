@@ -10,6 +10,7 @@ import (
 	"strings"
 
 	"github.com/google/uuid"
+	"github.com/vibe-c2/vibe-c2-core/core/pkg/authorization"
 	"github.com/vibe-c2/vibe-c2-core/core/pkg/eventbus"
 	"github.com/vibe-c2/vibe-c2-core/core/pkg/graphql/gqlctx"
 	"github.com/vibe-c2/vibe-c2-core/core/pkg/graphql/model"
@@ -19,42 +20,27 @@ import (
 // buildOperationFilter creates an event bus filter for operation-scoped subscriptions.
 // If operationID is provided, filters to that single operation.
 // Otherwise, fetches the caller's operations and filters to that set.
+//
+// Authorization goes through authorization.AuthorizeOperationRole so the
+// synthetic Public operation (which has no Mongo row and no explicit members)
+// is correctly treated as implicit-operator for any authenticated caller.
+// Re-implementing the membership check inline here previously caused Public
+// subscriptions to fail for non-admins — the helper short-circuits Public,
+// the inline loop did not.
 func (r *subscriptionResolver) buildOperationFilter(ctx context.Context, auth gqlctx.AuthInfo, operationID *string) (eventbus.Filter, error) {
 	if operationID != nil && *operationID != "" {
 		target := *operationID
 
-		// Verify caller has access to this operation (member or app-level admin).
-		isAdmin := false
-		for _, role := range auth.Roles {
-			if role == "admin" {
-				isAdmin = true
-				break
-			}
+		opID, err := uuid.Parse(target)
+		if err != nil {
+			return nil, fmt.Errorf("invalid operation ID")
 		}
-
-		if !isAdmin {
-			userID, err := uuid.Parse(auth.UserID)
-			if err != nil {
-				return nil, fmt.Errorf("invalid user ID")
-			}
-			opID, err := uuid.Parse(target)
-			if err != nil {
-				return nil, fmt.Errorf("invalid operation ID")
-			}
-			op, err := r.OperationRepo.FindByID(ctx, opID)
-			if err != nil {
-				return nil, fmt.Errorf("operation not found")
-			}
-			isMember := false
-			for _, m := range op.Members {
-				if m.UserID == userID {
-					isMember = true
-					break
-				}
-			}
-			if !isMember {
-				return nil, fmt.Errorf("forbidden: not a member of this operation")
-			}
+		op, err := r.OperationRepo.FindByID(ctx, opID)
+		if err != nil {
+			return nil, fmt.Errorf("operation not found")
+		}
+		if err := authorization.AuthorizeOperationRole(ctx, &op, models.OperationRoleViewer); err != nil {
+			return nil, err
 		}
 
 		// Track whether the subscriber's membership was revoked mid-subscription.
@@ -89,10 +75,13 @@ func (r *subscriptionResolver) buildOperationFilter(ctx context.Context, auth gq
 		return nil, fmt.Errorf("failed to fetch operations: %w", err)
 	}
 
-	opSet := make(map[string]struct{}, len(ops))
+	// +1 for the Public operation, which has no Mongo row and is never returned
+	// by FindByMemberID but is implicit-operator for every authenticated user.
+	opSet := make(map[string]struct{}, len(ops)+1)
 	for _, op := range ops {
 		opSet[op.OperationID.String()] = struct{}{}
 	}
+	opSet[models.PublicOperationID.String()] = struct{}{}
 
 	return func(event eventbus.Event) bool {
 		// Always deliver events triggered by the subscriber themselves
@@ -132,18 +121,16 @@ const myCredentialChangedOpCap = 100
 //
 //   - opIDs == nil  → caller's full membership set, captured once at subscribe
 //     time (same trade-off as buildOperationFilter's nil branch — a new
-//     membership won't be picked up without a reconnect).
+//     membership won't be picked up without a reconnect). The synthetic
+//     Public operation is always included because it is implicit-operator
+//     for every authenticated caller.
 //   - opIDs == []   → returns a filter that never matches. The subscription
 //     stays open but emits nothing. The frontend uses an `enabled` flag to
 //     avoid opening the SSE stream in this case, so this branch is mostly
 //     defensive.
-//   - opIDs has ids → every id is authorized at viewer minimum. Returns a
-//     filter that delivers events only when the event's operation_id is in
-//     the set.
-//
-// Authorization mirrors the inline check in buildOperationFilter rather than
-// going through authorization.AuthorizeOperationRole — consistent with the
-// neighboring single-op helper.
+//   - opIDs has ids → every id is authorized at viewer minimum via
+//     authorization.AuthorizeOperationRole. Returns a filter that delivers
+//     events only when the event's operation_id is in the set.
 func (r *subscriptionResolver) buildOperationsFilter(ctx context.Context, auth gqlctx.AuthInfo, opIDs []string) (eventbus.Filter, error) {
 	if opIDs == nil {
 		userID, err := uuid.Parse(auth.UserID)
@@ -154,10 +141,14 @@ func (r *subscriptionResolver) buildOperationsFilter(ctx context.Context, auth g
 		if err != nil {
 			return nil, fmt.Errorf("failed to fetch operations: %w", err)
 		}
-		opSet := make(map[string]struct{}, len(ops))
+		// +1 for the Public operation, which has no Mongo row and is never
+		// returned by FindByMemberID but is implicit-operator for every
+		// authenticated user.
+		opSet := make(map[string]struct{}, len(ops)+1)
 		for _, op := range ops {
 			opSet[op.OperationID.String()] = struct{}{}
 		}
+		opSet[models.PublicOperationID.String()] = struct{}{}
 		return filterFromOpSet(opSet, auth), nil
 	}
 
@@ -169,52 +160,22 @@ func (r *subscriptionResolver) buildOperationsFilter(ctx context.Context, auth g
 		return nil, fmt.Errorf("too many operations selected (max %d)", myCredentialChangedOpCap)
 	}
 
-	// Explicit ids: regular users must be at least viewers in every id, so
-	// we FindByID each one and check Members. App-admins skip the DB lookup
-	// — they bypass operation-level checks everywhere else, and the filter
-	// itself ignores ids that never produce events anyway.
-	isAdmin := false
-	for _, role := range auth.Roles {
-		if role == "admin" {
-			isAdmin = true
-			break
-		}
-	}
-
+	// Explicit ids: authorize each one via the shared helper, which honors
+	// the Public operation's implicit-operator rule and the app-admin bypass.
 	opSet := make(map[string]struct{}, len(opIDs))
-	if !isAdmin {
-		userID, err := uuid.Parse(auth.UserID)
+	for _, raw := range opIDs {
+		opUID, err := uuid.Parse(raw)
 		if err != nil {
-			return nil, fmt.Errorf("invalid user ID")
+			return nil, fmt.Errorf("invalid operation ID %q: %w", raw, err)
 		}
-		for _, raw := range opIDs {
-			opUID, err := uuid.Parse(raw)
-			if err != nil {
-				return nil, fmt.Errorf("invalid operation ID %q: %w", raw, err)
-			}
-			op, err := r.OperationRepo.FindByID(ctx, opUID)
-			if err != nil {
-				return nil, fmt.Errorf("operation not found: %w", err)
-			}
-			isMember := false
-			for _, m := range op.Members {
-				if m.UserID == userID {
-					isMember = true
-					break
-				}
-			}
-			if !isMember {
-				return nil, fmt.Errorf("forbidden: not a member of operation %s", raw)
-			}
-			opSet[raw] = struct{}{}
+		op, err := r.OperationRepo.FindByID(ctx, opUID)
+		if err != nil {
+			return nil, fmt.Errorf("operation not found: %w", err)
 		}
-	} else {
-		for _, raw := range opIDs {
-			if _, err := uuid.Parse(raw); err != nil {
-				return nil, fmt.Errorf("invalid operation ID %q: %w", raw, err)
-			}
-			opSet[raw] = struct{}{}
+		if err := authorization.AuthorizeOperationRole(ctx, &op, models.OperationRoleViewer); err != nil {
+			return nil, err
 		}
+		opSet[raw] = struct{}{}
 	}
 
 	return filterFromOpSet(opSet, auth), nil

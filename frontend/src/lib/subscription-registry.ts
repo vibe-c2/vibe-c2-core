@@ -135,11 +135,28 @@ function openSubscription<T>(sub: SharedSubscription<T>) {
           listener(msg.data as T)
         }
       },
-      error: () => {
+      error: (err) => {
         // Transport-level retry is owned by the graphql-ws client. We don't
         // tear down on error — the client will reconnect and re-emit the
         // subscription (graphql-ws restarts active subscriptions on
         // reconnect automatically).
+        //
+        // Server-side GraphQL errors (e.g. `forbidden`) arrive here as an
+        // array of objects with a `message` field. They do NOT trigger a
+        // reconnect — the subscription simply stops delivering. Log them
+        // so they don't fail silently: an auth misconfiguration on a
+        // subscription used to be impossible to spot from the client.
+        // Transport-level errors (CloseEvent / Error instances) are owned
+        // by the graphql-ws client layer and intentionally not logged here.
+        if (Array.isArray(err)) {
+          const messages = err
+            .map((e) => (e as { message?: string })?.message)
+            .filter(Boolean)
+            .join("; ")
+          console.error(
+            `[graphql-ws] subscription "${sub.operationName ?? "(anonymous)"}" rejected: ${messages}`,
+          )
+        }
       },
       complete: () => {
         // Server ended the stream cleanly. If listeners are still attached,

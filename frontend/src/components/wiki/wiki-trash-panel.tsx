@@ -36,6 +36,8 @@ import {
   useRestoreWikiDocument,
   useEmptyWikiDocumentTrash,
 } from "@/graphql/hooks/wiki"
+import { useMyOperationRole } from "@/graphql/hooks/operations"
+import { useAuthStore } from "@/stores/auth"
 
 interface WikiTrashPanelProps {
   operationId: string
@@ -80,6 +82,17 @@ export function WikiTrashPanel({ operationId }: WikiTrashPanelProps) {
   } = useWikiDocumentTrash(operationId)
   const restoreDocument = useRestoreWikiDocument()
   const emptyTrash = useEmptyWikiDocumentTrash()
+
+  // Hard-delete paths (PermanentlyDeleteWikiDocument, EmptyWikiDocumentTrash)
+  // require operation-level ADMIN on the backend. App-level admins bypass the
+  // operation check, so they're allowed everywhere. On the synthetic Public
+  // operation, `myOperationRole` returns OPERATOR for every authenticated
+  // user — including app admins — so the role query alone can't be trusted
+  // there; we have to consult the app-role flag too. Operation-level admins
+  // on a private op are allowed.
+  const isAppAdmin = useAuthStore((s) => s.user?.roles.includes("admin") ?? false)
+  const { data: roleData } = useMyOperationRole(operationId)
+  const canHardDelete = isAppAdmin || roleData?.myOperationRole === "ADMIN"
 
   // null = no prompt; the doc whose restore we're about to confirm otherwise.
   const [restorePrompt, setRestorePrompt] = useState<RestorePrompt | null>(null)
@@ -184,6 +197,7 @@ export function WikiTrashPanel({ operationId }: WikiTrashPanelProps) {
                     doc={doc}
                     onRestore={handleRestoreClick}
                     onPermanentDelete={openPermanentDeleteDialog}
+                    canHardDelete={canHardDelete}
                     restorePending={
                       probingId === doc.id ||
                       (restoreDocument.isPending &&
@@ -207,7 +221,7 @@ export function WikiTrashPanel({ operationId }: WikiTrashPanelProps) {
             )}
           </div>
 
-          {hasItems && (
+          {hasItems && canHardDelete && (
             <SheetFooter className="border-t">
               <Button
                 variant="outline"
@@ -311,10 +325,17 @@ interface TrashItemProps {
   doc: TrashDoc
   onRestore: (doc: TrashDoc) => void | Promise<void>
   onPermanentDelete: (doc: { id: string; title: string }) => void
+  canHardDelete: boolean
   restorePending: boolean
 }
 
-function TrashItem({ doc, onRestore, onPermanentDelete, restorePending }: TrashItemProps) {
+function TrashItem({
+  doc,
+  onRestore,
+  onPermanentDelete,
+  canHardDelete,
+  restorePending,
+}: TrashItemProps) {
   return (
     <div className="group flex items-start gap-2 rounded-md px-2 py-1.5 transition-colors hover:bg-muted/50">
       <span
@@ -352,22 +373,24 @@ function TrashItem({ doc, onRestore, onPermanentDelete, restorePending }: TrashI
           </TooltipTrigger>
           <TooltipContent>Restore</TooltipContent>
         </Tooltip>
-        <Tooltip>
-          <TooltipTrigger
-            render={
-              <Button
-                variant="ghost"
-                size="icon-xs"
-                className="text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
-                onClick={() => onPermanentDelete({ id: doc.id, title: doc.title })}
-                aria-label="Delete forever"
-              />
-            }
-          >
-            <Trash2Icon className="size-3.5" />
-          </TooltipTrigger>
-          <TooltipContent>Delete forever</TooltipContent>
-        </Tooltip>
+        {canHardDelete && (
+          <Tooltip>
+            <TooltipTrigger
+              render={
+                <Button
+                  variant="ghost"
+                  size="icon-xs"
+                  className="text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
+                  onClick={() => onPermanentDelete({ id: doc.id, title: doc.title })}
+                  aria-label="Delete forever"
+                />
+              }
+            >
+              <Trash2Icon className="size-3.5" />
+            </TooltipTrigger>
+            <TooltipContent>Delete forever</TooltipContent>
+          </Tooltip>
+        )}
       </div>
     </div>
   )
