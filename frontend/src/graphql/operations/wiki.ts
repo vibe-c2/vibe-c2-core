@@ -22,6 +22,13 @@ import { graphql } from "@/graphql/gql"
 export const WikiDocumentTreeFields = graphql(`
   fragment WikiDocumentTreeFields on WikiDocument {
     id
+    # operationId is required so per-parent cache writes (revealPath,
+    # ensureWikiTree) can key on the row's *actual* operation rather than
+    # trusting whichever operationId the caller had in scope at fetch time.
+    # Without it, opening a /wiki/<operationDocId> URL while the Public tab
+    # is active silently pollutes the Public children cache with operation
+    # rows — sidebar then renders the wrong tree under Public.
+    operationId
     parentDocumentId
     title
     emoji

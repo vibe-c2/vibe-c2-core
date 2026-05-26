@@ -93,26 +93,62 @@ function WikiPageInner({
   // editor renders a doc from a different tree. Only meaningful when a real
   // scope exists — without one, mode is forced to "public" already.
   //
-  // Dedupe per-documentId via a ref so this only auto-syncs on the *first*
-  // load of a given doc. Without that, manually toggling back to the
-  // operation tree while a public doc is still open re-fires this effect
-  // (operationId changed) and immediately flips mode back to "public",
-  // making the toggle button look dead.
+  // Three intents to disambiguate from the same effect re-run:
+  //
+  //  1. URL navigation to a new doc → AUTO-SYNC mode to match the doc.
+  //  2. User toggled the mode → PRESERVE the user's choice, never flip back.
+  //  3. Doc query resolved (docOperationId went null → real) → complete a
+  //     pending sync from #1 only if the user hasn't toggled in the meantime.
+  //
+  // Implementation:
+  //   - `pendingSyncDoc`: id of the doc we owe an auto-sync for. Set on
+  //     navigation, cleared by either a successful sync or a user toggle.
+  //   - `lastDoc` / `lastOp`: previous values, used to classify the rerun.
+  //
+  // The old single-ref dedupe had a race: if the user toggled *before* the
+  // doc query resolved, `docOperationId` was null on the toggle-driven run
+  // and the ref was never advanced. When the doc later resolved, the sync
+  // logic fired and silently reverted the toggle. The pendingSyncDoc handle
+  // closes that window — a toggle clears the pending intent, so the
+  // resolved-doc run becomes a no-op.
   const setWikiTreeMode = useWikiTreeModeStore((s) => s.setMode)
   const docOperationId = doc?.operationId ?? null
-  const lastSyncedDocId = useRef<string | null>(null)
+  const pendingSyncDoc = useRef<string | null>(null)
+  const lastDoc = useRef<string | null>(null)
+  const lastOp = useRef<string | null>(null)
   useEffect(() => {
-    if (!hasRealScope) {
-      lastSyncedDocId.current = null
+    if (!hasRealScope || !documentId) {
+      pendingSyncDoc.current = null
+      lastDoc.current = documentId
+      lastOp.current = operationId
       return
     }
-    if (!documentId) {
-      lastSyncedDocId.current = null
+
+    const docNavigated = lastDoc.current !== documentId
+    // A pure op change while the same doc stays open is a user toggle —
+    // either via the in-tab toggle or via the cross-tab storage event.
+    const userToggled =
+      !docNavigated && lastOp.current !== null && lastOp.current !== operationId
+
+    lastDoc.current = documentId
+    lastOp.current = operationId
+
+    if (userToggled) {
+      // Drop any queued auto-sync so a late-arriving doc resolution doesn't
+      // override the user's just-made choice.
+      pendingSyncDoc.current = null
       return
     }
-    if (!docOperationId) return
-    if (lastSyncedDocId.current === documentId) return
-    lastSyncedDocId.current = documentId
+
+    if (docNavigated) {
+      // Queue the sync; the actual mode flip happens below once
+      // docOperationId is known.
+      pendingSyncDoc.current = documentId
+    }
+
+    if (pendingSyncDoc.current !== documentId) return
+    if (!docOperationId) return // wait for the doc query to resolve
+    pendingSyncDoc.current = null
     if (docOperationId === operationId) return
     setWikiTreeMode(isPublicOperation(docOperationId) ? "public" : "operation")
   }, [documentId, docOperationId, operationId, hasRealScope, setWikiTreeMode])

@@ -110,6 +110,80 @@ export function useWikiDocumentTree(
   })
 }
 
+// Seed wikiKeys.children entries from a flat row list. Shared by
+// useEnsureWikiTree and useWikiDocumentTreeRevealPath — both fetch a tree
+// slice that they then "shred" into per-parent cache entries.
+//
+// `expectedOperationId` is mandatory and asserted against every row's
+// operationId. A mismatch means the caller is writing rows from a different
+// operation into the wrong cache bucket — silently swallowing this would
+// re-introduce the cross-operation cache-pollution bug that produces a wrong
+// tree under the Public toggle. We fail loud (logged drop) and seed nothing
+// rather than corrupt the cache.
+function seedChildrenCacheFromRows(
+  queryClient: ReturnType<typeof useQueryClient>,
+  rows: ReadonlyArray<WikiDocumentTreeFieldsFragment>,
+  expectedOperationId: string,
+  options?: { preSeedLeaves?: boolean; alwaysSeedRoot?: boolean },
+) {
+  if (rows.length === 0) {
+    if (options?.alwaysSeedRoot) {
+      queryClient.setQueryData<WikiDocumentChildrenQuery>(
+        wikiKeys.children(expectedOperationId, null),
+        { wikiDocumentChildren: [] },
+      )
+    }
+    return
+  }
+
+  // Guard: every row must belong to the expected operation. If even one
+  // mismatches, the whole batch is suspect — refuse to seed.
+  for (const row of rows) {
+    if (row.operationId !== expectedOperationId) {
+      console.error(
+        `[wiki] cache-write guard: refusing to seed children for ` +
+          `op=${expectedOperationId} — row ${row.id} belongs to ` +
+          `op=${row.operationId}. This indicates a stale fetch firing ` +
+          `against the wrong operation context; skipping cache write to ` +
+          `avoid cross-operation tree pollution.`,
+      )
+      return
+    }
+  }
+
+  const byParent = new Map<string | null, WikiDocumentTreeFieldsFragment[]>()
+
+  if (options?.preSeedLeaves) {
+    // Pre-seed every doc id with an empty list so leaf branches that the user
+    // later clicks into don't re-fetch (their empty children are still
+    // cached). Only meaningful for full-tree shreds where every node in the
+    // operation is present — revealPath only carries the ancestor chain and
+    // doesn't know whether unseen branches are leaves.
+    for (const row of rows) {
+      byParent.set(row.id, [])
+    }
+  }
+  if (options?.alwaysSeedRoot && !byParent.has(null)) {
+    byParent.set(null, [])
+  }
+
+  for (const row of rows) {
+    const pid = row.parentDocumentId ?? null
+    const arr = byParent.get(pid) ?? []
+    arr.push(row)
+    byParent.set(pid, arr)
+  }
+  for (const [pid, list] of byParent) {
+    list.sort((a, b) =>
+      a.sortOrder < b.sortOrder ? -1 : a.sortOrder > b.sortOrder ? 1 : 0,
+    )
+    queryClient.setQueryData<WikiDocumentChildrenQuery>(
+      wikiKeys.children(expectedOperationId, pid),
+      { wikiDocumentChildren: list },
+    )
+  }
+}
+
 // On-demand full-tree fetch that ALSO shreds the response into per-parent
 // children cache entries. Powers "Expand all" / "Expand subtree" in the lazy
 // sidebar: those actions need to know about branches the user has never
@@ -126,33 +200,14 @@ export function useEnsureWikiTree(operationId: string) {
     })
     const rows = data.wikiDocumentTree
 
-    // Group rows by parent and seed every per-parent cache entry so the lazy
-    // sidebar treats this as a free walk. Same shape as
-    // useWikiDocumentTreeRevealPath emits.
-    const byParent = new Map<string | null, WikiDocumentTreeFieldsFragment[]>()
-    // Pre-seed every doc id with an empty list so leaf branches that the user
-    // later clicks into don't re-fetch (their empty children are still cached).
-    for (const row of rows) {
-      byParent.set(row.id, [])
-    }
-    // Always include the root bucket — when an operation has zero documents
-    // the children:root entry still needs to be populated as an empty list.
-    if (!byParent.has(null)) byParent.set(null, [])
-    for (const row of rows) {
-      const pid = row.parentDocumentId ?? null
-      const arr = byParent.get(pid) ?? []
-      arr.push(row)
-      byParent.set(pid, arr)
-    }
-    for (const [pid, list] of byParent) {
-      list.sort((a, b) =>
-        a.sortOrder < b.sortOrder ? -1 : a.sortOrder > b.sortOrder ? 1 : 0,
-      )
-      queryClient.setQueryData<WikiDocumentChildrenQuery>(
-        wikiKeys.children(operationId, pid),
-        { wikiDocumentChildren: list },
-      )
-    }
+    // wikiDocumentTree is parameterised on operationId server-side, so every
+    // row is guaranteed to belong to `operationId`. The shared seeder still
+    // verifies — cheap insurance against a future schema change that loosens
+    // the backend filter.
+    seedChildrenCacheFromRows(queryClient, rows, operationId, {
+      preSeedLeaves: true,
+      alwaysSeedRoot: true,
+    })
 
     return rows
   }, [queryClient, operationId])
@@ -189,9 +244,17 @@ export function useWikiDocumentChildren(
 //
 // Returns the ancestor IDs (root → target's parent) so the page can call
 // expandMany() once with no follow-up walking.
+//
+// `expectedOperationId` is the operation the *caller* believes the doc
+// belongs to. It's used both as a gate (we only fire when the open doc's
+// operation matches the current effective tree — otherwise the fetched rows
+// would land in the wrong children cache) and as an assertion target in the
+// shared cache seeder. The actual destination key is derived from the rows
+// themselves (`row.operationId`), so even if the gate is wrong the seeder
+// can't pollute another op's cache.
 export function useWikiDocumentTreeRevealPath(
   documentId: string,
-  operationId: string,
+  expectedOperationId: string,
 ) {
   const queryClient = useQueryClient()
   return useQuery({
@@ -202,33 +265,24 @@ export function useWikiDocumentTreeRevealPath(
       })
       const rows = result.wikiDocumentTreeRevealPath
 
-      // Group by parentDocumentId and seed each per-parent cache entry. The
-      // shape must match what useWikiDocumentChildren produces, so the
-      // ChildrenQuery envelope name (`wikiDocumentChildren`) is what consumers
-      // read.
-      const byParent = new Map<string | null, WikiDocumentTreeFieldsFragment[]>()
-      for (const row of rows) {
-        const pid = row.parentDocumentId ?? null
-        const arr = byParent.get(pid) ?? []
-        arr.push(row)
-        byParent.set(pid, arr)
-      }
-      for (const [pid, list] of byParent) {
-        list.sort((a, b) =>
-          a.sortOrder < b.sortOrder ? -1 : a.sortOrder > b.sortOrder ? 1 : 0,
-        )
-        queryClient.setQueryData<WikiDocumentChildrenQuery>(
-          wikiKeys.children(operationId, pid),
-          { wikiDocumentChildren: list },
-        )
-      }
+      // Derive the destination operation from the target row, not from the
+      // caller's `expectedOperationId`. The backend resolves the doc and
+      // returns its operation's rows regardless of caller context — keying
+      // the cache write on the caller's value pollutes whichever tree they
+      // happen to have active. Falling back to `expectedOperationId` only
+      // when the row list is empty keeps the empty-root seed working.
+      const target = rows.find((r) => r.id === documentId)
+      const destinationOp = target?.operationId ?? expectedOperationId
+
+      // Group by parentDocumentId and seed each per-parent cache entry,
+      // asserting every row belongs to destinationOp.
+      seedChildrenCacheFromRows(queryClient, rows, destinationOp)
 
       // Compute the ancestor chain that the sidebar needs to auto-expand.
       // Walk parent pointers upward from the target's parent (the target
       // itself doesn't need to be expanded — its parent does).
       const byId = new Map(rows.map((r) => [r.id, r]))
       const ancestorIds: string[] = []
-      const target = rows.find((r) => r.id === documentId)
       let cursor = target?.parentDocumentId ?? null
       const seen = new Set<string>()
       while (cursor && !seen.has(cursor)) {
@@ -238,9 +292,9 @@ export function useWikiDocumentTreeRevealPath(
         cursor = parent?.parentDocumentId ?? null
       }
 
-      return { rows, ancestorIds }
+      return { rows, ancestorIds, destinationOp }
     },
-    enabled: !!documentId && !!operationId,
+    enabled: !!documentId && !!expectedOperationId,
     staleTime: Infinity,
   })
 }
