@@ -1,5 +1,6 @@
 import { GemIcon } from "lucide-react"
 import { useScopedOperation } from "@/hooks/use-scoped-operation"
+import { useCredentialDeepLink } from "@/hooks/use-credential-deep-link"
 import { usePageMetadata } from "@/hooks/use-page-metadata"
 import { useFindingsStore } from "@/stores/findings"
 import { CredentialsTab } from "@/components/findings/credentials-tab"
@@ -26,6 +27,11 @@ function FindingsPageInner({ mode }: { mode: FindingsMode }) {
     title: mode.kind === "scoped" ? "Findings" : "Findings · Global",
     icon: { kind: "lucide", component: GemIcon },
   })
+
+  // Two-way sync between `?credential=<id>` and the details dialog so
+  // credential links from outside the app (timeline, shared by users) deep-
+  // link straight into the right modal. See the hook for the state machine.
+  useCredentialDeepLink()
 
   const activeTab = useFindingsStore((s) => s.activeTab)
   const setActiveTab = useFindingsStore((s) => s.setActiveTab)

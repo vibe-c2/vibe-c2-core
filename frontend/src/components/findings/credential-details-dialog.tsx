@@ -5,6 +5,7 @@ import {
   CheckIcon,
   CopyIcon,
   KeyIcon,
+  LinkIcon,
   PencilIcon,
   TrashIcon,
   XCircleIcon,
@@ -30,13 +31,20 @@ import {
 } from "@/graphql/hooks/credentials"
 import { credentialTypeLabel } from "@/components/findings/credential-type-utils"
 import { CredentialBacklinkList } from "@/components/findings/credential-backlink-list"
+import { buildCredentialShareUrl } from "@/components/findings/credential-share-link"
 import type { CredentialCommentFieldsFragment } from "@/graphql/gql/graphql"
 
 export function CredentialDetailsDialog() {
   const { detailsPanelOpen, selected, closeDetailsPanel, openEditDialog } =
     useCredentialStore()
-  const { data, isLoading } = useCredential(selected?.id ?? "")
+  const { data, isLoading, isError } = useCredential(selected?.id ?? "")
   const credential = data?.credential
+
+  // Prefer the freshly-loaded name; fall back to the row's name (when opened
+  // from a row click) and finally to a generic label (when opened via
+  // ?credential=<id> deep link before the query resolves).
+  const title = credential?.name || selected?.name || "Credential"
+  const shareableId = credential?.id ?? selected?.id ?? null
 
   return (
     <Dialog
@@ -46,19 +54,43 @@ export function CredentialDetailsDialog() {
       }}
     >
       <DialogContent className="sm:max-w-3xl">
+        {shareableId && (
+          <CopyShareLinkButton
+            credentialId={shareableId}
+            className="absolute top-2 right-10"
+          />
+        )}
         <DialogHeader>
-          <DialogTitle className="flex items-center gap-2">
-            <KeyIcon className="size-4" />
-            {selected?.name ?? "Credential"}
+          <DialogTitle className="flex items-center gap-2 pr-16">
+            <KeyIcon className="size-4 shrink-0" />
+            <span className="min-w-0 truncate">{title}</span>
           </DialogTitle>
           <DialogDescription>
             Credential details, tags, and comments.
           </DialogDescription>
         </DialogHeader>
 
-        {isLoading || !credential ? (
+        {isLoading ? (
           <div className="py-8 text-center text-sm text-muted-foreground">
             Loading...
+          </div>
+        ) : !credential || isError ? (
+          // Conflates "deleted" and "no access" deliberately — leaking
+          // existence to non-members is worse than the slight UX cost. The
+          // backend gates `credential(id)` on operation membership, so this
+          // branch covers both cases.
+          <div className="flex flex-col items-center justify-center gap-3 py-10 text-center text-sm">
+            <p className="font-medium text-foreground">
+              Credential not found
+            </p>
+            <p className="max-w-sm text-muted-foreground">
+              This credential may have been deleted, or you don't have access
+              to the operation it belongs to. Ask the operation admin to add
+              you if you should have access.
+            </p>
+            <Button variant="outline" size="sm" onClick={closeDetailsPanel}>
+              Close
+            </Button>
           </div>
         ) : (
           // min-w-0 is load-bearing: DialogContent is a CSS grid, and grid
@@ -214,6 +246,47 @@ function FieldRow({
 }
 
 const COPIED_RESET_MS = 1500
+
+// Copies a shareable deep-link URL to the credential. Pairs with the
+// `?credential=<id>` consumer in `pages/findings.tsx`.
+function CopyShareLinkButton({
+  credentialId,
+  className,
+}: {
+  credentialId: string
+  className?: string
+}) {
+  const [copied, setCopied] = useState(false)
+
+  async function handleCopy() {
+    try {
+      await navigator.clipboard.writeText(buildCredentialShareUrl(credentialId))
+      setCopied(true)
+      toast.success("Link copied")
+      setTimeout(() => setCopied(false), COPIED_RESET_MS)
+    } catch {
+      toast.error("Failed to copy link")
+    }
+  }
+
+  return (
+    <Button
+      type="button"
+      variant="ghost"
+      size="icon-sm"
+      onClick={handleCopy}
+      aria-label="Copy link to this credential"
+      title="Copy link to this credential"
+      className={className}
+    >
+      {copied ? (
+        <CheckIcon className="size-3.5 text-emerald-600 dark:text-emerald-400" />
+      ) : (
+        <LinkIcon className="size-3.5" />
+      )}
+    </Button>
+  )
+}
 
 // Tiny inline copy-to-clipboard button. Shows a check icon on success and
 // resets after a short delay; surfaces clipboard errors via sonner.

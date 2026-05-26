@@ -4,6 +4,7 @@ import {
   CheckCircle2Icon,
   CopyIcon,
   KeyIcon,
+  LinkIcon,
   PencilIcon,
   TrashIcon,
   XCircleIcon,
@@ -19,6 +20,7 @@ import {
 } from "@/components/ui/context-menu"
 import { useCredentialStore } from "@/stores/credentials"
 import { useUpdateCredential } from "@/graphql/hooks/credentials"
+import { buildCredentialShareUrl } from "@/components/findings/credential-share-link"
 import type { CredentialFieldsFragment } from "@/graphql/gql/graphql"
 
 interface CredentialRowContextMenuProps {
@@ -53,6 +55,15 @@ export function CredentialRowContextMenu({
       toast.success(`Copied ${label}`)
     } catch {
       toast.error(`Failed to copy ${label}`)
+    }
+  }
+
+  async function copyShareLink() {
+    try {
+      await navigator.clipboard.writeText(buildCredentialShareUrl(credential.id))
+      toast.success("Link copied")
+    } catch {
+      toast.error("Failed to copy link")
     }
   }
 
@@ -128,6 +139,13 @@ export function CredentialRowContextMenu({
             </ContextMenuGroup>
           </>
         )}
+
+        <ContextMenuSeparator />
+
+        <ContextMenuItem onClick={copyShareLink}>
+          <LinkIcon className="size-4" />
+          Copy link
+        </ContextMenuItem>
 
         <ContextMenuSeparator />
 
