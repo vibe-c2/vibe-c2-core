@@ -31,6 +31,15 @@ var errCommentNotFound = errors.New("comment not found on this credential")
 // (= "all my operations", which the resolver derives in one repo call).
 const myCredentialsOpCap = 100
 
+// Limits on the operator-defined Properties bag. Picked to be roomy for any
+// real metadata while still preventing pathological documents (a single
+// credential mushrooming into multi-MB BSON via this field).
+const (
+	maxCredentialProperties       = 32
+	maxCredentialPropertyNameLen  = 64
+	maxCredentialPropertyValueLen = 4096
+)
+
 // ICredentialResolver defines the business logic methods for the Credential entity.
 // These map 1:1 to the GraphQL query, mutation, and field resolvers for Credential.
 type ICredentialResolver interface {
@@ -143,6 +152,11 @@ func (r *credentialResolver) CreateCredential(ctx context.Context, operationID s
 		return nil, fmt.Errorf("invalid caller ID: %w", err)
 	}
 
+	properties, err := normalizeCredentialProperties(input.Properties)
+	if err != nil {
+		return nil, err
+	}
+
 	cred := &models.Credential{
 		CredentialID: uuid.New(),
 		OperationID:  opUID,
@@ -151,6 +165,7 @@ func (r *credentialResolver) CreateCredential(ctx context.Context, operationID s
 		Username:     strDeref(input.Username),
 		Password:     strDeref(input.Password),
 		Keys:         normalizeCredentialKeys(input.Keys),
+		Properties:   properties,
 		IsValid:      boolDeref(input.IsValid, false),
 		Tags:         normalizeTags(input.Tags),
 		Comments:     []models.CredentialComment{},
@@ -211,6 +226,13 @@ func (r *credentialResolver) UpdateCredential(ctx context.Context, id string, in
 	}
 	if input.Keys != nil {
 		updates["keys"] = normalizeCredentialKeys(input.Keys)
+	}
+	if input.Properties != nil {
+		properties, err := normalizeCredentialProperties(input.Properties)
+		if err != nil {
+			return nil, err
+		}
+		updates["properties"] = properties
 	}
 	if input.IsValid != nil {
 		updates["is_valid"] = *input.IsValid
@@ -888,6 +910,47 @@ func normalizeCredentialKeys(in []*model.CredentialKeyInput) []models.Credential
 	return out
 }
 
+// normalizeCredentialProperties trims and validates the operator-defined
+// metadata bag. Drops entries where both fields are blank (a no-op row in the
+// editor); rejects rows that have a value but no name, duplicate names, an
+// over-long name/value, or too many entries overall. Names are compared
+// case-sensitively after trimming.
+func normalizeCredentialProperties(in []*model.CredentialPropertyInput) ([]models.CredentialProperty, error) {
+	if len(in) == 0 {
+		return []models.CredentialProperty{}, nil
+	}
+	out := make([]models.CredentialProperty, 0, len(in))
+	seen := make(map[string]struct{}, len(in))
+	for _, p := range in {
+		if p == nil {
+			continue
+		}
+		name := strings.TrimSpace(p.Name)
+		value := strings.TrimSpace(p.Value)
+		if name == "" && value == "" {
+			continue
+		}
+		if name == "" {
+			return nil, fmt.Errorf("property name is required")
+		}
+		if len(name) > maxCredentialPropertyNameLen {
+			return nil, fmt.Errorf("property name %q exceeds %d characters", name, maxCredentialPropertyNameLen)
+		}
+		if len(value) > maxCredentialPropertyValueLen {
+			return nil, fmt.Errorf("property %q value exceeds %d characters", name, maxCredentialPropertyValueLen)
+		}
+		if _, dup := seen[name]; dup {
+			return nil, fmt.Errorf("duplicate property name %q", name)
+		}
+		seen[name] = struct{}{}
+		out = append(out, models.CredentialProperty{Name: name, Value: value})
+	}
+	if len(out) > maxCredentialProperties {
+		return nil, fmt.Errorf("too many properties (max %d)", maxCredentialProperties)
+	}
+	return out, nil
+}
+
 // normalizeTags lowercases, trims, deduplicates while preserving first-seen order.
 func normalizeTags(in []string) []string {
 	if len(in) == 0 {
@@ -918,4 +981,3 @@ func findComment(list []models.CredentialComment, id uuid.UUID) (models.Credenti
 	}
 	return models.CredentialComment{}, false
 }
-

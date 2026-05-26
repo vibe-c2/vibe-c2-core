@@ -25,6 +25,10 @@ export const CredentialFields = graphql(`
       name
       content
     }
+    properties {
+      name
+      value
+    }
     isValid
     tags
     comments {

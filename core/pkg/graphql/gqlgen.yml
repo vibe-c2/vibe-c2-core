@@ -258,6 +258,12 @@ models:
     model:
       - github.com/vibe-c2/vibe-c2-core/core/pkg/models.CredentialKey
 
+  # Map the GraphQL "CredentialProperty" type to our existing Go model. Field
+  # names line up (Name, Value) so no field resolvers needed.
+  CredentialProperty:
+    model:
+      - github.com/vibe-c2/vibe-c2-core/core/pkg/models.CredentialProperty
+
   # Map the GraphQL "CredentialComment" type to our existing model.
   CredentialComment:
     model:

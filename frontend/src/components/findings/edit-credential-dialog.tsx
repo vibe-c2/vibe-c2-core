@@ -23,6 +23,10 @@ import {
   keyDraftsFromWire,
   keyDraftsToInputs,
 } from "@/components/findings/credential-key-drafts"
+import {
+  propertyDraftsFromWire,
+  propertyDraftsToInputs,
+} from "@/components/findings/credential-property-drafts"
 import type { CredentialFieldsFragment } from "@/graphql/gql/graphql"
 
 export function EditCredentialDialog() {
@@ -81,6 +85,7 @@ function EditCredentialForm({ credential, onSaved }: EditCredentialFormProps) {
     username: credential.username,
     password: credential.password,
     keys: keyDraftsFromWire(credential.keys),
+    properties: propertyDraftsFromWire(credential.properties),
     isValid: credential.isValid,
     tags: credential.tags,
   })
@@ -98,6 +103,7 @@ function EditCredentialForm({ credential, onSaved }: EditCredentialFormProps) {
           username: values.username,
           password: values.password,
           keys: keyDraftsToInputs(values.keys),
+          properties: propertyDraftsToInputs(values.properties),
           isValid: values.isValid,
           tags: values.tags,
         },

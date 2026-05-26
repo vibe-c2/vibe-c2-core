@@ -14,6 +14,8 @@ import {
 } from "@/components/findings/credential-type-utils"
 import type { KeyDraft } from "@/components/findings/credential-key-drafts"
 import { CredentialKeysEditor } from "@/components/findings/credential-keys-editor"
+import type { PropertyDraft } from "@/components/findings/credential-property-drafts"
+import { CredentialPropertiesEditor } from "@/components/findings/credential-properties-editor"
 import { TagComboboxInput } from "@/components/findings/tag-combobox-input"
 
 export interface CredentialFormValues {
@@ -22,6 +24,7 @@ export interface CredentialFormValues {
   username: string
   password: string
   keys: KeyDraft[]
+  properties: PropertyDraft[]
   isValid: boolean
   tags: string[]
 }
@@ -116,6 +119,16 @@ export function CredentialFormFields({
         <CredentialKeysEditor
           keys={values.keys}
           onChange={(keys: KeyDraft[]) => onChange({ ...values, keys })}
+        />
+      </Field>
+
+      <Field>
+        <FieldLabel>Properties</FieldLabel>
+        <CredentialPropertiesEditor
+          properties={values.properties}
+          onChange={(properties: PropertyDraft[]) =>
+            onChange({ ...values, properties })
+          }
         />
       </Field>
 

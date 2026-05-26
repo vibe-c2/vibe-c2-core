@@ -18,13 +18,14 @@ type APIKeyWithSecret struct {
 }
 
 type CreateCredentialInput struct {
-	Name     string                `json:"name"`
-	Type     models.CredentialType `json:"type"`
-	Username *string               `json:"username,omitempty"`
-	Password *string               `json:"password,omitempty"`
-	Keys     []*CredentialKeyInput `json:"keys,omitempty"`
-	IsValid  *bool                 `json:"isValid,omitempty"`
-	Tags     []string              `json:"tags,omitempty"`
+	Name       string                     `json:"name"`
+	Type       models.CredentialType      `json:"type"`
+	Username   *string                    `json:"username,omitempty"`
+	Password   *string                    `json:"password,omitempty"`
+	Keys       []*CredentialKeyInput      `json:"keys,omitempty"`
+	Properties []*CredentialPropertyInput `json:"properties,omitempty"`
+	IsValid    *bool                      `json:"isValid,omitempty"`
+	Tags       []string                   `json:"tags,omitempty"`
 }
 
 type CreateCustomTimelineEventInput struct {
@@ -89,6 +90,11 @@ type CredentialEvent struct {
 type CredentialKeyInput struct {
 	Name    string `json:"name"`
 	Content string `json:"content"`
+}
+
+type CredentialPropertyInput struct {
+	Name  string `json:"name"`
+	Value string `json:"value"`
 }
 
 type Mutation struct {
@@ -182,13 +188,14 @@ type TimelineTopicCount struct {
 }
 
 type UpdateCredentialInput struct {
-	Name     *string                `json:"name,omitempty"`
-	Type     *models.CredentialType `json:"type,omitempty"`
-	Username *string                `json:"username,omitempty"`
-	Password *string                `json:"password,omitempty"`
-	Keys     []*CredentialKeyInput  `json:"keys,omitempty"`
-	IsValid  *bool                  `json:"isValid,omitempty"`
-	Tags     []string               `json:"tags,omitempty"`
+	Name       *string                    `json:"name,omitempty"`
+	Type       *models.CredentialType     `json:"type,omitempty"`
+	Username   *string                    `json:"username,omitempty"`
+	Password   *string                    `json:"password,omitempty"`
+	Keys       []*CredentialKeyInput      `json:"keys,omitempty"`
+	Properties []*CredentialPropertyInput `json:"properties,omitempty"`
+	IsValid    *bool                      `json:"isValid,omitempty"`
+	Tags       []string                   `json:"tags,omitempty"`
 }
 
 type UpdateCustomTimelineEventInput struct {

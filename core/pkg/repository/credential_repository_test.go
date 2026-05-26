@@ -88,8 +88,8 @@ func TestBuildCredentialFilter_SearchEscapesRegexMetachars(t *testing.T) {
 			if !ok {
 				t.Fatalf("expected $or bson.A, got %T", f["$or"])
 			}
-			if len(orVal) != 3 {
-				t.Fatalf("expected $or with 3 branches (name/username/password), got %d", len(orVal))
+			if len(orVal) != 4 {
+				t.Fatalf("expected $or with 4 branches (name/username/password/properties.value), got %d", len(orVal))
 			}
 			first, ok := orVal[0].(bson.M)
 			if !ok {

@@ -177,6 +177,34 @@ export function CredentialDetailsDialog() {
                 </div>
               )}
 
+              {credential.properties.length > 0 && (
+                <div>
+                  <div className="text-xs uppercase text-muted-foreground">
+                    Properties
+                  </div>
+                  <div className="mt-1 flex flex-col gap-1">
+                    {credential.properties.map((p) => (
+                      <div
+                        key={p.name}
+                        className="grid grid-cols-[10rem_1fr_auto] items-center gap-2 rounded-md border bg-muted/30 px-2 py-1 text-sm"
+                      >
+                        <span className="truncate font-medium" title={p.name}>
+                          {p.name}
+                        </span>
+                        <span className="break-words text-muted-foreground">
+                          {p.value || "—"}
+                        </span>
+                        <div className="justify-self-end">
+                          {p.value ? (
+                            <CopyIconButton value={p.value} label={p.name} />
+                          ) : null}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
               <div>
                 <div className="text-xs uppercase text-muted-foreground">
                   Tags

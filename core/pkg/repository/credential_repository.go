@@ -20,7 +20,11 @@ const credentialCollection = "credentials"
 // All fields are independent — combining them ANDs them together at the
 // MongoDB query level.
 type CredentialFilter struct {
-	// Search matches case-insensitively against name, username, password.
+	// Search matches case-insensitively against name, username, password,
+	// and the values of operator-defined properties (properties.value).
+	// Property *names* are intentionally excluded — they're labels, not
+	// content, and matching them would surface false positives whenever a
+	// generic label like "port" or "url" appears in a query.
 	Search string
 	// Type, if non-nil, restricts to credentials of this type.
 	Type *models.CredentialType
@@ -268,6 +272,7 @@ func applyCredentialFilter(q bson.M, f CredentialFilter) bson.M {
 			bson.M{"name": rx},
 			bson.M{"username": rx},
 			bson.M{"password": rx},
+			bson.M{"properties.value": rx},
 		}
 	}
 

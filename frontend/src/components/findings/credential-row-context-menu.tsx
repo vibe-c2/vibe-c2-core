@@ -6,6 +6,7 @@ import {
   KeyIcon,
   LinkIcon,
   PencilIcon,
+  TagIcon,
   TrashIcon,
   XCircleIcon,
 } from "lucide-react"
@@ -16,6 +17,9 @@ import {
   ContextMenuItem,
   ContextMenuLabel,
   ContextMenuSeparator,
+  ContextMenuSub,
+  ContextMenuSubContent,
+  ContextMenuSubTrigger,
   ContextMenuTrigger,
 } from "@/components/ui/context-menu"
 import { useCredentialStore } from "@/stores/credentials"
@@ -137,6 +141,30 @@ export function CredentialRowContextMenu({
                 )
               })}
             </ContextMenuGroup>
+          </>
+        )}
+
+        {credential.properties.length > 0 && (
+          <>
+            <ContextMenuSeparator />
+            <ContextMenuSub>
+              <ContextMenuSubTrigger>
+                <TagIcon className="size-4" />
+                Copy property
+              </ContextMenuSubTrigger>
+              <ContextMenuSubContent>
+                {credential.properties.map((p) => (
+                  <ContextMenuItem
+                    key={p.name}
+                    disabled={!p.value}
+                    onClick={() => copy(p.value, p.name)}
+                  >
+                    <CopyIcon className="size-4" />
+                    <span className="truncate">{p.name}</span>
+                  </ContextMenuItem>
+                ))}
+              </ContextMenuSubContent>
+            </ContextMenuSub>
           </>
         )}
 

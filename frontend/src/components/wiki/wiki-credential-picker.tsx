@@ -23,6 +23,7 @@ import {
   type CredentialFormValues,
 } from "@/components/findings/credential-form-fields"
 import { keyDraftsToInputs } from "@/components/findings/credential-key-drafts"
+import { propertyDraftsToInputs } from "@/components/findings/credential-property-drafts"
 import { credentialTypeLabel } from "@/components/findings/credential-type-utils"
 import { cn } from "@/lib/utils"
 
@@ -382,6 +383,7 @@ const emptyFormValues: CredentialFormValues = {
   username: "",
   password: "",
   keys: [],
+  properties: [],
   isValid: false,
   tags: [],
 }
@@ -420,6 +422,7 @@ function CreateView({
           username: values.username || null,
           password: values.password || null,
           keys: keyDraftsToInputs(values.keys),
+          properties: propertyDraftsToInputs(values.properties),
           isValid: values.isValid,
           tags: values.tags,
         },
