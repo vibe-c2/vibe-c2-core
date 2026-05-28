@@ -101,27 +101,31 @@ func taskEvent(topic eventbus.Topic, p eventbus.TaskEventPayload) eventbus.Event
 	return eventbus.NewEvent(topic, eventbus.UserActor(uuid.NewString()), p)
 }
 
-// TestToTaskRow_CreatedBasics confirms that a task.created bus event lands
-// in the timeline as a row with the right subject kind, snapshotted name,
-// and no metadata.
-func TestToTaskRow_CreatedBasics(t *testing.T) {
+// TestToTaskRow_StageChangedToDoneCarriesTransition locks in the contract
+// the timeline summary depends on — a closure event must carry both
+// old_stage and new_stage so the summary can render "Closed from X"
+// without a follow-up lookup.
+func TestToTaskRow_StageChangedToDoneCarriesTransition(t *testing.T) {
 	l := &Logger{}
 	taskID := uuid.New()
-	opID := uuid.New()
 
 	row, err := l.toTaskRow(
-		taskEvent(eventbus.TopicTaskCreated, eventbus.TaskEventPayload{
+		taskEvent(eventbus.TopicTaskStageChanged, eventbus.TaskEventPayload{
 			TaskID:      taskID.String(),
-			OperationID: opID.String(),
-			Name:        "Recon north subnet",
-			Stage:       "BACKLOG",
-			Status:      "UNDEFINED",
+			OperationID: uuid.New().String(),
+			Name:        "Privilege escalation path",
+			Stage:       string(models.TaskStageDone),
+			Status:      "SUCCESS",
+			OldStage:    "IN_PROCESS",
 		}),
 		models.EventActorUser,
 		nil,
 	)
 	if err != nil {
 		t.Fatalf("toTaskRow: unexpected error %v", err)
+	}
+	if row == nil {
+		t.Fatalf("toTaskRow: expected row for DONE transition, got nil")
 	}
 	if row.SubjectKind != models.SubjectKindTask {
 		t.Fatalf("subject_kind: got %v want %v", row.SubjectKind, models.SubjectKindTask)
@@ -129,73 +133,41 @@ func TestToTaskRow_CreatedBasics(t *testing.T) {
 	if row.SubjectID != taskID {
 		t.Fatalf("subject_id: got %v want %v", row.SubjectID, taskID)
 	}
-	if row.SubjectName != "Recon north subnet" {
-		t.Fatalf("subject_name: got %q want %q", row.SubjectName, "Recon north subnet")
+	if row.SubjectName != "Privilege escalation path" {
+		t.Fatalf("subject_name: got %q", row.SubjectName)
 	}
-	if row.Topic != string(eventbus.TopicTaskCreated) {
-		t.Fatalf("topic: got %v want %v", row.Topic, eventbus.TopicTaskCreated)
+	if row.Metadata["old_stage"] != "IN_PROCESS" {
+		t.Fatalf("metadata.old_stage: got %v want IN_PROCESS", row.Metadata["old_stage"])
 	}
-	if row.Metadata != nil {
-		t.Fatalf("expected no metadata on created row, got %v", row.Metadata)
-	}
-}
-
-// TestToTaskRow_StageChangedCarriesTransition locks in the contract the
-// timeline summary depends on — both old_stage and new_stage must be on
-// the row so the summary can render "Moved from X to Y" without a
-// follow-up lookup.
-func TestToTaskRow_StageChangedCarriesTransition(t *testing.T) {
-	l := &Logger{}
-
-	row, err := l.toTaskRow(
-		taskEvent(eventbus.TopicTaskStageChanged, eventbus.TaskEventPayload{
-			TaskID:      uuid.New().String(),
-			OperationID: uuid.New().String(),
-			Name:        "Privilege escalation path",
-			Stage:       "IN_PROCESS",
-			Status:      "UNDEFINED",
-			OldStage:    "TODO",
-		}),
-		models.EventActorUser,
-		nil,
-	)
-	if err != nil {
-		t.Fatalf("toTaskRow: unexpected error %v", err)
-	}
-	if row.Metadata["old_stage"] != "TODO" {
-		t.Fatalf("metadata.old_stage: got %v want TODO", row.Metadata["old_stage"])
-	}
-	if row.Metadata["new_stage"] != "IN_PROCESS" {
-		t.Fatalf("metadata.new_stage: got %v want IN_PROCESS", row.Metadata["new_stage"])
+	if row.Metadata["new_stage"] != string(models.TaskStageDone) {
+		t.Fatalf("metadata.new_stage: got %v want DONE", row.Metadata["new_stage"])
 	}
 }
 
-// TestToTaskRow_StatusSetCarriesStatusAndStage locks in that a status-set
-// row carries both the chosen status and the stage at which it was set,
-// so the timeline can render "Marked SUCCESS while in Done" with full
-// context.
-func TestToTaskRow_StatusSetCarriesStatusAndStage(t *testing.T) {
+// TestToTaskRow_StageChangedAwayFromDoneIsDropped guards the closure-only
+// invariant: only transitions whose new stage is DONE land on the timeline.
+// Re-opening a task (DONE → IN_PROCESS) is intentionally silent.
+func TestToTaskRow_StageChangedAwayFromDoneIsDropped(t *testing.T) {
 	l := &Logger{}
 
-	row, err := l.toTaskRow(
-		taskEvent(eventbus.TopicTaskStatusSet, eventbus.TaskEventPayload{
-			TaskID:      uuid.New().String(),
-			OperationID: uuid.New().String(),
-			Name:        "Data exfil dry run",
-			Stage:       "DONE",
-			Status:      "SUCCESS",
-		}),
-		models.EventActorUser,
-		nil,
-	)
-	if err != nil {
-		t.Fatalf("toTaskRow: unexpected error %v", err)
-	}
-	if row.Metadata["status"] != "SUCCESS" {
-		t.Fatalf("metadata.status: got %v want SUCCESS", row.Metadata["status"])
-	}
-	if row.Metadata["stage"] != "DONE" {
-		t.Fatalf("metadata.stage: got %v want DONE", row.Metadata["stage"])
+	for _, newStage := range []string{"BACKLOG", "TODO", "IN_PROCESS"} {
+		row, err := l.toTaskRow(
+			taskEvent(eventbus.TopicTaskStageChanged, eventbus.TaskEventPayload{
+				TaskID:      uuid.New().String(),
+				OperationID: uuid.New().String(),
+				Name:        "noise",
+				Stage:       newStage,
+				OldStage:    "DONE",
+			}),
+			models.EventActorUser,
+			nil,
+		)
+		if err != nil {
+			t.Fatalf("toTaskRow(%s): unexpected error %v", newStage, err)
+		}
+		if row != nil {
+			t.Fatalf("toTaskRow(%s): expected nil row (non-DONE transition), got %+v", newStage, row)
+		}
 	}
 }
 
@@ -206,7 +178,7 @@ func TestToTaskRow_RejectsWrongPayload(t *testing.T) {
 	l := &Logger{}
 
 	_, err := l.toTaskRow(
-		eventbus.NewEvent(eventbus.TopicTaskCreated, eventbus.UserActor(uuid.NewString()),
+		eventbus.NewEvent(eventbus.TopicTaskStageChanged, eventbus.UserActor(uuid.NewString()),
 			eventbus.CredentialEventPayload{
 				CredentialID: uuid.NewString(),
 				OperationID:  uuid.NewString(),
@@ -219,27 +191,31 @@ func TestToTaskRow_RejectsWrongPayload(t *testing.T) {
 	}
 }
 
-// TestLogger_TopicsIncludesTaskCoverage is a contract check: every task
-// topic in the persisted set must appear in Topics() so the subscriber
-// actually receives them at startup. Catches drift between the switch
-// arm in toRow and the subscription list.
-func TestLogger_TopicsIncludesTaskCoverage(t *testing.T) {
-	want := []eventbus.Topic{
+// TestLogger_TopicsClosureOnly is a contract check: the timeline persists
+// only task.stage_changed (further narrowed to DONE inside toTaskRow). The
+// previously-persisted task creation, status-set, and soft/restore/hard
+// delete topics must NOT appear in Topics(). Wiki document creation is
+// also no longer persisted.
+func TestLogger_TopicsClosureOnly(t *testing.T) {
+	got := (&Logger{}).Topics()
+	gotSet := make(map[eventbus.Topic]struct{}, len(got))
+	for _, topic := range got {
+		gotSet[topic] = struct{}{}
+	}
+	if _, ok := gotSet[eventbus.TopicTaskStageChanged]; !ok {
+		t.Fatalf("Topics() missing TopicTaskStageChanged — closures will not persist")
+	}
+	forbidden := []eventbus.Topic{
 		eventbus.TopicTaskCreated,
-		eventbus.TopicTaskStageChanged,
 		eventbus.TopicTaskStatusSet,
 		eventbus.TopicTaskSoftDeleted,
 		eventbus.TopicTaskRestored,
 		eventbus.TopicTaskHardDeleted,
+		eventbus.TopicWikiDocumentCreated,
 	}
-	got := (&Logger{}).Topics()
-	gotSet := make(map[eventbus.Topic]struct{}, len(got))
-	for _, t := range got {
-		gotSet[t] = struct{}{}
-	}
-	for _, w := range want {
-		if _, ok := gotSet[w]; !ok {
-			t.Fatalf("Topics() missing %q — Subscribe will not receive it", w)
+	for _, f := range forbidden {
+		if _, ok := gotSet[f]; ok {
+			t.Fatalf("Topics() unexpectedly includes %q — timeline would re-receive dropped event", f)
 		}
 	}
 }

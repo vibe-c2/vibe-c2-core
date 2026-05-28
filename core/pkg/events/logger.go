@@ -25,12 +25,11 @@ var eventNamespace = uuid.MustParse("4f6d2d24-2b0d-5d8a-9c11-7a8f8c3a1f7e")
 // Logger is the persistence subscriber. Construct via NewLogger and register
 // with the event bus via Subscribe.
 type Logger struct {
-	repo     repository.IOperationEventRepository
-	ops      repository.IOperationRepository
-	creds    repository.ICredentialRepository
-	wikiDocs repository.IWikiDocumentRepository
-	bus      eventbus.IEventBus
-	log      *zap.Logger
+	repo  repository.IOperationEventRepository
+	ops   repository.IOperationRepository
+	creds repository.ICredentialRepository
+	bus   eventbus.IEventBus
+	log   *zap.Logger
 }
 
 // NewLogger wires repository dependencies and returns a ready-to-subscribe
@@ -41,32 +40,29 @@ func NewLogger(
 	repo repository.IOperationEventRepository,
 	ops repository.IOperationRepository,
 	creds repository.ICredentialRepository,
-	wikiDocs repository.IWikiDocumentRepository,
 	bus eventbus.IEventBus,
 	log *zap.Logger,
 ) *Logger {
-	return &Logger{repo: repo, ops: ops, creds: creds, wikiDocs: wikiDocs, bus: bus, log: log}
+	return &Logger{repo: repo, ops: ops, creds: creds, bus: bus, log: log}
 }
 
 // Topics returns the bus topics this logger persists. Wire one Subscribe call
 // in app.go with this slice; new topics are added here without touching the
 // app wiring.
 //
-// Task coverage: created + stage_changed + status_set + soft/restored/purged.
-// Generic task.updated, assignees_changed, and references_changed are
-// intentionally omitted — they would be noise on the timeline. Stage
-// transitions and terminal-status decisions are the operationally
-// meaningful events; field edits and link maintenance are not.
+// Task coverage: stage_changed only — and inside toTaskRow we further drop
+// every transition whose new stage is not DONE. The timeline records "task
+// closed" events, not the full lifecycle. Creation, status-set, and the
+// delete/restore family are intentionally absent: they were too noisy on
+// the operator's timeline. Generic task.updated, assignees_changed, and
+// references_changed have never been persisted for the same reason.
+//
+// Wiki coverage: none. Document creation was previously persisted but the
+// timeline now treats wiki maintenance as out-of-scope churn.
 func (l *Logger) Topics() []eventbus.Topic {
 	return []eventbus.Topic{
 		eventbus.TopicCredentialCreated,
-		eventbus.TopicWikiDocumentCreated,
-		eventbus.TopicTaskCreated,
 		eventbus.TopicTaskStageChanged,
-		eventbus.TopicTaskStatusSet,
-		eventbus.TopicTaskSoftDeleted,
-		eventbus.TopicTaskRestored,
-		eventbus.TopicTaskHardDeleted,
 	}
 }
 
@@ -140,69 +136,32 @@ func (l *Logger) toRow(ctx context.Context, e eventbus.Event) (*models.Operation
 			OccurredAt:  occurredAt(e),
 		}, nil
 
-	case eventbus.TopicWikiDocumentCreated:
-		p, ok := e.Payload.(eventbus.WikiDocumentEventPayload)
-		if !ok {
-			return nil, fmt.Errorf("unexpected payload type %T for %s", e.Payload, e.Topic)
-		}
-		docID, err := uuid.Parse(p.DocumentID)
-		if err != nil {
-			return nil, fmt.Errorf("parse document id: %w", err)
-		}
-		opID, err := uuid.Parse(p.OperationID)
-		if err != nil {
-			return nil, fmt.Errorf("parse operation id: %w", err)
-		}
-		name := p.Title
-		if name == "" {
-			if doc, err := l.wikiDocs.FindByID(ctx, docID); err == nil {
-				name = doc.Title
-			}
-		}
-		var meta map[string]any
-		if p.ParentDocumentID != "" {
-			meta = map[string]any{"parent_document_id": p.ParentDocumentID}
-		}
-		return &models.OperationEvent{
-			EventID:     uuid.New(),
-			OperationID: opID,
-			Topic:       string(e.Topic),
-			SubjectKind: models.SubjectKindWikiDocument,
-			SubjectID:   docID,
-			SubjectName: name,
-			ActorType:   actorType,
-			ActorID:     actorID,
-			Metadata:    meta,
-			OccurredAt:  occurredAt(e),
-		}, nil
-
-	case eventbus.TopicTaskCreated,
-		eventbus.TopicTaskStageChanged,
-		eventbus.TopicTaskStatusSet,
-		eventbus.TopicTaskSoftDeleted,
-		eventbus.TopicTaskRestored,
-		eventbus.TopicTaskHardDeleted:
+	case eventbus.TopicTaskStageChanged:
 		return l.toTaskRow(e, actorType, actorID)
 	}
 
 	return nil, nil
 }
 
-// toTaskRow translates any of the persisted task topics into a row.
-// Task payloads already snapshot Name (the resolver populates it at
-// publish time), so no repo lookup is needed — even for hard-deleted
-// tasks the timeline can still render their original name.
+// toTaskRow translates a task.stage_changed bus event into a row, but only
+// when the new stage is DONE. Every other transition (e.g. BACKLOG→TODO,
+// IN_PROCESS→TODO, DONE→IN_PROCESS) returns (nil, nil) so the subscriber
+// silently drops it — the timeline records task closures, nothing else.
 //
-// Metadata carries the topic-specific fields the frontend's summary
-// function uses to render specific lines:
-//   - stage_changed: {"old_stage", "new_stage"}
-//   - status_set:    {"status", "stage"} — stage is included so a
-//                    "marked Success while in Done" line has full context.
-//   - others:        no metadata.
+// Task payloads already snapshot Name at publish time, so no repo lookup is
+// needed; the row keeps the original name even if the task is later
+// hard-deleted.
+//
+// Metadata carries old_stage and new_stage so the frontend's summary
+// function can render "Closed from X" without a follow-up lookup.
 func (l *Logger) toTaskRow(e eventbus.Event, actorType models.EventActorType, actorID *uuid.UUID) (*models.OperationEvent, error) {
 	p, ok := e.Payload.(eventbus.TaskEventPayload)
 	if !ok {
 		return nil, fmt.Errorf("unexpected payload type %T for %s", e.Payload, e.Topic)
+	}
+	if p.Stage != string(models.TaskStageDone) {
+		// Only closures land on the timeline.
+		return nil, nil
 	}
 	taskID, err := uuid.Parse(p.TaskID)
 	if err != nil {
@@ -213,18 +172,9 @@ func (l *Logger) toTaskRow(e eventbus.Event, actorType models.EventActorType, ac
 		return nil, fmt.Errorf("parse operation id: %w", err)
 	}
 
-	var meta map[string]any
-	switch e.Topic {
-	case eventbus.TopicTaskStageChanged:
-		meta = map[string]any{
-			"old_stage": p.OldStage,
-			"new_stage": p.Stage,
-		}
-	case eventbus.TopicTaskStatusSet:
-		meta = map[string]any{
-			"status": p.Status,
-			"stage":  p.Stage,
-		}
+	meta := map[string]any{
+		"old_stage": p.OldStage,
+		"new_stage": p.Stage,
 	}
 
 	return &models.OperationEvent{
@@ -305,7 +255,7 @@ func (l *Logger) BackfillIfEmpty(ctx context.Context) error {
 
 	l.log.Info("event logger: backfilling operation_events from existing rows")
 
-	var totalCreds, totalDocs int
+	var totalCreds int
 
 	var offset int64
 	for {
@@ -325,14 +275,6 @@ func (l *Logger) BackfillIfEmpty(ctx context.Context) error {
 					zap.Error(err))
 			}
 			totalCreds += c
-
-			d, err := l.backfillWikiDocsFor(ctx, op.OperationID)
-			if err != nil {
-				l.log.Warn("event logger: wiki doc backfill failed",
-					zap.String("operation_id", op.OperationID.String()),
-					zap.Error(err))
-			}
-			totalDocs += d
 		}
 
 		if int64(len(ops)) < backfillOpPageSize {
@@ -342,8 +284,7 @@ func (l *Logger) BackfillIfEmpty(ctx context.Context) error {
 	}
 
 	l.log.Info("event logger: backfill complete",
-		zap.Int("credentials", totalCreds),
-		zap.Int("wiki_documents", totalDocs))
+		zap.Int("credentials", totalCreds))
 	return nil
 }
 
@@ -368,41 +309,6 @@ func (l *Logger) backfillCredentialsFor(ctx context.Context, opID uuid.UUID) (in
 			ActorType:   models.EventActorUser,
 			ActorID:     actor,
 			OccurredAt:  c.CreateAt.UTC(),
-		})
-	}
-
-	return l.insertInBatches(ctx, rows)
-}
-
-// backfillWikiDocsFor seeds wiki.document.created events for one operation.
-// Soft-deleted documents are excluded because the available repository
-// method filters them out; that is acceptable for a first-deploy seed —
-// the spec's note about including them is a hedge we can revisit if it
-// turns into a real loss.
-func (l *Logger) backfillWikiDocsFor(ctx context.Context, opID uuid.UUID) (int, error) {
-	docs, err := l.wikiDocs.FindAllByOperationID(ctx, opID)
-	if err != nil {
-		return 0, fmt.Errorf("list wiki docs: %w", err)
-	}
-
-	rows := make([]*models.OperationEvent, 0, len(docs))
-	for _, d := range docs {
-		actor := userActorPtr(d.CreatedByID)
-		var meta map[string]any
-		if d.ParentDocumentID != nil {
-			meta = map[string]any{"parent_document_id": d.ParentDocumentID.String()}
-		}
-		rows = append(rows, &models.OperationEvent{
-			EventID:     deterministicEventID(string(eventbus.TopicWikiDocumentCreated), d.DocumentID),
-			OperationID: d.OperationID,
-			Topic:       string(eventbus.TopicWikiDocumentCreated),
-			SubjectKind: models.SubjectKindWikiDocument,
-			SubjectID:   d.DocumentID,
-			SubjectName: d.Title,
-			ActorType:   models.EventActorUser,
-			ActorID:     actor,
-			Metadata:    meta,
-			OccurredAt:  d.CreateAt.UTC(),
 		})
 	}
 

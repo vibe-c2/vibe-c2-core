@@ -226,7 +226,7 @@ func NewApp() (*App, error) {
 	// Persist domain events into operation_events so the Timeline page can
 	// render historical activity. New event types are added by appending to
 	// events.Logger.Topics(), no further wiring required here.
-	eventLogger := events.NewLogger(repos.OperationEvent, repos.Operation, repos.Credential, repos.WikiDocument, bus, l)
+	eventLogger := events.NewLogger(repos.OperationEvent, repos.Operation, repos.Credential, bus, l)
 	bus.Subscribe(eventLogger.Topics(), eventLogger.Handle)
 
 	// Backfill once on first deploy. Idempotent via deterministic event IDs;

@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useMemo, useState } from "react"
 import {
+  useInfiniteQuery,
   useMutation,
   useQueries,
-  useQuery,
   useQueryClient,
 } from "@tanstack/react-query"
 import { graphqlClient } from "@/lib/graphql-client"
@@ -64,7 +64,14 @@ export const timelineKeys = {
     ] as const,
 }
 
-// useTimelineEventsByDay fetches the events that fall inside a single bucket.
+// Page size for the by-day events list. The detail pane virtualizes its
+// rows and prefetches the next page as the user scrolls, so a smaller page
+// trades a slightly larger number of round-trips for tighter first-paint
+// and smoother scroll on dense buckets.
+export const TIMELINE_DAY_PAGE_SIZE = 100
+
+// useTimelineEventsByDay fetches the events that fall inside a single bucket
+// as an infinite-query stream: 100 events per page, next page on scroll.
 // Only the day panel calls this — the canvas renders its dot stack from the
 // topicCounts on timelineBuckets, so a dense axis no longer fans out a
 // per-bucket events query.
@@ -77,7 +84,7 @@ export function useTimelineEventsByDay(
   actorIds?: string[] | null,
   enabled = true,
 ) {
-  return useQuery({
+  return useInfiniteQuery({
     queryKey: timelineKeys.day(
       operationId,
       date,
@@ -86,7 +93,7 @@ export function useTimelineEventsByDay(
       types,
       actorIds,
     ),
-    queryFn: () =>
+    queryFn: ({ pageParam }) =>
       graphqlClient(TimelineEventsByDayDocument, {
         operationId,
         date,
@@ -94,8 +101,14 @@ export function useTimelineEventsByDay(
         granularity,
         types: types && types.length > 0 ? types : null,
         actorIds: actorIds && actorIds.length > 0 ? actorIds : null,
-        first: 100,
+        first: TIMELINE_DAY_PAGE_SIZE,
+        after: pageParam,
       }),
+    initialPageParam: undefined as string | undefined,
+    getNextPageParam: (lastPage) =>
+      lastPage.timelineEventsByDay.pageInfo.hasNextPage
+        ? lastPage.timelineEventsByDay.pageInfo.endCursor ?? undefined
+        : undefined,
     enabled: enabled && !!operationId && !!date && !!timezone,
   })
 }
