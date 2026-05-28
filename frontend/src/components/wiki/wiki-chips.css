@@ -1,0 +1,398 @@
+/*
+ * Reusable reference-chip styles. These were originally scoped to `.tiptap`
+ * because they only rendered inside the wiki editor — they're now used in
+ * other surfaces too (task create/edit modals, future picker UIs), so the
+ * class rules live here and apply globally. The TipTap-specific wrapper
+ * rules (`.tiptap .wiki-*-chip-wrapper`, `.tiptap .react-renderer.node-*`)
+ * stay in wiki-editor.css because they only matter inside the editor.
+ *
+ * Visual language: credential chip uses a violet "secrets" accent, document
+ * chip uses a sky/blue "navigation" accent. Both react to ProseMirror's
+ * `selected` flag via the `is-selected` class so the editor selection ring
+ * still works when the chip is rendered inside a NodeView. Outside the
+ * editor, `is-selected` simply unused.
+ */
+
+/* --- Credential chip ----------------------------------------------------- */
+
+.wiki-credential-chip {
+  --chip-accent: oklch(0.5 0.18 295);
+  --chip-fg: oklch(0.36 0.16 295);
+}
+
+.dark .wiki-credential-chip {
+  --chip-accent: oklch(0.72 0.18 295);
+  --chip-fg: oklch(0.86 0.12 295);
+}
+
+.wiki-credential-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  vertical-align: baseline;
+  /* Wrap gracefully when the chip stretches past the column edge — the
+     username/password + multiple key hash segments can easily make the chip
+     wider than the prose container. */
+  flex-wrap: wrap;
+  max-width: 100%;
+  font-family: inherit;
+  font-size: 0.875em;
+  font-weight: 500;
+  line-height: 1.2;
+  padding: 0.32em 0.7em;
+  margin: 0 0.15em;
+  border-radius: 6px;
+  color: var(--chip-fg);
+  background: color-mix(in oklch, var(--chip-accent) 14%, transparent);
+  border: 1px solid color-mix(in oklch, var(--chip-accent) 36%, transparent);
+  cursor: pointer;
+  appearance: none;
+  text-align: inherit;
+  transition: background-color 120ms ease-out,
+    border-color 120ms ease-out, color 120ms ease-out,
+    box-shadow 120ms ease-out;
+}
+
+.wiki-credential-chip__icon {
+  flex-shrink: 0;
+  color: var(--chip-accent);
+}
+
+.wiki-credential-chip:hover {
+  background: color-mix(in oklch, var(--chip-accent) 22%, transparent);
+  border-color: color-mix(in oklch, var(--chip-accent) 52%, transparent);
+}
+
+.wiki-credential-chip:focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: 1px;
+}
+
+/* Selection cue. ProseMirror's `ProseMirror-selectednode` lands on the
+   NodeView wrapper for inline atoms — match both that and the `is-selected`
+   class driven off the NodeViewProps `selected` flag, so the ring shows
+   regardless of which signal arrives first. The ProseMirror selectors stay
+   scoped to .tiptap; the .is-selected variant works globally. */
+.wiki-credential-chip.is-selected,
+.tiptap .ProseMirror-selectednode .wiki-credential-chip,
+.tiptap .ProseMirror-selectednode.wiki-credential-chip-wrapper
+  .wiki-credential-chip {
+  background: color-mix(in oklch, var(--chip-accent) 26%, transparent);
+  box-shadow: 0 0 0 2px var(--ring);
+}
+
+/* Invalid override remaps the chip accent to the muted-foreground neutral.
+   Both selectors are spelled out so the rule sits at the same (0,2,0)
+   specificity as `.dark .wiki-credential-chip` above — otherwise the
+   theme-scoped violet `--chip-accent` would beat this in dark mode and the
+   invalid state would stay violet (only the icon would shift). */
+.wiki-credential-chip--invalid,
+.dark .wiki-credential-chip--invalid {
+  --chip-accent: var(--muted-foreground);
+  --chip-fg: var(--muted-foreground);
+}
+
+.wiki-credential-chip--invalid:hover {
+  background: color-mix(in oklch, var(--muted-foreground) 22%, transparent);
+  border-color: color-mix(in oklch, var(--muted-foreground) 48%, transparent);
+}
+
+.wiki-credential-chip--missing {
+  color: var(--destructive);
+  background: color-mix(in oklch, var(--destructive) 12%, transparent);
+  border-color: color-mix(in oklch, var(--destructive) 32%, transparent);
+  cursor: default;
+}
+
+.wiki-credential-chip--loading {
+  cursor: progress;
+  opacity: 0.75;
+}
+
+.wiki-credential-chip__name {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 28ch;
+}
+
+/* Secondary segments — `(username:password)` and per-key `(name:sha1prefix)`.
+   Muted compared to the credential name so the chip's primary affordance
+   (the name) still anchors the eye. Key segments render only a short prefix
+   of the SHA-1 (see KEY_HASH_DISPLAY_LEN in wiki-credential-chip-view.tsx),
+   short enough that the closing `)` stays inside the chip without ellipsis
+   truncation hiding it; the full digest is preserved in the tooltip. The
+   creds segment can hold a longer password — let it truncate there only,
+   and only when it would otherwise blow the column width. */
+.wiki-credential-chip__segment {
+  display: inline-flex;
+  align-items: center;
+  min-width: 0;
+  color: color-mix(in oklch, currentColor 78%, transparent);
+  font-weight: 400;
+  font-family: var(--font-mono);
+  font-size: 0.85em;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 32ch;
+}
+
+.wiki-credential-chip__segment--key {
+  /* Prefix is short by construction; no need to truncate, and truncating
+     would hide the closing `)`. Allow the full rendered text to size the
+     segment. */
+  max-width: none;
+  overflow: visible;
+}
+
+.wiki-credential-chip__validity--valid {
+  color: oklch(0.62 0.16 152);
+}
+
+.dark .wiki-credential-chip__validity--valid {
+  color: oklch(0.72 0.18 152);
+}
+
+.wiki-credential-chip__validity--invalid {
+  color: var(--muted-foreground);
+  opacity: 0.7;
+}
+
+.wiki-credential-chip__skel {
+  display: inline-block;
+  width: 6ch;
+  height: 0.9em;
+  border-radius: 4px;
+  background: color-mix(in oklch, currentColor 22%, transparent);
+  animation: wiki-credential-chip-pulse 1.2s ease-in-out infinite;
+}
+
+@keyframes wiki-credential-chip-pulse {
+  0%,
+  100% {
+    opacity: 0.5;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+
+/* --- Document chip ------------------------------------------------------- */
+/*
+ * Mirrors the credential chip layout but uses a sky/blue accent so the two
+ * reference flavors are visually distinguishable at a glance. The blue keeps
+ * "cross-document link" feeling like prose-anchored navigation, while violet
+ * keeps "credential" feeling like sensitive data.
+ */
+
+.wiki-document-chip {
+  --chip-accent: oklch(0.55 0.16 240);
+  --chip-fg: oklch(0.36 0.14 240);
+}
+
+.dark .wiki-document-chip {
+  --chip-accent: oklch(0.75 0.14 240);
+  --chip-fg: oklch(0.88 0.1 240);
+}
+
+.wiki-document-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  vertical-align: baseline;
+  flex-wrap: wrap;
+  max-width: 100%;
+  font-family: inherit;
+  font-size: 0.875em;
+  font-weight: 500;
+  line-height: 1.2;
+  padding: 0.28em 0.65em;
+  margin: 0 0.15em;
+  border-radius: 6px;
+  color: var(--chip-fg);
+  background: color-mix(in oklch, var(--chip-accent) 12%, transparent);
+  border: 1px solid color-mix(in oklch, var(--chip-accent) 34%, transparent);
+  cursor: pointer;
+  appearance: none;
+  text-align: inherit;
+  transition: background-color 120ms ease-out,
+    border-color 120ms ease-out, color 120ms ease-out,
+    box-shadow 120ms ease-out;
+}
+
+.wiki-document-chip__icon {
+  display: inline-flex;
+  flex-shrink: 0;
+  color: var(--chip-accent);
+}
+
+/* DocumentIcon renders a Lucide icon (or emoji) at its native size; clamp the
+   inner svg/emoji to chip height so a mismatched icon-size prop can't push the
+   chip taller than a single text line. */
+.wiki-document-chip__icon svg,
+.wiki-document-chip__icon > span {
+  width: 1em;
+  height: 1em;
+  font-size: 1em;
+}
+
+.wiki-document-chip:hover {
+  background: color-mix(in oklch, var(--chip-accent) 22%, transparent);
+  border-color: color-mix(in oklch, var(--chip-accent) 50%, transparent);
+}
+
+.wiki-document-chip:focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: 1px;
+}
+
+.wiki-document-chip.is-selected,
+.tiptap .ProseMirror-selectednode .wiki-document-chip,
+.tiptap .ProseMirror-selectednode.wiki-document-chip-wrapper
+  .wiki-document-chip {
+  background: color-mix(in oklch, var(--chip-accent) 26%, transparent);
+  box-shadow: 0 0 0 2px var(--ring);
+}
+
+.wiki-document-chip--missing {
+  color: var(--destructive);
+  background: color-mix(in oklch, var(--destructive) 12%, transparent);
+  border-color: color-mix(in oklch, var(--destructive) 32%, transparent);
+  cursor: default;
+}
+
+.wiki-document-chip--missing:disabled {
+  cursor: not-allowed;
+}
+
+.wiki-document-chip--loading {
+  cursor: progress;
+  opacity: 0.75;
+}
+
+.wiki-document-chip__name {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 36ch;
+}
+
+.wiki-document-chip__skel {
+  display: inline-block;
+  width: 8ch;
+  height: 0.9em;
+  border-radius: 4px;
+  background: color-mix(in oklch, currentColor 22%, transparent);
+  animation: wiki-credential-chip-pulse 1.2s ease-in-out infinite;
+}
+
+/* --- User chip ----------------------------------------------------------- */
+/*
+ * Neutral chip with the same shape as the document/credential chips but no
+ * accent palette — pure surface/foreground tokens so operators read as
+ * "person" without competing with the colored reference chips around them.
+ * Used for task assignees today; other operator-display surfaces can adopt
+ * the same chip later.
+ */
+
+.wiki-user-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  vertical-align: baseline;
+  flex-wrap: wrap;
+  max-width: 100%;
+  font-family: inherit;
+  font-size: 0.875em;
+  font-weight: 500;
+  line-height: 1.2;
+  padding: 0.28em 0.65em;
+  margin: 0 0.15em;
+  border-radius: 6px;
+  color: var(--foreground);
+  background: var(--background);
+  border: 1px solid var(--border);
+  cursor: pointer;
+  appearance: none;
+  text-align: inherit;
+  transition: background-color 120ms ease-out,
+    border-color 120ms ease-out, color 120ms ease-out,
+    box-shadow 120ms ease-out;
+}
+
+.wiki-user-chip:hover {
+  background: var(--muted);
+  border-color: color-mix(in oklch, var(--foreground) 24%, transparent);
+}
+
+.wiki-user-chip:focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: 1px;
+}
+
+.wiki-user-chip.is-selected {
+  background: var(--muted);
+  box-shadow: 0 0 0 2px var(--ring);
+}
+
+/* Inactive / disabled user — muted label, struck-through, default cursor.
+   Same intent as the doc/credential "missing" branches: the entity still
+   renders, but it's flagged as not usable. */
+.wiki-user-chip--inactive {
+  color: var(--muted-foreground);
+  cursor: default;
+}
+
+.wiki-user-chip--inactive .wiki-user-chip__name {
+  text-decoration: line-through;
+  text-decoration-color: color-mix(in oklch, currentColor 60%, transparent);
+}
+
+.wiki-user-chip__name {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 24ch;
+}
+
+/* --- Inline remove control ---------------------------------------------- */
+/*
+ * Optional trailing close affordance shared by both chip flavors. Rendered
+ * inside the chip container (which must therefore be non-interactive — a
+ * button nested inside a button is invalid). The button inherits the chip's
+ * accent color so it picks up the chip's theme without per-variant overrides;
+ * hover lifts the contrast a notch without recoloring.
+ */
+.wiki-chip-remove {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  width: 1.1em;
+  height: 1.1em;
+  margin-left: 2px;
+  border-radius: 999px;
+  padding: 0;
+  background: transparent;
+  border: none;
+  color: color-mix(in oklch, currentColor 70%, transparent);
+  cursor: pointer;
+  appearance: none;
+  transition: background-color 120ms ease-out, color 120ms ease-out;
+}
+
+.wiki-chip-remove:hover {
+  background: color-mix(in oklch, currentColor 18%, transparent);
+  color: currentColor;
+}
+
+.wiki-chip-remove:focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: 1px;
+}
+
+.wiki-chip-remove svg {
+  width: 0.85em;
+  height: 0.85em;
+}

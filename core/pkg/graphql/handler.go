@@ -61,6 +61,7 @@ func NewHandler(
 	wikiDocuments resolver.IWikiDocumentResolver,
 	wikiVisits resolver.IWikiDocumentVisitResolver,
 	credentials resolver.ICredentialResolver,
+	tasks resolver.ITaskResolver,
 	timeline resolver.ITimelineResolver,
 	apiKeys resolver.IAPIKeyResolver,
 	bus eventbus.IEventBus,
@@ -69,6 +70,7 @@ func NewHandler(
 	sessionRepo repository.ISessionRepository,
 	wikiDocumentRepo repository.IWikiDocumentRepository,
 	credentialRepo repository.ICredentialRepository,
+	taskRepo repository.ITaskRepository,
 	presenceTracker *wiki.PresenceTracker,
 	allowedOrigins []string,
 ) gin.HandlerFunc {
@@ -83,6 +85,7 @@ func NewHandler(
 		WikiDocumentResolver:       wikiDocuments,
 		WikiDocumentVisitResolver:  wikiVisits,
 		CredentialResolver:         credentials,
+		TaskResolver:               tasks,
 		TimelineResolver:           timeline,
 		APIKeyResolver:             apiKeys,
 		EventBus:                   bus,
@@ -91,6 +94,7 @@ func NewHandler(
 		SessionRepo:                sessionRepo,
 		WikiDocumentRepo:           wikiDocumentRepo,
 		CredentialRepo:             credentialRepo,
+		TaskRepo:                   taskRepo,
 		PresenceTracker:            presenceTracker,
 	}
 

@@ -58,6 +58,7 @@ func (a *App) NewRouter() *gin.Engine {
 		a.repos.Operation, a.repos.User,
 		a.repos.WikiDocumentVisit,
 		a.repos.Credential,
+		a.repos.Task,
 		a.eventBus, a.presenceTracker,
 	)
 	wikiVisitRes := resolver.NewWikiDocumentVisitResolver(
@@ -67,7 +68,10 @@ func (a *App) NewRouter() *gin.Engine {
 	// cross-domain join lives on wikiDocRes (where the wiki repo lives) so
 	// the dependency arrow points from credentials → wiki, not the other way.
 	credRes := resolver.NewCredentialResolver(
-		a.repos.Credential, a.repos.Operation, a.repos.User, wikiDocRes, a.eventBus,
+		a.repos.Credential, a.repos.Operation, a.repos.User, wikiDocRes, a.repos.Task, a.eventBus,
+	)
+	taskRes := resolver.NewTaskResolver(
+		a.repos.Task, a.repos.Operation, a.repos.User, a.repos.WikiDocument, a.repos.Credential, a.eventBus,
 	)
 	timelineRes := resolver.NewTimelineResolver(
 		a.repos.OperationEvent, a.repos.Operation, a.repos.User, a.eventBus,
@@ -200,9 +204,9 @@ func (a *App) NewRouter() *gin.Engine {
 		//                       inside gqlgen; one socket multiplexes every
 		//                       active subscription on the page.
 		gqlHandler := gql.NewHandler(
-			userRes, opRes, snpRes, sessRes, wikiDocRes, wikiVisitRes, credRes, timelineRes, apiKeyRes,
+			userRes, opRes, snpRes, sessRes, wikiDocRes, wikiVisitRes, credRes, taskRes, timelineRes, apiKeyRes,
 			a.eventBus,
-			a.repos.User, a.repos.Operation, a.repos.Session, a.repos.WikiDocument, a.repos.Credential,
+			a.repos.User, a.repos.Operation, a.repos.Session, a.repos.WikiDocument, a.repos.Credential, a.repos.Task,
 			a.presenceTracker,
 			a.env.CORSAllowedOrigins,
 		)

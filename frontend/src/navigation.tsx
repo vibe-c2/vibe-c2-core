@@ -1,6 +1,7 @@
 import {
   BookOpenIcon,
   FileCode2Icon,
+  KanbanSquareIcon,
   RouteIcon,
   LayoutDashboardIcon,
   GemIcon,
@@ -51,6 +52,12 @@ export const navigationGlobalItems: NavigationItem[] = [
 // Operation-scoped entries rendered BELOW the global block. Hidden until
 // the user picks an operation via the switcher.
 export const navigationOperationItems: NavigationItem[] = [
+  {
+    title: "Tasks",
+    url: "/tasks",
+    permission: null,
+    icon: KanbanSquareIcon,
+  },
   {
     title: "Timeline",
     url: "/timeline",

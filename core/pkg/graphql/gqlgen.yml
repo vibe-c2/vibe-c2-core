@@ -278,6 +278,55 @@ models:
       updatedAt:
         resolver: true         # time.Time -> RFC3339 string
 
+  # --- Tasks ---
+
+  # TaskStage / TaskStatus are mapped to the Go enum types so gqlgen marshals
+  # them directly without an intermediate string conversion. The Go side has
+  # IsValid() / IsTerminal() for boundary validation.
+  TaskStage:
+    model:
+      - github.com/vibe-c2/vibe-c2-core/core/pkg/models.TaskStage
+  TaskStatus:
+    model:
+      - github.com/vibe-c2/vibe-c2-core/core/pkg/models.TaskStatus
+
+  # Map the GraphQL "Task" type to our existing model. Field resolvers bridge
+  # UUID→string for ids, *time.Time→*string for nullable timestamps, and the
+  # relation lookups (assignees, wikiReferences, credentialReferences,
+  # createdBy, lastUpdatedBy, operation).
+  Task:
+    model:
+      - github.com/vibe-c2/vibe-c2-core/core/pkg/models.Task
+    fields:
+      id:
+        resolver: true         # TaskID (uuid.UUID) -> ID (string)
+      operationId:
+        resolver: true         # OperationID (uuid.UUID) -> ID (string)
+      operation:
+        resolver: true         # OperationID -> Operation (fetched from DB)
+      riskScore:
+        resolver: true         # uint8 -> Int
+      profitScore:
+        resolver: true         # uint8 -> Int
+      assignees:
+        resolver: true         # []uuid.UUID -> []User (fetched from DB)
+      wikiReferences:
+        resolver: true         # []uuid.UUID -> []WikiDocument (fetched from DB)
+      credentialReferences:
+        resolver: true         # []uuid.UUID -> []Credential (fetched from DB)
+      createdBy:
+        resolver: true         # CreatedByID (uuid.UUID) -> User
+      lastUpdatedBy:
+        resolver: true         # LastUpdatedByID (*uuid.UUID) -> User (nullable)
+      lastUpdatedAt:
+        resolver: true         # *time.Time -> *string (RFC3339 or null)
+      deletedAt:
+        resolver: true         # *time.Time -> *string (RFC3339 or null)
+      createdAt:
+        resolver: true         # field.DefaultField.CreateAt -> string
+      updatedAt:
+        resolver: true         # field.DefaultField.UpdateAt -> string
+
   # --- API Keys ---
 
   # Map the GraphQL "APIKey" type to our existing model. Field resolvers

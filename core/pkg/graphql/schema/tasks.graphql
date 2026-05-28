@@ -1,0 +1,275 @@
+# =============================================================================
+# Tasks
+# =============================================================================
+#
+# Tasks are operation-scoped units of operator-planned work. Each task carries
+# risk and profit scores so the team can triage via the matrix view (risk on
+# one axis, profit on the other, midpoint at 5/5). The kanban view groups
+# tasks by stage (BACKLOG / TODO / IN_PROCESS / DONE). Cards in DONE must
+# carry a terminal status (SUCCESS or FAIL) — the server enforces this
+# invariant on every stage transition.
+#
+# Tasks may reference wiki documents and credentials in the same operation.
+# When a referenced wiki doc or credential is hard-deleted, the corresponding
+# UUID is stripped from every task's reference array (see the resolver's
+# cleanup hook), so dangling pointers never render in the UI.
+#
+# Soft-delete follows the wiki document pattern: deleteTask sets deleted_at;
+# restoreTask clears it; purgeTask is the admin-only hard-delete.
+
+# --- Enums ---
+
+enum TaskStage {
+  BACKLOG
+  TODO
+  IN_PROCESS
+  DONE
+}
+
+enum TaskStatus {
+  UNDEFINED
+  SUCCESS
+  FAIL
+}
+
+# --- Types ---
+
+type Task {
+  id: ID!
+  operationId: ID!
+  # The full parent Operation. Resolved on demand via a DB lookup. Use in
+  # cross-operation views; in scoped views prefer operationId.
+  operation: Operation!
+
+  name: String!
+  description: String!
+
+  # Risk and profit scores. 0..10 inclusive. The matrix view treats scores
+  # below 5 as "low" and 5 and above as "high" — the quadrant threshold is
+  # hardcoded, not configurable.
+  riskScore: Int!
+  riskDescription: String!
+  profitScore: Int!
+  profitDescription: String!
+
+  stage: TaskStage!
+  # status is UNDEFINED until the task reaches DONE, at which point the
+  # operator must pick SUCCESS or FAIL. Tasks moved back out of DONE keep
+  # their last status as history unless explicitly reset.
+  status: TaskStatus!
+
+  # Operators responsible for the task. Multiple assignees are supported.
+  # Resolved on demand; empty list when nothing is assigned.
+  assignees: [User!]!
+
+  # Linked wiki documents and credentials in the same operation. References
+  # are stored as bare UUIDs on the task; the resolver fetches the live
+  # entities and silently drops missing ones (cleanup hooks keep this rare).
+  wikiReferences: [WikiDocument!]!
+  credentialReferences: [Credential!]!
+
+  # Null if the creator was deleted. Same shape as Credential.createdBy.
+  createdBy: User
+  # Null for tasks that have never been edited after creation (the row was
+  # only ever touched by createTask), or whose last editor was deleted.
+  lastUpdatedBy: User
+  lastUpdatedAt: String
+
+  # Soft-delete timestamp. Null for active tasks; ISO 8601 for trashed rows.
+  # The trash listing query (taskTrash) is the only way to surface
+  # soft-deleted tasks; the regular list/connection excludes them.
+  deletedAt: String
+
+  createdAt: String!
+  updatedAt: String!
+}
+
+type TaskEdge {
+  node: Task!
+  cursor: String!
+}
+
+type TaskConnection {
+  edges: [TaskEdge!]!
+  pageInfo: PageInfo!
+  totalCount: Int!
+}
+
+# TaskEvent wraps a task domain event for real-time updates. The task field
+# is null on DELETED (the entity is soft-deleted; subscribers refetch via
+# taskTrash if they care about the trashed copy). For non-DELETED events
+# the field is populated with the fresh entity so clients can apply the
+# update without a follow-up query.
+type TaskEvent {
+  action: EventAction!
+  taskId: ID!
+  operationId: ID!
+  task: Task
+}
+
+# --- Inputs ---
+
+input CreateTaskInput {
+  operationId: ID!
+  name: String!
+  description: String
+  riskScore: Int!
+  riskDescription: String
+  profitScore: Int!
+  profitDescription: String
+  # Initial assignees, wiki references, and credential references. All
+  # default to empty lists when omitted.
+  assigneeIds: [ID!]
+  wikiReferenceIds: [ID!]
+  credentialReferenceIds: [ID!]
+  # Initial stage. Defaults to BACKLOG when omitted.
+  stage: TaskStage
+  # Required only when stage is DONE — the server rejects DONE without a
+  # terminal status. Ignored for other stages (operators can park a status
+  # on a non-DONE task by including it explicitly).
+  status: TaskStatus
+}
+
+input UpdateTaskInput {
+  name: String
+  description: String
+  riskScore: Int
+  riskDescription: String
+  profitScore: Int
+  profitDescription: String
+}
+
+# ChangeTaskStageInput is the kanban drag-drop mutation payload. When the
+# new stage is DONE, status must be SUCCESS or FAIL — the server enforces
+# this invariant and surfaces a friendly error so the UI can prompt the
+# operator for a choice.
+input ChangeTaskStageInput {
+  taskId: ID!
+  stage: TaskStage!
+  status: TaskStatus
+}
+
+# --- Queries ---
+
+extend type Query {
+  # Single task by ID. Resolver checks operation membership.
+  task(id: ID!): Task!
+    @hasPermission(permission: "operation:member")
+
+  # Cursor-paginated list of active tasks in an operation. Sorted by
+  # createAt DESC (matches the kanban column auto-sort). Pass `stage` to
+  # narrow to one column; omit to pull every active task for the matrix
+  # view in a single query.
+  tasks(
+    operationId: ID!
+    stage: TaskStage
+    search: String
+    first: Int = 50
+    after: String
+    last: Int
+    before: String
+  ): TaskConnection!
+    @hasPermission(permission: "operation:member")
+
+  # Cursor-paginated list of soft-deleted tasks in an operation. Sorted by
+  # deleted_at DESC (most recently trashed first). Admin-only on purge,
+  # operator on restore — both checks live in the corresponding mutations.
+  taskTrash(
+    operationId: ID!
+    first: Int = 50
+    after: String
+    last: Int
+    before: String
+  ): TaskConnection!
+    @hasPermission(permission: "operation:member")
+}
+
+# --- Mutations ---
+
+extend type Mutation {
+  # createTask creates a new task in an operation. Requires operator+ in op.
+  # If input.stage is DONE, input.status must be SUCCESS or FAIL.
+  createTask(input: CreateTaskInput!): Task!
+    @hasPermission(permission: "operation:member")
+
+  # updateTask modifies the editable fields. Stage and status changes go
+  # through changeTaskStage so the invariant is enforced uniformly.
+  # Operator+ in op.
+  updateTask(id: ID!, input: UpdateTaskInput!): Task!
+    @hasPermission(permission: "operation:member")
+
+  # changeTaskStage moves a task between kanban columns. When the new
+  # stage is DONE, status must be SUCCESS or FAIL — the server returns a
+  # validation error otherwise. The frontend uses this signal to open the
+  # status-required modal before retrying.
+  changeTaskStage(input: ChangeTaskStageInput!): Task!
+    @hasPermission(permission: "operation:member")
+
+  # setTaskAssignees replaces the responsible-user list. Pass an empty
+  # array to clear all assignees. Operator+ in op.
+  setTaskAssignees(taskId: ID!, assigneeIds: [ID!]!): Task!
+    @hasPermission(permission: "operation:member")
+
+  # setTaskWikiReferences replaces the wiki document link list. Operator+ in op.
+  setTaskWikiReferences(taskId: ID!, wikiIds: [ID!]!): Task!
+    @hasPermission(permission: "operation:member")
+
+  # setTaskCredentialReferences replaces the credential link list. Operator+ in op.
+  setTaskCredentialReferences(taskId: ID!, credentialIds: [ID!]!): Task!
+    @hasPermission(permission: "operation:member")
+
+  # deleteTask soft-deletes a task. Operator+ in op.
+  deleteTask(id: ID!): Boolean!
+    @hasPermission(permission: "operation:member")
+
+  # restoreTask clears the soft-delete on a previously trashed task.
+  # Operator+ in op.
+  restoreTask(id: ID!): Task!
+    @hasPermission(permission: "operation:member")
+
+  # purgeTask permanently removes a soft-deleted task. Admin in op only.
+  purgeTask(id: ID!): Boolean!
+    @hasPermission(permission: "operation:member")
+}
+
+# --- Subscriptions ---
+
+extend type Subscription {
+  # Real-time task changes scoped to an operation. Same shape as
+  # credentialChanged: subscribe at viewer+ in op, receive events on
+  # every task mutation, fetch the fresh task for non-DELETED actions.
+  taskChanged(operationId: ID!): TaskEvent!
+    @hasPermission(permission: "operation:member")
+}
+
+# --- Cross-domain backlinks (task → wiki / credential) ---
+#
+# The wiki and credential schemas already expose document → document and
+# document → credential backlinks. These extensions add the task side: every
+# WikiDocument and Credential carries a `taskBacklinks` field listing the
+# active tasks in the same operation that reference it via the task's
+# wiki_references / credential_references array. Trashed tasks are excluded.
+# Capped at 200 most recently updated — past that, refining the reference
+# graph beats paginating the list.
+
+extend type WikiDocument {
+  taskBacklinks: [Task!]!
+}
+
+extend type Credential {
+  taskBacklinks: [Task!]!
+}
+
+extend type Query {
+  # Same data as WikiDocument.taskBacklinks, exposed standalone so the wiki
+  # editor footer can refetch on taskChanged subscription events without
+  # re-pulling the whole document.
+  tasksReferencingWikiDocument(documentId: ID!): [Task!]!
+    @hasPermission(permission: "operation:member")
+
+  # Same data as Credential.taskBacklinks, exposed standalone so the
+  # credential details dialog can refetch on taskChanged events without
+  # re-pulling the whole credential.
+  tasksReferencingCredential(credentialId: ID!): [Task!]!
+    @hasPermission(permission: "operation:member")
+}

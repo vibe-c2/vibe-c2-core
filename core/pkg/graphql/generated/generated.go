@@ -41,6 +41,7 @@ type ResolverRoot interface {
 	SchemeNetworkPort() SchemeNetworkPortResolver
 	Session() SessionResolver
 	Subscription() SubscriptionResolver
+	Task() TaskResolver
 	TimelineEvent() TimelineEventResolver
 	User() UserResolver
 	WikiDocument() WikiDocumentResolver
@@ -82,6 +83,7 @@ type ComplexityRoot struct {
 		Password      func(childComplexity int) int
 		Properties    func(childComplexity int) int
 		Tags          func(childComplexity int) int
+		TaskBacklinks func(childComplexity int) int
 		Type          func(childComplexity int) int
 		UpdatedAt     func(childComplexity int) int
 		Username      func(childComplexity int) int
@@ -129,11 +131,13 @@ type ComplexityRoot struct {
 		AddSchemeNetworkPort          func(childComplexity int, pointID string, input model.CreateSchemeNetworkPortInput) int
 		AdminRevokeAllUserSessions    func(childComplexity int, userID string) int
 		AdminRevokeSession            func(childComplexity int, id string) int
+		ChangeTaskStage               func(childComplexity int, input model.ChangeTaskStageInput) int
 		CreateCredential              func(childComplexity int, operationID string, input model.CreateCredentialInput) int
 		CreateCustomTimelineEvent     func(childComplexity int, operationID string, input model.CreateCustomTimelineEventInput) int
 		CreateMyAPIKey                func(childComplexity int) int
 		CreateOperation               func(childComplexity int, input model.CreateOperationInput) int
 		CreateSchemeNetworkPoint      func(childComplexity int, operationID string, input model.CreateSchemeNetworkPointInput) int
+		CreateTask                    func(childComplexity int, input model.CreateTaskInput) int
 		CreateUser                    func(childComplexity int, input model.CreateUserInput) int
 		CreateWikiDocument            func(childComplexity int, operationID string, input model.CreateWikiDocumentInput) int
 		CreateWikiDocumentBackup      func(childComplexity int, documentID string, description *string) int
@@ -143,21 +147,27 @@ type ComplexityRoot struct {
 		DeleteMyAPIKey                func(childComplexity int) int
 		DeleteOperation               func(childComplexity int, id string) int
 		DeleteSchemeNetworkPoint      func(childComplexity int, id string) int
+		DeleteTask                    func(childComplexity int, id string) int
 		DeleteUser                    func(childComplexity int, id string) int
 		DeleteWikiDocument            func(childComplexity int, id string) int
 		DeleteWikiDocumentBackup      func(childComplexity int, id string) int
 		DuplicateWikiDocument         func(childComplexity int, id string, withChildren *bool) int
 		EmptyWikiDocumentTrash        func(childComplexity int, operationID string) int
 		PermanentlyDeleteWikiDocument func(childComplexity int, id string) int
+		PurgeTask                     func(childComplexity int, id string) int
 		RegenerateMyAPIKey            func(childComplexity int) int
 		RemoveOperationMember         func(childComplexity int, operationID string, userID string) int
 		RemoveSchemeNetworkPort       func(childComplexity int, pointID string, portID string) int
 		ReorderWikiDocumentSiblings   func(childComplexity int, input model.ReorderWikiDocumentSiblingsInput) int
+		RestoreTask                   func(childComplexity int, id string) int
 		RestoreWikiDocument           func(childComplexity int, id string, cascade *bool) int
 		RestoreWikiDocumentBackup     func(childComplexity int, documentID string, backupID string) int
 		RevokeAllMySessions           func(childComplexity int) int
 		RevokeSession                 func(childComplexity int, id string) int
 		SetMyAPIKeyEnabled            func(childComplexity int, enabled bool) int
+		SetTaskAssignees              func(childComplexity int, taskID string, assigneeIds []string) int
+		SetTaskCredentialReferences   func(childComplexity int, taskID string, credentialIds []string) int
+		SetTaskWikiReferences         func(childComplexity int, taskID string, wikiIds []string) int
 		TrackWikiDocumentVisit        func(childComplexity int, documentID string) int
 		UpdateCredential              func(childComplexity int, id string, input model.UpdateCredentialInput) int
 		UpdateCredentialComment       func(childComplexity int, credentialID string, commentID string, text string) int
@@ -167,6 +177,7 @@ type ComplexityRoot struct {
 		UpdateOwnProfile              func(childComplexity int, input model.UpdateUserInput) int
 		UpdateSchemeNetworkPoint      func(childComplexity int, id string, input model.UpdateSchemeNetworkPointInput) int
 		UpdateSchemeNetworkPort       func(childComplexity int, pointID string, portID string, input model.UpdateSchemeNetworkPortInput) int
+		UpdateTask                    func(childComplexity int, id string, input model.UpdateTaskInput) int
 		UpdateUser                    func(childComplexity int, id string, input model.UpdateUserInput) int
 		UpdateWikiDocument            func(childComplexity int, id string, input model.UpdateWikiDocumentInput) int
 	}
@@ -232,6 +243,11 @@ type ComplexityRoot struct {
 		SchemeNetworkPoints                func(childComplexity int, operationID string, search *string, first *int, after *string, last *int, before *string) int
 		Session                            func(childComplexity int, id string) int
 		Sessions                           func(childComplexity int, userID *string, search *string, activeOnly *bool, first *int, after *string, last *int, before *string) int
+		Task                               func(childComplexity int, id string) int
+		TaskTrash                          func(childComplexity int, operationID string, first *int, after *string, last *int, before *string) int
+		Tasks                              func(childComplexity int, operationID string, stage *models.TaskStage, search *string, first *int, after *string, last *int, before *string) int
+		TasksReferencingCredential         func(childComplexity int, credentialID string) int
+		TasksReferencingWikiDocument       func(childComplexity int, documentID string) int
 		TimelineBuckets                    func(childComplexity int, operationID string, granularity *repository.TimelineGranularity, timezone string, from *string, to *string, types []string, actorIds []string) int
 		TimelineEventsByDay                func(childComplexity int, operationID string, date string, timezone string, granularity *repository.TimelineGranularity, types []string, actorIds []string, first *int, after *string) int
 		User                               func(childComplexity int, id string) int
@@ -326,10 +342,52 @@ type ComplexityRoot struct {
 		OperationChanged            func(childComplexity int, operationID *string) int
 		OperationMemberChanged      func(childComplexity int, operationID *string) int
 		SessionChanged              func(childComplexity int, userID *string) int
+		TaskChanged                 func(childComplexity int, operationID string) int
 		TimelineEventAdded          func(childComplexity int, operationID string) int
 		UserChanged                 func(childComplexity int) int
 		WikiDocumentChanged         func(childComplexity int, operationID string) int
 		WikiDocumentPresenceChanged func(childComplexity int, operationID string) int
+	}
+
+	Task struct {
+		Assignees            func(childComplexity int) int
+		CreatedAt            func(childComplexity int) int
+		CreatedBy            func(childComplexity int) int
+		CredentialReferences func(childComplexity int) int
+		DeletedAt            func(childComplexity int) int
+		Description          func(childComplexity int) int
+		ID                   func(childComplexity int) int
+		LastUpdatedAt        func(childComplexity int) int
+		LastUpdatedBy        func(childComplexity int) int
+		Name                 func(childComplexity int) int
+		Operation            func(childComplexity int) int
+		OperationID          func(childComplexity int) int
+		ProfitDescription    func(childComplexity int) int
+		ProfitScore          func(childComplexity int) int
+		RiskDescription      func(childComplexity int) int
+		RiskScore            func(childComplexity int) int
+		Stage                func(childComplexity int) int
+		Status               func(childComplexity int) int
+		UpdatedAt            func(childComplexity int) int
+		WikiReferences       func(childComplexity int) int
+	}
+
+	TaskConnection struct {
+		Edges      func(childComplexity int) int
+		PageInfo   func(childComplexity int) int
+		TotalCount func(childComplexity int) int
+	}
+
+	TaskEdge struct {
+		Cursor func(childComplexity int) int
+		Node   func(childComplexity int) int
+	}
+
+	TaskEvent struct {
+		Action      func(childComplexity int) int
+		OperationID func(childComplexity int) int
+		Task        func(childComplexity int) int
+		TaskID      func(childComplexity int) int
 	}
 
 	TimelineBucket struct {
@@ -419,6 +477,7 @@ type ComplexityRoot struct {
 		ParentDocument   func(childComplexity int) int
 		ParentDocumentID func(childComplexity int) int
 		SortOrder        func(childComplexity int) int
+		TaskBacklinks    func(childComplexity int) int
 		Title            func(childComplexity int) int
 		UpdatedAt        func(childComplexity int) int
 	}
@@ -548,6 +607,7 @@ type CredentialResolver interface {
 	Backlinks(ctx context.Context, obj *models.Credential) ([]*models.WikiDocument, error)
 	CreatedAt(ctx context.Context, obj *models.Credential) (string, error)
 	UpdatedAt(ctx context.Context, obj *models.Credential) (string, error)
+	TaskBacklinks(ctx context.Context, obj *models.Credential) ([]*models.Task, error)
 }
 type CredentialCommentResolver interface {
 	ID(ctx context.Context, obj *models.CredentialComment) (string, error)
@@ -587,6 +647,15 @@ type MutationResolver interface {
 	RevokeAllMySessions(ctx context.Context) (int, error)
 	AdminRevokeSession(ctx context.Context, id string) (bool, error)
 	AdminRevokeAllUserSessions(ctx context.Context, userID string) (int, error)
+	CreateTask(ctx context.Context, input model.CreateTaskInput) (*models.Task, error)
+	UpdateTask(ctx context.Context, id string, input model.UpdateTaskInput) (*models.Task, error)
+	ChangeTaskStage(ctx context.Context, input model.ChangeTaskStageInput) (*models.Task, error)
+	SetTaskAssignees(ctx context.Context, taskID string, assigneeIds []string) (*models.Task, error)
+	SetTaskWikiReferences(ctx context.Context, taskID string, wikiIds []string) (*models.Task, error)
+	SetTaskCredentialReferences(ctx context.Context, taskID string, credentialIds []string) (*models.Task, error)
+	DeleteTask(ctx context.Context, id string) (bool, error)
+	RestoreTask(ctx context.Context, id string) (*models.Task, error)
+	PurgeTask(ctx context.Context, id string) (bool, error)
 	CreateCustomTimelineEvent(ctx context.Context, operationID string, input model.CreateCustomTimelineEventInput) (*models.OperationEvent, error)
 	UpdateCustomTimelineEvent(ctx context.Context, id string, input model.UpdateCustomTimelineEventInput) (*models.OperationEvent, error)
 	DeleteCustomTimelineEvent(ctx context.Context, id string) (bool, error)
@@ -632,6 +701,11 @@ type QueryResolver interface {
 	MySessions(ctx context.Context, activeOnly *bool, first *int, after *string, last *int, before *string) (*model.SessionConnection, error)
 	Sessions(ctx context.Context, userID *string, search *string, activeOnly *bool, first *int, after *string, last *int, before *string) (*model.SessionConnection, error)
 	Session(ctx context.Context, id string) (*models.Session, error)
+	Task(ctx context.Context, id string) (*models.Task, error)
+	Tasks(ctx context.Context, operationID string, stage *models.TaskStage, search *string, first *int, after *string, last *int, before *string) (*model.TaskConnection, error)
+	TaskTrash(ctx context.Context, operationID string, first *int, after *string, last *int, before *string) (*model.TaskConnection, error)
+	TasksReferencingWikiDocument(ctx context.Context, documentID string) ([]*models.Task, error)
+	TasksReferencingCredential(ctx context.Context, credentialID string) ([]*models.Task, error)
 	TimelineBuckets(ctx context.Context, operationID string, granularity *repository.TimelineGranularity, timezone string, from *string, to *string, types []string, actorIds []string) ([]*model.TimelineBucket, error)
 	TimelineEventsByDay(ctx context.Context, operationID string, date string, timezone string, granularity *repository.TimelineGranularity, types []string, actorIds []string, first *int, after *string) (*model.TimelineEventConnection, error)
 	WikiDocument(ctx context.Context, id string) (*models.WikiDocument, error)
@@ -681,9 +755,29 @@ type SubscriptionResolver interface {
 	MyCredentialChanged(ctx context.Context, operationIds []string) (<-chan *model.CredentialEvent, error)
 	MySessionChanged(ctx context.Context) (<-chan *model.SessionEvent, error)
 	SessionChanged(ctx context.Context, userID *string) (<-chan *model.SessionEvent, error)
+	TaskChanged(ctx context.Context, operationID string) (<-chan *model.TaskEvent, error)
 	TimelineEventAdded(ctx context.Context, operationID string) (<-chan *models.OperationEvent, error)
 	WikiDocumentChanged(ctx context.Context, operationID string) (<-chan *model.WikiDocumentEvent, error)
 	WikiDocumentPresenceChanged(ctx context.Context, operationID string) (<-chan *model.WikiDocumentPresenceEvent, error)
+}
+type TaskResolver interface {
+	ID(ctx context.Context, obj *models.Task) (string, error)
+	OperationID(ctx context.Context, obj *models.Task) (string, error)
+	Operation(ctx context.Context, obj *models.Task) (*models.Operation, error)
+
+	RiskScore(ctx context.Context, obj *models.Task) (int, error)
+
+	ProfitScore(ctx context.Context, obj *models.Task) (int, error)
+
+	Assignees(ctx context.Context, obj *models.Task) ([]*models.User, error)
+	WikiReferences(ctx context.Context, obj *models.Task) ([]*models.WikiDocument, error)
+	CredentialReferences(ctx context.Context, obj *models.Task) ([]*models.Credential, error)
+	CreatedBy(ctx context.Context, obj *models.Task) (*models.User, error)
+	LastUpdatedBy(ctx context.Context, obj *models.Task) (*models.User, error)
+	LastUpdatedAt(ctx context.Context, obj *models.Task) (*string, error)
+	DeletedAt(ctx context.Context, obj *models.Task) (*string, error)
+	CreatedAt(ctx context.Context, obj *models.Task) (string, error)
+	UpdatedAt(ctx context.Context, obj *models.Task) (string, error)
 }
 type TimelineEventResolver interface {
 	ID(ctx context.Context, obj *models.OperationEvent) (string, error)
@@ -720,6 +814,7 @@ type WikiDocumentResolver interface {
 	DeletedBy(ctx context.Context, obj *models.WikiDocument) (*models.User, error)
 	CreatedAt(ctx context.Context, obj *models.WikiDocument) (string, error)
 	UpdatedAt(ctx context.Context, obj *models.WikiDocument) (string, error)
+	TaskBacklinks(ctx context.Context, obj *models.WikiDocument) ([]*models.Task, error)
 }
 type WikiDocumentBackupResolver interface {
 	ID(ctx context.Context, obj *models.WikiDocumentBackup) (string, error)
@@ -883,6 +978,12 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.Credential.Tags(childComplexity), true
+	case "Credential.taskBacklinks":
+		if e.ComplexityRoot.Credential.TaskBacklinks == nil {
+			break
+		}
+
+		return e.ComplexityRoot.Credential.TaskBacklinks(childComplexity), true
 	case "Credential.type":
 		if e.ComplexityRoot.Credential.Type == nil {
 			break
@@ -1071,6 +1172,17 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.Mutation.AdminRevokeSession(childComplexity, args["id"].(string)), true
+	case "Mutation.changeTaskStage":
+		if e.ComplexityRoot.Mutation.ChangeTaskStage == nil {
+			break
+		}
+
+		args, err := ec.field_Mutation_changeTaskStage_args(ctx, rawArgs)
+		if err != nil {
+			return 0, false
+		}
+
+		return e.ComplexityRoot.Mutation.ChangeTaskStage(childComplexity, args["input"].(model.ChangeTaskStageInput)), true
 	case "Mutation.createCredential":
 		if e.ComplexityRoot.Mutation.CreateCredential == nil {
 			break
@@ -1121,6 +1233,17 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.Mutation.CreateSchemeNetworkPoint(childComplexity, args["operationId"].(string), args["input"].(model.CreateSchemeNetworkPointInput)), true
+	case "Mutation.createTask":
+		if e.ComplexityRoot.Mutation.CreateTask == nil {
+			break
+		}
+
+		args, err := ec.field_Mutation_createTask_args(ctx, rawArgs)
+		if err != nil {
+			return 0, false
+		}
+
+		return e.ComplexityRoot.Mutation.CreateTask(childComplexity, args["input"].(model.CreateTaskInput)), true
 	case "Mutation.createUser":
 		if e.ComplexityRoot.Mutation.CreateUser == nil {
 			break
@@ -1215,6 +1338,17 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.Mutation.DeleteSchemeNetworkPoint(childComplexity, args["id"].(string)), true
+	case "Mutation.deleteTask":
+		if e.ComplexityRoot.Mutation.DeleteTask == nil {
+			break
+		}
+
+		args, err := ec.field_Mutation_deleteTask_args(ctx, rawArgs)
+		if err != nil {
+			return 0, false
+		}
+
+		return e.ComplexityRoot.Mutation.DeleteTask(childComplexity, args["id"].(string)), true
 	case "Mutation.deleteUser":
 		if e.ComplexityRoot.Mutation.DeleteUser == nil {
 			break
@@ -1281,6 +1415,17 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.Mutation.PermanentlyDeleteWikiDocument(childComplexity, args["id"].(string)), true
+	case "Mutation.purgeTask":
+		if e.ComplexityRoot.Mutation.PurgeTask == nil {
+			break
+		}
+
+		args, err := ec.field_Mutation_purgeTask_args(ctx, rawArgs)
+		if err != nil {
+			return 0, false
+		}
+
+		return e.ComplexityRoot.Mutation.PurgeTask(childComplexity, args["id"].(string)), true
 	case "Mutation.regenerateMyAPIKey":
 		if e.ComplexityRoot.Mutation.RegenerateMyAPIKey == nil {
 			break
@@ -1320,6 +1465,17 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.Mutation.ReorderWikiDocumentSiblings(childComplexity, args["input"].(model.ReorderWikiDocumentSiblingsInput)), true
+	case "Mutation.restoreTask":
+		if e.ComplexityRoot.Mutation.RestoreTask == nil {
+			break
+		}
+
+		args, err := ec.field_Mutation_restoreTask_args(ctx, rawArgs)
+		if err != nil {
+			return 0, false
+		}
+
+		return e.ComplexityRoot.Mutation.RestoreTask(childComplexity, args["id"].(string)), true
 	case "Mutation.restoreWikiDocument":
 		if e.ComplexityRoot.Mutation.RestoreWikiDocument == nil {
 			break
@@ -1370,6 +1526,39 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.Mutation.SetMyAPIKeyEnabled(childComplexity, args["enabled"].(bool)), true
+	case "Mutation.setTaskAssignees":
+		if e.ComplexityRoot.Mutation.SetTaskAssignees == nil {
+			break
+		}
+
+		args, err := ec.field_Mutation_setTaskAssignees_args(ctx, rawArgs)
+		if err != nil {
+			return 0, false
+		}
+
+		return e.ComplexityRoot.Mutation.SetTaskAssignees(childComplexity, args["taskId"].(string), args["assigneeIds"].([]string)), true
+	case "Mutation.setTaskCredentialReferences":
+		if e.ComplexityRoot.Mutation.SetTaskCredentialReferences == nil {
+			break
+		}
+
+		args, err := ec.field_Mutation_setTaskCredentialReferences_args(ctx, rawArgs)
+		if err != nil {
+			return 0, false
+		}
+
+		return e.ComplexityRoot.Mutation.SetTaskCredentialReferences(childComplexity, args["taskId"].(string), args["credentialIds"].([]string)), true
+	case "Mutation.setTaskWikiReferences":
+		if e.ComplexityRoot.Mutation.SetTaskWikiReferences == nil {
+			break
+		}
+
+		args, err := ec.field_Mutation_setTaskWikiReferences_args(ctx, rawArgs)
+		if err != nil {
+			return 0, false
+		}
+
+		return e.ComplexityRoot.Mutation.SetTaskWikiReferences(childComplexity, args["taskId"].(string), args["wikiIds"].([]string)), true
 	case "Mutation.trackWikiDocumentVisit":
 		if e.ComplexityRoot.Mutation.TrackWikiDocumentVisit == nil {
 			break
@@ -1469,6 +1658,17 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.Mutation.UpdateSchemeNetworkPort(childComplexity, args["pointId"].(string), args["portId"].(string), args["input"].(model.UpdateSchemeNetworkPortInput)), true
+	case "Mutation.updateTask":
+		if e.ComplexityRoot.Mutation.UpdateTask == nil {
+			break
+		}
+
+		args, err := ec.field_Mutation_updateTask_args(ctx, rawArgs)
+		if err != nil {
+			return 0, false
+		}
+
+		return e.ComplexityRoot.Mutation.UpdateTask(childComplexity, args["id"].(string), args["input"].(model.UpdateTaskInput)), true
 	case "Mutation.updateUser":
 		if e.ComplexityRoot.Mutation.UpdateUser == nil {
 			break
@@ -1799,6 +1999,61 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.Query.Sessions(childComplexity, args["userId"].(*string), args["search"].(*string), args["activeOnly"].(*bool), args["first"].(*int), args["after"].(*string), args["last"].(*int), args["before"].(*string)), true
+	case "Query.task":
+		if e.ComplexityRoot.Query.Task == nil {
+			break
+		}
+
+		args, err := ec.field_Query_task_args(ctx, rawArgs)
+		if err != nil {
+			return 0, false
+		}
+
+		return e.ComplexityRoot.Query.Task(childComplexity, args["id"].(string)), true
+	case "Query.taskTrash":
+		if e.ComplexityRoot.Query.TaskTrash == nil {
+			break
+		}
+
+		args, err := ec.field_Query_taskTrash_args(ctx, rawArgs)
+		if err != nil {
+			return 0, false
+		}
+
+		return e.ComplexityRoot.Query.TaskTrash(childComplexity, args["operationId"].(string), args["first"].(*int), args["after"].(*string), args["last"].(*int), args["before"].(*string)), true
+	case "Query.tasks":
+		if e.ComplexityRoot.Query.Tasks == nil {
+			break
+		}
+
+		args, err := ec.field_Query_tasks_args(ctx, rawArgs)
+		if err != nil {
+			return 0, false
+		}
+
+		return e.ComplexityRoot.Query.Tasks(childComplexity, args["operationId"].(string), args["stage"].(*models.TaskStage), args["search"].(*string), args["first"].(*int), args["after"].(*string), args["last"].(*int), args["before"].(*string)), true
+	case "Query.tasksReferencingCredential":
+		if e.ComplexityRoot.Query.TasksReferencingCredential == nil {
+			break
+		}
+
+		args, err := ec.field_Query_tasksReferencingCredential_args(ctx, rawArgs)
+		if err != nil {
+			return 0, false
+		}
+
+		return e.ComplexityRoot.Query.TasksReferencingCredential(childComplexity, args["credentialId"].(string)), true
+	case "Query.tasksReferencingWikiDocument":
+		if e.ComplexityRoot.Query.TasksReferencingWikiDocument == nil {
+			break
+		}
+
+		args, err := ec.field_Query_tasksReferencingWikiDocument_args(ctx, rawArgs)
+		if err != nil {
+			return 0, false
+		}
+
+		return e.ComplexityRoot.Query.TasksReferencingWikiDocument(childComplexity, args["documentId"].(string)), true
 	case "Query.timelineBuckets":
 		if e.ComplexityRoot.Query.TimelineBuckets == nil {
 			break
@@ -2340,6 +2595,17 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.Subscription.SessionChanged(childComplexity, args["userId"].(*string)), true
+	case "Subscription.taskChanged":
+		if e.ComplexityRoot.Subscription.TaskChanged == nil {
+			break
+		}
+
+		args, err := ec.field_Subscription_taskChanged_args(ctx, rawArgs)
+		if err != nil {
+			return 0, false
+		}
+
+		return e.ComplexityRoot.Subscription.TaskChanged(childComplexity, args["operationId"].(string)), true
 	case "Subscription.timelineEventAdded":
 		if e.ComplexityRoot.Subscription.TimelineEventAdded == nil {
 			break
@@ -2379,6 +2645,184 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.Subscription.WikiDocumentPresenceChanged(childComplexity, args["operationId"].(string)), true
+
+	case "Task.assignees":
+		if e.ComplexityRoot.Task.Assignees == nil {
+			break
+		}
+
+		return e.ComplexityRoot.Task.Assignees(childComplexity), true
+	case "Task.createdAt":
+		if e.ComplexityRoot.Task.CreatedAt == nil {
+			break
+		}
+
+		return e.ComplexityRoot.Task.CreatedAt(childComplexity), true
+	case "Task.createdBy":
+		if e.ComplexityRoot.Task.CreatedBy == nil {
+			break
+		}
+
+		return e.ComplexityRoot.Task.CreatedBy(childComplexity), true
+	case "Task.credentialReferences":
+		if e.ComplexityRoot.Task.CredentialReferences == nil {
+			break
+		}
+
+		return e.ComplexityRoot.Task.CredentialReferences(childComplexity), true
+	case "Task.deletedAt":
+		if e.ComplexityRoot.Task.DeletedAt == nil {
+			break
+		}
+
+		return e.ComplexityRoot.Task.DeletedAt(childComplexity), true
+	case "Task.description":
+		if e.ComplexityRoot.Task.Description == nil {
+			break
+		}
+
+		return e.ComplexityRoot.Task.Description(childComplexity), true
+	case "Task.id":
+		if e.ComplexityRoot.Task.ID == nil {
+			break
+		}
+
+		return e.ComplexityRoot.Task.ID(childComplexity), true
+	case "Task.lastUpdatedAt":
+		if e.ComplexityRoot.Task.LastUpdatedAt == nil {
+			break
+		}
+
+		return e.ComplexityRoot.Task.LastUpdatedAt(childComplexity), true
+	case "Task.lastUpdatedBy":
+		if e.ComplexityRoot.Task.LastUpdatedBy == nil {
+			break
+		}
+
+		return e.ComplexityRoot.Task.LastUpdatedBy(childComplexity), true
+	case "Task.name":
+		if e.ComplexityRoot.Task.Name == nil {
+			break
+		}
+
+		return e.ComplexityRoot.Task.Name(childComplexity), true
+	case "Task.operation":
+		if e.ComplexityRoot.Task.Operation == nil {
+			break
+		}
+
+		return e.ComplexityRoot.Task.Operation(childComplexity), true
+	case "Task.operationId":
+		if e.ComplexityRoot.Task.OperationID == nil {
+			break
+		}
+
+		return e.ComplexityRoot.Task.OperationID(childComplexity), true
+	case "Task.profitDescription":
+		if e.ComplexityRoot.Task.ProfitDescription == nil {
+			break
+		}
+
+		return e.ComplexityRoot.Task.ProfitDescription(childComplexity), true
+	case "Task.profitScore":
+		if e.ComplexityRoot.Task.ProfitScore == nil {
+			break
+		}
+
+		return e.ComplexityRoot.Task.ProfitScore(childComplexity), true
+	case "Task.riskDescription":
+		if e.ComplexityRoot.Task.RiskDescription == nil {
+			break
+		}
+
+		return e.ComplexityRoot.Task.RiskDescription(childComplexity), true
+	case "Task.riskScore":
+		if e.ComplexityRoot.Task.RiskScore == nil {
+			break
+		}
+
+		return e.ComplexityRoot.Task.RiskScore(childComplexity), true
+	case "Task.stage":
+		if e.ComplexityRoot.Task.Stage == nil {
+			break
+		}
+
+		return e.ComplexityRoot.Task.Stage(childComplexity), true
+	case "Task.status":
+		if e.ComplexityRoot.Task.Status == nil {
+			break
+		}
+
+		return e.ComplexityRoot.Task.Status(childComplexity), true
+	case "Task.updatedAt":
+		if e.ComplexityRoot.Task.UpdatedAt == nil {
+			break
+		}
+
+		return e.ComplexityRoot.Task.UpdatedAt(childComplexity), true
+	case "Task.wikiReferences":
+		if e.ComplexityRoot.Task.WikiReferences == nil {
+			break
+		}
+
+		return e.ComplexityRoot.Task.WikiReferences(childComplexity), true
+
+	case "TaskConnection.edges":
+		if e.ComplexityRoot.TaskConnection.Edges == nil {
+			break
+		}
+
+		return e.ComplexityRoot.TaskConnection.Edges(childComplexity), true
+	case "TaskConnection.pageInfo":
+		if e.ComplexityRoot.TaskConnection.PageInfo == nil {
+			break
+		}
+
+		return e.ComplexityRoot.TaskConnection.PageInfo(childComplexity), true
+	case "TaskConnection.totalCount":
+		if e.ComplexityRoot.TaskConnection.TotalCount == nil {
+			break
+		}
+
+		return e.ComplexityRoot.TaskConnection.TotalCount(childComplexity), true
+
+	case "TaskEdge.cursor":
+		if e.ComplexityRoot.TaskEdge.Cursor == nil {
+			break
+		}
+
+		return e.ComplexityRoot.TaskEdge.Cursor(childComplexity), true
+	case "TaskEdge.node":
+		if e.ComplexityRoot.TaskEdge.Node == nil {
+			break
+		}
+
+		return e.ComplexityRoot.TaskEdge.Node(childComplexity), true
+
+	case "TaskEvent.action":
+		if e.ComplexityRoot.TaskEvent.Action == nil {
+			break
+		}
+
+		return e.ComplexityRoot.TaskEvent.Action(childComplexity), true
+	case "TaskEvent.operationId":
+		if e.ComplexityRoot.TaskEvent.OperationID == nil {
+			break
+		}
+
+		return e.ComplexityRoot.TaskEvent.OperationID(childComplexity), true
+	case "TaskEvent.task":
+		if e.ComplexityRoot.TaskEvent.Task == nil {
+			break
+		}
+
+		return e.ComplexityRoot.TaskEvent.Task(childComplexity), true
+	case "TaskEvent.taskId":
+		if e.ComplexityRoot.TaskEvent.TaskID == nil {
+			break
+		}
+
+		return e.ComplexityRoot.TaskEvent.TaskID(childComplexity), true
 
 	case "TimelineBucket.bucketStart":
 		if e.ComplexityRoot.TimelineBucket.BucketStart == nil {
@@ -2726,6 +3170,12 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.WikiDocument.SortOrder(childComplexity), true
+	case "WikiDocument.taskBacklinks":
+		if e.ComplexityRoot.WikiDocument.TaskBacklinks == nil {
+			break
+		}
+
+		return e.ComplexityRoot.WikiDocument.TaskBacklinks(childComplexity), true
 	case "WikiDocument.title":
 		if e.ComplexityRoot.WikiDocument.Title == nil {
 			break
@@ -3111,11 +3561,13 @@ func (e *executableSchema) Exec(ctx context.Context) graphql.ResponseHandler {
 	opCtx := graphql.GetOperationContext(ctx)
 	ec := newExecutionContext(opCtx, e, make(chan graphql.DeferredResult))
 	inputUnmarshalMap := graphql.BuildUnmarshalerMap(
+		ec.unmarshalInputChangeTaskStageInput,
 		ec.unmarshalInputCreateCredentialInput,
 		ec.unmarshalInputCreateCustomTimelineEventInput,
 		ec.unmarshalInputCreateOperationInput,
 		ec.unmarshalInputCreateSchemeNetworkPointInput,
 		ec.unmarshalInputCreateSchemeNetworkPortInput,
+		ec.unmarshalInputCreateTaskInput,
 		ec.unmarshalInputCreateUserInput,
 		ec.unmarshalInputCreateWikiDocumentInput,
 		ec.unmarshalInputCredentialKeyInput,
@@ -3126,6 +3578,7 @@ func (e *executableSchema) Exec(ctx context.Context) graphql.ResponseHandler {
 		ec.unmarshalInputUpdateOperationInput,
 		ec.unmarshalInputUpdateSchemeNetworkPointInput,
 		ec.unmarshalInputUpdateSchemeNetworkPortInput,
+		ec.unmarshalInputUpdateTaskInput,
 		ec.unmarshalInputUpdateUserInput,
 		ec.unmarshalInputUpdateWikiDocumentInput,
 	)
@@ -4167,6 +4620,282 @@ type Subscription {
     @hasPermission(permission: "operation:member")
 }
 `, BuiltIn: false},
+	{Name: "../schema/tasks.graphql", Input: `# =============================================================================
+# Tasks
+# =============================================================================
+#
+# Tasks are operation-scoped units of operator-planned work. Each task carries
+# risk and profit scores so the team can triage via the matrix view (risk on
+# one axis, profit on the other, midpoint at 5/5). The kanban view groups
+# tasks by stage (BACKLOG / TODO / IN_PROCESS / DONE). Cards in DONE must
+# carry a terminal status (SUCCESS or FAIL) — the server enforces this
+# invariant on every stage transition.
+#
+# Tasks may reference wiki documents and credentials in the same operation.
+# When a referenced wiki doc or credential is hard-deleted, the corresponding
+# UUID is stripped from every task's reference array (see the resolver's
+# cleanup hook), so dangling pointers never render in the UI.
+#
+# Soft-delete follows the wiki document pattern: deleteTask sets deleted_at;
+# restoreTask clears it; purgeTask is the admin-only hard-delete.
+
+# --- Enums ---
+
+enum TaskStage {
+  BACKLOG
+  TODO
+  IN_PROCESS
+  DONE
+}
+
+enum TaskStatus {
+  UNDEFINED
+  SUCCESS
+  FAIL
+}
+
+# --- Types ---
+
+type Task {
+  id: ID!
+  operationId: ID!
+  # The full parent Operation. Resolved on demand via a DB lookup. Use in
+  # cross-operation views; in scoped views prefer operationId.
+  operation: Operation!
+
+  name: String!
+  description: String!
+
+  # Risk and profit scores. 0..10 inclusive. The matrix view treats scores
+  # below 5 as "low" and 5 and above as "high" — the quadrant threshold is
+  # hardcoded, not configurable.
+  riskScore: Int!
+  riskDescription: String!
+  profitScore: Int!
+  profitDescription: String!
+
+  stage: TaskStage!
+  # status is UNDEFINED until the task reaches DONE, at which point the
+  # operator must pick SUCCESS or FAIL. Tasks moved back out of DONE keep
+  # their last status as history unless explicitly reset.
+  status: TaskStatus!
+
+  # Operators responsible for the task. Multiple assignees are supported.
+  # Resolved on demand; empty list when nothing is assigned.
+  assignees: [User!]!
+
+  # Linked wiki documents and credentials in the same operation. References
+  # are stored as bare UUIDs on the task; the resolver fetches the live
+  # entities and silently drops missing ones (cleanup hooks keep this rare).
+  wikiReferences: [WikiDocument!]!
+  credentialReferences: [Credential!]!
+
+  # Null if the creator was deleted. Same shape as Credential.createdBy.
+  createdBy: User
+  # Null for tasks that have never been edited after creation (the row was
+  # only ever touched by createTask), or whose last editor was deleted.
+  lastUpdatedBy: User
+  lastUpdatedAt: String
+
+  # Soft-delete timestamp. Null for active tasks; ISO 8601 for trashed rows.
+  # The trash listing query (taskTrash) is the only way to surface
+  # soft-deleted tasks; the regular list/connection excludes them.
+  deletedAt: String
+
+  createdAt: String!
+  updatedAt: String!
+}
+
+type TaskEdge {
+  node: Task!
+  cursor: String!
+}
+
+type TaskConnection {
+  edges: [TaskEdge!]!
+  pageInfo: PageInfo!
+  totalCount: Int!
+}
+
+# TaskEvent wraps a task domain event for real-time updates. The task field
+# is null on DELETED (the entity is soft-deleted; subscribers refetch via
+# taskTrash if they care about the trashed copy). For non-DELETED events
+# the field is populated with the fresh entity so clients can apply the
+# update without a follow-up query.
+type TaskEvent {
+  action: EventAction!
+  taskId: ID!
+  operationId: ID!
+  task: Task
+}
+
+# --- Inputs ---
+
+input CreateTaskInput {
+  operationId: ID!
+  name: String!
+  description: String
+  riskScore: Int!
+  riskDescription: String
+  profitScore: Int!
+  profitDescription: String
+  # Initial assignees, wiki references, and credential references. All
+  # default to empty lists when omitted.
+  assigneeIds: [ID!]
+  wikiReferenceIds: [ID!]
+  credentialReferenceIds: [ID!]
+  # Initial stage. Defaults to BACKLOG when omitted.
+  stage: TaskStage
+  # Required only when stage is DONE — the server rejects DONE without a
+  # terminal status. Ignored for other stages (operators can park a status
+  # on a non-DONE task by including it explicitly).
+  status: TaskStatus
+}
+
+input UpdateTaskInput {
+  name: String
+  description: String
+  riskScore: Int
+  riskDescription: String
+  profitScore: Int
+  profitDescription: String
+}
+
+# ChangeTaskStageInput is the kanban drag-drop mutation payload. When the
+# new stage is DONE, status must be SUCCESS or FAIL — the server enforces
+# this invariant and surfaces a friendly error so the UI can prompt the
+# operator for a choice.
+input ChangeTaskStageInput {
+  taskId: ID!
+  stage: TaskStage!
+  status: TaskStatus
+}
+
+# --- Queries ---
+
+extend type Query {
+  # Single task by ID. Resolver checks operation membership.
+  task(id: ID!): Task!
+    @hasPermission(permission: "operation:member")
+
+  # Cursor-paginated list of active tasks in an operation. Sorted by
+  # createAt DESC (matches the kanban column auto-sort). Pass ` + "`" + `stage` + "`" + ` to
+  # narrow to one column; omit to pull every active task for the matrix
+  # view in a single query.
+  tasks(
+    operationId: ID!
+    stage: TaskStage
+    search: String
+    first: Int = 50
+    after: String
+    last: Int
+    before: String
+  ): TaskConnection!
+    @hasPermission(permission: "operation:member")
+
+  # Cursor-paginated list of soft-deleted tasks in an operation. Sorted by
+  # deleted_at DESC (most recently trashed first). Admin-only on purge,
+  # operator on restore — both checks live in the corresponding mutations.
+  taskTrash(
+    operationId: ID!
+    first: Int = 50
+    after: String
+    last: Int
+    before: String
+  ): TaskConnection!
+    @hasPermission(permission: "operation:member")
+}
+
+# --- Mutations ---
+
+extend type Mutation {
+  # createTask creates a new task in an operation. Requires operator+ in op.
+  # If input.stage is DONE, input.status must be SUCCESS or FAIL.
+  createTask(input: CreateTaskInput!): Task!
+    @hasPermission(permission: "operation:member")
+
+  # updateTask modifies the editable fields. Stage and status changes go
+  # through changeTaskStage so the invariant is enforced uniformly.
+  # Operator+ in op.
+  updateTask(id: ID!, input: UpdateTaskInput!): Task!
+    @hasPermission(permission: "operation:member")
+
+  # changeTaskStage moves a task between kanban columns. When the new
+  # stage is DONE, status must be SUCCESS or FAIL — the server returns a
+  # validation error otherwise. The frontend uses this signal to open the
+  # status-required modal before retrying.
+  changeTaskStage(input: ChangeTaskStageInput!): Task!
+    @hasPermission(permission: "operation:member")
+
+  # setTaskAssignees replaces the responsible-user list. Pass an empty
+  # array to clear all assignees. Operator+ in op.
+  setTaskAssignees(taskId: ID!, assigneeIds: [ID!]!): Task!
+    @hasPermission(permission: "operation:member")
+
+  # setTaskWikiReferences replaces the wiki document link list. Operator+ in op.
+  setTaskWikiReferences(taskId: ID!, wikiIds: [ID!]!): Task!
+    @hasPermission(permission: "operation:member")
+
+  # setTaskCredentialReferences replaces the credential link list. Operator+ in op.
+  setTaskCredentialReferences(taskId: ID!, credentialIds: [ID!]!): Task!
+    @hasPermission(permission: "operation:member")
+
+  # deleteTask soft-deletes a task. Operator+ in op.
+  deleteTask(id: ID!): Boolean!
+    @hasPermission(permission: "operation:member")
+
+  # restoreTask clears the soft-delete on a previously trashed task.
+  # Operator+ in op.
+  restoreTask(id: ID!): Task!
+    @hasPermission(permission: "operation:member")
+
+  # purgeTask permanently removes a soft-deleted task. Admin in op only.
+  purgeTask(id: ID!): Boolean!
+    @hasPermission(permission: "operation:member")
+}
+
+# --- Subscriptions ---
+
+extend type Subscription {
+  # Real-time task changes scoped to an operation. Same shape as
+  # credentialChanged: subscribe at viewer+ in op, receive events on
+  # every task mutation, fetch the fresh task for non-DELETED actions.
+  taskChanged(operationId: ID!): TaskEvent!
+    @hasPermission(permission: "operation:member")
+}
+
+# --- Cross-domain backlinks (task → wiki / credential) ---
+#
+# The wiki and credential schemas already expose document → document and
+# document → credential backlinks. These extensions add the task side: every
+# WikiDocument and Credential carries a ` + "`" + `taskBacklinks` + "`" + ` field listing the
+# active tasks in the same operation that reference it via the task's
+# wiki_references / credential_references array. Trashed tasks are excluded.
+# Capped at 200 most recently updated — past that, refining the reference
+# graph beats paginating the list.
+
+extend type WikiDocument {
+  taskBacklinks: [Task!]!
+}
+
+extend type Credential {
+  taskBacklinks: [Task!]!
+}
+
+extend type Query {
+  # Same data as WikiDocument.taskBacklinks, exposed standalone so the wiki
+  # editor footer can refetch on taskChanged subscription events without
+  # re-pulling the whole document.
+  tasksReferencingWikiDocument(documentId: ID!): [Task!]!
+    @hasPermission(permission: "operation:member")
+
+  # Same data as Credential.taskBacklinks, exposed standalone so the
+  # credential details dialog can refetch on taskChanged events without
+  # re-pulling the whole credential.
+  tasksReferencingCredential(credentialId: ID!): [Task!]!
+    @hasPermission(permission: "operation:member")
+}
+`, BuiltIn: false},
 	{Name: "../schema/timeline.graphql", Input: `# =============================================================================
 # Timeline — Operation Event History
 # =============================================================================
@@ -4877,6 +5606,17 @@ func (ec *executionContext) field_Mutation_adminRevokeSession_args(ctx context.C
 	return args, nil
 }
 
+func (ec *executionContext) field_Mutation_changeTaskStage_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
+	var err error
+	args := map[string]any{}
+	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "input", ec.unmarshalNChangeTaskStageInput2githubᚗcomᚋvibeᚑc2ᚋvibeᚑc2ᚑcoreᚋcoreᚋpkgᚋgraphqlᚋmodelᚐChangeTaskStageInput)
+	if err != nil {
+		return nil, err
+	}
+	args["input"] = arg0
+	return args, nil
+}
+
 func (ec *executionContext) field_Mutation_createCredential_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
 	var err error
 	args := map[string]any{}
@@ -4933,6 +5673,17 @@ func (ec *executionContext) field_Mutation_createSchemeNetworkPoint_args(ctx con
 		return nil, err
 	}
 	args["input"] = arg1
+	return args, nil
+}
+
+func (ec *executionContext) field_Mutation_createTask_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
+	var err error
+	args := map[string]any{}
+	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "input", ec.unmarshalNCreateTaskInput2githubᚗcomᚋvibeᚑc2ᚋvibeᚑc2ᚑcoreᚋcoreᚋpkgᚋgraphqlᚋmodelᚐCreateTaskInput)
+	if err != nil {
+		return nil, err
+	}
+	args["input"] = arg0
 	return args, nil
 }
 
@@ -5039,6 +5790,17 @@ func (ec *executionContext) field_Mutation_deleteSchemeNetworkPoint_args(ctx con
 	return args, nil
 }
 
+func (ec *executionContext) field_Mutation_deleteTask_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
+	var err error
+	args := map[string]any{}
+	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "id", ec.unmarshalNID2string)
+	if err != nil {
+		return nil, err
+	}
+	args["id"] = arg0
+	return args, nil
+}
+
 func (ec *executionContext) field_Mutation_deleteUser_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
 	var err error
 	args := map[string]any{}
@@ -5110,6 +5872,17 @@ func (ec *executionContext) field_Mutation_permanentlyDeleteWikiDocument_args(ct
 	return args, nil
 }
 
+func (ec *executionContext) field_Mutation_purgeTask_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
+	var err error
+	args := map[string]any{}
+	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "id", ec.unmarshalNID2string)
+	if err != nil {
+		return nil, err
+	}
+	args["id"] = arg0
+	return args, nil
+}
+
 func (ec *executionContext) field_Mutation_removeOperationMember_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
 	var err error
 	args := map[string]any{}
@@ -5150,6 +5923,17 @@ func (ec *executionContext) field_Mutation_reorderWikiDocumentSiblings_args(ctx 
 		return nil, err
 	}
 	args["input"] = arg0
+	return args, nil
+}
+
+func (ec *executionContext) field_Mutation_restoreTask_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
+	var err error
+	args := map[string]any{}
+	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "id", ec.unmarshalNID2string)
+	if err != nil {
+		return nil, err
+	}
+	args["id"] = arg0
 	return args, nil
 }
 
@@ -5204,6 +5988,54 @@ func (ec *executionContext) field_Mutation_setMyAPIKeyEnabled_args(ctx context.C
 		return nil, err
 	}
 	args["enabled"] = arg0
+	return args, nil
+}
+
+func (ec *executionContext) field_Mutation_setTaskAssignees_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
+	var err error
+	args := map[string]any{}
+	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "taskId", ec.unmarshalNID2string)
+	if err != nil {
+		return nil, err
+	}
+	args["taskId"] = arg0
+	arg1, err := graphql.ProcessArgField(ctx, rawArgs, "assigneeIds", ec.unmarshalNID2ᚕstringᚄ)
+	if err != nil {
+		return nil, err
+	}
+	args["assigneeIds"] = arg1
+	return args, nil
+}
+
+func (ec *executionContext) field_Mutation_setTaskCredentialReferences_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
+	var err error
+	args := map[string]any{}
+	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "taskId", ec.unmarshalNID2string)
+	if err != nil {
+		return nil, err
+	}
+	args["taskId"] = arg0
+	arg1, err := graphql.ProcessArgField(ctx, rawArgs, "credentialIds", ec.unmarshalNID2ᚕstringᚄ)
+	if err != nil {
+		return nil, err
+	}
+	args["credentialIds"] = arg1
+	return args, nil
+}
+
+func (ec *executionContext) field_Mutation_setTaskWikiReferences_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
+	var err error
+	args := map[string]any{}
+	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "taskId", ec.unmarshalNID2string)
+	if err != nil {
+		return nil, err
+	}
+	args["taskId"] = arg0
+	arg1, err := graphql.ProcessArgField(ctx, rawArgs, "wikiIds", ec.unmarshalNID2ᚕstringᚄ)
+	if err != nil {
+		return nil, err
+	}
+	args["wikiIds"] = arg1
 	return args, nil
 }
 
@@ -5353,6 +6185,22 @@ func (ec *executionContext) field_Mutation_updateSchemeNetworkPort_args(ctx cont
 		return nil, err
 	}
 	args["input"] = arg2
+	return args, nil
+}
+
+func (ec *executionContext) field_Mutation_updateTask_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
+	var err error
+	args := map[string]any{}
+	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "id", ec.unmarshalNID2string)
+	if err != nil {
+		return nil, err
+	}
+	args["id"] = arg0
+	arg1, err := graphql.ProcessArgField(ctx, rawArgs, "input", ec.unmarshalNUpdateTaskInput2githubᚗcomᚋvibeᚑc2ᚋvibeᚑc2ᚑcoreᚋcoreᚋpkgᚋgraphqlᚋmodelᚐUpdateTaskInput)
+	if err != nil {
+		return nil, err
+	}
+	args["input"] = arg1
 	return args, nil
 }
 
@@ -5694,6 +6542,111 @@ func (ec *executionContext) field_Query_sessions_args(ctx context.Context, rawAr
 		return nil, err
 	}
 	args["activeOnly"] = arg2
+	arg3, err := graphql.ProcessArgField(ctx, rawArgs, "first", ec.unmarshalOInt2ᚖint)
+	if err != nil {
+		return nil, err
+	}
+	args["first"] = arg3
+	arg4, err := graphql.ProcessArgField(ctx, rawArgs, "after", ec.unmarshalOString2ᚖstring)
+	if err != nil {
+		return nil, err
+	}
+	args["after"] = arg4
+	arg5, err := graphql.ProcessArgField(ctx, rawArgs, "last", ec.unmarshalOInt2ᚖint)
+	if err != nil {
+		return nil, err
+	}
+	args["last"] = arg5
+	arg6, err := graphql.ProcessArgField(ctx, rawArgs, "before", ec.unmarshalOString2ᚖstring)
+	if err != nil {
+		return nil, err
+	}
+	args["before"] = arg6
+	return args, nil
+}
+
+func (ec *executionContext) field_Query_taskTrash_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
+	var err error
+	args := map[string]any{}
+	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "operationId", ec.unmarshalNID2string)
+	if err != nil {
+		return nil, err
+	}
+	args["operationId"] = arg0
+	arg1, err := graphql.ProcessArgField(ctx, rawArgs, "first", ec.unmarshalOInt2ᚖint)
+	if err != nil {
+		return nil, err
+	}
+	args["first"] = arg1
+	arg2, err := graphql.ProcessArgField(ctx, rawArgs, "after", ec.unmarshalOString2ᚖstring)
+	if err != nil {
+		return nil, err
+	}
+	args["after"] = arg2
+	arg3, err := graphql.ProcessArgField(ctx, rawArgs, "last", ec.unmarshalOInt2ᚖint)
+	if err != nil {
+		return nil, err
+	}
+	args["last"] = arg3
+	arg4, err := graphql.ProcessArgField(ctx, rawArgs, "before", ec.unmarshalOString2ᚖstring)
+	if err != nil {
+		return nil, err
+	}
+	args["before"] = arg4
+	return args, nil
+}
+
+func (ec *executionContext) field_Query_task_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
+	var err error
+	args := map[string]any{}
+	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "id", ec.unmarshalNID2string)
+	if err != nil {
+		return nil, err
+	}
+	args["id"] = arg0
+	return args, nil
+}
+
+func (ec *executionContext) field_Query_tasksReferencingCredential_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
+	var err error
+	args := map[string]any{}
+	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "credentialId", ec.unmarshalNID2string)
+	if err != nil {
+		return nil, err
+	}
+	args["credentialId"] = arg0
+	return args, nil
+}
+
+func (ec *executionContext) field_Query_tasksReferencingWikiDocument_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
+	var err error
+	args := map[string]any{}
+	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "documentId", ec.unmarshalNID2string)
+	if err != nil {
+		return nil, err
+	}
+	args["documentId"] = arg0
+	return args, nil
+}
+
+func (ec *executionContext) field_Query_tasks_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
+	var err error
+	args := map[string]any{}
+	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "operationId", ec.unmarshalNID2string)
+	if err != nil {
+		return nil, err
+	}
+	args["operationId"] = arg0
+	arg1, err := graphql.ProcessArgField(ctx, rawArgs, "stage", ec.unmarshalOTaskStage2ᚖgithubᚗcomᚋvibeᚑc2ᚋvibeᚑc2ᚑcoreᚋcoreᚋpkgᚋmodelsᚐTaskStage)
+	if err != nil {
+		return nil, err
+	}
+	args["stage"] = arg1
+	arg2, err := graphql.ProcessArgField(ctx, rawArgs, "search", ec.unmarshalOString2ᚖstring)
+	if err != nil {
+		return nil, err
+	}
+	args["search"] = arg2
 	arg3, err := graphql.ProcessArgField(ctx, rawArgs, "first", ec.unmarshalOInt2ᚖint)
 	if err != nil {
 		return nil, err
@@ -6205,6 +7158,17 @@ func (ec *executionContext) field_Subscription_sessionChanged_args(ctx context.C
 		return nil, err
 	}
 	args["userId"] = arg0
+	return args, nil
+}
+
+func (ec *executionContext) field_Subscription_taskChanged_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
+	var err error
+	args := map[string]any{}
+	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "operationId", ec.unmarshalNID2string)
+	if err != nil {
+		return nil, err
+	}
+	args["operationId"] = arg0
 	return args, nil
 }
 
@@ -7065,6 +8029,8 @@ func (ec *executionContext) fieldContext_Credential_backlinks(_ context.Context,
 				return ec.fieldContext_WikiDocument_createdAt(ctx, field)
 			case "updatedAt":
 				return ec.fieldContext_WikiDocument_updatedAt(ctx, field)
+			case "taskBacklinks":
+				return ec.fieldContext_WikiDocument_taskBacklinks(ctx, field)
 			}
 			return nil, fmt.Errorf("no field named %q was found under type WikiDocument", field.Name)
 		},
@@ -7125,6 +8091,77 @@ func (ec *executionContext) fieldContext_Credential_updatedAt(_ context.Context,
 		IsResolver: true,
 		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
 			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Credential_taskBacklinks(ctx context.Context, field graphql.CollectedField, obj *models.Credential) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Credential_taskBacklinks,
+		func(ctx context.Context) (any, error) {
+			return ec.Resolvers.Credential().TaskBacklinks(ctx, obj)
+		},
+		nil,
+		ec.marshalNTask2ᚕᚖgithubᚗcomᚋvibeᚑc2ᚋvibeᚑc2ᚑcoreᚋcoreᚋpkgᚋmodelsᚐTaskᚄ,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_Credential_taskBacklinks(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Credential",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "id":
+				return ec.fieldContext_Task_id(ctx, field)
+			case "operationId":
+				return ec.fieldContext_Task_operationId(ctx, field)
+			case "operation":
+				return ec.fieldContext_Task_operation(ctx, field)
+			case "name":
+				return ec.fieldContext_Task_name(ctx, field)
+			case "description":
+				return ec.fieldContext_Task_description(ctx, field)
+			case "riskScore":
+				return ec.fieldContext_Task_riskScore(ctx, field)
+			case "riskDescription":
+				return ec.fieldContext_Task_riskDescription(ctx, field)
+			case "profitScore":
+				return ec.fieldContext_Task_profitScore(ctx, field)
+			case "profitDescription":
+				return ec.fieldContext_Task_profitDescription(ctx, field)
+			case "stage":
+				return ec.fieldContext_Task_stage(ctx, field)
+			case "status":
+				return ec.fieldContext_Task_status(ctx, field)
+			case "assignees":
+				return ec.fieldContext_Task_assignees(ctx, field)
+			case "wikiReferences":
+				return ec.fieldContext_Task_wikiReferences(ctx, field)
+			case "credentialReferences":
+				return ec.fieldContext_Task_credentialReferences(ctx, field)
+			case "createdBy":
+				return ec.fieldContext_Task_createdBy(ctx, field)
+			case "lastUpdatedBy":
+				return ec.fieldContext_Task_lastUpdatedBy(ctx, field)
+			case "lastUpdatedAt":
+				return ec.fieldContext_Task_lastUpdatedAt(ctx, field)
+			case "deletedAt":
+				return ec.fieldContext_Task_deletedAt(ctx, field)
+			case "createdAt":
+				return ec.fieldContext_Task_createdAt(ctx, field)
+			case "updatedAt":
+				return ec.fieldContext_Task_updatedAt(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type Task", field.Name)
 		},
 	}
 	return fc, nil
@@ -7450,6 +8487,8 @@ func (ec *executionContext) fieldContext_CredentialEdge_node(_ context.Context, 
 				return ec.fieldContext_Credential_createdAt(ctx, field)
 			case "updatedAt":
 				return ec.fieldContext_Credential_updatedAt(ctx, field)
+			case "taskBacklinks":
+				return ec.fieldContext_Credential_taskBacklinks(ctx, field)
 			}
 			return nil, fmt.Errorf("no field named %q was found under type Credential", field.Name)
 		},
@@ -7631,6 +8670,8 @@ func (ec *executionContext) fieldContext_CredentialEvent_credential(_ context.Co
 				return ec.fieldContext_Credential_createdAt(ctx, field)
 			case "updatedAt":
 				return ec.fieldContext_Credential_updatedAt(ctx, field)
+			case "taskBacklinks":
+				return ec.fieldContext_Credential_taskBacklinks(ctx, field)
 			}
 			return nil, fmt.Errorf("no field named %q was found under type Credential", field.Name)
 		},
@@ -9203,6 +10244,8 @@ func (ec *executionContext) fieldContext_Mutation_createCredential(ctx context.C
 				return ec.fieldContext_Credential_createdAt(ctx, field)
 			case "updatedAt":
 				return ec.fieldContext_Credential_updatedAt(ctx, field)
+			case "taskBacklinks":
+				return ec.fieldContext_Credential_taskBacklinks(ctx, field)
 			}
 			return nil, fmt.Errorf("no field named %q was found under type Credential", field.Name)
 		},
@@ -9298,6 +10341,8 @@ func (ec *executionContext) fieldContext_Mutation_updateCredential(ctx context.C
 				return ec.fieldContext_Credential_createdAt(ctx, field)
 			case "updatedAt":
 				return ec.fieldContext_Credential_updatedAt(ctx, field)
+			case "taskBacklinks":
+				return ec.fieldContext_Credential_taskBacklinks(ctx, field)
 			}
 			return nil, fmt.Errorf("no field named %q was found under type Credential", field.Name)
 		},
@@ -9452,6 +10497,8 @@ func (ec *executionContext) fieldContext_Mutation_addCredentialComment(ctx conte
 				return ec.fieldContext_Credential_createdAt(ctx, field)
 			case "updatedAt":
 				return ec.fieldContext_Credential_updatedAt(ctx, field)
+			case "taskBacklinks":
+				return ec.fieldContext_Credential_taskBacklinks(ctx, field)
 			}
 			return nil, fmt.Errorf("no field named %q was found under type Credential", field.Name)
 		},
@@ -9547,6 +10594,8 @@ func (ec *executionContext) fieldContext_Mutation_updateCredentialComment(ctx co
 				return ec.fieldContext_Credential_createdAt(ctx, field)
 			case "updatedAt":
 				return ec.fieldContext_Credential_updatedAt(ctx, field)
+			case "taskBacklinks":
+				return ec.fieldContext_Credential_taskBacklinks(ctx, field)
 			}
 			return nil, fmt.Errorf("no field named %q was found under type Credential", field.Name)
 		},
@@ -9642,6 +10691,8 @@ func (ec *executionContext) fieldContext_Mutation_deleteCredentialComment(ctx co
 				return ec.fieldContext_Credential_createdAt(ctx, field)
 			case "updatedAt":
 				return ec.fieldContext_Credential_updatedAt(ctx, field)
+			case "taskBacklinks":
+				return ec.fieldContext_Credential_taskBacklinks(ctx, field)
 			}
 			return nil, fmt.Errorf("no field named %q was found under type Credential", field.Name)
 		},
@@ -9878,6 +10929,831 @@ func (ec *executionContext) fieldContext_Mutation_adminRevokeAllUserSessions(ctx
 	}()
 	ctx = graphql.WithFieldContext(ctx, fc)
 	if fc.Args, err = ec.field_Mutation_adminRevokeAllUserSessions_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
+		ec.Error(ctx, err)
+		return fc, err
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Mutation_createTask(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Mutation_createTask,
+		func(ctx context.Context) (any, error) {
+			fc := graphql.GetFieldContext(ctx)
+			return ec.Resolvers.Mutation().CreateTask(ctx, fc.Args["input"].(model.CreateTaskInput))
+		},
+		func(ctx context.Context, next graphql.Resolver) graphql.Resolver {
+			directive0 := next
+
+			directive1 := func(ctx context.Context) (any, error) {
+				permission, err := ec.unmarshalNString2string(ctx, "operation:member")
+				if err != nil {
+					var zeroVal *models.Task
+					return zeroVal, err
+				}
+				if ec.Directives.HasPermission == nil {
+					var zeroVal *models.Task
+					return zeroVal, errors.New("directive hasPermission is not implemented")
+				}
+				return ec.Directives.HasPermission(ctx, nil, directive0, permission)
+			}
+
+			next = directive1
+			return next
+		},
+		ec.marshalNTask2ᚖgithubᚗcomᚋvibeᚑc2ᚋvibeᚑc2ᚑcoreᚋcoreᚋpkgᚋmodelsᚐTask,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_Mutation_createTask(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Mutation",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "id":
+				return ec.fieldContext_Task_id(ctx, field)
+			case "operationId":
+				return ec.fieldContext_Task_operationId(ctx, field)
+			case "operation":
+				return ec.fieldContext_Task_operation(ctx, field)
+			case "name":
+				return ec.fieldContext_Task_name(ctx, field)
+			case "description":
+				return ec.fieldContext_Task_description(ctx, field)
+			case "riskScore":
+				return ec.fieldContext_Task_riskScore(ctx, field)
+			case "riskDescription":
+				return ec.fieldContext_Task_riskDescription(ctx, field)
+			case "profitScore":
+				return ec.fieldContext_Task_profitScore(ctx, field)
+			case "profitDescription":
+				return ec.fieldContext_Task_profitDescription(ctx, field)
+			case "stage":
+				return ec.fieldContext_Task_stage(ctx, field)
+			case "status":
+				return ec.fieldContext_Task_status(ctx, field)
+			case "assignees":
+				return ec.fieldContext_Task_assignees(ctx, field)
+			case "wikiReferences":
+				return ec.fieldContext_Task_wikiReferences(ctx, field)
+			case "credentialReferences":
+				return ec.fieldContext_Task_credentialReferences(ctx, field)
+			case "createdBy":
+				return ec.fieldContext_Task_createdBy(ctx, field)
+			case "lastUpdatedBy":
+				return ec.fieldContext_Task_lastUpdatedBy(ctx, field)
+			case "lastUpdatedAt":
+				return ec.fieldContext_Task_lastUpdatedAt(ctx, field)
+			case "deletedAt":
+				return ec.fieldContext_Task_deletedAt(ctx, field)
+			case "createdAt":
+				return ec.fieldContext_Task_createdAt(ctx, field)
+			case "updatedAt":
+				return ec.fieldContext_Task_updatedAt(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type Task", field.Name)
+		},
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			err = ec.Recover(ctx, r)
+			ec.Error(ctx, err)
+		}
+	}()
+	ctx = graphql.WithFieldContext(ctx, fc)
+	if fc.Args, err = ec.field_Mutation_createTask_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
+		ec.Error(ctx, err)
+		return fc, err
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Mutation_updateTask(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Mutation_updateTask,
+		func(ctx context.Context) (any, error) {
+			fc := graphql.GetFieldContext(ctx)
+			return ec.Resolvers.Mutation().UpdateTask(ctx, fc.Args["id"].(string), fc.Args["input"].(model.UpdateTaskInput))
+		},
+		func(ctx context.Context, next graphql.Resolver) graphql.Resolver {
+			directive0 := next
+
+			directive1 := func(ctx context.Context) (any, error) {
+				permission, err := ec.unmarshalNString2string(ctx, "operation:member")
+				if err != nil {
+					var zeroVal *models.Task
+					return zeroVal, err
+				}
+				if ec.Directives.HasPermission == nil {
+					var zeroVal *models.Task
+					return zeroVal, errors.New("directive hasPermission is not implemented")
+				}
+				return ec.Directives.HasPermission(ctx, nil, directive0, permission)
+			}
+
+			next = directive1
+			return next
+		},
+		ec.marshalNTask2ᚖgithubᚗcomᚋvibeᚑc2ᚋvibeᚑc2ᚑcoreᚋcoreᚋpkgᚋmodelsᚐTask,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_Mutation_updateTask(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Mutation",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "id":
+				return ec.fieldContext_Task_id(ctx, field)
+			case "operationId":
+				return ec.fieldContext_Task_operationId(ctx, field)
+			case "operation":
+				return ec.fieldContext_Task_operation(ctx, field)
+			case "name":
+				return ec.fieldContext_Task_name(ctx, field)
+			case "description":
+				return ec.fieldContext_Task_description(ctx, field)
+			case "riskScore":
+				return ec.fieldContext_Task_riskScore(ctx, field)
+			case "riskDescription":
+				return ec.fieldContext_Task_riskDescription(ctx, field)
+			case "profitScore":
+				return ec.fieldContext_Task_profitScore(ctx, field)
+			case "profitDescription":
+				return ec.fieldContext_Task_profitDescription(ctx, field)
+			case "stage":
+				return ec.fieldContext_Task_stage(ctx, field)
+			case "status":
+				return ec.fieldContext_Task_status(ctx, field)
+			case "assignees":
+				return ec.fieldContext_Task_assignees(ctx, field)
+			case "wikiReferences":
+				return ec.fieldContext_Task_wikiReferences(ctx, field)
+			case "credentialReferences":
+				return ec.fieldContext_Task_credentialReferences(ctx, field)
+			case "createdBy":
+				return ec.fieldContext_Task_createdBy(ctx, field)
+			case "lastUpdatedBy":
+				return ec.fieldContext_Task_lastUpdatedBy(ctx, field)
+			case "lastUpdatedAt":
+				return ec.fieldContext_Task_lastUpdatedAt(ctx, field)
+			case "deletedAt":
+				return ec.fieldContext_Task_deletedAt(ctx, field)
+			case "createdAt":
+				return ec.fieldContext_Task_createdAt(ctx, field)
+			case "updatedAt":
+				return ec.fieldContext_Task_updatedAt(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type Task", field.Name)
+		},
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			err = ec.Recover(ctx, r)
+			ec.Error(ctx, err)
+		}
+	}()
+	ctx = graphql.WithFieldContext(ctx, fc)
+	if fc.Args, err = ec.field_Mutation_updateTask_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
+		ec.Error(ctx, err)
+		return fc, err
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Mutation_changeTaskStage(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Mutation_changeTaskStage,
+		func(ctx context.Context) (any, error) {
+			fc := graphql.GetFieldContext(ctx)
+			return ec.Resolvers.Mutation().ChangeTaskStage(ctx, fc.Args["input"].(model.ChangeTaskStageInput))
+		},
+		func(ctx context.Context, next graphql.Resolver) graphql.Resolver {
+			directive0 := next
+
+			directive1 := func(ctx context.Context) (any, error) {
+				permission, err := ec.unmarshalNString2string(ctx, "operation:member")
+				if err != nil {
+					var zeroVal *models.Task
+					return zeroVal, err
+				}
+				if ec.Directives.HasPermission == nil {
+					var zeroVal *models.Task
+					return zeroVal, errors.New("directive hasPermission is not implemented")
+				}
+				return ec.Directives.HasPermission(ctx, nil, directive0, permission)
+			}
+
+			next = directive1
+			return next
+		},
+		ec.marshalNTask2ᚖgithubᚗcomᚋvibeᚑc2ᚋvibeᚑc2ᚑcoreᚋcoreᚋpkgᚋmodelsᚐTask,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_Mutation_changeTaskStage(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Mutation",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "id":
+				return ec.fieldContext_Task_id(ctx, field)
+			case "operationId":
+				return ec.fieldContext_Task_operationId(ctx, field)
+			case "operation":
+				return ec.fieldContext_Task_operation(ctx, field)
+			case "name":
+				return ec.fieldContext_Task_name(ctx, field)
+			case "description":
+				return ec.fieldContext_Task_description(ctx, field)
+			case "riskScore":
+				return ec.fieldContext_Task_riskScore(ctx, field)
+			case "riskDescription":
+				return ec.fieldContext_Task_riskDescription(ctx, field)
+			case "profitScore":
+				return ec.fieldContext_Task_profitScore(ctx, field)
+			case "profitDescription":
+				return ec.fieldContext_Task_profitDescription(ctx, field)
+			case "stage":
+				return ec.fieldContext_Task_stage(ctx, field)
+			case "status":
+				return ec.fieldContext_Task_status(ctx, field)
+			case "assignees":
+				return ec.fieldContext_Task_assignees(ctx, field)
+			case "wikiReferences":
+				return ec.fieldContext_Task_wikiReferences(ctx, field)
+			case "credentialReferences":
+				return ec.fieldContext_Task_credentialReferences(ctx, field)
+			case "createdBy":
+				return ec.fieldContext_Task_createdBy(ctx, field)
+			case "lastUpdatedBy":
+				return ec.fieldContext_Task_lastUpdatedBy(ctx, field)
+			case "lastUpdatedAt":
+				return ec.fieldContext_Task_lastUpdatedAt(ctx, field)
+			case "deletedAt":
+				return ec.fieldContext_Task_deletedAt(ctx, field)
+			case "createdAt":
+				return ec.fieldContext_Task_createdAt(ctx, field)
+			case "updatedAt":
+				return ec.fieldContext_Task_updatedAt(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type Task", field.Name)
+		},
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			err = ec.Recover(ctx, r)
+			ec.Error(ctx, err)
+		}
+	}()
+	ctx = graphql.WithFieldContext(ctx, fc)
+	if fc.Args, err = ec.field_Mutation_changeTaskStage_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
+		ec.Error(ctx, err)
+		return fc, err
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Mutation_setTaskAssignees(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Mutation_setTaskAssignees,
+		func(ctx context.Context) (any, error) {
+			fc := graphql.GetFieldContext(ctx)
+			return ec.Resolvers.Mutation().SetTaskAssignees(ctx, fc.Args["taskId"].(string), fc.Args["assigneeIds"].([]string))
+		},
+		func(ctx context.Context, next graphql.Resolver) graphql.Resolver {
+			directive0 := next
+
+			directive1 := func(ctx context.Context) (any, error) {
+				permission, err := ec.unmarshalNString2string(ctx, "operation:member")
+				if err != nil {
+					var zeroVal *models.Task
+					return zeroVal, err
+				}
+				if ec.Directives.HasPermission == nil {
+					var zeroVal *models.Task
+					return zeroVal, errors.New("directive hasPermission is not implemented")
+				}
+				return ec.Directives.HasPermission(ctx, nil, directive0, permission)
+			}
+
+			next = directive1
+			return next
+		},
+		ec.marshalNTask2ᚖgithubᚗcomᚋvibeᚑc2ᚋvibeᚑc2ᚑcoreᚋcoreᚋpkgᚋmodelsᚐTask,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_Mutation_setTaskAssignees(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Mutation",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "id":
+				return ec.fieldContext_Task_id(ctx, field)
+			case "operationId":
+				return ec.fieldContext_Task_operationId(ctx, field)
+			case "operation":
+				return ec.fieldContext_Task_operation(ctx, field)
+			case "name":
+				return ec.fieldContext_Task_name(ctx, field)
+			case "description":
+				return ec.fieldContext_Task_description(ctx, field)
+			case "riskScore":
+				return ec.fieldContext_Task_riskScore(ctx, field)
+			case "riskDescription":
+				return ec.fieldContext_Task_riskDescription(ctx, field)
+			case "profitScore":
+				return ec.fieldContext_Task_profitScore(ctx, field)
+			case "profitDescription":
+				return ec.fieldContext_Task_profitDescription(ctx, field)
+			case "stage":
+				return ec.fieldContext_Task_stage(ctx, field)
+			case "status":
+				return ec.fieldContext_Task_status(ctx, field)
+			case "assignees":
+				return ec.fieldContext_Task_assignees(ctx, field)
+			case "wikiReferences":
+				return ec.fieldContext_Task_wikiReferences(ctx, field)
+			case "credentialReferences":
+				return ec.fieldContext_Task_credentialReferences(ctx, field)
+			case "createdBy":
+				return ec.fieldContext_Task_createdBy(ctx, field)
+			case "lastUpdatedBy":
+				return ec.fieldContext_Task_lastUpdatedBy(ctx, field)
+			case "lastUpdatedAt":
+				return ec.fieldContext_Task_lastUpdatedAt(ctx, field)
+			case "deletedAt":
+				return ec.fieldContext_Task_deletedAt(ctx, field)
+			case "createdAt":
+				return ec.fieldContext_Task_createdAt(ctx, field)
+			case "updatedAt":
+				return ec.fieldContext_Task_updatedAt(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type Task", field.Name)
+		},
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			err = ec.Recover(ctx, r)
+			ec.Error(ctx, err)
+		}
+	}()
+	ctx = graphql.WithFieldContext(ctx, fc)
+	if fc.Args, err = ec.field_Mutation_setTaskAssignees_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
+		ec.Error(ctx, err)
+		return fc, err
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Mutation_setTaskWikiReferences(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Mutation_setTaskWikiReferences,
+		func(ctx context.Context) (any, error) {
+			fc := graphql.GetFieldContext(ctx)
+			return ec.Resolvers.Mutation().SetTaskWikiReferences(ctx, fc.Args["taskId"].(string), fc.Args["wikiIds"].([]string))
+		},
+		func(ctx context.Context, next graphql.Resolver) graphql.Resolver {
+			directive0 := next
+
+			directive1 := func(ctx context.Context) (any, error) {
+				permission, err := ec.unmarshalNString2string(ctx, "operation:member")
+				if err != nil {
+					var zeroVal *models.Task
+					return zeroVal, err
+				}
+				if ec.Directives.HasPermission == nil {
+					var zeroVal *models.Task
+					return zeroVal, errors.New("directive hasPermission is not implemented")
+				}
+				return ec.Directives.HasPermission(ctx, nil, directive0, permission)
+			}
+
+			next = directive1
+			return next
+		},
+		ec.marshalNTask2ᚖgithubᚗcomᚋvibeᚑc2ᚋvibeᚑc2ᚑcoreᚋcoreᚋpkgᚋmodelsᚐTask,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_Mutation_setTaskWikiReferences(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Mutation",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "id":
+				return ec.fieldContext_Task_id(ctx, field)
+			case "operationId":
+				return ec.fieldContext_Task_operationId(ctx, field)
+			case "operation":
+				return ec.fieldContext_Task_operation(ctx, field)
+			case "name":
+				return ec.fieldContext_Task_name(ctx, field)
+			case "description":
+				return ec.fieldContext_Task_description(ctx, field)
+			case "riskScore":
+				return ec.fieldContext_Task_riskScore(ctx, field)
+			case "riskDescription":
+				return ec.fieldContext_Task_riskDescription(ctx, field)
+			case "profitScore":
+				return ec.fieldContext_Task_profitScore(ctx, field)
+			case "profitDescription":
+				return ec.fieldContext_Task_profitDescription(ctx, field)
+			case "stage":
+				return ec.fieldContext_Task_stage(ctx, field)
+			case "status":
+				return ec.fieldContext_Task_status(ctx, field)
+			case "assignees":
+				return ec.fieldContext_Task_assignees(ctx, field)
+			case "wikiReferences":
+				return ec.fieldContext_Task_wikiReferences(ctx, field)
+			case "credentialReferences":
+				return ec.fieldContext_Task_credentialReferences(ctx, field)
+			case "createdBy":
+				return ec.fieldContext_Task_createdBy(ctx, field)
+			case "lastUpdatedBy":
+				return ec.fieldContext_Task_lastUpdatedBy(ctx, field)
+			case "lastUpdatedAt":
+				return ec.fieldContext_Task_lastUpdatedAt(ctx, field)
+			case "deletedAt":
+				return ec.fieldContext_Task_deletedAt(ctx, field)
+			case "createdAt":
+				return ec.fieldContext_Task_createdAt(ctx, field)
+			case "updatedAt":
+				return ec.fieldContext_Task_updatedAt(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type Task", field.Name)
+		},
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			err = ec.Recover(ctx, r)
+			ec.Error(ctx, err)
+		}
+	}()
+	ctx = graphql.WithFieldContext(ctx, fc)
+	if fc.Args, err = ec.field_Mutation_setTaskWikiReferences_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
+		ec.Error(ctx, err)
+		return fc, err
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Mutation_setTaskCredentialReferences(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Mutation_setTaskCredentialReferences,
+		func(ctx context.Context) (any, error) {
+			fc := graphql.GetFieldContext(ctx)
+			return ec.Resolvers.Mutation().SetTaskCredentialReferences(ctx, fc.Args["taskId"].(string), fc.Args["credentialIds"].([]string))
+		},
+		func(ctx context.Context, next graphql.Resolver) graphql.Resolver {
+			directive0 := next
+
+			directive1 := func(ctx context.Context) (any, error) {
+				permission, err := ec.unmarshalNString2string(ctx, "operation:member")
+				if err != nil {
+					var zeroVal *models.Task
+					return zeroVal, err
+				}
+				if ec.Directives.HasPermission == nil {
+					var zeroVal *models.Task
+					return zeroVal, errors.New("directive hasPermission is not implemented")
+				}
+				return ec.Directives.HasPermission(ctx, nil, directive0, permission)
+			}
+
+			next = directive1
+			return next
+		},
+		ec.marshalNTask2ᚖgithubᚗcomᚋvibeᚑc2ᚋvibeᚑc2ᚑcoreᚋcoreᚋpkgᚋmodelsᚐTask,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_Mutation_setTaskCredentialReferences(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Mutation",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "id":
+				return ec.fieldContext_Task_id(ctx, field)
+			case "operationId":
+				return ec.fieldContext_Task_operationId(ctx, field)
+			case "operation":
+				return ec.fieldContext_Task_operation(ctx, field)
+			case "name":
+				return ec.fieldContext_Task_name(ctx, field)
+			case "description":
+				return ec.fieldContext_Task_description(ctx, field)
+			case "riskScore":
+				return ec.fieldContext_Task_riskScore(ctx, field)
+			case "riskDescription":
+				return ec.fieldContext_Task_riskDescription(ctx, field)
+			case "profitScore":
+				return ec.fieldContext_Task_profitScore(ctx, field)
+			case "profitDescription":
+				return ec.fieldContext_Task_profitDescription(ctx, field)
+			case "stage":
+				return ec.fieldContext_Task_stage(ctx, field)
+			case "status":
+				return ec.fieldContext_Task_status(ctx, field)
+			case "assignees":
+				return ec.fieldContext_Task_assignees(ctx, field)
+			case "wikiReferences":
+				return ec.fieldContext_Task_wikiReferences(ctx, field)
+			case "credentialReferences":
+				return ec.fieldContext_Task_credentialReferences(ctx, field)
+			case "createdBy":
+				return ec.fieldContext_Task_createdBy(ctx, field)
+			case "lastUpdatedBy":
+				return ec.fieldContext_Task_lastUpdatedBy(ctx, field)
+			case "lastUpdatedAt":
+				return ec.fieldContext_Task_lastUpdatedAt(ctx, field)
+			case "deletedAt":
+				return ec.fieldContext_Task_deletedAt(ctx, field)
+			case "createdAt":
+				return ec.fieldContext_Task_createdAt(ctx, field)
+			case "updatedAt":
+				return ec.fieldContext_Task_updatedAt(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type Task", field.Name)
+		},
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			err = ec.Recover(ctx, r)
+			ec.Error(ctx, err)
+		}
+	}()
+	ctx = graphql.WithFieldContext(ctx, fc)
+	if fc.Args, err = ec.field_Mutation_setTaskCredentialReferences_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
+		ec.Error(ctx, err)
+		return fc, err
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Mutation_deleteTask(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Mutation_deleteTask,
+		func(ctx context.Context) (any, error) {
+			fc := graphql.GetFieldContext(ctx)
+			return ec.Resolvers.Mutation().DeleteTask(ctx, fc.Args["id"].(string))
+		},
+		func(ctx context.Context, next graphql.Resolver) graphql.Resolver {
+			directive0 := next
+
+			directive1 := func(ctx context.Context) (any, error) {
+				permission, err := ec.unmarshalNString2string(ctx, "operation:member")
+				if err != nil {
+					var zeroVal bool
+					return zeroVal, err
+				}
+				if ec.Directives.HasPermission == nil {
+					var zeroVal bool
+					return zeroVal, errors.New("directive hasPermission is not implemented")
+				}
+				return ec.Directives.HasPermission(ctx, nil, directive0, permission)
+			}
+
+			next = directive1
+			return next
+		},
+		ec.marshalNBoolean2bool,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_Mutation_deleteTask(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Mutation",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Boolean does not have child fields")
+		},
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			err = ec.Recover(ctx, r)
+			ec.Error(ctx, err)
+		}
+	}()
+	ctx = graphql.WithFieldContext(ctx, fc)
+	if fc.Args, err = ec.field_Mutation_deleteTask_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
+		ec.Error(ctx, err)
+		return fc, err
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Mutation_restoreTask(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Mutation_restoreTask,
+		func(ctx context.Context) (any, error) {
+			fc := graphql.GetFieldContext(ctx)
+			return ec.Resolvers.Mutation().RestoreTask(ctx, fc.Args["id"].(string))
+		},
+		func(ctx context.Context, next graphql.Resolver) graphql.Resolver {
+			directive0 := next
+
+			directive1 := func(ctx context.Context) (any, error) {
+				permission, err := ec.unmarshalNString2string(ctx, "operation:member")
+				if err != nil {
+					var zeroVal *models.Task
+					return zeroVal, err
+				}
+				if ec.Directives.HasPermission == nil {
+					var zeroVal *models.Task
+					return zeroVal, errors.New("directive hasPermission is not implemented")
+				}
+				return ec.Directives.HasPermission(ctx, nil, directive0, permission)
+			}
+
+			next = directive1
+			return next
+		},
+		ec.marshalNTask2ᚖgithubᚗcomᚋvibeᚑc2ᚋvibeᚑc2ᚑcoreᚋcoreᚋpkgᚋmodelsᚐTask,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_Mutation_restoreTask(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Mutation",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "id":
+				return ec.fieldContext_Task_id(ctx, field)
+			case "operationId":
+				return ec.fieldContext_Task_operationId(ctx, field)
+			case "operation":
+				return ec.fieldContext_Task_operation(ctx, field)
+			case "name":
+				return ec.fieldContext_Task_name(ctx, field)
+			case "description":
+				return ec.fieldContext_Task_description(ctx, field)
+			case "riskScore":
+				return ec.fieldContext_Task_riskScore(ctx, field)
+			case "riskDescription":
+				return ec.fieldContext_Task_riskDescription(ctx, field)
+			case "profitScore":
+				return ec.fieldContext_Task_profitScore(ctx, field)
+			case "profitDescription":
+				return ec.fieldContext_Task_profitDescription(ctx, field)
+			case "stage":
+				return ec.fieldContext_Task_stage(ctx, field)
+			case "status":
+				return ec.fieldContext_Task_status(ctx, field)
+			case "assignees":
+				return ec.fieldContext_Task_assignees(ctx, field)
+			case "wikiReferences":
+				return ec.fieldContext_Task_wikiReferences(ctx, field)
+			case "credentialReferences":
+				return ec.fieldContext_Task_credentialReferences(ctx, field)
+			case "createdBy":
+				return ec.fieldContext_Task_createdBy(ctx, field)
+			case "lastUpdatedBy":
+				return ec.fieldContext_Task_lastUpdatedBy(ctx, field)
+			case "lastUpdatedAt":
+				return ec.fieldContext_Task_lastUpdatedAt(ctx, field)
+			case "deletedAt":
+				return ec.fieldContext_Task_deletedAt(ctx, field)
+			case "createdAt":
+				return ec.fieldContext_Task_createdAt(ctx, field)
+			case "updatedAt":
+				return ec.fieldContext_Task_updatedAt(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type Task", field.Name)
+		},
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			err = ec.Recover(ctx, r)
+			ec.Error(ctx, err)
+		}
+	}()
+	ctx = graphql.WithFieldContext(ctx, fc)
+	if fc.Args, err = ec.field_Mutation_restoreTask_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
+		ec.Error(ctx, err)
+		return fc, err
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Mutation_purgeTask(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Mutation_purgeTask,
+		func(ctx context.Context) (any, error) {
+			fc := graphql.GetFieldContext(ctx)
+			return ec.Resolvers.Mutation().PurgeTask(ctx, fc.Args["id"].(string))
+		},
+		func(ctx context.Context, next graphql.Resolver) graphql.Resolver {
+			directive0 := next
+
+			directive1 := func(ctx context.Context) (any, error) {
+				permission, err := ec.unmarshalNString2string(ctx, "operation:member")
+				if err != nil {
+					var zeroVal bool
+					return zeroVal, err
+				}
+				if ec.Directives.HasPermission == nil {
+					var zeroVal bool
+					return zeroVal, errors.New("directive hasPermission is not implemented")
+				}
+				return ec.Directives.HasPermission(ctx, nil, directive0, permission)
+			}
+
+			next = directive1
+			return next
+		},
+		ec.marshalNBoolean2bool,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_Mutation_purgeTask(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Mutation",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Boolean does not have child fields")
+		},
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			err = ec.Recover(ctx, r)
+			ec.Error(ctx, err)
+		}
+	}()
+	ctx = graphql.WithFieldContext(ctx, fc)
+	if fc.Args, err = ec.field_Mutation_purgeTask_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
 		ec.Error(ctx, err)
 		return fc, err
 	}
@@ -10188,6 +12064,8 @@ func (ec *executionContext) fieldContext_Mutation_createWikiDocument(ctx context
 				return ec.fieldContext_WikiDocument_createdAt(ctx, field)
 			case "updatedAt":
 				return ec.fieldContext_WikiDocument_updatedAt(ctx, field)
+			case "taskBacklinks":
+				return ec.fieldContext_WikiDocument_taskBacklinks(ctx, field)
 			}
 			return nil, fmt.Errorf("no field named %q was found under type WikiDocument", field.Name)
 		},
@@ -10293,6 +12171,8 @@ func (ec *executionContext) fieldContext_Mutation_updateWikiDocument(ctx context
 				return ec.fieldContext_WikiDocument_createdAt(ctx, field)
 			case "updatedAt":
 				return ec.fieldContext_WikiDocument_updatedAt(ctx, field)
+			case "taskBacklinks":
+				return ec.fieldContext_WikiDocument_taskBacklinks(ctx, field)
 			}
 			return nil, fmt.Errorf("no field named %q was found under type WikiDocument", field.Name)
 		},
@@ -10398,6 +12278,8 @@ func (ec *executionContext) fieldContext_Mutation_reorderWikiDocumentSiblings(ct
 				return ec.fieldContext_WikiDocument_createdAt(ctx, field)
 			case "updatedAt":
 				return ec.fieldContext_WikiDocument_updatedAt(ctx, field)
+			case "taskBacklinks":
+				return ec.fieldContext_WikiDocument_taskBacklinks(ctx, field)
 			}
 			return nil, fmt.Errorf("no field named %q was found under type WikiDocument", field.Name)
 		},
@@ -10562,6 +12444,8 @@ func (ec *executionContext) fieldContext_Mutation_duplicateWikiDocument(ctx cont
 				return ec.fieldContext_WikiDocument_createdAt(ctx, field)
 			case "updatedAt":
 				return ec.fieldContext_WikiDocument_updatedAt(ctx, field)
+			case "taskBacklinks":
+				return ec.fieldContext_WikiDocument_taskBacklinks(ctx, field)
 			}
 			return nil, fmt.Errorf("no field named %q was found under type WikiDocument", field.Name)
 		},
@@ -10667,6 +12551,8 @@ func (ec *executionContext) fieldContext_Mutation_restoreWikiDocument(ctx contex
 				return ec.fieldContext_WikiDocument_createdAt(ctx, field)
 			case "updatedAt":
 				return ec.fieldContext_WikiDocument_updatedAt(ctx, field)
+			case "taskBacklinks":
+				return ec.fieldContext_WikiDocument_taskBacklinks(ctx, field)
 			}
 			return nil, fmt.Errorf("no field named %q was found under type WikiDocument", field.Name)
 		},
@@ -10969,6 +12855,8 @@ func (ec *executionContext) fieldContext_Mutation_restoreWikiDocumentBackup(ctx 
 				return ec.fieldContext_WikiDocument_createdAt(ctx, field)
 			case "updatedAt":
 				return ec.fieldContext_WikiDocument_updatedAt(ctx, field)
+			case "taskBacklinks":
+				return ec.fieldContext_WikiDocument_taskBacklinks(ctx, field)
 			}
 			return nil, fmt.Errorf("no field named %q was found under type WikiDocument", field.Name)
 		},
@@ -12620,6 +14508,8 @@ func (ec *executionContext) fieldContext_Query_credential(ctx context.Context, f
 				return ec.fieldContext_Credential_createdAt(ctx, field)
 			case "updatedAt":
 				return ec.fieldContext_Credential_updatedAt(ctx, field)
+			case "taskBacklinks":
+				return ec.fieldContext_Credential_taskBacklinks(ctx, field)
 			}
 			return nil, fmt.Errorf("no field named %q was found under type Credential", field.Name)
 		},
@@ -13075,6 +14965,443 @@ func (ec *executionContext) fieldContext_Query_session(ctx context.Context, fiel
 	return fc, nil
 }
 
+func (ec *executionContext) _Query_task(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Query_task,
+		func(ctx context.Context) (any, error) {
+			fc := graphql.GetFieldContext(ctx)
+			return ec.Resolvers.Query().Task(ctx, fc.Args["id"].(string))
+		},
+		func(ctx context.Context, next graphql.Resolver) graphql.Resolver {
+			directive0 := next
+
+			directive1 := func(ctx context.Context) (any, error) {
+				permission, err := ec.unmarshalNString2string(ctx, "operation:member")
+				if err != nil {
+					var zeroVal *models.Task
+					return zeroVal, err
+				}
+				if ec.Directives.HasPermission == nil {
+					var zeroVal *models.Task
+					return zeroVal, errors.New("directive hasPermission is not implemented")
+				}
+				return ec.Directives.HasPermission(ctx, nil, directive0, permission)
+			}
+
+			next = directive1
+			return next
+		},
+		ec.marshalNTask2ᚖgithubᚗcomᚋvibeᚑc2ᚋvibeᚑc2ᚑcoreᚋcoreᚋpkgᚋmodelsᚐTask,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_Query_task(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Query",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "id":
+				return ec.fieldContext_Task_id(ctx, field)
+			case "operationId":
+				return ec.fieldContext_Task_operationId(ctx, field)
+			case "operation":
+				return ec.fieldContext_Task_operation(ctx, field)
+			case "name":
+				return ec.fieldContext_Task_name(ctx, field)
+			case "description":
+				return ec.fieldContext_Task_description(ctx, field)
+			case "riskScore":
+				return ec.fieldContext_Task_riskScore(ctx, field)
+			case "riskDescription":
+				return ec.fieldContext_Task_riskDescription(ctx, field)
+			case "profitScore":
+				return ec.fieldContext_Task_profitScore(ctx, field)
+			case "profitDescription":
+				return ec.fieldContext_Task_profitDescription(ctx, field)
+			case "stage":
+				return ec.fieldContext_Task_stage(ctx, field)
+			case "status":
+				return ec.fieldContext_Task_status(ctx, field)
+			case "assignees":
+				return ec.fieldContext_Task_assignees(ctx, field)
+			case "wikiReferences":
+				return ec.fieldContext_Task_wikiReferences(ctx, field)
+			case "credentialReferences":
+				return ec.fieldContext_Task_credentialReferences(ctx, field)
+			case "createdBy":
+				return ec.fieldContext_Task_createdBy(ctx, field)
+			case "lastUpdatedBy":
+				return ec.fieldContext_Task_lastUpdatedBy(ctx, field)
+			case "lastUpdatedAt":
+				return ec.fieldContext_Task_lastUpdatedAt(ctx, field)
+			case "deletedAt":
+				return ec.fieldContext_Task_deletedAt(ctx, field)
+			case "createdAt":
+				return ec.fieldContext_Task_createdAt(ctx, field)
+			case "updatedAt":
+				return ec.fieldContext_Task_updatedAt(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type Task", field.Name)
+		},
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			err = ec.Recover(ctx, r)
+			ec.Error(ctx, err)
+		}
+	}()
+	ctx = graphql.WithFieldContext(ctx, fc)
+	if fc.Args, err = ec.field_Query_task_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
+		ec.Error(ctx, err)
+		return fc, err
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Query_tasks(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Query_tasks,
+		func(ctx context.Context) (any, error) {
+			fc := graphql.GetFieldContext(ctx)
+			return ec.Resolvers.Query().Tasks(ctx, fc.Args["operationId"].(string), fc.Args["stage"].(*models.TaskStage), fc.Args["search"].(*string), fc.Args["first"].(*int), fc.Args["after"].(*string), fc.Args["last"].(*int), fc.Args["before"].(*string))
+		},
+		func(ctx context.Context, next graphql.Resolver) graphql.Resolver {
+			directive0 := next
+
+			directive1 := func(ctx context.Context) (any, error) {
+				permission, err := ec.unmarshalNString2string(ctx, "operation:member")
+				if err != nil {
+					var zeroVal *model.TaskConnection
+					return zeroVal, err
+				}
+				if ec.Directives.HasPermission == nil {
+					var zeroVal *model.TaskConnection
+					return zeroVal, errors.New("directive hasPermission is not implemented")
+				}
+				return ec.Directives.HasPermission(ctx, nil, directive0, permission)
+			}
+
+			next = directive1
+			return next
+		},
+		ec.marshalNTaskConnection2ᚖgithubᚗcomᚋvibeᚑc2ᚋvibeᚑc2ᚑcoreᚋcoreᚋpkgᚋgraphqlᚋmodelᚐTaskConnection,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_Query_tasks(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Query",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "edges":
+				return ec.fieldContext_TaskConnection_edges(ctx, field)
+			case "pageInfo":
+				return ec.fieldContext_TaskConnection_pageInfo(ctx, field)
+			case "totalCount":
+				return ec.fieldContext_TaskConnection_totalCount(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type TaskConnection", field.Name)
+		},
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			err = ec.Recover(ctx, r)
+			ec.Error(ctx, err)
+		}
+	}()
+	ctx = graphql.WithFieldContext(ctx, fc)
+	if fc.Args, err = ec.field_Query_tasks_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
+		ec.Error(ctx, err)
+		return fc, err
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Query_taskTrash(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Query_taskTrash,
+		func(ctx context.Context) (any, error) {
+			fc := graphql.GetFieldContext(ctx)
+			return ec.Resolvers.Query().TaskTrash(ctx, fc.Args["operationId"].(string), fc.Args["first"].(*int), fc.Args["after"].(*string), fc.Args["last"].(*int), fc.Args["before"].(*string))
+		},
+		func(ctx context.Context, next graphql.Resolver) graphql.Resolver {
+			directive0 := next
+
+			directive1 := func(ctx context.Context) (any, error) {
+				permission, err := ec.unmarshalNString2string(ctx, "operation:member")
+				if err != nil {
+					var zeroVal *model.TaskConnection
+					return zeroVal, err
+				}
+				if ec.Directives.HasPermission == nil {
+					var zeroVal *model.TaskConnection
+					return zeroVal, errors.New("directive hasPermission is not implemented")
+				}
+				return ec.Directives.HasPermission(ctx, nil, directive0, permission)
+			}
+
+			next = directive1
+			return next
+		},
+		ec.marshalNTaskConnection2ᚖgithubᚗcomᚋvibeᚑc2ᚋvibeᚑc2ᚑcoreᚋcoreᚋpkgᚋgraphqlᚋmodelᚐTaskConnection,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_Query_taskTrash(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Query",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "edges":
+				return ec.fieldContext_TaskConnection_edges(ctx, field)
+			case "pageInfo":
+				return ec.fieldContext_TaskConnection_pageInfo(ctx, field)
+			case "totalCount":
+				return ec.fieldContext_TaskConnection_totalCount(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type TaskConnection", field.Name)
+		},
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			err = ec.Recover(ctx, r)
+			ec.Error(ctx, err)
+		}
+	}()
+	ctx = graphql.WithFieldContext(ctx, fc)
+	if fc.Args, err = ec.field_Query_taskTrash_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
+		ec.Error(ctx, err)
+		return fc, err
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Query_tasksReferencingWikiDocument(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Query_tasksReferencingWikiDocument,
+		func(ctx context.Context) (any, error) {
+			fc := graphql.GetFieldContext(ctx)
+			return ec.Resolvers.Query().TasksReferencingWikiDocument(ctx, fc.Args["documentId"].(string))
+		},
+		func(ctx context.Context, next graphql.Resolver) graphql.Resolver {
+			directive0 := next
+
+			directive1 := func(ctx context.Context) (any, error) {
+				permission, err := ec.unmarshalNString2string(ctx, "operation:member")
+				if err != nil {
+					var zeroVal []*models.Task
+					return zeroVal, err
+				}
+				if ec.Directives.HasPermission == nil {
+					var zeroVal []*models.Task
+					return zeroVal, errors.New("directive hasPermission is not implemented")
+				}
+				return ec.Directives.HasPermission(ctx, nil, directive0, permission)
+			}
+
+			next = directive1
+			return next
+		},
+		ec.marshalNTask2ᚕᚖgithubᚗcomᚋvibeᚑc2ᚋvibeᚑc2ᚑcoreᚋcoreᚋpkgᚋmodelsᚐTaskᚄ,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_Query_tasksReferencingWikiDocument(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Query",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "id":
+				return ec.fieldContext_Task_id(ctx, field)
+			case "operationId":
+				return ec.fieldContext_Task_operationId(ctx, field)
+			case "operation":
+				return ec.fieldContext_Task_operation(ctx, field)
+			case "name":
+				return ec.fieldContext_Task_name(ctx, field)
+			case "description":
+				return ec.fieldContext_Task_description(ctx, field)
+			case "riskScore":
+				return ec.fieldContext_Task_riskScore(ctx, field)
+			case "riskDescription":
+				return ec.fieldContext_Task_riskDescription(ctx, field)
+			case "profitScore":
+				return ec.fieldContext_Task_profitScore(ctx, field)
+			case "profitDescription":
+				return ec.fieldContext_Task_profitDescription(ctx, field)
+			case "stage":
+				return ec.fieldContext_Task_stage(ctx, field)
+			case "status":
+				return ec.fieldContext_Task_status(ctx, field)
+			case "assignees":
+				return ec.fieldContext_Task_assignees(ctx, field)
+			case "wikiReferences":
+				return ec.fieldContext_Task_wikiReferences(ctx, field)
+			case "credentialReferences":
+				return ec.fieldContext_Task_credentialReferences(ctx, field)
+			case "createdBy":
+				return ec.fieldContext_Task_createdBy(ctx, field)
+			case "lastUpdatedBy":
+				return ec.fieldContext_Task_lastUpdatedBy(ctx, field)
+			case "lastUpdatedAt":
+				return ec.fieldContext_Task_lastUpdatedAt(ctx, field)
+			case "deletedAt":
+				return ec.fieldContext_Task_deletedAt(ctx, field)
+			case "createdAt":
+				return ec.fieldContext_Task_createdAt(ctx, field)
+			case "updatedAt":
+				return ec.fieldContext_Task_updatedAt(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type Task", field.Name)
+		},
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			err = ec.Recover(ctx, r)
+			ec.Error(ctx, err)
+		}
+	}()
+	ctx = graphql.WithFieldContext(ctx, fc)
+	if fc.Args, err = ec.field_Query_tasksReferencingWikiDocument_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
+		ec.Error(ctx, err)
+		return fc, err
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Query_tasksReferencingCredential(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Query_tasksReferencingCredential,
+		func(ctx context.Context) (any, error) {
+			fc := graphql.GetFieldContext(ctx)
+			return ec.Resolvers.Query().TasksReferencingCredential(ctx, fc.Args["credentialId"].(string))
+		},
+		func(ctx context.Context, next graphql.Resolver) graphql.Resolver {
+			directive0 := next
+
+			directive1 := func(ctx context.Context) (any, error) {
+				permission, err := ec.unmarshalNString2string(ctx, "operation:member")
+				if err != nil {
+					var zeroVal []*models.Task
+					return zeroVal, err
+				}
+				if ec.Directives.HasPermission == nil {
+					var zeroVal []*models.Task
+					return zeroVal, errors.New("directive hasPermission is not implemented")
+				}
+				return ec.Directives.HasPermission(ctx, nil, directive0, permission)
+			}
+
+			next = directive1
+			return next
+		},
+		ec.marshalNTask2ᚕᚖgithubᚗcomᚋvibeᚑc2ᚋvibeᚑc2ᚑcoreᚋcoreᚋpkgᚋmodelsᚐTaskᚄ,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_Query_tasksReferencingCredential(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Query",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "id":
+				return ec.fieldContext_Task_id(ctx, field)
+			case "operationId":
+				return ec.fieldContext_Task_operationId(ctx, field)
+			case "operation":
+				return ec.fieldContext_Task_operation(ctx, field)
+			case "name":
+				return ec.fieldContext_Task_name(ctx, field)
+			case "description":
+				return ec.fieldContext_Task_description(ctx, field)
+			case "riskScore":
+				return ec.fieldContext_Task_riskScore(ctx, field)
+			case "riskDescription":
+				return ec.fieldContext_Task_riskDescription(ctx, field)
+			case "profitScore":
+				return ec.fieldContext_Task_profitScore(ctx, field)
+			case "profitDescription":
+				return ec.fieldContext_Task_profitDescription(ctx, field)
+			case "stage":
+				return ec.fieldContext_Task_stage(ctx, field)
+			case "status":
+				return ec.fieldContext_Task_status(ctx, field)
+			case "assignees":
+				return ec.fieldContext_Task_assignees(ctx, field)
+			case "wikiReferences":
+				return ec.fieldContext_Task_wikiReferences(ctx, field)
+			case "credentialReferences":
+				return ec.fieldContext_Task_credentialReferences(ctx, field)
+			case "createdBy":
+				return ec.fieldContext_Task_createdBy(ctx, field)
+			case "lastUpdatedBy":
+				return ec.fieldContext_Task_lastUpdatedBy(ctx, field)
+			case "lastUpdatedAt":
+				return ec.fieldContext_Task_lastUpdatedAt(ctx, field)
+			case "deletedAt":
+				return ec.fieldContext_Task_deletedAt(ctx, field)
+			case "createdAt":
+				return ec.fieldContext_Task_createdAt(ctx, field)
+			case "updatedAt":
+				return ec.fieldContext_Task_updatedAt(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type Task", field.Name)
+		},
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			err = ec.Recover(ctx, r)
+			ec.Error(ctx, err)
+		}
+	}()
+	ctx = graphql.WithFieldContext(ctx, fc)
+	if fc.Args, err = ec.field_Query_tasksReferencingCredential_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
+		ec.Error(ctx, err)
+		return fc, err
+	}
+	return fc, nil
+}
+
 func (ec *executionContext) _Query_timelineBuckets(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
@@ -13294,6 +15621,8 @@ func (ec *executionContext) fieldContext_Query_wikiDocument(ctx context.Context,
 				return ec.fieldContext_WikiDocument_createdAt(ctx, field)
 			case "updatedAt":
 				return ec.fieldContext_WikiDocument_updatedAt(ctx, field)
+			case "taskBacklinks":
+				return ec.fieldContext_WikiDocument_taskBacklinks(ctx, field)
 			}
 			return nil, fmt.Errorf("no field named %q was found under type WikiDocument", field.Name)
 		},
@@ -13466,6 +15795,8 @@ func (ec *executionContext) fieldContext_Query_wikiDocumentTree(ctx context.Cont
 				return ec.fieldContext_WikiDocument_createdAt(ctx, field)
 			case "updatedAt":
 				return ec.fieldContext_WikiDocument_updatedAt(ctx, field)
+			case "taskBacklinks":
+				return ec.fieldContext_WikiDocument_taskBacklinks(ctx, field)
 			}
 			return nil, fmt.Errorf("no field named %q was found under type WikiDocument", field.Name)
 		},
@@ -13571,6 +15902,8 @@ func (ec *executionContext) fieldContext_Query_wikiDocumentChildren(ctx context.
 				return ec.fieldContext_WikiDocument_createdAt(ctx, field)
 			case "updatedAt":
 				return ec.fieldContext_WikiDocument_updatedAt(ctx, field)
+			case "taskBacklinks":
+				return ec.fieldContext_WikiDocument_taskBacklinks(ctx, field)
 			}
 			return nil, fmt.Errorf("no field named %q was found under type WikiDocument", field.Name)
 		},
@@ -13676,6 +16009,8 @@ func (ec *executionContext) fieldContext_Query_wikiDocumentTreeRevealPath(ctx co
 				return ec.fieldContext_WikiDocument_createdAt(ctx, field)
 			case "updatedAt":
 				return ec.fieldContext_WikiDocument_updatedAt(ctx, field)
+			case "taskBacklinks":
+				return ec.fieldContext_WikiDocument_taskBacklinks(ctx, field)
 			}
 			return nil, fmt.Errorf("no field named %q was found under type WikiDocument", field.Name)
 		},
@@ -13974,6 +16309,8 @@ func (ec *executionContext) fieldContext_Query_wikiDocumentTrashedDescendants(ct
 				return ec.fieldContext_WikiDocument_createdAt(ctx, field)
 			case "updatedAt":
 				return ec.fieldContext_WikiDocument_updatedAt(ctx, field)
+			case "taskBacklinks":
+				return ec.fieldContext_WikiDocument_taskBacklinks(ctx, field)
 			}
 			return nil, fmt.Errorf("no field named %q was found under type WikiDocument", field.Name)
 		},
@@ -14079,6 +16416,8 @@ func (ec *executionContext) fieldContext_Query_wikiDocumentBacklinks(ctx context
 				return ec.fieldContext_WikiDocument_createdAt(ctx, field)
 			case "updatedAt":
 				return ec.fieldContext_WikiDocument_updatedAt(ctx, field)
+			case "taskBacklinks":
+				return ec.fieldContext_WikiDocument_taskBacklinks(ctx, field)
 			}
 			return nil, fmt.Errorf("no field named %q was found under type WikiDocument", field.Name)
 		},
@@ -14184,6 +16523,8 @@ func (ec *executionContext) fieldContext_Query_wikiDocumentsReferencingCredentia
 				return ec.fieldContext_WikiDocument_createdAt(ctx, field)
 			case "updatedAt":
 				return ec.fieldContext_WikiDocument_updatedAt(ctx, field)
+			case "taskBacklinks":
+				return ec.fieldContext_WikiDocument_taskBacklinks(ctx, field)
 			}
 			return nil, fmt.Errorf("no field named %q was found under type WikiDocument", field.Name)
 		},
@@ -16384,6 +18725,75 @@ func (ec *executionContext) fieldContext_Subscription_sessionChanged(ctx context
 	return fc, nil
 }
 
+func (ec *executionContext) _Subscription_taskChanged(ctx context.Context, field graphql.CollectedField) (ret func(ctx context.Context) graphql.Marshaler) {
+	return graphql.ResolveFieldStream(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Subscription_taskChanged,
+		func(ctx context.Context) (any, error) {
+			fc := graphql.GetFieldContext(ctx)
+			return ec.Resolvers.Subscription().TaskChanged(ctx, fc.Args["operationId"].(string))
+		},
+		func(ctx context.Context, next graphql.Resolver) graphql.Resolver {
+			directive0 := next
+
+			directive1 := func(ctx context.Context) (any, error) {
+				permission, err := ec.unmarshalNString2string(ctx, "operation:member")
+				if err != nil {
+					var zeroVal *model.TaskEvent
+					return zeroVal, err
+				}
+				if ec.Directives.HasPermission == nil {
+					var zeroVal *model.TaskEvent
+					return zeroVal, errors.New("directive hasPermission is not implemented")
+				}
+				return ec.Directives.HasPermission(ctx, nil, directive0, permission)
+			}
+
+			next = directive1
+			return next
+		},
+		ec.marshalNTaskEvent2ᚖgithubᚗcomᚋvibeᚑc2ᚋvibeᚑc2ᚑcoreᚋcoreᚋpkgᚋgraphqlᚋmodelᚐTaskEvent,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_Subscription_taskChanged(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Subscription",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "action":
+				return ec.fieldContext_TaskEvent_action(ctx, field)
+			case "taskId":
+				return ec.fieldContext_TaskEvent_taskId(ctx, field)
+			case "operationId":
+				return ec.fieldContext_TaskEvent_operationId(ctx, field)
+			case "task":
+				return ec.fieldContext_TaskEvent_task(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type TaskEvent", field.Name)
+		},
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			err = ec.Recover(ctx, r)
+			ec.Error(ctx, err)
+		}
+	}()
+	ctx = graphql.WithFieldContext(ctx, fc)
+	if fc.Args, err = ec.field_Subscription_taskChanged_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
+		ec.Error(ctx, err)
+		return fc, err
+	}
+	return fc, nil
+}
+
 func (ec *executionContext) _Subscription_timelineEventAdded(ctx context.Context, field graphql.CollectedField) (ret func(ctx context.Context) graphql.Marshaler) {
 	return graphql.ResolveFieldStream(
 		ctx,
@@ -16603,6 +19013,1089 @@ func (ec *executionContext) fieldContext_Subscription_wikiDocumentPresenceChange
 	if fc.Args, err = ec.field_Subscription_wikiDocumentPresenceChanged_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
 		ec.Error(ctx, err)
 		return fc, err
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Task_id(ctx context.Context, field graphql.CollectedField, obj *models.Task) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Task_id,
+		func(ctx context.Context) (any, error) {
+			return ec.Resolvers.Task().ID(ctx, obj)
+		},
+		nil,
+		ec.marshalNID2string,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_Task_id(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Task",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type ID does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Task_operationId(ctx context.Context, field graphql.CollectedField, obj *models.Task) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Task_operationId,
+		func(ctx context.Context) (any, error) {
+			return ec.Resolvers.Task().OperationID(ctx, obj)
+		},
+		nil,
+		ec.marshalNID2string,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_Task_operationId(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Task",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type ID does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Task_operation(ctx context.Context, field graphql.CollectedField, obj *models.Task) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Task_operation,
+		func(ctx context.Context) (any, error) {
+			return ec.Resolvers.Task().Operation(ctx, obj)
+		},
+		nil,
+		ec.marshalNOperation2ᚖgithubᚗcomᚋvibeᚑc2ᚋvibeᚑc2ᚑcoreᚋcoreᚋpkgᚋmodelsᚐOperation,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_Task_operation(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Task",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "id":
+				return ec.fieldContext_Operation_id(ctx, field)
+			case "name":
+				return ec.fieldContext_Operation_name(ctx, field)
+			case "description":
+				return ec.fieldContext_Operation_description(ctx, field)
+			case "members":
+				return ec.fieldContext_Operation_members(ctx, field)
+			case "createdAt":
+				return ec.fieldContext_Operation_createdAt(ctx, field)
+			case "updatedAt":
+				return ec.fieldContext_Operation_updatedAt(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type Operation", field.Name)
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Task_name(ctx context.Context, field graphql.CollectedField, obj *models.Task) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Task_name,
+		func(ctx context.Context) (any, error) {
+			return obj.Name, nil
+		},
+		nil,
+		ec.marshalNString2string,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_Task_name(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Task",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Task_description(ctx context.Context, field graphql.CollectedField, obj *models.Task) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Task_description,
+		func(ctx context.Context) (any, error) {
+			return obj.Description, nil
+		},
+		nil,
+		ec.marshalNString2string,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_Task_description(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Task",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Task_riskScore(ctx context.Context, field graphql.CollectedField, obj *models.Task) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Task_riskScore,
+		func(ctx context.Context) (any, error) {
+			return ec.Resolvers.Task().RiskScore(ctx, obj)
+		},
+		nil,
+		ec.marshalNInt2int,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_Task_riskScore(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Task",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Int does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Task_riskDescription(ctx context.Context, field graphql.CollectedField, obj *models.Task) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Task_riskDescription,
+		func(ctx context.Context) (any, error) {
+			return obj.RiskDescription, nil
+		},
+		nil,
+		ec.marshalNString2string,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_Task_riskDescription(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Task",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Task_profitScore(ctx context.Context, field graphql.CollectedField, obj *models.Task) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Task_profitScore,
+		func(ctx context.Context) (any, error) {
+			return ec.Resolvers.Task().ProfitScore(ctx, obj)
+		},
+		nil,
+		ec.marshalNInt2int,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_Task_profitScore(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Task",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Int does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Task_profitDescription(ctx context.Context, field graphql.CollectedField, obj *models.Task) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Task_profitDescription,
+		func(ctx context.Context) (any, error) {
+			return obj.ProfitDescription, nil
+		},
+		nil,
+		ec.marshalNString2string,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_Task_profitDescription(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Task",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Task_stage(ctx context.Context, field graphql.CollectedField, obj *models.Task) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Task_stage,
+		func(ctx context.Context) (any, error) {
+			return obj.Stage, nil
+		},
+		nil,
+		ec.marshalNTaskStage2githubᚗcomᚋvibeᚑc2ᚋvibeᚑc2ᚑcoreᚋcoreᚋpkgᚋmodelsᚐTaskStage,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_Task_stage(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Task",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type TaskStage does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Task_status(ctx context.Context, field graphql.CollectedField, obj *models.Task) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Task_status,
+		func(ctx context.Context) (any, error) {
+			return obj.Status, nil
+		},
+		nil,
+		ec.marshalNTaskStatus2githubᚗcomᚋvibeᚑc2ᚋvibeᚑc2ᚑcoreᚋcoreᚋpkgᚋmodelsᚐTaskStatus,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_Task_status(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Task",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type TaskStatus does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Task_assignees(ctx context.Context, field graphql.CollectedField, obj *models.Task) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Task_assignees,
+		func(ctx context.Context) (any, error) {
+			return ec.Resolvers.Task().Assignees(ctx, obj)
+		},
+		nil,
+		ec.marshalNUser2ᚕᚖgithubᚗcomᚋvibeᚑc2ᚋvibeᚑc2ᚑcoreᚋcoreᚋpkgᚋmodelsᚐUserᚄ,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_Task_assignees(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Task",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "id":
+				return ec.fieldContext_User_id(ctx, field)
+			case "username":
+				return ec.fieldContext_User_username(ctx, field)
+			case "roles":
+				return ec.fieldContext_User_roles(ctx, field)
+			case "active":
+				return ec.fieldContext_User_active(ctx, field)
+			case "createdAt":
+				return ec.fieldContext_User_createdAt(ctx, field)
+			case "updatedAt":
+				return ec.fieldContext_User_updatedAt(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type User", field.Name)
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Task_wikiReferences(ctx context.Context, field graphql.CollectedField, obj *models.Task) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Task_wikiReferences,
+		func(ctx context.Context) (any, error) {
+			return ec.Resolvers.Task().WikiReferences(ctx, obj)
+		},
+		nil,
+		ec.marshalNWikiDocument2ᚕᚖgithubᚗcomᚋvibeᚑc2ᚋvibeᚑc2ᚑcoreᚋcoreᚋpkgᚋmodelsᚐWikiDocumentᚄ,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_Task_wikiReferences(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Task",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "id":
+				return ec.fieldContext_WikiDocument_id(ctx, field)
+			case "operationId":
+				return ec.fieldContext_WikiDocument_operationId(ctx, field)
+			case "parentDocument":
+				return ec.fieldContext_WikiDocument_parentDocument(ctx, field)
+			case "parentDocumentId":
+				return ec.fieldContext_WikiDocument_parentDocumentId(ctx, field)
+			case "childDocuments":
+				return ec.fieldContext_WikiDocument_childDocuments(ctx, field)
+			case "title":
+				return ec.fieldContext_WikiDocument_title(ctx, field)
+			case "content":
+				return ec.fieldContext_WikiDocument_content(ctx, field)
+			case "emoji":
+				return ec.fieldContext_WikiDocument_emoji(ctx, field)
+			case "color":
+				return ec.fieldContext_WikiDocument_color(ctx, field)
+			case "icon":
+				return ec.fieldContext_WikiDocument_icon(ctx, field)
+			case "sortOrder":
+				return ec.fieldContext_WikiDocument_sortOrder(ctx, field)
+			case "childCount":
+				return ec.fieldContext_WikiDocument_childCount(ctx, field)
+			case "backlinks":
+				return ec.fieldContext_WikiDocument_backlinks(ctx, field)
+			case "ancestors":
+				return ec.fieldContext_WikiDocument_ancestors(ctx, field)
+			case "createdBy":
+				return ec.fieldContext_WikiDocument_createdBy(ctx, field)
+			case "lastUpdatedBy":
+				return ec.fieldContext_WikiDocument_lastUpdatedBy(ctx, field)
+			case "lastUpdatedAt":
+				return ec.fieldContext_WikiDocument_lastUpdatedAt(ctx, field)
+			case "lastBackupAt":
+				return ec.fieldContext_WikiDocument_lastBackupAt(ctx, field)
+			case "deletedAt":
+				return ec.fieldContext_WikiDocument_deletedAt(ctx, field)
+			case "deletedBy":
+				return ec.fieldContext_WikiDocument_deletedBy(ctx, field)
+			case "createdAt":
+				return ec.fieldContext_WikiDocument_createdAt(ctx, field)
+			case "updatedAt":
+				return ec.fieldContext_WikiDocument_updatedAt(ctx, field)
+			case "taskBacklinks":
+				return ec.fieldContext_WikiDocument_taskBacklinks(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type WikiDocument", field.Name)
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Task_credentialReferences(ctx context.Context, field graphql.CollectedField, obj *models.Task) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Task_credentialReferences,
+		func(ctx context.Context) (any, error) {
+			return ec.Resolvers.Task().CredentialReferences(ctx, obj)
+		},
+		nil,
+		ec.marshalNCredential2ᚕᚖgithubᚗcomᚋvibeᚑc2ᚋvibeᚑc2ᚑcoreᚋcoreᚋpkgᚋmodelsᚐCredentialᚄ,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_Task_credentialReferences(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Task",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "id":
+				return ec.fieldContext_Credential_id(ctx, field)
+			case "operationId":
+				return ec.fieldContext_Credential_operationId(ctx, field)
+			case "operation":
+				return ec.fieldContext_Credential_operation(ctx, field)
+			case "name":
+				return ec.fieldContext_Credential_name(ctx, field)
+			case "type":
+				return ec.fieldContext_Credential_type(ctx, field)
+			case "username":
+				return ec.fieldContext_Credential_username(ctx, field)
+			case "password":
+				return ec.fieldContext_Credential_password(ctx, field)
+			case "keys":
+				return ec.fieldContext_Credential_keys(ctx, field)
+			case "properties":
+				return ec.fieldContext_Credential_properties(ctx, field)
+			case "isValid":
+				return ec.fieldContext_Credential_isValid(ctx, field)
+			case "tags":
+				return ec.fieldContext_Credential_tags(ctx, field)
+			case "comments":
+				return ec.fieldContext_Credential_comments(ctx, field)
+			case "createdBy":
+				return ec.fieldContext_Credential_createdBy(ctx, field)
+			case "backlinkCount":
+				return ec.fieldContext_Credential_backlinkCount(ctx, field)
+			case "backlinks":
+				return ec.fieldContext_Credential_backlinks(ctx, field)
+			case "createdAt":
+				return ec.fieldContext_Credential_createdAt(ctx, field)
+			case "updatedAt":
+				return ec.fieldContext_Credential_updatedAt(ctx, field)
+			case "taskBacklinks":
+				return ec.fieldContext_Credential_taskBacklinks(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type Credential", field.Name)
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Task_createdBy(ctx context.Context, field graphql.CollectedField, obj *models.Task) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Task_createdBy,
+		func(ctx context.Context) (any, error) {
+			return ec.Resolvers.Task().CreatedBy(ctx, obj)
+		},
+		nil,
+		ec.marshalOUser2ᚖgithubᚗcomᚋvibeᚑc2ᚋvibeᚑc2ᚑcoreᚋcoreᚋpkgᚋmodelsᚐUser,
+		true,
+		false,
+	)
+}
+
+func (ec *executionContext) fieldContext_Task_createdBy(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Task",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "id":
+				return ec.fieldContext_User_id(ctx, field)
+			case "username":
+				return ec.fieldContext_User_username(ctx, field)
+			case "roles":
+				return ec.fieldContext_User_roles(ctx, field)
+			case "active":
+				return ec.fieldContext_User_active(ctx, field)
+			case "createdAt":
+				return ec.fieldContext_User_createdAt(ctx, field)
+			case "updatedAt":
+				return ec.fieldContext_User_updatedAt(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type User", field.Name)
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Task_lastUpdatedBy(ctx context.Context, field graphql.CollectedField, obj *models.Task) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Task_lastUpdatedBy,
+		func(ctx context.Context) (any, error) {
+			return ec.Resolvers.Task().LastUpdatedBy(ctx, obj)
+		},
+		nil,
+		ec.marshalOUser2ᚖgithubᚗcomᚋvibeᚑc2ᚋvibeᚑc2ᚑcoreᚋcoreᚋpkgᚋmodelsᚐUser,
+		true,
+		false,
+	)
+}
+
+func (ec *executionContext) fieldContext_Task_lastUpdatedBy(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Task",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "id":
+				return ec.fieldContext_User_id(ctx, field)
+			case "username":
+				return ec.fieldContext_User_username(ctx, field)
+			case "roles":
+				return ec.fieldContext_User_roles(ctx, field)
+			case "active":
+				return ec.fieldContext_User_active(ctx, field)
+			case "createdAt":
+				return ec.fieldContext_User_createdAt(ctx, field)
+			case "updatedAt":
+				return ec.fieldContext_User_updatedAt(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type User", field.Name)
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Task_lastUpdatedAt(ctx context.Context, field graphql.CollectedField, obj *models.Task) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Task_lastUpdatedAt,
+		func(ctx context.Context) (any, error) {
+			return ec.Resolvers.Task().LastUpdatedAt(ctx, obj)
+		},
+		nil,
+		ec.marshalOString2ᚖstring,
+		true,
+		false,
+	)
+}
+
+func (ec *executionContext) fieldContext_Task_lastUpdatedAt(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Task",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Task_deletedAt(ctx context.Context, field graphql.CollectedField, obj *models.Task) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Task_deletedAt,
+		func(ctx context.Context) (any, error) {
+			return ec.Resolvers.Task().DeletedAt(ctx, obj)
+		},
+		nil,
+		ec.marshalOString2ᚖstring,
+		true,
+		false,
+	)
+}
+
+func (ec *executionContext) fieldContext_Task_deletedAt(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Task",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Task_createdAt(ctx context.Context, field graphql.CollectedField, obj *models.Task) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Task_createdAt,
+		func(ctx context.Context) (any, error) {
+			return ec.Resolvers.Task().CreatedAt(ctx, obj)
+		},
+		nil,
+		ec.marshalNString2string,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_Task_createdAt(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Task",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Task_updatedAt(ctx context.Context, field graphql.CollectedField, obj *models.Task) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Task_updatedAt,
+		func(ctx context.Context) (any, error) {
+			return ec.Resolvers.Task().UpdatedAt(ctx, obj)
+		},
+		nil,
+		ec.marshalNString2string,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_Task_updatedAt(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Task",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _TaskConnection_edges(ctx context.Context, field graphql.CollectedField, obj *model.TaskConnection) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_TaskConnection_edges,
+		func(ctx context.Context) (any, error) {
+			return obj.Edges, nil
+		},
+		nil,
+		ec.marshalNTaskEdge2ᚕᚖgithubᚗcomᚋvibeᚑc2ᚋvibeᚑc2ᚑcoreᚋcoreᚋpkgᚋgraphqlᚋmodelᚐTaskEdgeᚄ,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_TaskConnection_edges(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "TaskConnection",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "node":
+				return ec.fieldContext_TaskEdge_node(ctx, field)
+			case "cursor":
+				return ec.fieldContext_TaskEdge_cursor(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type TaskEdge", field.Name)
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _TaskConnection_pageInfo(ctx context.Context, field graphql.CollectedField, obj *model.TaskConnection) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_TaskConnection_pageInfo,
+		func(ctx context.Context) (any, error) {
+			return obj.PageInfo, nil
+		},
+		nil,
+		ec.marshalNPageInfo2ᚖgithubᚗcomᚋvibeᚑc2ᚋvibeᚑc2ᚑcoreᚋcoreᚋpkgᚋpaginationᚐPageInfo,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_TaskConnection_pageInfo(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "TaskConnection",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "hasNextPage":
+				return ec.fieldContext_PageInfo_hasNextPage(ctx, field)
+			case "hasPreviousPage":
+				return ec.fieldContext_PageInfo_hasPreviousPage(ctx, field)
+			case "startCursor":
+				return ec.fieldContext_PageInfo_startCursor(ctx, field)
+			case "endCursor":
+				return ec.fieldContext_PageInfo_endCursor(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type PageInfo", field.Name)
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _TaskConnection_totalCount(ctx context.Context, field graphql.CollectedField, obj *model.TaskConnection) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_TaskConnection_totalCount,
+		func(ctx context.Context) (any, error) {
+			return obj.TotalCount, nil
+		},
+		nil,
+		ec.marshalNInt2int,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_TaskConnection_totalCount(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "TaskConnection",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Int does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _TaskEdge_node(ctx context.Context, field graphql.CollectedField, obj *model.TaskEdge) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_TaskEdge_node,
+		func(ctx context.Context) (any, error) {
+			return obj.Node, nil
+		},
+		nil,
+		ec.marshalNTask2ᚖgithubᚗcomᚋvibeᚑc2ᚋvibeᚑc2ᚑcoreᚋcoreᚋpkgᚋmodelsᚐTask,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_TaskEdge_node(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "TaskEdge",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "id":
+				return ec.fieldContext_Task_id(ctx, field)
+			case "operationId":
+				return ec.fieldContext_Task_operationId(ctx, field)
+			case "operation":
+				return ec.fieldContext_Task_operation(ctx, field)
+			case "name":
+				return ec.fieldContext_Task_name(ctx, field)
+			case "description":
+				return ec.fieldContext_Task_description(ctx, field)
+			case "riskScore":
+				return ec.fieldContext_Task_riskScore(ctx, field)
+			case "riskDescription":
+				return ec.fieldContext_Task_riskDescription(ctx, field)
+			case "profitScore":
+				return ec.fieldContext_Task_profitScore(ctx, field)
+			case "profitDescription":
+				return ec.fieldContext_Task_profitDescription(ctx, field)
+			case "stage":
+				return ec.fieldContext_Task_stage(ctx, field)
+			case "status":
+				return ec.fieldContext_Task_status(ctx, field)
+			case "assignees":
+				return ec.fieldContext_Task_assignees(ctx, field)
+			case "wikiReferences":
+				return ec.fieldContext_Task_wikiReferences(ctx, field)
+			case "credentialReferences":
+				return ec.fieldContext_Task_credentialReferences(ctx, field)
+			case "createdBy":
+				return ec.fieldContext_Task_createdBy(ctx, field)
+			case "lastUpdatedBy":
+				return ec.fieldContext_Task_lastUpdatedBy(ctx, field)
+			case "lastUpdatedAt":
+				return ec.fieldContext_Task_lastUpdatedAt(ctx, field)
+			case "deletedAt":
+				return ec.fieldContext_Task_deletedAt(ctx, field)
+			case "createdAt":
+				return ec.fieldContext_Task_createdAt(ctx, field)
+			case "updatedAt":
+				return ec.fieldContext_Task_updatedAt(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type Task", field.Name)
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _TaskEdge_cursor(ctx context.Context, field graphql.CollectedField, obj *model.TaskEdge) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_TaskEdge_cursor,
+		func(ctx context.Context) (any, error) {
+			return obj.Cursor, nil
+		},
+		nil,
+		ec.marshalNString2string,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_TaskEdge_cursor(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "TaskEdge",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _TaskEvent_action(ctx context.Context, field graphql.CollectedField, obj *model.TaskEvent) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_TaskEvent_action,
+		func(ctx context.Context) (any, error) {
+			return obj.Action, nil
+		},
+		nil,
+		ec.marshalNEventAction2githubᚗcomᚋvibeᚑc2ᚋvibeᚑc2ᚑcoreᚋcoreᚋpkgᚋgraphqlᚋmodelᚐEventAction,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_TaskEvent_action(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "TaskEvent",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type EventAction does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _TaskEvent_taskId(ctx context.Context, field graphql.CollectedField, obj *model.TaskEvent) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_TaskEvent_taskId,
+		func(ctx context.Context) (any, error) {
+			return obj.TaskID, nil
+		},
+		nil,
+		ec.marshalNID2string,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_TaskEvent_taskId(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "TaskEvent",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type ID does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _TaskEvent_operationId(ctx context.Context, field graphql.CollectedField, obj *model.TaskEvent) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_TaskEvent_operationId,
+		func(ctx context.Context) (any, error) {
+			return obj.OperationID, nil
+		},
+		nil,
+		ec.marshalNID2string,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_TaskEvent_operationId(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "TaskEvent",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type ID does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _TaskEvent_task(ctx context.Context, field graphql.CollectedField, obj *model.TaskEvent) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_TaskEvent_task,
+		func(ctx context.Context) (any, error) {
+			return obj.Task, nil
+		},
+		nil,
+		ec.marshalOTask2ᚖgithubᚗcomᚋvibeᚑc2ᚋvibeᚑc2ᚑcoreᚋcoreᚋpkgᚋmodelsᚐTask,
+		true,
+		false,
+	)
+}
+
+func (ec *executionContext) fieldContext_TaskEvent_task(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "TaskEvent",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "id":
+				return ec.fieldContext_Task_id(ctx, field)
+			case "operationId":
+				return ec.fieldContext_Task_operationId(ctx, field)
+			case "operation":
+				return ec.fieldContext_Task_operation(ctx, field)
+			case "name":
+				return ec.fieldContext_Task_name(ctx, field)
+			case "description":
+				return ec.fieldContext_Task_description(ctx, field)
+			case "riskScore":
+				return ec.fieldContext_Task_riskScore(ctx, field)
+			case "riskDescription":
+				return ec.fieldContext_Task_riskDescription(ctx, field)
+			case "profitScore":
+				return ec.fieldContext_Task_profitScore(ctx, field)
+			case "profitDescription":
+				return ec.fieldContext_Task_profitDescription(ctx, field)
+			case "stage":
+				return ec.fieldContext_Task_stage(ctx, field)
+			case "status":
+				return ec.fieldContext_Task_status(ctx, field)
+			case "assignees":
+				return ec.fieldContext_Task_assignees(ctx, field)
+			case "wikiReferences":
+				return ec.fieldContext_Task_wikiReferences(ctx, field)
+			case "credentialReferences":
+				return ec.fieldContext_Task_credentialReferences(ctx, field)
+			case "createdBy":
+				return ec.fieldContext_Task_createdBy(ctx, field)
+			case "lastUpdatedBy":
+				return ec.fieldContext_Task_lastUpdatedBy(ctx, field)
+			case "lastUpdatedAt":
+				return ec.fieldContext_Task_lastUpdatedAt(ctx, field)
+			case "deletedAt":
+				return ec.fieldContext_Task_deletedAt(ctx, field)
+			case "createdAt":
+				return ec.fieldContext_Task_createdAt(ctx, field)
+			case "updatedAt":
+				return ec.fieldContext_Task_updatedAt(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type Task", field.Name)
+		},
 	}
 	return fc, nil
 }
@@ -17879,6 +21372,8 @@ func (ec *executionContext) fieldContext_WikiDocument_parentDocument(_ context.C
 				return ec.fieldContext_WikiDocument_createdAt(ctx, field)
 			case "updatedAt":
 				return ec.fieldContext_WikiDocument_updatedAt(ctx, field)
+			case "taskBacklinks":
+				return ec.fieldContext_WikiDocument_taskBacklinks(ctx, field)
 			}
 			return nil, fmt.Errorf("no field named %q was found under type WikiDocument", field.Name)
 		},
@@ -17983,6 +21478,8 @@ func (ec *executionContext) fieldContext_WikiDocument_childDocuments(_ context.C
 				return ec.fieldContext_WikiDocument_createdAt(ctx, field)
 			case "updatedAt":
 				return ec.fieldContext_WikiDocument_updatedAt(ctx, field)
+			case "taskBacklinks":
+				return ec.fieldContext_WikiDocument_taskBacklinks(ctx, field)
 			}
 			return nil, fmt.Errorf("no field named %q was found under type WikiDocument", field.Name)
 		},
@@ -18261,6 +21758,8 @@ func (ec *executionContext) fieldContext_WikiDocument_backlinks(_ context.Contex
 				return ec.fieldContext_WikiDocument_createdAt(ctx, field)
 			case "updatedAt":
 				return ec.fieldContext_WikiDocument_updatedAt(ctx, field)
+			case "taskBacklinks":
+				return ec.fieldContext_WikiDocument_taskBacklinks(ctx, field)
 			}
 			return nil, fmt.Errorf("no field named %q was found under type WikiDocument", field.Name)
 		},
@@ -18580,6 +22079,77 @@ func (ec *executionContext) fieldContext_WikiDocument_updatedAt(_ context.Contex
 		IsResolver: true,
 		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
 			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _WikiDocument_taskBacklinks(ctx context.Context, field graphql.CollectedField, obj *models.WikiDocument) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_WikiDocument_taskBacklinks,
+		func(ctx context.Context) (any, error) {
+			return ec.Resolvers.WikiDocument().TaskBacklinks(ctx, obj)
+		},
+		nil,
+		ec.marshalNTask2ᚕᚖgithubᚗcomᚋvibeᚑc2ᚋvibeᚑc2ᚑcoreᚋcoreᚋpkgᚋmodelsᚐTaskᚄ,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_WikiDocument_taskBacklinks(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "WikiDocument",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "id":
+				return ec.fieldContext_Task_id(ctx, field)
+			case "operationId":
+				return ec.fieldContext_Task_operationId(ctx, field)
+			case "operation":
+				return ec.fieldContext_Task_operation(ctx, field)
+			case "name":
+				return ec.fieldContext_Task_name(ctx, field)
+			case "description":
+				return ec.fieldContext_Task_description(ctx, field)
+			case "riskScore":
+				return ec.fieldContext_Task_riskScore(ctx, field)
+			case "riskDescription":
+				return ec.fieldContext_Task_riskDescription(ctx, field)
+			case "profitScore":
+				return ec.fieldContext_Task_profitScore(ctx, field)
+			case "profitDescription":
+				return ec.fieldContext_Task_profitDescription(ctx, field)
+			case "stage":
+				return ec.fieldContext_Task_stage(ctx, field)
+			case "status":
+				return ec.fieldContext_Task_status(ctx, field)
+			case "assignees":
+				return ec.fieldContext_Task_assignees(ctx, field)
+			case "wikiReferences":
+				return ec.fieldContext_Task_wikiReferences(ctx, field)
+			case "credentialReferences":
+				return ec.fieldContext_Task_credentialReferences(ctx, field)
+			case "createdBy":
+				return ec.fieldContext_Task_createdBy(ctx, field)
+			case "lastUpdatedBy":
+				return ec.fieldContext_Task_lastUpdatedBy(ctx, field)
+			case "lastUpdatedAt":
+				return ec.fieldContext_Task_lastUpdatedAt(ctx, field)
+			case "deletedAt":
+				return ec.fieldContext_Task_deletedAt(ctx, field)
+			case "createdAt":
+				return ec.fieldContext_Task_createdAt(ctx, field)
+			case "updatedAt":
+				return ec.fieldContext_Task_updatedAt(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type Task", field.Name)
 		},
 	}
 	return fc, nil
@@ -19386,6 +22956,8 @@ func (ec *executionContext) fieldContext_WikiDocumentEdge_node(_ context.Context
 				return ec.fieldContext_WikiDocument_createdAt(ctx, field)
 			case "updatedAt":
 				return ec.fieldContext_WikiDocument_updatedAt(ctx, field)
+			case "taskBacklinks":
+				return ec.fieldContext_WikiDocument_taskBacklinks(ctx, field)
 			}
 			return nil, fmt.Errorf("no field named %q was found under type WikiDocument", field.Name)
 		},
@@ -19722,6 +23294,8 @@ func (ec *executionContext) fieldContext_WikiDocumentEvent_document(_ context.Co
 				return ec.fieldContext_WikiDocument_createdAt(ctx, field)
 			case "updatedAt":
 				return ec.fieldContext_WikiDocument_updatedAt(ctx, field)
+			case "taskBacklinks":
+				return ec.fieldContext_WikiDocument_taskBacklinks(ctx, field)
 			}
 			return nil, fmt.Errorf("no field named %q was found under type WikiDocument", field.Name)
 		},
@@ -20037,6 +23611,8 @@ func (ec *executionContext) fieldContext_WikiDocumentVisit_document(_ context.Co
 				return ec.fieldContext_WikiDocument_createdAt(ctx, field)
 			case "updatedAt":
 				return ec.fieldContext_WikiDocument_updatedAt(ctx, field)
+			case "taskBacklinks":
+				return ec.fieldContext_WikiDocument_taskBacklinks(ctx, field)
 			}
 			return nil, fmt.Errorf("no field named %q was found under type WikiDocument", field.Name)
 		},
@@ -20407,6 +23983,8 @@ func (ec *executionContext) fieldContext_WikiSearchHit_document(_ context.Contex
 				return ec.fieldContext_WikiDocument_createdAt(ctx, field)
 			case "updatedAt":
 				return ec.fieldContext_WikiDocument_updatedAt(ctx, field)
+			case "taskBacklinks":
+				return ec.fieldContext_WikiDocument_taskBacklinks(ctx, field)
 			}
 			return nil, fmt.Errorf("no field named %q was found under type WikiDocument", field.Name)
 		},
@@ -22011,6 +25589,50 @@ func (ec *executionContext) fieldContext___Type_isOneOf(_ context.Context, field
 
 // region    **************************** input.gotpl *****************************
 
+func (ec *executionContext) unmarshalInputChangeTaskStageInput(ctx context.Context, obj any) (model.ChangeTaskStageInput, error) {
+	var it model.ChangeTaskStageInput
+	if obj == nil {
+		return it, nil
+	}
+
+	asMap := map[string]any{}
+	for k, v := range obj.(map[string]any) {
+		asMap[k] = v
+	}
+
+	fieldsInOrder := [...]string{"taskId", "stage", "status"}
+	for _, k := range fieldsInOrder {
+		v, ok := asMap[k]
+		if !ok {
+			continue
+		}
+		switch k {
+		case "taskId":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("taskId"))
+			data, err := ec.unmarshalNID2string(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.TaskID = data
+		case "stage":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("stage"))
+			data, err := ec.unmarshalNTaskStage2githubᚗcomᚋvibeᚑc2ᚋvibeᚑc2ᚑcoreᚋcoreᚋpkgᚋmodelsᚐTaskStage(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.Stage = data
+		case "status":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("status"))
+			data, err := ec.unmarshalOTaskStatus2ᚖgithubᚗcomᚋvibeᚑc2ᚋvibeᚑc2ᚑcoreᚋcoreᚋpkgᚋmodelsᚐTaskStatus(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.Status = data
+		}
+	}
+	return it, nil
+}
+
 func (ec *executionContext) unmarshalInputCreateCredentialInput(ctx context.Context, obj any) (model.CreateCredentialInput, error) {
 	var it model.CreateCredentialInput
 	if obj == nil {
@@ -22261,6 +25883,113 @@ func (ec *executionContext) unmarshalInputCreateSchemeNetworkPortInput(ctx conte
 				return it, err
 			}
 			it.Notes = data
+		}
+	}
+	return it, nil
+}
+
+func (ec *executionContext) unmarshalInputCreateTaskInput(ctx context.Context, obj any) (model.CreateTaskInput, error) {
+	var it model.CreateTaskInput
+	if obj == nil {
+		return it, nil
+	}
+
+	asMap := map[string]any{}
+	for k, v := range obj.(map[string]any) {
+		asMap[k] = v
+	}
+
+	fieldsInOrder := [...]string{"operationId", "name", "description", "riskScore", "riskDescription", "profitScore", "profitDescription", "assigneeIds", "wikiReferenceIds", "credentialReferenceIds", "stage", "status"}
+	for _, k := range fieldsInOrder {
+		v, ok := asMap[k]
+		if !ok {
+			continue
+		}
+		switch k {
+		case "operationId":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("operationId"))
+			data, err := ec.unmarshalNID2string(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.OperationID = data
+		case "name":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("name"))
+			data, err := ec.unmarshalNString2string(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.Name = data
+		case "description":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("description"))
+			data, err := ec.unmarshalOString2ᚖstring(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.Description = data
+		case "riskScore":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("riskScore"))
+			data, err := ec.unmarshalNInt2int(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.RiskScore = data
+		case "riskDescription":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("riskDescription"))
+			data, err := ec.unmarshalOString2ᚖstring(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.RiskDescription = data
+		case "profitScore":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("profitScore"))
+			data, err := ec.unmarshalNInt2int(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.ProfitScore = data
+		case "profitDescription":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("profitDescription"))
+			data, err := ec.unmarshalOString2ᚖstring(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.ProfitDescription = data
+		case "assigneeIds":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("assigneeIds"))
+			data, err := ec.unmarshalOID2ᚕstringᚄ(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.AssigneeIds = data
+		case "wikiReferenceIds":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("wikiReferenceIds"))
+			data, err := ec.unmarshalOID2ᚕstringᚄ(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.WikiReferenceIds = data
+		case "credentialReferenceIds":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("credentialReferenceIds"))
+			data, err := ec.unmarshalOID2ᚕstringᚄ(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.CredentialReferenceIds = data
+		case "stage":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("stage"))
+			data, err := ec.unmarshalOTaskStage2ᚖgithubᚗcomᚋvibeᚑc2ᚋvibeᚑc2ᚑcoreᚋcoreᚋpkgᚋmodelsᚐTaskStage(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.Stage = data
+		case "status":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("status"))
+			data, err := ec.unmarshalOTaskStatus2ᚖgithubᚗcomᚋvibeᚑc2ᚋvibeᚑc2ᚑcoreᚋcoreᚋpkgᚋmodelsᚐTaskStatus(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.Status = data
 		}
 	}
 	return it, nil
@@ -22761,6 +26490,71 @@ func (ec *executionContext) unmarshalInputUpdateSchemeNetworkPortInput(ctx conte
 				return it, err
 			}
 			it.Notes = data
+		}
+	}
+	return it, nil
+}
+
+func (ec *executionContext) unmarshalInputUpdateTaskInput(ctx context.Context, obj any) (model.UpdateTaskInput, error) {
+	var it model.UpdateTaskInput
+	if obj == nil {
+		return it, nil
+	}
+
+	asMap := map[string]any{}
+	for k, v := range obj.(map[string]any) {
+		asMap[k] = v
+	}
+
+	fieldsInOrder := [...]string{"name", "description", "riskScore", "riskDescription", "profitScore", "profitDescription"}
+	for _, k := range fieldsInOrder {
+		v, ok := asMap[k]
+		if !ok {
+			continue
+		}
+		switch k {
+		case "name":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("name"))
+			data, err := ec.unmarshalOString2ᚖstring(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.Name = data
+		case "description":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("description"))
+			data, err := ec.unmarshalOString2ᚖstring(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.Description = data
+		case "riskScore":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("riskScore"))
+			data, err := ec.unmarshalOInt2ᚖint(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.RiskScore = data
+		case "riskDescription":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("riskDescription"))
+			data, err := ec.unmarshalOString2ᚖstring(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.RiskDescription = data
+		case "profitScore":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("profitScore"))
+			data, err := ec.unmarshalOInt2ᚖint(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.ProfitScore = data
+		case "profitDescription":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("profitDescription"))
+			data, err := ec.unmarshalOString2ᚖstring(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.ProfitDescription = data
 		}
 	}
 	return it, nil
@@ -23491,6 +27285,42 @@ func (ec *executionContext) _Credential(ctx context.Context, sel ast.SelectionSe
 			}
 
 			out.Concurrently(i, func(ctx context.Context) graphql.Marshaler { return innerFunc(ctx, out) })
+		case "taskBacklinks":
+			field := field
+
+			innerFunc := func(ctx context.Context, fs *graphql.FieldSet) (res graphql.Marshaler) {
+				defer func() {
+					if r := recover(); r != nil {
+						ec.Error(ctx, ec.Recover(ctx, r))
+					}
+				}()
+				res = ec._Credential_taskBacklinks(ctx, field, obj)
+				if res == graphql.Null {
+					atomic.AddUint32(&fs.Invalids, 1)
+				}
+				return res
+			}
+
+			if field.Deferrable != nil {
+				dfs, ok := deferred[field.Deferrable.Label]
+				di := 0
+				if ok {
+					dfs.AddField(field)
+					di = len(dfs.Values) - 1
+				} else {
+					dfs = graphql.NewFieldSet([]graphql.CollectedField{field})
+					deferred[field.Deferrable.Label] = dfs
+				}
+				dfs.Concurrently(di, func(ctx context.Context) graphql.Marshaler {
+					return innerFunc(ctx, dfs)
+				})
+
+				// don't run the out.Concurrently() call below
+				out.Values[i] = graphql.Null
+				continue
+			}
+
+			out.Concurrently(i, func(ctx context.Context) graphql.Marshaler { return innerFunc(ctx, out) })
 		default:
 			panic("unknown field " + strconv.Quote(field.Name))
 		}
@@ -24151,6 +27981,69 @@ func (ec *executionContext) _Mutation(ctx context.Context, sel ast.SelectionSet)
 		case "adminRevokeAllUserSessions":
 			out.Values[i] = ec.OperationContext.RootResolverMiddleware(innerCtx, func(ctx context.Context) (res graphql.Marshaler) {
 				return ec._Mutation_adminRevokeAllUserSessions(ctx, field)
+			})
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "createTask":
+			out.Values[i] = ec.OperationContext.RootResolverMiddleware(innerCtx, func(ctx context.Context) (res graphql.Marshaler) {
+				return ec._Mutation_createTask(ctx, field)
+			})
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "updateTask":
+			out.Values[i] = ec.OperationContext.RootResolverMiddleware(innerCtx, func(ctx context.Context) (res graphql.Marshaler) {
+				return ec._Mutation_updateTask(ctx, field)
+			})
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "changeTaskStage":
+			out.Values[i] = ec.OperationContext.RootResolverMiddleware(innerCtx, func(ctx context.Context) (res graphql.Marshaler) {
+				return ec._Mutation_changeTaskStage(ctx, field)
+			})
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "setTaskAssignees":
+			out.Values[i] = ec.OperationContext.RootResolverMiddleware(innerCtx, func(ctx context.Context) (res graphql.Marshaler) {
+				return ec._Mutation_setTaskAssignees(ctx, field)
+			})
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "setTaskWikiReferences":
+			out.Values[i] = ec.OperationContext.RootResolverMiddleware(innerCtx, func(ctx context.Context) (res graphql.Marshaler) {
+				return ec._Mutation_setTaskWikiReferences(ctx, field)
+			})
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "setTaskCredentialReferences":
+			out.Values[i] = ec.OperationContext.RootResolverMiddleware(innerCtx, func(ctx context.Context) (res graphql.Marshaler) {
+				return ec._Mutation_setTaskCredentialReferences(ctx, field)
+			})
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "deleteTask":
+			out.Values[i] = ec.OperationContext.RootResolverMiddleware(innerCtx, func(ctx context.Context) (res graphql.Marshaler) {
+				return ec._Mutation_deleteTask(ctx, field)
+			})
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "restoreTask":
+			out.Values[i] = ec.OperationContext.RootResolverMiddleware(innerCtx, func(ctx context.Context) (res graphql.Marshaler) {
+				return ec._Mutation_restoreTask(ctx, field)
+			})
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "purgeTask":
+			out.Values[i] = ec.OperationContext.RootResolverMiddleware(innerCtx, func(ctx context.Context) (res graphql.Marshaler) {
+				return ec._Mutation_purgeTask(ctx, field)
 			})
 			if out.Values[i] == graphql.Null {
 				out.Invalids++
@@ -25181,6 +29074,116 @@ func (ec *executionContext) _Query(ctx context.Context, sel ast.SelectionSet) gr
 					}
 				}()
 				res = ec._Query_session(ctx, field)
+				if res == graphql.Null {
+					atomic.AddUint32(&fs.Invalids, 1)
+				}
+				return res
+			}
+
+			rrm := func(ctx context.Context) graphql.Marshaler {
+				return ec.OperationContext.RootResolverMiddleware(ctx,
+					func(ctx context.Context) graphql.Marshaler { return innerFunc(ctx, out) })
+			}
+
+			out.Concurrently(i, func(ctx context.Context) graphql.Marshaler { return rrm(innerCtx) })
+		case "task":
+			field := field
+
+			innerFunc := func(ctx context.Context, fs *graphql.FieldSet) (res graphql.Marshaler) {
+				defer func() {
+					if r := recover(); r != nil {
+						ec.Error(ctx, ec.Recover(ctx, r))
+					}
+				}()
+				res = ec._Query_task(ctx, field)
+				if res == graphql.Null {
+					atomic.AddUint32(&fs.Invalids, 1)
+				}
+				return res
+			}
+
+			rrm := func(ctx context.Context) graphql.Marshaler {
+				return ec.OperationContext.RootResolverMiddleware(ctx,
+					func(ctx context.Context) graphql.Marshaler { return innerFunc(ctx, out) })
+			}
+
+			out.Concurrently(i, func(ctx context.Context) graphql.Marshaler { return rrm(innerCtx) })
+		case "tasks":
+			field := field
+
+			innerFunc := func(ctx context.Context, fs *graphql.FieldSet) (res graphql.Marshaler) {
+				defer func() {
+					if r := recover(); r != nil {
+						ec.Error(ctx, ec.Recover(ctx, r))
+					}
+				}()
+				res = ec._Query_tasks(ctx, field)
+				if res == graphql.Null {
+					atomic.AddUint32(&fs.Invalids, 1)
+				}
+				return res
+			}
+
+			rrm := func(ctx context.Context) graphql.Marshaler {
+				return ec.OperationContext.RootResolverMiddleware(ctx,
+					func(ctx context.Context) graphql.Marshaler { return innerFunc(ctx, out) })
+			}
+
+			out.Concurrently(i, func(ctx context.Context) graphql.Marshaler { return rrm(innerCtx) })
+		case "taskTrash":
+			field := field
+
+			innerFunc := func(ctx context.Context, fs *graphql.FieldSet) (res graphql.Marshaler) {
+				defer func() {
+					if r := recover(); r != nil {
+						ec.Error(ctx, ec.Recover(ctx, r))
+					}
+				}()
+				res = ec._Query_taskTrash(ctx, field)
+				if res == graphql.Null {
+					atomic.AddUint32(&fs.Invalids, 1)
+				}
+				return res
+			}
+
+			rrm := func(ctx context.Context) graphql.Marshaler {
+				return ec.OperationContext.RootResolverMiddleware(ctx,
+					func(ctx context.Context) graphql.Marshaler { return innerFunc(ctx, out) })
+			}
+
+			out.Concurrently(i, func(ctx context.Context) graphql.Marshaler { return rrm(innerCtx) })
+		case "tasksReferencingWikiDocument":
+			field := field
+
+			innerFunc := func(ctx context.Context, fs *graphql.FieldSet) (res graphql.Marshaler) {
+				defer func() {
+					if r := recover(); r != nil {
+						ec.Error(ctx, ec.Recover(ctx, r))
+					}
+				}()
+				res = ec._Query_tasksReferencingWikiDocument(ctx, field)
+				if res == graphql.Null {
+					atomic.AddUint32(&fs.Invalids, 1)
+				}
+				return res
+			}
+
+			rrm := func(ctx context.Context) graphql.Marshaler {
+				return ec.OperationContext.RootResolverMiddleware(ctx,
+					func(ctx context.Context) graphql.Marshaler { return innerFunc(ctx, out) })
+			}
+
+			out.Concurrently(i, func(ctx context.Context) graphql.Marshaler { return rrm(innerCtx) })
+		case "tasksReferencingCredential":
+			field := field
+
+			innerFunc := func(ctx context.Context, fs *graphql.FieldSet) (res graphql.Marshaler) {
+				defer func() {
+					if r := recover(); r != nil {
+						ec.Error(ctx, ec.Recover(ctx, r))
+					}
+				}()
+				res = ec._Query_tasksReferencingCredential(ctx, field)
 				if res == graphql.Null {
 					atomic.AddUint32(&fs.Invalids, 1)
 				}
@@ -26547,6 +30550,8 @@ func (ec *executionContext) _Subscription(ctx context.Context, sel ast.Selection
 		return ec._Subscription_mySessionChanged(ctx, fields[0])
 	case "sessionChanged":
 		return ec._Subscription_sessionChanged(ctx, fields[0])
+	case "taskChanged":
+		return ec._Subscription_taskChanged(ctx, fields[0])
 	case "timelineEventAdded":
 		return ec._Subscription_timelineEventAdded(ctx, fields[0])
 	case "wikiDocumentChanged":
@@ -26556,6 +30561,706 @@ func (ec *executionContext) _Subscription(ctx context.Context, sel ast.Selection
 	default:
 		panic("unknown field " + strconv.Quote(fields[0].Name))
 	}
+}
+
+var taskImplementors = []string{"Task"}
+
+func (ec *executionContext) _Task(ctx context.Context, sel ast.SelectionSet, obj *models.Task) graphql.Marshaler {
+	fields := graphql.CollectFields(ec.OperationContext, sel, taskImplementors)
+
+	out := graphql.NewFieldSet(fields)
+	deferred := make(map[string]*graphql.FieldSet)
+	for i, field := range fields {
+		switch field.Name {
+		case "__typename":
+			out.Values[i] = graphql.MarshalString("Task")
+		case "id":
+			field := field
+
+			innerFunc := func(ctx context.Context, fs *graphql.FieldSet) (res graphql.Marshaler) {
+				defer func() {
+					if r := recover(); r != nil {
+						ec.Error(ctx, ec.Recover(ctx, r))
+					}
+				}()
+				res = ec._Task_id(ctx, field, obj)
+				if res == graphql.Null {
+					atomic.AddUint32(&fs.Invalids, 1)
+				}
+				return res
+			}
+
+			if field.Deferrable != nil {
+				dfs, ok := deferred[field.Deferrable.Label]
+				di := 0
+				if ok {
+					dfs.AddField(field)
+					di = len(dfs.Values) - 1
+				} else {
+					dfs = graphql.NewFieldSet([]graphql.CollectedField{field})
+					deferred[field.Deferrable.Label] = dfs
+				}
+				dfs.Concurrently(di, func(ctx context.Context) graphql.Marshaler {
+					return innerFunc(ctx, dfs)
+				})
+
+				// don't run the out.Concurrently() call below
+				out.Values[i] = graphql.Null
+				continue
+			}
+
+			out.Concurrently(i, func(ctx context.Context) graphql.Marshaler { return innerFunc(ctx, out) })
+		case "operationId":
+			field := field
+
+			innerFunc := func(ctx context.Context, fs *graphql.FieldSet) (res graphql.Marshaler) {
+				defer func() {
+					if r := recover(); r != nil {
+						ec.Error(ctx, ec.Recover(ctx, r))
+					}
+				}()
+				res = ec._Task_operationId(ctx, field, obj)
+				if res == graphql.Null {
+					atomic.AddUint32(&fs.Invalids, 1)
+				}
+				return res
+			}
+
+			if field.Deferrable != nil {
+				dfs, ok := deferred[field.Deferrable.Label]
+				di := 0
+				if ok {
+					dfs.AddField(field)
+					di = len(dfs.Values) - 1
+				} else {
+					dfs = graphql.NewFieldSet([]graphql.CollectedField{field})
+					deferred[field.Deferrable.Label] = dfs
+				}
+				dfs.Concurrently(di, func(ctx context.Context) graphql.Marshaler {
+					return innerFunc(ctx, dfs)
+				})
+
+				// don't run the out.Concurrently() call below
+				out.Values[i] = graphql.Null
+				continue
+			}
+
+			out.Concurrently(i, func(ctx context.Context) graphql.Marshaler { return innerFunc(ctx, out) })
+		case "operation":
+			field := field
+
+			innerFunc := func(ctx context.Context, fs *graphql.FieldSet) (res graphql.Marshaler) {
+				defer func() {
+					if r := recover(); r != nil {
+						ec.Error(ctx, ec.Recover(ctx, r))
+					}
+				}()
+				res = ec._Task_operation(ctx, field, obj)
+				if res == graphql.Null {
+					atomic.AddUint32(&fs.Invalids, 1)
+				}
+				return res
+			}
+
+			if field.Deferrable != nil {
+				dfs, ok := deferred[field.Deferrable.Label]
+				di := 0
+				if ok {
+					dfs.AddField(field)
+					di = len(dfs.Values) - 1
+				} else {
+					dfs = graphql.NewFieldSet([]graphql.CollectedField{field})
+					deferred[field.Deferrable.Label] = dfs
+				}
+				dfs.Concurrently(di, func(ctx context.Context) graphql.Marshaler {
+					return innerFunc(ctx, dfs)
+				})
+
+				// don't run the out.Concurrently() call below
+				out.Values[i] = graphql.Null
+				continue
+			}
+
+			out.Concurrently(i, func(ctx context.Context) graphql.Marshaler { return innerFunc(ctx, out) })
+		case "name":
+			out.Values[i] = ec._Task_name(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				atomic.AddUint32(&out.Invalids, 1)
+			}
+		case "description":
+			out.Values[i] = ec._Task_description(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				atomic.AddUint32(&out.Invalids, 1)
+			}
+		case "riskScore":
+			field := field
+
+			innerFunc := func(ctx context.Context, fs *graphql.FieldSet) (res graphql.Marshaler) {
+				defer func() {
+					if r := recover(); r != nil {
+						ec.Error(ctx, ec.Recover(ctx, r))
+					}
+				}()
+				res = ec._Task_riskScore(ctx, field, obj)
+				if res == graphql.Null {
+					atomic.AddUint32(&fs.Invalids, 1)
+				}
+				return res
+			}
+
+			if field.Deferrable != nil {
+				dfs, ok := deferred[field.Deferrable.Label]
+				di := 0
+				if ok {
+					dfs.AddField(field)
+					di = len(dfs.Values) - 1
+				} else {
+					dfs = graphql.NewFieldSet([]graphql.CollectedField{field})
+					deferred[field.Deferrable.Label] = dfs
+				}
+				dfs.Concurrently(di, func(ctx context.Context) graphql.Marshaler {
+					return innerFunc(ctx, dfs)
+				})
+
+				// don't run the out.Concurrently() call below
+				out.Values[i] = graphql.Null
+				continue
+			}
+
+			out.Concurrently(i, func(ctx context.Context) graphql.Marshaler { return innerFunc(ctx, out) })
+		case "riskDescription":
+			out.Values[i] = ec._Task_riskDescription(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				atomic.AddUint32(&out.Invalids, 1)
+			}
+		case "profitScore":
+			field := field
+
+			innerFunc := func(ctx context.Context, fs *graphql.FieldSet) (res graphql.Marshaler) {
+				defer func() {
+					if r := recover(); r != nil {
+						ec.Error(ctx, ec.Recover(ctx, r))
+					}
+				}()
+				res = ec._Task_profitScore(ctx, field, obj)
+				if res == graphql.Null {
+					atomic.AddUint32(&fs.Invalids, 1)
+				}
+				return res
+			}
+
+			if field.Deferrable != nil {
+				dfs, ok := deferred[field.Deferrable.Label]
+				di := 0
+				if ok {
+					dfs.AddField(field)
+					di = len(dfs.Values) - 1
+				} else {
+					dfs = graphql.NewFieldSet([]graphql.CollectedField{field})
+					deferred[field.Deferrable.Label] = dfs
+				}
+				dfs.Concurrently(di, func(ctx context.Context) graphql.Marshaler {
+					return innerFunc(ctx, dfs)
+				})
+
+				// don't run the out.Concurrently() call below
+				out.Values[i] = graphql.Null
+				continue
+			}
+
+			out.Concurrently(i, func(ctx context.Context) graphql.Marshaler { return innerFunc(ctx, out) })
+		case "profitDescription":
+			out.Values[i] = ec._Task_profitDescription(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				atomic.AddUint32(&out.Invalids, 1)
+			}
+		case "stage":
+			out.Values[i] = ec._Task_stage(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				atomic.AddUint32(&out.Invalids, 1)
+			}
+		case "status":
+			out.Values[i] = ec._Task_status(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				atomic.AddUint32(&out.Invalids, 1)
+			}
+		case "assignees":
+			field := field
+
+			innerFunc := func(ctx context.Context, fs *graphql.FieldSet) (res graphql.Marshaler) {
+				defer func() {
+					if r := recover(); r != nil {
+						ec.Error(ctx, ec.Recover(ctx, r))
+					}
+				}()
+				res = ec._Task_assignees(ctx, field, obj)
+				if res == graphql.Null {
+					atomic.AddUint32(&fs.Invalids, 1)
+				}
+				return res
+			}
+
+			if field.Deferrable != nil {
+				dfs, ok := deferred[field.Deferrable.Label]
+				di := 0
+				if ok {
+					dfs.AddField(field)
+					di = len(dfs.Values) - 1
+				} else {
+					dfs = graphql.NewFieldSet([]graphql.CollectedField{field})
+					deferred[field.Deferrable.Label] = dfs
+				}
+				dfs.Concurrently(di, func(ctx context.Context) graphql.Marshaler {
+					return innerFunc(ctx, dfs)
+				})
+
+				// don't run the out.Concurrently() call below
+				out.Values[i] = graphql.Null
+				continue
+			}
+
+			out.Concurrently(i, func(ctx context.Context) graphql.Marshaler { return innerFunc(ctx, out) })
+		case "wikiReferences":
+			field := field
+
+			innerFunc := func(ctx context.Context, fs *graphql.FieldSet) (res graphql.Marshaler) {
+				defer func() {
+					if r := recover(); r != nil {
+						ec.Error(ctx, ec.Recover(ctx, r))
+					}
+				}()
+				res = ec._Task_wikiReferences(ctx, field, obj)
+				if res == graphql.Null {
+					atomic.AddUint32(&fs.Invalids, 1)
+				}
+				return res
+			}
+
+			if field.Deferrable != nil {
+				dfs, ok := deferred[field.Deferrable.Label]
+				di := 0
+				if ok {
+					dfs.AddField(field)
+					di = len(dfs.Values) - 1
+				} else {
+					dfs = graphql.NewFieldSet([]graphql.CollectedField{field})
+					deferred[field.Deferrable.Label] = dfs
+				}
+				dfs.Concurrently(di, func(ctx context.Context) graphql.Marshaler {
+					return innerFunc(ctx, dfs)
+				})
+
+				// don't run the out.Concurrently() call below
+				out.Values[i] = graphql.Null
+				continue
+			}
+
+			out.Concurrently(i, func(ctx context.Context) graphql.Marshaler { return innerFunc(ctx, out) })
+		case "credentialReferences":
+			field := field
+
+			innerFunc := func(ctx context.Context, fs *graphql.FieldSet) (res graphql.Marshaler) {
+				defer func() {
+					if r := recover(); r != nil {
+						ec.Error(ctx, ec.Recover(ctx, r))
+					}
+				}()
+				res = ec._Task_credentialReferences(ctx, field, obj)
+				if res == graphql.Null {
+					atomic.AddUint32(&fs.Invalids, 1)
+				}
+				return res
+			}
+
+			if field.Deferrable != nil {
+				dfs, ok := deferred[field.Deferrable.Label]
+				di := 0
+				if ok {
+					dfs.AddField(field)
+					di = len(dfs.Values) - 1
+				} else {
+					dfs = graphql.NewFieldSet([]graphql.CollectedField{field})
+					deferred[field.Deferrable.Label] = dfs
+				}
+				dfs.Concurrently(di, func(ctx context.Context) graphql.Marshaler {
+					return innerFunc(ctx, dfs)
+				})
+
+				// don't run the out.Concurrently() call below
+				out.Values[i] = graphql.Null
+				continue
+			}
+
+			out.Concurrently(i, func(ctx context.Context) graphql.Marshaler { return innerFunc(ctx, out) })
+		case "createdBy":
+			field := field
+
+			innerFunc := func(ctx context.Context, _ *graphql.FieldSet) (res graphql.Marshaler) {
+				defer func() {
+					if r := recover(); r != nil {
+						ec.Error(ctx, ec.Recover(ctx, r))
+					}
+				}()
+				res = ec._Task_createdBy(ctx, field, obj)
+				return res
+			}
+
+			if field.Deferrable != nil {
+				dfs, ok := deferred[field.Deferrable.Label]
+				di := 0
+				if ok {
+					dfs.AddField(field)
+					di = len(dfs.Values) - 1
+				} else {
+					dfs = graphql.NewFieldSet([]graphql.CollectedField{field})
+					deferred[field.Deferrable.Label] = dfs
+				}
+				dfs.Concurrently(di, func(ctx context.Context) graphql.Marshaler {
+					return innerFunc(ctx, dfs)
+				})
+
+				// don't run the out.Concurrently() call below
+				out.Values[i] = graphql.Null
+				continue
+			}
+
+			out.Concurrently(i, func(ctx context.Context) graphql.Marshaler { return innerFunc(ctx, out) })
+		case "lastUpdatedBy":
+			field := field
+
+			innerFunc := func(ctx context.Context, _ *graphql.FieldSet) (res graphql.Marshaler) {
+				defer func() {
+					if r := recover(); r != nil {
+						ec.Error(ctx, ec.Recover(ctx, r))
+					}
+				}()
+				res = ec._Task_lastUpdatedBy(ctx, field, obj)
+				return res
+			}
+
+			if field.Deferrable != nil {
+				dfs, ok := deferred[field.Deferrable.Label]
+				di := 0
+				if ok {
+					dfs.AddField(field)
+					di = len(dfs.Values) - 1
+				} else {
+					dfs = graphql.NewFieldSet([]graphql.CollectedField{field})
+					deferred[field.Deferrable.Label] = dfs
+				}
+				dfs.Concurrently(di, func(ctx context.Context) graphql.Marshaler {
+					return innerFunc(ctx, dfs)
+				})
+
+				// don't run the out.Concurrently() call below
+				out.Values[i] = graphql.Null
+				continue
+			}
+
+			out.Concurrently(i, func(ctx context.Context) graphql.Marshaler { return innerFunc(ctx, out) })
+		case "lastUpdatedAt":
+			field := field
+
+			innerFunc := func(ctx context.Context, _ *graphql.FieldSet) (res graphql.Marshaler) {
+				defer func() {
+					if r := recover(); r != nil {
+						ec.Error(ctx, ec.Recover(ctx, r))
+					}
+				}()
+				res = ec._Task_lastUpdatedAt(ctx, field, obj)
+				return res
+			}
+
+			if field.Deferrable != nil {
+				dfs, ok := deferred[field.Deferrable.Label]
+				di := 0
+				if ok {
+					dfs.AddField(field)
+					di = len(dfs.Values) - 1
+				} else {
+					dfs = graphql.NewFieldSet([]graphql.CollectedField{field})
+					deferred[field.Deferrable.Label] = dfs
+				}
+				dfs.Concurrently(di, func(ctx context.Context) graphql.Marshaler {
+					return innerFunc(ctx, dfs)
+				})
+
+				// don't run the out.Concurrently() call below
+				out.Values[i] = graphql.Null
+				continue
+			}
+
+			out.Concurrently(i, func(ctx context.Context) graphql.Marshaler { return innerFunc(ctx, out) })
+		case "deletedAt":
+			field := field
+
+			innerFunc := func(ctx context.Context, _ *graphql.FieldSet) (res graphql.Marshaler) {
+				defer func() {
+					if r := recover(); r != nil {
+						ec.Error(ctx, ec.Recover(ctx, r))
+					}
+				}()
+				res = ec._Task_deletedAt(ctx, field, obj)
+				return res
+			}
+
+			if field.Deferrable != nil {
+				dfs, ok := deferred[field.Deferrable.Label]
+				di := 0
+				if ok {
+					dfs.AddField(field)
+					di = len(dfs.Values) - 1
+				} else {
+					dfs = graphql.NewFieldSet([]graphql.CollectedField{field})
+					deferred[field.Deferrable.Label] = dfs
+				}
+				dfs.Concurrently(di, func(ctx context.Context) graphql.Marshaler {
+					return innerFunc(ctx, dfs)
+				})
+
+				// don't run the out.Concurrently() call below
+				out.Values[i] = graphql.Null
+				continue
+			}
+
+			out.Concurrently(i, func(ctx context.Context) graphql.Marshaler { return innerFunc(ctx, out) })
+		case "createdAt":
+			field := field
+
+			innerFunc := func(ctx context.Context, fs *graphql.FieldSet) (res graphql.Marshaler) {
+				defer func() {
+					if r := recover(); r != nil {
+						ec.Error(ctx, ec.Recover(ctx, r))
+					}
+				}()
+				res = ec._Task_createdAt(ctx, field, obj)
+				if res == graphql.Null {
+					atomic.AddUint32(&fs.Invalids, 1)
+				}
+				return res
+			}
+
+			if field.Deferrable != nil {
+				dfs, ok := deferred[field.Deferrable.Label]
+				di := 0
+				if ok {
+					dfs.AddField(field)
+					di = len(dfs.Values) - 1
+				} else {
+					dfs = graphql.NewFieldSet([]graphql.CollectedField{field})
+					deferred[field.Deferrable.Label] = dfs
+				}
+				dfs.Concurrently(di, func(ctx context.Context) graphql.Marshaler {
+					return innerFunc(ctx, dfs)
+				})
+
+				// don't run the out.Concurrently() call below
+				out.Values[i] = graphql.Null
+				continue
+			}
+
+			out.Concurrently(i, func(ctx context.Context) graphql.Marshaler { return innerFunc(ctx, out) })
+		case "updatedAt":
+			field := field
+
+			innerFunc := func(ctx context.Context, fs *graphql.FieldSet) (res graphql.Marshaler) {
+				defer func() {
+					if r := recover(); r != nil {
+						ec.Error(ctx, ec.Recover(ctx, r))
+					}
+				}()
+				res = ec._Task_updatedAt(ctx, field, obj)
+				if res == graphql.Null {
+					atomic.AddUint32(&fs.Invalids, 1)
+				}
+				return res
+			}
+
+			if field.Deferrable != nil {
+				dfs, ok := deferred[field.Deferrable.Label]
+				di := 0
+				if ok {
+					dfs.AddField(field)
+					di = len(dfs.Values) - 1
+				} else {
+					dfs = graphql.NewFieldSet([]graphql.CollectedField{field})
+					deferred[field.Deferrable.Label] = dfs
+				}
+				dfs.Concurrently(di, func(ctx context.Context) graphql.Marshaler {
+					return innerFunc(ctx, dfs)
+				})
+
+				// don't run the out.Concurrently() call below
+				out.Values[i] = graphql.Null
+				continue
+			}
+
+			out.Concurrently(i, func(ctx context.Context) graphql.Marshaler { return innerFunc(ctx, out) })
+		default:
+			panic("unknown field " + strconv.Quote(field.Name))
+		}
+	}
+	out.Dispatch(ctx)
+	if out.Invalids > 0 {
+		return graphql.Null
+	}
+
+	atomic.AddInt32(&ec.Deferred, int32(len(deferred)))
+
+	for label, dfs := range deferred {
+		ec.ProcessDeferredGroup(graphql.DeferredGroup{
+			Label:    label,
+			Path:     graphql.GetPath(ctx),
+			FieldSet: dfs,
+			Context:  ctx,
+		})
+	}
+
+	return out
+}
+
+var taskConnectionImplementors = []string{"TaskConnection"}
+
+func (ec *executionContext) _TaskConnection(ctx context.Context, sel ast.SelectionSet, obj *model.TaskConnection) graphql.Marshaler {
+	fields := graphql.CollectFields(ec.OperationContext, sel, taskConnectionImplementors)
+
+	out := graphql.NewFieldSet(fields)
+	deferred := make(map[string]*graphql.FieldSet)
+	for i, field := range fields {
+		switch field.Name {
+		case "__typename":
+			out.Values[i] = graphql.MarshalString("TaskConnection")
+		case "edges":
+			out.Values[i] = ec._TaskConnection_edges(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "pageInfo":
+			out.Values[i] = ec._TaskConnection_pageInfo(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "totalCount":
+			out.Values[i] = ec._TaskConnection_totalCount(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		default:
+			panic("unknown field " + strconv.Quote(field.Name))
+		}
+	}
+	out.Dispatch(ctx)
+	if out.Invalids > 0 {
+		return graphql.Null
+	}
+
+	atomic.AddInt32(&ec.Deferred, int32(len(deferred)))
+
+	for label, dfs := range deferred {
+		ec.ProcessDeferredGroup(graphql.DeferredGroup{
+			Label:    label,
+			Path:     graphql.GetPath(ctx),
+			FieldSet: dfs,
+			Context:  ctx,
+		})
+	}
+
+	return out
+}
+
+var taskEdgeImplementors = []string{"TaskEdge"}
+
+func (ec *executionContext) _TaskEdge(ctx context.Context, sel ast.SelectionSet, obj *model.TaskEdge) graphql.Marshaler {
+	fields := graphql.CollectFields(ec.OperationContext, sel, taskEdgeImplementors)
+
+	out := graphql.NewFieldSet(fields)
+	deferred := make(map[string]*graphql.FieldSet)
+	for i, field := range fields {
+		switch field.Name {
+		case "__typename":
+			out.Values[i] = graphql.MarshalString("TaskEdge")
+		case "node":
+			out.Values[i] = ec._TaskEdge_node(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "cursor":
+			out.Values[i] = ec._TaskEdge_cursor(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		default:
+			panic("unknown field " + strconv.Quote(field.Name))
+		}
+	}
+	out.Dispatch(ctx)
+	if out.Invalids > 0 {
+		return graphql.Null
+	}
+
+	atomic.AddInt32(&ec.Deferred, int32(len(deferred)))
+
+	for label, dfs := range deferred {
+		ec.ProcessDeferredGroup(graphql.DeferredGroup{
+			Label:    label,
+			Path:     graphql.GetPath(ctx),
+			FieldSet: dfs,
+			Context:  ctx,
+		})
+	}
+
+	return out
+}
+
+var taskEventImplementors = []string{"TaskEvent"}
+
+func (ec *executionContext) _TaskEvent(ctx context.Context, sel ast.SelectionSet, obj *model.TaskEvent) graphql.Marshaler {
+	fields := graphql.CollectFields(ec.OperationContext, sel, taskEventImplementors)
+
+	out := graphql.NewFieldSet(fields)
+	deferred := make(map[string]*graphql.FieldSet)
+	for i, field := range fields {
+		switch field.Name {
+		case "__typename":
+			out.Values[i] = graphql.MarshalString("TaskEvent")
+		case "action":
+			out.Values[i] = ec._TaskEvent_action(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "taskId":
+			out.Values[i] = ec._TaskEvent_taskId(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "operationId":
+			out.Values[i] = ec._TaskEvent_operationId(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "task":
+			out.Values[i] = ec._TaskEvent_task(ctx, field, obj)
+		default:
+			panic("unknown field " + strconv.Quote(field.Name))
+		}
+	}
+	out.Dispatch(ctx)
+	if out.Invalids > 0 {
+		return graphql.Null
+	}
+
+	atomic.AddInt32(&ec.Deferred, int32(len(deferred)))
+
+	for label, dfs := range deferred {
+		ec.ProcessDeferredGroup(graphql.DeferredGroup{
+			Label:    label,
+			Path:     graphql.GetPath(ctx),
+			FieldSet: dfs,
+			Context:  ctx,
+		})
+	}
+
+	return out
 }
 
 var timelineBucketImplementors = []string{"TimelineBucket"}
@@ -27949,6 +32654,42 @@ func (ec *executionContext) _WikiDocument(ctx context.Context, sel ast.Selection
 					}
 				}()
 				res = ec._WikiDocument_updatedAt(ctx, field, obj)
+				if res == graphql.Null {
+					atomic.AddUint32(&fs.Invalids, 1)
+				}
+				return res
+			}
+
+			if field.Deferrable != nil {
+				dfs, ok := deferred[field.Deferrable.Label]
+				di := 0
+				if ok {
+					dfs.AddField(field)
+					di = len(dfs.Values) - 1
+				} else {
+					dfs = graphql.NewFieldSet([]graphql.CollectedField{field})
+					deferred[field.Deferrable.Label] = dfs
+				}
+				dfs.Concurrently(di, func(ctx context.Context) graphql.Marshaler {
+					return innerFunc(ctx, dfs)
+				})
+
+				// don't run the out.Concurrently() call below
+				out.Values[i] = graphql.Null
+				continue
+			}
+
+			out.Concurrently(i, func(ctx context.Context) graphql.Marshaler { return innerFunc(ctx, out) })
+		case "taskBacklinks":
+			field := field
+
+			innerFunc := func(ctx context.Context, fs *graphql.FieldSet) (res graphql.Marshaler) {
+				defer func() {
+					if r := recover(); r != nil {
+						ec.Error(ctx, ec.Recover(ctx, r))
+					}
+				}()
+				res = ec._WikiDocument_taskBacklinks(ctx, field, obj)
 				if res == graphql.Null {
 					atomic.AddUint32(&fs.Invalids, 1)
 				}
@@ -29444,6 +34185,11 @@ func (ec *executionContext) marshalNBoolean2bool(ctx context.Context, sel ast.Se
 	return res
 }
 
+func (ec *executionContext) unmarshalNChangeTaskStageInput2githubᚗcomᚋvibeᚑc2ᚋvibeᚑc2ᚑcoreᚋcoreᚋpkgᚋgraphqlᚋmodelᚐChangeTaskStageInput(ctx context.Context, v any) (model.ChangeTaskStageInput, error) {
+	res, err := ec.unmarshalInputChangeTaskStageInput(ctx, v)
+	return res, graphql.ErrorOnPath(ctx, err)
+}
+
 func (ec *executionContext) unmarshalNCreateCredentialInput2githubᚗcomᚋvibeᚑc2ᚋvibeᚑc2ᚑcoreᚋcoreᚋpkgᚋgraphqlᚋmodelᚐCreateCredentialInput(ctx context.Context, v any) (model.CreateCredentialInput, error) {
 	res, err := ec.unmarshalInputCreateCredentialInput(ctx, v)
 	return res, graphql.ErrorOnPath(ctx, err)
@@ -29469,6 +34215,11 @@ func (ec *executionContext) unmarshalNCreateSchemeNetworkPortInput2githubᚗcom�
 	return res, graphql.ErrorOnPath(ctx, err)
 }
 
+func (ec *executionContext) unmarshalNCreateTaskInput2githubᚗcomᚋvibeᚑc2ᚋvibeᚑc2ᚑcoreᚋcoreᚋpkgᚋgraphqlᚋmodelᚐCreateTaskInput(ctx context.Context, v any) (model.CreateTaskInput, error) {
+	res, err := ec.unmarshalInputCreateTaskInput(ctx, v)
+	return res, graphql.ErrorOnPath(ctx, err)
+}
+
 func (ec *executionContext) unmarshalNCreateUserInput2githubᚗcomᚋvibeᚑc2ᚋvibeᚑc2ᚑcoreᚋcoreᚋpkgᚋgraphqlᚋmodelᚐCreateUserInput(ctx context.Context, v any) (model.CreateUserInput, error) {
 	res, err := ec.unmarshalInputCreateUserInput(ctx, v)
 	return res, graphql.ErrorOnPath(ctx, err)
@@ -29481,6 +34232,22 @@ func (ec *executionContext) unmarshalNCreateWikiDocumentInput2githubᚗcomᚋvib
 
 func (ec *executionContext) marshalNCredential2githubᚗcomᚋvibeᚑc2ᚋvibeᚑc2ᚑcoreᚋcoreᚋpkgᚋmodelsᚐCredential(ctx context.Context, sel ast.SelectionSet, v models.Credential) graphql.Marshaler {
 	return ec._Credential(ctx, sel, &v)
+}
+
+func (ec *executionContext) marshalNCredential2ᚕᚖgithubᚗcomᚋvibeᚑc2ᚋvibeᚑc2ᚑcoreᚋcoreᚋpkgᚋmodelsᚐCredentialᚄ(ctx context.Context, sel ast.SelectionSet, v []*models.Credential) graphql.Marshaler {
+	ret := graphql.MarshalSliceConcurrently(ctx, len(v), 0, false, func(ctx context.Context, i int) graphql.Marshaler {
+		fc := graphql.GetFieldContext(ctx)
+		fc.Result = &v[i]
+		return ec.marshalNCredential2ᚖgithubᚗcomᚋvibeᚑc2ᚋvibeᚑc2ᚑcoreᚋcoreᚋpkgᚋmodelsᚐCredential(ctx, sel, v[i])
+	})
+
+	for _, e := range ret {
+		if e == graphql.Null {
+			return graphql.Null
+		}
+	}
+
+	return ret
 }
 
 func (ec *executionContext) marshalNCredential2ᚖgithubᚗcomᚋvibeᚑc2ᚋvibeᚑc2ᚑcoreᚋcoreᚋpkgᚋmodelsᚐCredential(ctx context.Context, sel ast.SelectionSet, v *models.Credential) graphql.Marshaler {
@@ -30059,6 +34826,124 @@ func (ec *executionContext) marshalNString2ᚕstringᚄ(ctx context.Context, sel
 	return ret
 }
 
+func (ec *executionContext) marshalNTask2githubᚗcomᚋvibeᚑc2ᚋvibeᚑc2ᚑcoreᚋcoreᚋpkgᚋmodelsᚐTask(ctx context.Context, sel ast.SelectionSet, v models.Task) graphql.Marshaler {
+	return ec._Task(ctx, sel, &v)
+}
+
+func (ec *executionContext) marshalNTask2ᚕᚖgithubᚗcomᚋvibeᚑc2ᚋvibeᚑc2ᚑcoreᚋcoreᚋpkgᚋmodelsᚐTaskᚄ(ctx context.Context, sel ast.SelectionSet, v []*models.Task) graphql.Marshaler {
+	ret := graphql.MarshalSliceConcurrently(ctx, len(v), 0, false, func(ctx context.Context, i int) graphql.Marshaler {
+		fc := graphql.GetFieldContext(ctx)
+		fc.Result = &v[i]
+		return ec.marshalNTask2ᚖgithubᚗcomᚋvibeᚑc2ᚋvibeᚑc2ᚑcoreᚋcoreᚋpkgᚋmodelsᚐTask(ctx, sel, v[i])
+	})
+
+	for _, e := range ret {
+		if e == graphql.Null {
+			return graphql.Null
+		}
+	}
+
+	return ret
+}
+
+func (ec *executionContext) marshalNTask2ᚖgithubᚗcomᚋvibeᚑc2ᚋvibeᚑc2ᚑcoreᚋcoreᚋpkgᚋmodelsᚐTask(ctx context.Context, sel ast.SelectionSet, v *models.Task) graphql.Marshaler {
+	if v == nil {
+		if !graphql.HasFieldError(ctx, graphql.GetFieldContext(ctx)) {
+			graphql.AddErrorf(ctx, "the requested element is null which the schema does not allow")
+		}
+		return graphql.Null
+	}
+	return ec._Task(ctx, sel, v)
+}
+
+func (ec *executionContext) marshalNTaskConnection2githubᚗcomᚋvibeᚑc2ᚋvibeᚑc2ᚑcoreᚋcoreᚋpkgᚋgraphqlᚋmodelᚐTaskConnection(ctx context.Context, sel ast.SelectionSet, v model.TaskConnection) graphql.Marshaler {
+	return ec._TaskConnection(ctx, sel, &v)
+}
+
+func (ec *executionContext) marshalNTaskConnection2ᚖgithubᚗcomᚋvibeᚑc2ᚋvibeᚑc2ᚑcoreᚋcoreᚋpkgᚋgraphqlᚋmodelᚐTaskConnection(ctx context.Context, sel ast.SelectionSet, v *model.TaskConnection) graphql.Marshaler {
+	if v == nil {
+		if !graphql.HasFieldError(ctx, graphql.GetFieldContext(ctx)) {
+			graphql.AddErrorf(ctx, "the requested element is null which the schema does not allow")
+		}
+		return graphql.Null
+	}
+	return ec._TaskConnection(ctx, sel, v)
+}
+
+func (ec *executionContext) marshalNTaskEdge2ᚕᚖgithubᚗcomᚋvibeᚑc2ᚋvibeᚑc2ᚑcoreᚋcoreᚋpkgᚋgraphqlᚋmodelᚐTaskEdgeᚄ(ctx context.Context, sel ast.SelectionSet, v []*model.TaskEdge) graphql.Marshaler {
+	ret := graphql.MarshalSliceConcurrently(ctx, len(v), 0, false, func(ctx context.Context, i int) graphql.Marshaler {
+		fc := graphql.GetFieldContext(ctx)
+		fc.Result = &v[i]
+		return ec.marshalNTaskEdge2ᚖgithubᚗcomᚋvibeᚑc2ᚋvibeᚑc2ᚑcoreᚋcoreᚋpkgᚋgraphqlᚋmodelᚐTaskEdge(ctx, sel, v[i])
+	})
+
+	for _, e := range ret {
+		if e == graphql.Null {
+			return graphql.Null
+		}
+	}
+
+	return ret
+}
+
+func (ec *executionContext) marshalNTaskEdge2ᚖgithubᚗcomᚋvibeᚑc2ᚋvibeᚑc2ᚑcoreᚋcoreᚋpkgᚋgraphqlᚋmodelᚐTaskEdge(ctx context.Context, sel ast.SelectionSet, v *model.TaskEdge) graphql.Marshaler {
+	if v == nil {
+		if !graphql.HasFieldError(ctx, graphql.GetFieldContext(ctx)) {
+			graphql.AddErrorf(ctx, "the requested element is null which the schema does not allow")
+		}
+		return graphql.Null
+	}
+	return ec._TaskEdge(ctx, sel, v)
+}
+
+func (ec *executionContext) marshalNTaskEvent2githubᚗcomᚋvibeᚑc2ᚋvibeᚑc2ᚑcoreᚋcoreᚋpkgᚋgraphqlᚋmodelᚐTaskEvent(ctx context.Context, sel ast.SelectionSet, v model.TaskEvent) graphql.Marshaler {
+	return ec._TaskEvent(ctx, sel, &v)
+}
+
+func (ec *executionContext) marshalNTaskEvent2ᚖgithubᚗcomᚋvibeᚑc2ᚋvibeᚑc2ᚑcoreᚋcoreᚋpkgᚋgraphqlᚋmodelᚐTaskEvent(ctx context.Context, sel ast.SelectionSet, v *model.TaskEvent) graphql.Marshaler {
+	if v == nil {
+		if !graphql.HasFieldError(ctx, graphql.GetFieldContext(ctx)) {
+			graphql.AddErrorf(ctx, "the requested element is null which the schema does not allow")
+		}
+		return graphql.Null
+	}
+	return ec._TaskEvent(ctx, sel, v)
+}
+
+func (ec *executionContext) unmarshalNTaskStage2githubᚗcomᚋvibeᚑc2ᚋvibeᚑc2ᚑcoreᚋcoreᚋpkgᚋmodelsᚐTaskStage(ctx context.Context, v any) (models.TaskStage, error) {
+	tmp, err := graphql.UnmarshalString(v)
+	res := models.TaskStage(tmp)
+	return res, graphql.ErrorOnPath(ctx, err)
+}
+
+func (ec *executionContext) marshalNTaskStage2githubᚗcomᚋvibeᚑc2ᚋvibeᚑc2ᚑcoreᚋcoreᚋpkgᚋmodelsᚐTaskStage(ctx context.Context, sel ast.SelectionSet, v models.TaskStage) graphql.Marshaler {
+	_ = sel
+	res := graphql.MarshalString(string(v))
+	if res == graphql.Null {
+		if !graphql.HasFieldError(ctx, graphql.GetFieldContext(ctx)) {
+			graphql.AddErrorf(ctx, "the requested element is null which the schema does not allow")
+		}
+	}
+	return res
+}
+
+func (ec *executionContext) unmarshalNTaskStatus2githubᚗcomᚋvibeᚑc2ᚋvibeᚑc2ᚑcoreᚋcoreᚋpkgᚋmodelsᚐTaskStatus(ctx context.Context, v any) (models.TaskStatus, error) {
+	tmp, err := graphql.UnmarshalString(v)
+	res := models.TaskStatus(tmp)
+	return res, graphql.ErrorOnPath(ctx, err)
+}
+
+func (ec *executionContext) marshalNTaskStatus2githubᚗcomᚋvibeᚑc2ᚋvibeᚑc2ᚑcoreᚋcoreᚋpkgᚋmodelsᚐTaskStatus(ctx context.Context, sel ast.SelectionSet, v models.TaskStatus) graphql.Marshaler {
+	_ = sel
+	res := graphql.MarshalString(string(v))
+	if res == graphql.Null {
+		if !graphql.HasFieldError(ctx, graphql.GetFieldContext(ctx)) {
+			graphql.AddErrorf(ctx, "the requested element is null which the schema does not allow")
+		}
+	}
+	return res
+}
+
 func (ec *executionContext) marshalNTimelineBucket2ᚕᚖgithubᚗcomᚋvibeᚑc2ᚋvibeᚑc2ᚑcoreᚋcoreᚋpkgᚋgraphqlᚋmodelᚐTimelineBucketᚄ(ctx context.Context, sel ast.SelectionSet, v []*model.TimelineBucket) graphql.Marshaler {
 	ret := graphql.MarshalSliceConcurrently(ctx, len(v), 0, false, func(ctx context.Context, i int) graphql.Marshaler {
 		fc := graphql.GetFieldContext(ctx)
@@ -30190,6 +35075,11 @@ func (ec *executionContext) unmarshalNUpdateSchemeNetworkPortInput2githubᚗcom�
 	return res, graphql.ErrorOnPath(ctx, err)
 }
 
+func (ec *executionContext) unmarshalNUpdateTaskInput2githubᚗcomᚋvibeᚑc2ᚋvibeᚑc2ᚑcoreᚋcoreᚋpkgᚋgraphqlᚋmodelᚐUpdateTaskInput(ctx context.Context, v any) (model.UpdateTaskInput, error) {
+	res, err := ec.unmarshalInputUpdateTaskInput(ctx, v)
+	return res, graphql.ErrorOnPath(ctx, err)
+}
+
 func (ec *executionContext) unmarshalNUpdateUserInput2githubᚗcomᚋvibeᚑc2ᚋvibeᚑc2ᚑcoreᚋcoreᚋpkgᚋgraphqlᚋmodelᚐUpdateUserInput(ctx context.Context, v any) (model.UpdateUserInput, error) {
 	res, err := ec.unmarshalInputUpdateUserInput(ctx, v)
 	return res, graphql.ErrorOnPath(ctx, err)
@@ -30202,6 +35092,22 @@ func (ec *executionContext) unmarshalNUpdateWikiDocumentInput2githubᚗcomᚋvib
 
 func (ec *executionContext) marshalNUser2githubᚗcomᚋvibeᚑc2ᚋvibeᚑc2ᚑcoreᚋcoreᚋpkgᚋmodelsᚐUser(ctx context.Context, sel ast.SelectionSet, v models.User) graphql.Marshaler {
 	return ec._User(ctx, sel, &v)
+}
+
+func (ec *executionContext) marshalNUser2ᚕᚖgithubᚗcomᚋvibeᚑc2ᚋvibeᚑc2ᚑcoreᚋcoreᚋpkgᚋmodelsᚐUserᚄ(ctx context.Context, sel ast.SelectionSet, v []*models.User) graphql.Marshaler {
+	ret := graphql.MarshalSliceConcurrently(ctx, len(v), 0, false, func(ctx context.Context, i int) graphql.Marshaler {
+		fc := graphql.GetFieldContext(ctx)
+		fc.Result = &v[i]
+		return ec.marshalNUser2ᚖgithubᚗcomᚋvibeᚑc2ᚋvibeᚑc2ᚑcoreᚋcoreᚋpkgᚋmodelsᚐUser(ctx, sel, v[i])
+	})
+
+	for _, e := range ret {
+		if e == graphql.Null {
+			return graphql.Null
+		}
+	}
+
+	return ret
 }
 
 func (ec *executionContext) marshalNUser2ᚖgithubᚗcomᚋvibeᚑc2ᚋvibeᚑc2ᚑcoreᚋcoreᚋpkgᚋmodelsᚐUser(ctx context.Context, sel ast.SelectionSet, v *models.User) graphql.Marshaler {
@@ -31098,6 +36004,51 @@ func (ec *executionContext) marshalOString2ᚖstring(ctx context.Context, sel as
 	_ = sel
 	_ = ctx
 	res := graphql.MarshalString(*v)
+	return res
+}
+
+func (ec *executionContext) marshalOTask2ᚖgithubᚗcomᚋvibeᚑc2ᚋvibeᚑc2ᚑcoreᚋcoreᚋpkgᚋmodelsᚐTask(ctx context.Context, sel ast.SelectionSet, v *models.Task) graphql.Marshaler {
+	if v == nil {
+		return graphql.Null
+	}
+	return ec._Task(ctx, sel, v)
+}
+
+func (ec *executionContext) unmarshalOTaskStage2ᚖgithubᚗcomᚋvibeᚑc2ᚋvibeᚑc2ᚑcoreᚋcoreᚋpkgᚋmodelsᚐTaskStage(ctx context.Context, v any) (*models.TaskStage, error) {
+	if v == nil {
+		return nil, nil
+	}
+	tmp, err := graphql.UnmarshalString(v)
+	res := models.TaskStage(tmp)
+	return &res, graphql.ErrorOnPath(ctx, err)
+}
+
+func (ec *executionContext) marshalOTaskStage2ᚖgithubᚗcomᚋvibeᚑc2ᚋvibeᚑc2ᚑcoreᚋcoreᚋpkgᚋmodelsᚐTaskStage(ctx context.Context, sel ast.SelectionSet, v *models.TaskStage) graphql.Marshaler {
+	if v == nil {
+		return graphql.Null
+	}
+	_ = sel
+	_ = ctx
+	res := graphql.MarshalString(string(*v))
+	return res
+}
+
+func (ec *executionContext) unmarshalOTaskStatus2ᚖgithubᚗcomᚋvibeᚑc2ᚋvibeᚑc2ᚑcoreᚋcoreᚋpkgᚋmodelsᚐTaskStatus(ctx context.Context, v any) (*models.TaskStatus, error) {
+	if v == nil {
+		return nil, nil
+	}
+	tmp, err := graphql.UnmarshalString(v)
+	res := models.TaskStatus(tmp)
+	return &res, graphql.ErrorOnPath(ctx, err)
+}
+
+func (ec *executionContext) marshalOTaskStatus2ᚖgithubᚗcomᚋvibeᚑc2ᚋvibeᚑc2ᚑcoreᚋcoreᚋpkgᚋmodelsᚐTaskStatus(ctx context.Context, sel ast.SelectionSet, v *models.TaskStatus) graphql.Marshaler {
+	if v == nil {
+		return graphql.Null
+	}
+	_ = sel
+	_ = ctx
+	res := graphql.MarshalString(string(*v))
 	return res
 }
 

@@ -17,6 +17,12 @@ type APIKeyWithSecret struct {
 	Token  string         `json:"token"`
 }
 
+type ChangeTaskStageInput struct {
+	TaskID string             `json:"taskId"`
+	Stage  models.TaskStage   `json:"stage"`
+	Status *models.TaskStatus `json:"status,omitempty"`
+}
+
 type CreateCredentialInput struct {
 	Name       string                     `json:"name"`
 	Type       models.CredentialType      `json:"type"`
@@ -50,6 +56,21 @@ type CreateSchemeNetworkPortInput struct {
 	Protocol *string `json:"protocol,omitempty"`
 	Service  *string `json:"service,omitempty"`
 	Notes    *string `json:"notes,omitempty"`
+}
+
+type CreateTaskInput struct {
+	OperationID            string             `json:"operationId"`
+	Name                   string             `json:"name"`
+	Description            *string            `json:"description,omitempty"`
+	RiskScore              int                `json:"riskScore"`
+	RiskDescription        *string            `json:"riskDescription,omitempty"`
+	ProfitScore            int                `json:"profitScore"`
+	ProfitDescription      *string            `json:"profitDescription,omitempty"`
+	AssigneeIds            []string           `json:"assigneeIds,omitempty"`
+	WikiReferenceIds       []string           `json:"wikiReferenceIds,omitempty"`
+	CredentialReferenceIds []string           `json:"credentialReferenceIds,omitempty"`
+	Stage                  *models.TaskStage  `json:"stage,omitempty"`
+	Status                 *models.TaskStatus `json:"status,omitempty"`
 }
 
 type CreateUserInput struct {
@@ -165,6 +186,24 @@ type SessionEvent struct {
 type Subscription struct {
 }
 
+type TaskConnection struct {
+	Edges      []*TaskEdge          `json:"edges"`
+	PageInfo   *pagination.PageInfo `json:"pageInfo"`
+	TotalCount int                  `json:"totalCount"`
+}
+
+type TaskEdge struct {
+	Node   *models.Task `json:"node"`
+	Cursor string       `json:"cursor"`
+}
+
+type TaskEvent struct {
+	Action      EventAction  `json:"action"`
+	TaskID      string       `json:"taskId"`
+	OperationID string       `json:"operationId"`
+	Task        *models.Task `json:"task,omitempty"`
+}
+
 type TimelineBucket struct {
 	BucketStart string                `json:"bucketStart"`
 	Count       int                   `json:"count"`
@@ -220,6 +259,15 @@ type UpdateSchemeNetworkPortInput struct {
 	Protocol *string `json:"protocol,omitempty"`
 	Service  *string `json:"service,omitempty"`
 	Notes    *string `json:"notes,omitempty"`
+}
+
+type UpdateTaskInput struct {
+	Name              *string `json:"name,omitempty"`
+	Description       *string `json:"description,omitempty"`
+	RiskScore         *int    `json:"riskScore,omitempty"`
+	RiskDescription   *string `json:"riskDescription,omitempty"`
+	ProfitScore       *int    `json:"profitScore,omitempty"`
+	ProfitDescription *string `json:"profitDescription,omitempty"`
 }
 
 type UpdateUserInput struct {

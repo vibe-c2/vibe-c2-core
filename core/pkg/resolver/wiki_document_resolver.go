@@ -11,10 +11,12 @@ import (
 	"github.com/vibe-c2/vibe-c2-core/core/pkg/eventbus"
 	"github.com/vibe-c2/vibe-c2-core/core/pkg/graphql/gqlctx"
 	"github.com/vibe-c2/vibe-c2-core/core/pkg/graphql/model"
+	"github.com/vibe-c2/vibe-c2-core/core/pkg/logger"
 	"github.com/vibe-c2/vibe-c2-core/core/pkg/models"
 	"github.com/vibe-c2/vibe-c2-core/core/pkg/pagination"
 	"github.com/vibe-c2/vibe-c2-core/core/pkg/repository"
 	"github.com/vibe-c2/vibe-c2-core/core/pkg/wiki"
+	"go.uber.org/zap"
 )
 
 const (
@@ -121,11 +123,16 @@ type wikiDocumentResolver struct {
 	// The field resolvers on Credential never need it because gqlgen passes
 	// the parent credential as `obj`.
 	credRepo repository.ICredentialRepository
+	// taskRepo (optional) is used by the hard-delete paths to strip the
+	// deleted document's UUID from every task's wiki_references array. Nil
+	// is acceptable for tests and any pre-Tasks wiring.
+	taskRepo repository.ITaskRepository
 	eventBus eventbus.IEventBus
 	presence *wiki.PresenceTracker
 }
 
 // NewWikiDocumentResolver creates a new wiki document resolver with the given dependencies.
+// taskRepo is optional; pass nil if Tasks are not wired (tests).
 func NewWikiDocumentResolver(
 	docRepo repository.IWikiDocumentRepository,
 	backupRepo repository.IWikiDocumentBackupRepository,
@@ -133,6 +140,7 @@ func NewWikiDocumentResolver(
 	userRepo repository.IUserRepository,
 	visitRepo repository.IWikiDocumentVisitRepository,
 	credRepo repository.ICredentialRepository,
+	taskRepo repository.ITaskRepository,
 	eventBus eventbus.IEventBus,
 	presence *wiki.PresenceTracker,
 ) IWikiDocumentResolver {
@@ -143,6 +151,7 @@ func NewWikiDocumentResolver(
 		userRepo:      userRepo,
 		visitRepo:     visitRepo,
 		credRepo:      credRepo,
+		taskRepo:      taskRepo,
 		eventBus:      eventBus,
 		presence:      presence,
 	}
@@ -1082,6 +1091,18 @@ func (r *wikiDocumentResolver) PermanentlyDeleteWikiDocument(ctx context.Context
 		return false, fmt.Errorf("failed to permanently delete document: %w", err)
 	}
 
+	// Strip this doc's id from every task's wiki_references array in the
+	// operation. Best-effort: a failed pull leaves a dangling pointer that
+	// the task field resolver silently drops at read time.
+	if r.taskRepo != nil {
+		if err := r.taskRepo.PullWikiReference(ctx, doc.OperationID, doc.DocumentID); err != nil {
+			logger.From(ctx).Warn("cleanup of task wiki references failed",
+				zap.String("document_id", doc.DocumentID.String()),
+				zap.Error(err),
+			)
+		}
+	}
+
 	r.eventBus.Publish(eventbus.NewWikiDocumentHardDeletedEvent(
 		eventbus.UserActor(auth.UserID), r.wikiDocPayload(&doc),
 	))
@@ -1129,6 +1150,21 @@ func (r *wikiDocumentResolver) EmptyWikiDocumentTrash(ctx context.Context, opera
 	// Hard-delete all trashed documents
 	if err := r.docRepo.HardDeleteTrashed(ctx, opUID); err != nil {
 		return false, fmt.Errorf("failed to empty trash: %w", err)
+	}
+
+	// Strip each purged doc's id from every task's wiki_references in the
+	// operation. Looped because the repo's PullWikiReference takes one id
+	// at a time; trash empties are admin-initiated and rare, so the loop
+	// is fine. Best-effort — surviving stale pointers are pruned at read.
+	if r.taskRepo != nil {
+		for _, d := range trashed {
+			if err := r.taskRepo.PullWikiReference(ctx, opUID, d.DocumentID); err != nil {
+				logger.From(ctx).Warn("cleanup of task wiki references failed",
+					zap.String("document_id", d.DocumentID.String()),
+					zap.Error(err),
+				)
+			}
+		}
 	}
 
 	r.eventBus.Publish(eventbus.NewWikiDocumentHardDeletedEvent(

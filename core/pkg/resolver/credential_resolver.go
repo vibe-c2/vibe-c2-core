@@ -94,15 +94,23 @@ type credentialResolver struct {
 	// inverse index lives in `wiki_documents.credential_references`, so the
 	// query naturally belongs in wiki land.
 	wikiDocRes IWikiDocumentResolver
-	eventBus   eventbus.IEventBus
+	// taskRepo (optional) is used by DeleteCredential to strip the deleted
+	// credential's UUID from every task's credential_references array. Nil
+	// is acceptable — the resolver skips the cleanup with no error so
+	// existing unit tests / wiring that predates Tasks continue to work.
+	taskRepo repository.ITaskRepository
+	eventBus eventbus.IEventBus
 }
 
 // NewCredentialResolver creates a new credential resolver with the given dependencies.
+// taskRepo is optional; pass nil if the task feature is not yet wired into
+// this caller (tests, embedded contexts).
 func NewCredentialResolver(
 	credRepo repository.ICredentialRepository,
 	operationRepo repository.IOperationRepository,
 	userRepo repository.IUserRepository,
 	wikiDocRes IWikiDocumentResolver,
+	taskRepo repository.ITaskRepository,
 	bus eventbus.IEventBus,
 ) ICredentialResolver {
 	if bus == nil {
@@ -113,6 +121,7 @@ func NewCredentialResolver(
 		operationRepo: operationRepo,
 		userRepo:      userRepo,
 		wikiDocRes:    wikiDocRes,
+		taskRepo:      taskRepo,
 		eventBus:      bus,
 	}
 }
@@ -295,6 +304,20 @@ func (r *credentialResolver) DeleteCredential(ctx context.Context, id string) (b
 	if r.wikiDocRes != nil {
 		if err := r.wikiDocRes.CleanupCredentialReferences(ctx, cred.OperationID, cred.CredentialID); err != nil {
 			logger.From(ctx).Warn("cleanup of credential backlinks failed",
+				zap.String("credential_id", cred.CredentialID.String()),
+				zap.Error(err),
+			)
+		}
+	}
+
+	// Same cleanup, task side — strip the dead credential id from every
+	// task's credential_references array. Best-effort: a failed pull leaves
+	// a stale pointer that the task field resolver silently drops at read
+	// time. taskRepo is optional in this constructor so tests and any
+	// pre-Tasks wiring continue to compile.
+	if r.taskRepo != nil {
+		if err := r.taskRepo.PullCredentialReference(ctx, cred.OperationID, cred.CredentialID); err != nil {
+			logger.From(ctx).Warn("cleanup of task credential references failed",
 				zap.String("credential_id", cred.CredentialID.String()),
 				zap.Error(err),
 			)
@@ -872,20 +895,7 @@ func (r *credentialResolver) CommentUpdatedAt(ctx context.Context, obj *models.C
 }
 
 // --- helpers ---
-
-func strDeref(p *string) string {
-	if p == nil {
-		return ""
-	}
-	return *p
-}
-
-func boolDeref(p *bool, fallback bool) bool {
-	if p == nil {
-		return fallback
-	}
-	return *p
-}
+// strDeref, boolDeref, and callerUIDFromCtx live in helpers.go.
 
 // normalizeCredentialKeys trims each field and drops entries where both name
 // and content are empty after trimming. Returns a non-nil empty slice for nil

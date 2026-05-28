@@ -210,6 +210,8 @@ func extractOperationID(event eventbus.Event) string {
 		return p.OperationID
 	case eventbus.CredentialEventPayload:
 		return p.OperationID
+	case eventbus.TaskEventPayload:
+		return p.OperationID
 	case eventbus.OperationEventLoggedPayload:
 		return p.OperationID
 	}
@@ -421,6 +423,92 @@ func (r *subscriptionResolver) wikiDocumentPresenceChanged(ctx context.Context, 
 		wikiPresenceTopics,
 		func(_ context.Context, event eventbus.Event) {
 			evt := toWikiDocumentPresenceEvent(event)
+
+			select {
+			case ch <- evt:
+			case <-ctx.Done():
+			}
+		},
+		filter,
+	)
+
+	go func() {
+		<-ctx.Done()
+		unsubscribe()
+		close(ch)
+	}()
+
+	return ch, nil
+}
+
+// taskTopics is the list of task event bus topics for subscriptions.
+// Includes every task topic so the subscriber refetches once per mutation
+// regardless of which axis (stage, status, assignees, references, etc.)
+// changed.
+var taskTopics = []eventbus.Topic{
+	eventbus.TopicTaskCreated,
+	eventbus.TopicTaskUpdated,
+	eventbus.TopicTaskStageChanged,
+	eventbus.TopicTaskStatusSet,
+	eventbus.TopicTaskAssigneesChanged,
+	eventbus.TopicTaskReferencesChanged,
+	eventbus.TopicTaskSoftDeleted,
+	eventbus.TopicTaskRestored,
+	eventbus.TopicTaskHardDeleted,
+}
+
+// toTaskEvent converts an event bus Event to a GraphQL TaskEvent. Soft and
+// hard delete map to DELETED so the subscriber prunes the row from its
+// cache; restore maps to CREATED so the kanban view re-inserts the card;
+// everything else (including stage / status changes) maps to UPDATED.
+func toTaskEvent(event eventbus.Event) *model.TaskEvent {
+	var action model.EventAction
+	switch event.Topic {
+	case eventbus.TopicTaskCreated, eventbus.TopicTaskRestored:
+		action = model.EventActionCreated
+	case eventbus.TopicTaskSoftDeleted, eventbus.TopicTaskHardDeleted:
+		action = model.EventActionDeleted
+	default:
+		action = model.EventActionUpdated
+	}
+
+	evt := &model.TaskEvent{Action: action}
+	if p, ok := event.Payload.(eventbus.TaskEventPayload); ok {
+		evt.TaskID = p.TaskID
+		evt.OperationID = p.OperationID
+	}
+	return evt
+}
+
+// taskChanged implements the taskChanged subscription. Same shape as
+// wikiDocumentChanged — auth via the operation filter, then refetch the
+// full task for non-DELETED events so clients can update without an
+// additional query.
+func (r *subscriptionResolver) taskChanged(ctx context.Context, operationID string) (<-chan *model.TaskEvent, error) {
+	auth := gqlctx.AuthFromContext(ctx)
+	if auth.UserID == "" {
+		return nil, fmt.Errorf("unauthorized")
+	}
+
+	filter, err := r.buildOperationFilter(ctx, auth, &operationID)
+	if err != nil {
+		return nil, err
+	}
+
+	ch := make(chan *model.TaskEvent, 1)
+
+	unsubscribe := r.EventBus.Subscribe(
+		taskTopics,
+		func(_ context.Context, event eventbus.Event) {
+			evt := toTaskEvent(event)
+
+			if evt.Action != model.EventActionDeleted && r.TaskRepo != nil {
+				if tid, err := uuid.Parse(evt.TaskID); err == nil {
+					if task, err := r.TaskRepo.FindByID(ctx, tid); err == nil {
+						evt.Task = &task
+					}
+				}
+			}
 
 			select {
 			case ch <- evt:

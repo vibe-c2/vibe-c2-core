@@ -48,6 +48,21 @@ const (
 	TopicWikiPresenceJoined Topic = "wiki.presence.joined"
 	TopicWikiPresenceLeft   Topic = "wiki.presence.left"
 
+	// Task events — emitted by TaskResolver. Stage and status transitions
+	// get their own topics so the timeline subscriber can render specific
+	// rows ("moved to In Process", "marked Success") instead of a generic
+	// "task updated" line. GraphQL subscribers listen to the whole set via
+	// taskChanged and refetch on any of them.
+	TopicTaskCreated            Topic = "task.created"
+	TopicTaskUpdated            Topic = "task.updated"
+	TopicTaskStageChanged       Topic = "task.stage_changed"
+	TopicTaskStatusSet          Topic = "task.status_set"
+	TopicTaskAssigneesChanged   Topic = "task.assignees_changed"
+	TopicTaskReferencesChanged  Topic = "task.references_changed"
+	TopicTaskSoftDeleted        Topic = "task.soft_deleted"
+	TopicTaskRestored           Topic = "task.restored"
+	TopicTaskHardDeleted        Topic = "task.hard_deleted"
+
 	// Credential events — emitted by CredentialResolver.
 	TopicCredentialCreated        Topic = "credential.created"
 	TopicCredentialUpdated        Topic = "credential.updated"

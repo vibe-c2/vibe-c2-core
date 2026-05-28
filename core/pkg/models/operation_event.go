@@ -15,6 +15,7 @@ type SubjectKind string
 const (
 	SubjectKindCredential   SubjectKind = "credential"
 	SubjectKindWikiDocument SubjectKind = "wiki_document"
+	SubjectKindTask         SubjectKind = "task"
 	// SubjectKindCustomEvent is a user-authored timeline annotation. Unlike
 	// the other kinds, the row IS its own subject — there is no backing
 	// entity — so event_id and subject_id are equal. Description lives in

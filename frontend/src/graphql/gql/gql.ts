@@ -61,6 +61,23 @@ type Documents = {
     "\n  mutation AdminRevokeAllUserSessions($userId: ID!) {\n    adminRevokeAllUserSessions(userId: $userId)\n  }\n": typeof types.AdminRevokeAllUserSessionsDocument,
     "\n  subscription MySessionChanged {\n    mySessionChanged {\n      action\n      sessionId\n      userId\n      session {\n        ...SessionFields\n      }\n    }\n  }\n": typeof types.MySessionChangedDocument,
     "\n  subscription SessionChanged($userId: ID) {\n    sessionChanged(userId: $userId) {\n      action\n      sessionId\n      userId\n      session {\n        ...SessionFields\n      }\n    }\n  }\n": typeof types.SessionChangedDocument,
+    "\n  fragment TaskFields on Task {\n    id\n    operationId\n    name\n    description\n    riskScore\n    riskDescription\n    profitScore\n    profitDescription\n    stage\n    status\n    assignees {\n      id\n      username\n    }\n    wikiReferences {\n      id\n      title\n      emoji\n    }\n    credentialReferences {\n      id\n      name\n      type\n    }\n    createdBy {\n      id\n      username\n    }\n    lastUpdatedBy {\n      id\n      username\n    }\n    lastUpdatedAt\n    deletedAt\n    createdAt\n    updatedAt\n  }\n": typeof types.TaskFieldsFragmentDoc,
+    "\n  fragment TaskBacklinkFields on Task {\n    id\n    operationId\n    name\n    stage\n    status\n    riskScore\n    profitScore\n    assignees {\n      id\n      username\n    }\n  }\n": typeof types.TaskBacklinkFieldsFragmentDoc,
+    "\n  query Task($id: ID!) {\n    task(id: $id) {\n      ...TaskFields\n    }\n  }\n": typeof types.TaskDocument,
+    "\n  query Tasks(\n    $operationId: ID!\n    $stage: TaskStage\n    $search: String\n    $first: Int\n    $after: String\n  ) {\n    tasks(\n      operationId: $operationId\n      stage: $stage\n      search: $search\n      first: $first\n      after: $after\n    ) {\n      edges {\n        node {\n          ...TaskFields\n        }\n        cursor\n      }\n      pageInfo {\n        hasNextPage\n        endCursor\n      }\n      totalCount\n    }\n  }\n": typeof types.TasksDocument,
+    "\n  query TaskTrash(\n    $operationId: ID!\n    $first: Int\n    $after: String\n  ) {\n    taskTrash(operationId: $operationId, first: $first, after: $after) {\n      edges {\n        node {\n          ...TaskFields\n        }\n        cursor\n      }\n      pageInfo {\n        hasNextPage\n        endCursor\n      }\n      totalCount\n    }\n  }\n": typeof types.TaskTrashDocument,
+    "\n  query TasksReferencingWikiDocument($documentId: ID!) {\n    tasksReferencingWikiDocument(documentId: $documentId) {\n      ...TaskBacklinkFields\n    }\n  }\n": typeof types.TasksReferencingWikiDocumentDocument,
+    "\n  query TasksReferencingCredential($credentialId: ID!) {\n    tasksReferencingCredential(credentialId: $credentialId) {\n      ...TaskBacklinkFields\n    }\n  }\n": typeof types.TasksReferencingCredentialDocument,
+    "\n  mutation CreateTask($input: CreateTaskInput!) {\n    createTask(input: $input) {\n      ...TaskFields\n    }\n  }\n": typeof types.CreateTaskDocument,
+    "\n  mutation UpdateTask($id: ID!, $input: UpdateTaskInput!) {\n    updateTask(id: $id, input: $input) {\n      ...TaskFields\n    }\n  }\n": typeof types.UpdateTaskDocument,
+    "\n  mutation ChangeTaskStage($input: ChangeTaskStageInput!) {\n    changeTaskStage(input: $input) {\n      ...TaskFields\n    }\n  }\n": typeof types.ChangeTaskStageDocument,
+    "\n  mutation SetTaskAssignees($taskId: ID!, $assigneeIds: [ID!]!) {\n    setTaskAssignees(taskId: $taskId, assigneeIds: $assigneeIds) {\n      ...TaskFields\n    }\n  }\n": typeof types.SetTaskAssigneesDocument,
+    "\n  mutation SetTaskWikiReferences($taskId: ID!, $wikiIds: [ID!]!) {\n    setTaskWikiReferences(taskId: $taskId, wikiIds: $wikiIds) {\n      ...TaskFields\n    }\n  }\n": typeof types.SetTaskWikiReferencesDocument,
+    "\n  mutation SetTaskCredentialReferences(\n    $taskId: ID!\n    $credentialIds: [ID!]!\n  ) {\n    setTaskCredentialReferences(\n      taskId: $taskId\n      credentialIds: $credentialIds\n    ) {\n      ...TaskFields\n    }\n  }\n": typeof types.SetTaskCredentialReferencesDocument,
+    "\n  mutation DeleteTask($id: ID!) {\n    deleteTask(id: $id)\n  }\n": typeof types.DeleteTaskDocument,
+    "\n  mutation RestoreTask($id: ID!) {\n    restoreTask(id: $id) {\n      ...TaskFields\n    }\n  }\n": typeof types.RestoreTaskDocument,
+    "\n  mutation PurgeTask($id: ID!) {\n    purgeTask(id: $id)\n  }\n": typeof types.PurgeTaskDocument,
+    "\n  subscription TaskChanged($operationId: ID!) {\n    taskChanged(operationId: $operationId) {\n      action\n      taskId\n      operationId\n      task {\n        ...TaskFields\n      }\n    }\n  }\n": typeof types.TaskChangedDocument,
     "\n  fragment TimelineEventFields on TimelineEvent {\n    id\n    operationId\n    topic\n    subjectKind\n    subjectId\n    subjectName\n    occurredAt\n    metadata\n    actor {\n      id\n      username\n    }\n  }\n": typeof types.TimelineEventFieldsFragmentDoc,
     "\n  query TimelineBuckets(\n    $operationId: ID!\n    $granularity: TimelineGranularity = DAY\n    $timezone: String!\n    $from: String\n    $to: String\n    $types: [String!]\n    $actorIds: [ID!]\n  ) {\n    timelineBuckets(\n      operationId: $operationId\n      granularity: $granularity\n      timezone: $timezone\n      from: $from\n      to: $to\n      types: $types\n      actorIds: $actorIds\n    ) {\n      bucketStart\n      count\n      topicCounts {\n        topic\n        subjectKind\n        count\n      }\n    }\n  }\n": typeof types.TimelineBucketsDocument,
     "\n  query TimelineEventsByDay(\n    $operationId: ID!\n    $date: String!\n    $timezone: String!\n    $granularity: TimelineGranularity = DAY\n    $types: [String!]\n    $actorIds: [ID!]\n    $first: Int = 100\n    $after: String\n  ) {\n    timelineEventsByDay(\n      operationId: $operationId\n      date: $date\n      timezone: $timezone\n      granularity: $granularity\n      types: $types\n      actorIds: $actorIds\n      first: $first\n      after: $after\n    ) {\n      edges {\n        node {\n          ...TimelineEventFields\n        }\n        cursor\n      }\n      pageInfo {\n        hasNextPage\n        hasPreviousPage\n        startCursor\n        endCursor\n      }\n    }\n  }\n": typeof types.TimelineEventsByDayDocument,
@@ -164,6 +181,23 @@ const documents: Documents = {
     "\n  mutation AdminRevokeAllUserSessions($userId: ID!) {\n    adminRevokeAllUserSessions(userId: $userId)\n  }\n": types.AdminRevokeAllUserSessionsDocument,
     "\n  subscription MySessionChanged {\n    mySessionChanged {\n      action\n      sessionId\n      userId\n      session {\n        ...SessionFields\n      }\n    }\n  }\n": types.MySessionChangedDocument,
     "\n  subscription SessionChanged($userId: ID) {\n    sessionChanged(userId: $userId) {\n      action\n      sessionId\n      userId\n      session {\n        ...SessionFields\n      }\n    }\n  }\n": types.SessionChangedDocument,
+    "\n  fragment TaskFields on Task {\n    id\n    operationId\n    name\n    description\n    riskScore\n    riskDescription\n    profitScore\n    profitDescription\n    stage\n    status\n    assignees {\n      id\n      username\n    }\n    wikiReferences {\n      id\n      title\n      emoji\n    }\n    credentialReferences {\n      id\n      name\n      type\n    }\n    createdBy {\n      id\n      username\n    }\n    lastUpdatedBy {\n      id\n      username\n    }\n    lastUpdatedAt\n    deletedAt\n    createdAt\n    updatedAt\n  }\n": types.TaskFieldsFragmentDoc,
+    "\n  fragment TaskBacklinkFields on Task {\n    id\n    operationId\n    name\n    stage\n    status\n    riskScore\n    profitScore\n    assignees {\n      id\n      username\n    }\n  }\n": types.TaskBacklinkFieldsFragmentDoc,
+    "\n  query Task($id: ID!) {\n    task(id: $id) {\n      ...TaskFields\n    }\n  }\n": types.TaskDocument,
+    "\n  query Tasks(\n    $operationId: ID!\n    $stage: TaskStage\n    $search: String\n    $first: Int\n    $after: String\n  ) {\n    tasks(\n      operationId: $operationId\n      stage: $stage\n      search: $search\n      first: $first\n      after: $after\n    ) {\n      edges {\n        node {\n          ...TaskFields\n        }\n        cursor\n      }\n      pageInfo {\n        hasNextPage\n        endCursor\n      }\n      totalCount\n    }\n  }\n": types.TasksDocument,
+    "\n  query TaskTrash(\n    $operationId: ID!\n    $first: Int\n    $after: String\n  ) {\n    taskTrash(operationId: $operationId, first: $first, after: $after) {\n      edges {\n        node {\n          ...TaskFields\n        }\n        cursor\n      }\n      pageInfo {\n        hasNextPage\n        endCursor\n      }\n      totalCount\n    }\n  }\n": types.TaskTrashDocument,
+    "\n  query TasksReferencingWikiDocument($documentId: ID!) {\n    tasksReferencingWikiDocument(documentId: $documentId) {\n      ...TaskBacklinkFields\n    }\n  }\n": types.TasksReferencingWikiDocumentDocument,
+    "\n  query TasksReferencingCredential($credentialId: ID!) {\n    tasksReferencingCredential(credentialId: $credentialId) {\n      ...TaskBacklinkFields\n    }\n  }\n": types.TasksReferencingCredentialDocument,
+    "\n  mutation CreateTask($input: CreateTaskInput!) {\n    createTask(input: $input) {\n      ...TaskFields\n    }\n  }\n": types.CreateTaskDocument,
+    "\n  mutation UpdateTask($id: ID!, $input: UpdateTaskInput!) {\n    updateTask(id: $id, input: $input) {\n      ...TaskFields\n    }\n  }\n": types.UpdateTaskDocument,
+    "\n  mutation ChangeTaskStage($input: ChangeTaskStageInput!) {\n    changeTaskStage(input: $input) {\n      ...TaskFields\n    }\n  }\n": types.ChangeTaskStageDocument,
+    "\n  mutation SetTaskAssignees($taskId: ID!, $assigneeIds: [ID!]!) {\n    setTaskAssignees(taskId: $taskId, assigneeIds: $assigneeIds) {\n      ...TaskFields\n    }\n  }\n": types.SetTaskAssigneesDocument,
+    "\n  mutation SetTaskWikiReferences($taskId: ID!, $wikiIds: [ID!]!) {\n    setTaskWikiReferences(taskId: $taskId, wikiIds: $wikiIds) {\n      ...TaskFields\n    }\n  }\n": types.SetTaskWikiReferencesDocument,
+    "\n  mutation SetTaskCredentialReferences(\n    $taskId: ID!\n    $credentialIds: [ID!]!\n  ) {\n    setTaskCredentialReferences(\n      taskId: $taskId\n      credentialIds: $credentialIds\n    ) {\n      ...TaskFields\n    }\n  }\n": types.SetTaskCredentialReferencesDocument,
+    "\n  mutation DeleteTask($id: ID!) {\n    deleteTask(id: $id)\n  }\n": types.DeleteTaskDocument,
+    "\n  mutation RestoreTask($id: ID!) {\n    restoreTask(id: $id) {\n      ...TaskFields\n    }\n  }\n": types.RestoreTaskDocument,
+    "\n  mutation PurgeTask($id: ID!) {\n    purgeTask(id: $id)\n  }\n": types.PurgeTaskDocument,
+    "\n  subscription TaskChanged($operationId: ID!) {\n    taskChanged(operationId: $operationId) {\n      action\n      taskId\n      operationId\n      task {\n        ...TaskFields\n      }\n    }\n  }\n": types.TaskChangedDocument,
     "\n  fragment TimelineEventFields on TimelineEvent {\n    id\n    operationId\n    topic\n    subjectKind\n    subjectId\n    subjectName\n    occurredAt\n    metadata\n    actor {\n      id\n      username\n    }\n  }\n": types.TimelineEventFieldsFragmentDoc,
     "\n  query TimelineBuckets(\n    $operationId: ID!\n    $granularity: TimelineGranularity = DAY\n    $timezone: String!\n    $from: String\n    $to: String\n    $types: [String!]\n    $actorIds: [ID!]\n  ) {\n    timelineBuckets(\n      operationId: $operationId\n      granularity: $granularity\n      timezone: $timezone\n      from: $from\n      to: $to\n      types: $types\n      actorIds: $actorIds\n    ) {\n      bucketStart\n      count\n      topicCounts {\n        topic\n        subjectKind\n        count\n      }\n    }\n  }\n": types.TimelineBucketsDocument,
     "\n  query TimelineEventsByDay(\n    $operationId: ID!\n    $date: String!\n    $timezone: String!\n    $granularity: TimelineGranularity = DAY\n    $types: [String!]\n    $actorIds: [ID!]\n    $first: Int = 100\n    $after: String\n  ) {\n    timelineEventsByDay(\n      operationId: $operationId\n      date: $date\n      timezone: $timezone\n      granularity: $granularity\n      types: $types\n      actorIds: $actorIds\n      first: $first\n      after: $after\n    ) {\n      edges {\n        node {\n          ...TimelineEventFields\n        }\n        cursor\n      }\n      pageInfo {\n        hasNextPage\n        hasPreviousPage\n        startCursor\n        endCursor\n      }\n    }\n  }\n": types.TimelineEventsByDayDocument,
@@ -422,6 +456,74 @@ export function graphql(source: "\n  subscription MySessionChanged {\n    mySess
  * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
  */
 export function graphql(source: "\n  subscription SessionChanged($userId: ID) {\n    sessionChanged(userId: $userId) {\n      action\n      sessionId\n      userId\n      session {\n        ...SessionFields\n      }\n    }\n  }\n"): (typeof documents)["\n  subscription SessionChanged($userId: ID) {\n    sessionChanged(userId: $userId) {\n      action\n      sessionId\n      userId\n      session {\n        ...SessionFields\n      }\n    }\n  }\n"];
+/**
+ * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
+ */
+export function graphql(source: "\n  fragment TaskFields on Task {\n    id\n    operationId\n    name\n    description\n    riskScore\n    riskDescription\n    profitScore\n    profitDescription\n    stage\n    status\n    assignees {\n      id\n      username\n    }\n    wikiReferences {\n      id\n      title\n      emoji\n    }\n    credentialReferences {\n      id\n      name\n      type\n    }\n    createdBy {\n      id\n      username\n    }\n    lastUpdatedBy {\n      id\n      username\n    }\n    lastUpdatedAt\n    deletedAt\n    createdAt\n    updatedAt\n  }\n"): (typeof documents)["\n  fragment TaskFields on Task {\n    id\n    operationId\n    name\n    description\n    riskScore\n    riskDescription\n    profitScore\n    profitDescription\n    stage\n    status\n    assignees {\n      id\n      username\n    }\n    wikiReferences {\n      id\n      title\n      emoji\n    }\n    credentialReferences {\n      id\n      name\n      type\n    }\n    createdBy {\n      id\n      username\n    }\n    lastUpdatedBy {\n      id\n      username\n    }\n    lastUpdatedAt\n    deletedAt\n    createdAt\n    updatedAt\n  }\n"];
+/**
+ * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
+ */
+export function graphql(source: "\n  fragment TaskBacklinkFields on Task {\n    id\n    operationId\n    name\n    stage\n    status\n    riskScore\n    profitScore\n    assignees {\n      id\n      username\n    }\n  }\n"): (typeof documents)["\n  fragment TaskBacklinkFields on Task {\n    id\n    operationId\n    name\n    stage\n    status\n    riskScore\n    profitScore\n    assignees {\n      id\n      username\n    }\n  }\n"];
+/**
+ * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
+ */
+export function graphql(source: "\n  query Task($id: ID!) {\n    task(id: $id) {\n      ...TaskFields\n    }\n  }\n"): (typeof documents)["\n  query Task($id: ID!) {\n    task(id: $id) {\n      ...TaskFields\n    }\n  }\n"];
+/**
+ * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
+ */
+export function graphql(source: "\n  query Tasks(\n    $operationId: ID!\n    $stage: TaskStage\n    $search: String\n    $first: Int\n    $after: String\n  ) {\n    tasks(\n      operationId: $operationId\n      stage: $stage\n      search: $search\n      first: $first\n      after: $after\n    ) {\n      edges {\n        node {\n          ...TaskFields\n        }\n        cursor\n      }\n      pageInfo {\n        hasNextPage\n        endCursor\n      }\n      totalCount\n    }\n  }\n"): (typeof documents)["\n  query Tasks(\n    $operationId: ID!\n    $stage: TaskStage\n    $search: String\n    $first: Int\n    $after: String\n  ) {\n    tasks(\n      operationId: $operationId\n      stage: $stage\n      search: $search\n      first: $first\n      after: $after\n    ) {\n      edges {\n        node {\n          ...TaskFields\n        }\n        cursor\n      }\n      pageInfo {\n        hasNextPage\n        endCursor\n      }\n      totalCount\n    }\n  }\n"];
+/**
+ * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
+ */
+export function graphql(source: "\n  query TaskTrash(\n    $operationId: ID!\n    $first: Int\n    $after: String\n  ) {\n    taskTrash(operationId: $operationId, first: $first, after: $after) {\n      edges {\n        node {\n          ...TaskFields\n        }\n        cursor\n      }\n      pageInfo {\n        hasNextPage\n        endCursor\n      }\n      totalCount\n    }\n  }\n"): (typeof documents)["\n  query TaskTrash(\n    $operationId: ID!\n    $first: Int\n    $after: String\n  ) {\n    taskTrash(operationId: $operationId, first: $first, after: $after) {\n      edges {\n        node {\n          ...TaskFields\n        }\n        cursor\n      }\n      pageInfo {\n        hasNextPage\n        endCursor\n      }\n      totalCount\n    }\n  }\n"];
+/**
+ * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
+ */
+export function graphql(source: "\n  query TasksReferencingWikiDocument($documentId: ID!) {\n    tasksReferencingWikiDocument(documentId: $documentId) {\n      ...TaskBacklinkFields\n    }\n  }\n"): (typeof documents)["\n  query TasksReferencingWikiDocument($documentId: ID!) {\n    tasksReferencingWikiDocument(documentId: $documentId) {\n      ...TaskBacklinkFields\n    }\n  }\n"];
+/**
+ * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
+ */
+export function graphql(source: "\n  query TasksReferencingCredential($credentialId: ID!) {\n    tasksReferencingCredential(credentialId: $credentialId) {\n      ...TaskBacklinkFields\n    }\n  }\n"): (typeof documents)["\n  query TasksReferencingCredential($credentialId: ID!) {\n    tasksReferencingCredential(credentialId: $credentialId) {\n      ...TaskBacklinkFields\n    }\n  }\n"];
+/**
+ * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
+ */
+export function graphql(source: "\n  mutation CreateTask($input: CreateTaskInput!) {\n    createTask(input: $input) {\n      ...TaskFields\n    }\n  }\n"): (typeof documents)["\n  mutation CreateTask($input: CreateTaskInput!) {\n    createTask(input: $input) {\n      ...TaskFields\n    }\n  }\n"];
+/**
+ * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
+ */
+export function graphql(source: "\n  mutation UpdateTask($id: ID!, $input: UpdateTaskInput!) {\n    updateTask(id: $id, input: $input) {\n      ...TaskFields\n    }\n  }\n"): (typeof documents)["\n  mutation UpdateTask($id: ID!, $input: UpdateTaskInput!) {\n    updateTask(id: $id, input: $input) {\n      ...TaskFields\n    }\n  }\n"];
+/**
+ * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
+ */
+export function graphql(source: "\n  mutation ChangeTaskStage($input: ChangeTaskStageInput!) {\n    changeTaskStage(input: $input) {\n      ...TaskFields\n    }\n  }\n"): (typeof documents)["\n  mutation ChangeTaskStage($input: ChangeTaskStageInput!) {\n    changeTaskStage(input: $input) {\n      ...TaskFields\n    }\n  }\n"];
+/**
+ * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
+ */
+export function graphql(source: "\n  mutation SetTaskAssignees($taskId: ID!, $assigneeIds: [ID!]!) {\n    setTaskAssignees(taskId: $taskId, assigneeIds: $assigneeIds) {\n      ...TaskFields\n    }\n  }\n"): (typeof documents)["\n  mutation SetTaskAssignees($taskId: ID!, $assigneeIds: [ID!]!) {\n    setTaskAssignees(taskId: $taskId, assigneeIds: $assigneeIds) {\n      ...TaskFields\n    }\n  }\n"];
+/**
+ * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
+ */
+export function graphql(source: "\n  mutation SetTaskWikiReferences($taskId: ID!, $wikiIds: [ID!]!) {\n    setTaskWikiReferences(taskId: $taskId, wikiIds: $wikiIds) {\n      ...TaskFields\n    }\n  }\n"): (typeof documents)["\n  mutation SetTaskWikiReferences($taskId: ID!, $wikiIds: [ID!]!) {\n    setTaskWikiReferences(taskId: $taskId, wikiIds: $wikiIds) {\n      ...TaskFields\n    }\n  }\n"];
+/**
+ * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
+ */
+export function graphql(source: "\n  mutation SetTaskCredentialReferences(\n    $taskId: ID!\n    $credentialIds: [ID!]!\n  ) {\n    setTaskCredentialReferences(\n      taskId: $taskId\n      credentialIds: $credentialIds\n    ) {\n      ...TaskFields\n    }\n  }\n"): (typeof documents)["\n  mutation SetTaskCredentialReferences(\n    $taskId: ID!\n    $credentialIds: [ID!]!\n  ) {\n    setTaskCredentialReferences(\n      taskId: $taskId\n      credentialIds: $credentialIds\n    ) {\n      ...TaskFields\n    }\n  }\n"];
+/**
+ * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
+ */
+export function graphql(source: "\n  mutation DeleteTask($id: ID!) {\n    deleteTask(id: $id)\n  }\n"): (typeof documents)["\n  mutation DeleteTask($id: ID!) {\n    deleteTask(id: $id)\n  }\n"];
+/**
+ * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
+ */
+export function graphql(source: "\n  mutation RestoreTask($id: ID!) {\n    restoreTask(id: $id) {\n      ...TaskFields\n    }\n  }\n"): (typeof documents)["\n  mutation RestoreTask($id: ID!) {\n    restoreTask(id: $id) {\n      ...TaskFields\n    }\n  }\n"];
+/**
+ * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
+ */
+export function graphql(source: "\n  mutation PurgeTask($id: ID!) {\n    purgeTask(id: $id)\n  }\n"): (typeof documents)["\n  mutation PurgeTask($id: ID!) {\n    purgeTask(id: $id)\n  }\n"];
+/**
+ * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
+ */
+export function graphql(source: "\n  subscription TaskChanged($operationId: ID!) {\n    taskChanged(operationId: $operationId) {\n      action\n      taskId\n      operationId\n      task {\n        ...TaskFields\n      }\n    }\n  }\n"): (typeof documents)["\n  subscription TaskChanged($operationId: ID!) {\n    taskChanged(operationId: $operationId) {\n      action\n      taskId\n      operationId\n      task {\n        ...TaskFields\n      }\n    }\n  }\n"];
 /**
  * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
  */

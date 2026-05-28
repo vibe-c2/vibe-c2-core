@@ -20,11 +20,8 @@ import {
 } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
 import { DocumentIcon } from "@/components/wiki/document-icon"
-import {
-  WikiAncestorBreadcrumb,
-  type AncestorCrumb,
-} from "@/components/wiki/wiki-ancestor-breadcrumb"
-import { useWikiDocumentTree } from "@/graphql/hooks/wiki"
+import { WikiAncestorBreadcrumb } from "@/components/wiki/wiki-ancestor-breadcrumb"
+import { useWikiDocumentTreeAncestors } from "@/components/wiki/use-wiki-document-tree-ancestors"
 import type { WikiDocumentTreeFieldsFragment } from "@/graphql/gql/graphql"
 import { cn } from "@/lib/utils"
 
@@ -148,56 +145,16 @@ function PickerBody({ search, setSearch }: PickerBodyProps) {
   // during render, no cascading-update edge cases on transitions to/from 0.
   const [rawActiveIndex, setRawActiveIndex] = useState(0)
 
-  const { data, isLoading } = useWikiDocumentTree(operationId)
-  const allDocs = useMemo(
-    () => data?.wikiDocumentTree ?? [],
-    [data?.wikiDocumentTree],
-  )
+  // Source data is the wiki tree the surrounding page already loaded, plus
+  // a precomputed parent-chain lookup. Shared with the task editor's wiki
+  // reference picker so both surfaces render identical rows.
+  const {
+    docs: allDocs,
+    ancestorsByDocId,
+    isLoading,
+  } = useWikiDocumentTreeAncestors(operationId)
 
   const excludeSet = useMemo(() => new Set(excludeIds), [excludeIds])
-
-  // id -> doc lookup over the loaded tree. Used to walk `parentDocumentId`
-  // chains so we can render an ancestor path under each row — same
-  // disambiguation affordance the search palette and history dropdown use
-  // for same-titled docs in different locations. Built locally to avoid an
-  // extra `ancestors { … }` selection on the tree fragment (the tree query
-  // is already loaded and may be large).
-  const docById = useMemo(() => {
-    const m = new Map<string, WikiDocumentTreeFieldsFragment>()
-    for (const d of allDocs) m.set(d.id, d)
-    return m
-  }, [allDocs])
-
-  // Precompute the ancestor chain for every doc once per tree load. Without
-  // this, each keystroke filter or arrow-key nav rebuilt N chains inline
-  // inside the render loop — a measurable hit on large operations.
-  // `isDeleted` is always false here because `wikiDocumentTree` only returns
-  // live docs (server filters `deleted_at: nil`). The walk bounds at the
-  // tree size to defend against any cyclic data slipping in.
-  const ancestorsByDocId = useMemo(() => {
-    const out = new Map<string, AncestorCrumb[]>()
-    for (const doc of allDocs) {
-      const chain: AncestorCrumb[] = []
-      let parentId = doc.parentDocumentId
-      let guard = docById.size
-      while (parentId && guard-- > 0) {
-        const parent = docById.get(parentId)
-        if (!parent) break
-        chain.push({
-          id: parent.id,
-          title: parent.title ?? "Untitled",
-          emoji: parent.emoji,
-          icon: parent.icon,
-          color: parent.color,
-          isDeleted: false,
-        })
-        parentId = parent.parentDocumentId
-      }
-      chain.reverse()
-      out.set(doc.id, chain)
-    }
-    return out
-  }, [allDocs, docById])
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase()

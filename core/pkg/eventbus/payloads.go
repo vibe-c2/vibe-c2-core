@@ -214,6 +214,67 @@ func NewCredentialCommentRemovedEvent(actor Actor, p CredentialEventPayload) Eve
 	return NewEvent(TopicCredentialCommentRemoved, actor, p)
 }
 
+// --- Task event payloads ---
+
+// TaskEventPayload is the payload for every task topic. The bus stays
+// decoupled from the models package, so this carries primitives only —
+// subscribers that need the full task refetch via the task repository.
+//
+// Name is snapshotted at publish time so the timeline subscriber can
+// render a stable SubjectName even after the row is hard-deleted.
+//
+// OldStage is populated for stage_changed events; for every other topic
+// it is empty. Stage/Status reflect the row state *after* the mutation
+// that triggered the event.
+//
+// DeletedAt is the ISO timestamp when the event represents a soft-delete;
+// empty for active rows. Mirrors the wiki document payload convention.
+type TaskEventPayload struct {
+	TaskID      string
+	OperationID string
+	Name        string
+	Stage       string
+	Status      string
+	OldStage    string
+	DeletedAt   string
+}
+
+func NewTaskCreatedEvent(actor Actor, p TaskEventPayload) Event {
+	return NewEvent(TopicTaskCreated, actor, p)
+}
+
+func NewTaskUpdatedEvent(actor Actor, p TaskEventPayload) Event {
+	return NewEvent(TopicTaskUpdated, actor, p)
+}
+
+func NewTaskStageChangedEvent(actor Actor, p TaskEventPayload) Event {
+	return NewEvent(TopicTaskStageChanged, actor, p)
+}
+
+func NewTaskStatusSetEvent(actor Actor, p TaskEventPayload) Event {
+	return NewEvent(TopicTaskStatusSet, actor, p)
+}
+
+func NewTaskAssigneesChangedEvent(actor Actor, p TaskEventPayload) Event {
+	return NewEvent(TopicTaskAssigneesChanged, actor, p)
+}
+
+func NewTaskReferencesChangedEvent(actor Actor, p TaskEventPayload) Event {
+	return NewEvent(TopicTaskReferencesChanged, actor, p)
+}
+
+func NewTaskSoftDeletedEvent(actor Actor, p TaskEventPayload) Event {
+	return NewEvent(TopicTaskSoftDeleted, actor, p)
+}
+
+func NewTaskRestoredEvent(actor Actor, p TaskEventPayload) Event {
+	return NewEvent(TopicTaskRestored, actor, p)
+}
+
+func NewTaskHardDeletedEvent(actor Actor, p TaskEventPayload) Event {
+	return NewEvent(TopicTaskHardDeleted, actor, p)
+}
+
 // --- Timeline event payload ---
 
 // OperationEventLoggedPayload is the payload for TopicOperationEventLogged.

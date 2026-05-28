@@ -51,10 +51,22 @@ func NewLogger(
 // Topics returns the bus topics this logger persists. Wire one Subscribe call
 // in app.go with this slice; new topics are added here without touching the
 // app wiring.
+//
+// Task coverage: created + stage_changed + status_set + soft/restored/purged.
+// Generic task.updated, assignees_changed, and references_changed are
+// intentionally omitted — they would be noise on the timeline. Stage
+// transitions and terminal-status decisions are the operationally
+// meaningful events; field edits and link maintenance are not.
 func (l *Logger) Topics() []eventbus.Topic {
 	return []eventbus.Topic{
 		eventbus.TopicCredentialCreated,
 		eventbus.TopicWikiDocumentCreated,
+		eventbus.TopicTaskCreated,
+		eventbus.TopicTaskStageChanged,
+		eventbus.TopicTaskStatusSet,
+		eventbus.TopicTaskSoftDeleted,
+		eventbus.TopicTaskRestored,
+		eventbus.TopicTaskHardDeleted,
 	}
 }
 
@@ -163,9 +175,70 @@ func (l *Logger) toRow(ctx context.Context, e eventbus.Event) (*models.Operation
 			Metadata:    meta,
 			OccurredAt:  occurredAt(e),
 		}, nil
+
+	case eventbus.TopicTaskCreated,
+		eventbus.TopicTaskStageChanged,
+		eventbus.TopicTaskStatusSet,
+		eventbus.TopicTaskSoftDeleted,
+		eventbus.TopicTaskRestored,
+		eventbus.TopicTaskHardDeleted:
+		return l.toTaskRow(e, actorType, actorID)
 	}
 
 	return nil, nil
+}
+
+// toTaskRow translates any of the persisted task topics into a row.
+// Task payloads already snapshot Name (the resolver populates it at
+// publish time), so no repo lookup is needed — even for hard-deleted
+// tasks the timeline can still render their original name.
+//
+// Metadata carries the topic-specific fields the frontend's summary
+// function uses to render specific lines:
+//   - stage_changed: {"old_stage", "new_stage"}
+//   - status_set:    {"status", "stage"} — stage is included so a
+//                    "marked Success while in Done" line has full context.
+//   - others:        no metadata.
+func (l *Logger) toTaskRow(e eventbus.Event, actorType models.EventActorType, actorID *uuid.UUID) (*models.OperationEvent, error) {
+	p, ok := e.Payload.(eventbus.TaskEventPayload)
+	if !ok {
+		return nil, fmt.Errorf("unexpected payload type %T for %s", e.Payload, e.Topic)
+	}
+	taskID, err := uuid.Parse(p.TaskID)
+	if err != nil {
+		return nil, fmt.Errorf("parse task id: %w", err)
+	}
+	opID, err := uuid.Parse(p.OperationID)
+	if err != nil {
+		return nil, fmt.Errorf("parse operation id: %w", err)
+	}
+
+	var meta map[string]any
+	switch e.Topic {
+	case eventbus.TopicTaskStageChanged:
+		meta = map[string]any{
+			"old_stage": p.OldStage,
+			"new_stage": p.Stage,
+		}
+	case eventbus.TopicTaskStatusSet:
+		meta = map[string]any{
+			"status": p.Status,
+			"stage":  p.Stage,
+		}
+	}
+
+	return &models.OperationEvent{
+		EventID:     uuid.New(),
+		OperationID: opID,
+		Topic:       string(e.Topic),
+		SubjectKind: models.SubjectKindTask,
+		SubjectID:   taskID,
+		SubjectName: p.Name,
+		ActorType:   actorType,
+		ActorID:     actorID,
+		Metadata:    meta,
+		OccurredAt:  occurredAt(e),
+	}, nil
 }
 
 // translateActor converts the eventbus actor into the model's persisted form.
