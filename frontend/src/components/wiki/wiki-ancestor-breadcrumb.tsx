@@ -1,5 +1,7 @@
+import { Link } from "react-router"
 import { DocumentIcon } from "@/components/wiki/document-icon"
-import { cn } from "@/lib/utils"
+import { HighlightedSubstring } from "@/components/wiki/wiki-highlight"
+import { cn, isPlainLeftClick } from "@/lib/utils"
 
 // Minimal shape every wiki query selects from `WikiDocumentAncestor`. Defined
 // locally instead of importing the generated type so callers can pass any
@@ -16,6 +18,12 @@ export interface AncestorCrumb {
 interface WikiAncestorBreadcrumbProps {
   ancestors: readonly AncestorCrumb[]
   className?: string
+  /** Case-insensitive substring to highlight inside each crumb's title. */
+  highlightQuery?: string | null
+  /** When provided, each non-deleted crumb becomes a navigation Link to
+   *  `/wiki/<id>` and this callback fires after the click is accepted.
+   *  Surfaces like the command palette use this to close the overlay. */
+  onCrumbClick?: () => void
 }
 
 // Renders the ancestor path as `icon title › icon title › …` with deleted
@@ -24,6 +32,8 @@ interface WikiAncestorBreadcrumbProps {
 export function WikiAncestorBreadcrumb({
   ancestors,
   className,
+  highlightQuery,
+  onCrumbClick,
 }: WikiAncestorBreadcrumbProps) {
   if (ancestors.length === 0) return null
   // Block-rendered <span> instead of <p> so callers can drop the breadcrumb
@@ -34,22 +44,62 @@ export function WikiAncestorBreadcrumb({
       {ancestors.map((a, i) => (
         <span key={a.id}>
           {i > 0 && <span className="mx-0.5 opacity-60">›</span>}
-          <span
-            className={cn(
-              "inline-flex items-center gap-1",
-              a.isDeleted && "text-muted-foreground/70 line-through",
-            )}
-          >
-            <DocumentIcon
-              emoji={a.emoji}
-              icon={a.icon}
-              size={12}
-              className="text-[11px]"
-            />
-            {a.title}
-          </span>
+          <Crumb
+            crumb={a}
+            highlightQuery={highlightQuery}
+            onCrumbClick={onCrumbClick}
+          />
         </span>
       ))}
     </span>
+  )
+}
+
+interface CrumbProps {
+  crumb: AncestorCrumb
+  highlightQuery?: string | null
+  onCrumbClick?: () => void
+}
+
+function Crumb({ crumb, highlightQuery, onCrumbClick }: CrumbProps) {
+  const inner = (
+    <>
+      <DocumentIcon
+        emoji={crumb.emoji}
+        icon={crumb.icon}
+        size={12}
+        className="text-[11px]"
+      />
+      <HighlightedSubstring text={crumb.title} query={highlightQuery} />
+    </>
+  )
+
+  // Deleted ancestors aren't navigable — their page is in the trash, the
+  // route would 404. Render them as plain text with the strike-through.
+  if (crumb.isDeleted) {
+    return (
+      <span className="inline-flex items-center gap-1 text-muted-foreground/70 line-through">
+        {inner}
+      </span>
+    )
+  }
+
+  if (!onCrumbClick) {
+    return <span className="inline-flex items-center gap-1">{inner}</span>
+  }
+
+  return (
+    <Link
+      to={`/wiki/${crumb.id}`}
+      onClick={(e) => {
+        // Stop the row-level click handler (e.g. the palette's row-open
+        // shortcut) from also firing — the crumb is its own navigation.
+        e.stopPropagation()
+        if (isPlainLeftClick(e)) onCrumbClick()
+      }}
+      className="inline-flex items-center gap-1 rounded hover:bg-accent/60 hover:text-foreground"
+    >
+      {inner}
+    </Link>
   )
 }

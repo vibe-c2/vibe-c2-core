@@ -41,18 +41,22 @@ type searchScoredDoc struct {
 	Score               float64 `bson:"score"`
 }
 
-// SearchByOperationID is the one true search path. It runs up to three
+// SearchByOperationID is the one true search path. It runs up to four
 // independent queries and merges their results:
 //
 //  1. Anchored prefix match on title_lower (uses the {operation_id, title_lower}
 //     index). Catches incremental typing on titles — "sea" finds "search" —
 //     which MongoDB $text cannot do because $text matches whole words only.
-//  2. Case-insensitive substring regex on content. Catches partial-word
-//     matches in document bodies — "banan" finds a doc containing "banana".
-//     No index (would need an n-gram index); the operation_id + deleted_at
-//     filter reduces the scan to one operation's active docs, capped at
-//     mergeFetchCap results.
-//  3. $text phrase search on the title+content text index. Adds scoring
+//  2. Case-insensitive substring regex on title_lower. Catches mid-title
+//     matches the anchored prefix misses ("cmg" inside "10.0.0.5_cmg-1",
+//     which $text also misses because the Unicode word-breaker keeps "_" as
+//     a word character and "5_cmg" indexes as one token). Piggybacks on the
+//     {operation_id, title_lower} index.
+//  3. Case-insensitive substring regex on content. Catches partial-word body
+//     matches — "banan" finds a doc containing "banana". No index (would
+//     need an n-gram index); the operation_id + deleted_at filter reduces
+//     the scan to one operation's active docs, capped at mergeFetchCap.
+//  4. $text phrase search on the title+content text index. Adds scoring
 //     (title matches weighted 10x) and surfaces docs where the query
 //     appears as an exact tokenized phrase. The query is phrase-quoted
 //     before being handed to $text — see buildTextSearchPhrase for why
@@ -60,10 +64,11 @@ type searchScoredDoc struct {
 //     negation and OR-splits on punctuation, which causes noisy queries
 //     to return unrelated documents).
 //
-// Ranking: title-prefix hits first (strongest "user is typing a title"
-// signal), then content-substring hits, then remaining $text hits. Duplicates
-// (same doc matched by multiple paths) are deduped to keep their
-// highest-priority position.
+// Ranking: title-prefix first (strongest "user is typing a title" signal),
+// then title-substring, then content-substring, then remaining $text hits.
+// Duplicates (same doc matched by multiple branches) are deduped to keep
+// their highest-priority position — so a title hit always outranks the same
+// doc's content hit.
 //
 // `total` reflects the merged, deduped result count. Offset/limit apply after
 // the merge.
@@ -112,16 +117,17 @@ func (r *wikiDocumentRepository) SearchByOperationID(
 		}
 	}
 
-	// Run the three branches in parallel — they hit the same operation_id
-	// pre-filter but otherwise share no state. errgroup cancels siblings if
-	// any one fails so we don't waste work; capture results into pre-declared
-	// slices to keep the merge order deterministic (title-prefix outranks
-	// content-substring outranks $text).
+	// Run the branches in parallel — they hit the same operation_id pre-filter
+	// but otherwise share no state. errgroup cancels siblings if any one fails
+	// so we don't waste work; capture results into pre-declared slices to keep
+	// the merge order deterministic (title-prefix → title-substring →
+	// content-substring → $text).
 	g, gctx := errgroup.WithContext(ctx)
 	var (
-		prefixHits  []WikiDocumentSearchHit
-		contentHits []WikiDocumentSearchHit
-		textHits    []WikiDocumentSearchHit
+		prefixHits           []WikiDocumentSearchHit
+		titleSubstringHits   []WikiDocumentSearchHit
+		contentSubstringHits []WikiDocumentSearchHit
+		textHits             []WikiDocumentSearchHit
 	)
 
 	// Branch 1: title-prefix (always runs, always cheap).
@@ -134,17 +140,29 @@ func (r *wikiDocumentRepository) SearchByOperationID(
 		return nil
 	})
 
-	// Branch 2: content substring regex. Catches partial-word matches inside
-	// bodies that $text cannot. Unindexed but scoped to one operation's
-	// active docs and capped at mergeFetchCap. Skip for single-char queries
-	// where a substring scan returns noise — use the title prefix instead.
+	// Branches 2 + 3: substring regex, split by field so title hits outrank
+	// content-only hits in the merged list. Title side catches mid-title
+	// matches the anchored prefix branch misses (e.g. "cmg" inside
+	// "10.0.0.5_cmg-1", which $text also misses because Mongo's Unicode
+	// word-breaker keeps "_" as a word character and indexes "5_cmg" as a
+	// single token). Content side is the unindexed body scan. Both are
+	// bounded by operation_id + deleted_at and capped at mergeFetchCap.
+	// Skip for single-char queries — the prefix branch already handles those.
 	if len([]rune(query)) >= 2 {
+		g.Go(func() error {
+			hits, err := r.searchTitleSubstring(gctx, raw, baseFilter, query)
+			if err != nil {
+				return err
+			}
+			titleSubstringHits = hits
+			return nil
+		})
 		g.Go(func() error {
 			hits, err := r.searchContentSubstring(gctx, raw, baseFilter, query)
 			if err != nil {
 				return err
 			}
-			contentHits = hits
+			contentSubstringHits = hits
 			return nil
 		})
 	}
@@ -167,7 +185,7 @@ func (r *wikiDocumentRepository) SearchByOperationID(
 		return nil, 0, err
 	}
 
-	merged := mergeSearchHits(prefixHits, contentHits, textHits)
+	merged := mergeSearchHits(prefixHits, titleSubstringHits, contentSubstringHits, textHits)
 	total := int64(len(merged))
 
 	// Slice by offset/limit.
@@ -326,6 +344,51 @@ func (r *wikiDocumentRepository) searchTitlePrefix(
 	// Project away `content` — snippets only render for the final page, and
 	// the page hydrates content separately. Shipping content for up to
 	// mergeFetchCap candidates was the dominant payload before this fix.
+	opt := options.Find().
+		SetSort(v1bson.D{{Key: "title_lower", Value: 1}}).
+		SetLimit(mergeFetchCap).
+		SetProjection(v1bson.M{"content": 0, "content_state": 0})
+
+	cur, err := raw.Find(ctx, filter, opt)
+	if err != nil {
+		return nil, err
+	}
+	defer cur.Close(ctx)
+
+	var docs []models.WikiDocument
+	if err := cur.All(ctx, &docs); err != nil {
+		return nil, err
+	}
+
+	hits := make([]WikiDocumentSearchHit, len(docs))
+	for i, d := range docs {
+		hits[i] = WikiDocumentSearchHit{Doc: d}
+	}
+	return hits, nil
+}
+
+// searchTitleSubstring runs a case-insensitive substring regex over
+// `title_lower`. Catches mid-title matches the anchored title-prefix branch
+// can't reach — e.g. "cmg" inside "10.0.0.5_cmg-1". `title_lower` is already
+// lowercased at write time, so the regex doesn't need the "i" option and
+// piggybacks on the {operation_id, title_lower} index.
+//
+// The regex is escaped (regexp.QuoteMeta) so user input like "(a+)+" is
+// matched literally and cannot trigger catastrophic backtracking.
+func (r *wikiDocumentRepository) searchTitleSubstring(
+	ctx context.Context,
+	raw *mongo.Collection,
+	baseFilter v1bson.M,
+	query string,
+) ([]WikiDocumentSearchHit, error) {
+	filter := v1bson.M{}
+	for k, v := range baseFilter {
+		filter[k] = v
+	}
+	filter["title_lower"] = v1bson.M{
+		"$regex": regexp.QuoteMeta(strings.ToLower(query)),
+	}
+
 	opt := options.Find().
 		SetSort(v1bson.D{{Key: "title_lower", Value: 1}}).
 		SetLimit(mergeFetchCap).

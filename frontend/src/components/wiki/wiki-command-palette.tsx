@@ -5,7 +5,6 @@ import {
   useRef,
   useState,
   type KeyboardEvent as ReactKeyboardEvent,
-  type ReactNode,
 } from "react";
 import { Link, useNavigate } from "react-router";
 import { SearchIcon, XIcon } from "lucide-react";
@@ -19,6 +18,10 @@ import { useWikiStore } from "@/stores/wiki";
 import { useWikiSearch } from "@/graphql/hooks/wiki";
 import { DocumentIcon } from "@/components/wiki/document-icon";
 import { WikiAncestorBreadcrumb } from "@/components/wiki/wiki-ancestor-breadcrumb";
+import {
+  HighlightedRanges,
+  HighlightedSubstring,
+} from "@/components/wiki/wiki-highlight";
 import { cn, isPlainLeftClick } from "@/lib/utils";
 
 interface WikiCommandPaletteProps {
@@ -141,6 +144,17 @@ function PaletteBody({ operationId, scope, onClose }: PaletteBodyProps) {
     [navigate, onClose],
   );
 
+  // Shared handler for every <Link> that opens the active hit (title row +
+  // snippet row both navigate to the same doc). Modifier-clicks fall through
+  // to the browser's default new-tab/new-window behavior so the palette only
+  // closes for plain navigation.
+  const handleOpenClick = useCallback(
+    (e: React.MouseEvent) => {
+      if (isPlainLeftClick(e)) onClose();
+    },
+    [onClose],
+  );
+
   const onKeyDown = useCallback(
     (e: ReactKeyboardEvent<HTMLInputElement>) => {
       if (e.key === "ArrowDown") {
@@ -202,41 +216,58 @@ function PaletteBody({ operationId, scope, onClose }: PaletteBodyProps) {
           <ul className="py-1">
             {hits.map((hit, i) => (
               <li key={hit.document.id}>
-                <Link
-                  to={`/wiki/${hit.document.id}`}
+                {/*
+                  Row is a plain div — not a Link — because the breadcrumb
+                  below renders its own per-crumb Links (clicking a crumb
+                  navigates to that ancestor). Nesting anchors inside an
+                  anchor is invalid HTML, so the row exposes the hit-open
+                  navigation through the dedicated title Link only.
+                  Keyboard Enter still opens the active row via openHit.
+                */}
+                <div
                   data-palette-index={i}
                   className={cn(
-                    "mx-1 flex cursor-pointer flex-col gap-0.5 rounded px-3 py-2 text-left",
+                    "mx-1 flex flex-col gap-0.5 rounded px-3 py-2",
                     i === activeIndex ? "bg-accent" : "hover:bg-muted/60",
                   )}
                   onMouseMove={() => setActiveIndex(i)}
-                  onClick={(e) => {
-                    if (isPlainLeftClick(e)) onClose()
-                  }}
                 >
-                  <div className="flex items-center gap-2">
+                  <Link
+                    to={`/wiki/${hit.document.id}`}
+                    className="flex cursor-pointer items-center gap-2 text-left"
+                    onClick={handleOpenClick}
+                  >
                     <DocumentIcon
                       emoji={hit.document.emoji}
                       icon={hit.document.icon}
                       color={hit.document.color}
                     />
                     <span className="truncate text-sm font-medium">
-                      {hit.document.title}
+                      <HighlightedSubstring
+                        text={hit.document.title}
+                        query={debounced}
+                      />
                     </span>
-                  </div>
+                  </Link>
                   <WikiAncestorBreadcrumb
                     ancestors={hit.document.ancestors}
                     className="truncate pl-6"
+                    highlightQuery={debounced}
+                    onCrumbClick={onClose}
                   />
                   {hit.snippet && (
-                    <p className="truncate text-xs text-muted-foreground">
-                      <HighlightedText
+                    <Link
+                      to={`/wiki/${hit.document.id}`}
+                      className="block truncate pl-6 text-xs text-muted-foreground"
+                      onClick={handleOpenClick}
+                    >
+                      <HighlightedRanges
                         text={hit.snippet}
                         ranges={hit.matchRanges}
                       />
-                    </p>
+                    </Link>
                   )}
-                </Link>
+                </div>
               </li>
             ))}
             <div ref={sentinelRef} className="h-1" />
@@ -270,41 +301,3 @@ function PaletteHint() {
   );
 }
 
-// HighlightedText wraps rune-offset ranges in <mark>. Ranges come from the
-// server and reference rune offsets in `text` — JS strings iterate by code
-// units, so we decode to an array of codepoints first to keep offsets aligned.
-function HighlightedText({
-  text,
-  ranges,
-}: {
-  text: string;
-  ranges: readonly { start: number; end: number }[];
-}) {
-  if (!ranges || ranges.length === 0) return <>{text}</>;
-
-  const runes = Array.from(text); // codepoint-aware split
-
-  const sorted = [...ranges]
-    .filter((r) => r.start < r.end && r.start >= 0 && r.end <= runes.length)
-    .sort((a, b) => a.start - b.start);
-
-  if (sorted.length === 0) return <>{text}</>;
-
-  const out: ReactNode[] = [];
-  let cursor = 0;
-  sorted.forEach((r, i) => {
-    if (r.start < cursor) return; // skip overlaps
-    if (r.start > cursor) out.push(runes.slice(cursor, r.start).join(""));
-    out.push(
-      <mark
-        key={i}
-        className="rounded bg-yellow-200 px-0.5 text-foreground dark:bg-yellow-800/70"
-      >
-        {runes.slice(r.start, r.end).join("")}
-      </mark>,
-    );
-    cursor = r.end;
-  });
-  if (cursor < runes.length) out.push(runes.slice(cursor).join(""));
-  return <>{out}</>;
-}
