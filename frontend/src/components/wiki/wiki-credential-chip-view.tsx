@@ -182,9 +182,11 @@ export const WikiCredentialChipView = forwardRef<
     selected && "is-selected",
   )
 
+  const credId = cred.id
+  const credName = cred.name
   function triggerOpen() {
     if (onClick) onClick()
-    else openDetails({ id: cred.id, name: cred.name })
+    else openDetails({ id: credId, name: credName })
   }
 
   let chipNode: ReactNode
