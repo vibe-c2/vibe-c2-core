@@ -69,24 +69,25 @@ type ComplexityRoot struct {
 	}
 
 	Credential struct {
-		BacklinkCount func(childComplexity int) int
-		Backlinks     func(childComplexity int) int
-		Comments      func(childComplexity int) int
-		CreatedAt     func(childComplexity int) int
-		CreatedBy     func(childComplexity int) int
-		ID            func(childComplexity int) int
-		IsValid       func(childComplexity int) int
-		Keys          func(childComplexity int) int
-		Name          func(childComplexity int) int
-		Operation     func(childComplexity int) int
-		OperationID   func(childComplexity int) int
-		Password      func(childComplexity int) int
-		Properties    func(childComplexity int) int
-		Tags          func(childComplexity int) int
-		TaskBacklinks func(childComplexity int) int
-		Type          func(childComplexity int) int
-		UpdatedAt     func(childComplexity int) int
-		Username      func(childComplexity int) int
+		BacklinkCount             func(childComplexity int) int
+		Backlinks                 func(childComplexity int) int
+		Comments                  func(childComplexity int) int
+		CreatedAt                 func(childComplexity int) int
+		CreatedBy                 func(childComplexity int) int
+		ID                        func(childComplexity int) int
+		IsValid                   func(childComplexity int) int
+		Keys                      func(childComplexity int) int
+		Name                      func(childComplexity int) int
+		Operation                 func(childComplexity int) int
+		OperationID               func(childComplexity int) int
+		Password                  func(childComplexity int) int
+		Properties                func(childComplexity int) int
+		Tags                      func(childComplexity int) int
+		TaskBacklinks             func(childComplexity int) int
+		Type                      func(childComplexity int) int
+		UpdatedAt                 func(childComplexity int) int
+		Username                  func(childComplexity int) int
+		ViewerCanModerateComments func(childComplexity int) int
 	}
 
 	CredentialComment struct {
@@ -603,6 +604,7 @@ type CredentialResolver interface {
 	Operation(ctx context.Context, obj *models.Credential) (*models.Operation, error)
 
 	Comments(ctx context.Context, obj *models.Credential) ([]*models.CredentialComment, error)
+	ViewerCanModerateComments(ctx context.Context, obj *models.Credential) (bool, error)
 	CreatedBy(ctx context.Context, obj *models.Credential) (*models.User, error)
 	BacklinkCount(ctx context.Context, obj *models.Credential) (int, error)
 	Backlinks(ctx context.Context, obj *models.Credential) ([]*models.WikiDocument, error)
@@ -1004,6 +1006,12 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.Credential.Username(childComplexity), true
+	case "Credential.viewerCanModerateComments":
+		if e.ComplexityRoot.Credential.ViewerCanModerateComments == nil {
+			break
+		}
+
+		return e.ComplexityRoot.Credential.ViewerCanModerateComments(childComplexity), true
 
 	case "CredentialComment.author":
 		if e.ComplexityRoot.CredentialComment.Author == nil {
@@ -3820,6 +3828,12 @@ type Credential {
   isValid: Boolean!
   tags: [String!]!
   comments: [CredentialComment!]!
+  # True when the calling user can moderate (currently: delete) any comment
+  # on this credential regardless of authorship. Granted to app-level admins
+  # and to admins of the parent operation. Used by the UI to expose a
+  # delete action on comments the caller did not write. Comment authors can
+  # always delete their own comments; this flag covers everything else.
+  viewerCanModerateComments: Boolean!
   # Null for credentials whose creator was deleted.
   createdBy: User
   # Number of active wiki documents in this operation that reference this
@@ -7926,6 +7940,35 @@ func (ec *executionContext) fieldContext_Credential_comments(_ context.Context, 
 	return fc, nil
 }
 
+func (ec *executionContext) _Credential_viewerCanModerateComments(ctx context.Context, field graphql.CollectedField, obj *models.Credential) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Credential_viewerCanModerateComments,
+		func(ctx context.Context) (any, error) {
+			return ec.Resolvers.Credential().ViewerCanModerateComments(ctx, obj)
+		},
+		nil,
+		ec.marshalNBoolean2bool,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_Credential_viewerCanModerateComments(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Credential",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Boolean does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
 func (ec *executionContext) _Credential_createdBy(ctx context.Context, field graphql.CollectedField, obj *models.Credential) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
@@ -8514,6 +8557,8 @@ func (ec *executionContext) fieldContext_CredentialEdge_node(_ context.Context, 
 				return ec.fieldContext_Credential_tags(ctx, field)
 			case "comments":
 				return ec.fieldContext_Credential_comments(ctx, field)
+			case "viewerCanModerateComments":
+				return ec.fieldContext_Credential_viewerCanModerateComments(ctx, field)
 			case "createdBy":
 				return ec.fieldContext_Credential_createdBy(ctx, field)
 			case "backlinkCount":
@@ -8697,6 +8742,8 @@ func (ec *executionContext) fieldContext_CredentialEvent_credential(_ context.Co
 				return ec.fieldContext_Credential_tags(ctx, field)
 			case "comments":
 				return ec.fieldContext_Credential_comments(ctx, field)
+			case "viewerCanModerateComments":
+				return ec.fieldContext_Credential_viewerCanModerateComments(ctx, field)
 			case "createdBy":
 				return ec.fieldContext_Credential_createdBy(ctx, field)
 			case "backlinkCount":
@@ -10271,6 +10318,8 @@ func (ec *executionContext) fieldContext_Mutation_createCredential(ctx context.C
 				return ec.fieldContext_Credential_tags(ctx, field)
 			case "comments":
 				return ec.fieldContext_Credential_comments(ctx, field)
+			case "viewerCanModerateComments":
+				return ec.fieldContext_Credential_viewerCanModerateComments(ctx, field)
 			case "createdBy":
 				return ec.fieldContext_Credential_createdBy(ctx, field)
 			case "backlinkCount":
@@ -10368,6 +10417,8 @@ func (ec *executionContext) fieldContext_Mutation_updateCredential(ctx context.C
 				return ec.fieldContext_Credential_tags(ctx, field)
 			case "comments":
 				return ec.fieldContext_Credential_comments(ctx, field)
+			case "viewerCanModerateComments":
+				return ec.fieldContext_Credential_viewerCanModerateComments(ctx, field)
 			case "createdBy":
 				return ec.fieldContext_Credential_createdBy(ctx, field)
 			case "backlinkCount":
@@ -10524,6 +10575,8 @@ func (ec *executionContext) fieldContext_Mutation_addCredentialComment(ctx conte
 				return ec.fieldContext_Credential_tags(ctx, field)
 			case "comments":
 				return ec.fieldContext_Credential_comments(ctx, field)
+			case "viewerCanModerateComments":
+				return ec.fieldContext_Credential_viewerCanModerateComments(ctx, field)
 			case "createdBy":
 				return ec.fieldContext_Credential_createdBy(ctx, field)
 			case "backlinkCount":
@@ -10621,6 +10674,8 @@ func (ec *executionContext) fieldContext_Mutation_updateCredentialComment(ctx co
 				return ec.fieldContext_Credential_tags(ctx, field)
 			case "comments":
 				return ec.fieldContext_Credential_comments(ctx, field)
+			case "viewerCanModerateComments":
+				return ec.fieldContext_Credential_viewerCanModerateComments(ctx, field)
 			case "createdBy":
 				return ec.fieldContext_Credential_createdBy(ctx, field)
 			case "backlinkCount":
@@ -10718,6 +10773,8 @@ func (ec *executionContext) fieldContext_Mutation_deleteCredentialComment(ctx co
 				return ec.fieldContext_Credential_tags(ctx, field)
 			case "comments":
 				return ec.fieldContext_Credential_comments(ctx, field)
+			case "viewerCanModerateComments":
+				return ec.fieldContext_Credential_viewerCanModerateComments(ctx, field)
 			case "createdBy":
 				return ec.fieldContext_Credential_createdBy(ctx, field)
 			case "backlinkCount":
@@ -14636,6 +14693,8 @@ func (ec *executionContext) fieldContext_Query_credential(ctx context.Context, f
 				return ec.fieldContext_Credential_tags(ctx, field)
 			case "comments":
 				return ec.fieldContext_Credential_comments(ctx, field)
+			case "viewerCanModerateComments":
+				return ec.fieldContext_Credential_viewerCanModerateComments(ctx, field)
 			case "createdBy":
 				return ec.fieldContext_Credential_createdBy(ctx, field)
 			case "backlinkCount":
@@ -19656,6 +19715,8 @@ func (ec *executionContext) fieldContext_Task_credentialReferences(_ context.Con
 				return ec.fieldContext_Credential_tags(ctx, field)
 			case "comments":
 				return ec.fieldContext_Credential_comments(ctx, field)
+			case "viewerCanModerateComments":
+				return ec.fieldContext_Credential_viewerCanModerateComments(ctx, field)
 			case "createdBy":
 				return ec.fieldContext_Credential_createdBy(ctx, field)
 			case "backlinkCount":
@@ -27220,6 +27281,42 @@ func (ec *executionContext) _Credential(ctx context.Context, sel ast.SelectionSe
 					}
 				}()
 				res = ec._Credential_comments(ctx, field, obj)
+				if res == graphql.Null {
+					atomic.AddUint32(&fs.Invalids, 1)
+				}
+				return res
+			}
+
+			if field.Deferrable != nil {
+				dfs, ok := deferred[field.Deferrable.Label]
+				di := 0
+				if ok {
+					dfs.AddField(field)
+					di = len(dfs.Values) - 1
+				} else {
+					dfs = graphql.NewFieldSet([]graphql.CollectedField{field})
+					deferred[field.Deferrable.Label] = dfs
+				}
+				dfs.Concurrently(di, func(ctx context.Context) graphql.Marshaler {
+					return innerFunc(ctx, dfs)
+				})
+
+				// don't run the out.Concurrently() call below
+				out.Values[i] = graphql.Null
+				continue
+			}
+
+			out.Concurrently(i, func(ctx context.Context) graphql.Marshaler { return innerFunc(ctx, out) })
+		case "viewerCanModerateComments":
+			field := field
+
+			innerFunc := func(ctx context.Context, fs *graphql.FieldSet) (res graphql.Marshaler) {
+				defer func() {
+					if r := recover(); r != nil {
+						ec.Error(ctx, ec.Recover(ctx, r))
+					}
+				}()
+				res = ec._Credential_viewerCanModerateComments(ctx, field, obj)
 				if res == graphql.Null {
 					atomic.AddUint32(&fs.Invalids, 1)
 				}

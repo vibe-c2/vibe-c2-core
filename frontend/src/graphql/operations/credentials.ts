@@ -34,6 +34,7 @@ export const CredentialFields = graphql(`
     comments {
       ...CredentialCommentFields
     }
+    viewerCanModerateComments
     createdBy {
       id
       username

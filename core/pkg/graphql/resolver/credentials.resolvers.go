@@ -37,6 +37,11 @@ func (r *credentialResolver) Comments(ctx context.Context, obj *models.Credentia
 	return r.CredentialResolver.Comments(ctx, obj)
 }
 
+// ViewerCanModerateComments is the resolver for the viewerCanModerateComments field.
+func (r *credentialResolver) ViewerCanModerateComments(ctx context.Context, obj *models.Credential) (bool, error) {
+	return r.CredentialResolver.ViewerCanModerateComments(ctx, obj)
+}
+
 // CreatedBy is the resolver for the createdBy field.
 func (r *credentialResolver) CreatedBy(ctx context.Context, obj *models.Credential) (*models.User, error) {
 	return r.CredentialResolver.CreatedBy(ctx, obj)

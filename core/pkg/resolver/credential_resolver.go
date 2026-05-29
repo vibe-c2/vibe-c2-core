@@ -71,6 +71,7 @@ type ICredentialResolver interface {
 	OperationIDField(ctx context.Context, obj *models.Credential) (string, error)
 	Operation(ctx context.Context, obj *models.Credential) (*models.Operation, error)
 	Comments(ctx context.Context, obj *models.Credential) ([]*models.CredentialComment, error)
+	ViewerCanModerateComments(ctx context.Context, obj *models.Credential) (bool, error)
 	CreatedBy(ctx context.Context, obj *models.Credential) (*models.User, error)
 	BacklinkCount(ctx context.Context, obj *models.Credential) (int, error)
 	Backlinks(ctx context.Context, obj *models.Credential) ([]*models.WikiDocument, error)
@@ -819,6 +820,24 @@ func (r *credentialResolver) Comments(ctx context.Context, obj *models.Credentia
 		ptrs[i] = &obj.Comments[i]
 	}
 	return ptrs, nil
+}
+
+// ViewerCanModerateComments reports whether the caller can delete any comment
+// on this credential. App-level admins always can; operation admins can on
+// credentials in their operation. Authors can always delete their own comments
+// regardless of this flag.
+func (r *credentialResolver) ViewerCanModerateComments(ctx context.Context, obj *models.Credential) (bool, error) {
+	auth := gqlctx.AuthFromContext(ctx)
+	for _, role := range auth.Roles {
+		if role == "admin" {
+			return true, nil
+		}
+	}
+	op, err := r.operationRepo.FindByID(ctx, obj.OperationID)
+	if err != nil {
+		return false, nil
+	}
+	return authorization.AuthorizeOperationRole(ctx, &op, models.OperationRoleAdmin) == nil, nil
 }
 
 // CreatedBy resolves the User who created the credential, or nil if that user was deleted.

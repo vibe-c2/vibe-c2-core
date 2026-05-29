@@ -245,6 +245,8 @@ models:
         resolver: true         # OperationID (uuid.UUID) -> Operation (fetched from DB)
       comments:
         resolver: true         # []CredentialComment -> []*CredentialComment
+      viewerCanModerateComments:
+        resolver: true         # caller-role check (app admin or operation admin)
       createdBy:
         resolver: true         # CreatedByID (uuid.UUID) -> User (fetched from DB)
       createdAt:

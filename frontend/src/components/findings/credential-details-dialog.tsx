@@ -233,6 +233,7 @@ export function CredentialDetailsDialog() {
             <CommentsSection
               credentialId={credential.id}
               comments={credential.comments}
+              canModerate={credential.viewerCanModerateComments}
             />
           </div>
         )}
@@ -353,9 +354,10 @@ function CopyIconButton({ value, label }: { value: string; label: string }) {
 interface CommentsSectionProps {
   credentialId: string
   comments: readonly CredentialCommentFieldsFragment[]
+  canModerate: boolean
 }
 
-function CommentsSection({ credentialId, comments }: CommentsSectionProps) {
+function CommentsSection({ credentialId, comments, canModerate }: CommentsSectionProps) {
   const [text, setText] = useState("")
   const [error, setError] = useState<string | null>(null)
   const addComment = useAddCredentialComment()
@@ -387,6 +389,7 @@ function CommentsSection({ credentialId, comments }: CommentsSectionProps) {
               credentialId={credentialId}
               comment={c}
               isOwn={c.author?.id === currentUserId}
+              canModerate={canModerate}
             />
           ))}
         </ul>
@@ -422,9 +425,10 @@ interface CommentRowProps {
   credentialId: string
   comment: CredentialCommentFieldsFragment
   isOwn: boolean
+  canModerate: boolean
 }
 
-function CommentRow({ credentialId, comment, isOwn }: CommentRowProps) {
+function CommentRow({ credentialId, comment, isOwn, canModerate }: CommentRowProps) {
   const [editing, setEditing] = useState(false)
   const [draft, setDraft] = useState(comment.text)
   const [error, setError] = useState<string | null>(null)
@@ -468,19 +472,21 @@ function CommentRow({ credentialId, comment, isOwn }: CommentRowProps) {
             <span>edited</span>
           </>
         )}
-        {isOwn && !editing && (
+        {!editing && (isOwn || canModerate) && (
           <div className="ms-auto flex gap-1">
-            <Button
-              variant="ghost"
-              size="icon-sm"
-              onClick={() => {
-                setDraft(comment.text)
-                setEditing(true)
-              }}
-              aria-label="Edit comment"
-            >
-              <PencilIcon className="size-3.5" />
-            </Button>
+            {isOwn && (
+              <Button
+                variant="ghost"
+                size="icon-sm"
+                onClick={() => {
+                  setDraft(comment.text)
+                  setEditing(true)
+                }}
+                aria-label="Edit comment"
+              >
+                <PencilIcon className="size-3.5" />
+              </Button>
+            )}
             <Button
               variant="ghost"
               size="icon-sm"
