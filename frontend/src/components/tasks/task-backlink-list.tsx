@@ -1,3 +1,4 @@
+import { type ReactNode } from "react"
 import { ChevronRightIcon } from "lucide-react"
 import { ScoreSwatch, TaskStageBadge, TaskStatusBadge } from "@/components/tasks/task-badges"
 import { cn } from "@/lib/utils"
@@ -22,6 +23,11 @@ interface TaskBacklinkListProps {
   // flows with the document.
   scrollable?: boolean
   isLoading?: boolean
+  // Optional trailing slot in the section heading — used by the wiki editor
+  // footer to render an "Add to task" trigger next to the count. Kept
+  // generic (ReactNode) so other surfaces can wire any inline action
+  // without forking the list component.
+  headerAction?: ReactNode
 }
 
 /**
@@ -42,17 +48,23 @@ export function TaskBacklinkList({
   showWhenEmpty = false,
   scrollable = false,
   isLoading = false,
+  headerAction,
 }: TaskBacklinkListProps) {
   if (isLoading && tasks.length === 0) return null
-  if (tasks.length === 0 && !showWhenEmpty) return null
+  // headerAction needs to surface even on an empty list — that's the whole
+  // point of the wiki footer's "Add to task" trigger (an unlinked doc still
+  // wants to offer the affordance). Treat presence of headerAction as an
+  // implicit showWhenEmpty.
+  if (tasks.length === 0 && !showWhenEmpty && !headerAction) return null
 
   return (
     <div className="min-w-0">
-      <div className="mb-2 flex items-center justify-between">
+      <div className="mb-2 flex items-center justify-between gap-2">
         <h3 className="text-xs font-medium tracking-wide text-muted-foreground uppercase">
           {title}
           <span className="ml-1.5 text-muted-foreground/70">{tasks.length}</span>
         </h3>
+        {headerAction}
       </div>
 
       {tasks.length === 0 ? (

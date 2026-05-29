@@ -129,6 +129,7 @@ type ComplexityRoot struct {
 		AddCredentialComment          func(childComplexity int, credentialID string, text string) int
 		AddOperationMember            func(childComplexity int, operationID string, userID string, role models.OperationRole) int
 		AddSchemeNetworkPort          func(childComplexity int, pointID string, input model.CreateSchemeNetworkPortInput) int
+		AddTaskWikiReference          func(childComplexity int, taskID string, wikiID string) int
 		AdminRevokeAllUserSessions    func(childComplexity int, userID string) int
 		AdminRevokeSession            func(childComplexity int, id string) int
 		ChangeTaskStage               func(childComplexity int, input model.ChangeTaskStageInput) int
@@ -652,6 +653,7 @@ type MutationResolver interface {
 	ChangeTaskStage(ctx context.Context, input model.ChangeTaskStageInput) (*models.Task, error)
 	SetTaskAssignees(ctx context.Context, taskID string, assigneeIds []string) (*models.Task, error)
 	SetTaskWikiReferences(ctx context.Context, taskID string, wikiIds []string) (*models.Task, error)
+	AddTaskWikiReference(ctx context.Context, taskID string, wikiID string) (*models.Task, error)
 	SetTaskCredentialReferences(ctx context.Context, taskID string, credentialIds []string) (*models.Task, error)
 	DeleteTask(ctx context.Context, id string) (bool, error)
 	RestoreTask(ctx context.Context, id string) (*models.Task, error)
@@ -1150,6 +1152,17 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.Mutation.AddSchemeNetworkPort(childComplexity, args["pointId"].(string), args["input"].(model.CreateSchemeNetworkPortInput)), true
+	case "Mutation.addTaskWikiReference":
+		if e.ComplexityRoot.Mutation.AddTaskWikiReference == nil {
+			break
+		}
+
+		args, err := ec.field_Mutation_addTaskWikiReference_args(ctx, rawArgs)
+		if err != nil {
+			return 0, false
+		}
+
+		return e.ComplexityRoot.Mutation.AddTaskWikiReference(childComplexity, args["taskId"].(string), args["wikiId"].(string)), true
 	case "Mutation.adminRevokeAllUserSessions":
 		if e.ComplexityRoot.Mutation.AdminRevokeAllUserSessions == nil {
 			break
@@ -4836,6 +4849,14 @@ extend type Mutation {
   setTaskWikiReferences(taskId: ID!, wikiIds: [ID!]!): Task!
     @hasPermission(permission: "operation:member")
 
+  # addTaskWikiReference appends a single wiki document to a task's reference
+  # list. Atomic ($addToSet) — idempotent if the doc is already linked.
+  # Used by the wiki editor's "Add to task" picker so an operator can attach
+  # the current page to a task without opening the task edit dialog and
+  # without racing concurrent edits from other surfaces. Operator+ in op.
+  addTaskWikiReference(taskId: ID!, wikiId: ID!): Task!
+    @hasPermission(permission: "operation:member")
+
   # setTaskCredentialReferences replaces the credential link list. Operator+ in op.
   setTaskCredentialReferences(taskId: ID!, credentialIds: [ID!]!): Task!
     @hasPermission(permission: "operation:member")
@@ -5581,6 +5602,22 @@ func (ec *executionContext) field_Mutation_addSchemeNetworkPort_args(ctx context
 		return nil, err
 	}
 	args["input"] = arg1
+	return args, nil
+}
+
+func (ec *executionContext) field_Mutation_addTaskWikiReference_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
+	var err error
+	args := map[string]any{}
+	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "taskId", ec.unmarshalNID2string)
+	if err != nil {
+		return nil, err
+	}
+	args["taskId"] = arg0
+	arg1, err := graphql.ProcessArgField(ctx, rawArgs, "wikiId", ec.unmarshalNID2string)
+	if err != nil {
+		return nil, err
+	}
+	args["wikiId"] = arg1
 	return args, nil
 }
 
@@ -11434,6 +11471,107 @@ func (ec *executionContext) fieldContext_Mutation_setTaskWikiReferences(ctx cont
 	}()
 	ctx = graphql.WithFieldContext(ctx, fc)
 	if fc.Args, err = ec.field_Mutation_setTaskWikiReferences_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
+		ec.Error(ctx, err)
+		return fc, err
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Mutation_addTaskWikiReference(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Mutation_addTaskWikiReference,
+		func(ctx context.Context) (any, error) {
+			fc := graphql.GetFieldContext(ctx)
+			return ec.Resolvers.Mutation().AddTaskWikiReference(ctx, fc.Args["taskId"].(string), fc.Args["wikiId"].(string))
+		},
+		func(ctx context.Context, next graphql.Resolver) graphql.Resolver {
+			directive0 := next
+
+			directive1 := func(ctx context.Context) (any, error) {
+				permission, err := ec.unmarshalNString2string(ctx, "operation:member")
+				if err != nil {
+					var zeroVal *models.Task
+					return zeroVal, err
+				}
+				if ec.Directives.HasPermission == nil {
+					var zeroVal *models.Task
+					return zeroVal, errors.New("directive hasPermission is not implemented")
+				}
+				return ec.Directives.HasPermission(ctx, nil, directive0, permission)
+			}
+
+			next = directive1
+			return next
+		},
+		ec.marshalNTask2ᚖgithubᚗcomᚋvibeᚑc2ᚋvibeᚑc2ᚑcoreᚋcoreᚋpkgᚋmodelsᚐTask,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_Mutation_addTaskWikiReference(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Mutation",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "id":
+				return ec.fieldContext_Task_id(ctx, field)
+			case "operationId":
+				return ec.fieldContext_Task_operationId(ctx, field)
+			case "operation":
+				return ec.fieldContext_Task_operation(ctx, field)
+			case "name":
+				return ec.fieldContext_Task_name(ctx, field)
+			case "description":
+				return ec.fieldContext_Task_description(ctx, field)
+			case "riskScore":
+				return ec.fieldContext_Task_riskScore(ctx, field)
+			case "riskDescription":
+				return ec.fieldContext_Task_riskDescription(ctx, field)
+			case "profitScore":
+				return ec.fieldContext_Task_profitScore(ctx, field)
+			case "profitDescription":
+				return ec.fieldContext_Task_profitDescription(ctx, field)
+			case "stage":
+				return ec.fieldContext_Task_stage(ctx, field)
+			case "status":
+				return ec.fieldContext_Task_status(ctx, field)
+			case "assignees":
+				return ec.fieldContext_Task_assignees(ctx, field)
+			case "wikiReferences":
+				return ec.fieldContext_Task_wikiReferences(ctx, field)
+			case "credentialReferences":
+				return ec.fieldContext_Task_credentialReferences(ctx, field)
+			case "createdBy":
+				return ec.fieldContext_Task_createdBy(ctx, field)
+			case "lastUpdatedBy":
+				return ec.fieldContext_Task_lastUpdatedBy(ctx, field)
+			case "lastUpdatedAt":
+				return ec.fieldContext_Task_lastUpdatedAt(ctx, field)
+			case "deletedAt":
+				return ec.fieldContext_Task_deletedAt(ctx, field)
+			case "createdAt":
+				return ec.fieldContext_Task_createdAt(ctx, field)
+			case "updatedAt":
+				return ec.fieldContext_Task_updatedAt(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type Task", field.Name)
+		},
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			err = ec.Recover(ctx, r)
+			ec.Error(ctx, err)
+		}
+	}()
+	ctx = graphql.WithFieldContext(ctx, fc)
+	if fc.Args, err = ec.field_Mutation_addTaskWikiReference_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
 		ec.Error(ctx, err)
 		return fc, err
 	}
@@ -28016,6 +28154,13 @@ func (ec *executionContext) _Mutation(ctx context.Context, sel ast.SelectionSet)
 		case "setTaskWikiReferences":
 			out.Values[i] = ec.OperationContext.RootResolverMiddleware(innerCtx, func(ctx context.Context) (res graphql.Marshaler) {
 				return ec._Mutation_setTaskWikiReferences(ctx, field)
+			})
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "addTaskWikiReference":
+			out.Values[i] = ec.OperationContext.RootResolverMiddleware(innerCtx, func(ctx context.Context) (res graphql.Marshaler) {
+				return ec._Mutation_addTaskWikiReference(ctx, field)
 			})
 			if out.Values[i] == graphql.Null {
 				out.Invalids++

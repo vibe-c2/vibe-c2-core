@@ -192,6 +192,19 @@ export const SetTaskWikiReferencesMutation = graphql(`
   }
 `)
 
+// AddTaskWikiReference appends a single wiki doc to a task's reference list.
+// Atomic on the server ($addToSet) — idempotent and race-free against
+// concurrent edits coming from the task edit dialog. Used by the wiki
+// editor's "Add to task" picker, which only knows the *current* wiki id
+// and shouldn't have to fetch+replace the task's full reference array.
+export const AddTaskWikiReferenceMutation = graphql(`
+  mutation AddTaskWikiReference($taskId: ID!, $wikiId: ID!) {
+    addTaskWikiReference(taskId: $taskId, wikiId: $wikiId) {
+      ...TaskFields
+    }
+  }
+`)
+
 export const SetTaskCredentialReferencesMutation = graphql(`
   mutation SetTaskCredentialReferences(
     $taskId: ID!

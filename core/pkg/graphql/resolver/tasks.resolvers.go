@@ -45,6 +45,11 @@ func (r *mutationResolver) SetTaskWikiReferences(ctx context.Context, taskID str
 	return r.TaskResolver.SetTaskWikiReferences(ctx, taskID, wikiIds)
 }
 
+// AddTaskWikiReference is the resolver for the addTaskWikiReference field.
+func (r *mutationResolver) AddTaskWikiReference(ctx context.Context, taskID string, wikiID string) (*models.Task, error) {
+	return r.TaskResolver.AddTaskWikiReference(ctx, taskID, wikiID)
+}
+
 // SetTaskCredentialReferences is the resolver for the setTaskCredentialReferences field.
 func (r *mutationResolver) SetTaskCredentialReferences(ctx context.Context, taskID string, credentialIds []string) (*models.Task, error) {
 	return r.TaskResolver.SetTaskCredentialReferences(ctx, taskID, credentialIds)

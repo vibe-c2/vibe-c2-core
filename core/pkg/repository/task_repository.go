@@ -68,6 +68,14 @@ type ITaskRepository interface {
 	HardDeleteByOperationID(ctx context.Context, opID uuid.UUID) error
 	HardDeleteTrashed(ctx context.Context, opID uuid.UUID) error
 
+	// AddWikiReference atomically appends wikiID to the task's
+	// wiki_references array via $addToSet — idempotent and race-free against
+	// concurrent edits from any other surface. Also stamps last_updated_at /
+	// last_updated_by_id so the audit trail mirrors the set-style mutations.
+	// Caller is responsible for size-cap and operation-scope checks before
+	// calling; the repo write itself does not enforce either.
+	AddWikiReference(ctx context.Context, taskID, wikiID, callerID uuid.UUID) error
+
 	// PullWikiReference removes wikiID from the wiki_references array on
 	// every active or trashed task in opID. Called by the wiki document
 	// hard-delete path so dangling pointers don't accumulate. A miss (the
@@ -271,6 +279,24 @@ func (r *taskRepository) HardDeleteTrashed(ctx context.Context, opID uuid.UUID) 
 		"deleted_at":   bson.M{"$ne": nil},
 	})
 	return err
+}
+
+func (r *taskRepository) AddWikiReference(ctx context.Context, taskID, wikiID, callerID uuid.UUID) error {
+	now := time.Now().UTC()
+	err := r.coll.UpdateOne(ctx,
+		bson.M{"task_id": taskID},
+		bson.M{
+			"$addToSet": bson.M{"wiki_references": wikiID},
+			"$set": bson.M{
+				"last_updated_at":    now,
+				"last_updated_by_id": callerID,
+			},
+		},
+	)
+	if err != nil {
+		return fmt.Errorf("failed to add wiki reference: %w", err)
+	}
+	return nil
 }
 
 func (r *taskRepository) PullWikiReference(ctx context.Context, opID, wikiID uuid.UUID) error {

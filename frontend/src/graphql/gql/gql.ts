@@ -73,6 +73,7 @@ type Documents = {
     "\n  mutation ChangeTaskStage($input: ChangeTaskStageInput!) {\n    changeTaskStage(input: $input) {\n      ...TaskFields\n    }\n  }\n": typeof types.ChangeTaskStageDocument,
     "\n  mutation SetTaskAssignees($taskId: ID!, $assigneeIds: [ID!]!) {\n    setTaskAssignees(taskId: $taskId, assigneeIds: $assigneeIds) {\n      ...TaskFields\n    }\n  }\n": typeof types.SetTaskAssigneesDocument,
     "\n  mutation SetTaskWikiReferences($taskId: ID!, $wikiIds: [ID!]!) {\n    setTaskWikiReferences(taskId: $taskId, wikiIds: $wikiIds) {\n      ...TaskFields\n    }\n  }\n": typeof types.SetTaskWikiReferencesDocument,
+    "\n  mutation AddTaskWikiReference($taskId: ID!, $wikiId: ID!) {\n    addTaskWikiReference(taskId: $taskId, wikiId: $wikiId) {\n      ...TaskFields\n    }\n  }\n": typeof types.AddTaskWikiReferenceDocument,
     "\n  mutation SetTaskCredentialReferences(\n    $taskId: ID!\n    $credentialIds: [ID!]!\n  ) {\n    setTaskCredentialReferences(\n      taskId: $taskId\n      credentialIds: $credentialIds\n    ) {\n      ...TaskFields\n    }\n  }\n": typeof types.SetTaskCredentialReferencesDocument,
     "\n  mutation DeleteTask($id: ID!) {\n    deleteTask(id: $id)\n  }\n": typeof types.DeleteTaskDocument,
     "\n  mutation RestoreTask($id: ID!) {\n    restoreTask(id: $id) {\n      ...TaskFields\n    }\n  }\n": typeof types.RestoreTaskDocument,
@@ -193,6 +194,7 @@ const documents: Documents = {
     "\n  mutation ChangeTaskStage($input: ChangeTaskStageInput!) {\n    changeTaskStage(input: $input) {\n      ...TaskFields\n    }\n  }\n": types.ChangeTaskStageDocument,
     "\n  mutation SetTaskAssignees($taskId: ID!, $assigneeIds: [ID!]!) {\n    setTaskAssignees(taskId: $taskId, assigneeIds: $assigneeIds) {\n      ...TaskFields\n    }\n  }\n": types.SetTaskAssigneesDocument,
     "\n  mutation SetTaskWikiReferences($taskId: ID!, $wikiIds: [ID!]!) {\n    setTaskWikiReferences(taskId: $taskId, wikiIds: $wikiIds) {\n      ...TaskFields\n    }\n  }\n": types.SetTaskWikiReferencesDocument,
+    "\n  mutation AddTaskWikiReference($taskId: ID!, $wikiId: ID!) {\n    addTaskWikiReference(taskId: $taskId, wikiId: $wikiId) {\n      ...TaskFields\n    }\n  }\n": types.AddTaskWikiReferenceDocument,
     "\n  mutation SetTaskCredentialReferences(\n    $taskId: ID!\n    $credentialIds: [ID!]!\n  ) {\n    setTaskCredentialReferences(\n      taskId: $taskId\n      credentialIds: $credentialIds\n    ) {\n      ...TaskFields\n    }\n  }\n": types.SetTaskCredentialReferencesDocument,
     "\n  mutation DeleteTask($id: ID!) {\n    deleteTask(id: $id)\n  }\n": types.DeleteTaskDocument,
     "\n  mutation RestoreTask($id: ID!) {\n    restoreTask(id: $id) {\n      ...TaskFields\n    }\n  }\n": types.RestoreTaskDocument,
@@ -504,6 +506,10 @@ export function graphql(source: "\n  mutation SetTaskAssignees($taskId: ID!, $as
  * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
  */
 export function graphql(source: "\n  mutation SetTaskWikiReferences($taskId: ID!, $wikiIds: [ID!]!) {\n    setTaskWikiReferences(taskId: $taskId, wikiIds: $wikiIds) {\n      ...TaskFields\n    }\n  }\n"): (typeof documents)["\n  mutation SetTaskWikiReferences($taskId: ID!, $wikiIds: [ID!]!) {\n    setTaskWikiReferences(taskId: $taskId, wikiIds: $wikiIds) {\n      ...TaskFields\n    }\n  }\n"];
+/**
+ * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
+ */
+export function graphql(source: "\n  mutation AddTaskWikiReference($taskId: ID!, $wikiId: ID!) {\n    addTaskWikiReference(taskId: $taskId, wikiId: $wikiId) {\n      ...TaskFields\n    }\n  }\n"): (typeof documents)["\n  mutation AddTaskWikiReference($taskId: ID!, $wikiId: ID!) {\n    addTaskWikiReference(taskId: $taskId, wikiId: $wikiId) {\n      ...TaskFields\n    }\n  }\n"];
 /**
  * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
  */

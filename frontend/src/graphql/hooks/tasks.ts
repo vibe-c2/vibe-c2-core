@@ -21,6 +21,7 @@ import {
   ChangeTaskStageDocument,
   SetTaskAssigneesDocument,
   SetTaskWikiReferencesDocument,
+  AddTaskWikiReferenceDocument,
   SetTaskCredentialReferencesDocument,
   DeleteTaskDocument,
   RestoreTaskDocument,
@@ -277,6 +278,28 @@ export function useSetTaskWikiReferences() {
         task: data.setTaskWikiReferences,
       })
       queryClient.invalidateQueries({ queryKey: taskKeys.lists() })
+    },
+  })
+}
+
+// useAddTaskWikiReference appends one wiki doc to a task. Used by the wiki
+// editor's "Add to task" picker — the operator knows the current document
+// id, picks a task, server does $addToSet. Idempotent.
+//
+// Invalidates wikiBacklinks so the wiki editor footer ("Task backlinks")
+// picks up the new row immediately, plus the lists prefix so any open
+// kanban / matrix view re-renders the chip count on the affected task.
+export function useAddTaskWikiReference() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (vars: { taskId: string; wikiId: string }) =>
+      graphqlClient(AddTaskWikiReferenceDocument, vars),
+    onSuccess: (data, vars) => {
+      queryClient.setQueryData(taskKeys.detail(vars.taskId), {
+        task: data.addTaskWikiReference,
+      })
+      queryClient.invalidateQueries({ queryKey: taskKeys.lists() })
+      queryClient.invalidateQueries({ queryKey: taskKeys.wikiBacklinks() })
     },
   })
 }

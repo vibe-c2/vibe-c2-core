@@ -51,6 +51,7 @@ type ITaskResolver interface {
 	ChangeTaskStage(ctx context.Context, input model.ChangeTaskStageInput) (*models.Task, error)
 	SetTaskAssignees(ctx context.Context, taskID string, assigneeIDs []string) (*models.Task, error)
 	SetTaskWikiReferences(ctx context.Context, taskID string, wikiIDs []string) (*models.Task, error)
+	AddTaskWikiReference(ctx context.Context, taskID string, wikiID string) (*models.Task, error)
 	SetTaskCredentialReferences(ctx context.Context, taskID string, credentialIDs []string) (*models.Task, error)
 	DeleteTask(ctx context.Context, id string) (bool, error)
 	RestoreTask(ctx context.Context, id string) (*models.Task, error)
@@ -407,6 +408,78 @@ func (r *taskResolver) SetTaskWikiReferences(ctx context.Context, taskID string,
 	}
 
 	updated, err := r.taskRepo.FindByID(ctx, task.TaskID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to fetch updated task: %w", err)
+	}
+
+	r.publishTaskEvent(ctx, eventbus.TopicTaskReferencesChanged, &updated, "")
+	return &updated, nil
+}
+
+// AddTaskWikiReference atomically appends a single wiki document to a task's
+// reference list. Used by the wiki editor's "Add to task" picker — separate
+// from SetTaskWikiReferences so the operator's intent ("add this one") can't
+// race-clobber concurrent edits coming from the task edit dialog.
+//
+// Idempotent: re-adding an already-linked doc returns the task unchanged and
+// does not emit a references-changed event. The size cap is checked before
+// the write so the soft-limit error surfaces consistently with the
+// set-style mutations.
+func (r *taskResolver) AddTaskWikiReference(ctx context.Context, taskID string, wikiID string) (*models.Task, error) {
+	tUID, err := uuid.Parse(taskID)
+	if err != nil {
+		return nil, fmt.Errorf("invalid task ID: %w", err)
+	}
+	wUID, err := uuid.Parse(wikiID)
+	if err != nil {
+		return nil, fmt.Errorf("invalid wiki ID: %w", err)
+	}
+
+	task, err := r.taskRepo.FindByID(ctx, tUID)
+	if err != nil {
+		return nil, fmt.Errorf("task not found: %w", err)
+	}
+
+	if err := r.authorizeForOperation(ctx, task.OperationID, models.OperationRoleOperator); err != nil {
+		return nil, err
+	}
+
+	// Enforce same-operation scope at write time — the wiki picker only
+	// surfaces docs in the active operation but the API contract has to
+	// hold even when called directly.
+	doc, err := r.wikiRepo.FindByID(ctx, wUID)
+	if err != nil {
+		return nil, fmt.Errorf("wiki document not found: %w", err)
+	}
+	if doc.OperationID != task.OperationID {
+		return nil, fmt.Errorf("wiki document is not in the task's operation")
+	}
+	if doc.DeletedAt != nil {
+		return nil, fmt.Errorf("wiki document is trashed")
+	}
+
+	// Idempotent short-circuit: already linked → return current task,
+	// no event, no write.
+	for _, existing := range task.WikiReferences {
+		if existing == wUID {
+			return &task, nil
+		}
+	}
+
+	if len(task.WikiReferences) >= maxTaskReferences {
+		return nil, fmt.Errorf("wiki references exceed max %d entries", maxTaskReferences)
+	}
+
+	callerUID, err := callerUIDFromCtx(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	if err := r.taskRepo.AddWikiReference(ctx, tUID, wUID, callerUID); err != nil {
+		return nil, err
+	}
+
+	updated, err := r.taskRepo.FindByID(ctx, tUID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to fetch updated task: %w", err)
 	}

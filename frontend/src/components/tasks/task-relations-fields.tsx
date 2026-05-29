@@ -1,5 +1,6 @@
-import { useEffect, useMemo, useState, type ReactNode } from "react"
+import { useMemo, useState, type ReactNode } from "react"
 import { FileTextIcon, KeyRoundIcon, PlusIcon, UserIcon } from "lucide-react"
+import { useDebounced } from "@/hooks/use-debounced"
 import { Label } from "@/components/ui/label"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import { type SuggestionOption } from "@/components/ui/suggestion-input"
@@ -144,15 +145,6 @@ function AssigneePicker({
       ))}
     </PickerShell>
   )
-}
-
-function useDebounced<T>(value: T, ms: number): T {
-  const [v, setV] = useState(value)
-  useEffect(() => {
-    const t = setTimeout(() => setV(value), ms)
-    return () => clearTimeout(t)
-  }, [value, ms])
-  return v
 }
 
 // --- Wiki reference picker ---------------------------------------------------

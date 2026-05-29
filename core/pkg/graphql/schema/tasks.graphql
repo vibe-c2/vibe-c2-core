@@ -214,6 +214,14 @@ extend type Mutation {
   setTaskWikiReferences(taskId: ID!, wikiIds: [ID!]!): Task!
     @hasPermission(permission: "operation:member")
 
+  # addTaskWikiReference appends a single wiki document to a task's reference
+  # list. Atomic ($addToSet) — idempotent if the doc is already linked.
+  # Used by the wiki editor's "Add to task" picker so an operator can attach
+  # the current page to a task without opening the task edit dialog and
+  # without racing concurrent edits from other surfaces. Operator+ in op.
+  addTaskWikiReference(taskId: ID!, wikiId: ID!): Task!
+    @hasPermission(permission: "operation:member")
+
   # setTaskCredentialReferences replaces the credential link list. Operator+ in op.
   setTaskCredentialReferences(taskId: ID!, credentialIds: [ID!]!): Task!
     @hasPermission(permission: "operation:member")

@@ -7,10 +7,9 @@ import {
   useRef,
   useState,
 } from "react"
-import { useDebounced } from "@/hooks/use-debounced"
 import { create } from "zustand"
 import { useVirtualizer } from "@tanstack/react-virtual"
-import { FileTextIcon, LoaderIcon, SearchIcon } from "lucide-react"
+import { ClipboardListIcon, LoaderIcon, SearchIcon } from "lucide-react"
 import {
   Dialog,
   DialogContent,
@@ -19,33 +18,33 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
-import { useWikiDocuments } from "@/graphql/hooks/wiki"
-import { DocumentIcon } from "@/components/wiki/document-icon"
-import { WikiAncestorBreadcrumb } from "@/components/wiki/wiki-ancestor-breadcrumb"
+import { useDebounced } from "@/hooks/use-debounced"
+import { useInfiniteTasks } from "@/graphql/hooks/tasks"
+import { TaskStageBadge, TaskStatusBadge } from "@/components/tasks/task-badges"
+import type { TaskFieldsFragment } from "@/graphql/gql/graphql"
 import { cn } from "@/lib/utils"
 
-// Shape passed back to the caller on pick. Matches what `useWikiDocuments`
-// projects per row so any subset is enough for typical post-pick work
-// (insert a wiki reference node, add a relation, render a chip).
-export interface PickedWikiDocument {
+// Shape passed back to the caller on pick. Matches the subset of TaskFields
+// every consuming surface needs — the wiki "Add to task" trigger uses
+// `name` for the toast, the rest is there for completeness in case future
+// callers want to render extra context post-pick.
+export interface PickedTask {
   id: string
-  title: string
-  emoji: string
-  icon: string
-  color: string
+  name: string
+  stage: TaskFieldsFragment["stage"]
+  status: TaskFieldsFragment["status"]
 }
 
 interface OpenArgs {
   operationId: string
-  /** Document IDs that should appear muted and reject clicks (e.g. the
-   *  current doc when called from the /doc slash command, or already-added
-   *  references when called from the task edit dialog). */
+  /** Task IDs that should appear muted and reject clicks (e.g. tasks that
+   *  already reference the current wiki document). */
   excludeIds?: string[]
-  /** Optional override for the dialog title — defaults to "Insert document reference". */
+  /** Optional override for the dialog title — defaults to "Link to a task". */
   title?: string
   /** Optional override for the dialog description. */
   description?: string
-  onPick: (doc: PickedWikiDocument) => void
+  onPick: (task: PickedTask) => void
 }
 
 interface PickerState {
@@ -54,20 +53,21 @@ interface PickerState {
   excludeIds: string[]
   title: string
   description: string
-  onPick: ((doc: PickedWikiDocument) => void) | null
+  onPick: ((task: PickedTask) => void) | null
   openPicker: (args: OpenArgs) => void
   closePicker: () => void
 }
 
-// Singleton store — the dialog is mounted once in AppLayout and any surface
-// (slash command, task edit dialog, future credential dialogs, etc.) calls
-// `openWikiDocumentPicker` to trigger it.
-const useWikiDocumentPickerStore = create<PickerState>((set) => ({
+// Singleton store — same pattern as the wiki document picker. Any surface
+// that needs to pick a task (today: the wiki editor's "Add to task"
+// button; later potentially the timeline / matrix views) calls
+// `openTaskPicker` to trigger it.
+const useTaskPickerStore = create<PickerState>((set) => ({
   open: false,
   operationId: "",
   excludeIds: [],
-  title: "Insert document reference",
-  description: "Pick a wiki document in this operation.",
+  title: "Link to a task",
+  description: "Pick a task in this operation.",
   onPick: null,
   openPicker: ({
     operationId,
@@ -80,9 +80,8 @@ const useWikiDocumentPickerStore = create<PickerState>((set) => ({
       open: true,
       operationId,
       excludeIds: excludeIds ?? [],
-      title: title ?? "Insert document reference",
-      description:
-        description ?? "Pick a wiki document in this operation.",
+      title: title ?? "Link to a task",
+      description: description ?? "Pick a task in this operation.",
       onPick,
     }),
   closePicker: () =>
@@ -96,15 +95,15 @@ const useWikiDocumentPickerStore = create<PickerState>((set) => ({
 
 /** Imperative entry point — same shape regardless of which surface opens it. */
 // eslint-disable-next-line react-refresh/only-export-components
-export function openWikiDocumentPicker(args: OpenArgs) {
-  useWikiDocumentPickerStore.getState().openPicker(args)
+export function openTaskPicker(args: OpenArgs) {
+  useTaskPickerStore.getState().openPicker(args)
 }
 
-export function WikiDocumentPickerDialog() {
-  const open = useWikiDocumentPickerStore((s) => s.open)
-  const title = useWikiDocumentPickerStore((s) => s.title)
-  const description = useWikiDocumentPickerStore((s) => s.description)
-  const closePicker = useWikiDocumentPickerStore((s) => s.closePicker)
+export function TaskPickerDialog() {
+  const open = useTaskPickerStore((s) => s.open)
+  const title = useTaskPickerStore((s) => s.title)
+  const description = useTaskPickerStore((s) => s.description)
+  const closePicker = useTaskPickerStore((s) => s.closePicker)
 
   return (
     <Dialog
@@ -116,7 +115,7 @@ export function WikiDocumentPickerDialog() {
       <DialogContent className="sm:max-w-xl">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
-            <FileTextIcon className="size-4" />
+            <ClipboardListIcon className="size-4" />
             {title}
           </DialogTitle>
           <DialogDescription>{description}</DialogDescription>
@@ -133,25 +132,21 @@ export function WikiDocumentPickerDialog() {
 
 // Row height estimate used by the virtualizer. Real rows are measured via
 // `measureElement` so this only matters for the initial scrollbar sizing —
-// icon + title + optional breadcrumb lands at ~52px in practice.
-const ROW_HEIGHT = 52
+// stage badge + name + status badge lands at ~44px in practice.
+const ROW_HEIGHT = 44
 
-// Fetch one page of this size. The picker shows ~5 rows before scrolling
-// (max-h-72 ≈ 288px / ROW_HEIGHT), so this is enough to fill the visible
-// window and have a few rows in reserve. Server-side scaling — the query
-// already paginates.
+// Fetch one page of this size. Matches the wiki picker — enough to fill the
+// visible window (~5 rows in max-h-72) with a few in reserve.
 const PAGE_SIZE = 30
 
 // How close to the tail we trigger the next-page fetch (in row indices).
-// Smaller = later fetch (more chance of the user seeing a loading row);
-// larger = earlier fetch (smoother scroll).
 const PREFETCH_THRESHOLD = 8
 
 function PickerBody() {
-  const operationId = useWikiDocumentPickerStore((s) => s.operationId)
-  const excludeIds = useWikiDocumentPickerStore((s) => s.excludeIds)
-  const onPick = useWikiDocumentPickerStore((s) => s.onPick)
-  const closePicker = useWikiDocumentPickerStore((s) => s.closePicker)
+  const operationId = useTaskPickerStore((s) => s.operationId)
+  const excludeIds = useTaskPickerStore((s) => s.excludeIds)
+  const onPick = useTaskPickerStore((s) => s.onPick)
+  const closePicker = useTaskPickerStore((s) => s.closePicker)
 
   const [search, setSearch] = useState("")
   const debounced = useDebounced(search.trim(), 180)
@@ -162,7 +157,7 @@ function PickerBody() {
     hasNextPage,
     isFetchingNextPage,
     fetchNextPage,
-  } = useWikiDocuments({
+  } = useInfiniteTasks({
     operationId,
     search: debounced || null,
     first: PAGE_SIZE,
@@ -171,26 +166,21 @@ function PickerBody() {
   const excludeSet = useMemo(() => new Set(excludeIds), [excludeIds])
 
   // Flatten paginated edges into a single row list. Server already sorts
-  // and filters — no client-side ranking pass.
+  // by createAt DESC and filters by name/description — no client ranking.
   const rows = useMemo(
     () =>
       data?.pages.flatMap((p) =>
-        p.wikiDocuments.edges.map((e) => e.node),
+        p.tasks.edges.map((e) => e.node),
       ) ?? [],
     [data],
   )
 
-  // rawActiveIndex is the last cursor value the user expressed via keyboard
-  // or hover. The render path always reads `activeIndex` (derived below) so
-  // a shrinking filtered set never points past the end.
   const [rawActiveIndex, setRawActiveIndex] = useState(0)
   const activeIndex =
     rows.length === 0
       ? 0
       : Math.min(Math.max(0, rawActiveIndex), rows.length - 1)
 
-  // Reset cursor to the top whenever the search string changes — otherwise a
-  // narrower result set would leave the cursor stranded in the middle.
   useEffect(() => {
     setRawActiveIndex(0)
   }, [debounced])
@@ -203,17 +193,11 @@ function PickerBody() {
     overscan: 6,
   })
 
-  // Keep the keyboard-active row in view. align: "auto" is a no-op when the
-  // row is already visible.
   useEffect(() => {
     if (rows.length === 0) return
     virtualizer.scrollToIndex(activeIndex, { align: "auto" })
   }, [activeIndex, rows.length, virtualizer])
 
-  // Pagination trigger: when the last rendered virtual row is within
-  // PREFETCH_THRESHOLD of the end of the current set, fetch the next page.
-  // Gated on hasNextPage and !isFetchingNextPage so we don't spam-call the
-  // hook (it's idempotent but the extra render churn is wasted).
   const virtualItems = virtualizer.getVirtualItems()
   useEffect(() => {
     if (!hasNextPage || isFetchingNextPage) return
@@ -230,18 +214,16 @@ function PickerBody() {
     fetchNextPage,
   ])
 
-  function pick(doc: PickedWikiDocument) {
-    if (excludeSet.has(doc.id)) return
+  function pick(task: PickedTask) {
+    if (excludeSet.has(task.id)) return
     if (!onPick) {
       closePicker()
       return
     }
-    onPick(doc)
+    onPick(task)
     closePicker()
   }
 
-  // Helpers re-bound the stored rawActiveIndex against the current rows so
-  // arrow-key navigation after a filter change moves from the bounded cursor.
   function clamp(i: number): number {
     if (rows.length === 0) return 0
     return Math.min(Math.max(0, i), rows.length - 1)
@@ -268,8 +250,15 @@ function PickerBody() {
       })
     } else if (e.key === "Enter") {
       e.preventDefault()
-      const doc = rows[activeIndex]
-      if (doc) pick(doc)
+      const task = rows[activeIndex]
+      if (task) {
+        pick({
+          id: task.id,
+          name: task.name,
+          stage: task.stage,
+          status: task.status,
+        })
+      }
     } else if (e.key === "Escape") {
       e.preventDefault()
       closePicker()
@@ -280,9 +269,6 @@ function PickerBody() {
   const showEmpty = !isLoading && rows.length === 0
 
   return (
-    // min-w-0 propagates so a long, unbreakable title can shrink past its
-    // intrinsic size and `truncate` kicks in. Without it grid items default
-    // to min-width: auto (=content width) and the row pushes past max-w.
     <div className="flex min-w-0 flex-col gap-2">
       <div className="relative min-w-0">
         <SearchIcon className="pointer-events-none absolute left-2.5 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground" />
@@ -291,7 +277,7 @@ function PickerBody() {
           value={search}
           onChange={(e) => setSearch(e.target.value)}
           onKeyDown={onKeyDown}
-          placeholder="Search documents by title…"
+          placeholder="Search tasks by name or description…"
           className="pl-8"
         />
       </div>
@@ -307,8 +293,8 @@ function PickerBody() {
         ) : showEmpty ? (
           <div className="p-3 text-sm text-muted-foreground">
             {search.trim()
-              ? "No documents match this search."
-              : "No documents in this operation yet."}
+              ? "No tasks match this search."
+              : "No tasks in this operation yet."}
           </div>
         ) : (
           <div
@@ -316,13 +302,13 @@ function PickerBody() {
             className="relative w-full"
           >
             {virtualItems.map((item) => {
-              const d = rows[item.index]
-              if (!d) return null
+              const t = rows[item.index]
+              if (!t) return null
               const isActive = item.index === activeIndex
-              const isExcluded = excludeSet.has(d.id)
+              const isExcluded = excludeSet.has(t.id)
               return (
                 <button
-                  key={d.id}
+                  key={t.id}
                   ref={virtualizer.measureElement}
                   data-index={item.index}
                   type="button"
@@ -331,7 +317,14 @@ function PickerBody() {
                     !isExcluded && setRawActiveIndex(item.index)
                   }
                   onMouseDown={(e) => e.preventDefault()}
-                  onClick={() => pick(d)}
+                  onClick={() =>
+                    pick({
+                      id: t.id,
+                      name: t.name,
+                      stage: t.stage,
+                      status: t.status,
+                    })
+                  }
                   aria-selected={isActive}
                   style={{
                     position: "absolute",
@@ -341,7 +334,7 @@ function PickerBody() {
                     transform: `translateY(${item.start}px)`,
                   }}
                   className={cn(
-                    "flex w-full min-w-0 items-start gap-2 border-b px-3 py-2 text-left text-sm outline-hidden last:border-b-0",
+                    "flex w-full min-w-0 items-center gap-2 border-b px-3 py-2 text-left text-sm outline-hidden last:border-b-0",
                     isExcluded
                       ? "cursor-not-allowed text-muted-foreground"
                       : isActive
@@ -349,25 +342,13 @@ function PickerBody() {
                         : "hover:bg-accent/60",
                   )}
                 >
-                  <DocumentIcon
-                    emoji={d.emoji}
-                    icon={d.icon}
-                    color={d.color}
-                    className="mt-0.5 shrink-0"
-                  />
-                  <span className="flex min-w-0 flex-1 flex-col gap-0.5">
-                    <span className="truncate font-medium">
-                      {d.title || "Untitled"}
-                    </span>
-                    {d.ancestors.length > 0 && (
-                      <WikiAncestorBreadcrumb
-                        ancestors={d.ancestors}
-                        className="truncate"
-                      />
-                    )}
+                  <TaskStageBadge stage={t.stage} />
+                  <span className="min-w-0 flex-1 truncate font-medium">
+                    {t.name || "Untitled"}
                   </span>
+                  <TaskStatusBadge status={t.status} />
                   {isExcluded && (
-                    <span className="mt-0.5 shrink-0 text-xs text-muted-foreground">
+                    <span className="shrink-0 text-xs text-muted-foreground">
                       already linked
                     </span>
                   )}
@@ -387,9 +368,6 @@ function PickerBody() {
   )
 }
 
-// Local error boundary. The picker dialog mounts at the app level — without
-// this, a render error in the body would unwind the whole app and the user
-// would see a blank screen with no clue what went wrong.
 interface PickerErrorBoundaryProps {
   onClose: () => void
   children: ReactNode
@@ -411,7 +389,7 @@ class PickerErrorBoundary extends Component<
 
   componentDidCatch(error: Error, info: ErrorInfo) {
     console.error(
-      "[WikiDocumentPickerDialog] render error:",
+      "[TaskPickerDialog] render error:",
       error,
       info.componentStack,
     )
@@ -422,7 +400,7 @@ class PickerErrorBoundary extends Component<
       return (
         <div className="flex flex-col gap-3 rounded-md border border-destructive/40 bg-destructive/10 p-4 text-sm">
           <p className="font-medium text-destructive">
-            Document picker crashed
+            Task picker crashed
           </p>
           <pre className="max-h-40 overflow-auto text-xs text-destructive/80">
             {this.state.error.message}

@@ -12,6 +12,7 @@ import { DeleteTaskDialog } from "@/components/tasks/delete-task-dialog"
 import { StatusRequiredDialog } from "@/components/tasks/status-required-dialog"
 import { ReopenTaskDialog } from "@/components/tasks/reopen-task-dialog"
 import { WikiDocumentPickerDialog } from "@/components/wiki/wiki-document-picker-dialog"
+import { TaskPickerDialog } from "@/components/tasks/task-picker-dialog"
 
 export function AppLayout() {
   const sidebarOpen = useAppStore((s) => s.sidebarOpen)
@@ -44,6 +45,10 @@ export function AppLayout() {
             (wiki editor) and the task edit dialog's "Wiki references" picker
             both call openWikiDocumentPicker imperatively. */}
         <WikiDocumentPickerDialog />
+        {/* Task picker is the mirror image — the wiki editor's "Add to task"
+            button calls openTaskPicker imperatively to attach the current
+            document to a task without leaving the wiki page. */}
+        <TaskPickerDialog />
       </SidebarProvider>
     </TooltipProvider>
   )
