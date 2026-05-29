@@ -220,6 +220,10 @@ export const WikiDocumentsQuery = graphql(`
           icon
           color
           sortOrder
+          # ancestors is bulk-preloaded by the WikiDocuments resolver via the
+          # per-request WikiTreeLoader, so requesting it adds one Mongo round
+          # trip per page (not per row). Powers the picker breadcrumb.
+          ancestors { id title emoji icon color isDeleted }
           createdBy { id username }
           createdAt
           updatedAt

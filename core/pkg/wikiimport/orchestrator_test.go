@@ -307,6 +307,16 @@ func (r *fakeDocRepo) FindByID(_ context.Context, id uuid.UUID) (models.WikiDocu
 	return models.WikiDocument{}, errNotFound
 }
 
+func (r *fakeDocRepo) FindByIDs(_ context.Context, ids []uuid.UUID) ([]models.WikiDocument, error) {
+	out := make([]models.WikiDocument, 0, len(ids))
+	for _, id := range ids {
+		if d, ok := r.docs[id]; ok {
+			out = append(out, *d)
+		}
+	}
+	return out, nil
+}
+
 func (r *fakeDocRepo) FindAllByOperationID(_ context.Context, opID uuid.UUID) ([]models.WikiDocument, error) {
 	var out []models.WikiDocument
 	for _, d := range r.docs {

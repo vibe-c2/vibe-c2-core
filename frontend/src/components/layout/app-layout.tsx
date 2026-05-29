@@ -11,6 +11,7 @@ import { EditTaskDialog } from "@/components/tasks/edit-task-dialog"
 import { DeleteTaskDialog } from "@/components/tasks/delete-task-dialog"
 import { StatusRequiredDialog } from "@/components/tasks/status-required-dialog"
 import { ReopenTaskDialog } from "@/components/tasks/reopen-task-dialog"
+import { WikiDocumentPickerDialog } from "@/components/wiki/wiki-document-picker-dialog"
 
 export function AppLayout() {
   const sidebarOpen = useAppStore((s) => s.sidebarOpen)
@@ -39,6 +40,10 @@ export function AppLayout() {
         <DeleteTaskDialog />
         <StatusRequiredDialog />
         <ReopenTaskDialog />
+        {/* Wiki document picker is mounted globally — the /doc slash command
+            (wiki editor) and the task edit dialog's "Wiki references" picker
+            both call openWikiDocumentPicker imperatively. */}
+        <WikiDocumentPickerDialog />
       </SidebarProvider>
     </TooltipProvider>
   )

@@ -57,6 +57,12 @@ type WikiDocumentFilter struct {
 type IWikiDocumentRepository interface {
 	Create(ctx context.Context, doc *models.WikiDocument) error
 	FindByID(ctx context.Context, id uuid.UUID) (models.WikiDocument, error)
+	// FindByIDs returns documents matching any id in `ids`, in unspecified
+	// order. Like FindByID, it reads through soft-deletes so callers that
+	// need trashed rows (e.g. ancestor crumb resolution) still get them.
+	// One Mongo round trip regardless of len(ids); ids should already be
+	// deduplicated by the caller.
+	FindByIDs(ctx context.Context, ids []uuid.UUID) ([]models.WikiDocument, error)
 	FindByOperationIDWithCursor(ctx context.Context, opID uuid.UUID, filter WikiDocumentFilter, cursor *pagination.Cursor, limit int64, forward bool) ([]models.WikiDocument, error)
 	// FindTrashedByOperationIDWithCursor lists soft-deleted documents ordered by
 	// deleted_at (most recently deleted first). Cursor encodes deleted_at +
@@ -296,6 +302,17 @@ func (r *wikiDocumentRepository) FindByID(ctx context.Context, id uuid.UUID) (mo
 	var doc models.WikiDocument
 	err := r.coll.FindOne(ctx, bson.M{"document_id": id}).One(&doc)
 	return doc, err
+}
+
+func (r *wikiDocumentRepository) FindByIDs(ctx context.Context, ids []uuid.UUID) ([]models.WikiDocument, error) {
+	if len(ids) == 0 {
+		return nil, nil
+	}
+	var docs []models.WikiDocument
+	if err := r.coll.Find(ctx, bson.M{"document_id": bson.M{"$in": ids}}).All(&docs); err != nil {
+		return nil, fmt.Errorf("find by ids: %w", err)
+	}
+	return docs, nil
 }
 
 func (r *wikiDocumentRepository) FindByOperationIDWithCursor(ctx context.Context, opID uuid.UUID, filter WikiDocumentFilter, cursor *pagination.Cursor, limit int64, forward bool) ([]models.WikiDocument, error) {

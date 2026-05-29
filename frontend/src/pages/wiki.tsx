@@ -35,7 +35,6 @@ import { PermanentDeleteWikiDocumentDialog } from "@/components/wiki/permanent-d
 import { WikiTrashPanel } from "@/components/wiki/wiki-trash-panel"
 import { WikiBackupPanel } from "@/components/wiki/wiki-backup-panel"
 import { WikiCredentialPickerDialog } from "@/components/wiki/wiki-credential-picker"
-import { WikiDocumentPickerDialog } from "@/components/wiki/wiki-document-picker"
 import { CredentialDetailsDialog } from "@/components/findings/credential-details-dialog"
 import { EditCredentialDialog } from "@/components/findings/edit-credential-dialog"
 import { DeleteCredentialDialog } from "@/components/findings/delete-credential-dialog"
@@ -318,7 +317,6 @@ function WikiPageInner({
       <EditCredentialDialog />
       <DeleteCredentialDialog />
       <WikiCredentialPickerDialog />
-      <WikiDocumentPickerDialog />
     </div>
   )
 }

@@ -1382,6 +1382,15 @@ func (r *wikiDocumentResolver) WikiDocuments(ctx context.Context, operationID st
 		docs = docs[:args.Limit]
 	}
 
+	// Bulk-preload the per-page ancestor crumbs into the request-scoped loader
+	// so the field resolver becomes a map walk over PathIDs instead of one
+	// upward chain traversal per row. PathIDs is the materialized
+	// root→immediate-parent chain on each doc; the union across the page is
+	// the exact set of ancestor rows we need to fetch.
+	if loader := WikiTreeLoaderFromContext(ctx); loader != nil && len(docs) > 0 {
+		preloadAncestorEntries(ctx, loader, r.docRepo, docs, opUID)
+	}
+
 	edges := make([]*model.WikiDocumentEdge, len(docs))
 	for i := range docs {
 		// Cursor encodes the timestamp from the sort column so pagination
@@ -2015,10 +2024,36 @@ func (r *wikiDocumentResolver) WikiDocumentParentDocumentID(ctx context.Context,
 // itself) so the frontend can render a breadcrumb for any document — notably
 // trashed ones, where the tree cache doesn't carry the path. Walks through
 // trashed ancestors and marks each segment's isDeleted accordingly.
+//
+// Fast path: when a list resolver bulk-preloaded crumbs into the request
+// loader and `obj.PathIDs` is populated, we assemble the chain entirely from
+// the loader map — zero round trips. The legacy chain walk stays as the
+// fallback for paths that don't precompute (subscription event payloads,
+// callers that bypass the list resolver, missing entries).
 func (r *wikiDocumentResolver) WikiDocumentAncestors(ctx context.Context, obj *models.WikiDocument) ([]*model.WikiDocumentAncestor, error) {
 	if obj.ParentDocumentID == nil {
 		return []*model.WikiDocumentAncestor{}, nil
 	}
+
+	if loader := WikiTreeLoaderFromContext(ctx); loader != nil && len(obj.PathIDs) > 0 {
+		out := make([]*model.WikiDocumentAncestor, 0, len(obj.PathIDs))
+		allPresent := true
+		for _, id := range obj.PathIDs {
+			entry, ok := loader.Ancestor(id)
+			if !ok {
+				allPresent = false
+				break
+			}
+			out = append(out, entry)
+		}
+		if allPresent {
+			return out, nil
+		}
+		// Partial loader population (e.g. preload encountered an error for a
+		// subset of ids) — fall through to the live walk rather than
+		// returning a partial breadcrumb.
+	}
+
 	chain, err := r.docRepo.FindAncestors(ctx, *obj.ParentDocumentID)
 	if err != nil {
 		// Degrade silently — the rest of the row is still useful.
@@ -2041,6 +2076,56 @@ func (r *wikiDocumentResolver) WikiDocumentAncestors(ctx context.Context, obj *m
 		})
 	}
 	return out, nil
+}
+
+// preloadAncestorEntries collects the union of PathIDs across the given
+// page, fetches them in one Mongo round trip, and seeds the request loader
+// so the per-row Ancestors resolver can assemble each chain from the map.
+// Entries belonging to a different operation are skipped — the same
+// op-boundary defense the live walk applies.
+func preloadAncestorEntries(
+	ctx context.Context,
+	loader *WikiTreeLoader,
+	docRepo repository.IWikiDocumentRepository,
+	docs []models.WikiDocument,
+	opID uuid.UUID,
+) {
+	wantSet := make(map[uuid.UUID]struct{})
+	for i := range docs {
+		for _, id := range docs[i].PathIDs {
+			wantSet[id] = struct{}{}
+		}
+	}
+	if len(wantSet) == 0 {
+		return
+	}
+	want := make([]uuid.UUID, 0, len(wantSet))
+	for id := range wantSet {
+		want = append(want, id)
+	}
+
+	ancestors, err := docRepo.FindByIDs(ctx, want)
+	if err != nil {
+		// Don't fail the page — the field resolver falls back to the live
+		// walk on a partial preload.
+		return
+	}
+	entries := make(map[uuid.UUID]*model.WikiDocumentAncestor, len(ancestors))
+	for i := range ancestors {
+		a := &ancestors[i]
+		if a.OperationID != opID {
+			continue
+		}
+		entries[a.DocumentID] = &model.WikiDocumentAncestor{
+			ID:        a.DocumentID.String(),
+			Title:     a.Title,
+			Emoji:     a.Emoji,
+			Icon:      a.Icon,
+			Color:     a.Color,
+			IsDeleted: a.DeletedAt != nil,
+		}
+	}
+	loader.SetAncestorEntries(entries)
 }
 
 func (r *wikiDocumentResolver) WikiDocumentChildDocuments(ctx context.Context, obj *models.WikiDocument) ([]*models.WikiDocument, error) {

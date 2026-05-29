@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState, type ReactNode } from "react"
-import { FileTextIcon, KeyRoundIcon, UserIcon } from "lucide-react"
+import { FileTextIcon, KeyRoundIcon, PlusIcon, UserIcon } from "lucide-react"
 import { Label } from "@/components/ui/label"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import { type SuggestionOption } from "@/components/ui/suggestion-input"
@@ -9,9 +9,7 @@ import { useInfiniteCredentials } from "@/graphql/hooks/credentials"
 import { WikiDocumentChipById } from "@/components/wiki/wiki-document-chip-view"
 import { WikiCredentialChipById } from "@/components/wiki/wiki-credential-chip-view"
 import { WikiUserChipView } from "@/components/wiki/wiki-user-chip-view"
-import { DocumentIcon } from "@/components/wiki/document-icon"
-import { WikiAncestorBreadcrumb } from "@/components/wiki/wiki-ancestor-breadcrumb"
-import { useWikiDocumentTreeAncestors } from "@/components/wiki/use-wiki-document-tree-ancestors"
+import { openWikiDocumentPicker } from "@/components/wiki/wiki-document-picker-dialog"
 
 import type {
   RelationItem,
@@ -148,20 +146,6 @@ function AssigneePicker({
   )
 }
 
-// --- Wiki reference picker ---------------------------------------------------
-//
-// Source of truth is the operation's wiki document tree (same query the
-// sidebar tree and the editor's /doc slash-command picker use, so the cache
-// is usually warm). We reuse `useWikiDocumentTreeAncestors` to precompute
-// each doc's parent chain and surface it under the row title — the same
-// disambiguation affordance the slash-command picker and search palette
-// already use for same-titled docs in different folders.
-//
-// Selected items render via WikiDocumentChipById — the same chip used inside
-// the wiki editor — so a doc linked from a task looks identical to a doc
-// linked from prose. The chip is wrapped non-interactive (no nested Link
-// inside the remove-button container) and accompanied by an X remove button.
-
 function useDebounced<T>(value: T, ms: number): T {
   const [v, setV] = useState(value)
   useEffect(() => {
@@ -171,7 +155,16 @@ function useDebounced<T>(value: T, ms: number): T {
   return v
 }
 
-const WIKI_PICKER_MAX_VISIBLE = 20
+// --- Wiki reference picker ---------------------------------------------------
+//
+// Delegates to the global wiki-document-picker dialog (same one the editor's
+// /doc slash command opens). That dialog runs server-paginated, virtualized,
+// and renders an ancestor breadcrumb under each row — so this picker scales
+// with operation size and shows the same UX wiki authors already know.
+//
+// Selected items render via WikiDocumentChipById — same chip the wiki editor
+// uses — so a doc linked from a task looks identical to a doc linked from
+// prose.
 
 function WikiReferencePicker({
   operationId,
@@ -182,65 +175,23 @@ function WikiReferencePicker({
   selected: RelationItem[]
   onChange: (items: RelationItem[]) => void
 }) {
-  const [search, setSearch] = useState("")
-  const debounced = useDebounced(search.trim().toLowerCase(), 120)
-
-  const { docs, ancestorsByDocId, isLoading } =
-    useWikiDocumentTreeAncestors(operationId)
-
-  const selectedIds = useMemo(
-    () => new Set(selected.map((s) => s.id)),
-    [selected],
-  )
-
-  const options: SuggestionOption[] = useMemo(() => {
-    // Filter by case-insensitive title substring, mirroring the slash
-    // command picker. Recency-first sort (lastUpdatedAt then updatedAt)
-    // so the top of the list matches what the operator just touched.
-    const matches = docs.filter((d) => {
-      if (selectedIds.has(d.id)) return false
-      if (!debounced) return true
-      return (d.title ?? "").toLowerCase().includes(debounced)
-    })
-    matches.sort((a, b) => {
-      const ta = a.lastUpdatedAt ?? a.updatedAt ?? ""
-      const tb = b.lastUpdatedAt ?? b.updatedAt ?? ""
-      if (ta !== tb) return ta < tb ? 1 : -1
-      return (a.title ?? "").localeCompare(b.title ?? "", undefined, {
-        sensitivity: "base",
-      })
-    })
-    return matches.slice(0, WIKI_PICKER_MAX_VISIBLE).map((d) => {
-      const ancestors = ancestorsByDocId.get(d.id) ?? []
-      return {
-        value: d.id,
-        label: (d.title ?? "") || "Untitled",
-        icon: (
-          <DocumentIcon
-            emoji={d.emoji}
-            icon={d.icon}
-            color={d.color}
-            className="shrink-0"
-          />
-        ),
-        subtitle:
-          ancestors.length > 0 ? (
-            <WikiAncestorBreadcrumb
-              ancestors={ancestors}
-              className="truncate"
-            />
-          ) : undefined,
-      }
-    })
-  }, [docs, ancestorsByDocId, selectedIds, debounced])
-
-  function addOption(opt: SuggestionOption) {
-    onChange([...selected, { id: opt.value, label: opt.label }])
-    setSearch("")
-  }
-
   function removeId(id: string) {
     onChange(selected.filter((s) => s.id !== id))
+  }
+
+  function openPicker() {
+    openWikiDocumentPicker({
+      operationId,
+      excludeIds: selected.map((s) => s.id),
+      title: "Link a wiki document",
+      description: "Pick a document in this operation to attach to this task.",
+      onPick: (doc) => {
+        onChange([
+          ...selected,
+          { id: doc.id, label: doc.title || "Untitled" },
+        ])
+      },
+    })
   }
 
   return (
@@ -249,20 +200,14 @@ function WikiReferencePicker({
       icon={<FileTextIcon className="size-3.5" />}
       count={selected.length}
       picker={
-        <SuggestionPopover
-          search={search}
-          onSearchChange={setSearch}
-          onSelect={addOption}
-          options={options}
-          loading={isLoading}
-          placeholder="Link a wiki document…"
-          emptyMessage="No matching documents"
-          triggerAriaLabel="Link a wiki document"
-          // Wiki doc titles often stack a breadcrumb subtitle underneath, so
-          // bump width for legibility — the assignee / credential pickers
-          // keep the compact default.
-          contentClassName="w-96"
-        />
+        <button
+          type="button"
+          onClick={openPicker}
+          aria-label="Link a wiki document"
+          className="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-md border border-dashed border-border text-muted-foreground transition-colors hover:border-foreground/40 hover:bg-accent hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+        >
+          <PlusIcon className="size-3.5" />
+        </button>
       }
     >
       {selected.map((item) => (
