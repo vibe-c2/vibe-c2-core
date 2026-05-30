@@ -64,6 +64,7 @@ const VALID_TYPES: ReadonlySet<string> = new Set([
   "credential",
   "wiki_document",
   "custom_event",
+  "task",
 ])
 // Bare YYYY-MM-DD — matches the resolver's parseTime fallback.
 const DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/
