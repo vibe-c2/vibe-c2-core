@@ -99,7 +99,6 @@ func (a *App) NewRouter() *gin.Engine {
 	// Hocuspocus sidecar via the existing HocuspocusClient.
 	wikiImportOrch := wikiimport.NewOrchestrator(
 		a.repos.WikiDocument,
-		a.repos.OperationEvent,
 		a.repos.Credential,
 		wikiImageCtrl,
 		wikiFileCtrl,
