@@ -100,6 +100,7 @@ func (a *App) NewRouter() *gin.Engine {
 	wikiImportOrch := wikiimport.NewOrchestrator(
 		a.repos.WikiDocument,
 		a.repos.OperationEvent,
+		a.repos.Credential,
 		wikiImageCtrl,
 		wikiFileCtrl,
 		a.hpClient,
@@ -121,6 +122,7 @@ func (a *App) NewRouter() *gin.Engine {
 		a.imageStore,
 		a.fileStore,
 		a.hpClient,
+		wikiexport.NewCredentialRepoLookup(a.repos.Credential),
 		a.logger,
 		wikiexport.Config{},
 	)

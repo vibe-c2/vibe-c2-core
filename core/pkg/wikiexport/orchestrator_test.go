@@ -157,6 +157,7 @@ func newRunner(docs []models.WikiDocument, imgs []models.WikiImage, files []mode
 		imageStore,
 		fileStore,
 		&fakeRenderer{markdown: bodyMarkdown, byBytesKey: byBytes},
+		nil, // credential lookup not exercised by attachment-focused tests
 		zap.NewNop(),
 		Config{},
 	)

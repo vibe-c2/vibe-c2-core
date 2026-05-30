@@ -34,7 +34,7 @@ func TestOrchestrator_Run_Smoke(t *testing.T) {
 	fileIn := &fakeFileIngestor{}
 	converter := &fakeConverter{}
 
-	orch := NewOrchestrator(docRepo, nil, imageIn, fileIn, converter, nil, zap.NewNop())
+	orch := NewOrchestrator(docRepo, nil, nil, imageIn, fileIn, converter, nil, zap.NewNop())
 
 	opID := uuid.New()
 	callerID := uuid.New()
@@ -96,7 +96,7 @@ func TestOrchestrator_PublishesEvents(t *testing.T) {
 	docRepo := newFakeDocRepo()
 	bus := &fakeEventBus{}
 	eventRepo := &fakeOperationEventRepo{}
-	orch := NewOrchestrator(docRepo, eventRepo, &fakeImageIngestor{}, &fakeFileIngestor{}, &fakeConverter{}, bus, zap.NewNop())
+	orch := NewOrchestrator(docRepo, eventRepo, nil, &fakeImageIngestor{}, &fakeFileIngestor{}, &fakeConverter{}, bus, zap.NewNop())
 
 	opID := uuid.New()
 	callerID := uuid.New()
@@ -188,7 +188,7 @@ func TestOrchestrator_LogsTimelineRowPerImportedDoc(t *testing.T) {
 	docRepo := newFakeDocRepo()
 	bus := &fakeEventBus{}
 	eventRepo := &fakeOperationEventRepo{}
-	orch := NewOrchestrator(docRepo, eventRepo, &fakeImageIngestor{}, &fakeFileIngestor{}, &fakeConverter{}, bus, zap.NewNop())
+	orch := NewOrchestrator(docRepo, eventRepo, nil, &fakeImageIngestor{}, &fakeFileIngestor{}, &fakeConverter{}, bus, zap.NewNop())
 
 	opID := uuid.New()
 	callerID := uuid.New()
@@ -250,7 +250,7 @@ func TestOrchestrator_ReusesImportParent(t *testing.T) {
 	parsed, _ := Parse(&zr.Reader)
 
 	docRepo := newFakeDocRepo()
-	orch := NewOrchestrator(docRepo, nil, &fakeImageIngestor{}, &fakeFileIngestor{}, &fakeConverter{}, nil, zap.NewNop())
+	orch := NewOrchestrator(docRepo, nil, nil, &fakeImageIngestor{}, &fakeFileIngestor{}, &fakeConverter{}, nil, zap.NewNop())
 
 	opID := uuid.New()
 	callerID := uuid.New()

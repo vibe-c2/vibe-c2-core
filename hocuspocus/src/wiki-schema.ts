@@ -268,6 +268,59 @@ export const wikiSchema = new Schema({
         },
       ],
     },
+
+    // Inline atom referencing a credential by id. Matches the editor's
+    // wiki-credential-reference-node.tsx. The only persisted attribute is
+    // `credentialId`; the chip's visible text is hydrated client-side from
+    // the credentials API. On export, the serializer lifts these inline
+    // atoms into block-level wikiCredentialBlock nodes so they can be
+    // emitted as fenced ```vibe-credential code blocks (CommonMark fences
+    // are block-level only, so the inline chip can't carry the JSON
+    // directly).
+    wikiCredentialReference: {
+      group: "inline",
+      inline: true,
+      atom: true,
+      attrs: { credentialId: { default: null } },
+      parseDOM: [{ tag: "span[data-wiki-credential]" }],
+      toDOM: (node) => [
+        "span",
+        {
+          "data-wiki-credential": "true",
+          "data-credential-id": node.attrs.credentialId,
+        },
+      ],
+    },
+
+    // Block-level companion to wikiCredentialReference. This node is NEVER
+    // produced by the editor and NEVER persisted in Y.js — it exists solely
+    // at the markdown serialize/parse boundary. The serializer's pre-walk
+    // lifts inline credential chips into wikiCredentialBlock nodes (so they
+    // can be emitted as fences); the parser's post-walk lowers each
+    // wikiCredentialBlock back to a paragraph containing one inline chip.
+    //
+    // payload is the verbatim JSON object carried in the fence body. Keys:
+    //   { id, name?, type?, username?, password?, keys?, properties?,
+    //     isValid?, tags?, deleted? }
+    // The core import orchestrator uses payload to resolve-or-create the
+    // credential in the target operation and then rewrites the chip's id
+    // to the final value before applying the Y.js update.
+    wikiCredentialBlock: {
+      group: "block",
+      atom: true,
+      attrs: {
+        credentialId: { default: null },
+        payload: { default: null },
+      },
+      parseDOM: [{ tag: "div[data-wiki-credential-block]" }],
+      toDOM: (node) => [
+        "div",
+        {
+          "data-wiki-credential-block": "true",
+          "data-credential-id": node.attrs.credentialId,
+        },
+      ],
+    },
   },
 
   marks: {

@@ -33,8 +33,13 @@ type Orchestrator struct {
 	imageStore blob.ObjectStore
 	fileStore  blob.ObjectStore
 	renderer   MarkdownRenderer
-	logger     *zap.Logger
-	cfg        Config
+	// credentials is the optional credential payload resolver. When nil,
+	// credential fences in rendered markdown stay id-only — fine for tests
+	// and for installations without the credentials feature. Production
+	// wiring passes NewCredentialRepoLookup(repos.Credential).
+	credentials CredentialLookup
+	logger      *zap.Logger
+	cfg         Config
 }
 
 // Config groups the runtime caps. Zero values fall back to documented
@@ -69,6 +74,10 @@ func (c Config) withDefaults() Config {
 // NewOrchestrator wires the export orchestrator with the dependencies it
 // needs to read documents, look up attachment metadata, stream binaries
 // from the object store, and convert Y.js bytes back to markdown.
+//
+// credentials may be nil — passing nil leaves every `vibe-credential`
+// fence in id-only form. Pass NewCredentialRepoLookup(repo) in production
+// to hydrate full credential payloads into the exported markdown.
 func NewOrchestrator(
 	docRepo repository.IWikiDocumentRepository,
 	imageRepo repository.IWikiImageRepository,
@@ -76,18 +85,20 @@ func NewOrchestrator(
 	imageStore blob.ObjectStore,
 	fileStore blob.ObjectStore,
 	renderer MarkdownRenderer,
+	credentials CredentialLookup,
 	logger *zap.Logger,
 	cfg Config,
 ) *Orchestrator {
 	return &Orchestrator{
-		docRepo:    docRepo,
-		imageRepo:  imageRepo,
-		fileRepo:   fileRepo,
-		imageStore: imageStore,
-		fileStore:  fileStore,
-		renderer:   renderer,
-		logger:     logger,
-		cfg:        cfg.withDefaults(),
+		docRepo:     docRepo,
+		imageRepo:   imageRepo,
+		fileRepo:    fileRepo,
+		imageStore:  imageStore,
+		fileStore:   fileStore,
+		renderer:    renderer,
+		credentials: credentials,
+		logger:      logger,
+		cfg:         cfg.withDefaults(),
 	}
 }
 
@@ -103,15 +114,17 @@ type SkipRecord struct {
 // inside the zip; never returned to the HTTP caller because the response
 // body is the zip stream itself.
 type Report struct {
-	RootTitle      string       `json:"rootTitle"`
-	Scope          string       `json:"scope"`        // "tree" or "subtree"
-	TotalDocs      int          `json:"totalDocs"`    // attempted
-	ExportedDocs   int          `json:"exportedDocs"` // produced an .md
-	SkippedDocs    int          `json:"skippedDocs"`  // counted in Skipped
-	ImagesExported int          `json:"imagesExported"`
-	FilesExported  int          `json:"filesExported"`
-	Skipped        []SkipRecord `json:"skipped,omitempty"`
-	Warnings       []SkipRecord `json:"warnings,omitempty"`
+	RootTitle           string       `json:"rootTitle"`
+	Scope               string       `json:"scope"`        // "tree" or "subtree"
+	TotalDocs           int          `json:"totalDocs"`    // attempted
+	ExportedDocs        int          `json:"exportedDocs"` // produced an .md
+	SkippedDocs         int          `json:"skippedDocs"`  // counted in Skipped
+	ImagesExported      int          `json:"imagesExported"`
+	FilesExported       int          `json:"filesExported"`
+	CredentialsHydrated int          `json:"credentialsHydrated"` // fences resolved to full payload
+	CredentialsTombstoned int        `json:"credentialsTombstoned"` // fences lowered to {deleted:true}
+	Skipped             []SkipRecord `json:"skipped,omitempty"`
+	Warnings            []SkipRecord `json:"warnings,omitempty"`
 }
 
 // Request describes one export run. RootID == nil means tree-wide export.
@@ -338,6 +351,17 @@ func (o *Orchestrator) writeBranch(
 		})
 		return
 	}
+
+	// Hydrate credential reference fences with full payloads from the
+	// credential repository. Runs BEFORE attachment rewriting because the
+	// two operate on disjoint markdown shapes (fences vs. link targets);
+	// ordering it first keeps the rewritten body small for the cap check
+	// in the streamer (a credential fence inflates ~50 bytes per ref).
+	body, credHydrated, credTombstoned := hydrateCredentialFences(
+		ctx, body, doc.OperationID, o.credentials,
+	)
+	bctx.report.CredentialsHydrated += credHydrated
+	bctx.report.CredentialsTombstoned += credTombstoned
 
 	// Stream attachments referenced by this doc and rewrite the body's
 	// refs to the in-zip relative paths.

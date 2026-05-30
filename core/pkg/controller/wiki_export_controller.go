@@ -155,6 +155,8 @@ func (wec *WikiExportController) Export(c *gin.Context) {
 		zap.Int("skipped", report.SkippedDocs),
 		zap.Int("images", report.ImagesExported),
 		zap.Int("files", report.FilesExported),
+		zap.Int("credentials_hydrated", report.CredentialsHydrated),
+		zap.Int("credentials_tombstoned", report.CredentialsTombstoned),
 	)
 }
 

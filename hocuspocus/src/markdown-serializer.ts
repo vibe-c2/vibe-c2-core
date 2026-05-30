@@ -16,10 +16,16 @@
 // declares.
 
 import { MarkdownSerializer } from "prosemirror-markdown";
-import { Node } from "prosemirror-model";
+import { Fragment, Node } from "prosemirror-model";
 import { wikiSchema } from "./wiki-schema.js";
 
 const NOTICE_VARIANTS = new Set(["info", "success", "warning", "tip"]);
+
+// Fence info-string identifying a credential block. The core import
+// orchestrator and the parser's lifter both key on this exact value, so
+// any code that wants to recognise a credential fence should reference
+// this constant rather than the literal.
+export const CREDENTIAL_FENCE_INFO = "vibe-credential";
 
 // Render the contents of a cell as a single line of markdown so it fits in
 // a pipe-table row. Block content (paragraphs) gets flattened: each block's
@@ -171,6 +177,22 @@ function buildSerializer(): MarkdownSerializer {
       state.renderContent(node);
       state.ensureNewLine();
       state.write(":::");
+      state.closeBlock(node);
+    },
+
+    wikiCredentialBlock(state, node) {
+      // Emit a fenced code block whose info-string is the discriminator the
+      // importer's lifter looks for. The payload is JSON.stringified verbatim
+      // — the lift pass before serialization is responsible for shaping it.
+      // Pretty-printing the JSON costs a few bytes but makes the exported
+      // markdown readable by humans and trivially diffable across runs.
+      const fence = "```";
+      state.write(fence + CREDENTIAL_FENCE_INFO + "\n");
+      const payload = (node.attrs.payload as unknown) ?? {
+        id: node.attrs.credentialId,
+      };
+      state.text(JSON.stringify(payload, null, 2), false);
+      state.write("\n" + fence);
       state.closeBlock(node);
     },
 
@@ -334,14 +356,135 @@ function backticksFor(node: Node, side: number): string {
 const serializer = buildSerializer();
 
 /**
+ * CredentialPayloadResolver returns the JSON payload to embed for a given
+ * credential id. The core export orchestrator passes a resolver backed by
+ * the credential repository, scoped to the document's operation. Returning
+ * `null` produces a tombstone block (`{"id":"...","deleted":true}`); the
+ * resolver should return `null` for ids that don't resolve in the
+ * document's operation rather than throwing, so the export keeps going.
+ */
+export type CredentialPayloadResolver = (
+  credentialId: string,
+) => Record<string, unknown> | null;
+
+/**
+ * Walk the doc and replace every paragraph that contains at least one
+ * wikiCredentialReference with a flattened sequence: optional
+ * paragraph-of-leading-text, one wikiCredentialBlock per chip in original
+ * order, optional paragraph-of-trailing-text. Chips inside the same
+ * paragraph each become their own block — sentence structure around them
+ * is split, which is the explicit design trade-off (chips never carried
+ * inline secret-typed content anyway).
+ *
+ * Non-credential inline content keeps its marks (bold, links, code).
+ *
+ * The resolver is called once per unique credential id encountered; when it
+ * returns null, the chip is lowered to a tombstone payload so the reader
+ * sees "this referred to a deleted credential" rather than a vanished
+ * sentence fragment.
+ */
+function liftCredentialChipsToBlocks(
+  doc: Node,
+  resolve: CredentialPayloadResolver,
+): Node {
+  const chipType = wikiSchema.nodes.wikiCredentialReference;
+  const blockType = wikiSchema.nodes.wikiCredentialBlock;
+  if (!chipType || !blockType) return doc;
+
+  // Resolver memoisation. A credential referenced N times in the same doc
+  // produces N identical blocks; we only need to look up the payload once.
+  const payloadCache = new Map<string, Record<string, unknown> | null>();
+  const resolveOnce = (id: string): Record<string, unknown> | null => {
+    if (payloadCache.has(id)) return payloadCache.get(id) ?? null;
+    const p = resolve(id);
+    payloadCache.set(id, p);
+    return p;
+  };
+
+  const buildBlockForChip = (chip: Node): Node => {
+    const id = String(chip.attrs.credentialId ?? "");
+    const resolved = id ? resolveOnce(id) : null;
+    const payload: Record<string, unknown> = resolved ?? {
+      id,
+      deleted: true,
+    };
+    return blockType.create({ credentialId: id, payload });
+  };
+
+  // For a paragraph containing one or more chips, produce the lifted
+  // sequence. For a paragraph with no chips, return null so the caller can
+  // pass the original node through unchanged.
+  const splitParagraph = (para: Node): Node[] | null => {
+    let hasChip = false;
+    para.content.forEach((child) => {
+      if (child.type === chipType) hasChip = true;
+    });
+    if (!hasChip) return null;
+
+    const out: Node[] = [];
+    let pending: Node[] = [];
+    const flushPending = () => {
+      if (pending.length === 0) return;
+      out.push(
+        wikiSchema.nodes.paragraph.create(null, Fragment.fromArray(pending)),
+      );
+      pending = [];
+    };
+    para.content.forEach((child) => {
+      if (child.type === chipType) {
+        flushPending();
+        out.push(buildBlockForChip(child));
+      } else {
+        pending.push(child);
+      }
+    });
+    flushPending();
+    return out;
+  };
+
+  // Recursively walk every block container, splitting paragraphs as we go.
+  // Top-level container is `doc`; lists, blockquotes, notice blocks, and
+  // table cells can all hold paragraphs that need the same treatment.
+  const walk = (node: Node): Node => {
+    if (node.isAtom || node.isText) return node;
+    const newChildren: Node[] = [];
+    node.content.forEach((child) => {
+      if (child.type === wikiSchema.nodes.paragraph) {
+        const split = splitParagraph(child);
+        if (split) {
+          for (const piece of split) newChildren.push(piece);
+          return;
+        }
+      }
+      newChildren.push(walk(child));
+    });
+    return node.copy(Fragment.fromArray(newChildren));
+  };
+
+  return walk(doc);
+}
+
+/**
  * Serialize a ProseMirror Node (the root doc of the wiki editor schema) to
  * Outline-flavored markdown. The output round-trips back through
  * parseOutlineMarkdown into an equivalent document.
+ *
+ * resolveCredential is optional. Pass it when the caller has a credential
+ * repository handy and wants chip references hydrated into their full
+ * payload at export time; omit it (or pass () => null) to emit id-only
+ * blocks suitable for same-instance round-trip.
  *
  * Never throws on a well-formed doc; the serializer is non-strict so unknown
  * nodes (legacy editor extensions added without a serializer entry) are
  * silently skipped rather than aborting the export.
  */
-export function serializeWikiDocument(doc: Node): string {
-  return serializer.serialize(doc);
+export function serializeWikiDocument(
+  doc: Node,
+  resolveCredential?: CredentialPayloadResolver,
+): string {
+  const lifted = liftCredentialChipsToBlocks(
+    doc,
+    resolveCredential ?? ((id) => ({ id })),
+  );
+  return serializer.serialize(lifted);
 }

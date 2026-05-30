@@ -20,6 +20,7 @@ import type StateInline from "markdown-it/lib/rules_inline/state_inline.mjs";
 import { MarkdownParser } from "prosemirror-markdown";
 import { Node, type Attrs } from "prosemirror-model";
 import { wikiSchema } from "./wiki-schema.js";
+import { CREDENTIAL_FENCE_INFO } from "./markdown-serializer.js";
 
 // The four notice variants our editor supports. New variants must be added
 // here, in wiki-schema.ts, and on the editor side at the same time.
@@ -71,6 +72,38 @@ function liftStandaloneImagesRule(state: StateCore): void {
   }
 
   state.tokens = out;
+}
+
+// Core rule: recognise ```vibe-credential fences as credential reference
+// blocks rather than generic code blocks. The fence body is JSON shaped
+// like { id, name?, ... } — the parser keeps the raw body in token.content
+// so the post-walk in parseOutlineMarkdown can extract the id without
+// re-tokenising. Invalid JSON or missing `id` leaves the fence alone (it
+// falls through to the regular `fence` -> `codeBlock` mapping), so an
+// accidental info-string collision produces a visible code block rather
+// than a silent drop.
+function recogniseCredentialFenceRule(state: StateCore): void {
+  for (const token of state.tokens) {
+    if (token.type !== "fence") continue;
+    const info = (token.info ?? "").trim();
+    if (info !== CREDENTIAL_FENCE_INFO) continue;
+
+    let parsed: { id?: unknown } | null = null;
+    try {
+      parsed = JSON.parse(token.content) as { id?: unknown };
+    } catch {
+      continue;
+    }
+    if (!parsed || typeof parsed.id !== "string" || parsed.id.length === 0) {
+      continue;
+    }
+
+    token.type = "wiki_credential_block";
+    token.tag = "div";
+    // Stash the parsed id as a token attr; the JSON body stays on
+    // token.content so the import orchestrator can read the full payload.
+    token.attrs = [["data-credential-id", parsed.id]];
+  }
 }
 
 // Core rule: wrap the `inline` token inside each table cell (`td`/`th`)
@@ -221,6 +254,13 @@ function buildTokenizer(): MarkdownIt {
   // We slot in just before `linkify` to see fully-resolved inline tokens.
   md.core.ruler.before("linkify", "lift_standalone_images", liftStandaloneImagesRule);
   md.core.ruler.before("linkify", "wrap_table_cell_inline", wrapTableCellInlineRule);
+  // Slot the credential-fence recogniser before our other lifters so the
+  // token mutation happens once on the canonical fence shape.
+  md.core.ruler.before(
+    "lift_standalone_images",
+    "recognise_credential_fence",
+    recogniseCredentialFenceRule,
+  );
 
   // Inline rule for `<mark>` highlight tags. Slot before `autolink` so the
   // opening `<` doesn't get consumed by the bare-URL auto-linker (which
@@ -354,6 +394,34 @@ function buildTokenMap() {
       getAttrs: (tok: { attrGet: (name: string) => string | null }) => ({
         color: tok.attrGet("data-color") ?? "",
       }),
+    },
+
+    // Credential reference block, lifted by recogniseCredentialFenceRule
+    // out of a ```vibe-credential fence. The id and verbatim JSON payload
+    // both land in attrs so the post-parse pass can decide how to lower
+    // the block back to an inline chip (or, server-side, rewrite the id).
+    //
+    // Uses `node:` (atom leaf), not `block:` — wikiCredentialBlock has
+    // `atom: true` and no content. The `block:` form pushes onto the
+    // content stack and expects child tokens; for a contentless block,
+    // prosemirror-markdown silently drops the node.
+    wiki_credential_block: {
+      node: "wikiCredentialBlock",
+      noCloseToken: true,
+      getAttrs: (tok: {
+        content: string;
+        attrGet: (name: string) => string | null;
+      }) => {
+        const id = tok.attrGet("data-credential-id") ?? "";
+        let payload: Record<string, unknown> = { id };
+        try {
+          payload = JSON.parse(tok.content) as Record<string, unknown>;
+        } catch {
+          // Should not happen — the recognise rule only converts fences whose
+          // body parses as JSON. Defensive: keep the id-only payload.
+        }
+        return { credentialId: id, payload };
+      },
     },
   };
 
@@ -500,6 +568,43 @@ function guessContentType(filename: string): string {
   }
 }
 
+// Lower every wikiCredentialBlock at the top level back to a paragraph
+// containing one inline wikiCredentialReference atom. Y.js + the editor
+// only model the inline chip; the block form exists solely at the
+// markdown boundary. We replace top-level blocks because that's where the
+// serializer's lifter places them — chips nested inside blockquotes or
+// list items round-trip as top-level blocks (the structural change is the
+// trade-off the user accepted when choosing the fenced-code-block carrier).
+function lowerCredentialBlocksToChips(doc: Node): Node {
+  const blockType = wikiSchema.nodes.wikiCredentialBlock;
+  const chipType = wikiSchema.nodes.wikiCredentialReference;
+  if (!blockType || !chipType) return doc;
+
+  let json = doc.toJSON() as { content?: unknown[] };
+  if (!Array.isArray(json.content)) return doc;
+
+  const newContent: Array<Record<string, unknown>> = [];
+  for (const child of json.content as Array<Record<string, unknown>>) {
+    if (child.type === "wikiCredentialBlock") {
+      const attrs = (child.attrs ?? {}) as Record<string, unknown>;
+      const credentialId = String(attrs.credentialId ?? "");
+      newContent.push({
+        type: "paragraph",
+        content: [
+          {
+            type: "wikiCredentialReference",
+            attrs: { credentialId },
+          },
+        ],
+      });
+      continue;
+    }
+    newContent.push(child);
+  }
+
+  return wikiSchema.nodeFromJSON({ ...json, content: newContent });
+}
+
 // Public entry point. Always returns a valid ProseMirror Node — never throws
 // on malformed markdown. On parser failure, returns a single paragraph
 // containing the original markdown so no text content is lost.
@@ -520,7 +625,43 @@ export function parseOutlineMarkdown(markdown: string): Node {
     );
   }
 
-  return liftFileLinksToBlocks(parsed);
+  const withFiles = liftFileLinksToBlocks(parsed);
+  return lowerCredentialBlocksToChips(withFiles);
+}
+
+/**
+ * Parse the markdown and return the credential reference payloads embedded
+ * in `vibe-credential` fences, in source order. Used by the core import
+ * orchestrator to resolve-or-create credentials in the target operation
+ * BEFORE handing the rewritten markdown to markdownToYjs.
+ *
+ * Returns an empty array when the markdown has no credential fences.
+ * Returned payloads preserve insertion order so a deterministic id-rewrite
+ * map can be built without re-walking.
+ */
+export function extractCredentialPayloads(
+  markdown: string,
+): Array<Record<string, unknown>> {
+  // Run the parser; the credential lifter mutates fence tokens in place and
+  // the token map populates payload on each wikiCredentialBlock attrs.
+  let parsed: Node;
+  try {
+    parsed = innerParser.parse(markdown) ?? buildFallbackDoc(markdown);
+  } catch {
+    return [];
+  }
+  const json = parsed.toJSON() as { content?: unknown[] };
+  if (!Array.isArray(json.content)) return [];
+  const out: Array<Record<string, unknown>> = [];
+  for (const child of json.content as Array<Record<string, unknown>>) {
+    if (child.type !== "wikiCredentialBlock") continue;
+    const attrs = (child.attrs ?? {}) as Record<string, unknown>;
+    const payload = attrs.payload;
+    if (payload && typeof payload === "object") {
+      out.push(payload as Record<string, unknown>);
+    }
+  }
+  return out;
 }
 
 function buildFallbackDoc(text: string): Node {

@@ -56,6 +56,7 @@ type MarkdownConverter interface {
 type Orchestrator struct {
 	docRepo     repository.IWikiDocumentRepository
 	eventRepo   repository.IOperationEventRepository
+	credRepo    repository.ICredentialRepository
 	imageIn     ImageIngestor
 	fileIn      FileIngestor
 	converter   MarkdownConverter
@@ -80,6 +81,7 @@ type Orchestrator struct {
 func NewOrchestrator(
 	docRepo repository.IWikiDocumentRepository,
 	eventRepo repository.IOperationEventRepository,
+	credRepo repository.ICredentialRepository,
 	imageIn ImageIngestor,
 	fileIn FileIngestor,
 	converter MarkdownConverter,
@@ -89,6 +91,7 @@ func NewOrchestrator(
 	return &Orchestrator{
 		docRepo:   docRepo,
 		eventRepo: eventRepo,
+		credRepo:  credRepo,
 		imageIn:   imageIn,
 		fileIn:    fileIn,
 		converter: converter,
@@ -100,15 +103,19 @@ func NewOrchestrator(
 // Report summarises the result of an import. Returned to the caller and
 // surfaced in the HTTP response body.
 type Report struct {
-	ImportParentID    uuid.UUID    `json:"importParentId"`
-	TimestampParentID uuid.UUID    `json:"timestampParentId"`
-	TotalDocs         int          `json:"totalDocs"`
-	CreatedDocs       int          `json:"createdDocs"`
-	SkippedDocs       int          `json:"skippedDocs"`
-	ImagesIngested    int          `json:"imagesIngested"`
-	FilesIngested     int          `json:"filesIngested"`
-	Skipped           []SkipRecord `json:"skipped,omitempty"`
-	Warnings          []SkipRecord `json:"warnings,omitempty"`
+	ImportParentID        uuid.UUID    `json:"importParentId"`
+	TimestampParentID     uuid.UUID    `json:"timestampParentId"`
+	TotalDocs             int          `json:"totalDocs"`
+	CreatedDocs           int          `json:"createdDocs"`
+	SkippedDocs           int          `json:"skippedDocs"`
+	ImagesIngested        int          `json:"imagesIngested"`
+	FilesIngested         int          `json:"filesIngested"`
+	CredentialsReused     int          `json:"credentialsReused"`
+	CredentialsCreated    int          `json:"credentialsCreated"`
+	CredentialsTombstoned int          `json:"credentialsTombstoned"`
+	CredentialsSkipped    int          `json:"credentialsSkipped"`
+	Skipped               []SkipRecord `json:"skipped,omitempty"`
+	Warnings              []SkipRecord `json:"warnings,omitempty"`
 }
 
 // SkipRecord captures one document that was skipped or warned about. Path
@@ -390,6 +397,52 @@ func (o *Orchestrator) processDocs(
 		// markdown reference in place — readers will see a broken link
 		// but the doc still imports.
 		rewrittenBody := o.ingestAttachmentsAndRewrite(ctx, pctx, parsed, created)
+
+		// Reconcile credential reference fences. For non-Public operations
+		// this resolves each fence's id against the target operation —
+		// reusing the same credential if it already exists there, or
+		// creating a fresh one from the embedded payload otherwise. The
+		// returned body has every fence's `id` field rewritten to the
+		// final value before we hand it to the markdown converter, so the
+		// resulting chip nodes point at credentials that actually live in
+		// the target operation.
+		//
+		// Public operations forbid credential references entirely
+		// (persistence.ts:35-38 + 180-188): credentials are operation-
+		// private, and a chip persisted into a world-readable doc would
+		// surface credential metadata to every authenticated user. Strip
+		// the fences from the body and skip the resolve-or-create.
+		if models.IsPublicOperation(pctx.operationID) {
+			// Count the actual fences the regex recognises, not raw
+			// marker occurrences — keeps the report aligned with the
+			// reconciler's counters on the non-public path.
+			stripped := len(credentialFencePattern.FindAllStringIndex(rewrittenBody, -1))
+			if stripped > 0 {
+				rewrittenBody = StripFences(rewrittenBody)
+				o.logger.Info("wiki import: stripped credential fences from public doc",
+					zap.String("document_id", created.DocumentID.String()),
+					zap.Int("stripped_count", stripped),
+				)
+				pctx.report.CredentialsSkipped += stripped
+			}
+		} else if o.credRepo != nil {
+			rec := NewCredentialReconciler(o.credRepo, pctx.operationID)
+			newBody, result := rec.ReconcileBody(ctx, rewrittenBody, pctx.callerID)
+			rewrittenBody = newBody
+			pctx.report.CredentialsReused += result.Reused
+			pctx.report.CredentialsCreated += result.Created
+			pctx.report.CredentialsTombstoned += result.Tombstoned
+			pctx.report.CredentialsSkipped += result.Skipped
+			if result.Reused+result.Created+result.Tombstoned+result.Skipped > 0 {
+				o.logger.Info("wiki import: credential fences reconciled",
+					zap.String("document_id", created.DocumentID.String()),
+					zap.Int("reused", result.Reused),
+					zap.Int("created", result.Created),
+					zap.Int("tombstoned", result.Tombstoned),
+					zap.Int("skipped", result.Skipped),
+				)
+			}
+		}
 
 		// Markdown → Y.js binary via the Hocuspocus sidecar.
 		contentState, err := o.converter.MarkdownToYjs(ctx, rewrittenBody)
