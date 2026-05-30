@@ -530,7 +530,8 @@ func parseSubjectKinds(in []string) ([]models.SubjectKind, error) {
 		switch sk {
 		case models.SubjectKindCredential,
 			models.SubjectKindWikiDocument,
-			models.SubjectKindCustomEvent:
+			models.SubjectKindCustomEvent,
+			models.SubjectKindTask:
 			out = append(out, sk)
 		default:
 			return nil, fmt.Errorf("unknown subject kind: %q", s)

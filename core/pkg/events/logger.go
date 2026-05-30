@@ -175,6 +175,7 @@ func (l *Logger) toTaskRow(e eventbus.Event, actorType models.EventActorType, ac
 	meta := map[string]any{
 		"old_stage": p.OldStage,
 		"new_stage": p.Stage,
+		"status":    p.Status,
 	}
 
 	return &models.OperationEvent{
