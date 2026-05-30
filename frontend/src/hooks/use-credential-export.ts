@@ -7,6 +7,7 @@ import {
   type CredentialType,
 } from "@/graphql/gql/graphql"
 import { useCredentialStore } from "@/stores/credentials"
+import { useOperation } from "@/graphql/hooks/operations"
 import { useFindingsOpsParam } from "@/hooks/use-findings-ops-param"
 import type { FindingsMode } from "@/components/findings/findings-mode"
 import {
@@ -47,6 +48,12 @@ const FORMATS: Record<
 export function useCredentialExport(mode: FindingsMode) {
   const filters = useCredentialStore((s) => s.filters)
   const { operationIds } = useFindingsOpsParam()
+  // useOperation is gated on `!!id`, so in global mode this stays inert.
+  // In scoped mode it usually hits cache (the op page already loaded it).
+  const operationQuery = useOperation(
+    mode.kind === "scoped" ? mode.operationId : "",
+  )
+  const operationName = operationQuery.data?.operation.name
 
   const [isExporting, setIsExporting] = useState(false)
   const [progress, setProgress] = useState(0)
@@ -78,7 +85,8 @@ export function useCredentialExport(mode: FindingsMode) {
         }
 
         const { mime, encode } = FORMATS[format]
-        const label = mode.kind === "scoped" ? "operation" : "global"
+        const label =
+          mode.kind === "scoped" ? operationName ?? "operation" : "global"
         downloadBlob(encode(credentials), exportFilename(label, format), mime)
         toast.success(`Exported ${credentials.length} credentials`)
       } catch (err) {
@@ -90,7 +98,7 @@ export function useCredentialExport(mode: FindingsMode) {
         setProgress(0)
       }
     },
-    [filters, isExporting, mode, operationIds],
+    [filters, isExporting, mode, operationIds, operationName],
   )
 
   return { exportCredentials: run, isExporting, progress }
