@@ -1,4 +1,5 @@
 import type { TimelineEventFieldsFragment } from "@/graphql/gql/graphql"
+import { taskStatus } from "./event-icons"
 
 // renderEventSummary turns a persisted timeline event into a one-line human
 // description. Kept as a pure function so iteration on phrasing /
@@ -16,6 +17,10 @@ export function renderEventSummary(event: TimelineEventFieldsFragment): string {
       return `${actor} added credential "${name}"`
     case "wiki.document.created":
       return `${actor} created wiki document "${name}"`
+    case "task.stage_changed":
+      return `${actor} completed task "${name}" with status ${taskOutcomeLabel(
+        event.metadata,
+      )}`
     case "timeline.custom.created":
       // Custom annotations carry the name as the primary content; the actor
       // is surfaced via the dialog's "Actor" row, so we keep the headline
@@ -39,10 +44,27 @@ export function renderGroupSummary(topic: string, count: number): string {
       return `${count} wiki documents created`
     case "timeline.custom.created":
       return `${count} custom events`
+    case "task.stage_changed":
+      return `${count} tasks completed`
     default: {
       const verb = humaniseTopic(topic)
       return `${count} × ${verb}`
     }
+  }
+}
+
+// taskOutcomeLabel renders the persisted task status as a lowercase word
+// for inline summary use. Falls back to "unknown" when older rows lack a
+// status field in metadata.
+function taskOutcomeLabel(metadata: string | null | undefined): string {
+  const s = taskStatus(metadata)
+  switch (s) {
+    case "SUCCESS":
+      return "success"
+    case "FAIL":
+      return "fail"
+    default:
+      return "unknown"
   }
 }
 

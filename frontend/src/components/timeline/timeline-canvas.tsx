@@ -30,6 +30,14 @@ interface Props {
   onLoadOlder: () => void
   selectedBucketStart: string | null
   onSelectBucket: (bucketStart: string) => void
+  // Chip click in the dot stack — opens the group-scoped event modal at the
+  // page level. The page owns this dialog because the same page also owns
+  // the per-event details dialog and threads selection state for both.
+  onSelectGroup: (
+    bucketStart: string,
+    topic: string,
+    subjectKind: string,
+  ) => void
 }
 
 // Fixed pixel height for the canvas. Picked so the dot stack (capped at 16
@@ -62,6 +70,7 @@ export function TimelineCanvas({
   onLoadOlder,
   selectedBucketStart,
   onSelectBucket,
+  onSelectGroup,
 }: Props) {
   // Live updates — bumps the buckets + events queries via cache invalidation.
   useTimelineLiveUpdates(operationId)
@@ -146,7 +155,11 @@ export function TimelineCanvas({
   // re-scroll — the user-driven scroll-anchor above is the authority on
   // scrollLeft once initial positioning is done.
   const lastScrolledToRef = useRef<string | null>(null)
-  useEffect(() => {
+  // useLayoutEffect so scrollIntoView runs before the browser paints. Plain
+  // useEffect let the canvas paint at scrollLeft=0 first, then jump — the
+  // visible jump (or, on cached data, the lucky no-jump landing at the end)
+  // was the source of "I sometimes land at the start, sometimes at the end".
+  useLayoutEffect(() => {
     if (!selectedBucketStart) return
     if (lastScrolledToRef.current === selectedBucketStart) return
     const root = scrollRef.current
@@ -276,6 +289,7 @@ export function TimelineCanvas({
                   timezone={timezone}
                   isSelected={seg.bucketStart === selectedBucketStart}
                   onSelectBucket={onSelectBucket}
+                  onSelectGroup={onSelectGroup}
                 />
               </div>
             )

@@ -6,9 +6,8 @@ import type {
   TimelineEventFieldsFragment,
   TimelineGranularity,
 } from "@/graphql/gql/graphql"
-import { dayjs } from "./dayjs-setup"
-import { subjectKindIcon, subjectKindAccent } from "./event-icons"
-import { renderEventSummary } from "./event-summary"
+import { formatRangeLabel } from "./bucket-label"
+import { EventRow } from "./event-row"
 import { granularityNoun } from "./granularity"
 
 interface Props {
@@ -231,52 +230,3 @@ function DayPanelLoaded({
   )
 }
 
-function EventRow({
-  event,
-  timezone,
-  onSelect,
-}: {
-  event: TimelineEventFieldsFragment
-  timezone: string
-  onSelect: () => void
-}) {
-  const Icon = subjectKindIcon(event.subjectKind)
-  const accent = subjectKindAccent(event.subjectKind)
-  const t = dayjs(event.occurredAt).tz(timezone)
-  return (
-    <button
-      type="button"
-      onClick={onSelect}
-      className="flex w-full items-start gap-3 px-3 py-2 text-left hover:bg-muted/40 transition-colors"
-    >
-      <Icon className={`mt-0.5 size-4 shrink-0 ${accent}`} />
-      <div className="min-w-0 flex-1">
-        <div className="truncate text-sm">{renderEventSummary(event)}</div>
-        <div className="text-xs text-muted-foreground tabular-nums">
-          {t.format("HH:mm")} · {t.fromNow()}
-        </div>
-      </div>
-    </button>
-  )
-}
-
-function formatRangeLabel(
-  bucketStart: string,
-  granularity: TimelineGranularity,
-  timezone: string,
-): string {
-  const start = dayjs(bucketStart).tz(timezone)
-  switch (granularity) {
-    case "WEEK": {
-      const end = start.add(6, "day")
-      const sameMonth = start.month() === end.month()
-      return sameMonth
-        ? `${start.format("MMM D")} – ${end.format("D, YYYY")}`
-        : `${start.format("MMM D")} – ${end.format("MMM D, YYYY")}`
-    }
-    case "MONTH":
-      return start.format("MMMM YYYY")
-    default:
-      return start.format("dddd, MMM D, YYYY")
-  }
-}

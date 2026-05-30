@@ -13,8 +13,9 @@ import {
 import type { TimelineEventFieldsFragment } from "@/graphql/gql/graphql"
 import { useMe } from "@/graphql/hooks/users"
 import { useDeleteCustomTimelineEvent } from "@/graphql/hooks/timeline"
+import { useTaskStore } from "@/stores/tasks"
 import { dayjs } from "./dayjs-setup"
-import { subjectKindIcon, subjectKindAccent } from "./event-icons"
+import { eventIcon, eventAccent } from "./event-icons"
 import {
   parseCustomEventDescription,
   renderEventSummary,
@@ -46,13 +47,14 @@ export function EventDetailsDialog({
 }: Props) {
   const { data: meData } = useMe()
   const deleteMut = useDeleteCustomTimelineEvent()
+  const openEditTask = useTaskStore((s) => s.openEditDialog)
   const [confirmDelete, setConfirmDelete] = useState(false)
   const [deleteError, setDeleteError] = useState<string | null>(null)
 
   if (!event) return null
 
-  const Icon = subjectKindIcon(event.subjectKind)
-  const accent = subjectKindAccent(event.subjectKind)
+  const Icon = eventIcon(event)
+  const accent = eventAccent(event)
   const occurred = dayjs(event.occurredAt)
   const description = parseCustomEventDescription(event.metadata)
 
@@ -117,7 +119,25 @@ export function EventDetailsDialog({
             <>
               <dt className="text-muted-foreground">Subject</dt>
               <dd>
-                {subjectLink(event) ? (
+                {event.subjectKind === "task" ? (
+                  // Tasks open via the globally-mounted EditTaskDialog so
+                  // the operator stays on the timeline page instead of
+                  // navigating to /tasks. Mirrors the wiki / credential
+                  // backlink pattern.
+                  <button
+                    type="button"
+                    onClick={() => {
+                      openEditTask({
+                        id: event.subjectId,
+                        name: event.subjectName || "(unnamed)",
+                      })
+                      onOpenChange(false)
+                    }}
+                    className="cursor-pointer text-left underline underline-offset-2 hover:text-foreground"
+                  >
+                    {event.subjectName || "(unnamed)"}
+                  </button>
+                ) : subjectLink(event) ? (
                   <Link
                     to={subjectLink(event)!}
                     className="underline underline-offset-2 hover:text-foreground"

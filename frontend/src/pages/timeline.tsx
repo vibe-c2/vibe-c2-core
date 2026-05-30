@@ -1,4 +1,11 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react"
+import {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react"
 import { Navigate, useSearchParams } from "react-router"
 import { RouteIcon } from "lucide-react"
 import { useScopedOperation } from "@/hooks/use-scoped-operation"
@@ -18,6 +25,7 @@ import { TimelineDayPanel } from "@/components/timeline/timeline-day-panel"
 import { dayjs } from "@/components/timeline/dayjs-setup"
 import { truncateToGranularity } from "@/components/timeline/piecewise-axis"
 import { EventDetailsDialog } from "@/components/timeline/event-details-dialog"
+import { EventGroupDialog } from "@/components/timeline/event-group-dialog"
 import { CustomTimelineEventDialog } from "@/components/timeline/custom-timeline-event-dialog"
 import type { ActorChip } from "@/components/timeline/timeline-filters"
 
@@ -302,16 +310,30 @@ function TimelinePageInner({ operationId }: { operationId: string }) {
   // Latest active bucket drives the auto-select default. Buckets are sorted
   // ascending across all loaded windows, so the most recent active bucket
   // is the last entry.
+  //
+  // Normalise the raw bucket string through the same truncate+timezone
+  // transform that buildSegments applies — without this, the auto-select
+  // writes a UTC "Z" string ("2026-05-29T21:00:00Z") while the rendered
+  // segments carry the offset form ("2026-05-30T00:00:00+03:00"). The
+  // scroll-to-selected query selector then never matches and the canvas
+  // stays at scrollLeft=0.
   const latestBucketStart = useMemo(() => {
     if (loadedBuckets.length === 0) return null
-    return loadedBuckets[loadedBuckets.length - 1].bucketStart
-  }, [loadedBuckets])
+    const raw = loadedBuckets[loadedBuckets.length - 1].bucketStart
+    return truncateToGranularity(dayjs(raw).tz(timezone), granularity).format()
+  }, [loadedBuckets, timezone, granularity])
 
-  useEffect(() => {
+  // useLayoutEffect so the URL gains ?day=<latest> before the canvas paints.
+  // Plain useEffect runs after first paint, which let the canvas render once
+  // with no selection — defaulting to scrollLeft=0 (the left edge) — before
+  // a second commit scrolled it to the right. Landing position on reload
+  // was effectively a race: with cached bucket data (e.g. navigating to the
+  // timeline from another page) React often batches both commits into the
+  // same visible paint, so users land at the latest bucket; without cache
+  // they briefly see the start. useLayoutEffect closes the gap.
+  useLayoutEffect(() => {
     if (selectedDay) return
     if (!latestBucketStart) return
-    // Auto-selecting means a fresh load of the timeline shows real content
-    // in the panel instead of an empty "click a day" hint.
     setSelectedDay(latestBucketStart)
     // setSelectedDay is stable via useCallback.
   }, [latestBucketStart, selectedDay, setSelectedDay])
@@ -329,6 +351,36 @@ function TimelinePageInner({ operationId }: { operationId: string }) {
     setSelectedEvent(event)
     setEventDialogOpen(true)
   }, [])
+
+  // --- Event group dialog state ---------------------------------------
+  //
+  // The dot stack's chips open this modal — a focused list of every event
+  // in one (topic, subjectKind) slice of the bucket. Distinct from the
+  // day panel (whole bucket) and the details dialog (single event), so the
+  // user can drill into "10 credentials added" without scrolling past
+  // unrelated rows.
+
+  const [groupDialog, setGroupDialog] = useState<{
+    bucketStart: string
+    topic: string
+    subjectKind: string
+  } | null>(null)
+
+  const handleGroupClick = useCallback(
+    (bucketStart: string, topic: string, subjectKind: string) => {
+      setGroupDialog({ bucketStart, topic, subjectKind })
+    },
+    [],
+  )
+
+  const handleGroupEventSelect = useCallback(
+    (event: TimelineEventFieldsFragment) => {
+      setGroupDialog(null)
+      setSelectedEvent(event)
+      setEventDialogOpen(true)
+    },
+    [],
+  )
 
   // --- Custom timeline event dialog (create + edit) --------------------
   //
@@ -406,6 +458,7 @@ function TimelinePageInner({ operationId }: { operationId: string }) {
         onLoadOlder={loadOlder}
         selectedBucketStart={selectedDay}
         onSelectBucket={setSelectedDay}
+        onSelectGroup={handleGroupClick}
       />
 
       <TimelineDayPanel
@@ -430,6 +483,21 @@ function TimelinePageInner({ operationId }: { operationId: string }) {
         event={selectedEvent}
         canEditCustomEvent={canEditTimeline}
         onEditCustomEvent={openEditCustomEvent}
+      />
+
+      <EventGroupDialog
+        open={groupDialog !== null}
+        onOpenChange={(next) => {
+          if (!next) setGroupDialog(null)
+        }}
+        operationId={op.id}
+        bucketStart={groupDialog?.bucketStart ?? null}
+        granularity={granularity}
+        timezone={timezone}
+        topic={groupDialog?.topic ?? null}
+        subjectKind={groupDialog?.subjectKind ?? null}
+        actorIds={actorIds.length > 0 ? actorIds : null}
+        onEventSelect={handleGroupEventSelect}
       />
 
       <CustomTimelineEventDialog
