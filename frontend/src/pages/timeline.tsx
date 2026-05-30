@@ -27,6 +27,9 @@ import { truncateToGranularity } from "@/components/timeline/piecewise-axis"
 import { EventDetailsDialog } from "@/components/timeline/event-details-dialog"
 import { EventGroupDialog } from "@/components/timeline/event-group-dialog"
 import { CustomTimelineEventDialog } from "@/components/timeline/custom-timeline-event-dialog"
+import { CredentialDetailsDialog } from "@/components/findings/credential-details-dialog"
+import { EditCredentialDialog } from "@/components/findings/edit-credential-dialog"
+import { DeleteCredentialDialog } from "@/components/findings/delete-credential-dialog"
 import type { ActorChip } from "@/components/timeline/timeline-filters"
 
 // Resolve the viewer's IANA timezone once per mount. Browsers without
@@ -508,6 +511,10 @@ function TimelinePageInner({ operationId }: { operationId: string }) {
         timezone={timezone}
         event={customEventBeingEdited}
       />
+
+      <CredentialDetailsDialog />
+      <EditCredentialDialog />
+      <DeleteCredentialDialog />
     </div>
   )
 }

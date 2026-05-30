@@ -14,6 +14,7 @@ import type { TimelineEventFieldsFragment } from "@/graphql/gql/graphql"
 import { useMe } from "@/graphql/hooks/users"
 import { useDeleteCustomTimelineEvent } from "@/graphql/hooks/timeline"
 import { useTaskStore } from "@/stores/tasks"
+import { useCredentialStore } from "@/stores/credentials"
 import { dayjs } from "./dayjs-setup"
 import { eventIcon, eventAccent } from "./event-icons"
 import {
@@ -48,6 +49,7 @@ export function EventDetailsDialog({
   const { data: meData } = useMe()
   const deleteMut = useDeleteCustomTimelineEvent()
   const openEditTask = useTaskStore((s) => s.openEditDialog)
+  const openCredentialDetails = useCredentialStore((s) => s.openDetailsPanel)
   const [confirmDelete, setConfirmDelete] = useState(false)
   const [deleteError, setDeleteError] = useState<string | null>(null)
 
@@ -128,6 +130,20 @@ export function EventDetailsDialog({
                     type="button"
                     onClick={() => {
                       openEditTask({
+                        id: event.subjectId,
+                        name: event.subjectName || "(unnamed)",
+                      })
+                      onOpenChange(false)
+                    }}
+                    className="cursor-pointer text-left underline underline-offset-2 hover:text-foreground"
+                  >
+                    {event.subjectName || "(unnamed)"}
+                  </button>
+                ) : event.subjectKind === "credential" ? (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      openCredentialDetails({
                         id: event.subjectId,
                         name: event.subjectName || "(unnamed)",
                       })
@@ -227,10 +243,6 @@ function subjectLink(event: TimelineEventFieldsFragment): string | null {
   switch (event.subjectKind) {
     case "wiki_document":
       return `/wiki/${event.subjectId}`
-    case "credential":
-      // Findings filters credentials by id via query param; the page falls
-      // back to listing if the id is gone.
-      return `/findings?credential=${event.subjectId}`
     default:
       return null
   }
