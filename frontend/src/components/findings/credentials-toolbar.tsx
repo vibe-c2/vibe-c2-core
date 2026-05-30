@@ -1,5 +1,12 @@
 import { useMemo, useState } from "react"
-import { PlusIcon, FilterIcon, SearchIcon, XIcon } from "lucide-react"
+import {
+  PlusIcon,
+  FilterIcon,
+  SearchIcon,
+  XIcon,
+  DownloadIcon,
+  Loader2Icon,
+} from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Checkbox } from "@/components/ui/checkbox"
@@ -16,9 +23,16 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover"
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
 import { SearchInput } from "@/components/ui/search-input"
 import { Switch } from "@/components/ui/switch"
 import { useCredentialStore } from "@/stores/credentials"
+import { useCredentialExport } from "@/hooks/use-credential-export"
 import {
   useCredentialTags,
   useMyCredentialTags,
@@ -142,13 +156,45 @@ export function CredentialsToolbar({ mode }: CredentialsToolbarProps) {
       {/* Credentials are created against a specific operation. In scoped mode
           the parent passes the op id straight to the dialog. In global mode
           the dialog renders an inline op picker so the user can choose. */}
-      <div className="ms-auto">
+      <div className="ms-auto flex items-center gap-2">
+        <ExportMenu mode={mode} />
         <Button onClick={openCreate}>
           <PlusIcon className="size-4" />
           Add credential
         </Button>
       </div>
     </div>
+  )
+}
+
+// Export the current (filtered) credential set as JSON or CSV. Paginates
+// through the same `credentials` / `myCredentials` query the table uses, so
+// authorization and filter semantics are identical to what's on screen.
+function ExportMenu({ mode }: { mode: FindingsMode }) {
+  const { exportCredentials, isExporting, progress } = useCredentialExport(mode)
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger
+        render={
+          <Button variant="outline" disabled={isExporting}>
+            {isExporting ? (
+              <Loader2Icon className="size-4 animate-spin" />
+            ) : (
+              <DownloadIcon className="size-4" />
+            )}
+            {isExporting ? `Exporting ${progress}…` : "Export"}
+          </Button>
+        }
+      />
+      <DropdownMenuContent align="end">
+        <DropdownMenuItem onClick={() => exportCredentials("json")}>
+          Export as JSON
+        </DropdownMenuItem>
+        <DropdownMenuItem onClick={() => exportCredentials("csv")}>
+          Export as CSV
+        </DropdownMenuItem>
+      </DropdownMenuContent>
+    </DropdownMenu>
   )
 }
 
