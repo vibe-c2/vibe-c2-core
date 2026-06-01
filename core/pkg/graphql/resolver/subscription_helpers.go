@@ -210,6 +210,12 @@ func extractOperationID(event eventbus.Event) string {
 		return p.OperationID
 	case eventbus.CredentialEventPayload:
 		return p.OperationID
+	case eventbus.HashEventPayload:
+		return p.OperationID
+	case eventbus.HashCrackedPayload:
+		return p.OperationID
+	case eventbus.HashBulkImportPayload:
+		return p.OperationID
 	case eventbus.TaskEventPayload:
 		return p.OperationID
 	case eventbus.OperationEventLoggedPayload:
@@ -338,6 +344,51 @@ func toCredentialEvent(event eventbus.Event) *model.CredentialEvent {
 	evt := &model.CredentialEvent{Action: action}
 	if p, ok := event.Payload.(eventbus.CredentialEventPayload); ok {
 		evt.CredentialID = p.CredentialID
+		evt.OperationID = p.OperationID
+	}
+	return evt
+}
+
+// hashTopics is the list of hash event bus topics for subscriptions. Includes
+// every hash topic so the subscriber refetches once per mutation regardless of
+// which axis (status, link, comment, bulk import) changed.
+var hashTopics = []eventbus.Topic{
+	eventbus.TopicHashCreated,
+	eventbus.TopicHashUpdated,
+	eventbus.TopicHashDeleted,
+	eventbus.TopicHashCracked,
+	eventbus.TopicHashBulkImported,
+	eventbus.TopicHashCommentAdded,
+	eventbus.TopicHashCommentUpdated,
+	eventbus.TopicHashCommentRemoved,
+}
+
+// toHashEvent converts an event bus Event to a GraphQL HashEvent. Cracked and
+// bulk_imported both surface as UPDATED — the client refetches and the table
+// re-renders the new state. Comment.* topics surface as UPDATED for the same
+// reason.
+func toHashEvent(event eventbus.Event) *model.HashEvent {
+	var action model.EventAction
+	switch event.Topic {
+	case eventbus.TopicHashCreated:
+		action = model.EventActionCreated
+	case eventbus.TopicHashDeleted:
+		action = model.EventActionDeleted
+	default:
+		action = model.EventActionUpdated
+	}
+	evt := &model.HashEvent{Action: action}
+	switch p := event.Payload.(type) {
+	case eventbus.HashEventPayload:
+		evt.HashID = p.HashID
+		evt.OperationID = p.OperationID
+	case eventbus.HashCrackedPayload:
+		evt.HashID = p.HashID
+		evt.OperationID = p.OperationID
+	case eventbus.HashBulkImportPayload:
+		// Bulk imports have no single subject id — leave HashID empty; the
+		// client treats an empty id as "invalidate the list" rather than "fetch
+		// this row".
 		evt.OperationID = p.OperationID
 	}
 	return evt

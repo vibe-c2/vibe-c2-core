@@ -16,6 +16,7 @@ import {
   CredentialsDocument,
   CredentialTagsDocument,
   CredentialBacklinksDocument,
+  CredentialSourceHashesDocument,
   CreateCredentialDocument,
   UpdateCredentialDocument,
   DeleteCredentialDocument,
@@ -66,6 +67,8 @@ export const credentialKeys = {
     [...credentialKeys.tagSets(), "my", operationIds] as const,
   backlinks: (credentialId: string) =>
     [...credentialKeys.all, "backlinks", credentialId] as const,
+  sourceHashes: (credentialId: string) =>
+    [...credentialKeys.all, "sourceHashes", credentialId] as const,
 }
 
 // --- Queries ---
@@ -121,6 +124,18 @@ export function useCredentialTags(operationId: string) {
 // documents. Live-invalidation runs through the existing credentialChanged
 // and wikiDocumentChanged subscriptions, which both blanket-invalidate the
 // backlinks prefix.
+// Hashes that produced this credential. Loaded on demand by the details
+// dialog. Cache invalidates whenever any hash mutation runs (the hash hooks
+// drop the entire credentials prefix on cracked, which covers this).
+export function useCredentialSourceHashes(credentialId: string) {
+  return useQuery({
+    queryKey: credentialKeys.sourceHashes(credentialId),
+    queryFn: () =>
+      graphqlClient(CredentialSourceHashesDocument, { id: credentialId }),
+    enabled: !!credentialId,
+  })
+}
+
 export function useCredentialBacklinks(credentialId: string) {
   return useQuery({
     queryKey: credentialKeys.backlinks(credentialId),

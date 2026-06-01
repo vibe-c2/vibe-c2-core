@@ -70,6 +70,12 @@ func (a *App) NewRouter() *gin.Engine {
 	credRes := resolver.NewCredentialResolver(
 		a.repos.Credential, a.repos.Operation, a.repos.User, wikiDocRes, a.repos.Task, a.eventBus,
 	)
+	// hashRes depends on credRes because MarkHashCracked may need to create a
+	// new credential inline — going through the credential resolver keeps the
+	// validation, event publishing, and timeline write paths consistent.
+	hashRes := resolver.NewHashResolver(
+		a.repos.Hash, a.repos.Credential, a.repos.Operation, a.repos.User, credRes, a.eventBus,
+	)
 	taskRes := resolver.NewTaskResolver(
 		a.repos.Task, a.repos.Operation, a.repos.User, a.repos.WikiDocument, a.repos.Credential, a.eventBus,
 	)
@@ -205,9 +211,9 @@ func (a *App) NewRouter() *gin.Engine {
 		//                       inside gqlgen; one socket multiplexes every
 		//                       active subscription on the page.
 		gqlHandler := gql.NewHandler(
-			userRes, opRes, snpRes, sessRes, wikiDocRes, wikiVisitRes, credRes, taskRes, timelineRes, apiKeyRes,
+			userRes, opRes, snpRes, sessRes, wikiDocRes, wikiVisitRes, credRes, hashRes, taskRes, timelineRes, apiKeyRes,
 			a.eventBus,
-			a.repos.User, a.repos.Operation, a.repos.Session, a.repos.WikiDocument, a.repos.Credential, a.repos.Task,
+			a.repos.User, a.repos.Operation, a.repos.Session, a.repos.WikiDocument, a.repos.Credential, a.repos.Hash, a.repos.Task,
 			a.presenceTracker,
 			a.env.CORSAllowedOrigins,
 		)

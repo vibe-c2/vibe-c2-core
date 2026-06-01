@@ -214,6 +214,63 @@ func NewCredentialCommentRemovedEvent(actor Actor, p CredentialEventPayload) Eve
 	return NewEvent(TopicCredentialCommentRemoved, actor, p)
 }
 
+// --- Hash event payloads ---
+
+// HashEventPayload is the payload for hash create/update/delete and comment events.
+type HashEventPayload struct {
+	HashID      string
+	OperationID string
+}
+
+// HashCrackedPayload is the payload for TopicHashCracked. CredentialID is the
+// id of the credential that the cracked hash was linked to (either newly
+// created or selected from the operation).
+type HashCrackedPayload struct {
+	HashID       string
+	OperationID  string
+	CredentialID string
+}
+
+// HashBulkImportPayload is the payload for TopicHashBulkImported. Carries the
+// summary count rather than per-row ids — the timeline subscriber writes a
+// single "imported N hashes" row regardless of batch size.
+type HashBulkImportPayload struct {
+	OperationID string
+	Count       int
+}
+
+func NewHashCreatedEvent(actor Actor, p HashEventPayload) Event {
+	return NewEvent(TopicHashCreated, actor, p)
+}
+
+func NewHashUpdatedEvent(actor Actor, p HashEventPayload) Event {
+	return NewEvent(TopicHashUpdated, actor, p)
+}
+
+func NewHashDeletedEvent(actor Actor, p HashEventPayload) Event {
+	return NewEvent(TopicHashDeleted, actor, p)
+}
+
+func NewHashCrackedEvent(actor Actor, p HashCrackedPayload) Event {
+	return NewEvent(TopicHashCracked, actor, p)
+}
+
+func NewHashBulkImportedEvent(actor Actor, p HashBulkImportPayload) Event {
+	return NewEvent(TopicHashBulkImported, actor, p)
+}
+
+func NewHashCommentAddedEvent(actor Actor, p HashEventPayload) Event {
+	return NewEvent(TopicHashCommentAdded, actor, p)
+}
+
+func NewHashCommentUpdatedEvent(actor Actor, p HashEventPayload) Event {
+	return NewEvent(TopicHashCommentUpdated, actor, p)
+}
+
+func NewHashCommentRemovedEvent(actor Actor, p HashEventPayload) Event {
+	return NewEvent(TopicHashCommentRemoved, actor, p)
+}
+
 // --- Task event payloads ---
 
 // TaskEventPayload is the payload for every task topic. The bus stays

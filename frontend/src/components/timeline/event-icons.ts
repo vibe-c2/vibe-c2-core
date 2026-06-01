@@ -3,6 +3,7 @@ import {
   CircleCheckIcon,
   CircleDashedIcon,
   CircleXIcon,
+  HashIcon,
   KeyRoundIcon,
   PinIcon,
   type LucideIcon,
@@ -52,6 +53,8 @@ export function subjectKindIcon(subjectKind: string): LucideIcon {
   switch (subjectKind) {
     case "credential":
       return KeyRoundIcon
+    case "hash":
+      return HashIcon
     case "wiki_document":
       return BookOpenIcon
     case "custom_event":
@@ -70,6 +73,8 @@ export function subjectKindAccent(subjectKind: string): string {
   switch (subjectKind) {
     case "credential":
       return "text-amber-500"
+    case "hash":
+      return "text-purple-500"
     case "wiki_document":
       return "text-sky-500"
     case "custom_event":

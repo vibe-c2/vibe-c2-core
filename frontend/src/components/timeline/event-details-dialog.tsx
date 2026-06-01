@@ -15,6 +15,7 @@ import { useMe } from "@/graphql/hooks/users"
 import { useDeleteCustomTimelineEvent } from "@/graphql/hooks/timeline"
 import { useTaskStore } from "@/stores/tasks"
 import { useCredentialStore } from "@/stores/credentials"
+import { useHashStore } from "@/stores/hashes"
 import { dayjs } from "./dayjs-setup"
 import { eventIcon, eventAccent } from "./event-icons"
 import {
@@ -50,6 +51,7 @@ export function EventDetailsDialog({
   const deleteMut = useDeleteCustomTimelineEvent()
   const openEditTask = useTaskStore((s) => s.openEditDialog)
   const openCredentialDetails = useCredentialStore((s) => s.openDetailsPanel)
+  const openHashDetails = useHashStore((s) => s.openDetailsPanel)
   const [confirmDelete, setConfirmDelete] = useState(false)
   const [deleteError, setDeleteError] = useState<string | null>(null)
 
@@ -146,6 +148,24 @@ export function EventDetailsDialog({
                       openCredentialDetails({
                         id: event.subjectId,
                         name: event.subjectName || "(unnamed)",
+                      })
+                      onOpenChange(false)
+                    }}
+                    className="cursor-pointer text-left underline underline-offset-2 hover:text-foreground"
+                  >
+                    {event.subjectName || "(unnamed)"}
+                  </button>
+                ) : event.subjectKind === "hash" &&
+                  event.topic !== "hash.bulk_imported" ? (
+                  // Bulk-import rows are their own subject (no real hash to
+                  // open) — render as plain text. Per-row events link into
+                  // the hash details dialog the same way credentials do.
+                  <button
+                    type="button"
+                    onClick={() => {
+                      openHashDetails({
+                        id: event.subjectId,
+                        label: event.subjectName || "(unnamed)",
                       })
                       onOpenChange(false)
                     }}

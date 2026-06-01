@@ -17,6 +17,20 @@ type APIKeyWithSecret struct {
 	Token  string         `json:"token"`
 }
 
+type BulkImportHashesInput struct {
+	Text            string         `json:"text"`
+	Format          BulkHashFormat `json:"format"`
+	DefaultHashType *string        `json:"defaultHashType,omitempty"`
+	Source          *string        `json:"source,omitempty"`
+	Tags            []string       `json:"tags,omitempty"`
+}
+
+type BulkImportHashesResult struct {
+	Added   int            `json:"added"`
+	Skipped int            `json:"skipped"`
+	Hashes  []*models.Hash `json:"hashes"`
+}
+
 type ChangeTaskStageInput struct {
 	TaskID string             `json:"taskId"`
 	Stage  models.TaskStage   `json:"stage"`
@@ -38,6 +52,17 @@ type CreateCustomTimelineEventInput struct {
 	Name        string  `json:"name"`
 	Description *string `json:"description,omitempty"`
 	OccurredAt  string  `json:"occurredAt"`
+}
+
+type CreateHashInput struct {
+	Value      string               `json:"value"`
+	HashType   string               `json:"hashType"`
+	Username   *string              `json:"username,omitempty"`
+	Domain     *string              `json:"domain,omitempty"`
+	Source     *string              `json:"source,omitempty"`
+	Status     *models.HashStatus   `json:"status,omitempty"`
+	Tags       []string             `json:"tags,omitempty"`
+	Properties []*HashPropertyInput `json:"properties,omitempty"`
 }
 
 type CreateOperationInput struct {
@@ -116,6 +141,39 @@ type CredentialKeyInput struct {
 type CredentialPropertyInput struct {
 	Name  string `json:"name"`
 	Value string `json:"value"`
+}
+
+type HashConnection struct {
+	Edges      []*HashEdge          `json:"edges"`
+	PageInfo   *pagination.PageInfo `json:"pageInfo"`
+	TotalCount int                  `json:"totalCount"`
+}
+
+type HashEdge struct {
+	Node   *models.Hash `json:"node"`
+	Cursor string       `json:"cursor"`
+}
+
+type HashEvent struct {
+	Action      EventAction  `json:"action"`
+	HashID      string       `json:"hashId"`
+	OperationID string       `json:"operationId"`
+	Hash        *models.Hash `json:"hash,omitempty"`
+}
+
+type HashPropertyInput struct {
+	Name  string `json:"name"`
+	Value string `json:"value"`
+}
+
+type MarkHashCrackedInput struct {
+	Plaintext     string                 `json:"plaintext"`
+	CredentialID  *string                `json:"credentialId,omitempty"`
+	NewCredential *CreateCredentialInput `json:"newCredential,omitempty"`
+	Tool          *string                `json:"tool,omitempty"`
+	Wordlist      *string                `json:"wordlist,omitempty"`
+	Rules         *string                `json:"rules,omitempty"`
+	DurationSec   *int                   `json:"durationSec,omitempty"`
 }
 
 type Mutation struct {
@@ -241,6 +299,17 @@ type UpdateCustomTimelineEventInput struct {
 	Name        *string `json:"name,omitempty"`
 	Description *string `json:"description,omitempty"`
 	OccurredAt  *string `json:"occurredAt,omitempty"`
+}
+
+type UpdateHashInput struct {
+	Value      *string              `json:"value,omitempty"`
+	HashType   *string              `json:"hashType,omitempty"`
+	Username   *string              `json:"username,omitempty"`
+	Domain     *string              `json:"domain,omitempty"`
+	Source     *string              `json:"source,omitempty"`
+	Status     *models.HashStatus   `json:"status,omitempty"`
+	Tags       []string             `json:"tags,omitempty"`
+	Properties []*HashPropertyInput `json:"properties,omitempty"`
 }
 
 type UpdateOperationInput struct {
@@ -395,6 +464,63 @@ type WikiSearchHit struct {
 type WikiSearchMatchRange struct {
 	Start int `json:"start"`
 	End   int `json:"end"`
+}
+
+type BulkHashFormat string
+
+const (
+	BulkHashFormatRaw         BulkHashFormat = "RAW"
+	BulkHashFormatSecretsdump BulkHashFormat = "SECRETSDUMP"
+	BulkHashFormatPwdump      BulkHashFormat = "PWDUMP"
+)
+
+var AllBulkHashFormat = []BulkHashFormat{
+	BulkHashFormatRaw,
+	BulkHashFormatSecretsdump,
+	BulkHashFormatPwdump,
+}
+
+func (e BulkHashFormat) IsValid() bool {
+	switch e {
+	case BulkHashFormatRaw, BulkHashFormatSecretsdump, BulkHashFormatPwdump:
+		return true
+	}
+	return false
+}
+
+func (e BulkHashFormat) String() string {
+	return string(e)
+}
+
+func (e *BulkHashFormat) UnmarshalGQL(v any) error {
+	str, ok := v.(string)
+	if !ok {
+		return fmt.Errorf("enums must be strings")
+	}
+
+	*e = BulkHashFormat(str)
+	if !e.IsValid() {
+		return fmt.Errorf("%s is not a valid BulkHashFormat", str)
+	}
+	return nil
+}
+
+func (e BulkHashFormat) MarshalGQL(w io.Writer) {
+	fmt.Fprint(w, strconv.Quote(e.String()))
+}
+
+func (e *BulkHashFormat) UnmarshalJSON(b []byte) error {
+	s, err := strconv.Unquote(string(b))
+	if err != nil {
+		return err
+	}
+	return e.UnmarshalGQL(s)
+}
+
+func (e BulkHashFormat) MarshalJSON() ([]byte, error) {
+	var buf bytes.Buffer
+	e.MarshalGQL(&buf)
+	return buf.Bytes(), nil
 }
 
 type EventAction string

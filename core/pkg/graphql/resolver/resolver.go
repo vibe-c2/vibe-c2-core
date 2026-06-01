@@ -39,6 +39,7 @@ type Resolver struct {
 	WikiDocumentResolver       resolver.IWikiDocumentResolver
 	WikiDocumentVisitResolver  resolver.IWikiDocumentVisitResolver
 	CredentialResolver         resolver.ICredentialResolver
+	HashResolver               resolver.IHashResolver
 	TaskResolver               resolver.ITaskResolver
 	TimelineResolver           resolver.ITimelineResolver
 	APIKeyResolver             resolver.IAPIKeyResolver
@@ -51,6 +52,7 @@ type Resolver struct {
 	SessionRepo      repository.ISessionRepository
 	WikiDocumentRepo repository.IWikiDocumentRepository
 	CredentialRepo   repository.ICredentialRepository
+	HashRepo         repository.IHashRepository
 	TaskRepo         repository.ITaskRepository
 	PresenceTracker  *wiki.PresenceTracker
 }

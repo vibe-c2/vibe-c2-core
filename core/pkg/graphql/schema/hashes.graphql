@@ -1,0 +1,302 @@
+# =============================================================================
+# Findings — Hashes
+# =============================================================================
+#
+# Hashes are an operation-scoped record of password hashes discovered against
+# target accounts. Cracking happens offline; this app tracks the workflow
+# (NOT_PROCESSED → QUEUED → CRACKING → CRACKED / FAILED) and links a cracked
+# hash to the resulting Credential so the two findings tabs stay joined.
+#
+# Hash values are NOT secrets in the application sense — they're already-stolen
+# target material, stored and rendered plainly. Same convention as credentials.
+
+# --- Enums ---
+
+enum HashStatus {
+  NOT_PROCESSED
+  QUEUED
+  CRACKING
+  CRACKED
+  FAILED
+}
+
+# --- Types ---
+
+# HashTypeSpec advertises a curated hash family operators can pick from. The
+# hashcatMode is included so the UI can show "hashcat -m 1000" alongside the
+# label. Returned by the hashTypes query; not a field on Hash itself.
+type HashTypeSpec {
+  name: String!
+  displayName: String!
+  hashcatMode: Int!
+}
+
+# Operator note attached to a hash. Same shape as CredentialComment.
+type HashComment {
+  id: ID!
+  author: User
+  text: String!
+  createdAt: String!
+  updatedAt: String!
+}
+
+# Operator-defined key/value pair for ad-hoc metadata. Same non-secret /
+# search-indexed semantics as CredentialProperty.
+type HashProperty {
+  name: String!
+  value: String!
+}
+
+# Free-form postmortem fields recorded when a hash is marked CRACKED. Operators
+# self-report; the app does not run hashcat or validate any field.
+type HashCrackingMeta {
+  tool: String!
+  wordlist: String!
+  rules: String!
+  durationSec: Int!
+  crackedBy: User
+  crackedAt: String!
+}
+
+type Hash {
+  id: ID!
+  operationId: ID!
+  # Full parent Operation. Used by the global Findings page where one row may
+  # belong to any operation. In scoped views the operation is implicit — skip
+  # this field to avoid a DB round-trip per row.
+  operation: Operation!
+  value: String!
+  # Canonical hash type name (e.g. "NTLM", "NETNTLMV2"). Unknown types pass
+  # through uppercased; see hashTypes query for the curated preset list.
+  hashType: String!
+  # Hashcat -m mode. 0 for unknown / not applicable types.
+  hashcatMode: Int!
+  username: String!
+  domain: String!
+  status: HashStatus!
+  source: String!
+  tags: [String!]!
+  # Linked credential populated once a hash is cracked via markHashCracked.
+  # Null while pending. The credential field resolver does a DB lookup; skip
+  # it on list payloads if you only need the id.
+  credentialId: ID
+  credential: Credential
+  # Postmortem details recorded on the markHashCracked call. Null for any
+  # hash that has not yet been cracked.
+  crackingMeta: HashCrackingMeta
+  properties: [HashProperty!]!
+  comments: [HashComment!]!
+  # True when the caller can moderate any comment on this hash regardless of
+  # authorship. Same rule as Credential.viewerCanModerateComments.
+  viewerCanModerateComments: Boolean!
+  createdBy: User
+  createdAt: String!
+  updatedAt: String!
+}
+
+type HashEdge {
+  node: Hash!
+  cursor: String!
+}
+
+type HashConnection {
+  edges: [HashEdge!]!
+  pageInfo: PageInfo!
+  totalCount: Int!
+}
+
+type HashEvent {
+  action: EventAction!
+  hashId: ID!
+  operationId: ID!
+  hash: Hash
+}
+
+# Result of a bulk paste. Returns counts and the newly created rows so the UI
+# can update its list without a follow-up query.
+type BulkImportHashesResult {
+  added: Int!
+  skipped: Int!
+  hashes: [Hash!]!
+}
+
+# --- Inputs ---
+
+input HashPropertyInput {
+  name: String!
+  value: String!
+}
+
+input CreateHashInput {
+  value: String!
+  hashType: String!
+  username: String
+  domain: String
+  source: String
+  status: HashStatus
+  tags: [String!]
+  properties: [HashPropertyInput!]
+}
+
+# UpdateHashInput is the general-purpose mutation surface. Transitioning the
+# status to CRACKED via this input is rejected — use markHashCracked, which
+# enforces the credential link.
+input UpdateHashInput {
+  value: String
+  hashType: String
+  username: String
+  domain: String
+  source: String
+  status: HashStatus
+  tags: [String!]
+  properties: [HashPropertyInput!]
+}
+
+# BulkImportHashesInput accepts a raw paste plus the format hint that drives
+# parsing. format=RAW expects one hash per line. SECRETSDUMP / PWDUMP parse
+# the colon-separated dump formats and pull out username + NT hash. All
+# parsed rows take the same default status, hash type override, source, and
+# tags applied at the input level — per-row metadata can be edited after.
+input BulkImportHashesInput {
+  text: String!
+  format: BulkHashFormat!
+  # Default hash type for RAW input. Ignored for SECRETSDUMP/PWDUMP which
+  # always produce NTLM rows.
+  defaultHashType: String
+  source: String
+  tags: [String!]
+}
+
+enum BulkHashFormat {
+  RAW
+  SECRETSDUMP
+  PWDUMP
+}
+
+# Used by markHashCracked. Exactly one of credentialId or newCredential must
+# be set — the resolver rejects ambiguous / missing combinations with a
+# friendly error.
+input MarkHashCrackedInput {
+  plaintext: String!
+  # Link to an existing credential in the same operation.
+  credentialId: ID
+  # Or create a new credential inline. Type defaults to PASSWORD; username
+  # pre-fills from the hash if omitted.
+  newCredential: CreateCredentialInput
+  # Optional postmortem fields. All free-form.
+  tool: String
+  wordlist: String
+  rules: String
+  durationSec: Int
+}
+
+# --- Queries ---
+
+extend type Query {
+  hash(id: ID!): Hash!
+    @hasPermission(permission: "operation:member")
+
+  hashes(
+    operationId: ID!
+    search: String
+    statuses: [HashStatus!]
+    hashTypes: [String!]
+    tags: [String!]
+    hasCredential: Boolean
+    first: Int = 20
+    after: String
+    last: Int
+    before: String
+  ): HashConnection!
+    @hasPermission(permission: "operation:member")
+
+  hashTags(operationId: ID!): [String!]!
+    @hasPermission(permission: "operation:member")
+
+  # Cross-operation list — powers the global Findings page. Same authorization
+  # model as myCredentials: no @hasPermission directive, the resolver
+  # authorises each op via resolveAccessibleOperationIDs.
+  myHashes(
+    operationIds: [ID!]
+    search: String
+    statuses: [HashStatus!]
+    hashTypes: [String!]
+    tags: [String!]
+    hasCredential: Boolean
+    first: Int = 20
+    after: String
+    last: Int
+    before: String
+  ): HashConnection!
+
+  myHashTags(operationIds: [ID!]): [String!]!
+
+  # Curated hash-type preset list used by the UI type picker and the bulk
+  # import format hint. Static — does not require auth context, but kept
+  # gated to authenticated users via the operation:member directive so the
+  # surface area matches sibling queries.
+  hashTypes: [HashTypeSpec!]!
+    @hasPermission(permission: "operation:member")
+}
+
+# --- Mutations ---
+
+extend type Mutation {
+  createHash(operationId: ID!, input: CreateHashInput!): Hash!
+    @hasPermission(permission: "operation:member")
+
+  # updateHash is the general-purpose modifier. Transitioning to CRACKED is
+  # rejected here — that path goes through markHashCracked so the credential
+  # link is enforced.
+  updateHash(id: ID!, input: UpdateHashInput!): Hash!
+    @hasPermission(permission: "operation:member")
+
+  deleteHash(id: ID!): Boolean!
+    @hasPermission(permission: "operation:member")
+
+  # bulkImportHashes parses the supplied text per `format`, dedupes against
+  # existing hashes in the operation, and inserts the survivors. Emits ONE
+  # summary timeline event regardless of batch size. Capped at 5000 rows per
+  # call to keep request timeouts predictable.
+  bulkImportHashes(operationId: ID!, input: BulkImportHashesInput!): BulkImportHashesResult!
+    @hasPermission(permission: "operation:member")
+
+  # markHashCracked is the single path that moves a hash into the CRACKED
+  # state. Either links to an existing credential or creates a new one
+  # inline, then stamps status + crackingMeta in one atomic-from-the-caller's
+  # point-of-view operation (credential first, hash second — see the
+  # resolver comment for the rationale).
+  markHashCracked(id: ID!, input: MarkHashCrackedInput!): Hash!
+    @hasPermission(permission: "operation:member")
+
+  addHashComment(hashId: ID!, text: String!): Hash!
+    @hasPermission(permission: "operation:member")
+
+  updateHashComment(hashId: ID!, commentId: ID!, text: String!): Hash!
+    @hasPermission(permission: "operation:member")
+
+  deleteHashComment(hashId: ID!, commentId: ID!): Hash!
+    @hasPermission(permission: "operation:member")
+}
+
+# --- Subscriptions ---
+
+extend type Subscription {
+  hashChanged(operationId: ID!): HashEvent!
+    @hasPermission(permission: "operation:member")
+
+  # Multi-operation sibling of hashChanged. No @hasPermission directive — the
+  # resolver authorises at subscribe time via buildOperationsFilter. Same
+  # nil/empty/explicit semantics as myCredentialChanged.
+  myHashChanged(operationIds: [ID!]): HashEvent!
+}
+
+# --- Extend Credential with sourceHashes ---
+#
+# A credential can be the cracking result of one or more hashes (e.g. an NTLM
+# and a NetNTLMv2 capture for the same user both crack to the same plaintext
+# and get linked to the same credential). This field surfaces that inverse
+# relationship on the credential detail view.
+extend type Credential {
+  sourceHashes: [Hash!]!
+}

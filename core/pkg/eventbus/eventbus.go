@@ -71,6 +71,20 @@ const (
 	TopicCredentialCommentUpdated Topic = "credential.comment.updated"
 	TopicCredentialCommentRemoved Topic = "credential.comment.removed"
 
+	// Hash events — emitted by HashResolver. Cracking is split out from the
+	// generic update topic because the timeline subscriber renders a custom
+	// "cracked from X → credential Y" card for it, and the bulk import topic
+	// is its own thing so the subscriber can emit one summary row instead of
+	// N per-row events.
+	TopicHashCreated        Topic = "hash.created"
+	TopicHashUpdated        Topic = "hash.updated"
+	TopicHashDeleted        Topic = "hash.deleted"
+	TopicHashCracked        Topic = "hash.cracked"
+	TopicHashBulkImported   Topic = "hash.bulk_imported"
+	TopicHashCommentAdded   Topic = "hash.comment.added"
+	TopicHashCommentUpdated Topic = "hash.comment.updated"
+	TopicHashCommentRemoved Topic = "hash.comment.removed"
+
 	// Timeline events — emitted by pkg/events.Logger after a row has been
 	// persisted to the operation_events collection. Carries only the
 	// (event_id, operation_id) primitives so the eventbus package stays

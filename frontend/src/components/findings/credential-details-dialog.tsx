@@ -23,11 +23,13 @@ import { Textarea } from "@/components/ui/textarea"
 import { FormattedDateTimeText } from "@/components/ui/formatted-date-time-text"
 import { useAuthStore } from "@/stores/auth"
 import { useCredentialStore } from "@/stores/credentials"
+import { useHashStore } from "@/stores/hashes"
 import {
   useCredential,
   useAddCredentialComment,
   useUpdateCredentialComment,
   useDeleteCredentialComment,
+  useCredentialSourceHashes,
 } from "@/graphql/hooks/credentials"
 import { credentialTypeLabel } from "@/components/findings/credential-type-utils"
 import { CredentialBacklinkList } from "@/components/findings/credential-backlink-list"
@@ -229,6 +231,8 @@ export function CredentialDetailsDialog() {
             </section>
 
             <CredentialBacklinkList credentialId={credential.id} />
+
+            <CredentialSourceHashesList credentialId={credential.id} />
 
             <CommentsSection
               credentialId={credential.id}
@@ -537,5 +541,49 @@ function CommentRow({ credentialId, comment, isOwn, canModerate }: CommentRowPro
         <p className="whitespace-pre-wrap break-words">{comment.text}</p>
       )}
     </li>
+  )
+}
+
+// CredentialSourceHashesList renders chips for every hash that produced this
+// credential via markHashCracked. Clicking a chip closes the credential
+// dialog and opens the hash details dialog so the operator can pivot
+// between the two findings tabs without losing context. Hidden when the
+// credential has no source hashes (the common case for hand-entered creds).
+function CredentialSourceHashesList({ credentialId }: { credentialId: string }) {
+  const { data, isLoading } = useCredentialSourceHashes(credentialId)
+  const closeCredentialPanel = useCredentialStore((s) => s.closeDetailsPanel)
+  const openHashDetails = useHashStore((s) => s.openDetailsPanel)
+  const hashes = data?.credential?.sourceHashes ?? []
+  if (isLoading || hashes.length === 0) return null
+  return (
+    <section className="flex flex-col gap-2">
+      <h3 className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+        Source hashes
+      </h3>
+      <div className="flex flex-wrap gap-2">
+        {hashes.map((h) => {
+          const label = h.username
+            ? h.domain
+              ? `${h.domain}\\${h.username}`
+              : h.username
+            : h.hashType
+          return (
+            <button
+              key={h.id}
+              type="button"
+              onClick={() => {
+                closeCredentialPanel()
+                openHashDetails({ id: h.id, label })
+              }}
+              className="inline-flex items-center gap-1.5 rounded-md border bg-card px-2 py-1 text-xs hover:bg-muted"
+              title={h.value}
+            >
+              <span className="font-medium">{label}</span>
+              <span className="text-muted-foreground">{h.hashType}</span>
+            </button>
+          )
+        })}
+      </div>
+    </section>
   )
 }

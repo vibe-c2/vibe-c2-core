@@ -2,7 +2,7 @@ import { create } from "zustand"
 
 // The list of tabs on the Findings page. New finding kinds (hashes, files,
 // hosts, ...) are added here and to the page's tab switcher.
-export type FindingsPageTab = "credentials"
+export type FindingsPageTab = "credentials" | "hashes"
 
 interface FindingsStoreState {
   activeTab: FindingsPageTab

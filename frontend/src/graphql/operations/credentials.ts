@@ -111,6 +111,27 @@ export const CredentialTagsQuery = graphql(`
 // /credential chip. Powers the "Referenced in" section in the credential
 // details dialog. Mirrors WikiDocumentBacklinksQuery and reuses the same
 // row fragment so both surfaces render identically.
+// Hashes that produced this credential via the markHashCracked flow.
+// Loaded on demand by the details dialog — the field on the Credential type
+// resolves to the hashes whose credential_id points back. Capped server-side
+// by the per-op hash count; in practice a single credential is linked to one
+// or two hashes (e.g. NTLM and NetNTLMv2 for the same user).
+export const CredentialSourceHashesQuery = graphql(`
+  query CredentialSourceHashes($id: ID!) {
+    credential(id: $id) {
+      id
+      sourceHashes {
+        id
+        value
+        hashType
+        username
+        domain
+        status
+      }
+    }
+  }
+`)
+
 export const CredentialBacklinksQuery = graphql(`
   query CredentialBacklinks($credentialId: ID!) {
     wikiDocumentsReferencingCredential(credentialId: $credentialId) {

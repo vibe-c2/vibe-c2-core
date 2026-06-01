@@ -26,6 +26,7 @@ type Documents = {
     "\n  query Credential($id: ID!) {\n    credential(id: $id) {\n      ...CredentialFields\n    }\n  }\n": typeof types.CredentialDocument,
     "\n  query Credentials(\n    $operationId: ID!\n    $search: String\n    $type: CredentialType\n    $tags: [String!]\n    $validOnly: Boolean\n    $first: Int\n    $after: String\n  ) {\n    credentials(\n      operationId: $operationId\n      search: $search\n      type: $type\n      tags: $tags\n      validOnly: $validOnly\n      first: $first\n      after: $after\n    ) {\n      edges {\n        node {\n          ...CredentialFields\n        }\n        cursor\n      }\n      pageInfo {\n        hasNextPage\n        endCursor\n      }\n      totalCount\n    }\n  }\n": typeof types.CredentialsDocument,
     "\n  query CredentialTags($operationId: ID!) {\n    credentialTags(operationId: $operationId)\n  }\n": typeof types.CredentialTagsDocument,
+    "\n  query CredentialSourceHashes($id: ID!) {\n    credential(id: $id) {\n      id\n      sourceHashes {\n        id\n        value\n        hashType\n        username\n        domain\n        status\n      }\n    }\n  }\n": typeof types.CredentialSourceHashesDocument,
     "\n  query CredentialBacklinks($credentialId: ID!) {\n    wikiDocumentsReferencingCredential(credentialId: $credentialId) {\n      ...WikiDocumentBacklinkFields\n    }\n  }\n": typeof types.CredentialBacklinksDocument,
     "\n  query MyCredentials(\n    $operationIds: [ID!]\n    $search: String\n    $type: CredentialType\n    $tags: [String!]\n    $validOnly: Boolean\n    $first: Int\n    $after: String\n  ) {\n    myCredentials(\n      operationIds: $operationIds\n      search: $search\n      type: $type\n      tags: $tags\n      validOnly: $validOnly\n      first: $first\n      after: $after\n    ) {\n      edges {\n        node {\n          ...CredentialFieldsWithOperation\n        }\n        cursor\n      }\n      pageInfo {\n        hasNextPage\n        endCursor\n      }\n      totalCount\n    }\n  }\n": typeof types.MyCredentialsDocument,
     "\n  query MyCredentialTags($operationIds: [ID!]) {\n    myCredentialTags(operationIds: $operationIds)\n  }\n": typeof types.MyCredentialTagsDocument,
@@ -37,6 +38,27 @@ type Documents = {
     "\n  mutation DeleteCredentialComment($credentialId: ID!, $commentId: ID!) {\n    deleteCredentialComment(credentialId: $credentialId, commentId: $commentId) {\n      ...CredentialFields\n    }\n  }\n": typeof types.DeleteCredentialCommentDocument,
     "\n  subscription CredentialChanged($operationId: ID!) {\n    credentialChanged(operationId: $operationId) {\n      action\n      credentialId\n      operationId\n      credential {\n        ...CredentialFields\n      }\n    }\n  }\n": typeof types.CredentialChangedDocument,
     "\n  subscription MyCredentialChanged($operationIds: [ID!]) {\n    myCredentialChanged(operationIds: $operationIds) {\n      action\n      credentialId\n      operationId\n      credential {\n        ...CredentialFieldsWithOperation\n      }\n    }\n  }\n": typeof types.MyCredentialChangedDocument,
+    "\n  fragment HashCommentFields on HashComment {\n    id\n    text\n    createdAt\n    updatedAt\n    author {\n      id\n      username\n    }\n  }\n": typeof types.HashCommentFieldsFragmentDoc,
+    "\n  fragment HashCrackingMetaFields on HashCrackingMeta {\n    tool\n    wordlist\n    rules\n    durationSec\n    crackedAt\n    crackedBy {\n      id\n      username\n    }\n  }\n": typeof types.HashCrackingMetaFieldsFragmentDoc,
+    "\n  fragment HashFields on Hash {\n    id\n    operationId\n    value\n    hashType\n    hashcatMode\n    username\n    domain\n    status\n    source\n    tags\n    credentialId\n    properties {\n      name\n      value\n    }\n    comments {\n      ...HashCommentFields\n    }\n    crackingMeta {\n      ...HashCrackingMetaFields\n    }\n    viewerCanModerateComments\n    createdBy {\n      id\n      username\n    }\n    createdAt\n    updatedAt\n  }\n": typeof types.HashFieldsFragmentDoc,
+    "\n  fragment HashFieldsWithCredential on Hash {\n    ...HashFields\n    credential {\n      id\n      name\n      type\n      username\n    }\n  }\n": typeof types.HashFieldsWithCredentialFragmentDoc,
+    "\n  fragment HashFieldsWithOperation on Hash {\n    ...HashFields\n    operation {\n      id\n      name\n    }\n  }\n": typeof types.HashFieldsWithOperationFragmentDoc,
+    "\n  query Hash($id: ID!) {\n    hash(id: $id) {\n      ...HashFieldsWithCredential\n    }\n  }\n": typeof types.HashDocument,
+    "\n  query Hashes(\n    $operationId: ID!\n    $search: String\n    $statuses: [HashStatus!]\n    $hashTypes: [String!]\n    $tags: [String!]\n    $hasCredential: Boolean\n    $first: Int\n    $after: String\n  ) {\n    hashes(\n      operationId: $operationId\n      search: $search\n      statuses: $statuses\n      hashTypes: $hashTypes\n      tags: $tags\n      hasCredential: $hasCredential\n      first: $first\n      after: $after\n    ) {\n      edges {\n        node {\n          ...HashFields\n        }\n        cursor\n      }\n      pageInfo {\n        hasNextPage\n        endCursor\n      }\n      totalCount\n    }\n  }\n": typeof types.HashesDocument,
+    "\n  query HashTags($operationId: ID!) {\n    hashTags(operationId: $operationId)\n  }\n": typeof types.HashTagsDocument,
+    "\n  query MyHashes(\n    $operationIds: [ID!]\n    $search: String\n    $statuses: [HashStatus!]\n    $hashTypes: [String!]\n    $tags: [String!]\n    $hasCredential: Boolean\n    $first: Int\n    $after: String\n  ) {\n    myHashes(\n      operationIds: $operationIds\n      search: $search\n      statuses: $statuses\n      hashTypes: $hashTypes\n      tags: $tags\n      hasCredential: $hasCredential\n      first: $first\n      after: $after\n    ) {\n      edges {\n        node {\n          ...HashFieldsWithOperation\n        }\n        cursor\n      }\n      pageInfo {\n        hasNextPage\n        endCursor\n      }\n      totalCount\n    }\n  }\n": typeof types.MyHashesDocument,
+    "\n  query MyHashTags($operationIds: [ID!]) {\n    myHashTags(operationIds: $operationIds)\n  }\n": typeof types.MyHashTagsDocument,
+    "\n  query HashTypes {\n    hashTypes {\n      name\n      displayName\n      hashcatMode\n    }\n  }\n": typeof types.HashTypesDocument,
+    "\n  mutation CreateHash($operationId: ID!, $input: CreateHashInput!) {\n    createHash(operationId: $operationId, input: $input) {\n      ...HashFields\n    }\n  }\n": typeof types.CreateHashDocument,
+    "\n  mutation UpdateHash($id: ID!, $input: UpdateHashInput!) {\n    updateHash(id: $id, input: $input) {\n      ...HashFields\n    }\n  }\n": typeof types.UpdateHashDocument,
+    "\n  mutation DeleteHash($id: ID!) {\n    deleteHash(id: $id)\n  }\n": typeof types.DeleteHashDocument,
+    "\n  mutation BulkImportHashes($operationId: ID!, $input: BulkImportHashesInput!) {\n    bulkImportHashes(operationId: $operationId, input: $input) {\n      added\n      skipped\n      hashes {\n        ...HashFields\n      }\n    }\n  }\n": typeof types.BulkImportHashesDocument,
+    "\n  mutation MarkHashCracked($id: ID!, $input: MarkHashCrackedInput!) {\n    markHashCracked(id: $id, input: $input) {\n      ...HashFieldsWithCredential\n    }\n  }\n": typeof types.MarkHashCrackedDocument,
+    "\n  mutation AddHashComment($hashId: ID!, $text: String!) {\n    addHashComment(hashId: $hashId, text: $text) {\n      ...HashFields\n    }\n  }\n": typeof types.AddHashCommentDocument,
+    "\n  mutation UpdateHashComment(\n    $hashId: ID!\n    $commentId: ID!\n    $text: String!\n  ) {\n    updateHashComment(hashId: $hashId, commentId: $commentId, text: $text) {\n      ...HashFields\n    }\n  }\n": typeof types.UpdateHashCommentDocument,
+    "\n  mutation DeleteHashComment($hashId: ID!, $commentId: ID!) {\n    deleteHashComment(hashId: $hashId, commentId: $commentId) {\n      ...HashFields\n    }\n  }\n": typeof types.DeleteHashCommentDocument,
+    "\n  subscription HashChanged($operationId: ID!) {\n    hashChanged(operationId: $operationId) {\n      action\n      hashId\n      operationId\n      hash {\n        ...HashFields\n      }\n    }\n  }\n": typeof types.HashChangedDocument,
+    "\n  subscription MyHashChanged($operationIds: [ID!]) {\n    myHashChanged(operationIds: $operationIds) {\n      action\n      hashId\n      operationId\n      hash {\n        ...HashFieldsWithOperation\n      }\n    }\n  }\n": typeof types.MyHashChangedDocument,
     "\n  fragment OperationMemberFields on OperationMember {\n    user {\n      id\n      username\n      roles\n      active\n      createdAt\n      updatedAt\n    }\n    role\n  }\n": typeof types.OperationMemberFieldsFragmentDoc,
     "\n  fragment OperationFields on Operation {\n    id\n    name\n    description\n    members {\n      ...OperationMemberFields\n    }\n    createdAt\n    updatedAt\n  }\n": typeof types.OperationFieldsFragmentDoc,
     "\n  query Operation($id: ID!) {\n    operation(id: $id) {\n      ...OperationFields\n    }\n  }\n": typeof types.OperationDocument,
@@ -147,6 +169,7 @@ const documents: Documents = {
     "\n  query Credential($id: ID!) {\n    credential(id: $id) {\n      ...CredentialFields\n    }\n  }\n": types.CredentialDocument,
     "\n  query Credentials(\n    $operationId: ID!\n    $search: String\n    $type: CredentialType\n    $tags: [String!]\n    $validOnly: Boolean\n    $first: Int\n    $after: String\n  ) {\n    credentials(\n      operationId: $operationId\n      search: $search\n      type: $type\n      tags: $tags\n      validOnly: $validOnly\n      first: $first\n      after: $after\n    ) {\n      edges {\n        node {\n          ...CredentialFields\n        }\n        cursor\n      }\n      pageInfo {\n        hasNextPage\n        endCursor\n      }\n      totalCount\n    }\n  }\n": types.CredentialsDocument,
     "\n  query CredentialTags($operationId: ID!) {\n    credentialTags(operationId: $operationId)\n  }\n": types.CredentialTagsDocument,
+    "\n  query CredentialSourceHashes($id: ID!) {\n    credential(id: $id) {\n      id\n      sourceHashes {\n        id\n        value\n        hashType\n        username\n        domain\n        status\n      }\n    }\n  }\n": types.CredentialSourceHashesDocument,
     "\n  query CredentialBacklinks($credentialId: ID!) {\n    wikiDocumentsReferencingCredential(credentialId: $credentialId) {\n      ...WikiDocumentBacklinkFields\n    }\n  }\n": types.CredentialBacklinksDocument,
     "\n  query MyCredentials(\n    $operationIds: [ID!]\n    $search: String\n    $type: CredentialType\n    $tags: [String!]\n    $validOnly: Boolean\n    $first: Int\n    $after: String\n  ) {\n    myCredentials(\n      operationIds: $operationIds\n      search: $search\n      type: $type\n      tags: $tags\n      validOnly: $validOnly\n      first: $first\n      after: $after\n    ) {\n      edges {\n        node {\n          ...CredentialFieldsWithOperation\n        }\n        cursor\n      }\n      pageInfo {\n        hasNextPage\n        endCursor\n      }\n      totalCount\n    }\n  }\n": types.MyCredentialsDocument,
     "\n  query MyCredentialTags($operationIds: [ID!]) {\n    myCredentialTags(operationIds: $operationIds)\n  }\n": types.MyCredentialTagsDocument,
@@ -158,6 +181,27 @@ const documents: Documents = {
     "\n  mutation DeleteCredentialComment($credentialId: ID!, $commentId: ID!) {\n    deleteCredentialComment(credentialId: $credentialId, commentId: $commentId) {\n      ...CredentialFields\n    }\n  }\n": types.DeleteCredentialCommentDocument,
     "\n  subscription CredentialChanged($operationId: ID!) {\n    credentialChanged(operationId: $operationId) {\n      action\n      credentialId\n      operationId\n      credential {\n        ...CredentialFields\n      }\n    }\n  }\n": types.CredentialChangedDocument,
     "\n  subscription MyCredentialChanged($operationIds: [ID!]) {\n    myCredentialChanged(operationIds: $operationIds) {\n      action\n      credentialId\n      operationId\n      credential {\n        ...CredentialFieldsWithOperation\n      }\n    }\n  }\n": types.MyCredentialChangedDocument,
+    "\n  fragment HashCommentFields on HashComment {\n    id\n    text\n    createdAt\n    updatedAt\n    author {\n      id\n      username\n    }\n  }\n": types.HashCommentFieldsFragmentDoc,
+    "\n  fragment HashCrackingMetaFields on HashCrackingMeta {\n    tool\n    wordlist\n    rules\n    durationSec\n    crackedAt\n    crackedBy {\n      id\n      username\n    }\n  }\n": types.HashCrackingMetaFieldsFragmentDoc,
+    "\n  fragment HashFields on Hash {\n    id\n    operationId\n    value\n    hashType\n    hashcatMode\n    username\n    domain\n    status\n    source\n    tags\n    credentialId\n    properties {\n      name\n      value\n    }\n    comments {\n      ...HashCommentFields\n    }\n    crackingMeta {\n      ...HashCrackingMetaFields\n    }\n    viewerCanModerateComments\n    createdBy {\n      id\n      username\n    }\n    createdAt\n    updatedAt\n  }\n": types.HashFieldsFragmentDoc,
+    "\n  fragment HashFieldsWithCredential on Hash {\n    ...HashFields\n    credential {\n      id\n      name\n      type\n      username\n    }\n  }\n": types.HashFieldsWithCredentialFragmentDoc,
+    "\n  fragment HashFieldsWithOperation on Hash {\n    ...HashFields\n    operation {\n      id\n      name\n    }\n  }\n": types.HashFieldsWithOperationFragmentDoc,
+    "\n  query Hash($id: ID!) {\n    hash(id: $id) {\n      ...HashFieldsWithCredential\n    }\n  }\n": types.HashDocument,
+    "\n  query Hashes(\n    $operationId: ID!\n    $search: String\n    $statuses: [HashStatus!]\n    $hashTypes: [String!]\n    $tags: [String!]\n    $hasCredential: Boolean\n    $first: Int\n    $after: String\n  ) {\n    hashes(\n      operationId: $operationId\n      search: $search\n      statuses: $statuses\n      hashTypes: $hashTypes\n      tags: $tags\n      hasCredential: $hasCredential\n      first: $first\n      after: $after\n    ) {\n      edges {\n        node {\n          ...HashFields\n        }\n        cursor\n      }\n      pageInfo {\n        hasNextPage\n        endCursor\n      }\n      totalCount\n    }\n  }\n": types.HashesDocument,
+    "\n  query HashTags($operationId: ID!) {\n    hashTags(operationId: $operationId)\n  }\n": types.HashTagsDocument,
+    "\n  query MyHashes(\n    $operationIds: [ID!]\n    $search: String\n    $statuses: [HashStatus!]\n    $hashTypes: [String!]\n    $tags: [String!]\n    $hasCredential: Boolean\n    $first: Int\n    $after: String\n  ) {\n    myHashes(\n      operationIds: $operationIds\n      search: $search\n      statuses: $statuses\n      hashTypes: $hashTypes\n      tags: $tags\n      hasCredential: $hasCredential\n      first: $first\n      after: $after\n    ) {\n      edges {\n        node {\n          ...HashFieldsWithOperation\n        }\n        cursor\n      }\n      pageInfo {\n        hasNextPage\n        endCursor\n      }\n      totalCount\n    }\n  }\n": types.MyHashesDocument,
+    "\n  query MyHashTags($operationIds: [ID!]) {\n    myHashTags(operationIds: $operationIds)\n  }\n": types.MyHashTagsDocument,
+    "\n  query HashTypes {\n    hashTypes {\n      name\n      displayName\n      hashcatMode\n    }\n  }\n": types.HashTypesDocument,
+    "\n  mutation CreateHash($operationId: ID!, $input: CreateHashInput!) {\n    createHash(operationId: $operationId, input: $input) {\n      ...HashFields\n    }\n  }\n": types.CreateHashDocument,
+    "\n  mutation UpdateHash($id: ID!, $input: UpdateHashInput!) {\n    updateHash(id: $id, input: $input) {\n      ...HashFields\n    }\n  }\n": types.UpdateHashDocument,
+    "\n  mutation DeleteHash($id: ID!) {\n    deleteHash(id: $id)\n  }\n": types.DeleteHashDocument,
+    "\n  mutation BulkImportHashes($operationId: ID!, $input: BulkImportHashesInput!) {\n    bulkImportHashes(operationId: $operationId, input: $input) {\n      added\n      skipped\n      hashes {\n        ...HashFields\n      }\n    }\n  }\n": types.BulkImportHashesDocument,
+    "\n  mutation MarkHashCracked($id: ID!, $input: MarkHashCrackedInput!) {\n    markHashCracked(id: $id, input: $input) {\n      ...HashFieldsWithCredential\n    }\n  }\n": types.MarkHashCrackedDocument,
+    "\n  mutation AddHashComment($hashId: ID!, $text: String!) {\n    addHashComment(hashId: $hashId, text: $text) {\n      ...HashFields\n    }\n  }\n": types.AddHashCommentDocument,
+    "\n  mutation UpdateHashComment(\n    $hashId: ID!\n    $commentId: ID!\n    $text: String!\n  ) {\n    updateHashComment(hashId: $hashId, commentId: $commentId, text: $text) {\n      ...HashFields\n    }\n  }\n": types.UpdateHashCommentDocument,
+    "\n  mutation DeleteHashComment($hashId: ID!, $commentId: ID!) {\n    deleteHashComment(hashId: $hashId, commentId: $commentId) {\n      ...HashFields\n    }\n  }\n": types.DeleteHashCommentDocument,
+    "\n  subscription HashChanged($operationId: ID!) {\n    hashChanged(operationId: $operationId) {\n      action\n      hashId\n      operationId\n      hash {\n        ...HashFields\n      }\n    }\n  }\n": types.HashChangedDocument,
+    "\n  subscription MyHashChanged($operationIds: [ID!]) {\n    myHashChanged(operationIds: $operationIds) {\n      action\n      hashId\n      operationId\n      hash {\n        ...HashFieldsWithOperation\n      }\n    }\n  }\n": types.MyHashChangedDocument,
     "\n  fragment OperationMemberFields on OperationMember {\n    user {\n      id\n      username\n      roles\n      active\n      createdAt\n      updatedAt\n    }\n    role\n  }\n": types.OperationMemberFieldsFragmentDoc,
     "\n  fragment OperationFields on Operation {\n    id\n    name\n    description\n    members {\n      ...OperationMemberFields\n    }\n    createdAt\n    updatedAt\n  }\n": types.OperationFieldsFragmentDoc,
     "\n  query Operation($id: ID!) {\n    operation(id: $id) {\n      ...OperationFields\n    }\n  }\n": types.OperationDocument,
@@ -321,6 +365,10 @@ export function graphql(source: "\n  query CredentialTags($operationId: ID!) {\n
 /**
  * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
  */
+export function graphql(source: "\n  query CredentialSourceHashes($id: ID!) {\n    credential(id: $id) {\n      id\n      sourceHashes {\n        id\n        value\n        hashType\n        username\n        domain\n        status\n      }\n    }\n  }\n"): (typeof documents)["\n  query CredentialSourceHashes($id: ID!) {\n    credential(id: $id) {\n      id\n      sourceHashes {\n        id\n        value\n        hashType\n        username\n        domain\n        status\n      }\n    }\n  }\n"];
+/**
+ * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
+ */
 export function graphql(source: "\n  query CredentialBacklinks($credentialId: ID!) {\n    wikiDocumentsReferencingCredential(credentialId: $credentialId) {\n      ...WikiDocumentBacklinkFields\n    }\n  }\n"): (typeof documents)["\n  query CredentialBacklinks($credentialId: ID!) {\n    wikiDocumentsReferencingCredential(credentialId: $credentialId) {\n      ...WikiDocumentBacklinkFields\n    }\n  }\n"];
 /**
  * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
@@ -362,6 +410,90 @@ export function graphql(source: "\n  subscription CredentialChanged($operationId
  * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
  */
 export function graphql(source: "\n  subscription MyCredentialChanged($operationIds: [ID!]) {\n    myCredentialChanged(operationIds: $operationIds) {\n      action\n      credentialId\n      operationId\n      credential {\n        ...CredentialFieldsWithOperation\n      }\n    }\n  }\n"): (typeof documents)["\n  subscription MyCredentialChanged($operationIds: [ID!]) {\n    myCredentialChanged(operationIds: $operationIds) {\n      action\n      credentialId\n      operationId\n      credential {\n        ...CredentialFieldsWithOperation\n      }\n    }\n  }\n"];
+/**
+ * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
+ */
+export function graphql(source: "\n  fragment HashCommentFields on HashComment {\n    id\n    text\n    createdAt\n    updatedAt\n    author {\n      id\n      username\n    }\n  }\n"): (typeof documents)["\n  fragment HashCommentFields on HashComment {\n    id\n    text\n    createdAt\n    updatedAt\n    author {\n      id\n      username\n    }\n  }\n"];
+/**
+ * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
+ */
+export function graphql(source: "\n  fragment HashCrackingMetaFields on HashCrackingMeta {\n    tool\n    wordlist\n    rules\n    durationSec\n    crackedAt\n    crackedBy {\n      id\n      username\n    }\n  }\n"): (typeof documents)["\n  fragment HashCrackingMetaFields on HashCrackingMeta {\n    tool\n    wordlist\n    rules\n    durationSec\n    crackedAt\n    crackedBy {\n      id\n      username\n    }\n  }\n"];
+/**
+ * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
+ */
+export function graphql(source: "\n  fragment HashFields on Hash {\n    id\n    operationId\n    value\n    hashType\n    hashcatMode\n    username\n    domain\n    status\n    source\n    tags\n    credentialId\n    properties {\n      name\n      value\n    }\n    comments {\n      ...HashCommentFields\n    }\n    crackingMeta {\n      ...HashCrackingMetaFields\n    }\n    viewerCanModerateComments\n    createdBy {\n      id\n      username\n    }\n    createdAt\n    updatedAt\n  }\n"): (typeof documents)["\n  fragment HashFields on Hash {\n    id\n    operationId\n    value\n    hashType\n    hashcatMode\n    username\n    domain\n    status\n    source\n    tags\n    credentialId\n    properties {\n      name\n      value\n    }\n    comments {\n      ...HashCommentFields\n    }\n    crackingMeta {\n      ...HashCrackingMetaFields\n    }\n    viewerCanModerateComments\n    createdBy {\n      id\n      username\n    }\n    createdAt\n    updatedAt\n  }\n"];
+/**
+ * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
+ */
+export function graphql(source: "\n  fragment HashFieldsWithCredential on Hash {\n    ...HashFields\n    credential {\n      id\n      name\n      type\n      username\n    }\n  }\n"): (typeof documents)["\n  fragment HashFieldsWithCredential on Hash {\n    ...HashFields\n    credential {\n      id\n      name\n      type\n      username\n    }\n  }\n"];
+/**
+ * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
+ */
+export function graphql(source: "\n  fragment HashFieldsWithOperation on Hash {\n    ...HashFields\n    operation {\n      id\n      name\n    }\n  }\n"): (typeof documents)["\n  fragment HashFieldsWithOperation on Hash {\n    ...HashFields\n    operation {\n      id\n      name\n    }\n  }\n"];
+/**
+ * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
+ */
+export function graphql(source: "\n  query Hash($id: ID!) {\n    hash(id: $id) {\n      ...HashFieldsWithCredential\n    }\n  }\n"): (typeof documents)["\n  query Hash($id: ID!) {\n    hash(id: $id) {\n      ...HashFieldsWithCredential\n    }\n  }\n"];
+/**
+ * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
+ */
+export function graphql(source: "\n  query Hashes(\n    $operationId: ID!\n    $search: String\n    $statuses: [HashStatus!]\n    $hashTypes: [String!]\n    $tags: [String!]\n    $hasCredential: Boolean\n    $first: Int\n    $after: String\n  ) {\n    hashes(\n      operationId: $operationId\n      search: $search\n      statuses: $statuses\n      hashTypes: $hashTypes\n      tags: $tags\n      hasCredential: $hasCredential\n      first: $first\n      after: $after\n    ) {\n      edges {\n        node {\n          ...HashFields\n        }\n        cursor\n      }\n      pageInfo {\n        hasNextPage\n        endCursor\n      }\n      totalCount\n    }\n  }\n"): (typeof documents)["\n  query Hashes(\n    $operationId: ID!\n    $search: String\n    $statuses: [HashStatus!]\n    $hashTypes: [String!]\n    $tags: [String!]\n    $hasCredential: Boolean\n    $first: Int\n    $after: String\n  ) {\n    hashes(\n      operationId: $operationId\n      search: $search\n      statuses: $statuses\n      hashTypes: $hashTypes\n      tags: $tags\n      hasCredential: $hasCredential\n      first: $first\n      after: $after\n    ) {\n      edges {\n        node {\n          ...HashFields\n        }\n        cursor\n      }\n      pageInfo {\n        hasNextPage\n        endCursor\n      }\n      totalCount\n    }\n  }\n"];
+/**
+ * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
+ */
+export function graphql(source: "\n  query HashTags($operationId: ID!) {\n    hashTags(operationId: $operationId)\n  }\n"): (typeof documents)["\n  query HashTags($operationId: ID!) {\n    hashTags(operationId: $operationId)\n  }\n"];
+/**
+ * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
+ */
+export function graphql(source: "\n  query MyHashes(\n    $operationIds: [ID!]\n    $search: String\n    $statuses: [HashStatus!]\n    $hashTypes: [String!]\n    $tags: [String!]\n    $hasCredential: Boolean\n    $first: Int\n    $after: String\n  ) {\n    myHashes(\n      operationIds: $operationIds\n      search: $search\n      statuses: $statuses\n      hashTypes: $hashTypes\n      tags: $tags\n      hasCredential: $hasCredential\n      first: $first\n      after: $after\n    ) {\n      edges {\n        node {\n          ...HashFieldsWithOperation\n        }\n        cursor\n      }\n      pageInfo {\n        hasNextPage\n        endCursor\n      }\n      totalCount\n    }\n  }\n"): (typeof documents)["\n  query MyHashes(\n    $operationIds: [ID!]\n    $search: String\n    $statuses: [HashStatus!]\n    $hashTypes: [String!]\n    $tags: [String!]\n    $hasCredential: Boolean\n    $first: Int\n    $after: String\n  ) {\n    myHashes(\n      operationIds: $operationIds\n      search: $search\n      statuses: $statuses\n      hashTypes: $hashTypes\n      tags: $tags\n      hasCredential: $hasCredential\n      first: $first\n      after: $after\n    ) {\n      edges {\n        node {\n          ...HashFieldsWithOperation\n        }\n        cursor\n      }\n      pageInfo {\n        hasNextPage\n        endCursor\n      }\n      totalCount\n    }\n  }\n"];
+/**
+ * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
+ */
+export function graphql(source: "\n  query MyHashTags($operationIds: [ID!]) {\n    myHashTags(operationIds: $operationIds)\n  }\n"): (typeof documents)["\n  query MyHashTags($operationIds: [ID!]) {\n    myHashTags(operationIds: $operationIds)\n  }\n"];
+/**
+ * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
+ */
+export function graphql(source: "\n  query HashTypes {\n    hashTypes {\n      name\n      displayName\n      hashcatMode\n    }\n  }\n"): (typeof documents)["\n  query HashTypes {\n    hashTypes {\n      name\n      displayName\n      hashcatMode\n    }\n  }\n"];
+/**
+ * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
+ */
+export function graphql(source: "\n  mutation CreateHash($operationId: ID!, $input: CreateHashInput!) {\n    createHash(operationId: $operationId, input: $input) {\n      ...HashFields\n    }\n  }\n"): (typeof documents)["\n  mutation CreateHash($operationId: ID!, $input: CreateHashInput!) {\n    createHash(operationId: $operationId, input: $input) {\n      ...HashFields\n    }\n  }\n"];
+/**
+ * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
+ */
+export function graphql(source: "\n  mutation UpdateHash($id: ID!, $input: UpdateHashInput!) {\n    updateHash(id: $id, input: $input) {\n      ...HashFields\n    }\n  }\n"): (typeof documents)["\n  mutation UpdateHash($id: ID!, $input: UpdateHashInput!) {\n    updateHash(id: $id, input: $input) {\n      ...HashFields\n    }\n  }\n"];
+/**
+ * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
+ */
+export function graphql(source: "\n  mutation DeleteHash($id: ID!) {\n    deleteHash(id: $id)\n  }\n"): (typeof documents)["\n  mutation DeleteHash($id: ID!) {\n    deleteHash(id: $id)\n  }\n"];
+/**
+ * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
+ */
+export function graphql(source: "\n  mutation BulkImportHashes($operationId: ID!, $input: BulkImportHashesInput!) {\n    bulkImportHashes(operationId: $operationId, input: $input) {\n      added\n      skipped\n      hashes {\n        ...HashFields\n      }\n    }\n  }\n"): (typeof documents)["\n  mutation BulkImportHashes($operationId: ID!, $input: BulkImportHashesInput!) {\n    bulkImportHashes(operationId: $operationId, input: $input) {\n      added\n      skipped\n      hashes {\n        ...HashFields\n      }\n    }\n  }\n"];
+/**
+ * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
+ */
+export function graphql(source: "\n  mutation MarkHashCracked($id: ID!, $input: MarkHashCrackedInput!) {\n    markHashCracked(id: $id, input: $input) {\n      ...HashFieldsWithCredential\n    }\n  }\n"): (typeof documents)["\n  mutation MarkHashCracked($id: ID!, $input: MarkHashCrackedInput!) {\n    markHashCracked(id: $id, input: $input) {\n      ...HashFieldsWithCredential\n    }\n  }\n"];
+/**
+ * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
+ */
+export function graphql(source: "\n  mutation AddHashComment($hashId: ID!, $text: String!) {\n    addHashComment(hashId: $hashId, text: $text) {\n      ...HashFields\n    }\n  }\n"): (typeof documents)["\n  mutation AddHashComment($hashId: ID!, $text: String!) {\n    addHashComment(hashId: $hashId, text: $text) {\n      ...HashFields\n    }\n  }\n"];
+/**
+ * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
+ */
+export function graphql(source: "\n  mutation UpdateHashComment(\n    $hashId: ID!\n    $commentId: ID!\n    $text: String!\n  ) {\n    updateHashComment(hashId: $hashId, commentId: $commentId, text: $text) {\n      ...HashFields\n    }\n  }\n"): (typeof documents)["\n  mutation UpdateHashComment(\n    $hashId: ID!\n    $commentId: ID!\n    $text: String!\n  ) {\n    updateHashComment(hashId: $hashId, commentId: $commentId, text: $text) {\n      ...HashFields\n    }\n  }\n"];
+/**
+ * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
+ */
+export function graphql(source: "\n  mutation DeleteHashComment($hashId: ID!, $commentId: ID!) {\n    deleteHashComment(hashId: $hashId, commentId: $commentId) {\n      ...HashFields\n    }\n  }\n"): (typeof documents)["\n  mutation DeleteHashComment($hashId: ID!, $commentId: ID!) {\n    deleteHashComment(hashId: $hashId, commentId: $commentId) {\n      ...HashFields\n    }\n  }\n"];
+/**
+ * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
+ */
+export function graphql(source: "\n  subscription HashChanged($operationId: ID!) {\n    hashChanged(operationId: $operationId) {\n      action\n      hashId\n      operationId\n      hash {\n        ...HashFields\n      }\n    }\n  }\n"): (typeof documents)["\n  subscription HashChanged($operationId: ID!) {\n    hashChanged(operationId: $operationId) {\n      action\n      hashId\n      operationId\n      hash {\n        ...HashFields\n      }\n    }\n  }\n"];
+/**
+ * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
+ */
+export function graphql(source: "\n  subscription MyHashChanged($operationIds: [ID!]) {\n    myHashChanged(operationIds: $operationIds) {\n      action\n      hashId\n      operationId\n      hash {\n        ...HashFieldsWithOperation\n      }\n    }\n  }\n"): (typeof documents)["\n  subscription MyHashChanged($operationIds: [ID!]) {\n    myHashChanged(operationIds: $operationIds) {\n      action\n      hashId\n      operationId\n      hash {\n        ...HashFieldsWithOperation\n      }\n    }\n  }\n"];
 /**
  * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
  */

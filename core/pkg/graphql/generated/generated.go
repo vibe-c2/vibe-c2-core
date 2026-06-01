@@ -33,6 +33,9 @@ type ResolverRoot interface {
 	APIKey() APIKeyResolver
 	Credential() CredentialResolver
 	CredentialComment() CredentialCommentResolver
+	Hash() HashResolver
+	HashComment() HashCommentResolver
+	HashCrackingMeta() HashCrackingMetaResolver
 	Mutation() MutationResolver
 	Operation() OperationResolver
 	OperationMember() OperationMemberResolver
@@ -68,6 +71,12 @@ type ComplexityRoot struct {
 		Token  func(childComplexity int) int
 	}
 
+	BulkImportHashesResult struct {
+		Added   func(childComplexity int) int
+		Hashes  func(childComplexity int) int
+		Skipped func(childComplexity int) int
+	}
+
 	Credential struct {
 		BacklinkCount             func(childComplexity int) int
 		Backlinks                 func(childComplexity int) int
@@ -82,6 +91,7 @@ type ComplexityRoot struct {
 		OperationID               func(childComplexity int) int
 		Password                  func(childComplexity int) int
 		Properties                func(childComplexity int) int
+		SourceHashes              func(childComplexity int) int
 		Tags                      func(childComplexity int) int
 		TaskBacklinks             func(childComplexity int) int
 		Type                      func(childComplexity int) int
@@ -126,16 +136,88 @@ type ComplexityRoot struct {
 		Value func(childComplexity int) int
 	}
 
+	Hash struct {
+		Comments                  func(childComplexity int) int
+		CrackingMeta              func(childComplexity int) int
+		CreatedAt                 func(childComplexity int) int
+		CreatedBy                 func(childComplexity int) int
+		Credential                func(childComplexity int) int
+		CredentialID              func(childComplexity int) int
+		Domain                    func(childComplexity int) int
+		HashType                  func(childComplexity int) int
+		HashcatMode               func(childComplexity int) int
+		ID                        func(childComplexity int) int
+		Operation                 func(childComplexity int) int
+		OperationID               func(childComplexity int) int
+		Properties                func(childComplexity int) int
+		Source                    func(childComplexity int) int
+		Status                    func(childComplexity int) int
+		Tags                      func(childComplexity int) int
+		UpdatedAt                 func(childComplexity int) int
+		Username                  func(childComplexity int) int
+		Value                     func(childComplexity int) int
+		ViewerCanModerateComments func(childComplexity int) int
+	}
+
+	HashComment struct {
+		Author    func(childComplexity int) int
+		CreatedAt func(childComplexity int) int
+		ID        func(childComplexity int) int
+		Text      func(childComplexity int) int
+		UpdatedAt func(childComplexity int) int
+	}
+
+	HashConnection struct {
+		Edges      func(childComplexity int) int
+		PageInfo   func(childComplexity int) int
+		TotalCount func(childComplexity int) int
+	}
+
+	HashCrackingMeta struct {
+		CrackedAt   func(childComplexity int) int
+		CrackedBy   func(childComplexity int) int
+		DurationSec func(childComplexity int) int
+		Rules       func(childComplexity int) int
+		Tool        func(childComplexity int) int
+		Wordlist    func(childComplexity int) int
+	}
+
+	HashEdge struct {
+		Cursor func(childComplexity int) int
+		Node   func(childComplexity int) int
+	}
+
+	HashEvent struct {
+		Action      func(childComplexity int) int
+		Hash        func(childComplexity int) int
+		HashID      func(childComplexity int) int
+		OperationID func(childComplexity int) int
+	}
+
+	HashProperty struct {
+		Name  func(childComplexity int) int
+		Value func(childComplexity int) int
+	}
+
+	HashTypeSpec struct {
+		DisplayName func(childComplexity int) int
+		HashcatMode func(childComplexity int) int
+		Name        func(childComplexity int) int
+	}
+
 	Mutation struct {
 		AddCredentialComment          func(childComplexity int, credentialID string, text string) int
+		AddHashComment                func(childComplexity int, hashID string, text string) int
 		AddOperationMember            func(childComplexity int, operationID string, userID string, role models.OperationRole) int
 		AddSchemeNetworkPort          func(childComplexity int, pointID string, input model.CreateSchemeNetworkPortInput) int
 		AddTaskWikiReference          func(childComplexity int, taskID string, wikiID string) int
 		AdminRevokeAllUserSessions    func(childComplexity int, userID string) int
 		AdminRevokeSession            func(childComplexity int, id string) int
+		BulkImportHashes              func(childComplexity int, operationID string, input model.BulkImportHashesInput) int
 		ChangeTaskStage               func(childComplexity int, input model.ChangeTaskStageInput) int
 		CreateCredential              func(childComplexity int, operationID string, input model.CreateCredentialInput) int
 		CreateCustomTimelineEvent     func(childComplexity int, operationID string, input model.CreateCustomTimelineEventInput) int
+		CreateHash                    func(childComplexity int, operationID string, input model.CreateHashInput) int
 		CreateMyAPIKey                func(childComplexity int) int
 		CreateOperation               func(childComplexity int, input model.CreateOperationInput) int
 		CreateSchemeNetworkPoint      func(childComplexity int, operationID string, input model.CreateSchemeNetworkPointInput) int
@@ -146,6 +228,8 @@ type ComplexityRoot struct {
 		DeleteCredential              func(childComplexity int, id string) int
 		DeleteCredentialComment       func(childComplexity int, credentialID string, commentID string) int
 		DeleteCustomTimelineEvent     func(childComplexity int, id string) int
+		DeleteHash                    func(childComplexity int, id string) int
+		DeleteHashComment             func(childComplexity int, hashID string, commentID string) int
 		DeleteMyAPIKey                func(childComplexity int) int
 		DeleteOperation               func(childComplexity int, id string) int
 		DeleteSchemeNetworkPoint      func(childComplexity int, id string) int
@@ -155,6 +239,7 @@ type ComplexityRoot struct {
 		DeleteWikiDocumentBackup      func(childComplexity int, id string) int
 		DuplicateWikiDocument         func(childComplexity int, id string, withChildren *bool) int
 		EmptyWikiDocumentTrash        func(childComplexity int, operationID string) int
+		MarkHashCracked               func(childComplexity int, id string, input model.MarkHashCrackedInput) int
 		PermanentlyDeleteWikiDocument func(childComplexity int, id string) int
 		PurgeTask                     func(childComplexity int, id string) int
 		RegenerateMyAPIKey            func(childComplexity int) int
@@ -174,6 +259,8 @@ type ComplexityRoot struct {
 		UpdateCredential              func(childComplexity int, id string, input model.UpdateCredentialInput) int
 		UpdateCredentialComment       func(childComplexity int, credentialID string, commentID string, text string) int
 		UpdateCustomTimelineEvent     func(childComplexity int, id string, input model.UpdateCustomTimelineEventInput) int
+		UpdateHash                    func(childComplexity int, id string, input model.UpdateHashInput) int
+		UpdateHashComment             func(childComplexity int, hashID string, commentID string, text string) int
 		UpdateOperation               func(childComplexity int, id string, input model.UpdateOperationInput) int
 		UpdateOperationMemberRole     func(childComplexity int, operationID string, userID string, role models.OperationRole) int
 		UpdateOwnProfile              func(childComplexity int, input model.UpdateUserInput) int
@@ -233,10 +320,16 @@ type ComplexityRoot struct {
 		Credential                         func(childComplexity int, id string) int
 		CredentialTags                     func(childComplexity int, operationID string) int
 		Credentials                        func(childComplexity int, operationID string, search *string, typeArg *models.CredentialType, tags []string, validOnly *bool, first *int, after *string, last *int, before *string) int
+		Hash                               func(childComplexity int, id string) int
+		HashTags                           func(childComplexity int, operationID string) int
+		HashTypes                          func(childComplexity int) int
+		Hashes                             func(childComplexity int, operationID string, search *string, statuses []models.HashStatus, hashTypes []string, tags []string, hasCredential *bool, first *int, after *string, last *int, before *string) int
 		Me                                 func(childComplexity int) int
 		MyAPIKey                           func(childComplexity int) int
 		MyCredentialTags                   func(childComplexity int, operationIds []string) int
 		MyCredentials                      func(childComplexity int, operationIds []string, search *string, typeArg *models.CredentialType, tags []string, validOnly *bool, first *int, after *string, last *int, before *string) int
+		MyHashTags                         func(childComplexity int, operationIds []string) int
+		MyHashes                           func(childComplexity int, operationIds []string, search *string, statuses []models.HashStatus, hashTypes []string, tags []string, hasCredential *bool, first *int, after *string, last *int, before *string) int
 		MyOperationRole                    func(childComplexity int, operationID string) int
 		MySessions                         func(childComplexity int, activeOnly *bool, first *int, after *string, last *int, before *string) int
 		Operation                          func(childComplexity int, id string) int
@@ -339,7 +432,9 @@ type ComplexityRoot struct {
 
 	Subscription struct {
 		CredentialChanged           func(childComplexity int, operationID string) int
+		HashChanged                 func(childComplexity int, operationID string) int
 		MyCredentialChanged         func(childComplexity int, operationIds []string) int
+		MyHashChanged               func(childComplexity int, operationIds []string) int
 		MySessionChanged            func(childComplexity int) int
 		OperationChanged            func(childComplexity int, operationID *string) int
 		OperationMemberChanged      func(childComplexity int, operationID *string) int
@@ -610,6 +705,7 @@ type CredentialResolver interface {
 	Backlinks(ctx context.Context, obj *models.Credential) ([]*models.WikiDocument, error)
 	CreatedAt(ctx context.Context, obj *models.Credential) (string, error)
 	UpdatedAt(ctx context.Context, obj *models.Credential) (string, error)
+	SourceHashes(ctx context.Context, obj *models.Credential) ([]*models.Hash, error)
 	TaskBacklinks(ctx context.Context, obj *models.Credential) ([]*models.Task, error)
 }
 type CredentialCommentResolver interface {
@@ -618,6 +714,33 @@ type CredentialCommentResolver interface {
 
 	CreatedAt(ctx context.Context, obj *models.CredentialComment) (string, error)
 	UpdatedAt(ctx context.Context, obj *models.CredentialComment) (string, error)
+}
+type HashResolver interface {
+	ID(ctx context.Context, obj *models.Hash) (string, error)
+	OperationID(ctx context.Context, obj *models.Hash) (string, error)
+	Operation(ctx context.Context, obj *models.Hash) (*models.Operation, error)
+
+	CredentialID(ctx context.Context, obj *models.Hash) (*string, error)
+	Credential(ctx context.Context, obj *models.Hash) (*models.Credential, error)
+	CrackingMeta(ctx context.Context, obj *models.Hash) (*models.HashCrackingMeta, error)
+
+	Comments(ctx context.Context, obj *models.Hash) ([]*models.HashComment, error)
+	ViewerCanModerateComments(ctx context.Context, obj *models.Hash) (bool, error)
+	CreatedBy(ctx context.Context, obj *models.Hash) (*models.User, error)
+	CreatedAt(ctx context.Context, obj *models.Hash) (string, error)
+	UpdatedAt(ctx context.Context, obj *models.Hash) (string, error)
+}
+type HashCommentResolver interface {
+	ID(ctx context.Context, obj *models.HashComment) (string, error)
+	Author(ctx context.Context, obj *models.HashComment) (*models.User, error)
+
+	CreatedAt(ctx context.Context, obj *models.HashComment) (string, error)
+	UpdatedAt(ctx context.Context, obj *models.HashComment) (string, error)
+}
+type HashCrackingMetaResolver interface {
+	DurationSec(ctx context.Context, obj *models.HashCrackingMeta) (int, error)
+	CrackedBy(ctx context.Context, obj *models.HashCrackingMeta) (*models.User, error)
+	CrackedAt(ctx context.Context, obj *models.HashCrackingMeta) (string, error)
 }
 type MutationResolver interface {
 	CreateUser(ctx context.Context, input model.CreateUserInput) (*models.User, error)
@@ -646,6 +769,14 @@ type MutationResolver interface {
 	AddCredentialComment(ctx context.Context, credentialID string, text string) (*models.Credential, error)
 	UpdateCredentialComment(ctx context.Context, credentialID string, commentID string, text string) (*models.Credential, error)
 	DeleteCredentialComment(ctx context.Context, credentialID string, commentID string) (*models.Credential, error)
+	CreateHash(ctx context.Context, operationID string, input model.CreateHashInput) (*models.Hash, error)
+	UpdateHash(ctx context.Context, id string, input model.UpdateHashInput) (*models.Hash, error)
+	DeleteHash(ctx context.Context, id string) (bool, error)
+	BulkImportHashes(ctx context.Context, operationID string, input model.BulkImportHashesInput) (*model.BulkImportHashesResult, error)
+	MarkHashCracked(ctx context.Context, id string, input model.MarkHashCrackedInput) (*models.Hash, error)
+	AddHashComment(ctx context.Context, hashID string, text string) (*models.Hash, error)
+	UpdateHashComment(ctx context.Context, hashID string, commentID string, text string) (*models.Hash, error)
+	DeleteHashComment(ctx context.Context, hashID string, commentID string) (*models.Hash, error)
 	RevokeSession(ctx context.Context, id string) (bool, error)
 	RevokeAllMySessions(ctx context.Context) (int, error)
 	AdminRevokeSession(ctx context.Context, id string) (bool, error)
@@ -702,6 +833,12 @@ type QueryResolver interface {
 	CredentialTags(ctx context.Context, operationID string) ([]string, error)
 	MyCredentials(ctx context.Context, operationIds []string, search *string, typeArg *models.CredentialType, tags []string, validOnly *bool, first *int, after *string, last *int, before *string) (*model.CredentialConnection, error)
 	MyCredentialTags(ctx context.Context, operationIds []string) ([]string, error)
+	Hash(ctx context.Context, id string) (*models.Hash, error)
+	Hashes(ctx context.Context, operationID string, search *string, statuses []models.HashStatus, hashTypes []string, tags []string, hasCredential *bool, first *int, after *string, last *int, before *string) (*model.HashConnection, error)
+	HashTags(ctx context.Context, operationID string) ([]string, error)
+	MyHashes(ctx context.Context, operationIds []string, search *string, statuses []models.HashStatus, hashTypes []string, tags []string, hasCredential *bool, first *int, after *string, last *int, before *string) (*model.HashConnection, error)
+	MyHashTags(ctx context.Context, operationIds []string) ([]string, error)
+	HashTypes(ctx context.Context) ([]*models.HashTypeSpec, error)
 	MySessions(ctx context.Context, activeOnly *bool, first *int, after *string, last *int, before *string) (*model.SessionConnection, error)
 	Sessions(ctx context.Context, userID *string, search *string, activeOnly *bool, first *int, after *string, last *int, before *string) (*model.SessionConnection, error)
 	Session(ctx context.Context, id string) (*models.Session, error)
@@ -757,6 +894,8 @@ type SubscriptionResolver interface {
 	OperationMemberChanged(ctx context.Context, operationID *string) (<-chan *model.OperationMemberEvent, error)
 	CredentialChanged(ctx context.Context, operationID string) (<-chan *model.CredentialEvent, error)
 	MyCredentialChanged(ctx context.Context, operationIds []string) (<-chan *model.CredentialEvent, error)
+	HashChanged(ctx context.Context, operationID string) (<-chan *model.HashEvent, error)
+	MyHashChanged(ctx context.Context, operationIds []string) (<-chan *model.HashEvent, error)
 	MySessionChanged(ctx context.Context) (<-chan *model.SessionEvent, error)
 	SessionChanged(ctx context.Context, userID *string) (<-chan *model.SessionEvent, error)
 	TaskChanged(ctx context.Context, operationID string) (<-chan *model.TaskEvent, error)
@@ -898,6 +1037,25 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 
 		return e.ComplexityRoot.APIKeyWithSecret.Token(childComplexity), true
 
+	case "BulkImportHashesResult.added":
+		if e.ComplexityRoot.BulkImportHashesResult.Added == nil {
+			break
+		}
+
+		return e.ComplexityRoot.BulkImportHashesResult.Added(childComplexity), true
+	case "BulkImportHashesResult.hashes":
+		if e.ComplexityRoot.BulkImportHashesResult.Hashes == nil {
+			break
+		}
+
+		return e.ComplexityRoot.BulkImportHashesResult.Hashes(childComplexity), true
+	case "BulkImportHashesResult.skipped":
+		if e.ComplexityRoot.BulkImportHashesResult.Skipped == nil {
+			break
+		}
+
+		return e.ComplexityRoot.BulkImportHashesResult.Skipped(childComplexity), true
+
 	case "Credential.backlinkCount":
 		if e.ComplexityRoot.Credential.BacklinkCount == nil {
 			break
@@ -976,6 +1134,12 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.Credential.Properties(childComplexity), true
+	case "Credential.sourceHashes":
+		if e.ComplexityRoot.Credential.SourceHashes == nil {
+			break
+		}
+
+		return e.ComplexityRoot.Credential.SourceHashes(childComplexity), true
 	case "Credential.tags":
 		if e.ComplexityRoot.Credential.Tags == nil {
 			break
@@ -1127,6 +1291,284 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 
 		return e.ComplexityRoot.CredentialProperty.Value(childComplexity), true
 
+	case "Hash.comments":
+		if e.ComplexityRoot.Hash.Comments == nil {
+			break
+		}
+
+		return e.ComplexityRoot.Hash.Comments(childComplexity), true
+	case "Hash.crackingMeta":
+		if e.ComplexityRoot.Hash.CrackingMeta == nil {
+			break
+		}
+
+		return e.ComplexityRoot.Hash.CrackingMeta(childComplexity), true
+	case "Hash.createdAt":
+		if e.ComplexityRoot.Hash.CreatedAt == nil {
+			break
+		}
+
+		return e.ComplexityRoot.Hash.CreatedAt(childComplexity), true
+	case "Hash.createdBy":
+		if e.ComplexityRoot.Hash.CreatedBy == nil {
+			break
+		}
+
+		return e.ComplexityRoot.Hash.CreatedBy(childComplexity), true
+	case "Hash.credential":
+		if e.ComplexityRoot.Hash.Credential == nil {
+			break
+		}
+
+		return e.ComplexityRoot.Hash.Credential(childComplexity), true
+	case "Hash.credentialId":
+		if e.ComplexityRoot.Hash.CredentialID == nil {
+			break
+		}
+
+		return e.ComplexityRoot.Hash.CredentialID(childComplexity), true
+	case "Hash.domain":
+		if e.ComplexityRoot.Hash.Domain == nil {
+			break
+		}
+
+		return e.ComplexityRoot.Hash.Domain(childComplexity), true
+	case "Hash.hashType":
+		if e.ComplexityRoot.Hash.HashType == nil {
+			break
+		}
+
+		return e.ComplexityRoot.Hash.HashType(childComplexity), true
+	case "Hash.hashcatMode":
+		if e.ComplexityRoot.Hash.HashcatMode == nil {
+			break
+		}
+
+		return e.ComplexityRoot.Hash.HashcatMode(childComplexity), true
+	case "Hash.id":
+		if e.ComplexityRoot.Hash.ID == nil {
+			break
+		}
+
+		return e.ComplexityRoot.Hash.ID(childComplexity), true
+	case "Hash.operation":
+		if e.ComplexityRoot.Hash.Operation == nil {
+			break
+		}
+
+		return e.ComplexityRoot.Hash.Operation(childComplexity), true
+	case "Hash.operationId":
+		if e.ComplexityRoot.Hash.OperationID == nil {
+			break
+		}
+
+		return e.ComplexityRoot.Hash.OperationID(childComplexity), true
+	case "Hash.properties":
+		if e.ComplexityRoot.Hash.Properties == nil {
+			break
+		}
+
+		return e.ComplexityRoot.Hash.Properties(childComplexity), true
+	case "Hash.source":
+		if e.ComplexityRoot.Hash.Source == nil {
+			break
+		}
+
+		return e.ComplexityRoot.Hash.Source(childComplexity), true
+	case "Hash.status":
+		if e.ComplexityRoot.Hash.Status == nil {
+			break
+		}
+
+		return e.ComplexityRoot.Hash.Status(childComplexity), true
+	case "Hash.tags":
+		if e.ComplexityRoot.Hash.Tags == nil {
+			break
+		}
+
+		return e.ComplexityRoot.Hash.Tags(childComplexity), true
+	case "Hash.updatedAt":
+		if e.ComplexityRoot.Hash.UpdatedAt == nil {
+			break
+		}
+
+		return e.ComplexityRoot.Hash.UpdatedAt(childComplexity), true
+	case "Hash.username":
+		if e.ComplexityRoot.Hash.Username == nil {
+			break
+		}
+
+		return e.ComplexityRoot.Hash.Username(childComplexity), true
+	case "Hash.value":
+		if e.ComplexityRoot.Hash.Value == nil {
+			break
+		}
+
+		return e.ComplexityRoot.Hash.Value(childComplexity), true
+	case "Hash.viewerCanModerateComments":
+		if e.ComplexityRoot.Hash.ViewerCanModerateComments == nil {
+			break
+		}
+
+		return e.ComplexityRoot.Hash.ViewerCanModerateComments(childComplexity), true
+
+	case "HashComment.author":
+		if e.ComplexityRoot.HashComment.Author == nil {
+			break
+		}
+
+		return e.ComplexityRoot.HashComment.Author(childComplexity), true
+	case "HashComment.createdAt":
+		if e.ComplexityRoot.HashComment.CreatedAt == nil {
+			break
+		}
+
+		return e.ComplexityRoot.HashComment.CreatedAt(childComplexity), true
+	case "HashComment.id":
+		if e.ComplexityRoot.HashComment.ID == nil {
+			break
+		}
+
+		return e.ComplexityRoot.HashComment.ID(childComplexity), true
+	case "HashComment.text":
+		if e.ComplexityRoot.HashComment.Text == nil {
+			break
+		}
+
+		return e.ComplexityRoot.HashComment.Text(childComplexity), true
+	case "HashComment.updatedAt":
+		if e.ComplexityRoot.HashComment.UpdatedAt == nil {
+			break
+		}
+
+		return e.ComplexityRoot.HashComment.UpdatedAt(childComplexity), true
+
+	case "HashConnection.edges":
+		if e.ComplexityRoot.HashConnection.Edges == nil {
+			break
+		}
+
+		return e.ComplexityRoot.HashConnection.Edges(childComplexity), true
+	case "HashConnection.pageInfo":
+		if e.ComplexityRoot.HashConnection.PageInfo == nil {
+			break
+		}
+
+		return e.ComplexityRoot.HashConnection.PageInfo(childComplexity), true
+	case "HashConnection.totalCount":
+		if e.ComplexityRoot.HashConnection.TotalCount == nil {
+			break
+		}
+
+		return e.ComplexityRoot.HashConnection.TotalCount(childComplexity), true
+
+	case "HashCrackingMeta.crackedAt":
+		if e.ComplexityRoot.HashCrackingMeta.CrackedAt == nil {
+			break
+		}
+
+		return e.ComplexityRoot.HashCrackingMeta.CrackedAt(childComplexity), true
+	case "HashCrackingMeta.crackedBy":
+		if e.ComplexityRoot.HashCrackingMeta.CrackedBy == nil {
+			break
+		}
+
+		return e.ComplexityRoot.HashCrackingMeta.CrackedBy(childComplexity), true
+	case "HashCrackingMeta.durationSec":
+		if e.ComplexityRoot.HashCrackingMeta.DurationSec == nil {
+			break
+		}
+
+		return e.ComplexityRoot.HashCrackingMeta.DurationSec(childComplexity), true
+	case "HashCrackingMeta.rules":
+		if e.ComplexityRoot.HashCrackingMeta.Rules == nil {
+			break
+		}
+
+		return e.ComplexityRoot.HashCrackingMeta.Rules(childComplexity), true
+	case "HashCrackingMeta.tool":
+		if e.ComplexityRoot.HashCrackingMeta.Tool == nil {
+			break
+		}
+
+		return e.ComplexityRoot.HashCrackingMeta.Tool(childComplexity), true
+	case "HashCrackingMeta.wordlist":
+		if e.ComplexityRoot.HashCrackingMeta.Wordlist == nil {
+			break
+		}
+
+		return e.ComplexityRoot.HashCrackingMeta.Wordlist(childComplexity), true
+
+	case "HashEdge.cursor":
+		if e.ComplexityRoot.HashEdge.Cursor == nil {
+			break
+		}
+
+		return e.ComplexityRoot.HashEdge.Cursor(childComplexity), true
+	case "HashEdge.node":
+		if e.ComplexityRoot.HashEdge.Node == nil {
+			break
+		}
+
+		return e.ComplexityRoot.HashEdge.Node(childComplexity), true
+
+	case "HashEvent.action":
+		if e.ComplexityRoot.HashEvent.Action == nil {
+			break
+		}
+
+		return e.ComplexityRoot.HashEvent.Action(childComplexity), true
+	case "HashEvent.hash":
+		if e.ComplexityRoot.HashEvent.Hash == nil {
+			break
+		}
+
+		return e.ComplexityRoot.HashEvent.Hash(childComplexity), true
+	case "HashEvent.hashId":
+		if e.ComplexityRoot.HashEvent.HashID == nil {
+			break
+		}
+
+		return e.ComplexityRoot.HashEvent.HashID(childComplexity), true
+	case "HashEvent.operationId":
+		if e.ComplexityRoot.HashEvent.OperationID == nil {
+			break
+		}
+
+		return e.ComplexityRoot.HashEvent.OperationID(childComplexity), true
+
+	case "HashProperty.name":
+		if e.ComplexityRoot.HashProperty.Name == nil {
+			break
+		}
+
+		return e.ComplexityRoot.HashProperty.Name(childComplexity), true
+	case "HashProperty.value":
+		if e.ComplexityRoot.HashProperty.Value == nil {
+			break
+		}
+
+		return e.ComplexityRoot.HashProperty.Value(childComplexity), true
+
+	case "HashTypeSpec.displayName":
+		if e.ComplexityRoot.HashTypeSpec.DisplayName == nil {
+			break
+		}
+
+		return e.ComplexityRoot.HashTypeSpec.DisplayName(childComplexity), true
+	case "HashTypeSpec.hashcatMode":
+		if e.ComplexityRoot.HashTypeSpec.HashcatMode == nil {
+			break
+		}
+
+		return e.ComplexityRoot.HashTypeSpec.HashcatMode(childComplexity), true
+	case "HashTypeSpec.name":
+		if e.ComplexityRoot.HashTypeSpec.Name == nil {
+			break
+		}
+
+		return e.ComplexityRoot.HashTypeSpec.Name(childComplexity), true
+
 	case "Mutation.addCredentialComment":
 		if e.ComplexityRoot.Mutation.AddCredentialComment == nil {
 			break
@@ -1138,6 +1580,17 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.Mutation.AddCredentialComment(childComplexity, args["credentialId"].(string), args["text"].(string)), true
+	case "Mutation.addHashComment":
+		if e.ComplexityRoot.Mutation.AddHashComment == nil {
+			break
+		}
+
+		args, err := ec.field_Mutation_addHashComment_args(ctx, rawArgs)
+		if err != nil {
+			return 0, false
+		}
+
+		return e.ComplexityRoot.Mutation.AddHashComment(childComplexity, args["hashId"].(string), args["text"].(string)), true
 	case "Mutation.addOperationMember":
 		if e.ComplexityRoot.Mutation.AddOperationMember == nil {
 			break
@@ -1193,6 +1646,17 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.Mutation.AdminRevokeSession(childComplexity, args["id"].(string)), true
+	case "Mutation.bulkImportHashes":
+		if e.ComplexityRoot.Mutation.BulkImportHashes == nil {
+			break
+		}
+
+		args, err := ec.field_Mutation_bulkImportHashes_args(ctx, rawArgs)
+		if err != nil {
+			return 0, false
+		}
+
+		return e.ComplexityRoot.Mutation.BulkImportHashes(childComplexity, args["operationId"].(string), args["input"].(model.BulkImportHashesInput)), true
 	case "Mutation.changeTaskStage":
 		if e.ComplexityRoot.Mutation.ChangeTaskStage == nil {
 			break
@@ -1226,6 +1690,17 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.Mutation.CreateCustomTimelineEvent(childComplexity, args["operationId"].(string), args["input"].(model.CreateCustomTimelineEventInput)), true
+	case "Mutation.createHash":
+		if e.ComplexityRoot.Mutation.CreateHash == nil {
+			break
+		}
+
+		args, err := ec.field_Mutation_createHash_args(ctx, rawArgs)
+		if err != nil {
+			return 0, false
+		}
+
+		return e.ComplexityRoot.Mutation.CreateHash(childComplexity, args["operationId"].(string), args["input"].(model.CreateHashInput)), true
 	case "Mutation.createMyAPIKey":
 		if e.ComplexityRoot.Mutation.CreateMyAPIKey == nil {
 			break
@@ -1331,6 +1806,28 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.Mutation.DeleteCustomTimelineEvent(childComplexity, args["id"].(string)), true
+	case "Mutation.deleteHash":
+		if e.ComplexityRoot.Mutation.DeleteHash == nil {
+			break
+		}
+
+		args, err := ec.field_Mutation_deleteHash_args(ctx, rawArgs)
+		if err != nil {
+			return 0, false
+		}
+
+		return e.ComplexityRoot.Mutation.DeleteHash(childComplexity, args["id"].(string)), true
+	case "Mutation.deleteHashComment":
+		if e.ComplexityRoot.Mutation.DeleteHashComment == nil {
+			break
+		}
+
+		args, err := ec.field_Mutation_deleteHashComment_args(ctx, rawArgs)
+		if err != nil {
+			return 0, false
+		}
+
+		return e.ComplexityRoot.Mutation.DeleteHashComment(childComplexity, args["hashId"].(string), args["commentId"].(string)), true
 	case "Mutation.deleteMyAPIKey":
 		if e.ComplexityRoot.Mutation.DeleteMyAPIKey == nil {
 			break
@@ -1425,6 +1922,17 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.Mutation.EmptyWikiDocumentTrash(childComplexity, args["operationId"].(string)), true
+	case "Mutation.markHashCracked":
+		if e.ComplexityRoot.Mutation.MarkHashCracked == nil {
+			break
+		}
+
+		args, err := ec.field_Mutation_markHashCracked_args(ctx, rawArgs)
+		if err != nil {
+			return 0, false
+		}
+
+		return e.ComplexityRoot.Mutation.MarkHashCracked(childComplexity, args["id"].(string), args["input"].(model.MarkHashCrackedInput)), true
 	case "Mutation.permanentlyDeleteWikiDocument":
 		if e.ComplexityRoot.Mutation.PermanentlyDeleteWikiDocument == nil {
 			break
@@ -1624,6 +2132,28 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.Mutation.UpdateCustomTimelineEvent(childComplexity, args["id"].(string), args["input"].(model.UpdateCustomTimelineEventInput)), true
+	case "Mutation.updateHash":
+		if e.ComplexityRoot.Mutation.UpdateHash == nil {
+			break
+		}
+
+		args, err := ec.field_Mutation_updateHash_args(ctx, rawArgs)
+		if err != nil {
+			return 0, false
+		}
+
+		return e.ComplexityRoot.Mutation.UpdateHash(childComplexity, args["id"].(string), args["input"].(model.UpdateHashInput)), true
+	case "Mutation.updateHashComment":
+		if e.ComplexityRoot.Mutation.UpdateHashComment == nil {
+			break
+		}
+
+		args, err := ec.field_Mutation_updateHashComment_args(ctx, rawArgs)
+		if err != nil {
+			return 0, false
+		}
+
+		return e.ComplexityRoot.Mutation.UpdateHashComment(childComplexity, args["hashId"].(string), args["commentId"].(string), args["text"].(string)), true
 	case "Mutation.updateOperation":
 		if e.ComplexityRoot.Mutation.UpdateOperation == nil {
 			break
@@ -1897,6 +2427,45 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.Query.Credentials(childComplexity, args["operationId"].(string), args["search"].(*string), args["type"].(*models.CredentialType), args["tags"].([]string), args["validOnly"].(*bool), args["first"].(*int), args["after"].(*string), args["last"].(*int), args["before"].(*string)), true
+	case "Query.hash":
+		if e.ComplexityRoot.Query.Hash == nil {
+			break
+		}
+
+		args, err := ec.field_Query_hash_args(ctx, rawArgs)
+		if err != nil {
+			return 0, false
+		}
+
+		return e.ComplexityRoot.Query.Hash(childComplexity, args["id"].(string)), true
+	case "Query.hashTags":
+		if e.ComplexityRoot.Query.HashTags == nil {
+			break
+		}
+
+		args, err := ec.field_Query_hashTags_args(ctx, rawArgs)
+		if err != nil {
+			return 0, false
+		}
+
+		return e.ComplexityRoot.Query.HashTags(childComplexity, args["operationId"].(string)), true
+	case "Query.hashTypes":
+		if e.ComplexityRoot.Query.HashTypes == nil {
+			break
+		}
+
+		return e.ComplexityRoot.Query.HashTypes(childComplexity), true
+	case "Query.hashes":
+		if e.ComplexityRoot.Query.Hashes == nil {
+			break
+		}
+
+		args, err := ec.field_Query_hashes_args(ctx, rawArgs)
+		if err != nil {
+			return 0, false
+		}
+
+		return e.ComplexityRoot.Query.Hashes(childComplexity, args["operationId"].(string), args["search"].(*string), args["statuses"].([]models.HashStatus), args["hashTypes"].([]string), args["tags"].([]string), args["hasCredential"].(*bool), args["first"].(*int), args["after"].(*string), args["last"].(*int), args["before"].(*string)), true
 
 	case "Query.me":
 		if e.ComplexityRoot.Query.Me == nil {
@@ -1932,6 +2501,28 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.Query.MyCredentials(childComplexity, args["operationIds"].([]string), args["search"].(*string), args["type"].(*models.CredentialType), args["tags"].([]string), args["validOnly"].(*bool), args["first"].(*int), args["after"].(*string), args["last"].(*int), args["before"].(*string)), true
+	case "Query.myHashTags":
+		if e.ComplexityRoot.Query.MyHashTags == nil {
+			break
+		}
+
+		args, err := ec.field_Query_myHashTags_args(ctx, rawArgs)
+		if err != nil {
+			return 0, false
+		}
+
+		return e.ComplexityRoot.Query.MyHashTags(childComplexity, args["operationIds"].([]string)), true
+	case "Query.myHashes":
+		if e.ComplexityRoot.Query.MyHashes == nil {
+			break
+		}
+
+		args, err := ec.field_Query_myHashes_args(ctx, rawArgs)
+		if err != nil {
+			return 0, false
+		}
+
+		return e.ComplexityRoot.Query.MyHashes(childComplexity, args["operationIds"].([]string), args["search"].(*string), args["statuses"].([]models.HashStatus), args["hashTypes"].([]string), args["tags"].([]string), args["hasCredential"].(*bool), args["first"].(*int), args["after"].(*string), args["last"].(*int), args["before"].(*string)), true
 	case "Query.myOperationRole":
 		if e.ComplexityRoot.Query.MyOperationRole == nil {
 			break
@@ -2566,6 +3157,17 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.Subscription.CredentialChanged(childComplexity, args["operationId"].(string)), true
+	case "Subscription.hashChanged":
+		if e.ComplexityRoot.Subscription.HashChanged == nil {
+			break
+		}
+
+		args, err := ec.field_Subscription_hashChanged_args(ctx, rawArgs)
+		if err != nil {
+			return 0, false
+		}
+
+		return e.ComplexityRoot.Subscription.HashChanged(childComplexity, args["operationId"].(string)), true
 	case "Subscription.myCredentialChanged":
 		if e.ComplexityRoot.Subscription.MyCredentialChanged == nil {
 			break
@@ -2577,6 +3179,17 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.Subscription.MyCredentialChanged(childComplexity, args["operationIds"].([]string)), true
+	case "Subscription.myHashChanged":
+		if e.ComplexityRoot.Subscription.MyHashChanged == nil {
+			break
+		}
+
+		args, err := ec.field_Subscription_myHashChanged_args(ctx, rawArgs)
+		if err != nil {
+			return 0, false
+		}
+
+		return e.ComplexityRoot.Subscription.MyHashChanged(childComplexity, args["operationIds"].([]string)), true
 	case "Subscription.mySessionChanged":
 		if e.ComplexityRoot.Subscription.MySessionChanged == nil {
 			break
@@ -3582,9 +4195,11 @@ func (e *executableSchema) Exec(ctx context.Context) graphql.ResponseHandler {
 	opCtx := graphql.GetOperationContext(ctx)
 	ec := newExecutionContext(opCtx, e, make(chan graphql.DeferredResult))
 	inputUnmarshalMap := graphql.BuildUnmarshalerMap(
+		ec.unmarshalInputBulkImportHashesInput,
 		ec.unmarshalInputChangeTaskStageInput,
 		ec.unmarshalInputCreateCredentialInput,
 		ec.unmarshalInputCreateCustomTimelineEventInput,
+		ec.unmarshalInputCreateHashInput,
 		ec.unmarshalInputCreateOperationInput,
 		ec.unmarshalInputCreateSchemeNetworkPointInput,
 		ec.unmarshalInputCreateSchemeNetworkPortInput,
@@ -3593,9 +4208,12 @@ func (e *executableSchema) Exec(ctx context.Context) graphql.ResponseHandler {
 		ec.unmarshalInputCreateWikiDocumentInput,
 		ec.unmarshalInputCredentialKeyInput,
 		ec.unmarshalInputCredentialPropertyInput,
+		ec.unmarshalInputHashPropertyInput,
+		ec.unmarshalInputMarkHashCrackedInput,
 		ec.unmarshalInputReorderWikiDocumentSiblingsInput,
 		ec.unmarshalInputUpdateCredentialInput,
 		ec.unmarshalInputUpdateCustomTimelineEventInput,
+		ec.unmarshalInputUpdateHashInput,
 		ec.unmarshalInputUpdateOperationInput,
 		ec.unmarshalInputUpdateSchemeNetworkPointInput,
 		ec.unmarshalInputUpdateSchemeNetworkPortInput,
@@ -4027,6 +4645,309 @@ extend type Subscription {
   # reconnect to pick up the new membership set — same constraint as
   # operationChanged.
   myCredentialChanged(operationIds: [ID!]): CredentialEvent!
+}
+`, BuiltIn: false},
+	{Name: "../schema/hashes.graphql", Input: `# =============================================================================
+# Findings — Hashes
+# =============================================================================
+#
+# Hashes are an operation-scoped record of password hashes discovered against
+# target accounts. Cracking happens offline; this app tracks the workflow
+# (NOT_PROCESSED → QUEUED → CRACKING → CRACKED / FAILED) and links a cracked
+# hash to the resulting Credential so the two findings tabs stay joined.
+#
+# Hash values are NOT secrets in the application sense — they're already-stolen
+# target material, stored and rendered plainly. Same convention as credentials.
+
+# --- Enums ---
+
+enum HashStatus {
+  NOT_PROCESSED
+  QUEUED
+  CRACKING
+  CRACKED
+  FAILED
+}
+
+# --- Types ---
+
+# HashTypeSpec advertises a curated hash family operators can pick from. The
+# hashcatMode is included so the UI can show "hashcat -m 1000" alongside the
+# label. Returned by the hashTypes query; not a field on Hash itself.
+type HashTypeSpec {
+  name: String!
+  displayName: String!
+  hashcatMode: Int!
+}
+
+# Operator note attached to a hash. Same shape as CredentialComment.
+type HashComment {
+  id: ID!
+  author: User
+  text: String!
+  createdAt: String!
+  updatedAt: String!
+}
+
+# Operator-defined key/value pair for ad-hoc metadata. Same non-secret /
+# search-indexed semantics as CredentialProperty.
+type HashProperty {
+  name: String!
+  value: String!
+}
+
+# Free-form postmortem fields recorded when a hash is marked CRACKED. Operators
+# self-report; the app does not run hashcat or validate any field.
+type HashCrackingMeta {
+  tool: String!
+  wordlist: String!
+  rules: String!
+  durationSec: Int!
+  crackedBy: User
+  crackedAt: String!
+}
+
+type Hash {
+  id: ID!
+  operationId: ID!
+  # Full parent Operation. Used by the global Findings page where one row may
+  # belong to any operation. In scoped views the operation is implicit — skip
+  # this field to avoid a DB round-trip per row.
+  operation: Operation!
+  value: String!
+  # Canonical hash type name (e.g. "NTLM", "NETNTLMV2"). Unknown types pass
+  # through uppercased; see hashTypes query for the curated preset list.
+  hashType: String!
+  # Hashcat -m mode. 0 for unknown / not applicable types.
+  hashcatMode: Int!
+  username: String!
+  domain: String!
+  status: HashStatus!
+  source: String!
+  tags: [String!]!
+  # Linked credential populated once a hash is cracked via markHashCracked.
+  # Null while pending. The credential field resolver does a DB lookup; skip
+  # it on list payloads if you only need the id.
+  credentialId: ID
+  credential: Credential
+  # Postmortem details recorded on the markHashCracked call. Null for any
+  # hash that has not yet been cracked.
+  crackingMeta: HashCrackingMeta
+  properties: [HashProperty!]!
+  comments: [HashComment!]!
+  # True when the caller can moderate any comment on this hash regardless of
+  # authorship. Same rule as Credential.viewerCanModerateComments.
+  viewerCanModerateComments: Boolean!
+  createdBy: User
+  createdAt: String!
+  updatedAt: String!
+}
+
+type HashEdge {
+  node: Hash!
+  cursor: String!
+}
+
+type HashConnection {
+  edges: [HashEdge!]!
+  pageInfo: PageInfo!
+  totalCount: Int!
+}
+
+type HashEvent {
+  action: EventAction!
+  hashId: ID!
+  operationId: ID!
+  hash: Hash
+}
+
+# Result of a bulk paste. Returns counts and the newly created rows so the UI
+# can update its list without a follow-up query.
+type BulkImportHashesResult {
+  added: Int!
+  skipped: Int!
+  hashes: [Hash!]!
+}
+
+# --- Inputs ---
+
+input HashPropertyInput {
+  name: String!
+  value: String!
+}
+
+input CreateHashInput {
+  value: String!
+  hashType: String!
+  username: String
+  domain: String
+  source: String
+  status: HashStatus
+  tags: [String!]
+  properties: [HashPropertyInput!]
+}
+
+# UpdateHashInput is the general-purpose mutation surface. Transitioning the
+# status to CRACKED via this input is rejected — use markHashCracked, which
+# enforces the credential link.
+input UpdateHashInput {
+  value: String
+  hashType: String
+  username: String
+  domain: String
+  source: String
+  status: HashStatus
+  tags: [String!]
+  properties: [HashPropertyInput!]
+}
+
+# BulkImportHashesInput accepts a raw paste plus the format hint that drives
+# parsing. format=RAW expects one hash per line. SECRETSDUMP / PWDUMP parse
+# the colon-separated dump formats and pull out username + NT hash. All
+# parsed rows take the same default status, hash type override, source, and
+# tags applied at the input level — per-row metadata can be edited after.
+input BulkImportHashesInput {
+  text: String!
+  format: BulkHashFormat!
+  # Default hash type for RAW input. Ignored for SECRETSDUMP/PWDUMP which
+  # always produce NTLM rows.
+  defaultHashType: String
+  source: String
+  tags: [String!]
+}
+
+enum BulkHashFormat {
+  RAW
+  SECRETSDUMP
+  PWDUMP
+}
+
+# Used by markHashCracked. Exactly one of credentialId or newCredential must
+# be set — the resolver rejects ambiguous / missing combinations with a
+# friendly error.
+input MarkHashCrackedInput {
+  plaintext: String!
+  # Link to an existing credential in the same operation.
+  credentialId: ID
+  # Or create a new credential inline. Type defaults to PASSWORD; username
+  # pre-fills from the hash if omitted.
+  newCredential: CreateCredentialInput
+  # Optional postmortem fields. All free-form.
+  tool: String
+  wordlist: String
+  rules: String
+  durationSec: Int
+}
+
+# --- Queries ---
+
+extend type Query {
+  hash(id: ID!): Hash!
+    @hasPermission(permission: "operation:member")
+
+  hashes(
+    operationId: ID!
+    search: String
+    statuses: [HashStatus!]
+    hashTypes: [String!]
+    tags: [String!]
+    hasCredential: Boolean
+    first: Int = 20
+    after: String
+    last: Int
+    before: String
+  ): HashConnection!
+    @hasPermission(permission: "operation:member")
+
+  hashTags(operationId: ID!): [String!]!
+    @hasPermission(permission: "operation:member")
+
+  # Cross-operation list — powers the global Findings page. Same authorization
+  # model as myCredentials: no @hasPermission directive, the resolver
+  # authorises each op via resolveAccessibleOperationIDs.
+  myHashes(
+    operationIds: [ID!]
+    search: String
+    statuses: [HashStatus!]
+    hashTypes: [String!]
+    tags: [String!]
+    hasCredential: Boolean
+    first: Int = 20
+    after: String
+    last: Int
+    before: String
+  ): HashConnection!
+
+  myHashTags(operationIds: [ID!]): [String!]!
+
+  # Curated hash-type preset list used by the UI type picker and the bulk
+  # import format hint. Static — does not require auth context, but kept
+  # gated to authenticated users via the operation:member directive so the
+  # surface area matches sibling queries.
+  hashTypes: [HashTypeSpec!]!
+    @hasPermission(permission: "operation:member")
+}
+
+# --- Mutations ---
+
+extend type Mutation {
+  createHash(operationId: ID!, input: CreateHashInput!): Hash!
+    @hasPermission(permission: "operation:member")
+
+  # updateHash is the general-purpose modifier. Transitioning to CRACKED is
+  # rejected here — that path goes through markHashCracked so the credential
+  # link is enforced.
+  updateHash(id: ID!, input: UpdateHashInput!): Hash!
+    @hasPermission(permission: "operation:member")
+
+  deleteHash(id: ID!): Boolean!
+    @hasPermission(permission: "operation:member")
+
+  # bulkImportHashes parses the supplied text per ` + "`" + `format` + "`" + `, dedupes against
+  # existing hashes in the operation, and inserts the survivors. Emits ONE
+  # summary timeline event regardless of batch size. Capped at 5000 rows per
+  # call to keep request timeouts predictable.
+  bulkImportHashes(operationId: ID!, input: BulkImportHashesInput!): BulkImportHashesResult!
+    @hasPermission(permission: "operation:member")
+
+  # markHashCracked is the single path that moves a hash into the CRACKED
+  # state. Either links to an existing credential or creates a new one
+  # inline, then stamps status + crackingMeta in one atomic-from-the-caller's
+  # point-of-view operation (credential first, hash second — see the
+  # resolver comment for the rationale).
+  markHashCracked(id: ID!, input: MarkHashCrackedInput!): Hash!
+    @hasPermission(permission: "operation:member")
+
+  addHashComment(hashId: ID!, text: String!): Hash!
+    @hasPermission(permission: "operation:member")
+
+  updateHashComment(hashId: ID!, commentId: ID!, text: String!): Hash!
+    @hasPermission(permission: "operation:member")
+
+  deleteHashComment(hashId: ID!, commentId: ID!): Hash!
+    @hasPermission(permission: "operation:member")
+}
+
+# --- Subscriptions ---
+
+extend type Subscription {
+  hashChanged(operationId: ID!): HashEvent!
+    @hasPermission(permission: "operation:member")
+
+  # Multi-operation sibling of hashChanged. No @hasPermission directive — the
+  # resolver authorises at subscribe time via buildOperationsFilter. Same
+  # nil/empty/explicit semantics as myCredentialChanged.
+  myHashChanged(operationIds: [ID!]): HashEvent!
+}
+
+# --- Extend Credential with sourceHashes ---
+#
+# A credential can be the cracking result of one or more hashes (e.g. an NTLM
+# and a NetNTLMv2 capture for the same user both crack to the same plaintext
+# and get linked to the same credential). This field surfaces that inverse
+# relationship on the credential detail view.
+extend type Credential {
+  sourceHashes: [Hash!]!
 }
 `, BuiltIn: false},
 	{Name: "../schema/schema.graphql", Input: `# =============================================================================
@@ -5582,6 +6503,22 @@ func (ec *executionContext) field_Mutation_addCredentialComment_args(ctx context
 	return args, nil
 }
 
+func (ec *executionContext) field_Mutation_addHashComment_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
+	var err error
+	args := map[string]any{}
+	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "hashId", ec.unmarshalNID2string)
+	if err != nil {
+		return nil, err
+	}
+	args["hashId"] = arg0
+	arg1, err := graphql.ProcessArgField(ctx, rawArgs, "text", ec.unmarshalNString2string)
+	if err != nil {
+		return nil, err
+	}
+	args["text"] = arg1
+	return args, nil
+}
+
 func (ec *executionContext) field_Mutation_addOperationMember_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
 	var err error
 	args := map[string]any{}
@@ -5657,6 +6594,22 @@ func (ec *executionContext) field_Mutation_adminRevokeSession_args(ctx context.C
 	return args, nil
 }
 
+func (ec *executionContext) field_Mutation_bulkImportHashes_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
+	var err error
+	args := map[string]any{}
+	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "operationId", ec.unmarshalNID2string)
+	if err != nil {
+		return nil, err
+	}
+	args["operationId"] = arg0
+	arg1, err := graphql.ProcessArgField(ctx, rawArgs, "input", ec.unmarshalNBulkImportHashesInput2githubᚗcomᚋvibeᚑc2ᚋvibeᚑc2ᚑcoreᚋcoreᚋpkgᚋgraphqlᚋmodelᚐBulkImportHashesInput)
+	if err != nil {
+		return nil, err
+	}
+	args["input"] = arg1
+	return args, nil
+}
+
 func (ec *executionContext) field_Mutation_changeTaskStage_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
 	var err error
 	args := map[string]any{}
@@ -5693,6 +6646,22 @@ func (ec *executionContext) field_Mutation_createCustomTimelineEvent_args(ctx co
 	}
 	args["operationId"] = arg0
 	arg1, err := graphql.ProcessArgField(ctx, rawArgs, "input", ec.unmarshalNCreateCustomTimelineEventInput2githubᚗcomᚋvibeᚑc2ᚋvibeᚑc2ᚑcoreᚋcoreᚋpkgᚋgraphqlᚋmodelᚐCreateCustomTimelineEventInput)
+	if err != nil {
+		return nil, err
+	}
+	args["input"] = arg1
+	return args, nil
+}
+
+func (ec *executionContext) field_Mutation_createHash_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
+	var err error
+	args := map[string]any{}
+	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "operationId", ec.unmarshalNID2string)
+	if err != nil {
+		return nil, err
+	}
+	args["operationId"] = arg0
+	arg1, err := graphql.ProcessArgField(ctx, rawArgs, "input", ec.unmarshalNCreateHashInput2githubᚗcomᚋvibeᚑc2ᚋvibeᚑc2ᚑcoreᚋcoreᚋpkgᚋgraphqlᚋmodelᚐCreateHashInput)
 	if err != nil {
 		return nil, err
 	}
@@ -5819,6 +6788,33 @@ func (ec *executionContext) field_Mutation_deleteCustomTimelineEvent_args(ctx co
 	return args, nil
 }
 
+func (ec *executionContext) field_Mutation_deleteHashComment_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
+	var err error
+	args := map[string]any{}
+	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "hashId", ec.unmarshalNID2string)
+	if err != nil {
+		return nil, err
+	}
+	args["hashId"] = arg0
+	arg1, err := graphql.ProcessArgField(ctx, rawArgs, "commentId", ec.unmarshalNID2string)
+	if err != nil {
+		return nil, err
+	}
+	args["commentId"] = arg1
+	return args, nil
+}
+
+func (ec *executionContext) field_Mutation_deleteHash_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
+	var err error
+	args := map[string]any{}
+	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "id", ec.unmarshalNID2string)
+	if err != nil {
+		return nil, err
+	}
+	args["id"] = arg0
+	return args, nil
+}
+
 func (ec *executionContext) field_Mutation_deleteOperation_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
 	var err error
 	args := map[string]any{}
@@ -5909,6 +6905,22 @@ func (ec *executionContext) field_Mutation_emptyWikiDocumentTrash_args(ctx conte
 		return nil, err
 	}
 	args["operationId"] = arg0
+	return args, nil
+}
+
+func (ec *executionContext) field_Mutation_markHashCracked_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
+	var err error
+	args := map[string]any{}
+	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "id", ec.unmarshalNID2string)
+	if err != nil {
+		return nil, err
+	}
+	args["id"] = arg0
+	arg1, err := graphql.ProcessArgField(ctx, rawArgs, "input", ec.unmarshalNMarkHashCrackedInput2githubᚗcomᚋvibeᚑc2ᚋvibeᚑc2ᚑcoreᚋcoreᚋpkgᚋgraphqlᚋmodelᚐMarkHashCrackedInput)
+	if err != nil {
+		return nil, err
+	}
+	args["input"] = arg1
 	return args, nil
 }
 
@@ -6154,6 +7166,43 @@ func (ec *executionContext) field_Mutation_updateCustomTimelineEvent_args(ctx co
 	return args, nil
 }
 
+func (ec *executionContext) field_Mutation_updateHashComment_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
+	var err error
+	args := map[string]any{}
+	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "hashId", ec.unmarshalNID2string)
+	if err != nil {
+		return nil, err
+	}
+	args["hashId"] = arg0
+	arg1, err := graphql.ProcessArgField(ctx, rawArgs, "commentId", ec.unmarshalNID2string)
+	if err != nil {
+		return nil, err
+	}
+	args["commentId"] = arg1
+	arg2, err := graphql.ProcessArgField(ctx, rawArgs, "text", ec.unmarshalNString2string)
+	if err != nil {
+		return nil, err
+	}
+	args["text"] = arg2
+	return args, nil
+}
+
+func (ec *executionContext) field_Mutation_updateHash_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
+	var err error
+	args := map[string]any{}
+	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "id", ec.unmarshalNID2string)
+	if err != nil {
+		return nil, err
+	}
+	args["id"] = arg0
+	arg1, err := graphql.ProcessArgField(ctx, rawArgs, "input", ec.unmarshalNUpdateHashInput2githubᚗcomᚋvibeᚑc2ᚋvibeᚑc2ᚑcoreᚋcoreᚋpkgᚋgraphqlᚋmodelᚐUpdateHashInput)
+	if err != nil {
+		return nil, err
+	}
+	args["input"] = arg1
+	return args, nil
+}
+
 func (ec *executionContext) field_Mutation_updateOperationMemberRole_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
 	var err error
 	args := map[string]any{}
@@ -6371,6 +7420,84 @@ func (ec *executionContext) field_Query_credentials_args(ctx context.Context, ra
 	return args, nil
 }
 
+func (ec *executionContext) field_Query_hashTags_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
+	var err error
+	args := map[string]any{}
+	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "operationId", ec.unmarshalNID2string)
+	if err != nil {
+		return nil, err
+	}
+	args["operationId"] = arg0
+	return args, nil
+}
+
+func (ec *executionContext) field_Query_hash_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
+	var err error
+	args := map[string]any{}
+	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "id", ec.unmarshalNID2string)
+	if err != nil {
+		return nil, err
+	}
+	args["id"] = arg0
+	return args, nil
+}
+
+func (ec *executionContext) field_Query_hashes_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
+	var err error
+	args := map[string]any{}
+	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "operationId", ec.unmarshalNID2string)
+	if err != nil {
+		return nil, err
+	}
+	args["operationId"] = arg0
+	arg1, err := graphql.ProcessArgField(ctx, rawArgs, "search", ec.unmarshalOString2ᚖstring)
+	if err != nil {
+		return nil, err
+	}
+	args["search"] = arg1
+	arg2, err := graphql.ProcessArgField(ctx, rawArgs, "statuses", ec.unmarshalOHashStatus2ᚕgithubᚗcomᚋvibeᚑc2ᚋvibeᚑc2ᚑcoreᚋcoreᚋpkgᚋmodelsᚐHashStatusᚄ)
+	if err != nil {
+		return nil, err
+	}
+	args["statuses"] = arg2
+	arg3, err := graphql.ProcessArgField(ctx, rawArgs, "hashTypes", ec.unmarshalOString2ᚕstringᚄ)
+	if err != nil {
+		return nil, err
+	}
+	args["hashTypes"] = arg3
+	arg4, err := graphql.ProcessArgField(ctx, rawArgs, "tags", ec.unmarshalOString2ᚕstringᚄ)
+	if err != nil {
+		return nil, err
+	}
+	args["tags"] = arg4
+	arg5, err := graphql.ProcessArgField(ctx, rawArgs, "hasCredential", ec.unmarshalOBoolean2ᚖbool)
+	if err != nil {
+		return nil, err
+	}
+	args["hasCredential"] = arg5
+	arg6, err := graphql.ProcessArgField(ctx, rawArgs, "first", ec.unmarshalOInt2ᚖint)
+	if err != nil {
+		return nil, err
+	}
+	args["first"] = arg6
+	arg7, err := graphql.ProcessArgField(ctx, rawArgs, "after", ec.unmarshalOString2ᚖstring)
+	if err != nil {
+		return nil, err
+	}
+	args["after"] = arg7
+	arg8, err := graphql.ProcessArgField(ctx, rawArgs, "last", ec.unmarshalOInt2ᚖint)
+	if err != nil {
+		return nil, err
+	}
+	args["last"] = arg8
+	arg9, err := graphql.ProcessArgField(ctx, rawArgs, "before", ec.unmarshalOString2ᚖstring)
+	if err != nil {
+		return nil, err
+	}
+	args["before"] = arg9
+	return args, nil
+}
+
 func (ec *executionContext) field_Query_myCredentialTags_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
 	var err error
 	args := map[string]any{}
@@ -6430,6 +7557,73 @@ func (ec *executionContext) field_Query_myCredentials_args(ctx context.Context, 
 		return nil, err
 	}
 	args["before"] = arg8
+	return args, nil
+}
+
+func (ec *executionContext) field_Query_myHashTags_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
+	var err error
+	args := map[string]any{}
+	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "operationIds", ec.unmarshalOID2ᚕstringᚄ)
+	if err != nil {
+		return nil, err
+	}
+	args["operationIds"] = arg0
+	return args, nil
+}
+
+func (ec *executionContext) field_Query_myHashes_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
+	var err error
+	args := map[string]any{}
+	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "operationIds", ec.unmarshalOID2ᚕstringᚄ)
+	if err != nil {
+		return nil, err
+	}
+	args["operationIds"] = arg0
+	arg1, err := graphql.ProcessArgField(ctx, rawArgs, "search", ec.unmarshalOString2ᚖstring)
+	if err != nil {
+		return nil, err
+	}
+	args["search"] = arg1
+	arg2, err := graphql.ProcessArgField(ctx, rawArgs, "statuses", ec.unmarshalOHashStatus2ᚕgithubᚗcomᚋvibeᚑc2ᚋvibeᚑc2ᚑcoreᚋcoreᚋpkgᚋmodelsᚐHashStatusᚄ)
+	if err != nil {
+		return nil, err
+	}
+	args["statuses"] = arg2
+	arg3, err := graphql.ProcessArgField(ctx, rawArgs, "hashTypes", ec.unmarshalOString2ᚕstringᚄ)
+	if err != nil {
+		return nil, err
+	}
+	args["hashTypes"] = arg3
+	arg4, err := graphql.ProcessArgField(ctx, rawArgs, "tags", ec.unmarshalOString2ᚕstringᚄ)
+	if err != nil {
+		return nil, err
+	}
+	args["tags"] = arg4
+	arg5, err := graphql.ProcessArgField(ctx, rawArgs, "hasCredential", ec.unmarshalOBoolean2ᚖbool)
+	if err != nil {
+		return nil, err
+	}
+	args["hasCredential"] = arg5
+	arg6, err := graphql.ProcessArgField(ctx, rawArgs, "first", ec.unmarshalOInt2ᚖint)
+	if err != nil {
+		return nil, err
+	}
+	args["first"] = arg6
+	arg7, err := graphql.ProcessArgField(ctx, rawArgs, "after", ec.unmarshalOString2ᚖstring)
+	if err != nil {
+		return nil, err
+	}
+	args["after"] = arg7
+	arg8, err := graphql.ProcessArgField(ctx, rawArgs, "last", ec.unmarshalOInt2ᚖint)
+	if err != nil {
+		return nil, err
+	}
+	args["last"] = arg8
+	arg9, err := graphql.ProcessArgField(ctx, rawArgs, "before", ec.unmarshalOString2ᚖstring)
+	if err != nil {
+		return nil, err
+	}
+	args["before"] = arg9
 	return args, nil
 }
 
@@ -7168,7 +8362,29 @@ func (ec *executionContext) field_Subscription_credentialChanged_args(ctx contex
 	return args, nil
 }
 
+func (ec *executionContext) field_Subscription_hashChanged_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
+	var err error
+	args := map[string]any{}
+	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "operationId", ec.unmarshalNID2string)
+	if err != nil {
+		return nil, err
+	}
+	args["operationId"] = arg0
+	return args, nil
+}
+
 func (ec *executionContext) field_Subscription_myCredentialChanged_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
+	var err error
+	args := map[string]any{}
+	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "operationIds", ec.unmarshalOID2ᚕstringᚄ)
+	if err != nil {
+		return nil, err
+	}
+	args["operationIds"] = arg0
+	return args, nil
+}
+
+func (ec *executionContext) field_Subscription_myHashChanged_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
 	var err error
 	args := map[string]any{}
 	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "operationIds", ec.unmarshalOID2ᚕstringᚄ)
@@ -7549,6 +8765,135 @@ func (ec *executionContext) fieldContext_APIKeyWithSecret_token(_ context.Contex
 		IsResolver: false,
 		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
 			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _BulkImportHashesResult_added(ctx context.Context, field graphql.CollectedField, obj *model.BulkImportHashesResult) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_BulkImportHashesResult_added,
+		func(ctx context.Context) (any, error) {
+			return obj.Added, nil
+		},
+		nil,
+		ec.marshalNInt2int,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_BulkImportHashesResult_added(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "BulkImportHashesResult",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Int does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _BulkImportHashesResult_skipped(ctx context.Context, field graphql.CollectedField, obj *model.BulkImportHashesResult) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_BulkImportHashesResult_skipped,
+		func(ctx context.Context) (any, error) {
+			return obj.Skipped, nil
+		},
+		nil,
+		ec.marshalNInt2int,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_BulkImportHashesResult_skipped(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "BulkImportHashesResult",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Int does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _BulkImportHashesResult_hashes(ctx context.Context, field graphql.CollectedField, obj *model.BulkImportHashesResult) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_BulkImportHashesResult_hashes,
+		func(ctx context.Context) (any, error) {
+			return obj.Hashes, nil
+		},
+		nil,
+		ec.marshalNHash2ᚕᚖgithubᚗcomᚋvibeᚑc2ᚋvibeᚑc2ᚑcoreᚋcoreᚋpkgᚋmodelsᚐHashᚄ,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_BulkImportHashesResult_hashes(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "BulkImportHashesResult",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "id":
+				return ec.fieldContext_Hash_id(ctx, field)
+			case "operationId":
+				return ec.fieldContext_Hash_operationId(ctx, field)
+			case "operation":
+				return ec.fieldContext_Hash_operation(ctx, field)
+			case "value":
+				return ec.fieldContext_Hash_value(ctx, field)
+			case "hashType":
+				return ec.fieldContext_Hash_hashType(ctx, field)
+			case "hashcatMode":
+				return ec.fieldContext_Hash_hashcatMode(ctx, field)
+			case "username":
+				return ec.fieldContext_Hash_username(ctx, field)
+			case "domain":
+				return ec.fieldContext_Hash_domain(ctx, field)
+			case "status":
+				return ec.fieldContext_Hash_status(ctx, field)
+			case "source":
+				return ec.fieldContext_Hash_source(ctx, field)
+			case "tags":
+				return ec.fieldContext_Hash_tags(ctx, field)
+			case "credentialId":
+				return ec.fieldContext_Hash_credentialId(ctx, field)
+			case "credential":
+				return ec.fieldContext_Hash_credential(ctx, field)
+			case "crackingMeta":
+				return ec.fieldContext_Hash_crackingMeta(ctx, field)
+			case "properties":
+				return ec.fieldContext_Hash_properties(ctx, field)
+			case "comments":
+				return ec.fieldContext_Hash_comments(ctx, field)
+			case "viewerCanModerateComments":
+				return ec.fieldContext_Hash_viewerCanModerateComments(ctx, field)
+			case "createdBy":
+				return ec.fieldContext_Hash_createdBy(ctx, field)
+			case "createdAt":
+				return ec.fieldContext_Hash_createdAt(ctx, field)
+			case "updatedAt":
+				return ec.fieldContext_Hash_updatedAt(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type Hash", field.Name)
 		},
 	}
 	return fc, nil
@@ -8176,6 +9521,77 @@ func (ec *executionContext) fieldContext_Credential_updatedAt(_ context.Context,
 	return fc, nil
 }
 
+func (ec *executionContext) _Credential_sourceHashes(ctx context.Context, field graphql.CollectedField, obj *models.Credential) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Credential_sourceHashes,
+		func(ctx context.Context) (any, error) {
+			return ec.Resolvers.Credential().SourceHashes(ctx, obj)
+		},
+		nil,
+		ec.marshalNHash2ᚕᚖgithubᚗcomᚋvibeᚑc2ᚋvibeᚑc2ᚑcoreᚋcoreᚋpkgᚋmodelsᚐHashᚄ,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_Credential_sourceHashes(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Credential",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "id":
+				return ec.fieldContext_Hash_id(ctx, field)
+			case "operationId":
+				return ec.fieldContext_Hash_operationId(ctx, field)
+			case "operation":
+				return ec.fieldContext_Hash_operation(ctx, field)
+			case "value":
+				return ec.fieldContext_Hash_value(ctx, field)
+			case "hashType":
+				return ec.fieldContext_Hash_hashType(ctx, field)
+			case "hashcatMode":
+				return ec.fieldContext_Hash_hashcatMode(ctx, field)
+			case "username":
+				return ec.fieldContext_Hash_username(ctx, field)
+			case "domain":
+				return ec.fieldContext_Hash_domain(ctx, field)
+			case "status":
+				return ec.fieldContext_Hash_status(ctx, field)
+			case "source":
+				return ec.fieldContext_Hash_source(ctx, field)
+			case "tags":
+				return ec.fieldContext_Hash_tags(ctx, field)
+			case "credentialId":
+				return ec.fieldContext_Hash_credentialId(ctx, field)
+			case "credential":
+				return ec.fieldContext_Hash_credential(ctx, field)
+			case "crackingMeta":
+				return ec.fieldContext_Hash_crackingMeta(ctx, field)
+			case "properties":
+				return ec.fieldContext_Hash_properties(ctx, field)
+			case "comments":
+				return ec.fieldContext_Hash_comments(ctx, field)
+			case "viewerCanModerateComments":
+				return ec.fieldContext_Hash_viewerCanModerateComments(ctx, field)
+			case "createdBy":
+				return ec.fieldContext_Hash_createdBy(ctx, field)
+			case "createdAt":
+				return ec.fieldContext_Hash_createdAt(ctx, field)
+			case "updatedAt":
+				return ec.fieldContext_Hash_updatedAt(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type Hash", field.Name)
+		},
+	}
+	return fc, nil
+}
+
 func (ec *executionContext) _Credential_taskBacklinks(ctx context.Context, field graphql.CollectedField, obj *models.Credential) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
@@ -8569,6 +9985,8 @@ func (ec *executionContext) fieldContext_CredentialEdge_node(_ context.Context, 
 				return ec.fieldContext_Credential_createdAt(ctx, field)
 			case "updatedAt":
 				return ec.fieldContext_Credential_updatedAt(ctx, field)
+			case "sourceHashes":
+				return ec.fieldContext_Credential_sourceHashes(ctx, field)
 			case "taskBacklinks":
 				return ec.fieldContext_Credential_taskBacklinks(ctx, field)
 			}
@@ -8754,6 +10172,8 @@ func (ec *executionContext) fieldContext_CredentialEvent_credential(_ context.Co
 				return ec.fieldContext_Credential_createdAt(ctx, field)
 			case "updatedAt":
 				return ec.fieldContext_Credential_updatedAt(ctx, field)
+			case "sourceHashes":
+				return ec.fieldContext_Credential_sourceHashes(ctx, field)
 			case "taskBacklinks":
 				return ec.fieldContext_Credential_taskBacklinks(ctx, field)
 			}
@@ -8874,6 +10294,1541 @@ func (ec *executionContext) fieldContext_CredentialProperty_value(_ context.Cont
 		IsResolver: false,
 		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
 			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Hash_id(ctx context.Context, field graphql.CollectedField, obj *models.Hash) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Hash_id,
+		func(ctx context.Context) (any, error) {
+			return ec.Resolvers.Hash().ID(ctx, obj)
+		},
+		nil,
+		ec.marshalNID2string,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_Hash_id(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Hash",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type ID does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Hash_operationId(ctx context.Context, field graphql.CollectedField, obj *models.Hash) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Hash_operationId,
+		func(ctx context.Context) (any, error) {
+			return ec.Resolvers.Hash().OperationID(ctx, obj)
+		},
+		nil,
+		ec.marshalNID2string,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_Hash_operationId(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Hash",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type ID does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Hash_operation(ctx context.Context, field graphql.CollectedField, obj *models.Hash) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Hash_operation,
+		func(ctx context.Context) (any, error) {
+			return ec.Resolvers.Hash().Operation(ctx, obj)
+		},
+		nil,
+		ec.marshalNOperation2ᚖgithubᚗcomᚋvibeᚑc2ᚋvibeᚑc2ᚑcoreᚋcoreᚋpkgᚋmodelsᚐOperation,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_Hash_operation(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Hash",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "id":
+				return ec.fieldContext_Operation_id(ctx, field)
+			case "name":
+				return ec.fieldContext_Operation_name(ctx, field)
+			case "description":
+				return ec.fieldContext_Operation_description(ctx, field)
+			case "members":
+				return ec.fieldContext_Operation_members(ctx, field)
+			case "createdAt":
+				return ec.fieldContext_Operation_createdAt(ctx, field)
+			case "updatedAt":
+				return ec.fieldContext_Operation_updatedAt(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type Operation", field.Name)
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Hash_value(ctx context.Context, field graphql.CollectedField, obj *models.Hash) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Hash_value,
+		func(ctx context.Context) (any, error) {
+			return obj.Value, nil
+		},
+		nil,
+		ec.marshalNString2string,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_Hash_value(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Hash",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Hash_hashType(ctx context.Context, field graphql.CollectedField, obj *models.Hash) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Hash_hashType,
+		func(ctx context.Context) (any, error) {
+			return obj.HashType, nil
+		},
+		nil,
+		ec.marshalNString2string,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_Hash_hashType(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Hash",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Hash_hashcatMode(ctx context.Context, field graphql.CollectedField, obj *models.Hash) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Hash_hashcatMode,
+		func(ctx context.Context) (any, error) {
+			return obj.HashcatMode, nil
+		},
+		nil,
+		ec.marshalNInt2int,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_Hash_hashcatMode(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Hash",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Int does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Hash_username(ctx context.Context, field graphql.CollectedField, obj *models.Hash) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Hash_username,
+		func(ctx context.Context) (any, error) {
+			return obj.Username, nil
+		},
+		nil,
+		ec.marshalNString2string,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_Hash_username(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Hash",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Hash_domain(ctx context.Context, field graphql.CollectedField, obj *models.Hash) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Hash_domain,
+		func(ctx context.Context) (any, error) {
+			return obj.Domain, nil
+		},
+		nil,
+		ec.marshalNString2string,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_Hash_domain(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Hash",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Hash_status(ctx context.Context, field graphql.CollectedField, obj *models.Hash) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Hash_status,
+		func(ctx context.Context) (any, error) {
+			return obj.Status, nil
+		},
+		nil,
+		ec.marshalNHashStatus2githubᚗcomᚋvibeᚑc2ᚋvibeᚑc2ᚑcoreᚋcoreᚋpkgᚋmodelsᚐHashStatus,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_Hash_status(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Hash",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type HashStatus does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Hash_source(ctx context.Context, field graphql.CollectedField, obj *models.Hash) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Hash_source,
+		func(ctx context.Context) (any, error) {
+			return obj.Source, nil
+		},
+		nil,
+		ec.marshalNString2string,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_Hash_source(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Hash",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Hash_tags(ctx context.Context, field graphql.CollectedField, obj *models.Hash) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Hash_tags,
+		func(ctx context.Context) (any, error) {
+			return obj.Tags, nil
+		},
+		nil,
+		ec.marshalNString2ᚕstringᚄ,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_Hash_tags(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Hash",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Hash_credentialId(ctx context.Context, field graphql.CollectedField, obj *models.Hash) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Hash_credentialId,
+		func(ctx context.Context) (any, error) {
+			return ec.Resolvers.Hash().CredentialID(ctx, obj)
+		},
+		nil,
+		ec.marshalOID2ᚖstring,
+		true,
+		false,
+	)
+}
+
+func (ec *executionContext) fieldContext_Hash_credentialId(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Hash",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type ID does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Hash_credential(ctx context.Context, field graphql.CollectedField, obj *models.Hash) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Hash_credential,
+		func(ctx context.Context) (any, error) {
+			return ec.Resolvers.Hash().Credential(ctx, obj)
+		},
+		nil,
+		ec.marshalOCredential2ᚖgithubᚗcomᚋvibeᚑc2ᚋvibeᚑc2ᚑcoreᚋcoreᚋpkgᚋmodelsᚐCredential,
+		true,
+		false,
+	)
+}
+
+func (ec *executionContext) fieldContext_Hash_credential(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Hash",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "id":
+				return ec.fieldContext_Credential_id(ctx, field)
+			case "operationId":
+				return ec.fieldContext_Credential_operationId(ctx, field)
+			case "operation":
+				return ec.fieldContext_Credential_operation(ctx, field)
+			case "name":
+				return ec.fieldContext_Credential_name(ctx, field)
+			case "type":
+				return ec.fieldContext_Credential_type(ctx, field)
+			case "username":
+				return ec.fieldContext_Credential_username(ctx, field)
+			case "password":
+				return ec.fieldContext_Credential_password(ctx, field)
+			case "keys":
+				return ec.fieldContext_Credential_keys(ctx, field)
+			case "properties":
+				return ec.fieldContext_Credential_properties(ctx, field)
+			case "isValid":
+				return ec.fieldContext_Credential_isValid(ctx, field)
+			case "tags":
+				return ec.fieldContext_Credential_tags(ctx, field)
+			case "comments":
+				return ec.fieldContext_Credential_comments(ctx, field)
+			case "viewerCanModerateComments":
+				return ec.fieldContext_Credential_viewerCanModerateComments(ctx, field)
+			case "createdBy":
+				return ec.fieldContext_Credential_createdBy(ctx, field)
+			case "backlinkCount":
+				return ec.fieldContext_Credential_backlinkCount(ctx, field)
+			case "backlinks":
+				return ec.fieldContext_Credential_backlinks(ctx, field)
+			case "createdAt":
+				return ec.fieldContext_Credential_createdAt(ctx, field)
+			case "updatedAt":
+				return ec.fieldContext_Credential_updatedAt(ctx, field)
+			case "sourceHashes":
+				return ec.fieldContext_Credential_sourceHashes(ctx, field)
+			case "taskBacklinks":
+				return ec.fieldContext_Credential_taskBacklinks(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type Credential", field.Name)
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Hash_crackingMeta(ctx context.Context, field graphql.CollectedField, obj *models.Hash) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Hash_crackingMeta,
+		func(ctx context.Context) (any, error) {
+			return ec.Resolvers.Hash().CrackingMeta(ctx, obj)
+		},
+		nil,
+		ec.marshalOHashCrackingMeta2ᚖgithubᚗcomᚋvibeᚑc2ᚋvibeᚑc2ᚑcoreᚋcoreᚋpkgᚋmodelsᚐHashCrackingMeta,
+		true,
+		false,
+	)
+}
+
+func (ec *executionContext) fieldContext_Hash_crackingMeta(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Hash",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "tool":
+				return ec.fieldContext_HashCrackingMeta_tool(ctx, field)
+			case "wordlist":
+				return ec.fieldContext_HashCrackingMeta_wordlist(ctx, field)
+			case "rules":
+				return ec.fieldContext_HashCrackingMeta_rules(ctx, field)
+			case "durationSec":
+				return ec.fieldContext_HashCrackingMeta_durationSec(ctx, field)
+			case "crackedBy":
+				return ec.fieldContext_HashCrackingMeta_crackedBy(ctx, field)
+			case "crackedAt":
+				return ec.fieldContext_HashCrackingMeta_crackedAt(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type HashCrackingMeta", field.Name)
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Hash_properties(ctx context.Context, field graphql.CollectedField, obj *models.Hash) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Hash_properties,
+		func(ctx context.Context) (any, error) {
+			return obj.Properties, nil
+		},
+		nil,
+		ec.marshalNHashProperty2ᚕgithubᚗcomᚋvibeᚑc2ᚋvibeᚑc2ᚑcoreᚋcoreᚋpkgᚋmodelsᚐHashPropertyᚄ,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_Hash_properties(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Hash",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "name":
+				return ec.fieldContext_HashProperty_name(ctx, field)
+			case "value":
+				return ec.fieldContext_HashProperty_value(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type HashProperty", field.Name)
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Hash_comments(ctx context.Context, field graphql.CollectedField, obj *models.Hash) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Hash_comments,
+		func(ctx context.Context) (any, error) {
+			return ec.Resolvers.Hash().Comments(ctx, obj)
+		},
+		nil,
+		ec.marshalNHashComment2ᚕᚖgithubᚗcomᚋvibeᚑc2ᚋvibeᚑc2ᚑcoreᚋcoreᚋpkgᚋmodelsᚐHashCommentᚄ,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_Hash_comments(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Hash",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "id":
+				return ec.fieldContext_HashComment_id(ctx, field)
+			case "author":
+				return ec.fieldContext_HashComment_author(ctx, field)
+			case "text":
+				return ec.fieldContext_HashComment_text(ctx, field)
+			case "createdAt":
+				return ec.fieldContext_HashComment_createdAt(ctx, field)
+			case "updatedAt":
+				return ec.fieldContext_HashComment_updatedAt(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type HashComment", field.Name)
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Hash_viewerCanModerateComments(ctx context.Context, field graphql.CollectedField, obj *models.Hash) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Hash_viewerCanModerateComments,
+		func(ctx context.Context) (any, error) {
+			return ec.Resolvers.Hash().ViewerCanModerateComments(ctx, obj)
+		},
+		nil,
+		ec.marshalNBoolean2bool,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_Hash_viewerCanModerateComments(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Hash",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Boolean does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Hash_createdBy(ctx context.Context, field graphql.CollectedField, obj *models.Hash) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Hash_createdBy,
+		func(ctx context.Context) (any, error) {
+			return ec.Resolvers.Hash().CreatedBy(ctx, obj)
+		},
+		nil,
+		ec.marshalOUser2ᚖgithubᚗcomᚋvibeᚑc2ᚋvibeᚑc2ᚑcoreᚋcoreᚋpkgᚋmodelsᚐUser,
+		true,
+		false,
+	)
+}
+
+func (ec *executionContext) fieldContext_Hash_createdBy(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Hash",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "id":
+				return ec.fieldContext_User_id(ctx, field)
+			case "username":
+				return ec.fieldContext_User_username(ctx, field)
+			case "roles":
+				return ec.fieldContext_User_roles(ctx, field)
+			case "active":
+				return ec.fieldContext_User_active(ctx, field)
+			case "createdAt":
+				return ec.fieldContext_User_createdAt(ctx, field)
+			case "updatedAt":
+				return ec.fieldContext_User_updatedAt(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type User", field.Name)
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Hash_createdAt(ctx context.Context, field graphql.CollectedField, obj *models.Hash) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Hash_createdAt,
+		func(ctx context.Context) (any, error) {
+			return ec.Resolvers.Hash().CreatedAt(ctx, obj)
+		},
+		nil,
+		ec.marshalNString2string,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_Hash_createdAt(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Hash",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Hash_updatedAt(ctx context.Context, field graphql.CollectedField, obj *models.Hash) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Hash_updatedAt,
+		func(ctx context.Context) (any, error) {
+			return ec.Resolvers.Hash().UpdatedAt(ctx, obj)
+		},
+		nil,
+		ec.marshalNString2string,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_Hash_updatedAt(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Hash",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _HashComment_id(ctx context.Context, field graphql.CollectedField, obj *models.HashComment) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_HashComment_id,
+		func(ctx context.Context) (any, error) {
+			return ec.Resolvers.HashComment().ID(ctx, obj)
+		},
+		nil,
+		ec.marshalNID2string,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_HashComment_id(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "HashComment",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type ID does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _HashComment_author(ctx context.Context, field graphql.CollectedField, obj *models.HashComment) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_HashComment_author,
+		func(ctx context.Context) (any, error) {
+			return ec.Resolvers.HashComment().Author(ctx, obj)
+		},
+		nil,
+		ec.marshalOUser2ᚖgithubᚗcomᚋvibeᚑc2ᚋvibeᚑc2ᚑcoreᚋcoreᚋpkgᚋmodelsᚐUser,
+		true,
+		false,
+	)
+}
+
+func (ec *executionContext) fieldContext_HashComment_author(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "HashComment",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "id":
+				return ec.fieldContext_User_id(ctx, field)
+			case "username":
+				return ec.fieldContext_User_username(ctx, field)
+			case "roles":
+				return ec.fieldContext_User_roles(ctx, field)
+			case "active":
+				return ec.fieldContext_User_active(ctx, field)
+			case "createdAt":
+				return ec.fieldContext_User_createdAt(ctx, field)
+			case "updatedAt":
+				return ec.fieldContext_User_updatedAt(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type User", field.Name)
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _HashComment_text(ctx context.Context, field graphql.CollectedField, obj *models.HashComment) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_HashComment_text,
+		func(ctx context.Context) (any, error) {
+			return obj.Text, nil
+		},
+		nil,
+		ec.marshalNString2string,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_HashComment_text(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "HashComment",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _HashComment_createdAt(ctx context.Context, field graphql.CollectedField, obj *models.HashComment) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_HashComment_createdAt,
+		func(ctx context.Context) (any, error) {
+			return ec.Resolvers.HashComment().CreatedAt(ctx, obj)
+		},
+		nil,
+		ec.marshalNString2string,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_HashComment_createdAt(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "HashComment",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _HashComment_updatedAt(ctx context.Context, field graphql.CollectedField, obj *models.HashComment) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_HashComment_updatedAt,
+		func(ctx context.Context) (any, error) {
+			return ec.Resolvers.HashComment().UpdatedAt(ctx, obj)
+		},
+		nil,
+		ec.marshalNString2string,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_HashComment_updatedAt(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "HashComment",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _HashConnection_edges(ctx context.Context, field graphql.CollectedField, obj *model.HashConnection) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_HashConnection_edges,
+		func(ctx context.Context) (any, error) {
+			return obj.Edges, nil
+		},
+		nil,
+		ec.marshalNHashEdge2ᚕᚖgithubᚗcomᚋvibeᚑc2ᚋvibeᚑc2ᚑcoreᚋcoreᚋpkgᚋgraphqlᚋmodelᚐHashEdgeᚄ,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_HashConnection_edges(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "HashConnection",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "node":
+				return ec.fieldContext_HashEdge_node(ctx, field)
+			case "cursor":
+				return ec.fieldContext_HashEdge_cursor(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type HashEdge", field.Name)
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _HashConnection_pageInfo(ctx context.Context, field graphql.CollectedField, obj *model.HashConnection) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_HashConnection_pageInfo,
+		func(ctx context.Context) (any, error) {
+			return obj.PageInfo, nil
+		},
+		nil,
+		ec.marshalNPageInfo2ᚖgithubᚗcomᚋvibeᚑc2ᚋvibeᚑc2ᚑcoreᚋcoreᚋpkgᚋpaginationᚐPageInfo,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_HashConnection_pageInfo(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "HashConnection",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "hasNextPage":
+				return ec.fieldContext_PageInfo_hasNextPage(ctx, field)
+			case "hasPreviousPage":
+				return ec.fieldContext_PageInfo_hasPreviousPage(ctx, field)
+			case "startCursor":
+				return ec.fieldContext_PageInfo_startCursor(ctx, field)
+			case "endCursor":
+				return ec.fieldContext_PageInfo_endCursor(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type PageInfo", field.Name)
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _HashConnection_totalCount(ctx context.Context, field graphql.CollectedField, obj *model.HashConnection) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_HashConnection_totalCount,
+		func(ctx context.Context) (any, error) {
+			return obj.TotalCount, nil
+		},
+		nil,
+		ec.marshalNInt2int,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_HashConnection_totalCount(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "HashConnection",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Int does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _HashCrackingMeta_tool(ctx context.Context, field graphql.CollectedField, obj *models.HashCrackingMeta) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_HashCrackingMeta_tool,
+		func(ctx context.Context) (any, error) {
+			return obj.Tool, nil
+		},
+		nil,
+		ec.marshalNString2string,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_HashCrackingMeta_tool(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "HashCrackingMeta",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _HashCrackingMeta_wordlist(ctx context.Context, field graphql.CollectedField, obj *models.HashCrackingMeta) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_HashCrackingMeta_wordlist,
+		func(ctx context.Context) (any, error) {
+			return obj.Wordlist, nil
+		},
+		nil,
+		ec.marshalNString2string,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_HashCrackingMeta_wordlist(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "HashCrackingMeta",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _HashCrackingMeta_rules(ctx context.Context, field graphql.CollectedField, obj *models.HashCrackingMeta) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_HashCrackingMeta_rules,
+		func(ctx context.Context) (any, error) {
+			return obj.Rules, nil
+		},
+		nil,
+		ec.marshalNString2string,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_HashCrackingMeta_rules(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "HashCrackingMeta",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _HashCrackingMeta_durationSec(ctx context.Context, field graphql.CollectedField, obj *models.HashCrackingMeta) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_HashCrackingMeta_durationSec,
+		func(ctx context.Context) (any, error) {
+			return ec.Resolvers.HashCrackingMeta().DurationSec(ctx, obj)
+		},
+		nil,
+		ec.marshalNInt2int,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_HashCrackingMeta_durationSec(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "HashCrackingMeta",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Int does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _HashCrackingMeta_crackedBy(ctx context.Context, field graphql.CollectedField, obj *models.HashCrackingMeta) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_HashCrackingMeta_crackedBy,
+		func(ctx context.Context) (any, error) {
+			return ec.Resolvers.HashCrackingMeta().CrackedBy(ctx, obj)
+		},
+		nil,
+		ec.marshalOUser2ᚖgithubᚗcomᚋvibeᚑc2ᚋvibeᚑc2ᚑcoreᚋcoreᚋpkgᚋmodelsᚐUser,
+		true,
+		false,
+	)
+}
+
+func (ec *executionContext) fieldContext_HashCrackingMeta_crackedBy(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "HashCrackingMeta",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "id":
+				return ec.fieldContext_User_id(ctx, field)
+			case "username":
+				return ec.fieldContext_User_username(ctx, field)
+			case "roles":
+				return ec.fieldContext_User_roles(ctx, field)
+			case "active":
+				return ec.fieldContext_User_active(ctx, field)
+			case "createdAt":
+				return ec.fieldContext_User_createdAt(ctx, field)
+			case "updatedAt":
+				return ec.fieldContext_User_updatedAt(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type User", field.Name)
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _HashCrackingMeta_crackedAt(ctx context.Context, field graphql.CollectedField, obj *models.HashCrackingMeta) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_HashCrackingMeta_crackedAt,
+		func(ctx context.Context) (any, error) {
+			return ec.Resolvers.HashCrackingMeta().CrackedAt(ctx, obj)
+		},
+		nil,
+		ec.marshalNString2string,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_HashCrackingMeta_crackedAt(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "HashCrackingMeta",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _HashEdge_node(ctx context.Context, field graphql.CollectedField, obj *model.HashEdge) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_HashEdge_node,
+		func(ctx context.Context) (any, error) {
+			return obj.Node, nil
+		},
+		nil,
+		ec.marshalNHash2ᚖgithubᚗcomᚋvibeᚑc2ᚋvibeᚑc2ᚑcoreᚋcoreᚋpkgᚋmodelsᚐHash,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_HashEdge_node(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "HashEdge",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "id":
+				return ec.fieldContext_Hash_id(ctx, field)
+			case "operationId":
+				return ec.fieldContext_Hash_operationId(ctx, field)
+			case "operation":
+				return ec.fieldContext_Hash_operation(ctx, field)
+			case "value":
+				return ec.fieldContext_Hash_value(ctx, field)
+			case "hashType":
+				return ec.fieldContext_Hash_hashType(ctx, field)
+			case "hashcatMode":
+				return ec.fieldContext_Hash_hashcatMode(ctx, field)
+			case "username":
+				return ec.fieldContext_Hash_username(ctx, field)
+			case "domain":
+				return ec.fieldContext_Hash_domain(ctx, field)
+			case "status":
+				return ec.fieldContext_Hash_status(ctx, field)
+			case "source":
+				return ec.fieldContext_Hash_source(ctx, field)
+			case "tags":
+				return ec.fieldContext_Hash_tags(ctx, field)
+			case "credentialId":
+				return ec.fieldContext_Hash_credentialId(ctx, field)
+			case "credential":
+				return ec.fieldContext_Hash_credential(ctx, field)
+			case "crackingMeta":
+				return ec.fieldContext_Hash_crackingMeta(ctx, field)
+			case "properties":
+				return ec.fieldContext_Hash_properties(ctx, field)
+			case "comments":
+				return ec.fieldContext_Hash_comments(ctx, field)
+			case "viewerCanModerateComments":
+				return ec.fieldContext_Hash_viewerCanModerateComments(ctx, field)
+			case "createdBy":
+				return ec.fieldContext_Hash_createdBy(ctx, field)
+			case "createdAt":
+				return ec.fieldContext_Hash_createdAt(ctx, field)
+			case "updatedAt":
+				return ec.fieldContext_Hash_updatedAt(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type Hash", field.Name)
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _HashEdge_cursor(ctx context.Context, field graphql.CollectedField, obj *model.HashEdge) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_HashEdge_cursor,
+		func(ctx context.Context) (any, error) {
+			return obj.Cursor, nil
+		},
+		nil,
+		ec.marshalNString2string,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_HashEdge_cursor(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "HashEdge",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _HashEvent_action(ctx context.Context, field graphql.CollectedField, obj *model.HashEvent) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_HashEvent_action,
+		func(ctx context.Context) (any, error) {
+			return obj.Action, nil
+		},
+		nil,
+		ec.marshalNEventAction2githubᚗcomᚋvibeᚑc2ᚋvibeᚑc2ᚑcoreᚋcoreᚋpkgᚋgraphqlᚋmodelᚐEventAction,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_HashEvent_action(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "HashEvent",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type EventAction does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _HashEvent_hashId(ctx context.Context, field graphql.CollectedField, obj *model.HashEvent) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_HashEvent_hashId,
+		func(ctx context.Context) (any, error) {
+			return obj.HashID, nil
+		},
+		nil,
+		ec.marshalNID2string,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_HashEvent_hashId(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "HashEvent",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type ID does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _HashEvent_operationId(ctx context.Context, field graphql.CollectedField, obj *model.HashEvent) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_HashEvent_operationId,
+		func(ctx context.Context) (any, error) {
+			return obj.OperationID, nil
+		},
+		nil,
+		ec.marshalNID2string,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_HashEvent_operationId(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "HashEvent",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type ID does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _HashEvent_hash(ctx context.Context, field graphql.CollectedField, obj *model.HashEvent) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_HashEvent_hash,
+		func(ctx context.Context) (any, error) {
+			return obj.Hash, nil
+		},
+		nil,
+		ec.marshalOHash2ᚖgithubᚗcomᚋvibeᚑc2ᚋvibeᚑc2ᚑcoreᚋcoreᚋpkgᚋmodelsᚐHash,
+		true,
+		false,
+	)
+}
+
+func (ec *executionContext) fieldContext_HashEvent_hash(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "HashEvent",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "id":
+				return ec.fieldContext_Hash_id(ctx, field)
+			case "operationId":
+				return ec.fieldContext_Hash_operationId(ctx, field)
+			case "operation":
+				return ec.fieldContext_Hash_operation(ctx, field)
+			case "value":
+				return ec.fieldContext_Hash_value(ctx, field)
+			case "hashType":
+				return ec.fieldContext_Hash_hashType(ctx, field)
+			case "hashcatMode":
+				return ec.fieldContext_Hash_hashcatMode(ctx, field)
+			case "username":
+				return ec.fieldContext_Hash_username(ctx, field)
+			case "domain":
+				return ec.fieldContext_Hash_domain(ctx, field)
+			case "status":
+				return ec.fieldContext_Hash_status(ctx, field)
+			case "source":
+				return ec.fieldContext_Hash_source(ctx, field)
+			case "tags":
+				return ec.fieldContext_Hash_tags(ctx, field)
+			case "credentialId":
+				return ec.fieldContext_Hash_credentialId(ctx, field)
+			case "credential":
+				return ec.fieldContext_Hash_credential(ctx, field)
+			case "crackingMeta":
+				return ec.fieldContext_Hash_crackingMeta(ctx, field)
+			case "properties":
+				return ec.fieldContext_Hash_properties(ctx, field)
+			case "comments":
+				return ec.fieldContext_Hash_comments(ctx, field)
+			case "viewerCanModerateComments":
+				return ec.fieldContext_Hash_viewerCanModerateComments(ctx, field)
+			case "createdBy":
+				return ec.fieldContext_Hash_createdBy(ctx, field)
+			case "createdAt":
+				return ec.fieldContext_Hash_createdAt(ctx, field)
+			case "updatedAt":
+				return ec.fieldContext_Hash_updatedAt(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type Hash", field.Name)
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _HashProperty_name(ctx context.Context, field graphql.CollectedField, obj *models.HashProperty) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_HashProperty_name,
+		func(ctx context.Context) (any, error) {
+			return obj.Name, nil
+		},
+		nil,
+		ec.marshalNString2string,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_HashProperty_name(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "HashProperty",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _HashProperty_value(ctx context.Context, field graphql.CollectedField, obj *models.HashProperty) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_HashProperty_value,
+		func(ctx context.Context) (any, error) {
+			return obj.Value, nil
+		},
+		nil,
+		ec.marshalNString2string,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_HashProperty_value(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "HashProperty",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _HashTypeSpec_name(ctx context.Context, field graphql.CollectedField, obj *models.HashTypeSpec) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_HashTypeSpec_name,
+		func(ctx context.Context) (any, error) {
+			return obj.Name, nil
+		},
+		nil,
+		ec.marshalNString2string,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_HashTypeSpec_name(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "HashTypeSpec",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _HashTypeSpec_displayName(ctx context.Context, field graphql.CollectedField, obj *models.HashTypeSpec) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_HashTypeSpec_displayName,
+		func(ctx context.Context) (any, error) {
+			return obj.DisplayName, nil
+		},
+		nil,
+		ec.marshalNString2string,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_HashTypeSpec_displayName(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "HashTypeSpec",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _HashTypeSpec_hashcatMode(ctx context.Context, field graphql.CollectedField, obj *models.HashTypeSpec) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_HashTypeSpec_hashcatMode,
+		func(ctx context.Context) (any, error) {
+			return obj.HashcatMode, nil
+		},
+		nil,
+		ec.marshalNInt2int,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_HashTypeSpec_hashcatMode(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "HashTypeSpec",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Int does not have child fields")
 		},
 	}
 	return fc, nil
@@ -10330,6 +13285,8 @@ func (ec *executionContext) fieldContext_Mutation_createCredential(ctx context.C
 				return ec.fieldContext_Credential_createdAt(ctx, field)
 			case "updatedAt":
 				return ec.fieldContext_Credential_updatedAt(ctx, field)
+			case "sourceHashes":
+				return ec.fieldContext_Credential_sourceHashes(ctx, field)
 			case "taskBacklinks":
 				return ec.fieldContext_Credential_taskBacklinks(ctx, field)
 			}
@@ -10429,6 +13386,8 @@ func (ec *executionContext) fieldContext_Mutation_updateCredential(ctx context.C
 				return ec.fieldContext_Credential_createdAt(ctx, field)
 			case "updatedAt":
 				return ec.fieldContext_Credential_updatedAt(ctx, field)
+			case "sourceHashes":
+				return ec.fieldContext_Credential_sourceHashes(ctx, field)
 			case "taskBacklinks":
 				return ec.fieldContext_Credential_taskBacklinks(ctx, field)
 			}
@@ -10587,6 +13546,8 @@ func (ec *executionContext) fieldContext_Mutation_addCredentialComment(ctx conte
 				return ec.fieldContext_Credential_createdAt(ctx, field)
 			case "updatedAt":
 				return ec.fieldContext_Credential_updatedAt(ctx, field)
+			case "sourceHashes":
+				return ec.fieldContext_Credential_sourceHashes(ctx, field)
 			case "taskBacklinks":
 				return ec.fieldContext_Credential_taskBacklinks(ctx, field)
 			}
@@ -10686,6 +13647,8 @@ func (ec *executionContext) fieldContext_Mutation_updateCredentialComment(ctx co
 				return ec.fieldContext_Credential_createdAt(ctx, field)
 			case "updatedAt":
 				return ec.fieldContext_Credential_updatedAt(ctx, field)
+			case "sourceHashes":
+				return ec.fieldContext_Credential_sourceHashes(ctx, field)
 			case "taskBacklinks":
 				return ec.fieldContext_Credential_taskBacklinks(ctx, field)
 			}
@@ -10785,6 +13748,8 @@ func (ec *executionContext) fieldContext_Mutation_deleteCredentialComment(ctx co
 				return ec.fieldContext_Credential_createdAt(ctx, field)
 			case "updatedAt":
 				return ec.fieldContext_Credential_updatedAt(ctx, field)
+			case "sourceHashes":
+				return ec.fieldContext_Credential_sourceHashes(ctx, field)
 			case "taskBacklinks":
 				return ec.fieldContext_Credential_taskBacklinks(ctx, field)
 			}
@@ -10799,6 +13764,738 @@ func (ec *executionContext) fieldContext_Mutation_deleteCredentialComment(ctx co
 	}()
 	ctx = graphql.WithFieldContext(ctx, fc)
 	if fc.Args, err = ec.field_Mutation_deleteCredentialComment_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
+		ec.Error(ctx, err)
+		return fc, err
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Mutation_createHash(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Mutation_createHash,
+		func(ctx context.Context) (any, error) {
+			fc := graphql.GetFieldContext(ctx)
+			return ec.Resolvers.Mutation().CreateHash(ctx, fc.Args["operationId"].(string), fc.Args["input"].(model.CreateHashInput))
+		},
+		func(ctx context.Context, next graphql.Resolver) graphql.Resolver {
+			directive0 := next
+
+			directive1 := func(ctx context.Context) (any, error) {
+				permission, err := ec.unmarshalNString2string(ctx, "operation:member")
+				if err != nil {
+					var zeroVal *models.Hash
+					return zeroVal, err
+				}
+				if ec.Directives.HasPermission == nil {
+					var zeroVal *models.Hash
+					return zeroVal, errors.New("directive hasPermission is not implemented")
+				}
+				return ec.Directives.HasPermission(ctx, nil, directive0, permission)
+			}
+
+			next = directive1
+			return next
+		},
+		ec.marshalNHash2ᚖgithubᚗcomᚋvibeᚑc2ᚋvibeᚑc2ᚑcoreᚋcoreᚋpkgᚋmodelsᚐHash,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_Mutation_createHash(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Mutation",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "id":
+				return ec.fieldContext_Hash_id(ctx, field)
+			case "operationId":
+				return ec.fieldContext_Hash_operationId(ctx, field)
+			case "operation":
+				return ec.fieldContext_Hash_operation(ctx, field)
+			case "value":
+				return ec.fieldContext_Hash_value(ctx, field)
+			case "hashType":
+				return ec.fieldContext_Hash_hashType(ctx, field)
+			case "hashcatMode":
+				return ec.fieldContext_Hash_hashcatMode(ctx, field)
+			case "username":
+				return ec.fieldContext_Hash_username(ctx, field)
+			case "domain":
+				return ec.fieldContext_Hash_domain(ctx, field)
+			case "status":
+				return ec.fieldContext_Hash_status(ctx, field)
+			case "source":
+				return ec.fieldContext_Hash_source(ctx, field)
+			case "tags":
+				return ec.fieldContext_Hash_tags(ctx, field)
+			case "credentialId":
+				return ec.fieldContext_Hash_credentialId(ctx, field)
+			case "credential":
+				return ec.fieldContext_Hash_credential(ctx, field)
+			case "crackingMeta":
+				return ec.fieldContext_Hash_crackingMeta(ctx, field)
+			case "properties":
+				return ec.fieldContext_Hash_properties(ctx, field)
+			case "comments":
+				return ec.fieldContext_Hash_comments(ctx, field)
+			case "viewerCanModerateComments":
+				return ec.fieldContext_Hash_viewerCanModerateComments(ctx, field)
+			case "createdBy":
+				return ec.fieldContext_Hash_createdBy(ctx, field)
+			case "createdAt":
+				return ec.fieldContext_Hash_createdAt(ctx, field)
+			case "updatedAt":
+				return ec.fieldContext_Hash_updatedAt(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type Hash", field.Name)
+		},
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			err = ec.Recover(ctx, r)
+			ec.Error(ctx, err)
+		}
+	}()
+	ctx = graphql.WithFieldContext(ctx, fc)
+	if fc.Args, err = ec.field_Mutation_createHash_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
+		ec.Error(ctx, err)
+		return fc, err
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Mutation_updateHash(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Mutation_updateHash,
+		func(ctx context.Context) (any, error) {
+			fc := graphql.GetFieldContext(ctx)
+			return ec.Resolvers.Mutation().UpdateHash(ctx, fc.Args["id"].(string), fc.Args["input"].(model.UpdateHashInput))
+		},
+		func(ctx context.Context, next graphql.Resolver) graphql.Resolver {
+			directive0 := next
+
+			directive1 := func(ctx context.Context) (any, error) {
+				permission, err := ec.unmarshalNString2string(ctx, "operation:member")
+				if err != nil {
+					var zeroVal *models.Hash
+					return zeroVal, err
+				}
+				if ec.Directives.HasPermission == nil {
+					var zeroVal *models.Hash
+					return zeroVal, errors.New("directive hasPermission is not implemented")
+				}
+				return ec.Directives.HasPermission(ctx, nil, directive0, permission)
+			}
+
+			next = directive1
+			return next
+		},
+		ec.marshalNHash2ᚖgithubᚗcomᚋvibeᚑc2ᚋvibeᚑc2ᚑcoreᚋcoreᚋpkgᚋmodelsᚐHash,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_Mutation_updateHash(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Mutation",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "id":
+				return ec.fieldContext_Hash_id(ctx, field)
+			case "operationId":
+				return ec.fieldContext_Hash_operationId(ctx, field)
+			case "operation":
+				return ec.fieldContext_Hash_operation(ctx, field)
+			case "value":
+				return ec.fieldContext_Hash_value(ctx, field)
+			case "hashType":
+				return ec.fieldContext_Hash_hashType(ctx, field)
+			case "hashcatMode":
+				return ec.fieldContext_Hash_hashcatMode(ctx, field)
+			case "username":
+				return ec.fieldContext_Hash_username(ctx, field)
+			case "domain":
+				return ec.fieldContext_Hash_domain(ctx, field)
+			case "status":
+				return ec.fieldContext_Hash_status(ctx, field)
+			case "source":
+				return ec.fieldContext_Hash_source(ctx, field)
+			case "tags":
+				return ec.fieldContext_Hash_tags(ctx, field)
+			case "credentialId":
+				return ec.fieldContext_Hash_credentialId(ctx, field)
+			case "credential":
+				return ec.fieldContext_Hash_credential(ctx, field)
+			case "crackingMeta":
+				return ec.fieldContext_Hash_crackingMeta(ctx, field)
+			case "properties":
+				return ec.fieldContext_Hash_properties(ctx, field)
+			case "comments":
+				return ec.fieldContext_Hash_comments(ctx, field)
+			case "viewerCanModerateComments":
+				return ec.fieldContext_Hash_viewerCanModerateComments(ctx, field)
+			case "createdBy":
+				return ec.fieldContext_Hash_createdBy(ctx, field)
+			case "createdAt":
+				return ec.fieldContext_Hash_createdAt(ctx, field)
+			case "updatedAt":
+				return ec.fieldContext_Hash_updatedAt(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type Hash", field.Name)
+		},
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			err = ec.Recover(ctx, r)
+			ec.Error(ctx, err)
+		}
+	}()
+	ctx = graphql.WithFieldContext(ctx, fc)
+	if fc.Args, err = ec.field_Mutation_updateHash_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
+		ec.Error(ctx, err)
+		return fc, err
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Mutation_deleteHash(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Mutation_deleteHash,
+		func(ctx context.Context) (any, error) {
+			fc := graphql.GetFieldContext(ctx)
+			return ec.Resolvers.Mutation().DeleteHash(ctx, fc.Args["id"].(string))
+		},
+		func(ctx context.Context, next graphql.Resolver) graphql.Resolver {
+			directive0 := next
+
+			directive1 := func(ctx context.Context) (any, error) {
+				permission, err := ec.unmarshalNString2string(ctx, "operation:member")
+				if err != nil {
+					var zeroVal bool
+					return zeroVal, err
+				}
+				if ec.Directives.HasPermission == nil {
+					var zeroVal bool
+					return zeroVal, errors.New("directive hasPermission is not implemented")
+				}
+				return ec.Directives.HasPermission(ctx, nil, directive0, permission)
+			}
+
+			next = directive1
+			return next
+		},
+		ec.marshalNBoolean2bool,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_Mutation_deleteHash(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Mutation",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Boolean does not have child fields")
+		},
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			err = ec.Recover(ctx, r)
+			ec.Error(ctx, err)
+		}
+	}()
+	ctx = graphql.WithFieldContext(ctx, fc)
+	if fc.Args, err = ec.field_Mutation_deleteHash_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
+		ec.Error(ctx, err)
+		return fc, err
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Mutation_bulkImportHashes(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Mutation_bulkImportHashes,
+		func(ctx context.Context) (any, error) {
+			fc := graphql.GetFieldContext(ctx)
+			return ec.Resolvers.Mutation().BulkImportHashes(ctx, fc.Args["operationId"].(string), fc.Args["input"].(model.BulkImportHashesInput))
+		},
+		func(ctx context.Context, next graphql.Resolver) graphql.Resolver {
+			directive0 := next
+
+			directive1 := func(ctx context.Context) (any, error) {
+				permission, err := ec.unmarshalNString2string(ctx, "operation:member")
+				if err != nil {
+					var zeroVal *model.BulkImportHashesResult
+					return zeroVal, err
+				}
+				if ec.Directives.HasPermission == nil {
+					var zeroVal *model.BulkImportHashesResult
+					return zeroVal, errors.New("directive hasPermission is not implemented")
+				}
+				return ec.Directives.HasPermission(ctx, nil, directive0, permission)
+			}
+
+			next = directive1
+			return next
+		},
+		ec.marshalNBulkImportHashesResult2ᚖgithubᚗcomᚋvibeᚑc2ᚋvibeᚑc2ᚑcoreᚋcoreᚋpkgᚋgraphqlᚋmodelᚐBulkImportHashesResult,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_Mutation_bulkImportHashes(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Mutation",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "added":
+				return ec.fieldContext_BulkImportHashesResult_added(ctx, field)
+			case "skipped":
+				return ec.fieldContext_BulkImportHashesResult_skipped(ctx, field)
+			case "hashes":
+				return ec.fieldContext_BulkImportHashesResult_hashes(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type BulkImportHashesResult", field.Name)
+		},
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			err = ec.Recover(ctx, r)
+			ec.Error(ctx, err)
+		}
+	}()
+	ctx = graphql.WithFieldContext(ctx, fc)
+	if fc.Args, err = ec.field_Mutation_bulkImportHashes_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
+		ec.Error(ctx, err)
+		return fc, err
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Mutation_markHashCracked(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Mutation_markHashCracked,
+		func(ctx context.Context) (any, error) {
+			fc := graphql.GetFieldContext(ctx)
+			return ec.Resolvers.Mutation().MarkHashCracked(ctx, fc.Args["id"].(string), fc.Args["input"].(model.MarkHashCrackedInput))
+		},
+		func(ctx context.Context, next graphql.Resolver) graphql.Resolver {
+			directive0 := next
+
+			directive1 := func(ctx context.Context) (any, error) {
+				permission, err := ec.unmarshalNString2string(ctx, "operation:member")
+				if err != nil {
+					var zeroVal *models.Hash
+					return zeroVal, err
+				}
+				if ec.Directives.HasPermission == nil {
+					var zeroVal *models.Hash
+					return zeroVal, errors.New("directive hasPermission is not implemented")
+				}
+				return ec.Directives.HasPermission(ctx, nil, directive0, permission)
+			}
+
+			next = directive1
+			return next
+		},
+		ec.marshalNHash2ᚖgithubᚗcomᚋvibeᚑc2ᚋvibeᚑc2ᚑcoreᚋcoreᚋpkgᚋmodelsᚐHash,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_Mutation_markHashCracked(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Mutation",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "id":
+				return ec.fieldContext_Hash_id(ctx, field)
+			case "operationId":
+				return ec.fieldContext_Hash_operationId(ctx, field)
+			case "operation":
+				return ec.fieldContext_Hash_operation(ctx, field)
+			case "value":
+				return ec.fieldContext_Hash_value(ctx, field)
+			case "hashType":
+				return ec.fieldContext_Hash_hashType(ctx, field)
+			case "hashcatMode":
+				return ec.fieldContext_Hash_hashcatMode(ctx, field)
+			case "username":
+				return ec.fieldContext_Hash_username(ctx, field)
+			case "domain":
+				return ec.fieldContext_Hash_domain(ctx, field)
+			case "status":
+				return ec.fieldContext_Hash_status(ctx, field)
+			case "source":
+				return ec.fieldContext_Hash_source(ctx, field)
+			case "tags":
+				return ec.fieldContext_Hash_tags(ctx, field)
+			case "credentialId":
+				return ec.fieldContext_Hash_credentialId(ctx, field)
+			case "credential":
+				return ec.fieldContext_Hash_credential(ctx, field)
+			case "crackingMeta":
+				return ec.fieldContext_Hash_crackingMeta(ctx, field)
+			case "properties":
+				return ec.fieldContext_Hash_properties(ctx, field)
+			case "comments":
+				return ec.fieldContext_Hash_comments(ctx, field)
+			case "viewerCanModerateComments":
+				return ec.fieldContext_Hash_viewerCanModerateComments(ctx, field)
+			case "createdBy":
+				return ec.fieldContext_Hash_createdBy(ctx, field)
+			case "createdAt":
+				return ec.fieldContext_Hash_createdAt(ctx, field)
+			case "updatedAt":
+				return ec.fieldContext_Hash_updatedAt(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type Hash", field.Name)
+		},
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			err = ec.Recover(ctx, r)
+			ec.Error(ctx, err)
+		}
+	}()
+	ctx = graphql.WithFieldContext(ctx, fc)
+	if fc.Args, err = ec.field_Mutation_markHashCracked_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
+		ec.Error(ctx, err)
+		return fc, err
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Mutation_addHashComment(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Mutation_addHashComment,
+		func(ctx context.Context) (any, error) {
+			fc := graphql.GetFieldContext(ctx)
+			return ec.Resolvers.Mutation().AddHashComment(ctx, fc.Args["hashId"].(string), fc.Args["text"].(string))
+		},
+		func(ctx context.Context, next graphql.Resolver) graphql.Resolver {
+			directive0 := next
+
+			directive1 := func(ctx context.Context) (any, error) {
+				permission, err := ec.unmarshalNString2string(ctx, "operation:member")
+				if err != nil {
+					var zeroVal *models.Hash
+					return zeroVal, err
+				}
+				if ec.Directives.HasPermission == nil {
+					var zeroVal *models.Hash
+					return zeroVal, errors.New("directive hasPermission is not implemented")
+				}
+				return ec.Directives.HasPermission(ctx, nil, directive0, permission)
+			}
+
+			next = directive1
+			return next
+		},
+		ec.marshalNHash2ᚖgithubᚗcomᚋvibeᚑc2ᚋvibeᚑc2ᚑcoreᚋcoreᚋpkgᚋmodelsᚐHash,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_Mutation_addHashComment(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Mutation",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "id":
+				return ec.fieldContext_Hash_id(ctx, field)
+			case "operationId":
+				return ec.fieldContext_Hash_operationId(ctx, field)
+			case "operation":
+				return ec.fieldContext_Hash_operation(ctx, field)
+			case "value":
+				return ec.fieldContext_Hash_value(ctx, field)
+			case "hashType":
+				return ec.fieldContext_Hash_hashType(ctx, field)
+			case "hashcatMode":
+				return ec.fieldContext_Hash_hashcatMode(ctx, field)
+			case "username":
+				return ec.fieldContext_Hash_username(ctx, field)
+			case "domain":
+				return ec.fieldContext_Hash_domain(ctx, field)
+			case "status":
+				return ec.fieldContext_Hash_status(ctx, field)
+			case "source":
+				return ec.fieldContext_Hash_source(ctx, field)
+			case "tags":
+				return ec.fieldContext_Hash_tags(ctx, field)
+			case "credentialId":
+				return ec.fieldContext_Hash_credentialId(ctx, field)
+			case "credential":
+				return ec.fieldContext_Hash_credential(ctx, field)
+			case "crackingMeta":
+				return ec.fieldContext_Hash_crackingMeta(ctx, field)
+			case "properties":
+				return ec.fieldContext_Hash_properties(ctx, field)
+			case "comments":
+				return ec.fieldContext_Hash_comments(ctx, field)
+			case "viewerCanModerateComments":
+				return ec.fieldContext_Hash_viewerCanModerateComments(ctx, field)
+			case "createdBy":
+				return ec.fieldContext_Hash_createdBy(ctx, field)
+			case "createdAt":
+				return ec.fieldContext_Hash_createdAt(ctx, field)
+			case "updatedAt":
+				return ec.fieldContext_Hash_updatedAt(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type Hash", field.Name)
+		},
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			err = ec.Recover(ctx, r)
+			ec.Error(ctx, err)
+		}
+	}()
+	ctx = graphql.WithFieldContext(ctx, fc)
+	if fc.Args, err = ec.field_Mutation_addHashComment_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
+		ec.Error(ctx, err)
+		return fc, err
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Mutation_updateHashComment(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Mutation_updateHashComment,
+		func(ctx context.Context) (any, error) {
+			fc := graphql.GetFieldContext(ctx)
+			return ec.Resolvers.Mutation().UpdateHashComment(ctx, fc.Args["hashId"].(string), fc.Args["commentId"].(string), fc.Args["text"].(string))
+		},
+		func(ctx context.Context, next graphql.Resolver) graphql.Resolver {
+			directive0 := next
+
+			directive1 := func(ctx context.Context) (any, error) {
+				permission, err := ec.unmarshalNString2string(ctx, "operation:member")
+				if err != nil {
+					var zeroVal *models.Hash
+					return zeroVal, err
+				}
+				if ec.Directives.HasPermission == nil {
+					var zeroVal *models.Hash
+					return zeroVal, errors.New("directive hasPermission is not implemented")
+				}
+				return ec.Directives.HasPermission(ctx, nil, directive0, permission)
+			}
+
+			next = directive1
+			return next
+		},
+		ec.marshalNHash2ᚖgithubᚗcomᚋvibeᚑc2ᚋvibeᚑc2ᚑcoreᚋcoreᚋpkgᚋmodelsᚐHash,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_Mutation_updateHashComment(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Mutation",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "id":
+				return ec.fieldContext_Hash_id(ctx, field)
+			case "operationId":
+				return ec.fieldContext_Hash_operationId(ctx, field)
+			case "operation":
+				return ec.fieldContext_Hash_operation(ctx, field)
+			case "value":
+				return ec.fieldContext_Hash_value(ctx, field)
+			case "hashType":
+				return ec.fieldContext_Hash_hashType(ctx, field)
+			case "hashcatMode":
+				return ec.fieldContext_Hash_hashcatMode(ctx, field)
+			case "username":
+				return ec.fieldContext_Hash_username(ctx, field)
+			case "domain":
+				return ec.fieldContext_Hash_domain(ctx, field)
+			case "status":
+				return ec.fieldContext_Hash_status(ctx, field)
+			case "source":
+				return ec.fieldContext_Hash_source(ctx, field)
+			case "tags":
+				return ec.fieldContext_Hash_tags(ctx, field)
+			case "credentialId":
+				return ec.fieldContext_Hash_credentialId(ctx, field)
+			case "credential":
+				return ec.fieldContext_Hash_credential(ctx, field)
+			case "crackingMeta":
+				return ec.fieldContext_Hash_crackingMeta(ctx, field)
+			case "properties":
+				return ec.fieldContext_Hash_properties(ctx, field)
+			case "comments":
+				return ec.fieldContext_Hash_comments(ctx, field)
+			case "viewerCanModerateComments":
+				return ec.fieldContext_Hash_viewerCanModerateComments(ctx, field)
+			case "createdBy":
+				return ec.fieldContext_Hash_createdBy(ctx, field)
+			case "createdAt":
+				return ec.fieldContext_Hash_createdAt(ctx, field)
+			case "updatedAt":
+				return ec.fieldContext_Hash_updatedAt(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type Hash", field.Name)
+		},
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			err = ec.Recover(ctx, r)
+			ec.Error(ctx, err)
+		}
+	}()
+	ctx = graphql.WithFieldContext(ctx, fc)
+	if fc.Args, err = ec.field_Mutation_updateHashComment_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
+		ec.Error(ctx, err)
+		return fc, err
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Mutation_deleteHashComment(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Mutation_deleteHashComment,
+		func(ctx context.Context) (any, error) {
+			fc := graphql.GetFieldContext(ctx)
+			return ec.Resolvers.Mutation().DeleteHashComment(ctx, fc.Args["hashId"].(string), fc.Args["commentId"].(string))
+		},
+		func(ctx context.Context, next graphql.Resolver) graphql.Resolver {
+			directive0 := next
+
+			directive1 := func(ctx context.Context) (any, error) {
+				permission, err := ec.unmarshalNString2string(ctx, "operation:member")
+				if err != nil {
+					var zeroVal *models.Hash
+					return zeroVal, err
+				}
+				if ec.Directives.HasPermission == nil {
+					var zeroVal *models.Hash
+					return zeroVal, errors.New("directive hasPermission is not implemented")
+				}
+				return ec.Directives.HasPermission(ctx, nil, directive0, permission)
+			}
+
+			next = directive1
+			return next
+		},
+		ec.marshalNHash2ᚖgithubᚗcomᚋvibeᚑc2ᚋvibeᚑc2ᚑcoreᚋcoreᚋpkgᚋmodelsᚐHash,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_Mutation_deleteHashComment(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Mutation",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "id":
+				return ec.fieldContext_Hash_id(ctx, field)
+			case "operationId":
+				return ec.fieldContext_Hash_operationId(ctx, field)
+			case "operation":
+				return ec.fieldContext_Hash_operation(ctx, field)
+			case "value":
+				return ec.fieldContext_Hash_value(ctx, field)
+			case "hashType":
+				return ec.fieldContext_Hash_hashType(ctx, field)
+			case "hashcatMode":
+				return ec.fieldContext_Hash_hashcatMode(ctx, field)
+			case "username":
+				return ec.fieldContext_Hash_username(ctx, field)
+			case "domain":
+				return ec.fieldContext_Hash_domain(ctx, field)
+			case "status":
+				return ec.fieldContext_Hash_status(ctx, field)
+			case "source":
+				return ec.fieldContext_Hash_source(ctx, field)
+			case "tags":
+				return ec.fieldContext_Hash_tags(ctx, field)
+			case "credentialId":
+				return ec.fieldContext_Hash_credentialId(ctx, field)
+			case "credential":
+				return ec.fieldContext_Hash_credential(ctx, field)
+			case "crackingMeta":
+				return ec.fieldContext_Hash_crackingMeta(ctx, field)
+			case "properties":
+				return ec.fieldContext_Hash_properties(ctx, field)
+			case "comments":
+				return ec.fieldContext_Hash_comments(ctx, field)
+			case "viewerCanModerateComments":
+				return ec.fieldContext_Hash_viewerCanModerateComments(ctx, field)
+			case "createdBy":
+				return ec.fieldContext_Hash_createdBy(ctx, field)
+			case "createdAt":
+				return ec.fieldContext_Hash_createdAt(ctx, field)
+			case "updatedAt":
+				return ec.fieldContext_Hash_updatedAt(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type Hash", field.Name)
+		},
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			err = ec.Recover(ctx, r)
+			ec.Error(ctx, err)
+		}
+	}()
+	ctx = graphql.WithFieldContext(ctx, fc)
+	if fc.Args, err = ec.field_Mutation_deleteHashComment_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
 		ec.Error(ctx, err)
 		return fc, err
 	}
@@ -14705,6 +18402,8 @@ func (ec *executionContext) fieldContext_Query_credential(ctx context.Context, f
 				return ec.fieldContext_Credential_createdAt(ctx, field)
 			case "updatedAt":
 				return ec.fieldContext_Credential_updatedAt(ctx, field)
+			case "sourceHashes":
+				return ec.fieldContext_Credential_sourceHashes(ctx, field)
 			case "taskBacklinks":
 				return ec.fieldContext_Credential_taskBacklinks(ctx, field)
 			}
@@ -14937,6 +18636,378 @@ func (ec *executionContext) fieldContext_Query_myCredentialTags(ctx context.Cont
 	if fc.Args, err = ec.field_Query_myCredentialTags_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
 		ec.Error(ctx, err)
 		return fc, err
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Query_hash(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Query_hash,
+		func(ctx context.Context) (any, error) {
+			fc := graphql.GetFieldContext(ctx)
+			return ec.Resolvers.Query().Hash(ctx, fc.Args["id"].(string))
+		},
+		func(ctx context.Context, next graphql.Resolver) graphql.Resolver {
+			directive0 := next
+
+			directive1 := func(ctx context.Context) (any, error) {
+				permission, err := ec.unmarshalNString2string(ctx, "operation:member")
+				if err != nil {
+					var zeroVal *models.Hash
+					return zeroVal, err
+				}
+				if ec.Directives.HasPermission == nil {
+					var zeroVal *models.Hash
+					return zeroVal, errors.New("directive hasPermission is not implemented")
+				}
+				return ec.Directives.HasPermission(ctx, nil, directive0, permission)
+			}
+
+			next = directive1
+			return next
+		},
+		ec.marshalNHash2ᚖgithubᚗcomᚋvibeᚑc2ᚋvibeᚑc2ᚑcoreᚋcoreᚋpkgᚋmodelsᚐHash,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_Query_hash(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Query",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "id":
+				return ec.fieldContext_Hash_id(ctx, field)
+			case "operationId":
+				return ec.fieldContext_Hash_operationId(ctx, field)
+			case "operation":
+				return ec.fieldContext_Hash_operation(ctx, field)
+			case "value":
+				return ec.fieldContext_Hash_value(ctx, field)
+			case "hashType":
+				return ec.fieldContext_Hash_hashType(ctx, field)
+			case "hashcatMode":
+				return ec.fieldContext_Hash_hashcatMode(ctx, field)
+			case "username":
+				return ec.fieldContext_Hash_username(ctx, field)
+			case "domain":
+				return ec.fieldContext_Hash_domain(ctx, field)
+			case "status":
+				return ec.fieldContext_Hash_status(ctx, field)
+			case "source":
+				return ec.fieldContext_Hash_source(ctx, field)
+			case "tags":
+				return ec.fieldContext_Hash_tags(ctx, field)
+			case "credentialId":
+				return ec.fieldContext_Hash_credentialId(ctx, field)
+			case "credential":
+				return ec.fieldContext_Hash_credential(ctx, field)
+			case "crackingMeta":
+				return ec.fieldContext_Hash_crackingMeta(ctx, field)
+			case "properties":
+				return ec.fieldContext_Hash_properties(ctx, field)
+			case "comments":
+				return ec.fieldContext_Hash_comments(ctx, field)
+			case "viewerCanModerateComments":
+				return ec.fieldContext_Hash_viewerCanModerateComments(ctx, field)
+			case "createdBy":
+				return ec.fieldContext_Hash_createdBy(ctx, field)
+			case "createdAt":
+				return ec.fieldContext_Hash_createdAt(ctx, field)
+			case "updatedAt":
+				return ec.fieldContext_Hash_updatedAt(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type Hash", field.Name)
+		},
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			err = ec.Recover(ctx, r)
+			ec.Error(ctx, err)
+		}
+	}()
+	ctx = graphql.WithFieldContext(ctx, fc)
+	if fc.Args, err = ec.field_Query_hash_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
+		ec.Error(ctx, err)
+		return fc, err
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Query_hashes(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Query_hashes,
+		func(ctx context.Context) (any, error) {
+			fc := graphql.GetFieldContext(ctx)
+			return ec.Resolvers.Query().Hashes(ctx, fc.Args["operationId"].(string), fc.Args["search"].(*string), fc.Args["statuses"].([]models.HashStatus), fc.Args["hashTypes"].([]string), fc.Args["tags"].([]string), fc.Args["hasCredential"].(*bool), fc.Args["first"].(*int), fc.Args["after"].(*string), fc.Args["last"].(*int), fc.Args["before"].(*string))
+		},
+		func(ctx context.Context, next graphql.Resolver) graphql.Resolver {
+			directive0 := next
+
+			directive1 := func(ctx context.Context) (any, error) {
+				permission, err := ec.unmarshalNString2string(ctx, "operation:member")
+				if err != nil {
+					var zeroVal *model.HashConnection
+					return zeroVal, err
+				}
+				if ec.Directives.HasPermission == nil {
+					var zeroVal *model.HashConnection
+					return zeroVal, errors.New("directive hasPermission is not implemented")
+				}
+				return ec.Directives.HasPermission(ctx, nil, directive0, permission)
+			}
+
+			next = directive1
+			return next
+		},
+		ec.marshalNHashConnection2ᚖgithubᚗcomᚋvibeᚑc2ᚋvibeᚑc2ᚑcoreᚋcoreᚋpkgᚋgraphqlᚋmodelᚐHashConnection,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_Query_hashes(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Query",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "edges":
+				return ec.fieldContext_HashConnection_edges(ctx, field)
+			case "pageInfo":
+				return ec.fieldContext_HashConnection_pageInfo(ctx, field)
+			case "totalCount":
+				return ec.fieldContext_HashConnection_totalCount(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type HashConnection", field.Name)
+		},
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			err = ec.Recover(ctx, r)
+			ec.Error(ctx, err)
+		}
+	}()
+	ctx = graphql.WithFieldContext(ctx, fc)
+	if fc.Args, err = ec.field_Query_hashes_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
+		ec.Error(ctx, err)
+		return fc, err
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Query_hashTags(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Query_hashTags,
+		func(ctx context.Context) (any, error) {
+			fc := graphql.GetFieldContext(ctx)
+			return ec.Resolvers.Query().HashTags(ctx, fc.Args["operationId"].(string))
+		},
+		func(ctx context.Context, next graphql.Resolver) graphql.Resolver {
+			directive0 := next
+
+			directive1 := func(ctx context.Context) (any, error) {
+				permission, err := ec.unmarshalNString2string(ctx, "operation:member")
+				if err != nil {
+					var zeroVal []string
+					return zeroVal, err
+				}
+				if ec.Directives.HasPermission == nil {
+					var zeroVal []string
+					return zeroVal, errors.New("directive hasPermission is not implemented")
+				}
+				return ec.Directives.HasPermission(ctx, nil, directive0, permission)
+			}
+
+			next = directive1
+			return next
+		},
+		ec.marshalNString2ᚕstringᚄ,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_Query_hashTags(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Query",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			err = ec.Recover(ctx, r)
+			ec.Error(ctx, err)
+		}
+	}()
+	ctx = graphql.WithFieldContext(ctx, fc)
+	if fc.Args, err = ec.field_Query_hashTags_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
+		ec.Error(ctx, err)
+		return fc, err
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Query_myHashes(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Query_myHashes,
+		func(ctx context.Context) (any, error) {
+			fc := graphql.GetFieldContext(ctx)
+			return ec.Resolvers.Query().MyHashes(ctx, fc.Args["operationIds"].([]string), fc.Args["search"].(*string), fc.Args["statuses"].([]models.HashStatus), fc.Args["hashTypes"].([]string), fc.Args["tags"].([]string), fc.Args["hasCredential"].(*bool), fc.Args["first"].(*int), fc.Args["after"].(*string), fc.Args["last"].(*int), fc.Args["before"].(*string))
+		},
+		nil,
+		ec.marshalNHashConnection2ᚖgithubᚗcomᚋvibeᚑc2ᚋvibeᚑc2ᚑcoreᚋcoreᚋpkgᚋgraphqlᚋmodelᚐHashConnection,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_Query_myHashes(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Query",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "edges":
+				return ec.fieldContext_HashConnection_edges(ctx, field)
+			case "pageInfo":
+				return ec.fieldContext_HashConnection_pageInfo(ctx, field)
+			case "totalCount":
+				return ec.fieldContext_HashConnection_totalCount(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type HashConnection", field.Name)
+		},
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			err = ec.Recover(ctx, r)
+			ec.Error(ctx, err)
+		}
+	}()
+	ctx = graphql.WithFieldContext(ctx, fc)
+	if fc.Args, err = ec.field_Query_myHashes_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
+		ec.Error(ctx, err)
+		return fc, err
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Query_myHashTags(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Query_myHashTags,
+		func(ctx context.Context) (any, error) {
+			fc := graphql.GetFieldContext(ctx)
+			return ec.Resolvers.Query().MyHashTags(ctx, fc.Args["operationIds"].([]string))
+		},
+		nil,
+		ec.marshalNString2ᚕstringᚄ,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_Query_myHashTags(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Query",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			err = ec.Recover(ctx, r)
+			ec.Error(ctx, err)
+		}
+	}()
+	ctx = graphql.WithFieldContext(ctx, fc)
+	if fc.Args, err = ec.field_Query_myHashTags_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
+		ec.Error(ctx, err)
+		return fc, err
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Query_hashTypes(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Query_hashTypes,
+		func(ctx context.Context) (any, error) {
+			return ec.Resolvers.Query().HashTypes(ctx)
+		},
+		func(ctx context.Context, next graphql.Resolver) graphql.Resolver {
+			directive0 := next
+
+			directive1 := func(ctx context.Context) (any, error) {
+				permission, err := ec.unmarshalNString2string(ctx, "operation:member")
+				if err != nil {
+					var zeroVal []*models.HashTypeSpec
+					return zeroVal, err
+				}
+				if ec.Directives.HasPermission == nil {
+					var zeroVal []*models.HashTypeSpec
+					return zeroVal, errors.New("directive hasPermission is not implemented")
+				}
+				return ec.Directives.HasPermission(ctx, nil, directive0, permission)
+			}
+
+			next = directive1
+			return next
+		},
+		ec.marshalNHashTypeSpec2ᚕᚖgithubᚗcomᚋvibeᚑc2ᚋvibeᚑc2ᚑcoreᚋcoreᚋpkgᚋmodelsᚐHashTypeSpecᚄ,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_Query_hashTypes(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Query",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "name":
+				return ec.fieldContext_HashTypeSpec_name(ctx, field)
+			case "displayName":
+				return ec.fieldContext_HashTypeSpec_displayName(ctx, field)
+			case "hashcatMode":
+				return ec.fieldContext_HashTypeSpec_hashcatMode(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type HashTypeSpec", field.Name)
+		},
 	}
 	return fc, nil
 }
@@ -18796,6 +22867,126 @@ func (ec *executionContext) fieldContext_Subscription_myCredentialChanged(ctx co
 	return fc, nil
 }
 
+func (ec *executionContext) _Subscription_hashChanged(ctx context.Context, field graphql.CollectedField) (ret func(ctx context.Context) graphql.Marshaler) {
+	return graphql.ResolveFieldStream(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Subscription_hashChanged,
+		func(ctx context.Context) (any, error) {
+			fc := graphql.GetFieldContext(ctx)
+			return ec.Resolvers.Subscription().HashChanged(ctx, fc.Args["operationId"].(string))
+		},
+		func(ctx context.Context, next graphql.Resolver) graphql.Resolver {
+			directive0 := next
+
+			directive1 := func(ctx context.Context) (any, error) {
+				permission, err := ec.unmarshalNString2string(ctx, "operation:member")
+				if err != nil {
+					var zeroVal *model.HashEvent
+					return zeroVal, err
+				}
+				if ec.Directives.HasPermission == nil {
+					var zeroVal *model.HashEvent
+					return zeroVal, errors.New("directive hasPermission is not implemented")
+				}
+				return ec.Directives.HasPermission(ctx, nil, directive0, permission)
+			}
+
+			next = directive1
+			return next
+		},
+		ec.marshalNHashEvent2ᚖgithubᚗcomᚋvibeᚑc2ᚋvibeᚑc2ᚑcoreᚋcoreᚋpkgᚋgraphqlᚋmodelᚐHashEvent,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_Subscription_hashChanged(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Subscription",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "action":
+				return ec.fieldContext_HashEvent_action(ctx, field)
+			case "hashId":
+				return ec.fieldContext_HashEvent_hashId(ctx, field)
+			case "operationId":
+				return ec.fieldContext_HashEvent_operationId(ctx, field)
+			case "hash":
+				return ec.fieldContext_HashEvent_hash(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type HashEvent", field.Name)
+		},
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			err = ec.Recover(ctx, r)
+			ec.Error(ctx, err)
+		}
+	}()
+	ctx = graphql.WithFieldContext(ctx, fc)
+	if fc.Args, err = ec.field_Subscription_hashChanged_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
+		ec.Error(ctx, err)
+		return fc, err
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Subscription_myHashChanged(ctx context.Context, field graphql.CollectedField) (ret func(ctx context.Context) graphql.Marshaler) {
+	return graphql.ResolveFieldStream(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Subscription_myHashChanged,
+		func(ctx context.Context) (any, error) {
+			fc := graphql.GetFieldContext(ctx)
+			return ec.Resolvers.Subscription().MyHashChanged(ctx, fc.Args["operationIds"].([]string))
+		},
+		nil,
+		ec.marshalNHashEvent2ᚖgithubᚗcomᚋvibeᚑc2ᚋvibeᚑc2ᚑcoreᚋcoreᚋpkgᚋgraphqlᚋmodelᚐHashEvent,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_Subscription_myHashChanged(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Subscription",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "action":
+				return ec.fieldContext_HashEvent_action(ctx, field)
+			case "hashId":
+				return ec.fieldContext_HashEvent_hashId(ctx, field)
+			case "operationId":
+				return ec.fieldContext_HashEvent_operationId(ctx, field)
+			case "hash":
+				return ec.fieldContext_HashEvent_hash(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type HashEvent", field.Name)
+		},
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			err = ec.Recover(ctx, r)
+			ec.Error(ctx, err)
+		}
+	}()
+	ctx = graphql.WithFieldContext(ctx, fc)
+	if fc.Args, err = ec.field_Subscription_myHashChanged_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
+		ec.Error(ctx, err)
+		return fc, err
+	}
+	return fc, nil
+}
+
 func (ec *executionContext) _Subscription_mySessionChanged(ctx context.Context, field graphql.CollectedField) (ret func(ctx context.Context) graphql.Marshaler) {
 	return graphql.ResolveFieldStream(
 		ctx,
@@ -19727,6 +23918,8 @@ func (ec *executionContext) fieldContext_Task_credentialReferences(_ context.Con
 				return ec.fieldContext_Credential_createdAt(ctx, field)
 			case "updatedAt":
 				return ec.fieldContext_Credential_updatedAt(ctx, field)
+			case "sourceHashes":
+				return ec.fieldContext_Credential_sourceHashes(ctx, field)
 			case "taskBacklinks":
 				return ec.fieldContext_Credential_taskBacklinks(ctx, field)
 			}
@@ -25788,6 +29981,64 @@ func (ec *executionContext) fieldContext___Type_isOneOf(_ context.Context, field
 
 // region    **************************** input.gotpl *****************************
 
+func (ec *executionContext) unmarshalInputBulkImportHashesInput(ctx context.Context, obj any) (model.BulkImportHashesInput, error) {
+	var it model.BulkImportHashesInput
+	if obj == nil {
+		return it, nil
+	}
+
+	asMap := map[string]any{}
+	for k, v := range obj.(map[string]any) {
+		asMap[k] = v
+	}
+
+	fieldsInOrder := [...]string{"text", "format", "defaultHashType", "source", "tags"}
+	for _, k := range fieldsInOrder {
+		v, ok := asMap[k]
+		if !ok {
+			continue
+		}
+		switch k {
+		case "text":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("text"))
+			data, err := ec.unmarshalNString2string(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.Text = data
+		case "format":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("format"))
+			data, err := ec.unmarshalNBulkHashFormat2githubᚗcomᚋvibeᚑc2ᚋvibeᚑc2ᚑcoreᚋcoreᚋpkgᚋgraphqlᚋmodelᚐBulkHashFormat(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.Format = data
+		case "defaultHashType":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("defaultHashType"))
+			data, err := ec.unmarshalOString2ᚖstring(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.DefaultHashType = data
+		case "source":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("source"))
+			data, err := ec.unmarshalOString2ᚖstring(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.Source = data
+		case "tags":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("tags"))
+			data, err := ec.unmarshalOString2ᚕstringᚄ(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.Tags = data
+		}
+	}
+	return it, nil
+}
+
 func (ec *executionContext) unmarshalInputChangeTaskStageInput(ctx context.Context, obj any) (model.ChangeTaskStageInput, error) {
 	var it model.ChangeTaskStageInput
 	if obj == nil {
@@ -25950,6 +30201,85 @@ func (ec *executionContext) unmarshalInputCreateCustomTimelineEventInput(ctx con
 				return it, err
 			}
 			it.OccurredAt = data
+		}
+	}
+	return it, nil
+}
+
+func (ec *executionContext) unmarshalInputCreateHashInput(ctx context.Context, obj any) (model.CreateHashInput, error) {
+	var it model.CreateHashInput
+	if obj == nil {
+		return it, nil
+	}
+
+	asMap := map[string]any{}
+	for k, v := range obj.(map[string]any) {
+		asMap[k] = v
+	}
+
+	fieldsInOrder := [...]string{"value", "hashType", "username", "domain", "source", "status", "tags", "properties"}
+	for _, k := range fieldsInOrder {
+		v, ok := asMap[k]
+		if !ok {
+			continue
+		}
+		switch k {
+		case "value":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("value"))
+			data, err := ec.unmarshalNString2string(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.Value = data
+		case "hashType":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("hashType"))
+			data, err := ec.unmarshalNString2string(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.HashType = data
+		case "username":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("username"))
+			data, err := ec.unmarshalOString2ᚖstring(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.Username = data
+		case "domain":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("domain"))
+			data, err := ec.unmarshalOString2ᚖstring(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.Domain = data
+		case "source":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("source"))
+			data, err := ec.unmarshalOString2ᚖstring(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.Source = data
+		case "status":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("status"))
+			data, err := ec.unmarshalOHashStatus2ᚖgithubᚗcomᚋvibeᚑc2ᚋvibeᚑc2ᚑcoreᚋcoreᚋpkgᚋmodelsᚐHashStatus(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.Status = data
+		case "tags":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("tags"))
+			data, err := ec.unmarshalOString2ᚕstringᚄ(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.Tags = data
+		case "properties":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("properties"))
+			data, err := ec.unmarshalOHashPropertyInput2ᚕᚖgithubᚗcomᚋvibeᚑc2ᚋvibeᚑc2ᚑcoreᚋcoreᚋpkgᚋgraphqlᚋmodelᚐHashPropertyInputᚄ(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.Properties = data
 		}
 	}
 	return it, nil
@@ -26395,6 +30725,115 @@ func (ec *executionContext) unmarshalInputCredentialPropertyInput(ctx context.Co
 	return it, nil
 }
 
+func (ec *executionContext) unmarshalInputHashPropertyInput(ctx context.Context, obj any) (model.HashPropertyInput, error) {
+	var it model.HashPropertyInput
+	if obj == nil {
+		return it, nil
+	}
+
+	asMap := map[string]any{}
+	for k, v := range obj.(map[string]any) {
+		asMap[k] = v
+	}
+
+	fieldsInOrder := [...]string{"name", "value"}
+	for _, k := range fieldsInOrder {
+		v, ok := asMap[k]
+		if !ok {
+			continue
+		}
+		switch k {
+		case "name":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("name"))
+			data, err := ec.unmarshalNString2string(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.Name = data
+		case "value":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("value"))
+			data, err := ec.unmarshalNString2string(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.Value = data
+		}
+	}
+	return it, nil
+}
+
+func (ec *executionContext) unmarshalInputMarkHashCrackedInput(ctx context.Context, obj any) (model.MarkHashCrackedInput, error) {
+	var it model.MarkHashCrackedInput
+	if obj == nil {
+		return it, nil
+	}
+
+	asMap := map[string]any{}
+	for k, v := range obj.(map[string]any) {
+		asMap[k] = v
+	}
+
+	fieldsInOrder := [...]string{"plaintext", "credentialId", "newCredential", "tool", "wordlist", "rules", "durationSec"}
+	for _, k := range fieldsInOrder {
+		v, ok := asMap[k]
+		if !ok {
+			continue
+		}
+		switch k {
+		case "plaintext":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("plaintext"))
+			data, err := ec.unmarshalNString2string(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.Plaintext = data
+		case "credentialId":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("credentialId"))
+			data, err := ec.unmarshalOID2ᚖstring(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.CredentialID = data
+		case "newCredential":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("newCredential"))
+			data, err := ec.unmarshalOCreateCredentialInput2ᚖgithubᚗcomᚋvibeᚑc2ᚋvibeᚑc2ᚑcoreᚋcoreᚋpkgᚋgraphqlᚋmodelᚐCreateCredentialInput(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.NewCredential = data
+		case "tool":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("tool"))
+			data, err := ec.unmarshalOString2ᚖstring(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.Tool = data
+		case "wordlist":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("wordlist"))
+			data, err := ec.unmarshalOString2ᚖstring(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.Wordlist = data
+		case "rules":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("rules"))
+			data, err := ec.unmarshalOString2ᚖstring(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.Rules = data
+		case "durationSec":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("durationSec"))
+			data, err := ec.unmarshalOInt2ᚖint(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.DurationSec = data
+		}
+	}
+	return it, nil
+}
+
 func (ec *executionContext) unmarshalInputReorderWikiDocumentSiblingsInput(ctx context.Context, obj any) (model.ReorderWikiDocumentSiblingsInput, error) {
 	var it model.ReorderWikiDocumentSiblingsInput
 	if obj == nil {
@@ -26557,6 +30996,85 @@ func (ec *executionContext) unmarshalInputUpdateCustomTimelineEventInput(ctx con
 				return it, err
 			}
 			it.OccurredAt = data
+		}
+	}
+	return it, nil
+}
+
+func (ec *executionContext) unmarshalInputUpdateHashInput(ctx context.Context, obj any) (model.UpdateHashInput, error) {
+	var it model.UpdateHashInput
+	if obj == nil {
+		return it, nil
+	}
+
+	asMap := map[string]any{}
+	for k, v := range obj.(map[string]any) {
+		asMap[k] = v
+	}
+
+	fieldsInOrder := [...]string{"value", "hashType", "username", "domain", "source", "status", "tags", "properties"}
+	for _, k := range fieldsInOrder {
+		v, ok := asMap[k]
+		if !ok {
+			continue
+		}
+		switch k {
+		case "value":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("value"))
+			data, err := ec.unmarshalOString2ᚖstring(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.Value = data
+		case "hashType":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("hashType"))
+			data, err := ec.unmarshalOString2ᚖstring(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.HashType = data
+		case "username":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("username"))
+			data, err := ec.unmarshalOString2ᚖstring(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.Username = data
+		case "domain":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("domain"))
+			data, err := ec.unmarshalOString2ᚖstring(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.Domain = data
+		case "source":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("source"))
+			data, err := ec.unmarshalOString2ᚖstring(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.Source = data
+		case "status":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("status"))
+			data, err := ec.unmarshalOHashStatus2ᚖgithubᚗcomᚋvibeᚑc2ᚋvibeᚑc2ᚑcoreᚋcoreᚋpkgᚋmodelsᚐHashStatus(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.Status = data
+		case "tags":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("tags"))
+			data, err := ec.unmarshalOString2ᚕstringᚄ(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.Tags = data
+		case "properties":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("properties"))
+			data, err := ec.unmarshalOHashPropertyInput2ᚕᚖgithubᚗcomᚋvibeᚑc2ᚋvibeᚑc2ᚑcoreᚋcoreᚋpkgᚋgraphqlᚋmodelᚐHashPropertyInputᚄ(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.Properties = data
 		}
 	}
 	return it, nil
@@ -27112,6 +31630,55 @@ func (ec *executionContext) _APIKeyWithSecret(ctx context.Context, sel ast.Selec
 	return out
 }
 
+var bulkImportHashesResultImplementors = []string{"BulkImportHashesResult"}
+
+func (ec *executionContext) _BulkImportHashesResult(ctx context.Context, sel ast.SelectionSet, obj *model.BulkImportHashesResult) graphql.Marshaler {
+	fields := graphql.CollectFields(ec.OperationContext, sel, bulkImportHashesResultImplementors)
+
+	out := graphql.NewFieldSet(fields)
+	deferred := make(map[string]*graphql.FieldSet)
+	for i, field := range fields {
+		switch field.Name {
+		case "__typename":
+			out.Values[i] = graphql.MarshalString("BulkImportHashesResult")
+		case "added":
+			out.Values[i] = ec._BulkImportHashesResult_added(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "skipped":
+			out.Values[i] = ec._BulkImportHashesResult_skipped(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "hashes":
+			out.Values[i] = ec._BulkImportHashesResult_hashes(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		default:
+			panic("unknown field " + strconv.Quote(field.Name))
+		}
+	}
+	out.Dispatch(ctx)
+	if out.Invalids > 0 {
+		return graphql.Null
+	}
+
+	atomic.AddInt32(&ec.Deferred, int32(len(deferred)))
+
+	for label, dfs := range deferred {
+		ec.ProcessDeferredGroup(graphql.DeferredGroup{
+			Label:    label,
+			Path:     graphql.GetPath(ctx),
+			FieldSet: dfs,
+			Context:  ctx,
+		})
+	}
+
+	return out
+}
+
 var credentialImplementors = []string{"Credential"}
 
 func (ec *executionContext) _Credential(ctx context.Context, sel ast.SelectionSet, obj *models.Credential) graphql.Marshaler {
@@ -27494,6 +32061,42 @@ func (ec *executionContext) _Credential(ctx context.Context, sel ast.SelectionSe
 					}
 				}()
 				res = ec._Credential_updatedAt(ctx, field, obj)
+				if res == graphql.Null {
+					atomic.AddUint32(&fs.Invalids, 1)
+				}
+				return res
+			}
+
+			if field.Deferrable != nil {
+				dfs, ok := deferred[field.Deferrable.Label]
+				di := 0
+				if ok {
+					dfs.AddField(field)
+					di = len(dfs.Values) - 1
+				} else {
+					dfs = graphql.NewFieldSet([]graphql.CollectedField{field})
+					deferred[field.Deferrable.Label] = dfs
+				}
+				dfs.Concurrently(di, func(ctx context.Context) graphql.Marshaler {
+					return innerFunc(ctx, dfs)
+				})
+
+				// don't run the out.Concurrently() call below
+				out.Values[i] = graphql.Null
+				continue
+			}
+
+			out.Concurrently(i, func(ctx context.Context) graphql.Marshaler { return innerFunc(ctx, out) })
+		case "sourceHashes":
+			field := field
+
+			innerFunc := func(ctx context.Context, fs *graphql.FieldSet) (res graphql.Marshaler) {
+				defer func() {
+					if r := recover(); r != nil {
+						ec.Error(ctx, ec.Recover(ctx, r))
+					}
+				}()
+				res = ec._Credential_sourceHashes(ctx, field, obj)
 				if res == graphql.Null {
 					atomic.AddUint32(&fs.Invalids, 1)
 				}
@@ -27991,6 +32594,1040 @@ func (ec *executionContext) _CredentialProperty(ctx context.Context, sel ast.Sel
 	return out
 }
 
+var hashImplementors = []string{"Hash"}
+
+func (ec *executionContext) _Hash(ctx context.Context, sel ast.SelectionSet, obj *models.Hash) graphql.Marshaler {
+	fields := graphql.CollectFields(ec.OperationContext, sel, hashImplementors)
+
+	out := graphql.NewFieldSet(fields)
+	deferred := make(map[string]*graphql.FieldSet)
+	for i, field := range fields {
+		switch field.Name {
+		case "__typename":
+			out.Values[i] = graphql.MarshalString("Hash")
+		case "id":
+			field := field
+
+			innerFunc := func(ctx context.Context, fs *graphql.FieldSet) (res graphql.Marshaler) {
+				defer func() {
+					if r := recover(); r != nil {
+						ec.Error(ctx, ec.Recover(ctx, r))
+					}
+				}()
+				res = ec._Hash_id(ctx, field, obj)
+				if res == graphql.Null {
+					atomic.AddUint32(&fs.Invalids, 1)
+				}
+				return res
+			}
+
+			if field.Deferrable != nil {
+				dfs, ok := deferred[field.Deferrable.Label]
+				di := 0
+				if ok {
+					dfs.AddField(field)
+					di = len(dfs.Values) - 1
+				} else {
+					dfs = graphql.NewFieldSet([]graphql.CollectedField{field})
+					deferred[field.Deferrable.Label] = dfs
+				}
+				dfs.Concurrently(di, func(ctx context.Context) graphql.Marshaler {
+					return innerFunc(ctx, dfs)
+				})
+
+				// don't run the out.Concurrently() call below
+				out.Values[i] = graphql.Null
+				continue
+			}
+
+			out.Concurrently(i, func(ctx context.Context) graphql.Marshaler { return innerFunc(ctx, out) })
+		case "operationId":
+			field := field
+
+			innerFunc := func(ctx context.Context, fs *graphql.FieldSet) (res graphql.Marshaler) {
+				defer func() {
+					if r := recover(); r != nil {
+						ec.Error(ctx, ec.Recover(ctx, r))
+					}
+				}()
+				res = ec._Hash_operationId(ctx, field, obj)
+				if res == graphql.Null {
+					atomic.AddUint32(&fs.Invalids, 1)
+				}
+				return res
+			}
+
+			if field.Deferrable != nil {
+				dfs, ok := deferred[field.Deferrable.Label]
+				di := 0
+				if ok {
+					dfs.AddField(field)
+					di = len(dfs.Values) - 1
+				} else {
+					dfs = graphql.NewFieldSet([]graphql.CollectedField{field})
+					deferred[field.Deferrable.Label] = dfs
+				}
+				dfs.Concurrently(di, func(ctx context.Context) graphql.Marshaler {
+					return innerFunc(ctx, dfs)
+				})
+
+				// don't run the out.Concurrently() call below
+				out.Values[i] = graphql.Null
+				continue
+			}
+
+			out.Concurrently(i, func(ctx context.Context) graphql.Marshaler { return innerFunc(ctx, out) })
+		case "operation":
+			field := field
+
+			innerFunc := func(ctx context.Context, fs *graphql.FieldSet) (res graphql.Marshaler) {
+				defer func() {
+					if r := recover(); r != nil {
+						ec.Error(ctx, ec.Recover(ctx, r))
+					}
+				}()
+				res = ec._Hash_operation(ctx, field, obj)
+				if res == graphql.Null {
+					atomic.AddUint32(&fs.Invalids, 1)
+				}
+				return res
+			}
+
+			if field.Deferrable != nil {
+				dfs, ok := deferred[field.Deferrable.Label]
+				di := 0
+				if ok {
+					dfs.AddField(field)
+					di = len(dfs.Values) - 1
+				} else {
+					dfs = graphql.NewFieldSet([]graphql.CollectedField{field})
+					deferred[field.Deferrable.Label] = dfs
+				}
+				dfs.Concurrently(di, func(ctx context.Context) graphql.Marshaler {
+					return innerFunc(ctx, dfs)
+				})
+
+				// don't run the out.Concurrently() call below
+				out.Values[i] = graphql.Null
+				continue
+			}
+
+			out.Concurrently(i, func(ctx context.Context) graphql.Marshaler { return innerFunc(ctx, out) })
+		case "value":
+			out.Values[i] = ec._Hash_value(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				atomic.AddUint32(&out.Invalids, 1)
+			}
+		case "hashType":
+			out.Values[i] = ec._Hash_hashType(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				atomic.AddUint32(&out.Invalids, 1)
+			}
+		case "hashcatMode":
+			out.Values[i] = ec._Hash_hashcatMode(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				atomic.AddUint32(&out.Invalids, 1)
+			}
+		case "username":
+			out.Values[i] = ec._Hash_username(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				atomic.AddUint32(&out.Invalids, 1)
+			}
+		case "domain":
+			out.Values[i] = ec._Hash_domain(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				atomic.AddUint32(&out.Invalids, 1)
+			}
+		case "status":
+			out.Values[i] = ec._Hash_status(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				atomic.AddUint32(&out.Invalids, 1)
+			}
+		case "source":
+			out.Values[i] = ec._Hash_source(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				atomic.AddUint32(&out.Invalids, 1)
+			}
+		case "tags":
+			out.Values[i] = ec._Hash_tags(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				atomic.AddUint32(&out.Invalids, 1)
+			}
+		case "credentialId":
+			field := field
+
+			innerFunc := func(ctx context.Context, _ *graphql.FieldSet) (res graphql.Marshaler) {
+				defer func() {
+					if r := recover(); r != nil {
+						ec.Error(ctx, ec.Recover(ctx, r))
+					}
+				}()
+				res = ec._Hash_credentialId(ctx, field, obj)
+				return res
+			}
+
+			if field.Deferrable != nil {
+				dfs, ok := deferred[field.Deferrable.Label]
+				di := 0
+				if ok {
+					dfs.AddField(field)
+					di = len(dfs.Values) - 1
+				} else {
+					dfs = graphql.NewFieldSet([]graphql.CollectedField{field})
+					deferred[field.Deferrable.Label] = dfs
+				}
+				dfs.Concurrently(di, func(ctx context.Context) graphql.Marshaler {
+					return innerFunc(ctx, dfs)
+				})
+
+				// don't run the out.Concurrently() call below
+				out.Values[i] = graphql.Null
+				continue
+			}
+
+			out.Concurrently(i, func(ctx context.Context) graphql.Marshaler { return innerFunc(ctx, out) })
+		case "credential":
+			field := field
+
+			innerFunc := func(ctx context.Context, _ *graphql.FieldSet) (res graphql.Marshaler) {
+				defer func() {
+					if r := recover(); r != nil {
+						ec.Error(ctx, ec.Recover(ctx, r))
+					}
+				}()
+				res = ec._Hash_credential(ctx, field, obj)
+				return res
+			}
+
+			if field.Deferrable != nil {
+				dfs, ok := deferred[field.Deferrable.Label]
+				di := 0
+				if ok {
+					dfs.AddField(field)
+					di = len(dfs.Values) - 1
+				} else {
+					dfs = graphql.NewFieldSet([]graphql.CollectedField{field})
+					deferred[field.Deferrable.Label] = dfs
+				}
+				dfs.Concurrently(di, func(ctx context.Context) graphql.Marshaler {
+					return innerFunc(ctx, dfs)
+				})
+
+				// don't run the out.Concurrently() call below
+				out.Values[i] = graphql.Null
+				continue
+			}
+
+			out.Concurrently(i, func(ctx context.Context) graphql.Marshaler { return innerFunc(ctx, out) })
+		case "crackingMeta":
+			field := field
+
+			innerFunc := func(ctx context.Context, _ *graphql.FieldSet) (res graphql.Marshaler) {
+				defer func() {
+					if r := recover(); r != nil {
+						ec.Error(ctx, ec.Recover(ctx, r))
+					}
+				}()
+				res = ec._Hash_crackingMeta(ctx, field, obj)
+				return res
+			}
+
+			if field.Deferrable != nil {
+				dfs, ok := deferred[field.Deferrable.Label]
+				di := 0
+				if ok {
+					dfs.AddField(field)
+					di = len(dfs.Values) - 1
+				} else {
+					dfs = graphql.NewFieldSet([]graphql.CollectedField{field})
+					deferred[field.Deferrable.Label] = dfs
+				}
+				dfs.Concurrently(di, func(ctx context.Context) graphql.Marshaler {
+					return innerFunc(ctx, dfs)
+				})
+
+				// don't run the out.Concurrently() call below
+				out.Values[i] = graphql.Null
+				continue
+			}
+
+			out.Concurrently(i, func(ctx context.Context) graphql.Marshaler { return innerFunc(ctx, out) })
+		case "properties":
+			out.Values[i] = ec._Hash_properties(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				atomic.AddUint32(&out.Invalids, 1)
+			}
+		case "comments":
+			field := field
+
+			innerFunc := func(ctx context.Context, fs *graphql.FieldSet) (res graphql.Marshaler) {
+				defer func() {
+					if r := recover(); r != nil {
+						ec.Error(ctx, ec.Recover(ctx, r))
+					}
+				}()
+				res = ec._Hash_comments(ctx, field, obj)
+				if res == graphql.Null {
+					atomic.AddUint32(&fs.Invalids, 1)
+				}
+				return res
+			}
+
+			if field.Deferrable != nil {
+				dfs, ok := deferred[field.Deferrable.Label]
+				di := 0
+				if ok {
+					dfs.AddField(field)
+					di = len(dfs.Values) - 1
+				} else {
+					dfs = graphql.NewFieldSet([]graphql.CollectedField{field})
+					deferred[field.Deferrable.Label] = dfs
+				}
+				dfs.Concurrently(di, func(ctx context.Context) graphql.Marshaler {
+					return innerFunc(ctx, dfs)
+				})
+
+				// don't run the out.Concurrently() call below
+				out.Values[i] = graphql.Null
+				continue
+			}
+
+			out.Concurrently(i, func(ctx context.Context) graphql.Marshaler { return innerFunc(ctx, out) })
+		case "viewerCanModerateComments":
+			field := field
+
+			innerFunc := func(ctx context.Context, fs *graphql.FieldSet) (res graphql.Marshaler) {
+				defer func() {
+					if r := recover(); r != nil {
+						ec.Error(ctx, ec.Recover(ctx, r))
+					}
+				}()
+				res = ec._Hash_viewerCanModerateComments(ctx, field, obj)
+				if res == graphql.Null {
+					atomic.AddUint32(&fs.Invalids, 1)
+				}
+				return res
+			}
+
+			if field.Deferrable != nil {
+				dfs, ok := deferred[field.Deferrable.Label]
+				di := 0
+				if ok {
+					dfs.AddField(field)
+					di = len(dfs.Values) - 1
+				} else {
+					dfs = graphql.NewFieldSet([]graphql.CollectedField{field})
+					deferred[field.Deferrable.Label] = dfs
+				}
+				dfs.Concurrently(di, func(ctx context.Context) graphql.Marshaler {
+					return innerFunc(ctx, dfs)
+				})
+
+				// don't run the out.Concurrently() call below
+				out.Values[i] = graphql.Null
+				continue
+			}
+
+			out.Concurrently(i, func(ctx context.Context) graphql.Marshaler { return innerFunc(ctx, out) })
+		case "createdBy":
+			field := field
+
+			innerFunc := func(ctx context.Context, _ *graphql.FieldSet) (res graphql.Marshaler) {
+				defer func() {
+					if r := recover(); r != nil {
+						ec.Error(ctx, ec.Recover(ctx, r))
+					}
+				}()
+				res = ec._Hash_createdBy(ctx, field, obj)
+				return res
+			}
+
+			if field.Deferrable != nil {
+				dfs, ok := deferred[field.Deferrable.Label]
+				di := 0
+				if ok {
+					dfs.AddField(field)
+					di = len(dfs.Values) - 1
+				} else {
+					dfs = graphql.NewFieldSet([]graphql.CollectedField{field})
+					deferred[field.Deferrable.Label] = dfs
+				}
+				dfs.Concurrently(di, func(ctx context.Context) graphql.Marshaler {
+					return innerFunc(ctx, dfs)
+				})
+
+				// don't run the out.Concurrently() call below
+				out.Values[i] = graphql.Null
+				continue
+			}
+
+			out.Concurrently(i, func(ctx context.Context) graphql.Marshaler { return innerFunc(ctx, out) })
+		case "createdAt":
+			field := field
+
+			innerFunc := func(ctx context.Context, fs *graphql.FieldSet) (res graphql.Marshaler) {
+				defer func() {
+					if r := recover(); r != nil {
+						ec.Error(ctx, ec.Recover(ctx, r))
+					}
+				}()
+				res = ec._Hash_createdAt(ctx, field, obj)
+				if res == graphql.Null {
+					atomic.AddUint32(&fs.Invalids, 1)
+				}
+				return res
+			}
+
+			if field.Deferrable != nil {
+				dfs, ok := deferred[field.Deferrable.Label]
+				di := 0
+				if ok {
+					dfs.AddField(field)
+					di = len(dfs.Values) - 1
+				} else {
+					dfs = graphql.NewFieldSet([]graphql.CollectedField{field})
+					deferred[field.Deferrable.Label] = dfs
+				}
+				dfs.Concurrently(di, func(ctx context.Context) graphql.Marshaler {
+					return innerFunc(ctx, dfs)
+				})
+
+				// don't run the out.Concurrently() call below
+				out.Values[i] = graphql.Null
+				continue
+			}
+
+			out.Concurrently(i, func(ctx context.Context) graphql.Marshaler { return innerFunc(ctx, out) })
+		case "updatedAt":
+			field := field
+
+			innerFunc := func(ctx context.Context, fs *graphql.FieldSet) (res graphql.Marshaler) {
+				defer func() {
+					if r := recover(); r != nil {
+						ec.Error(ctx, ec.Recover(ctx, r))
+					}
+				}()
+				res = ec._Hash_updatedAt(ctx, field, obj)
+				if res == graphql.Null {
+					atomic.AddUint32(&fs.Invalids, 1)
+				}
+				return res
+			}
+
+			if field.Deferrable != nil {
+				dfs, ok := deferred[field.Deferrable.Label]
+				di := 0
+				if ok {
+					dfs.AddField(field)
+					di = len(dfs.Values) - 1
+				} else {
+					dfs = graphql.NewFieldSet([]graphql.CollectedField{field})
+					deferred[field.Deferrable.Label] = dfs
+				}
+				dfs.Concurrently(di, func(ctx context.Context) graphql.Marshaler {
+					return innerFunc(ctx, dfs)
+				})
+
+				// don't run the out.Concurrently() call below
+				out.Values[i] = graphql.Null
+				continue
+			}
+
+			out.Concurrently(i, func(ctx context.Context) graphql.Marshaler { return innerFunc(ctx, out) })
+		default:
+			panic("unknown field " + strconv.Quote(field.Name))
+		}
+	}
+	out.Dispatch(ctx)
+	if out.Invalids > 0 {
+		return graphql.Null
+	}
+
+	atomic.AddInt32(&ec.Deferred, int32(len(deferred)))
+
+	for label, dfs := range deferred {
+		ec.ProcessDeferredGroup(graphql.DeferredGroup{
+			Label:    label,
+			Path:     graphql.GetPath(ctx),
+			FieldSet: dfs,
+			Context:  ctx,
+		})
+	}
+
+	return out
+}
+
+var hashCommentImplementors = []string{"HashComment"}
+
+func (ec *executionContext) _HashComment(ctx context.Context, sel ast.SelectionSet, obj *models.HashComment) graphql.Marshaler {
+	fields := graphql.CollectFields(ec.OperationContext, sel, hashCommentImplementors)
+
+	out := graphql.NewFieldSet(fields)
+	deferred := make(map[string]*graphql.FieldSet)
+	for i, field := range fields {
+		switch field.Name {
+		case "__typename":
+			out.Values[i] = graphql.MarshalString("HashComment")
+		case "id":
+			field := field
+
+			innerFunc := func(ctx context.Context, fs *graphql.FieldSet) (res graphql.Marshaler) {
+				defer func() {
+					if r := recover(); r != nil {
+						ec.Error(ctx, ec.Recover(ctx, r))
+					}
+				}()
+				res = ec._HashComment_id(ctx, field, obj)
+				if res == graphql.Null {
+					atomic.AddUint32(&fs.Invalids, 1)
+				}
+				return res
+			}
+
+			if field.Deferrable != nil {
+				dfs, ok := deferred[field.Deferrable.Label]
+				di := 0
+				if ok {
+					dfs.AddField(field)
+					di = len(dfs.Values) - 1
+				} else {
+					dfs = graphql.NewFieldSet([]graphql.CollectedField{field})
+					deferred[field.Deferrable.Label] = dfs
+				}
+				dfs.Concurrently(di, func(ctx context.Context) graphql.Marshaler {
+					return innerFunc(ctx, dfs)
+				})
+
+				// don't run the out.Concurrently() call below
+				out.Values[i] = graphql.Null
+				continue
+			}
+
+			out.Concurrently(i, func(ctx context.Context) graphql.Marshaler { return innerFunc(ctx, out) })
+		case "author":
+			field := field
+
+			innerFunc := func(ctx context.Context, _ *graphql.FieldSet) (res graphql.Marshaler) {
+				defer func() {
+					if r := recover(); r != nil {
+						ec.Error(ctx, ec.Recover(ctx, r))
+					}
+				}()
+				res = ec._HashComment_author(ctx, field, obj)
+				return res
+			}
+
+			if field.Deferrable != nil {
+				dfs, ok := deferred[field.Deferrable.Label]
+				di := 0
+				if ok {
+					dfs.AddField(field)
+					di = len(dfs.Values) - 1
+				} else {
+					dfs = graphql.NewFieldSet([]graphql.CollectedField{field})
+					deferred[field.Deferrable.Label] = dfs
+				}
+				dfs.Concurrently(di, func(ctx context.Context) graphql.Marshaler {
+					return innerFunc(ctx, dfs)
+				})
+
+				// don't run the out.Concurrently() call below
+				out.Values[i] = graphql.Null
+				continue
+			}
+
+			out.Concurrently(i, func(ctx context.Context) graphql.Marshaler { return innerFunc(ctx, out) })
+		case "text":
+			out.Values[i] = ec._HashComment_text(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				atomic.AddUint32(&out.Invalids, 1)
+			}
+		case "createdAt":
+			field := field
+
+			innerFunc := func(ctx context.Context, fs *graphql.FieldSet) (res graphql.Marshaler) {
+				defer func() {
+					if r := recover(); r != nil {
+						ec.Error(ctx, ec.Recover(ctx, r))
+					}
+				}()
+				res = ec._HashComment_createdAt(ctx, field, obj)
+				if res == graphql.Null {
+					atomic.AddUint32(&fs.Invalids, 1)
+				}
+				return res
+			}
+
+			if field.Deferrable != nil {
+				dfs, ok := deferred[field.Deferrable.Label]
+				di := 0
+				if ok {
+					dfs.AddField(field)
+					di = len(dfs.Values) - 1
+				} else {
+					dfs = graphql.NewFieldSet([]graphql.CollectedField{field})
+					deferred[field.Deferrable.Label] = dfs
+				}
+				dfs.Concurrently(di, func(ctx context.Context) graphql.Marshaler {
+					return innerFunc(ctx, dfs)
+				})
+
+				// don't run the out.Concurrently() call below
+				out.Values[i] = graphql.Null
+				continue
+			}
+
+			out.Concurrently(i, func(ctx context.Context) graphql.Marshaler { return innerFunc(ctx, out) })
+		case "updatedAt":
+			field := field
+
+			innerFunc := func(ctx context.Context, fs *graphql.FieldSet) (res graphql.Marshaler) {
+				defer func() {
+					if r := recover(); r != nil {
+						ec.Error(ctx, ec.Recover(ctx, r))
+					}
+				}()
+				res = ec._HashComment_updatedAt(ctx, field, obj)
+				if res == graphql.Null {
+					atomic.AddUint32(&fs.Invalids, 1)
+				}
+				return res
+			}
+
+			if field.Deferrable != nil {
+				dfs, ok := deferred[field.Deferrable.Label]
+				di := 0
+				if ok {
+					dfs.AddField(field)
+					di = len(dfs.Values) - 1
+				} else {
+					dfs = graphql.NewFieldSet([]graphql.CollectedField{field})
+					deferred[field.Deferrable.Label] = dfs
+				}
+				dfs.Concurrently(di, func(ctx context.Context) graphql.Marshaler {
+					return innerFunc(ctx, dfs)
+				})
+
+				// don't run the out.Concurrently() call below
+				out.Values[i] = graphql.Null
+				continue
+			}
+
+			out.Concurrently(i, func(ctx context.Context) graphql.Marshaler { return innerFunc(ctx, out) })
+		default:
+			panic("unknown field " + strconv.Quote(field.Name))
+		}
+	}
+	out.Dispatch(ctx)
+	if out.Invalids > 0 {
+		return graphql.Null
+	}
+
+	atomic.AddInt32(&ec.Deferred, int32(len(deferred)))
+
+	for label, dfs := range deferred {
+		ec.ProcessDeferredGroup(graphql.DeferredGroup{
+			Label:    label,
+			Path:     graphql.GetPath(ctx),
+			FieldSet: dfs,
+			Context:  ctx,
+		})
+	}
+
+	return out
+}
+
+var hashConnectionImplementors = []string{"HashConnection"}
+
+func (ec *executionContext) _HashConnection(ctx context.Context, sel ast.SelectionSet, obj *model.HashConnection) graphql.Marshaler {
+	fields := graphql.CollectFields(ec.OperationContext, sel, hashConnectionImplementors)
+
+	out := graphql.NewFieldSet(fields)
+	deferred := make(map[string]*graphql.FieldSet)
+	for i, field := range fields {
+		switch field.Name {
+		case "__typename":
+			out.Values[i] = graphql.MarshalString("HashConnection")
+		case "edges":
+			out.Values[i] = ec._HashConnection_edges(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "pageInfo":
+			out.Values[i] = ec._HashConnection_pageInfo(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "totalCount":
+			out.Values[i] = ec._HashConnection_totalCount(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		default:
+			panic("unknown field " + strconv.Quote(field.Name))
+		}
+	}
+	out.Dispatch(ctx)
+	if out.Invalids > 0 {
+		return graphql.Null
+	}
+
+	atomic.AddInt32(&ec.Deferred, int32(len(deferred)))
+
+	for label, dfs := range deferred {
+		ec.ProcessDeferredGroup(graphql.DeferredGroup{
+			Label:    label,
+			Path:     graphql.GetPath(ctx),
+			FieldSet: dfs,
+			Context:  ctx,
+		})
+	}
+
+	return out
+}
+
+var hashCrackingMetaImplementors = []string{"HashCrackingMeta"}
+
+func (ec *executionContext) _HashCrackingMeta(ctx context.Context, sel ast.SelectionSet, obj *models.HashCrackingMeta) graphql.Marshaler {
+	fields := graphql.CollectFields(ec.OperationContext, sel, hashCrackingMetaImplementors)
+
+	out := graphql.NewFieldSet(fields)
+	deferred := make(map[string]*graphql.FieldSet)
+	for i, field := range fields {
+		switch field.Name {
+		case "__typename":
+			out.Values[i] = graphql.MarshalString("HashCrackingMeta")
+		case "tool":
+			out.Values[i] = ec._HashCrackingMeta_tool(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				atomic.AddUint32(&out.Invalids, 1)
+			}
+		case "wordlist":
+			out.Values[i] = ec._HashCrackingMeta_wordlist(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				atomic.AddUint32(&out.Invalids, 1)
+			}
+		case "rules":
+			out.Values[i] = ec._HashCrackingMeta_rules(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				atomic.AddUint32(&out.Invalids, 1)
+			}
+		case "durationSec":
+			field := field
+
+			innerFunc := func(ctx context.Context, fs *graphql.FieldSet) (res graphql.Marshaler) {
+				defer func() {
+					if r := recover(); r != nil {
+						ec.Error(ctx, ec.Recover(ctx, r))
+					}
+				}()
+				res = ec._HashCrackingMeta_durationSec(ctx, field, obj)
+				if res == graphql.Null {
+					atomic.AddUint32(&fs.Invalids, 1)
+				}
+				return res
+			}
+
+			if field.Deferrable != nil {
+				dfs, ok := deferred[field.Deferrable.Label]
+				di := 0
+				if ok {
+					dfs.AddField(field)
+					di = len(dfs.Values) - 1
+				} else {
+					dfs = graphql.NewFieldSet([]graphql.CollectedField{field})
+					deferred[field.Deferrable.Label] = dfs
+				}
+				dfs.Concurrently(di, func(ctx context.Context) graphql.Marshaler {
+					return innerFunc(ctx, dfs)
+				})
+
+				// don't run the out.Concurrently() call below
+				out.Values[i] = graphql.Null
+				continue
+			}
+
+			out.Concurrently(i, func(ctx context.Context) graphql.Marshaler { return innerFunc(ctx, out) })
+		case "crackedBy":
+			field := field
+
+			innerFunc := func(ctx context.Context, _ *graphql.FieldSet) (res graphql.Marshaler) {
+				defer func() {
+					if r := recover(); r != nil {
+						ec.Error(ctx, ec.Recover(ctx, r))
+					}
+				}()
+				res = ec._HashCrackingMeta_crackedBy(ctx, field, obj)
+				return res
+			}
+
+			if field.Deferrable != nil {
+				dfs, ok := deferred[field.Deferrable.Label]
+				di := 0
+				if ok {
+					dfs.AddField(field)
+					di = len(dfs.Values) - 1
+				} else {
+					dfs = graphql.NewFieldSet([]graphql.CollectedField{field})
+					deferred[field.Deferrable.Label] = dfs
+				}
+				dfs.Concurrently(di, func(ctx context.Context) graphql.Marshaler {
+					return innerFunc(ctx, dfs)
+				})
+
+				// don't run the out.Concurrently() call below
+				out.Values[i] = graphql.Null
+				continue
+			}
+
+			out.Concurrently(i, func(ctx context.Context) graphql.Marshaler { return innerFunc(ctx, out) })
+		case "crackedAt":
+			field := field
+
+			innerFunc := func(ctx context.Context, fs *graphql.FieldSet) (res graphql.Marshaler) {
+				defer func() {
+					if r := recover(); r != nil {
+						ec.Error(ctx, ec.Recover(ctx, r))
+					}
+				}()
+				res = ec._HashCrackingMeta_crackedAt(ctx, field, obj)
+				if res == graphql.Null {
+					atomic.AddUint32(&fs.Invalids, 1)
+				}
+				return res
+			}
+
+			if field.Deferrable != nil {
+				dfs, ok := deferred[field.Deferrable.Label]
+				di := 0
+				if ok {
+					dfs.AddField(field)
+					di = len(dfs.Values) - 1
+				} else {
+					dfs = graphql.NewFieldSet([]graphql.CollectedField{field})
+					deferred[field.Deferrable.Label] = dfs
+				}
+				dfs.Concurrently(di, func(ctx context.Context) graphql.Marshaler {
+					return innerFunc(ctx, dfs)
+				})
+
+				// don't run the out.Concurrently() call below
+				out.Values[i] = graphql.Null
+				continue
+			}
+
+			out.Concurrently(i, func(ctx context.Context) graphql.Marshaler { return innerFunc(ctx, out) })
+		default:
+			panic("unknown field " + strconv.Quote(field.Name))
+		}
+	}
+	out.Dispatch(ctx)
+	if out.Invalids > 0 {
+		return graphql.Null
+	}
+
+	atomic.AddInt32(&ec.Deferred, int32(len(deferred)))
+
+	for label, dfs := range deferred {
+		ec.ProcessDeferredGroup(graphql.DeferredGroup{
+			Label:    label,
+			Path:     graphql.GetPath(ctx),
+			FieldSet: dfs,
+			Context:  ctx,
+		})
+	}
+
+	return out
+}
+
+var hashEdgeImplementors = []string{"HashEdge"}
+
+func (ec *executionContext) _HashEdge(ctx context.Context, sel ast.SelectionSet, obj *model.HashEdge) graphql.Marshaler {
+	fields := graphql.CollectFields(ec.OperationContext, sel, hashEdgeImplementors)
+
+	out := graphql.NewFieldSet(fields)
+	deferred := make(map[string]*graphql.FieldSet)
+	for i, field := range fields {
+		switch field.Name {
+		case "__typename":
+			out.Values[i] = graphql.MarshalString("HashEdge")
+		case "node":
+			out.Values[i] = ec._HashEdge_node(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "cursor":
+			out.Values[i] = ec._HashEdge_cursor(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		default:
+			panic("unknown field " + strconv.Quote(field.Name))
+		}
+	}
+	out.Dispatch(ctx)
+	if out.Invalids > 0 {
+		return graphql.Null
+	}
+
+	atomic.AddInt32(&ec.Deferred, int32(len(deferred)))
+
+	for label, dfs := range deferred {
+		ec.ProcessDeferredGroup(graphql.DeferredGroup{
+			Label:    label,
+			Path:     graphql.GetPath(ctx),
+			FieldSet: dfs,
+			Context:  ctx,
+		})
+	}
+
+	return out
+}
+
+var hashEventImplementors = []string{"HashEvent"}
+
+func (ec *executionContext) _HashEvent(ctx context.Context, sel ast.SelectionSet, obj *model.HashEvent) graphql.Marshaler {
+	fields := graphql.CollectFields(ec.OperationContext, sel, hashEventImplementors)
+
+	out := graphql.NewFieldSet(fields)
+	deferred := make(map[string]*graphql.FieldSet)
+	for i, field := range fields {
+		switch field.Name {
+		case "__typename":
+			out.Values[i] = graphql.MarshalString("HashEvent")
+		case "action":
+			out.Values[i] = ec._HashEvent_action(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "hashId":
+			out.Values[i] = ec._HashEvent_hashId(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "operationId":
+			out.Values[i] = ec._HashEvent_operationId(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "hash":
+			out.Values[i] = ec._HashEvent_hash(ctx, field, obj)
+		default:
+			panic("unknown field " + strconv.Quote(field.Name))
+		}
+	}
+	out.Dispatch(ctx)
+	if out.Invalids > 0 {
+		return graphql.Null
+	}
+
+	atomic.AddInt32(&ec.Deferred, int32(len(deferred)))
+
+	for label, dfs := range deferred {
+		ec.ProcessDeferredGroup(graphql.DeferredGroup{
+			Label:    label,
+			Path:     graphql.GetPath(ctx),
+			FieldSet: dfs,
+			Context:  ctx,
+		})
+	}
+
+	return out
+}
+
+var hashPropertyImplementors = []string{"HashProperty"}
+
+func (ec *executionContext) _HashProperty(ctx context.Context, sel ast.SelectionSet, obj *models.HashProperty) graphql.Marshaler {
+	fields := graphql.CollectFields(ec.OperationContext, sel, hashPropertyImplementors)
+
+	out := graphql.NewFieldSet(fields)
+	deferred := make(map[string]*graphql.FieldSet)
+	for i, field := range fields {
+		switch field.Name {
+		case "__typename":
+			out.Values[i] = graphql.MarshalString("HashProperty")
+		case "name":
+			out.Values[i] = ec._HashProperty_name(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "value":
+			out.Values[i] = ec._HashProperty_value(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		default:
+			panic("unknown field " + strconv.Quote(field.Name))
+		}
+	}
+	out.Dispatch(ctx)
+	if out.Invalids > 0 {
+		return graphql.Null
+	}
+
+	atomic.AddInt32(&ec.Deferred, int32(len(deferred)))
+
+	for label, dfs := range deferred {
+		ec.ProcessDeferredGroup(graphql.DeferredGroup{
+			Label:    label,
+			Path:     graphql.GetPath(ctx),
+			FieldSet: dfs,
+			Context:  ctx,
+		})
+	}
+
+	return out
+}
+
+var hashTypeSpecImplementors = []string{"HashTypeSpec"}
+
+func (ec *executionContext) _HashTypeSpec(ctx context.Context, sel ast.SelectionSet, obj *models.HashTypeSpec) graphql.Marshaler {
+	fields := graphql.CollectFields(ec.OperationContext, sel, hashTypeSpecImplementors)
+
+	out := graphql.NewFieldSet(fields)
+	deferred := make(map[string]*graphql.FieldSet)
+	for i, field := range fields {
+		switch field.Name {
+		case "__typename":
+			out.Values[i] = graphql.MarshalString("HashTypeSpec")
+		case "name":
+			out.Values[i] = ec._HashTypeSpec_name(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "displayName":
+			out.Values[i] = ec._HashTypeSpec_displayName(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "hashcatMode":
+			out.Values[i] = ec._HashTypeSpec_hashcatMode(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		default:
+			panic("unknown field " + strconv.Quote(field.Name))
+		}
+	}
+	out.Dispatch(ctx)
+	if out.Invalids > 0 {
+		return graphql.Null
+	}
+
+	atomic.AddInt32(&ec.Deferred, int32(len(deferred)))
+
+	for label, dfs := range deferred {
+		ec.ProcessDeferredGroup(graphql.DeferredGroup{
+			Label:    label,
+			Path:     graphql.GetPath(ctx),
+			FieldSet: dfs,
+			Context:  ctx,
+		})
+	}
+
+	return out
+}
+
 var mutationImplementors = []string{"Mutation"}
 
 func (ec *executionContext) _Mutation(ctx context.Context, sel ast.SelectionSet) graphql.Marshaler {
@@ -28188,6 +33825,62 @@ func (ec *executionContext) _Mutation(ctx context.Context, sel ast.SelectionSet)
 		case "deleteCredentialComment":
 			out.Values[i] = ec.OperationContext.RootResolverMiddleware(innerCtx, func(ctx context.Context) (res graphql.Marshaler) {
 				return ec._Mutation_deleteCredentialComment(ctx, field)
+			})
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "createHash":
+			out.Values[i] = ec.OperationContext.RootResolverMiddleware(innerCtx, func(ctx context.Context) (res graphql.Marshaler) {
+				return ec._Mutation_createHash(ctx, field)
+			})
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "updateHash":
+			out.Values[i] = ec.OperationContext.RootResolverMiddleware(innerCtx, func(ctx context.Context) (res graphql.Marshaler) {
+				return ec._Mutation_updateHash(ctx, field)
+			})
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "deleteHash":
+			out.Values[i] = ec.OperationContext.RootResolverMiddleware(innerCtx, func(ctx context.Context) (res graphql.Marshaler) {
+				return ec._Mutation_deleteHash(ctx, field)
+			})
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "bulkImportHashes":
+			out.Values[i] = ec.OperationContext.RootResolverMiddleware(innerCtx, func(ctx context.Context) (res graphql.Marshaler) {
+				return ec._Mutation_bulkImportHashes(ctx, field)
+			})
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "markHashCracked":
+			out.Values[i] = ec.OperationContext.RootResolverMiddleware(innerCtx, func(ctx context.Context) (res graphql.Marshaler) {
+				return ec._Mutation_markHashCracked(ctx, field)
+			})
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "addHashComment":
+			out.Values[i] = ec.OperationContext.RootResolverMiddleware(innerCtx, func(ctx context.Context) (res graphql.Marshaler) {
+				return ec._Mutation_addHashComment(ctx, field)
+			})
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "updateHashComment":
+			out.Values[i] = ec.OperationContext.RootResolverMiddleware(innerCtx, func(ctx context.Context) (res graphql.Marshaler) {
+				return ec._Mutation_updateHashComment(ctx, field)
+			})
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "deleteHashComment":
+			out.Values[i] = ec.OperationContext.RootResolverMiddleware(innerCtx, func(ctx context.Context) (res graphql.Marshaler) {
+				return ec._Mutation_deleteHashComment(ctx, field)
 			})
 			if out.Values[i] == graphql.Null {
 				out.Invalids++
@@ -29250,6 +34943,138 @@ func (ec *executionContext) _Query(ctx context.Context, sel ast.SelectionSet) gr
 					}
 				}()
 				res = ec._Query_myCredentialTags(ctx, field)
+				if res == graphql.Null {
+					atomic.AddUint32(&fs.Invalids, 1)
+				}
+				return res
+			}
+
+			rrm := func(ctx context.Context) graphql.Marshaler {
+				return ec.OperationContext.RootResolverMiddleware(ctx,
+					func(ctx context.Context) graphql.Marshaler { return innerFunc(ctx, out) })
+			}
+
+			out.Concurrently(i, func(ctx context.Context) graphql.Marshaler { return rrm(innerCtx) })
+		case "hash":
+			field := field
+
+			innerFunc := func(ctx context.Context, fs *graphql.FieldSet) (res graphql.Marshaler) {
+				defer func() {
+					if r := recover(); r != nil {
+						ec.Error(ctx, ec.Recover(ctx, r))
+					}
+				}()
+				res = ec._Query_hash(ctx, field)
+				if res == graphql.Null {
+					atomic.AddUint32(&fs.Invalids, 1)
+				}
+				return res
+			}
+
+			rrm := func(ctx context.Context) graphql.Marshaler {
+				return ec.OperationContext.RootResolverMiddleware(ctx,
+					func(ctx context.Context) graphql.Marshaler { return innerFunc(ctx, out) })
+			}
+
+			out.Concurrently(i, func(ctx context.Context) graphql.Marshaler { return rrm(innerCtx) })
+		case "hashes":
+			field := field
+
+			innerFunc := func(ctx context.Context, fs *graphql.FieldSet) (res graphql.Marshaler) {
+				defer func() {
+					if r := recover(); r != nil {
+						ec.Error(ctx, ec.Recover(ctx, r))
+					}
+				}()
+				res = ec._Query_hashes(ctx, field)
+				if res == graphql.Null {
+					atomic.AddUint32(&fs.Invalids, 1)
+				}
+				return res
+			}
+
+			rrm := func(ctx context.Context) graphql.Marshaler {
+				return ec.OperationContext.RootResolverMiddleware(ctx,
+					func(ctx context.Context) graphql.Marshaler { return innerFunc(ctx, out) })
+			}
+
+			out.Concurrently(i, func(ctx context.Context) graphql.Marshaler { return rrm(innerCtx) })
+		case "hashTags":
+			field := field
+
+			innerFunc := func(ctx context.Context, fs *graphql.FieldSet) (res graphql.Marshaler) {
+				defer func() {
+					if r := recover(); r != nil {
+						ec.Error(ctx, ec.Recover(ctx, r))
+					}
+				}()
+				res = ec._Query_hashTags(ctx, field)
+				if res == graphql.Null {
+					atomic.AddUint32(&fs.Invalids, 1)
+				}
+				return res
+			}
+
+			rrm := func(ctx context.Context) graphql.Marshaler {
+				return ec.OperationContext.RootResolverMiddleware(ctx,
+					func(ctx context.Context) graphql.Marshaler { return innerFunc(ctx, out) })
+			}
+
+			out.Concurrently(i, func(ctx context.Context) graphql.Marshaler { return rrm(innerCtx) })
+		case "myHashes":
+			field := field
+
+			innerFunc := func(ctx context.Context, fs *graphql.FieldSet) (res graphql.Marshaler) {
+				defer func() {
+					if r := recover(); r != nil {
+						ec.Error(ctx, ec.Recover(ctx, r))
+					}
+				}()
+				res = ec._Query_myHashes(ctx, field)
+				if res == graphql.Null {
+					atomic.AddUint32(&fs.Invalids, 1)
+				}
+				return res
+			}
+
+			rrm := func(ctx context.Context) graphql.Marshaler {
+				return ec.OperationContext.RootResolverMiddleware(ctx,
+					func(ctx context.Context) graphql.Marshaler { return innerFunc(ctx, out) })
+			}
+
+			out.Concurrently(i, func(ctx context.Context) graphql.Marshaler { return rrm(innerCtx) })
+		case "myHashTags":
+			field := field
+
+			innerFunc := func(ctx context.Context, fs *graphql.FieldSet) (res graphql.Marshaler) {
+				defer func() {
+					if r := recover(); r != nil {
+						ec.Error(ctx, ec.Recover(ctx, r))
+					}
+				}()
+				res = ec._Query_myHashTags(ctx, field)
+				if res == graphql.Null {
+					atomic.AddUint32(&fs.Invalids, 1)
+				}
+				return res
+			}
+
+			rrm := func(ctx context.Context) graphql.Marshaler {
+				return ec.OperationContext.RootResolverMiddleware(ctx,
+					func(ctx context.Context) graphql.Marshaler { return innerFunc(ctx, out) })
+			}
+
+			out.Concurrently(i, func(ctx context.Context) graphql.Marshaler { return rrm(innerCtx) })
+		case "hashTypes":
+			field := field
+
+			innerFunc := func(ctx context.Context, fs *graphql.FieldSet) (res graphql.Marshaler) {
+				defer func() {
+					if r := recover(); r != nil {
+						ec.Error(ctx, ec.Recover(ctx, r))
+					}
+				}()
+				res = ec._Query_hashTypes(ctx, field)
 				if res == graphql.Null {
 					atomic.AddUint32(&fs.Invalids, 1)
 				}
@@ -30788,6 +36613,10 @@ func (ec *executionContext) _Subscription(ctx context.Context, sel ast.Selection
 		return ec._Subscription_credentialChanged(ctx, fields[0])
 	case "myCredentialChanged":
 		return ec._Subscription_myCredentialChanged(ctx, fields[0])
+	case "hashChanged":
+		return ec._Subscription_hashChanged(ctx, fields[0])
+	case "myHashChanged":
+		return ec._Subscription_myHashChanged(ctx, fields[0])
 	case "mySessionChanged":
 		return ec._Subscription_mySessionChanged(ctx, fields[0])
 	case "sessionChanged":
@@ -34427,6 +40256,35 @@ func (ec *executionContext) marshalNBoolean2bool(ctx context.Context, sel ast.Se
 	return res
 }
 
+func (ec *executionContext) unmarshalNBulkHashFormat2githubᚗcomᚋvibeᚑc2ᚋvibeᚑc2ᚑcoreᚋcoreᚋpkgᚋgraphqlᚋmodelᚐBulkHashFormat(ctx context.Context, v any) (model.BulkHashFormat, error) {
+	var res model.BulkHashFormat
+	err := res.UnmarshalGQL(v)
+	return res, graphql.ErrorOnPath(ctx, err)
+}
+
+func (ec *executionContext) marshalNBulkHashFormat2githubᚗcomᚋvibeᚑc2ᚋvibeᚑc2ᚑcoreᚋcoreᚋpkgᚋgraphqlᚋmodelᚐBulkHashFormat(ctx context.Context, sel ast.SelectionSet, v model.BulkHashFormat) graphql.Marshaler {
+	return v
+}
+
+func (ec *executionContext) unmarshalNBulkImportHashesInput2githubᚗcomᚋvibeᚑc2ᚋvibeᚑc2ᚑcoreᚋcoreᚋpkgᚋgraphqlᚋmodelᚐBulkImportHashesInput(ctx context.Context, v any) (model.BulkImportHashesInput, error) {
+	res, err := ec.unmarshalInputBulkImportHashesInput(ctx, v)
+	return res, graphql.ErrorOnPath(ctx, err)
+}
+
+func (ec *executionContext) marshalNBulkImportHashesResult2githubᚗcomᚋvibeᚑc2ᚋvibeᚑc2ᚑcoreᚋcoreᚋpkgᚋgraphqlᚋmodelᚐBulkImportHashesResult(ctx context.Context, sel ast.SelectionSet, v model.BulkImportHashesResult) graphql.Marshaler {
+	return ec._BulkImportHashesResult(ctx, sel, &v)
+}
+
+func (ec *executionContext) marshalNBulkImportHashesResult2ᚖgithubᚗcomᚋvibeᚑc2ᚋvibeᚑc2ᚑcoreᚋcoreᚋpkgᚋgraphqlᚋmodelᚐBulkImportHashesResult(ctx context.Context, sel ast.SelectionSet, v *model.BulkImportHashesResult) graphql.Marshaler {
+	if v == nil {
+		if !graphql.HasFieldError(ctx, graphql.GetFieldContext(ctx)) {
+			graphql.AddErrorf(ctx, "the requested element is null which the schema does not allow")
+		}
+		return graphql.Null
+	}
+	return ec._BulkImportHashesResult(ctx, sel, v)
+}
+
 func (ec *executionContext) unmarshalNChangeTaskStageInput2githubᚗcomᚋvibeᚑc2ᚋvibeᚑc2ᚑcoreᚋcoreᚋpkgᚋgraphqlᚋmodelᚐChangeTaskStageInput(ctx context.Context, v any) (model.ChangeTaskStageInput, error) {
 	res, err := ec.unmarshalInputChangeTaskStageInput(ctx, v)
 	return res, graphql.ErrorOnPath(ctx, err)
@@ -34439,6 +40297,11 @@ func (ec *executionContext) unmarshalNCreateCredentialInput2githubᚗcomᚋvibe�
 
 func (ec *executionContext) unmarshalNCreateCustomTimelineEventInput2githubᚗcomᚋvibeᚑc2ᚋvibeᚑc2ᚑcoreᚋcoreᚋpkgᚋgraphqlᚋmodelᚐCreateCustomTimelineEventInput(ctx context.Context, v any) (model.CreateCustomTimelineEventInput, error) {
 	res, err := ec.unmarshalInputCreateCustomTimelineEventInput(ctx, v)
+	return res, graphql.ErrorOnPath(ctx, err)
+}
+
+func (ec *executionContext) unmarshalNCreateHashInput2githubᚗcomᚋvibeᚑc2ᚋvibeᚑc2ᚑcoreᚋcoreᚋpkgᚋgraphqlᚋmodelᚐCreateHashInput(ctx context.Context, v any) (model.CreateHashInput, error) {
+	res, err := ec.unmarshalInputCreateHashInput(ctx, v)
 	return res, graphql.ErrorOnPath(ctx, err)
 }
 
@@ -34659,6 +40522,184 @@ func (ec *executionContext) marshalNEventAction2githubᚗcomᚋvibeᚑc2ᚋvibe�
 	return v
 }
 
+func (ec *executionContext) marshalNHash2githubᚗcomᚋvibeᚑc2ᚋvibeᚑc2ᚑcoreᚋcoreᚋpkgᚋmodelsᚐHash(ctx context.Context, sel ast.SelectionSet, v models.Hash) graphql.Marshaler {
+	return ec._Hash(ctx, sel, &v)
+}
+
+func (ec *executionContext) marshalNHash2ᚕᚖgithubᚗcomᚋvibeᚑc2ᚋvibeᚑc2ᚑcoreᚋcoreᚋpkgᚋmodelsᚐHashᚄ(ctx context.Context, sel ast.SelectionSet, v []*models.Hash) graphql.Marshaler {
+	ret := graphql.MarshalSliceConcurrently(ctx, len(v), 0, false, func(ctx context.Context, i int) graphql.Marshaler {
+		fc := graphql.GetFieldContext(ctx)
+		fc.Result = &v[i]
+		return ec.marshalNHash2ᚖgithubᚗcomᚋvibeᚑc2ᚋvibeᚑc2ᚑcoreᚋcoreᚋpkgᚋmodelsᚐHash(ctx, sel, v[i])
+	})
+
+	for _, e := range ret {
+		if e == graphql.Null {
+			return graphql.Null
+		}
+	}
+
+	return ret
+}
+
+func (ec *executionContext) marshalNHash2ᚖgithubᚗcomᚋvibeᚑc2ᚋvibeᚑc2ᚑcoreᚋcoreᚋpkgᚋmodelsᚐHash(ctx context.Context, sel ast.SelectionSet, v *models.Hash) graphql.Marshaler {
+	if v == nil {
+		if !graphql.HasFieldError(ctx, graphql.GetFieldContext(ctx)) {
+			graphql.AddErrorf(ctx, "the requested element is null which the schema does not allow")
+		}
+		return graphql.Null
+	}
+	return ec._Hash(ctx, sel, v)
+}
+
+func (ec *executionContext) marshalNHashComment2ᚕᚖgithubᚗcomᚋvibeᚑc2ᚋvibeᚑc2ᚑcoreᚋcoreᚋpkgᚋmodelsᚐHashCommentᚄ(ctx context.Context, sel ast.SelectionSet, v []*models.HashComment) graphql.Marshaler {
+	ret := graphql.MarshalSliceConcurrently(ctx, len(v), 0, false, func(ctx context.Context, i int) graphql.Marshaler {
+		fc := graphql.GetFieldContext(ctx)
+		fc.Result = &v[i]
+		return ec.marshalNHashComment2ᚖgithubᚗcomᚋvibeᚑc2ᚋvibeᚑc2ᚑcoreᚋcoreᚋpkgᚋmodelsᚐHashComment(ctx, sel, v[i])
+	})
+
+	for _, e := range ret {
+		if e == graphql.Null {
+			return graphql.Null
+		}
+	}
+
+	return ret
+}
+
+func (ec *executionContext) marshalNHashComment2ᚖgithubᚗcomᚋvibeᚑc2ᚋvibeᚑc2ᚑcoreᚋcoreᚋpkgᚋmodelsᚐHashComment(ctx context.Context, sel ast.SelectionSet, v *models.HashComment) graphql.Marshaler {
+	if v == nil {
+		if !graphql.HasFieldError(ctx, graphql.GetFieldContext(ctx)) {
+			graphql.AddErrorf(ctx, "the requested element is null which the schema does not allow")
+		}
+		return graphql.Null
+	}
+	return ec._HashComment(ctx, sel, v)
+}
+
+func (ec *executionContext) marshalNHashConnection2githubᚗcomᚋvibeᚑc2ᚋvibeᚑc2ᚑcoreᚋcoreᚋpkgᚋgraphqlᚋmodelᚐHashConnection(ctx context.Context, sel ast.SelectionSet, v model.HashConnection) graphql.Marshaler {
+	return ec._HashConnection(ctx, sel, &v)
+}
+
+func (ec *executionContext) marshalNHashConnection2ᚖgithubᚗcomᚋvibeᚑc2ᚋvibeᚑc2ᚑcoreᚋcoreᚋpkgᚋgraphqlᚋmodelᚐHashConnection(ctx context.Context, sel ast.SelectionSet, v *model.HashConnection) graphql.Marshaler {
+	if v == nil {
+		if !graphql.HasFieldError(ctx, graphql.GetFieldContext(ctx)) {
+			graphql.AddErrorf(ctx, "the requested element is null which the schema does not allow")
+		}
+		return graphql.Null
+	}
+	return ec._HashConnection(ctx, sel, v)
+}
+
+func (ec *executionContext) marshalNHashEdge2ᚕᚖgithubᚗcomᚋvibeᚑc2ᚋvibeᚑc2ᚑcoreᚋcoreᚋpkgᚋgraphqlᚋmodelᚐHashEdgeᚄ(ctx context.Context, sel ast.SelectionSet, v []*model.HashEdge) graphql.Marshaler {
+	ret := graphql.MarshalSliceConcurrently(ctx, len(v), 0, false, func(ctx context.Context, i int) graphql.Marshaler {
+		fc := graphql.GetFieldContext(ctx)
+		fc.Result = &v[i]
+		return ec.marshalNHashEdge2ᚖgithubᚗcomᚋvibeᚑc2ᚋvibeᚑc2ᚑcoreᚋcoreᚋpkgᚋgraphqlᚋmodelᚐHashEdge(ctx, sel, v[i])
+	})
+
+	for _, e := range ret {
+		if e == graphql.Null {
+			return graphql.Null
+		}
+	}
+
+	return ret
+}
+
+func (ec *executionContext) marshalNHashEdge2ᚖgithubᚗcomᚋvibeᚑc2ᚋvibeᚑc2ᚑcoreᚋcoreᚋpkgᚋgraphqlᚋmodelᚐHashEdge(ctx context.Context, sel ast.SelectionSet, v *model.HashEdge) graphql.Marshaler {
+	if v == nil {
+		if !graphql.HasFieldError(ctx, graphql.GetFieldContext(ctx)) {
+			graphql.AddErrorf(ctx, "the requested element is null which the schema does not allow")
+		}
+		return graphql.Null
+	}
+	return ec._HashEdge(ctx, sel, v)
+}
+
+func (ec *executionContext) marshalNHashEvent2githubᚗcomᚋvibeᚑc2ᚋvibeᚑc2ᚑcoreᚋcoreᚋpkgᚋgraphqlᚋmodelᚐHashEvent(ctx context.Context, sel ast.SelectionSet, v model.HashEvent) graphql.Marshaler {
+	return ec._HashEvent(ctx, sel, &v)
+}
+
+func (ec *executionContext) marshalNHashEvent2ᚖgithubᚗcomᚋvibeᚑc2ᚋvibeᚑc2ᚑcoreᚋcoreᚋpkgᚋgraphqlᚋmodelᚐHashEvent(ctx context.Context, sel ast.SelectionSet, v *model.HashEvent) graphql.Marshaler {
+	if v == nil {
+		if !graphql.HasFieldError(ctx, graphql.GetFieldContext(ctx)) {
+			graphql.AddErrorf(ctx, "the requested element is null which the schema does not allow")
+		}
+		return graphql.Null
+	}
+	return ec._HashEvent(ctx, sel, v)
+}
+
+func (ec *executionContext) marshalNHashProperty2githubᚗcomᚋvibeᚑc2ᚋvibeᚑc2ᚑcoreᚋcoreᚋpkgᚋmodelsᚐHashProperty(ctx context.Context, sel ast.SelectionSet, v models.HashProperty) graphql.Marshaler {
+	return ec._HashProperty(ctx, sel, &v)
+}
+
+func (ec *executionContext) marshalNHashProperty2ᚕgithubᚗcomᚋvibeᚑc2ᚋvibeᚑc2ᚑcoreᚋcoreᚋpkgᚋmodelsᚐHashPropertyᚄ(ctx context.Context, sel ast.SelectionSet, v []models.HashProperty) graphql.Marshaler {
+	ret := graphql.MarshalSliceConcurrently(ctx, len(v), 0, false, func(ctx context.Context, i int) graphql.Marshaler {
+		fc := graphql.GetFieldContext(ctx)
+		fc.Result = &v[i]
+		return ec.marshalNHashProperty2githubᚗcomᚋvibeᚑc2ᚋvibeᚑc2ᚑcoreᚋcoreᚋpkgᚋmodelsᚐHashProperty(ctx, sel, v[i])
+	})
+
+	for _, e := range ret {
+		if e == graphql.Null {
+			return graphql.Null
+		}
+	}
+
+	return ret
+}
+
+func (ec *executionContext) unmarshalNHashPropertyInput2ᚖgithubᚗcomᚋvibeᚑc2ᚋvibeᚑc2ᚑcoreᚋcoreᚋpkgᚋgraphqlᚋmodelᚐHashPropertyInput(ctx context.Context, v any) (*model.HashPropertyInput, error) {
+	res, err := ec.unmarshalInputHashPropertyInput(ctx, v)
+	return &res, graphql.ErrorOnPath(ctx, err)
+}
+
+func (ec *executionContext) unmarshalNHashStatus2githubᚗcomᚋvibeᚑc2ᚋvibeᚑc2ᚑcoreᚋcoreᚋpkgᚋmodelsᚐHashStatus(ctx context.Context, v any) (models.HashStatus, error) {
+	tmp, err := graphql.UnmarshalString(v)
+	res := models.HashStatus(tmp)
+	return res, graphql.ErrorOnPath(ctx, err)
+}
+
+func (ec *executionContext) marshalNHashStatus2githubᚗcomᚋvibeᚑc2ᚋvibeᚑc2ᚑcoreᚋcoreᚋpkgᚋmodelsᚐHashStatus(ctx context.Context, sel ast.SelectionSet, v models.HashStatus) graphql.Marshaler {
+	_ = sel
+	res := graphql.MarshalString(string(v))
+	if res == graphql.Null {
+		if !graphql.HasFieldError(ctx, graphql.GetFieldContext(ctx)) {
+			graphql.AddErrorf(ctx, "the requested element is null which the schema does not allow")
+		}
+	}
+	return res
+}
+
+func (ec *executionContext) marshalNHashTypeSpec2ᚕᚖgithubᚗcomᚋvibeᚑc2ᚋvibeᚑc2ᚑcoreᚋcoreᚋpkgᚋmodelsᚐHashTypeSpecᚄ(ctx context.Context, sel ast.SelectionSet, v []*models.HashTypeSpec) graphql.Marshaler {
+	ret := graphql.MarshalSliceConcurrently(ctx, len(v), 0, false, func(ctx context.Context, i int) graphql.Marshaler {
+		fc := graphql.GetFieldContext(ctx)
+		fc.Result = &v[i]
+		return ec.marshalNHashTypeSpec2ᚖgithubᚗcomᚋvibeᚑc2ᚋvibeᚑc2ᚑcoreᚋcoreᚋpkgᚋmodelsᚐHashTypeSpec(ctx, sel, v[i])
+	})
+
+	for _, e := range ret {
+		if e == graphql.Null {
+			return graphql.Null
+		}
+	}
+
+	return ret
+}
+
+func (ec *executionContext) marshalNHashTypeSpec2ᚖgithubᚗcomᚋvibeᚑc2ᚋvibeᚑc2ᚑcoreᚋcoreᚋpkgᚋmodelsᚐHashTypeSpec(ctx context.Context, sel ast.SelectionSet, v *models.HashTypeSpec) graphql.Marshaler {
+	if v == nil {
+		if !graphql.HasFieldError(ctx, graphql.GetFieldContext(ctx)) {
+			graphql.AddErrorf(ctx, "the requested element is null which the schema does not allow")
+		}
+		return graphql.Null
+	}
+	return ec._HashTypeSpec(ctx, sel, v)
+}
+
 func (ec *executionContext) unmarshalNID2string(ctx context.Context, v any) (string, error) {
 	res, err := graphql.UnmarshalID(v)
 	return res, graphql.ErrorOnPath(ctx, err)
@@ -34719,6 +40760,11 @@ func (ec *executionContext) marshalNInt2int(ctx context.Context, sel ast.Selecti
 		}
 	}
 	return res
+}
+
+func (ec *executionContext) unmarshalNMarkHashCrackedInput2githubᚗcomᚋvibeᚑc2ᚋvibeᚑc2ᚑcoreᚋcoreᚋpkgᚋgraphqlᚋmodelᚐMarkHashCrackedInput(ctx context.Context, v any) (model.MarkHashCrackedInput, error) {
+	res, err := ec.unmarshalInputMarkHashCrackedInput(ctx, v)
+	return res, graphql.ErrorOnPath(ctx, err)
 }
 
 func (ec *executionContext) marshalNOperation2githubᚗcomᚋvibeᚑc2ᚋvibeᚑc2ᚑcoreᚋcoreᚋpkgᚋmodelsᚐOperation(ctx context.Context, sel ast.SelectionSet, v models.Operation) graphql.Marshaler {
@@ -35299,6 +41345,11 @@ func (ec *executionContext) unmarshalNUpdateCredentialInput2githubᚗcomᚋvibe�
 
 func (ec *executionContext) unmarshalNUpdateCustomTimelineEventInput2githubᚗcomᚋvibeᚑc2ᚋvibeᚑc2ᚑcoreᚋcoreᚋpkgᚋgraphqlᚋmodelᚐUpdateCustomTimelineEventInput(ctx context.Context, v any) (model.UpdateCustomTimelineEventInput, error) {
 	res, err := ec.unmarshalInputUpdateCustomTimelineEventInput(ctx, v)
+	return res, graphql.ErrorOnPath(ctx, err)
+}
+
+func (ec *executionContext) unmarshalNUpdateHashInput2githubᚗcomᚋvibeᚑc2ᚋvibeᚑc2ᚑcoreᚋcoreᚋpkgᚋgraphqlᚋmodelᚐUpdateHashInput(ctx context.Context, v any) (model.UpdateHashInput, error) {
+	res, err := ec.unmarshalInputUpdateHashInput(ctx, v)
 	return res, graphql.ErrorOnPath(ctx, err)
 }
 
@@ -35984,6 +42035,14 @@ func (ec *executionContext) marshalOBoolean2ᚖbool(ctx context.Context, sel ast
 	return res
 }
 
+func (ec *executionContext) unmarshalOCreateCredentialInput2ᚖgithubᚗcomᚋvibeᚑc2ᚋvibeᚑc2ᚑcoreᚋcoreᚋpkgᚋgraphqlᚋmodelᚐCreateCredentialInput(ctx context.Context, v any) (*model.CreateCredentialInput, error) {
+	if v == nil {
+		return nil, nil
+	}
+	res, err := ec.unmarshalInputCreateCredentialInput(ctx, v)
+	return &res, graphql.ErrorOnPath(ctx, err)
+}
+
 func (ec *executionContext) marshalOCredential2ᚖgithubᚗcomᚋvibeᚑc2ᚋvibeᚑc2ᚑcoreᚋcoreᚋpkgᚋmodelsᚐCredential(ctx context.Context, sel ast.SelectionSet, v *models.Credential) graphql.Marshaler {
 	if v == nil {
 		return graphql.Null
@@ -36061,6 +42120,94 @@ func (ec *executionContext) marshalOFloat2ᚖfloat64(ctx context.Context, sel as
 	_ = sel
 	res := graphql.MarshalFloatContext(*v)
 	return graphql.WrapContextMarshaler(ctx, res)
+}
+
+func (ec *executionContext) marshalOHash2ᚖgithubᚗcomᚋvibeᚑc2ᚋvibeᚑc2ᚑcoreᚋcoreᚋpkgᚋmodelsᚐHash(ctx context.Context, sel ast.SelectionSet, v *models.Hash) graphql.Marshaler {
+	if v == nil {
+		return graphql.Null
+	}
+	return ec._Hash(ctx, sel, v)
+}
+
+func (ec *executionContext) marshalOHashCrackingMeta2ᚖgithubᚗcomᚋvibeᚑc2ᚋvibeᚑc2ᚑcoreᚋcoreᚋpkgᚋmodelsᚐHashCrackingMeta(ctx context.Context, sel ast.SelectionSet, v *models.HashCrackingMeta) graphql.Marshaler {
+	if v == nil {
+		return graphql.Null
+	}
+	return ec._HashCrackingMeta(ctx, sel, v)
+}
+
+func (ec *executionContext) unmarshalOHashPropertyInput2ᚕᚖgithubᚗcomᚋvibeᚑc2ᚋvibeᚑc2ᚑcoreᚋcoreᚋpkgᚋgraphqlᚋmodelᚐHashPropertyInputᚄ(ctx context.Context, v any) ([]*model.HashPropertyInput, error) {
+	if v == nil {
+		return nil, nil
+	}
+	var vSlice []any
+	vSlice = graphql.CoerceList(v)
+	var err error
+	res := make([]*model.HashPropertyInput, len(vSlice))
+	for i := range vSlice {
+		ctx := graphql.WithPathContext(ctx, graphql.NewPathWithIndex(i))
+		res[i], err = ec.unmarshalNHashPropertyInput2ᚖgithubᚗcomᚋvibeᚑc2ᚋvibeᚑc2ᚑcoreᚋcoreᚋpkgᚋgraphqlᚋmodelᚐHashPropertyInput(ctx, vSlice[i])
+		if err != nil {
+			return nil, err
+		}
+	}
+	return res, nil
+}
+
+func (ec *executionContext) unmarshalOHashStatus2ᚕgithubᚗcomᚋvibeᚑc2ᚋvibeᚑc2ᚑcoreᚋcoreᚋpkgᚋmodelsᚐHashStatusᚄ(ctx context.Context, v any) ([]models.HashStatus, error) {
+	if v == nil {
+		return nil, nil
+	}
+	var vSlice []any
+	vSlice = graphql.CoerceList(v)
+	var err error
+	res := make([]models.HashStatus, len(vSlice))
+	for i := range vSlice {
+		ctx := graphql.WithPathContext(ctx, graphql.NewPathWithIndex(i))
+		res[i], err = ec.unmarshalNHashStatus2githubᚗcomᚋvibeᚑc2ᚋvibeᚑc2ᚑcoreᚋcoreᚋpkgᚋmodelsᚐHashStatus(ctx, vSlice[i])
+		if err != nil {
+			return nil, err
+		}
+	}
+	return res, nil
+}
+
+func (ec *executionContext) marshalOHashStatus2ᚕgithubᚗcomᚋvibeᚑc2ᚋvibeᚑc2ᚑcoreᚋcoreᚋpkgᚋmodelsᚐHashStatusᚄ(ctx context.Context, sel ast.SelectionSet, v []models.HashStatus) graphql.Marshaler {
+	if v == nil {
+		return graphql.Null
+	}
+	ret := graphql.MarshalSliceConcurrently(ctx, len(v), 0, false, func(ctx context.Context, i int) graphql.Marshaler {
+		fc := graphql.GetFieldContext(ctx)
+		fc.Result = &v[i]
+		return ec.marshalNHashStatus2githubᚗcomᚋvibeᚑc2ᚋvibeᚑc2ᚑcoreᚋcoreᚋpkgᚋmodelsᚐHashStatus(ctx, sel, v[i])
+	})
+
+	for _, e := range ret {
+		if e == graphql.Null {
+			return graphql.Null
+		}
+	}
+
+	return ret
+}
+
+func (ec *executionContext) unmarshalOHashStatus2ᚖgithubᚗcomᚋvibeᚑc2ᚋvibeᚑc2ᚑcoreᚋcoreᚋpkgᚋmodelsᚐHashStatus(ctx context.Context, v any) (*models.HashStatus, error) {
+	if v == nil {
+		return nil, nil
+	}
+	tmp, err := graphql.UnmarshalString(v)
+	res := models.HashStatus(tmp)
+	return &res, graphql.ErrorOnPath(ctx, err)
+}
+
+func (ec *executionContext) marshalOHashStatus2ᚖgithubᚗcomᚋvibeᚑc2ᚋvibeᚑc2ᚑcoreᚋcoreᚋpkgᚋmodelsᚐHashStatus(ctx context.Context, sel ast.SelectionSet, v *models.HashStatus) graphql.Marshaler {
+	if v == nil {
+		return graphql.Null
+	}
+	_ = sel
+	_ = ctx
+	res := graphql.MarshalString(string(*v))
+	return res
 }
 
 func (ec *executionContext) unmarshalOID2ᚕstringᚄ(ctx context.Context, v any) ([]string, error) {

@@ -15,6 +15,12 @@ export function renderEventSummary(event: TimelineEventFieldsFragment): string {
   switch (event.topic) {
     case "credential.created":
       return `${actor} added credential "${name}"`
+    case "hash.created":
+      return `${actor} added hash "${name}"`
+    case "hash.bulk_imported":
+      return `${actor} imported ${name}`
+    case "hash.cracked":
+      return `${actor} cracked hash "${name}"`
     case "wiki.document.created":
       return `${actor} created wiki document "${name}"`
     case "task.stage_changed":
@@ -40,6 +46,12 @@ export function renderGroupSummary(topic: string, count: number): string {
   switch (topic) {
     case "credential.created":
       return `${count} credentials added`
+    case "hash.created":
+      return `${count} hashes added`
+    case "hash.bulk_imported":
+      return `${count} bulk imports`
+    case "hash.cracked":
+      return `${count} hashes cracked`
     case "wiki.document.created":
       return `${count} wiki documents created`
     case "timeline.custom.created":

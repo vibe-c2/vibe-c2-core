@@ -280,6 +280,71 @@ models:
       updatedAt:
         resolver: true         # time.Time -> RFC3339 string
 
+  # --- Hashes ---
+
+  HashStatus:
+    model:
+      - github.com/vibe-c2/vibe-c2-core/core/pkg/models.HashStatus
+
+  HashTypeSpec:
+    model:
+      - github.com/vibe-c2/vibe-c2-core/core/pkg/models.HashTypeSpec
+
+  Hash:
+    model:
+      - github.com/vibe-c2/vibe-c2-core/core/pkg/models.Hash
+    fields:
+      id:
+        resolver: true         # HashID (uuid.UUID) -> ID (string)
+      operationId:
+        resolver: true         # OperationID (uuid.UUID) -> ID (string)
+      operation:
+        resolver: true         # OperationID -> Operation (fetched from DB)
+      credentialId:
+        resolver: true         # *uuid.UUID -> *string (nullable)
+      credential:
+        resolver: true         # CredentialID -> Credential (fetched from DB, nullable)
+      crackingMeta:
+        resolver: true         # *HashCrackingMeta -> *HashCrackingMeta (nullable)
+      comments:
+        resolver: true         # []HashComment -> []*HashComment
+      viewerCanModerateComments:
+        resolver: true
+      createdBy:
+        resolver: true         # CreatedByID -> User
+      createdAt:
+        resolver: true         # field.DefaultField.CreateAt -> string
+      updatedAt:
+        resolver: true         # field.DefaultField.UpdateAt -> string
+
+  HashProperty:
+    model:
+      - github.com/vibe-c2/vibe-c2-core/core/pkg/models.HashProperty
+
+  HashComment:
+    model:
+      - github.com/vibe-c2/vibe-c2-core/core/pkg/models.HashComment
+    fields:
+      id:
+        resolver: true         # CommentID (uuid.UUID) -> ID (string)
+      author:
+        resolver: true         # AuthorID (uuid.UUID) -> User (fetched from DB)
+      createdAt:
+        resolver: true         # time.Time -> RFC3339 string
+      updatedAt:
+        resolver: true         # time.Time -> RFC3339 string
+
+  HashCrackingMeta:
+    model:
+      - github.com/vibe-c2/vibe-c2-core/core/pkg/models.HashCrackingMeta
+    fields:
+      durationSec:
+        resolver: true         # int64 -> Int
+      crackedBy:
+        resolver: true         # CrackedByID -> User (nullable)
+      crackedAt:
+        resolver: true         # time.Time -> RFC3339 string
+
   # --- Tasks ---
 
   # TaskStage / TaskStatus are mapped to the Go enum types so gqlgen marshals

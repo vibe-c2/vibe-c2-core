@@ -25,11 +25,12 @@ var eventNamespace = uuid.MustParse("4f6d2d24-2b0d-5d8a-9c11-7a8f8c3a1f7e")
 // Logger is the persistence subscriber. Construct via NewLogger and register
 // with the event bus via Subscribe.
 type Logger struct {
-	repo  repository.IOperationEventRepository
-	ops   repository.IOperationRepository
-	creds repository.ICredentialRepository
-	bus   eventbus.IEventBus
-	log   *zap.Logger
+	repo   repository.IOperationEventRepository
+	ops    repository.IOperationRepository
+	creds  repository.ICredentialRepository
+	hashes repository.IHashRepository
+	bus    eventbus.IEventBus
+	log    *zap.Logger
 }
 
 // NewLogger wires repository dependencies and returns a ready-to-subscribe
@@ -40,10 +41,11 @@ func NewLogger(
 	repo repository.IOperationEventRepository,
 	ops repository.IOperationRepository,
 	creds repository.ICredentialRepository,
+	hashes repository.IHashRepository,
 	bus eventbus.IEventBus,
 	log *zap.Logger,
 ) *Logger {
-	return &Logger{repo: repo, ops: ops, creds: creds, bus: bus, log: log}
+	return &Logger{repo: repo, ops: ops, creds: creds, hashes: hashes, bus: bus, log: log}
 }
 
 // Topics returns the bus topics this logger persists. Wire one Subscribe call
@@ -63,6 +65,14 @@ func (l *Logger) Topics() []eventbus.Topic {
 	return []eventbus.Topic{
 		eventbus.TopicCredentialCreated,
 		eventbus.TopicTaskStageChanged,
+		// Hash topics: creation is the main signal; bulk import collapses to
+		// a single summary row (see toHashBulkRow); cracked gets its own row
+		// because the timeline card links to BOTH the hash and the resulting
+		// credential. Status changes and comment events are intentionally
+		// dropped — they would drown the timeline in low-signal churn.
+		eventbus.TopicHashCreated,
+		eventbus.TopicHashBulkImported,
+		eventbus.TopicHashCracked,
 	}
 }
 
@@ -138,9 +148,136 @@ func (l *Logger) toRow(ctx context.Context, e eventbus.Event) (*models.Operation
 
 	case eventbus.TopicTaskStageChanged:
 		return l.toTaskRow(e, actorType, actorID)
+
+	case eventbus.TopicHashCreated:
+		return l.toHashRow(ctx, e, actorType, actorID)
+
+	case eventbus.TopicHashBulkImported:
+		return l.toHashBulkRow(e, actorType, actorID)
+
+	case eventbus.TopicHashCracked:
+		return l.toHashCrackedRow(ctx, e, actorType, actorID)
 	}
 
 	return nil, nil
+}
+
+// toHashRow translates a hash.created event into a single timeline row.
+// SubjectName is the hash username if known, otherwise the hash type — gives
+// the timeline card something scannable without showing the raw hash string.
+func (l *Logger) toHashRow(ctx context.Context, e eventbus.Event, actorType models.EventActorType, actorID *uuid.UUID) (*models.OperationEvent, error) {
+	p, ok := e.Payload.(eventbus.HashEventPayload)
+	if !ok {
+		return nil, fmt.Errorf("unexpected payload type %T for %s", e.Payload, e.Topic)
+	}
+	hashUID, err := uuid.Parse(p.HashID)
+	if err != nil {
+		return nil, fmt.Errorf("parse hash id: %w", err)
+	}
+	opID, err := uuid.Parse(p.OperationID)
+	if err != nil {
+		return nil, fmt.Errorf("parse operation id: %w", err)
+	}
+	name := ""
+	if l.hashes != nil {
+		if h, err := l.hashes.FindByID(ctx, hashUID); err == nil {
+			name = hashDisplayName(h)
+		}
+	}
+	return &models.OperationEvent{
+		EventID:     uuid.New(),
+		OperationID: opID,
+		Topic:       string(e.Topic),
+		SubjectKind: models.SubjectKindHash,
+		SubjectID:   hashUID,
+		SubjectName: name,
+		ActorType:   actorType,
+		ActorID:     actorID,
+		OccurredAt:  occurredAt(e),
+	}, nil
+}
+
+// toHashBulkRow collapses a bulk import into a single timeline row. The row
+// is its own subject (EventID = SubjectID, like CustomEvent) because there is
+// no single hash to point at. Count goes into metadata for the frontend's
+// summary renderer.
+func (l *Logger) toHashBulkRow(e eventbus.Event, actorType models.EventActorType, actorID *uuid.UUID) (*models.OperationEvent, error) {
+	p, ok := e.Payload.(eventbus.HashBulkImportPayload)
+	if !ok {
+		return nil, fmt.Errorf("unexpected payload type %T for %s", e.Payload, e.Topic)
+	}
+	opID, err := uuid.Parse(p.OperationID)
+	if err != nil {
+		return nil, fmt.Errorf("parse operation id: %w", err)
+	}
+	eventID := uuid.New()
+	return &models.OperationEvent{
+		EventID:     eventID,
+		OperationID: opID,
+		Topic:       string(e.Topic),
+		SubjectKind: models.SubjectKindHash,
+		SubjectID:   eventID,
+		SubjectName: fmt.Sprintf("%d hashes", p.Count),
+		ActorType:   actorType,
+		ActorID:     actorID,
+		Metadata:    map[string]any{"count": p.Count},
+		OccurredAt:  occurredAt(e),
+	}, nil
+}
+
+// toHashCrackedRow records a hash → credential link. The row's subject is the
+// hash; the linked credential id rides in metadata so the timeline card can
+// render two chips (hash, credential) without a follow-up lookup.
+func (l *Logger) toHashCrackedRow(ctx context.Context, e eventbus.Event, actorType models.EventActorType, actorID *uuid.UUID) (*models.OperationEvent, error) {
+	p, ok := e.Payload.(eventbus.HashCrackedPayload)
+	if !ok {
+		return nil, fmt.Errorf("unexpected payload type %T for %s", e.Payload, e.Topic)
+	}
+	hashUID, err := uuid.Parse(p.HashID)
+	if err != nil {
+		return nil, fmt.Errorf("parse hash id: %w", err)
+	}
+	opID, err := uuid.Parse(p.OperationID)
+	if err != nil {
+		return nil, fmt.Errorf("parse operation id: %w", err)
+	}
+	name := ""
+	if l.hashes != nil {
+		if h, err := l.hashes.FindByID(ctx, hashUID); err == nil {
+			name = hashDisplayName(h)
+		}
+	}
+	return &models.OperationEvent{
+		EventID:     uuid.New(),
+		OperationID: opID,
+		Topic:       string(e.Topic),
+		SubjectKind: models.SubjectKindHash,
+		SubjectID:   hashUID,
+		SubjectName: name,
+		ActorType:   actorType,
+		ActorID:     actorID,
+		Metadata: map[string]any{
+			"credential_id": p.CredentialID,
+		},
+		OccurredAt: occurredAt(e),
+	}, nil
+}
+
+// hashDisplayName produces the SubjectName snapshot for a hash row. Prefers a
+// "domain\user" form if available, falls back to bare username, then to the
+// hash type. Never the raw hash value — the timeline card stays scannable
+// even for long hashes.
+func hashDisplayName(h models.Hash) string {
+	if h.Username != "" {
+		if h.Domain != "" {
+			return h.Domain + `\` + h.Username
+		}
+		return h.Username
+	}
+	if h.HashType != "" {
+		return h.HashType
+	}
+	return ""
 }
 
 // toTaskRow translates a task.stage_changed bus event into a row, but only

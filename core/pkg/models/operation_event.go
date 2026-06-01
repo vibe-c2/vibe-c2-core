@@ -14,6 +14,7 @@ type SubjectKind string
 
 const (
 	SubjectKindCredential   SubjectKind = "credential"
+	SubjectKindHash         SubjectKind = "hash"
 	SubjectKindWikiDocument SubjectKind = "wiki_document"
 	SubjectKindTask         SubjectKind = "task"
 	// SubjectKindCustomEvent is a user-authored timeline annotation. Unlike
