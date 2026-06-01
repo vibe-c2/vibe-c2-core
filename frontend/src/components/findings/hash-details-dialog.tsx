@@ -3,7 +3,6 @@ import {
   KeyIcon,
   PencilIcon,
   Trash2Icon,
-  SwordsIcon,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
@@ -176,15 +175,6 @@ export function HashDetailsDialog() {
                     </div>
                   )}
                 </div>
-              </Field>
-            )}
-
-            {hash.operation && (
-              <Field label="Operation">
-                <span className="inline-flex items-center gap-1.5 text-sm text-muted-foreground">
-                  <SwordsIcon className="size-3.5" />
-                  {hash.operation.name}
-                </span>
               </Field>
             )}
 

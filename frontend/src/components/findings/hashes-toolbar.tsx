@@ -27,7 +27,6 @@ import {
   useMyHashTags,
   useHashTypes,
 } from "@/graphql/hooks/hashes"
-import type { HashStatus } from "@/graphql/gql/graphql"
 import {
   HASH_STATUSES,
   hashStatusLabel,
@@ -79,7 +78,7 @@ export function HashesToolbar({ mode }: HashesToolbarProps) {
         ? HAS_CRED_VALUES.uncracked
         : HAS_CRED_VALUES.all
 
-  function onHasCredChange(v: string) {
+  function onHasCredChange(v: string | null) {
     if (v === HAS_CRED_VALUES.cracked) setHasCredential(true)
     else if (v === HAS_CRED_VALUES.uncracked) setHasCredential(false)
     else setHasCredential(null)

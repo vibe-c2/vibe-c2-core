@@ -148,7 +148,7 @@ export function CreateHashDialog({ operationId }: CreateHashDialogProps) {
               <Select
                 value={values.hashType}
                 onValueChange={(v) =>
-                  setValues((cur) => ({ ...cur, hashType: v }))
+                  setValues((cur) => ({ ...cur, hashType: v ?? "" }))
                 }
               >
                 <SelectTrigger>

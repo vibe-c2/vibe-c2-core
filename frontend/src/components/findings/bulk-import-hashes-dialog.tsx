@@ -160,7 +160,10 @@ export function BulkImportHashesDialog({ operationId }: BulkImportDialogProps) {
             {format === "RAW" && (
               <div className="grid gap-1.5">
                 <Label>Default hash type</Label>
-                <Select value={defaultType} onValueChange={setDefaultType}>
+                <Select
+                  value={defaultType}
+                  onValueChange={(v) => setDefaultType(v ?? "")}
+                >
                   <SelectTrigger>
                     <SelectValue />
                   </SelectTrigger>

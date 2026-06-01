@@ -116,7 +116,7 @@ export function useHashTags(operationId: string) {
 export function useHashTypes() {
   return useQuery({
     queryKey: hashKeys.types(),
-    queryFn: () => graphqlClient(HashTypesDocument, {}),
+    queryFn: () => graphqlClient(HashTypesDocument),
     staleTime: Infinity,
   })
 }

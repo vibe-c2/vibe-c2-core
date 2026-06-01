@@ -146,7 +146,7 @@ export function EditHashDialog() {
                 <Select
                   value={values.hashType}
                   onValueChange={(v) =>
-                    setValues((cur) => cur && { ...cur, hashType: v })
+                    setValues((cur) => cur && { ...cur, hashType: v ?? "" })
                   }
                 >
                   <SelectTrigger>
