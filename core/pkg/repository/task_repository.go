@@ -21,9 +21,27 @@ const taskCollection = "tasks"
 // single kanban column; an empty Stage means "all stages". Trashed is the
 // list/trash toggle — list views always pass Trashed=false, the dedicated
 // trash query passes Trashed=true.
+//
+// RiskScoreMin/Max and ProfitScoreMin/Max are inclusive bounds for the
+// matrix-quadrant queries (e.g. "high profit, low risk" → ProfitScoreMin=5,
+// RiskScoreMax=4). Zero means "no lower bound"; a negative max means "no
+// upper bound" — both are unset by default so an empty filter matches all
+// scores. ExcludeStages drops tasks in any of the listed stages, used by
+// the matrix view to skip DONE (and optionally BACKLOG).
 type TaskFilter struct {
 	// Stage, if non-empty, restricts to tasks in this kanban column.
 	Stage models.TaskStage
+	// ExcludeStages, if non-empty, drops rows whose stage is in the list.
+	// Mutually compatible with Stage (intersection — but the matrix view
+	// only uses one or the other).
+	ExcludeStages []models.TaskStage
+	// RiskScoreMin / RiskScoreMax: inclusive bounds for risk_score. Nil on
+	// either side means "unbounded" — both nil disables the risk filter.
+	RiskScoreMin *int
+	RiskScoreMax *int
+	// ProfitScoreMin / ProfitScoreMax: inclusive bounds for profit_score.
+	ProfitScoreMin *int
+	ProfitScoreMax *int
 	// Search matches case-insensitively against name and description.
 	Search string
 	// Trashed: false = only active rows (deleted_at == nil), true = only
@@ -94,6 +112,14 @@ type ITaskRepository interface {
 	// FindCredentialReferrers is the credential counterpart to
 	// FindWikiReferrers.
 	FindCredentialReferrers(ctx context.Context, opID, credentialID uuid.UUID, limit int64) ([]models.Task, error)
+
+	// BackfillDoneAt stamps done_at on every DONE-stage task that is
+	// missing the field, using the row's updateAt as the best available
+	// proxy for "most recent completion time". Idempotent: subsequent
+	// calls match zero rows. Called once at startup so legacy DONE tasks
+	// participate in the DONE column's done_at DESC ordering instead of
+	// collapsing to the bottom (null-sorts-last).
+	BackfillDoneAt(ctx context.Context) (int64, error)
 }
 
 type taskRepository struct {
@@ -113,7 +139,13 @@ func NewTaskRepository(db database.Database) ITaskRepository {
 		{Key: []string{"operation_id", "deleted_at"}},
 		// Kanban column read: filter by stage within an op, sort by createAt
 		// DESC (the column auto-sort). The trailing -_id breaks createAt ties.
+		// Covers BACKLOG / TODO / IN_PROCESS columns.
 		{Key: []string{"operation_id", "stage", "-createAt", "-_id"}},
+		// DONE column read: same shape but sorted by done_at DESC — the
+		// "most recently completed first" ordering operators expect on the
+		// Done column. Separate index so neither column degrades to a
+		// scan + sort.
+		{Key: []string{"operation_id", "stage", "-done_at", "-_id"}},
 		// Matrix view: risk × profit scan within an op, restricted to active.
 		{Key: []string{"operation_id", "risk_score", "profit_score", "deleted_at"}},
 		// Multikey: assignees lookup ("my tasks in this op").
@@ -156,7 +188,18 @@ func (r *taskRepository) FindByID(ctx context.Context, id uuid.UUID) (models.Tas
 func (r *taskRepository) FindByOperationIDWithCursor(ctx context.Context, opID uuid.UUID, filter TaskFilter, cursor *pagination.Cursor, limit int64, forward bool) ([]models.Task, error) {
 	q := buildTaskFilter(opID, filter)
 
-	if cursorFilter := pagination.BuildCursorFilter(cursor, forward); len(cursorFilter) > 0 {
+	// The DONE column sorts by completion time (done_at), every other
+	// stage sorts by creation time (createAt). The cursor's encoded shape
+	// is identical in both modes; only the field name driving the filter
+	// and sort changes. The matrix view never narrows to DONE (DONE is
+	// excluded from the matrix), so this branch fires only for the DONE
+	// kanban column.
+	sortField := "createAt"
+	if filter.Stage == models.TaskStageDone {
+		sortField = "done_at"
+	}
+
+	if cursorFilter := pagination.BuildCursorFilterOn(cursor, forward, sortField); len(cursorFilter) > 0 {
 		for k, v := range cursorFilter {
 			q[k] = v
 		}
@@ -164,7 +207,7 @@ func (r *taskRepository) FindByOperationIDWithCursor(ctx context.Context, opID u
 
 	var tasks []models.Task
 	err := r.coll.Find(ctx, q).
-		Sort(pagination.SortFields(forward)...).
+		Sort(pagination.SortFieldsOn(forward, sortField)...).
 		Limit(limit).
 		All(&tasks)
 
@@ -339,6 +382,43 @@ func (r *taskRepository) FindWikiReferrers(ctx context.Context, opID, wikiID uui
 	return tasks, err
 }
 
+// BackfillDoneAt stamps done_at on legacy DONE tasks that lack the field.
+// Uses each row's updateAt as the timestamp — the row's last write is the
+// best available proxy for "moved to DONE" since the ChangeTaskStage write
+// is what would have created done_at had this field existed at the time.
+// Idempotent: subsequent calls match zero rows.
+//
+// Implemented as a fetch-and-per-row-update loop rather than a single
+// updateMany-with-pipeline so it stays portable across the driver
+// abstractions and the operation count stays modest (one-time backfill,
+// only the DONE column, only rows missing the field).
+func (r *taskRepository) BackfillDoneAt(ctx context.Context) (int64, error) {
+	var legacy []models.Task
+	err := r.coll.Find(ctx, bson.M{
+		"stage":   models.TaskStageDone,
+		"done_at": nil,
+	}).All(&legacy)
+	if err != nil {
+		return 0, fmt.Errorf("backfill done_at: list legacy: %w", err)
+	}
+
+	var n int64
+	for i := range legacy {
+		stamp := legacy[i].UpdateAt
+		if stamp.IsZero() {
+			stamp = legacy[i].CreateAt
+		}
+		if err := r.coll.UpdateOne(ctx,
+			bson.M{"task_id": legacy[i].TaskID},
+			bson.M{"$set": bson.M{"done_at": stamp}},
+		); err != nil {
+			return n, fmt.Errorf("backfill done_at: update %s: %w", legacy[i].TaskID, err)
+		}
+		n++
+	}
+	return n, nil
+}
+
 func (r *taskRepository) FindCredentialReferrers(ctx context.Context, opID, credentialID uuid.UUID, limit int64) ([]models.Task, error) {
 	var tasks []models.Task
 	err := r.coll.Find(ctx, bson.M{
@@ -363,6 +443,29 @@ func buildTaskFilter(opID uuid.UUID, f TaskFilter) bson.M {
 
 	if f.Stage != "" {
 		q["stage"] = f.Stage
+	} else if len(f.ExcludeStages) > 0 {
+		q["stage"] = bson.M{"$nin": f.ExcludeStages}
+	}
+
+	if f.RiskScoreMin != nil || f.RiskScoreMax != nil {
+		rng := bson.M{}
+		if f.RiskScoreMin != nil {
+			rng["$gte"] = *f.RiskScoreMin
+		}
+		if f.RiskScoreMax != nil {
+			rng["$lte"] = *f.RiskScoreMax
+		}
+		q["risk_score"] = rng
+	}
+	if f.ProfitScoreMin != nil || f.ProfitScoreMax != nil {
+		rng := bson.M{}
+		if f.ProfitScoreMin != nil {
+			rng["$gte"] = *f.ProfitScoreMin
+		}
+		if f.ProfitScoreMax != nil {
+			rng["$lte"] = *f.ProfitScoreMax
+		}
+		q["profit_score"] = rng
 	}
 
 	if f.Search != "" {

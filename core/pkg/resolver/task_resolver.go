@@ -59,7 +59,7 @@ type ITaskResolver interface {
 
 	// Queries
 	Task(ctx context.Context, id string) (*models.Task, error)
-	Tasks(ctx context.Context, operationID string, stage *models.TaskStage, search *string, first *int, after *string, last *int, before *string) (*model.TaskConnection, error)
+	Tasks(ctx context.Context, operationID string, stage *models.TaskStage, excludeStages []models.TaskStage, riskScoreMin *int, riskScoreMax *int, profitScoreMin *int, profitScoreMax *int, search *string, first *int, after *string, last *int, before *string) (*model.TaskConnection, error)
 	TaskTrash(ctx context.Context, operationID string, first *int, after *string, last *int, before *string) (*model.TaskConnection, error)
 
 	// Cross-domain backlink queries. Standalone paths re-auth at viewer+ on
@@ -84,6 +84,7 @@ type ITaskResolver interface {
 	LastUpdatedBy(ctx context.Context, obj *models.Task) (*models.User, error)
 	LastUpdatedAt(ctx context.Context, obj *models.Task) (*string, error)
 	DeletedAt(ctx context.Context, obj *models.Task) (*string, error)
+	DoneAt(ctx context.Context, obj *models.Task) (*string, error)
 	CreatedAt(ctx context.Context, obj *models.Task) (string, error)
 	UpdatedAt(ctx context.Context, obj *models.Task) (string, error)
 
@@ -219,6 +220,14 @@ func (r *taskResolver) CreateTask(ctx context.Context, input model.CreateTaskInp
 		CredentialReferences: credRefs,
 		CreatedByID:          callerUID,
 	}
+	// Tasks created directly in DONE need done_at stamped at creation so
+	// they sort alongside tasks moved into DONE later. The other stages
+	// leave it nil; ChangeTaskStage stamps it on the first transition into
+	// DONE.
+	if stage == models.TaskStageDone {
+		now := time.Now().UTC()
+		task.DoneAt = &now
+	}
 
 	if err := r.taskRepo.Create(ctx, task); err != nil {
 		return nil, fmt.Errorf("failed to create task: %w", err)
@@ -351,6 +360,18 @@ func (r *taskResolver) ChangeTaskStage(ctx context.Context, input model.ChangeTa
 	updates := map[string]interface{}{
 		"stage":  newStage,
 		"status": newStatus,
+	}
+	// Maintain done_at so the DONE column can sort by completion time:
+	//   - moving INTO DONE stamps a fresh timestamp (re-completing pushes
+	//     the card back to the top — "done again, now" is the useful order)
+	//   - moving OUT OF DONE clears done_at so a future re-completion
+	//     stamps fresh, not a stale historical value
+	//   - intra-DONE no-ops (status flip while still DONE) leave done_at
+	//     alone
+	if newStage == models.TaskStageDone && oldStage != models.TaskStageDone {
+		updates["done_at"] = time.Now().UTC()
+	} else if oldStage == models.TaskStageDone && newStage != models.TaskStageDone {
+		updates["done_at"] = nil
 	}
 	if err := r.stampLastUpdatedAndApply(ctx, &task, updates); err != nil {
 		return nil, err
@@ -642,7 +663,13 @@ func (r *taskResolver) Task(ctx context.Context, id string) (*models.Task, error
 }
 
 // Tasks lists active tasks in an operation. Viewer+ on the operation.
-func (r *taskResolver) Tasks(ctx context.Context, operationID string, stage *models.TaskStage, search *string, first *int, after *string, last *int, before *string) (*model.TaskConnection, error) {
+//
+// stage narrows to a single kanban column. excludeStages drops rows in the
+// listed stages (used by the matrix view to skip DONE and optionally
+// BACKLOG). riskScoreMin/Max and profitScoreMin/Max are inclusive bounds
+// driving the per-quadrant matrix queries — each quadrant fetches its own
+// virtualized list independently.
+func (r *taskResolver) Tasks(ctx context.Context, operationID string, stage *models.TaskStage, excludeStages []models.TaskStage, riskScoreMin *int, riskScoreMax *int, profitScoreMin *int, profitScoreMax *int, search *string, first *int, after *string, last *int, before *string) (*model.TaskConnection, error) {
 	opUID, err := uuid.Parse(operationID)
 	if err != nil {
 		return nil, fmt.Errorf("invalid operation ID: %w", err)
@@ -664,11 +691,42 @@ func (r *taskResolver) Tasks(ctx context.Context, operationID string, stage *mod
 		}
 		filter.Stage = *stage
 	}
+	for _, s := range excludeStages {
+		if !s.IsValid() {
+			return nil, fmt.Errorf("invalid task stage: %s", s)
+		}
+		filter.ExcludeStages = append(filter.ExcludeStages, s)
+	}
+	if err := validateScoreBound(riskScoreMin, "riskScoreMin"); err != nil {
+		return nil, err
+	}
+	if err := validateScoreBound(riskScoreMax, "riskScoreMax"); err != nil {
+		return nil, err
+	}
+	if err := validateScoreBound(profitScoreMin, "profitScoreMin"); err != nil {
+		return nil, err
+	}
+	if err := validateScoreBound(profitScoreMax, "profitScoreMax"); err != nil {
+		return nil, err
+	}
+	filter.RiskScoreMin = riskScoreMin
+	filter.RiskScoreMax = riskScoreMax
+	filter.ProfitScoreMin = profitScoreMin
+	filter.ProfitScoreMax = profitScoreMax
 	if search != nil {
 		filter.Search = strings.TrimSpace(*search)
 	}
 
 	return r.listTasks(ctx, opUID, filter, args)
+}
+
+// validateScoreBound is the optional-pointer form of validateScoreInput
+// used by the Tasks query's range filters. Nil passes through unchanged.
+func validateScoreBound(v *int, field string) error {
+	if v == nil {
+		return nil
+	}
+	return validateScoreInput(*v, field)
 }
 
 // TaskTrash lists soft-deleted tasks in an operation. Viewer+ on the op
@@ -699,7 +757,7 @@ func (r *taskResolver) TaskTrash(ctx context.Context, operationID string, first 
 		return nil, fmt.Errorf("failed to list trashed tasks: %w", err)
 	}
 
-	return buildTaskConnection(tasks, args, total), nil
+	return buildTaskConnection(tasks, args, total, false), nil
 }
 
 // listTasks is the shared body of the active tasks query — counts, fetches
@@ -715,13 +773,20 @@ func (r *taskResolver) listTasks(ctx context.Context, opUID uuid.UUID, filter re
 		return nil, fmt.Errorf("failed to list tasks: %w", err)
 	}
 
-	return buildTaskConnection(tasks, args, total), nil
+	// Cursor time field must match the repo's sort field for this list mode
+	// or hasNextPage skipping rows mid-page. DONE column sorts by done_at;
+	// every other stage sorts by createAt. Falls back to createAt when
+	// done_at is unexpectedly nil (legacy row pre-backfill).
+	useDoneAt := filter.Stage == models.TaskStageDone
+	return buildTaskConnection(tasks, args, total, useDoneAt), nil
 }
 
 // buildTaskConnection turns a slice of tasks plus pagination args into a
 // GraphQL TaskConnection. Identical shape to the credential pagination
 // path — kept as a free function so both list and trash queries can reuse.
-func buildTaskConnection(tasks []models.Task, args pagination.Args, total int64) *model.TaskConnection {
+// useDoneAt controls which field is encoded in the cursor: true uses
+// done_at (DONE column), false uses createAt (every other list mode).
+func buildTaskConnection(tasks []models.Task, args pagination.Args, total int64, useDoneAt bool) *model.TaskConnection {
 	hasMore := int64(len(tasks)) > args.Limit
 	if hasMore {
 		tasks = tasks[:args.Limit]
@@ -729,7 +794,11 @@ func buildTaskConnection(tasks []models.Task, args pagination.Args, total int64)
 
 	edges := make([]*model.TaskEdge, len(tasks))
 	for i := range tasks {
-		cursor := pagination.EncodeCursor(tasks[i].CreateAt, tasks[i].Id)
+		cursorTime := tasks[i].CreateAt
+		if useDoneAt && tasks[i].DoneAt != nil {
+			cursorTime = *tasks[i].DoneAt
+		}
+		cursor := pagination.EncodeCursor(cursorTime, tasks[i].Id)
 		edges[i] = &model.TaskEdge{
 			Node:   &tasks[i],
 			Cursor: cursor,
@@ -976,6 +1045,14 @@ func (r *taskResolver) DeletedAt(_ context.Context, obj *models.Task) (*string, 
 		return nil, nil
 	}
 	s := obj.DeletedAt.UTC().Format(time.RFC3339)
+	return &s, nil
+}
+
+func (r *taskResolver) DoneAt(_ context.Context, obj *models.Task) (*string, error) {
+	if obj.DoneAt == nil {
+		return nil, nil
+	}
+	s := obj.DoneAt.UTC().Format(time.RFC3339)
 	return &s, nil
 }
 

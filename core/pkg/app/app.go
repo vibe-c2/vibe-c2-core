@@ -237,6 +237,15 @@ func NewApp() (*App, error) {
 		l.Warn("event logger: backfill failed", zap.Error(err))
 	}
 
+	// Stamp done_at on any legacy DONE-stage task that predates the field.
+	// Idempotent and bounded by the DONE-without-done_at row count, so it
+	// is cheap on subsequent boots (zero rows to update).
+	if n, err := repos.Task.BackfillDoneAt(ctx); err != nil {
+		l.Warn("task done_at backfill failed", zap.Error(err))
+	} else if n > 0 {
+		l.Info("task done_at backfill complete", zap.Int64("rows", n))
+	}
+
 	// Subscribe to operation membership changes for wiki role enforcement.
 	// When a user is removed from an operation or demoted below operator,
 	// disconnect their active Hocuspocus WebSocket connections.

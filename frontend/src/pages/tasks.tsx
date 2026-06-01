@@ -1,4 +1,3 @@
-import { useMemo } from "react"
 import { KanbanSquareIcon, LayoutGridIcon, PlusIcon } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { SearchInput } from "@/components/ui/search-input"
@@ -7,10 +6,7 @@ import { Label } from "@/components/ui/label"
 import { useScopedOperation } from "@/hooks/use-scoped-operation"
 import { usePageMetadata } from "@/hooks/use-page-metadata"
 import { useTaskStore } from "@/stores/tasks"
-import {
-  useInfiniteTasks,
-  useTaskChangedSubscription,
-} from "@/graphql/hooks/tasks"
+import { useTaskChangedSubscription } from "@/graphql/hooks/tasks"
 import { CreateTaskDialog } from "@/components/tasks/create-task-dialog"
 import { KanbanBoard } from "@/components/tasks/kanban-board"
 import { RiskProfitMatrix } from "@/components/tasks/risk-profit-matrix"
@@ -67,39 +63,10 @@ function TasksPageInner({ operationId }: { operationId: string }) {
   )
   const openCreateDialog = useTaskStore((s) => s.openCreateDialog)
 
-  // Fetch active tasks for the operation. We pull every page so both views
-  // (kanban + matrix) get the full set; large operations pull-through
-  // pagination as needed via getNextPageParam.
-  const tasksQuery = useInfiniteTasks({
-    operationId,
-    search: search.trim() || null,
-    first: 100,
-  })
-
-  // Auto-paginate: as soon as one page resolves with hasNextPage, kick off
-  // the next page. This keeps the implementation simple — users don't have
-  // to scroll a column to load more cards. Capped implicitly by the
-  // operation's task count.
-  if (
-    tasksQuery.hasNextPage &&
-    !tasksQuery.isFetchingNextPage &&
-    !tasksQuery.isLoading
-  ) {
-    void tasksQuery.fetchNextPage()
-  }
-
-  // Realtime board updates — refetches the list whenever any task in the
-  // operation changes, soft-deletes, or restores. Hot-update of the
-  // details cache happens in the hook itself.
+  // Realtime board updates — invalidates per-column / per-quadrant lists
+  // whenever any task in the operation changes, soft-deletes, or restores.
+  // Hot-update of the details cache happens in the hook itself.
   useTaskChangedSubscription(operationId)
-
-  // Flatten pages into a single task list for the views.
-  const tasks = useMemo(
-    () =>
-      tasksQuery.data?.pages.flatMap((p) => p.tasks.edges.map((e) => e.node)) ??
-      [],
-    [tasksQuery.data],
-  )
 
   return (
     <div className="flex flex-1 flex-col gap-2 p-2">
@@ -143,17 +110,12 @@ function TasksPageInner({ operationId }: { operationId: string }) {
           intrinsic min content (4 columns) pushes past the viewport,
           clipping rightmost columns under the parent's overflow-hidden. */}
       <div className="flex flex-1 flex-col overflow-hidden min-w-0 min-h-0">
-        {tasksQuery.isLoading ? (
-          <div className="flex flex-1 items-center justify-center text-sm text-muted-foreground">
-            Loading tasks…
-          </div>
-        ) : tasks.length === 0 ? (
-          <EmptyState onCreate={openCreateDialog} />
-        ) : viewMode === "kanban" ? (
-          <KanbanBoard tasks={tasks} />
+        {viewMode === "kanban" ? (
+          <KanbanBoard operationId={operationId} search={search} />
         ) : (
           <RiskProfitMatrix
-            tasks={tasks}
+            operationId={operationId}
+            search={search}
             includeBacklog={matrixIncludeBacklog}
           />
         )}
@@ -209,21 +171,3 @@ function ViewToggle({
   )
 }
 
-function EmptyState({ onCreate }: { onCreate: () => void }) {
-  return (
-    <div className="flex flex-1 flex-col items-center justify-center gap-3 text-center">
-      <KanbanSquareIcon className="size-10 text-muted-foreground" />
-      <div>
-        <h3 className="text-lg font-medium">No tasks yet</h3>
-        <p className="text-sm text-muted-foreground">
-          Plan your next move. Score it by risk and profit, then watch it
-          travel across the board.
-        </p>
-      </div>
-      <Button onClick={onCreate}>
-        <PlusIcon className="size-4" />
-        Create first task
-      </Button>
-    </div>
-  )
-}

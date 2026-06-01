@@ -80,6 +80,12 @@ type Task {
   # soft-deleted tasks; the regular list/connection excludes them.
   deletedAt: String
 
+  # Completion timestamp. Stamped when the task transitions into stage
+  # DONE, cleared when the task moves back out of DONE, and stamped fresh
+  # on every re-entry. Null for tasks that have never reached DONE.
+  # Drives the DONE column's sort order (most recently completed first).
+  doneAt: String
+
   createdAt: String!
   updatedAt: String!
 }
@@ -157,12 +163,22 @@ extend type Query {
     @hasPermission(permission: "operation:member")
 
   # Cursor-paginated list of active tasks in an operation. Sorted by
-  # createAt DESC (matches the kanban column auto-sort). Pass `stage` to
-  # narrow to one column; omit to pull every active task for the matrix
-  # view in a single query.
+  # createAt DESC, except when `stage` is DONE — the DONE column sorts by
+  # doneAt DESC (most recently completed first). Pass `stage` to narrow to
+  # one kanban column; pass `excludeStages` to drop rows in those stages
+  # (the matrix view excludes DONE, and optionally BACKLOG). Pass
+  # `riskScoreMin/Max` and `profitScoreMin/Max` for the matrix-quadrant
+  # filtering (inclusive bounds; omit for unbounded). Each kanban column
+  # and each matrix quadrant runs its own paginated query so the frontend
+  # can virtualize independently.
   tasks(
     operationId: ID!
     stage: TaskStage
+    excludeStages: [TaskStage!]
+    riskScoreMin: Int
+    riskScoreMax: Int
+    profitScoreMin: Int
+    profitScoreMax: Int
     search: String
     first: Int = 50
     after: String

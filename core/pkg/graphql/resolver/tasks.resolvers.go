@@ -76,8 +76,8 @@ func (r *queryResolver) Task(ctx context.Context, id string) (*models.Task, erro
 }
 
 // Tasks is the resolver for the tasks field.
-func (r *queryResolver) Tasks(ctx context.Context, operationID string, stage *models.TaskStage, search *string, first *int, after *string, last *int, before *string) (*model.TaskConnection, error) {
-	return r.TaskResolver.Tasks(ctx, operationID, stage, search, first, after, last, before)
+func (r *queryResolver) Tasks(ctx context.Context, operationID string, stage *models.TaskStage, excludeStages []models.TaskStage, riskScoreMin *int, riskScoreMax *int, profitScoreMin *int, profitScoreMax *int, search *string, first *int, after *string, last *int, before *string) (*model.TaskConnection, error) {
+	return r.TaskResolver.Tasks(ctx, operationID, stage, excludeStages, riskScoreMin, riskScoreMax, profitScoreMin, profitScoreMax, search, first, after, last, before)
 }
 
 // TaskTrash is the resolver for the taskTrash field.
@@ -161,6 +161,11 @@ func (r *taskResolver) LastUpdatedAt(ctx context.Context, obj *models.Task) (*st
 // DeletedAt is the resolver for the deletedAt field.
 func (r *taskResolver) DeletedAt(ctx context.Context, obj *models.Task) (*string, error) {
 	return r.TaskResolver.DeletedAt(ctx, obj)
+}
+
+// DoneAt is the resolver for the doneAt field.
+func (r *taskResolver) DoneAt(ctx context.Context, obj *models.Task) (*string, error) {
+	return r.TaskResolver.DoneAt(ctx, obj)
 }
 
 // CreatedAt is the resolver for the createdAt field.

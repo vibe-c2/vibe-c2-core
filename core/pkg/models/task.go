@@ -96,6 +96,13 @@ type Task struct {
 	Stage  TaskStage  `bson:"stage" json:"stage"`
 	Status TaskStatus `bson:"status" json:"status"`
 
+	// DoneAt is stamped each time the task transitions into stage DONE and
+	// cleared on transitions out of DONE. Drives the DONE column's sort
+	// order (newest-completed first); the other three stages sort by
+	// createAt DESC. Null for tasks that have never been DONE; backfilled
+	// at startup for historical DONE rows that predate this field.
+	DoneAt *time.Time `bson:"done_at,omitempty" json:"doneAt,omitempty"`
+
 	// AssigneeIDs lists the user IDs responsible for the task. Multikey-
 	// indexed with operation_id so "tasks assigned to me in this operation"
 	// is one index probe. Empty slice = unassigned; never nil after Create.

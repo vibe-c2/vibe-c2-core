@@ -340,7 +340,7 @@ type ComplexityRoot struct {
 		Sessions                           func(childComplexity int, userID *string, search *string, activeOnly *bool, first *int, after *string, last *int, before *string) int
 		Task                               func(childComplexity int, id string) int
 		TaskTrash                          func(childComplexity int, operationID string, first *int, after *string, last *int, before *string) int
-		Tasks                              func(childComplexity int, operationID string, stage *models.TaskStage, search *string, first *int, after *string, last *int, before *string) int
+		Tasks                              func(childComplexity int, operationID string, stage *models.TaskStage, excludeStages []models.TaskStage, riskScoreMin *int, riskScoreMax *int, profitScoreMin *int, profitScoreMax *int, search *string, first *int, after *string, last *int, before *string) int
 		TasksReferencingCredential         func(childComplexity int, credentialID string) int
 		TasksReferencingWikiDocument       func(childComplexity int, documentID string) int
 		TimelineBuckets                    func(childComplexity int, operationID string, granularity *repository.TimelineGranularity, timezone string, from *string, to *string, types []string, actorIds []string) int
@@ -453,6 +453,7 @@ type ComplexityRoot struct {
 		CredentialReferences func(childComplexity int) int
 		DeletedAt            func(childComplexity int) int
 		Description          func(childComplexity int) int
+		DoneAt               func(childComplexity int) int
 		ID                   func(childComplexity int) int
 		LastUpdatedAt        func(childComplexity int) int
 		LastUpdatedBy        func(childComplexity int) int
@@ -843,7 +844,7 @@ type QueryResolver interface {
 	Sessions(ctx context.Context, userID *string, search *string, activeOnly *bool, first *int, after *string, last *int, before *string) (*model.SessionConnection, error)
 	Session(ctx context.Context, id string) (*models.Session, error)
 	Task(ctx context.Context, id string) (*models.Task, error)
-	Tasks(ctx context.Context, operationID string, stage *models.TaskStage, search *string, first *int, after *string, last *int, before *string) (*model.TaskConnection, error)
+	Tasks(ctx context.Context, operationID string, stage *models.TaskStage, excludeStages []models.TaskStage, riskScoreMin *int, riskScoreMax *int, profitScoreMin *int, profitScoreMax *int, search *string, first *int, after *string, last *int, before *string) (*model.TaskConnection, error)
 	TaskTrash(ctx context.Context, operationID string, first *int, after *string, last *int, before *string) (*model.TaskConnection, error)
 	TasksReferencingWikiDocument(ctx context.Context, documentID string) ([]*models.Task, error)
 	TasksReferencingCredential(ctx context.Context, credentialID string) ([]*models.Task, error)
@@ -919,6 +920,7 @@ type TaskResolver interface {
 	LastUpdatedBy(ctx context.Context, obj *models.Task) (*models.User, error)
 	LastUpdatedAt(ctx context.Context, obj *models.Task) (*string, error)
 	DeletedAt(ctx context.Context, obj *models.Task) (*string, error)
+	DoneAt(ctx context.Context, obj *models.Task) (*string, error)
 	CreatedAt(ctx context.Context, obj *models.Task) (string, error)
 	UpdatedAt(ctx context.Context, obj *models.Task) (string, error)
 }
@@ -2643,7 +2645,7 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 			return 0, false
 		}
 
-		return e.ComplexityRoot.Query.Tasks(childComplexity, args["operationId"].(string), args["stage"].(*models.TaskStage), args["search"].(*string), args["first"].(*int), args["after"].(*string), args["last"].(*int), args["before"].(*string)), true
+		return e.ComplexityRoot.Query.Tasks(childComplexity, args["operationId"].(string), args["stage"].(*models.TaskStage), args["excludeStages"].([]models.TaskStage), args["riskScoreMin"].(*int), args["riskScoreMax"].(*int), args["profitScoreMin"].(*int), args["profitScoreMax"].(*int), args["search"].(*string), args["first"].(*int), args["after"].(*string), args["last"].(*int), args["before"].(*string)), true
 	case "Query.tasksReferencingCredential":
 		if e.ComplexityRoot.Query.TasksReferencingCredential == nil {
 			break
@@ -3316,6 +3318,12 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.Task.Description(childComplexity), true
+	case "Task.doneAt":
+		if e.ComplexityRoot.Task.DoneAt == nil {
+			break
+		}
+
+		return e.ComplexityRoot.Task.DoneAt(childComplexity), true
 	case "Task.id":
 		if e.ComplexityRoot.Task.ID == nil {
 			break
@@ -5650,6 +5658,12 @@ type Task {
   # soft-deleted tasks; the regular list/connection excludes them.
   deletedAt: String
 
+  # Completion timestamp. Stamped when the task transitions into stage
+  # DONE, cleared when the task moves back out of DONE, and stamped fresh
+  # on every re-entry. Null for tasks that have never reached DONE.
+  # Drives the DONE column's sort order (most recently completed first).
+  doneAt: String
+
   createdAt: String!
   updatedAt: String!
 }
@@ -5727,12 +5741,22 @@ extend type Query {
     @hasPermission(permission: "operation:member")
 
   # Cursor-paginated list of active tasks in an operation. Sorted by
-  # createAt DESC (matches the kanban column auto-sort). Pass ` + "`" + `stage` + "`" + ` to
-  # narrow to one column; omit to pull every active task for the matrix
-  # view in a single query.
+  # createAt DESC, except when ` + "`" + `stage` + "`" + ` is DONE — the DONE column sorts by
+  # doneAt DESC (most recently completed first). Pass ` + "`" + `stage` + "`" + ` to narrow to
+  # one kanban column; pass ` + "`" + `excludeStages` + "`" + ` to drop rows in those stages
+  # (the matrix view excludes DONE, and optionally BACKLOG). Pass
+  # ` + "`" + `riskScoreMin/Max` + "`" + ` and ` + "`" + `profitScoreMin/Max` + "`" + ` for the matrix-quadrant
+  # filtering (inclusive bounds; omit for unbounded). Each kanban column
+  # and each matrix quadrant runs its own paginated query so the frontend
+  # can virtualize independently.
   tasks(
     operationId: ID!
     stage: TaskStage
+    excludeStages: [TaskStage!]
+    riskScoreMin: Int
+    riskScoreMax: Int
+    profitScoreMin: Int
+    profitScoreMax: Int
     search: String
     first: Int = 50
     after: String
@@ -7887,31 +7911,56 @@ func (ec *executionContext) field_Query_tasks_args(ctx context.Context, rawArgs 
 		return nil, err
 	}
 	args["stage"] = arg1
-	arg2, err := graphql.ProcessArgField(ctx, rawArgs, "search", ec.unmarshalOString2ᚖstring)
+	arg2, err := graphql.ProcessArgField(ctx, rawArgs, "excludeStages", ec.unmarshalOTaskStage2ᚕgithubᚗcomᚋvibeᚑc2ᚋvibeᚑc2ᚑcoreᚋcoreᚋpkgᚋmodelsᚐTaskStageᚄ)
 	if err != nil {
 		return nil, err
 	}
-	args["search"] = arg2
-	arg3, err := graphql.ProcessArgField(ctx, rawArgs, "first", ec.unmarshalOInt2ᚖint)
+	args["excludeStages"] = arg2
+	arg3, err := graphql.ProcessArgField(ctx, rawArgs, "riskScoreMin", ec.unmarshalOInt2ᚖint)
 	if err != nil {
 		return nil, err
 	}
-	args["first"] = arg3
-	arg4, err := graphql.ProcessArgField(ctx, rawArgs, "after", ec.unmarshalOString2ᚖstring)
+	args["riskScoreMin"] = arg3
+	arg4, err := graphql.ProcessArgField(ctx, rawArgs, "riskScoreMax", ec.unmarshalOInt2ᚖint)
 	if err != nil {
 		return nil, err
 	}
-	args["after"] = arg4
-	arg5, err := graphql.ProcessArgField(ctx, rawArgs, "last", ec.unmarshalOInt2ᚖint)
+	args["riskScoreMax"] = arg4
+	arg5, err := graphql.ProcessArgField(ctx, rawArgs, "profitScoreMin", ec.unmarshalOInt2ᚖint)
 	if err != nil {
 		return nil, err
 	}
-	args["last"] = arg5
-	arg6, err := graphql.ProcessArgField(ctx, rawArgs, "before", ec.unmarshalOString2ᚖstring)
+	args["profitScoreMin"] = arg5
+	arg6, err := graphql.ProcessArgField(ctx, rawArgs, "profitScoreMax", ec.unmarshalOInt2ᚖint)
 	if err != nil {
 		return nil, err
 	}
-	args["before"] = arg6
+	args["profitScoreMax"] = arg6
+	arg7, err := graphql.ProcessArgField(ctx, rawArgs, "search", ec.unmarshalOString2ᚖstring)
+	if err != nil {
+		return nil, err
+	}
+	args["search"] = arg7
+	arg8, err := graphql.ProcessArgField(ctx, rawArgs, "first", ec.unmarshalOInt2ᚖint)
+	if err != nil {
+		return nil, err
+	}
+	args["first"] = arg8
+	arg9, err := graphql.ProcessArgField(ctx, rawArgs, "after", ec.unmarshalOString2ᚖstring)
+	if err != nil {
+		return nil, err
+	}
+	args["after"] = arg9
+	arg10, err := graphql.ProcessArgField(ctx, rawArgs, "last", ec.unmarshalOInt2ᚖint)
+	if err != nil {
+		return nil, err
+	}
+	args["last"] = arg10
+	arg11, err := graphql.ProcessArgField(ctx, rawArgs, "before", ec.unmarshalOString2ᚖstring)
+	if err != nil {
+		return nil, err
+	}
+	args["before"] = arg11
 	return args, nil
 }
 
@@ -9652,6 +9701,8 @@ func (ec *executionContext) fieldContext_Credential_taskBacklinks(_ context.Cont
 				return ec.fieldContext_Task_lastUpdatedAt(ctx, field)
 			case "deletedAt":
 				return ec.fieldContext_Task_deletedAt(ctx, field)
+			case "doneAt":
+				return ec.fieldContext_Task_doneAt(ctx, field)
 			case "createdAt":
 				return ec.fieldContext_Task_createdAt(ctx, field)
 			case "updatedAt":
@@ -14805,6 +14856,8 @@ func (ec *executionContext) fieldContext_Mutation_createTask(ctx context.Context
 				return ec.fieldContext_Task_lastUpdatedAt(ctx, field)
 			case "deletedAt":
 				return ec.fieldContext_Task_deletedAt(ctx, field)
+			case "doneAt":
+				return ec.fieldContext_Task_doneAt(ctx, field)
 			case "createdAt":
 				return ec.fieldContext_Task_createdAt(ctx, field)
 			case "updatedAt":
@@ -14906,6 +14959,8 @@ func (ec *executionContext) fieldContext_Mutation_updateTask(ctx context.Context
 				return ec.fieldContext_Task_lastUpdatedAt(ctx, field)
 			case "deletedAt":
 				return ec.fieldContext_Task_deletedAt(ctx, field)
+			case "doneAt":
+				return ec.fieldContext_Task_doneAt(ctx, field)
 			case "createdAt":
 				return ec.fieldContext_Task_createdAt(ctx, field)
 			case "updatedAt":
@@ -15007,6 +15062,8 @@ func (ec *executionContext) fieldContext_Mutation_changeTaskStage(ctx context.Co
 				return ec.fieldContext_Task_lastUpdatedAt(ctx, field)
 			case "deletedAt":
 				return ec.fieldContext_Task_deletedAt(ctx, field)
+			case "doneAt":
+				return ec.fieldContext_Task_doneAt(ctx, field)
 			case "createdAt":
 				return ec.fieldContext_Task_createdAt(ctx, field)
 			case "updatedAt":
@@ -15108,6 +15165,8 @@ func (ec *executionContext) fieldContext_Mutation_setTaskAssignees(ctx context.C
 				return ec.fieldContext_Task_lastUpdatedAt(ctx, field)
 			case "deletedAt":
 				return ec.fieldContext_Task_deletedAt(ctx, field)
+			case "doneAt":
+				return ec.fieldContext_Task_doneAt(ctx, field)
 			case "createdAt":
 				return ec.fieldContext_Task_createdAt(ctx, field)
 			case "updatedAt":
@@ -15209,6 +15268,8 @@ func (ec *executionContext) fieldContext_Mutation_setTaskWikiReferences(ctx cont
 				return ec.fieldContext_Task_lastUpdatedAt(ctx, field)
 			case "deletedAt":
 				return ec.fieldContext_Task_deletedAt(ctx, field)
+			case "doneAt":
+				return ec.fieldContext_Task_doneAt(ctx, field)
 			case "createdAt":
 				return ec.fieldContext_Task_createdAt(ctx, field)
 			case "updatedAt":
@@ -15310,6 +15371,8 @@ func (ec *executionContext) fieldContext_Mutation_addTaskWikiReference(ctx conte
 				return ec.fieldContext_Task_lastUpdatedAt(ctx, field)
 			case "deletedAt":
 				return ec.fieldContext_Task_deletedAt(ctx, field)
+			case "doneAt":
+				return ec.fieldContext_Task_doneAt(ctx, field)
 			case "createdAt":
 				return ec.fieldContext_Task_createdAt(ctx, field)
 			case "updatedAt":
@@ -15411,6 +15474,8 @@ func (ec *executionContext) fieldContext_Mutation_setTaskCredentialReferences(ct
 				return ec.fieldContext_Task_lastUpdatedAt(ctx, field)
 			case "deletedAt":
 				return ec.fieldContext_Task_deletedAt(ctx, field)
+			case "doneAt":
+				return ec.fieldContext_Task_doneAt(ctx, field)
 			case "createdAt":
 				return ec.fieldContext_Task_createdAt(ctx, field)
 			case "updatedAt":
@@ -15571,6 +15636,8 @@ func (ec *executionContext) fieldContext_Mutation_restoreTask(ctx context.Contex
 				return ec.fieldContext_Task_lastUpdatedAt(ctx, field)
 			case "deletedAt":
 				return ec.fieldContext_Task_deletedAt(ctx, field)
+			case "doneAt":
+				return ec.fieldContext_Task_doneAt(ctx, field)
 			case "createdAt":
 				return ec.fieldContext_Task_createdAt(ctx, field)
 			case "updatedAt":
@@ -19312,6 +19379,8 @@ func (ec *executionContext) fieldContext_Query_task(ctx context.Context, field g
 				return ec.fieldContext_Task_lastUpdatedAt(ctx, field)
 			case "deletedAt":
 				return ec.fieldContext_Task_deletedAt(ctx, field)
+			case "doneAt":
+				return ec.fieldContext_Task_doneAt(ctx, field)
 			case "createdAt":
 				return ec.fieldContext_Task_createdAt(ctx, field)
 			case "updatedAt":
@@ -19342,7 +19411,7 @@ func (ec *executionContext) _Query_tasks(ctx context.Context, field graphql.Coll
 		ec.fieldContext_Query_tasks,
 		func(ctx context.Context) (any, error) {
 			fc := graphql.GetFieldContext(ctx)
-			return ec.Resolvers.Query().Tasks(ctx, fc.Args["operationId"].(string), fc.Args["stage"].(*models.TaskStage), fc.Args["search"].(*string), fc.Args["first"].(*int), fc.Args["after"].(*string), fc.Args["last"].(*int), fc.Args["before"].(*string))
+			return ec.Resolvers.Query().Tasks(ctx, fc.Args["operationId"].(string), fc.Args["stage"].(*models.TaskStage), fc.Args["excludeStages"].([]models.TaskStage), fc.Args["riskScoreMin"].(*int), fc.Args["riskScoreMax"].(*int), fc.Args["profitScoreMin"].(*int), fc.Args["profitScoreMax"].(*int), fc.Args["search"].(*string), fc.Args["first"].(*int), fc.Args["after"].(*string), fc.Args["last"].(*int), fc.Args["before"].(*string))
 		},
 		func(ctx context.Context, next graphql.Resolver) graphql.Resolver {
 			directive0 := next
@@ -19547,6 +19616,8 @@ func (ec *executionContext) fieldContext_Query_tasksReferencingWikiDocument(ctx 
 				return ec.fieldContext_Task_lastUpdatedAt(ctx, field)
 			case "deletedAt":
 				return ec.fieldContext_Task_deletedAt(ctx, field)
+			case "doneAt":
+				return ec.fieldContext_Task_doneAt(ctx, field)
 			case "createdAt":
 				return ec.fieldContext_Task_createdAt(ctx, field)
 			case "updatedAt":
@@ -19648,6 +19719,8 @@ func (ec *executionContext) fieldContext_Query_tasksReferencingCredential(ctx co
 				return ec.fieldContext_Task_lastUpdatedAt(ctx, field)
 			case "deletedAt":
 				return ec.fieldContext_Task_deletedAt(ctx, field)
+			case "doneAt":
+				return ec.fieldContext_Task_doneAt(ctx, field)
 			case "createdAt":
 				return ec.fieldContext_Task_createdAt(ctx, field)
 			case "updatedAt":
@@ -24073,6 +24146,35 @@ func (ec *executionContext) fieldContext_Task_deletedAt(_ context.Context, field
 	return fc, nil
 }
 
+func (ec *executionContext) _Task_doneAt(ctx context.Context, field graphql.CollectedField, obj *models.Task) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Task_doneAt,
+		func(ctx context.Context) (any, error) {
+			return ec.Resolvers.Task().DoneAt(ctx, obj)
+		},
+		nil,
+		ec.marshalOString2ᚖstring,
+		true,
+		false,
+	)
+}
+
+func (ec *executionContext) fieldContext_Task_doneAt(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Task",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
 func (ec *executionContext) _Task_createdAt(ctx context.Context, field graphql.CollectedField, obj *models.Task) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
@@ -24294,6 +24396,8 @@ func (ec *executionContext) fieldContext_TaskEdge_node(_ context.Context, field 
 				return ec.fieldContext_Task_lastUpdatedAt(ctx, field)
 			case "deletedAt":
 				return ec.fieldContext_Task_deletedAt(ctx, field)
+			case "doneAt":
+				return ec.fieldContext_Task_doneAt(ctx, field)
 			case "createdAt":
 				return ec.fieldContext_Task_createdAt(ctx, field)
 			case "updatedAt":
@@ -24481,6 +24585,8 @@ func (ec *executionContext) fieldContext_TaskEvent_task(_ context.Context, field
 				return ec.fieldContext_Task_lastUpdatedAt(ctx, field)
 			case "deletedAt":
 				return ec.fieldContext_Task_deletedAt(ctx, field)
+			case "doneAt":
+				return ec.fieldContext_Task_doneAt(ctx, field)
 			case "createdAt":
 				return ec.fieldContext_Task_createdAt(ctx, field)
 			case "updatedAt":
@@ -26536,6 +26642,8 @@ func (ec *executionContext) fieldContext_WikiDocument_taskBacklinks(_ context.Co
 				return ec.fieldContext_Task_lastUpdatedAt(ctx, field)
 			case "deletedAt":
 				return ec.fieldContext_Task_deletedAt(ctx, field)
+			case "doneAt":
+				return ec.fieldContext_Task_doneAt(ctx, field)
 			case "createdAt":
 				return ec.fieldContext_Task_createdAt(ctx, field)
 			case "updatedAt":
@@ -37095,6 +37203,39 @@ func (ec *executionContext) _Task(ctx context.Context, sel ast.SelectionSet, obj
 			}
 
 			out.Concurrently(i, func(ctx context.Context) graphql.Marshaler { return innerFunc(ctx, out) })
+		case "doneAt":
+			field := field
+
+			innerFunc := func(ctx context.Context, _ *graphql.FieldSet) (res graphql.Marshaler) {
+				defer func() {
+					if r := recover(); r != nil {
+						ec.Error(ctx, ec.Recover(ctx, r))
+					}
+				}()
+				res = ec._Task_doneAt(ctx, field, obj)
+				return res
+			}
+
+			if field.Deferrable != nil {
+				dfs, ok := deferred[field.Deferrable.Label]
+				di := 0
+				if ok {
+					dfs.AddField(field)
+					di = len(dfs.Values) - 1
+				} else {
+					dfs = graphql.NewFieldSet([]graphql.CollectedField{field})
+					deferred[field.Deferrable.Label] = dfs
+				}
+				dfs.Concurrently(di, func(ctx context.Context) graphql.Marshaler {
+					return innerFunc(ctx, dfs)
+				})
+
+				// don't run the out.Concurrently() call below
+				out.Values[i] = graphql.Null
+				continue
+			}
+
+			out.Concurrently(i, func(ctx context.Context) graphql.Marshaler { return innerFunc(ctx, out) })
 		case "createdAt":
 			field := field
 
@@ -42401,6 +42542,43 @@ func (ec *executionContext) marshalOTask2ᚖgithubᚗcomᚋvibeᚑc2ᚋvibeᚑc2
 		return graphql.Null
 	}
 	return ec._Task(ctx, sel, v)
+}
+
+func (ec *executionContext) unmarshalOTaskStage2ᚕgithubᚗcomᚋvibeᚑc2ᚋvibeᚑc2ᚑcoreᚋcoreᚋpkgᚋmodelsᚐTaskStageᚄ(ctx context.Context, v any) ([]models.TaskStage, error) {
+	if v == nil {
+		return nil, nil
+	}
+	var vSlice []any
+	vSlice = graphql.CoerceList(v)
+	var err error
+	res := make([]models.TaskStage, len(vSlice))
+	for i := range vSlice {
+		ctx := graphql.WithPathContext(ctx, graphql.NewPathWithIndex(i))
+		res[i], err = ec.unmarshalNTaskStage2githubᚗcomᚋvibeᚑc2ᚋvibeᚑc2ᚑcoreᚋcoreᚋpkgᚋmodelsᚐTaskStage(ctx, vSlice[i])
+		if err != nil {
+			return nil, err
+		}
+	}
+	return res, nil
+}
+
+func (ec *executionContext) marshalOTaskStage2ᚕgithubᚗcomᚋvibeᚑc2ᚋvibeᚑc2ᚑcoreᚋcoreᚋpkgᚋmodelsᚐTaskStageᚄ(ctx context.Context, sel ast.SelectionSet, v []models.TaskStage) graphql.Marshaler {
+	if v == nil {
+		return graphql.Null
+	}
+	ret := graphql.MarshalSliceConcurrently(ctx, len(v), 0, false, func(ctx context.Context, i int) graphql.Marshaler {
+		fc := graphql.GetFieldContext(ctx)
+		fc.Result = &v[i]
+		return ec.marshalNTaskStage2githubᚗcomᚋvibeᚑc2ᚋvibeᚑc2ᚑcoreᚋcoreᚋpkgᚋmodelsᚐTaskStage(ctx, sel, v[i])
+	})
+
+	for _, e := range ret {
+		if e == graphql.Null {
+			return graphql.Null
+		}
+	}
+
+	return ret
 }
 
 func (ec *executionContext) unmarshalOTaskStage2ᚖgithubᚗcomᚋvibeᚑc2ᚋvibeᚑc2ᚑcoreᚋcoreᚋpkgᚋmodelsᚐTaskStage(ctx context.Context, v any) (*models.TaskStage, error) {

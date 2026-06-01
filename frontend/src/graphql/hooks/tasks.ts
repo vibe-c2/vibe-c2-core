@@ -34,6 +34,16 @@ import {
 export type TaskListParams = {
   operationId: string
   stage?: TaskStage | null
+  // excludeStages drops rows in the listed stages. Matrix view uses this
+  // to skip DONE (and optionally BACKLOG); kanban columns leave it unset.
+  excludeStages?: TaskStage[] | null
+  // Risk/profit inclusive bounds drive the matrix-quadrant queries. Each
+  // quadrant calls this hook with its own bounds so the four lists fetch
+  // and paginate independently.
+  riskScoreMin?: number | null
+  riskScoreMax?: number | null
+  profitScoreMin?: number | null
+  profitScoreMax?: number | null
   search?: string | null
   first?: number
 }
@@ -92,8 +102,13 @@ export function useInfiniteTasks(
       graphqlClient(TasksDocument, {
         operationId: params.operationId,
         stage: params.stage ?? null,
+        excludeStages: params.excludeStages ?? null,
+        riskScoreMin: params.riskScoreMin ?? null,
+        riskScoreMax: params.riskScoreMax ?? null,
+        profitScoreMin: params.profitScoreMin ?? null,
+        profitScoreMax: params.profitScoreMax ?? null,
         search: params.search ?? null,
-        first: params.first ?? 100,
+        first: params.first ?? 30,
         after: pageParam,
       }),
     initialPageParam: undefined as string | undefined,
@@ -191,11 +206,12 @@ export function useUpdateTask() {
 // modal before retrying when that error surfaces. The error message
 // includes "DONE requires status" so the UI can detect that branch.
 //
-// Optimistic update: the kanban board renders directly off this cache, so
-// without an immediate write the source card flickers back into its old
-// column for the duration of the round-trip before the refetch moves it.
-// We patch every cached list page in place — flipping just `stage` on the
-// matching node — then reconcile against the server result.
+// Optimistic update: each kanban column is now its own infinite query
+// (one cache entry per column), so a cross-stage move means removing the
+// edge from the source column's pages and prepending it to the target
+// column's first page. We snapshot every list query, mutate in place,
+// and roll back on error. onSettled invalidates so the server-side
+// cursor ordering reconciles.
 export function useChangeTaskStage() {
   const queryClient = useQueryClient()
   return useMutation({
@@ -205,31 +221,92 @@ export function useChangeTaskStage() {
       // CRITICAL: apply the optimistic write synchronously BEFORE any
       // await. If we await cancelQueries first, React flushes the
       // post-drop render (overlay gone, source opacity restored) while
-      // the cache still points the task at its old stage, painting one
-      // frame in the wrong column before the cache update lands.
-      const snapshots = queryClient.getQueriesData<{
-        pages: Array<{
-          tasks: {
-            edges: Array<{ node: { id: string; stage: TaskStage } }>
+      // the cache still points the task at its old column, painting one
+      // frame in the wrong place before the cache update lands.
+      type EdgeShape = {
+        node: { id: string; stage: TaskStage } & Record<string, unknown>
+        cursor: string
+      }
+      type PageShape = {
+        tasks: {
+          edges: EdgeShape[]
+          pageInfo: { hasNextPage: boolean; endCursor: string | null }
+          totalCount: number
+        }
+      }
+      type CacheShape = { pages: PageShape[]; pageParams: unknown[] }
+
+      const snapshots = queryClient.getQueriesData<CacheShape>({
+        queryKey: taskKeys.lists(),
+      })
+
+      // First pass: find the moving task's full edge so we can transplant
+      // it into the target-stage cache with all fields intact.
+      let movedEdge: EdgeShape | null = null
+      for (const [, data] of snapshots) {
+        if (!data) continue
+        for (const page of data.pages) {
+          const found = page.tasks.edges.find((e) => e.node.id === input.taskId)
+          if (found) {
+            movedEdge = found
+            break
           }
-        }>
-      }>({ queryKey: taskKeys.lists() })
+        }
+        if (movedEdge) break
+      }
 
       for (const [key, data] of snapshots) {
         if (!data) continue
-        queryClient.setQueryData(key, {
+        // Query-key shape: ["tasks","list","infinite", params]. The last
+        // entry is the TaskListParams used to build the cache slice; we
+        // read params.stage to know whether this slice is the target
+        // column's cache. Matrix-quadrant caches (params.stage undefined)
+        // never match — they just drop the moving task.
+        const params = (key[key.length - 1] ?? {}) as TaskListParams
+        const isTargetCache = movedEdge != null && params.stage === input.stage
+
+        queryClient.setQueryData<CacheShape>(key, {
           ...data,
-          pages: data.pages.map((page) => ({
-            ...page,
-            tasks: {
-              ...page.tasks,
-              edges: page.tasks.edges.map((edge) =>
-                edge.node.id === input.taskId
-                  ? { ...edge, node: { ...edge.node, stage: input.stage } }
-                  : edge,
-              ),
-            },
-          })),
+          pages: data.pages.map((page, idx) => {
+            const filtered = page.tasks.edges.filter(
+              (e) => e.node.id !== input.taskId,
+            )
+            const wasPresent = filtered.length !== page.tasks.edges.length
+
+            // Target column, first page: prepend the moved edge with
+            // stage flipped so it lands at the top of the list. The
+            // server reconciles ordering on the next refetch.
+            if (isTargetCache && idx === 0 && movedEdge) {
+              return {
+                ...page,
+                tasks: {
+                  ...page.tasks,
+                  edges: [
+                    {
+                      ...movedEdge,
+                      node: { ...movedEdge.node, stage: input.stage },
+                    },
+                    ...filtered,
+                  ],
+                  totalCount: page.tasks.totalCount + 1,
+                },
+              }
+            }
+
+            // Any other slice: removing the task is enough. totalCount
+            // is page-0 only.
+            return {
+              ...page,
+              tasks: {
+                ...page.tasks,
+                edges: filtered,
+                totalCount:
+                  idx === 0 && wasPresent
+                    ? Math.max(0, page.tasks.totalCount - 1)
+                    : page.tasks.totalCount,
+              },
+            }
+          }),
         })
       }
 

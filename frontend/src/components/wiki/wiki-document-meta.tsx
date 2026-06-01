@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react"
+import { FormattedDateTimeText } from "@/components/ui/formatted-date-time-text"
 import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip"
 import { useAuthStore } from "@/stores/auth"
 import type { WikiDocumentFieldsFragment } from "@/graphql/gql/graphql"
@@ -70,14 +71,15 @@ function MetaEntry({ verb, actor, timestamp, currentUserId }: MetaEntryProps) {
 
   const parsed = new Date(timestamp)
   const relative = formatRelativeTime(parsed)
-  const absolute = formatAbsolute(parsed)
 
   return (
     <Tooltip>
       <TooltipTrigger render={<span className="cursor-default" />}>
         {verb} by {actorLabel} {relative}
       </TooltipTrigger>
-      <TooltipContent>{absolute}</TooltipContent>
+      <TooltipContent>
+        <FormattedDateTimeText date={parsed} />
+      </TooltipContent>
     </Tooltip>
   )
 }
@@ -100,9 +102,3 @@ function formatRelativeTime(date: Date): string {
   return rtf.format(Math.round(deltaSec / 31_536_000), "year")
 }
 
-function formatAbsolute(date: Date): string {
-  return date.toLocaleString(undefined, {
-    dateStyle: "medium",
-    timeStyle: "short",
-  })
-}

@@ -41,6 +41,7 @@ export const TaskFields = graphql(`
     }
     lastUpdatedAt
     deletedAt
+    doneAt
     createdAt
     updatedAt
   }
@@ -82,6 +83,11 @@ export const TasksQuery = graphql(`
   query Tasks(
     $operationId: ID!
     $stage: TaskStage
+    $excludeStages: [TaskStage!]
+    $riskScoreMin: Int
+    $riskScoreMax: Int
+    $profitScoreMin: Int
+    $profitScoreMax: Int
     $search: String
     $first: Int
     $after: String
@@ -89,6 +95,11 @@ export const TasksQuery = graphql(`
     tasks(
       operationId: $operationId
       stage: $stage
+      excludeStages: $excludeStages
+      riskScoreMin: $riskScoreMin
+      riskScoreMax: $riskScoreMax
+      profitScoreMin: $profitScoreMin
+      profitScoreMax: $profitScoreMax
       search: $search
       first: $first
       after: $after

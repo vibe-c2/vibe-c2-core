@@ -8,10 +8,11 @@ import {
   type DragEndEvent,
   type DragStartEvent,
 } from "@dnd-kit/core"
+import { useQueryClient } from "@tanstack/react-query"
 import { toast } from "sonner"
 import { KanbanColumn } from "@/components/tasks/kanban-column"
 import { TaskCard } from "@/components/tasks/task-card"
-import { useChangeTaskStage } from "@/graphql/hooks/tasks"
+import { useChangeTaskStage, taskKeys } from "@/graphql/hooks/tasks"
 import { useTaskStore } from "@/stores/tasks"
 import type { TaskFieldsFragment, TaskStage } from "@/graphql/gql/graphql"
 
@@ -20,10 +21,11 @@ import type { TaskFieldsFragment, TaskStage } from "@/graphql/gql/graphql"
 const STAGES: TaskStage[] = ["BACKLOG", "TODO", "IN_PROCESS", "DONE"]
 
 interface KanbanBoardProps {
-  tasks: TaskFieldsFragment[]
+  operationId: string
+  search: string
 }
 
-export function KanbanBoard({ tasks }: KanbanBoardProps) {
+export function KanbanBoard({ operationId, search }: KanbanBoardProps) {
   // PointerSensor with an 8px activation threshold so plain clicks open the
   // details dialog (handled by TaskCard's onClick) without DnD swallowing
   // them. Drags only start once the operator clearly intends to move.
@@ -31,6 +33,7 @@ export function KanbanBoard({ tasks }: KanbanBoardProps) {
     useSensor(PointerSensor, { activationConstraint: { distance: 8 } }),
   )
 
+  const queryClient = useQueryClient()
   const changeStage = useChangeTaskStage()
   const openStatusRequiredModal = useTaskStore(
     (s) => s.openStatusRequiredModal,
@@ -38,23 +41,16 @@ export function KanbanBoard({ tasks }: KanbanBoardProps) {
   const openReopenModal = useTaskStore((s) => s.openReopenModal)
 
   const [activeId, setActiveId] = useState<string | null>(null)
-  const activeTask = useMemo(
-    () => tasks.find((t) => t.id === activeId) ?? null,
-    [tasks, activeId],
-  )
 
-  // Group tasks by stage for the columns. Server already returns them
-  // sorted by createAt DESC, so we just bucket without re-sorting.
-  const byStage = useMemo(() => {
-    const groups: Record<TaskStage, TaskFieldsFragment[]> = {
-      BACKLOG: [],
-      TODO: [],
-      IN_PROCESS: [],
-      DONE: [],
-    }
-    for (const t of tasks) groups[t.stage].push(t)
-    return groups
-  }, [tasks])
+  // To render the DragOverlay we need the active task. Each column owns
+  // its own cache entry, so we scan every infinite-list cache entry for
+  // a matching id rather than holding a centralized list. This stays
+  // cheap because each cache slice is a column's pages; the early return
+  // on first hit keeps the loop short in practice.
+  const activeTask = useMemo<TaskFieldsFragment | null>(
+    () => (activeId ? findTaskInCache(queryClient, activeId) : null),
+    [activeId, queryClient],
+  )
 
   function handleDragStart(e: DragStartEvent) {
     setActiveId(String(e.active.id))
@@ -70,7 +66,10 @@ export function KanbanBoard({ tasks }: KanbanBoardProps) {
       | null
     if (!targetStage) return
 
-    const task = tasks.find((t) => t.id === taskId)
+    // We just had the active task in hand for the overlay; reuse the
+    // same lookup to learn its current stage + status without forcing
+    // every consumer to thread a `tasks` prop.
+    const task = findTaskInCache(queryClient, taskId)
     if (!task || task.stage === targetStage) return
 
     // Moving INTO Done without a terminal status: hand off to the
@@ -127,7 +126,12 @@ export function KanbanBoard({ tasks }: KanbanBoardProps) {
     >
       <div className="flex flex-1 gap-1 overflow-x-auto p-1">
         {STAGES.map((stage) => (
-          <KanbanColumn key={stage} stage={stage} tasks={byStage[stage]} />
+          <KanbanColumn
+            key={stage}
+            operationId={operationId}
+            stage={stage}
+            search={search}
+          />
         ))}
       </div>
 
@@ -142,4 +146,24 @@ export function KanbanBoard({ tasks }: KanbanBoardProps) {
       </DragOverlay>
     </DndContext>
   )
+}
+
+// findTaskInCache scans every cached task-list entry for a task by id.
+// Returns null when no cache slice contains the task — happens briefly
+// during invalidation flushes; the caller treats that as a no-op move.
+function findTaskInCache(
+  queryClient: ReturnType<typeof useQueryClient>,
+  taskId: string,
+): TaskFieldsFragment | null {
+  const entries = queryClient.getQueriesData<{
+    pages: Array<{ tasks: { edges: Array<{ node: TaskFieldsFragment }> } }>
+  }>({ queryKey: taskKeys.lists() })
+  for (const [, data] of entries) {
+    if (!data) continue
+    for (const page of data.pages) {
+      const found = page.tasks.edges.find((e) => e.node.id === taskId)
+      if (found) return found.node
+    }
+  }
+  return null
 }

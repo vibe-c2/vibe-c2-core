@@ -1,11 +1,22 @@
 import { useDraggable } from "@dnd-kit/core"
-import { FileTextIcon, KeyRoundIcon } from "lucide-react"
+import {
+  CheckCircle2Icon,
+  ClockIcon,
+  FileTextIcon,
+  KeyRoundIcon,
+} from "lucide-react"
 import {
   Avatar,
   AvatarFallback,
   AvatarGroup,
   AvatarGroupCount,
 } from "@/components/ui/avatar"
+import { FormattedDateTimeText } from "@/components/ui/formatted-date-time-text"
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip"
 import { cn } from "@/lib/utils"
 import type { TaskFieldsFragment } from "@/graphql/gql/graphql"
 import {
@@ -85,12 +96,30 @@ export function TaskCard({ task, draggable = true, onClick }: TaskCardProps) {
         </p>
       )}
 
+
       {/* Bottom row anchors the score tiles to the right edge of the card,
           matching the create/edit modal selector aesthetic. Assignees and
           reference counters sit on the left so the row stays balanced
           when both are present. */}
       <div className="mt-auto flex items-end justify-between gap-2 pt-1">
-        <div className="flex flex-wrap items-center gap-1.5">
+        <div className="flex flex-wrap items-center gap-1.5 text-[10px] text-muted-foreground">
+          {/* One timestamp chip per card, leading the bottom row. DONE
+              cards show their completion time (the milestone that
+              matters for review); every other stage shows the creation
+              time (the only meaningful "when" before the work lands). */}
+          {task.stage === "DONE" && task.doneAt ? (
+            <TimestampChip
+              icon={<CheckCircle2Icon className="size-3" />}
+              label="Completed"
+              isoTimestamp={task.doneAt}
+            />
+          ) : (
+            <TimestampChip
+              icon={<ClockIcon className="size-3" />}
+              label="Created"
+              isoTimestamp={task.createdAt}
+            />
+          )}
           {task.assignees.length > 0 && (
             <AvatarGroup>
               {visibleAssignees.map((u) => (
@@ -128,5 +157,36 @@ export function TaskCard({ task, draggable = true, onClick }: TaskCardProps) {
         </div>
       </div>
     </button>
+  )
+}
+
+interface TimestampChipProps {
+  icon: React.ReactNode
+  label: string
+  isoTimestamp: string
+}
+
+// TimestampChip renders one timestamp pair in the card meta row: an icon
+// plus the formatted datetime in the app-wide format (FormattedDateTimeText
+// — same component the users table and other surfaces use). The label
+// ("Created" / "Completed") is surfaced on hover so the row stays tight.
+// The trigger is a span so it can sit inline inside the parent <button>
+// without nesting interactive elements.
+function TimestampChip({ icon, label, isoTimestamp }: TimestampChipProps) {
+  return (
+    <Tooltip>
+      <TooltipTrigger
+        render={
+          <span className="inline-flex items-center gap-1 cursor-default" />
+        }
+      >
+        {icon}
+        <FormattedDateTimeText
+          date={isoTimestamp}
+          className="tabular-nums"
+        />
+      </TooltipTrigger>
+      <TooltipContent>{label}</TooltipContent>
+    </Tooltip>
   )
 }

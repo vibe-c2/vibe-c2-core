@@ -1,9 +1,11 @@
 import { useMemo } from "react"
 import { useTaskStore } from "@/stores/tasks"
 import { cn } from "@/lib/utils"
-import type { TaskFieldsFragment } from "@/graphql/gql/graphql"
+import type { TaskFieldsFragment, TaskStage } from "@/graphql/gql/graphql"
 import { TaskCard } from "@/components/tasks/task-card"
 import { TaskCardContextMenu } from "@/components/tasks/task-card-context-menu"
+import { VirtualTaskList } from "@/components/tasks/virtual-task-list"
+import { useInfiniteTasks } from "@/graphql/hooks/tasks"
 
 // Quadrant layout (C2 vocabulary — profit = operational value, risk = burn /
 // detection risk):
@@ -13,142 +15,173 @@ import { TaskCardContextMenu } from "@/components/tasks/task-card-context-menu"
 //   bottom-left: low  value, low  risk → "Footholds"
 //   bottom-right:low  value, high risk → "Burn Risks"
 //
-// Threshold is hardcoded at 5/5 (scores < 5 are "low", scores ≥ 5 are
-// "high"). Per the plan: configurable per-operation could land later if
-// teams have different risk appetites; v1 is hardcoded.
-const QUADRANTS = [
+// Threshold is hardcoded at 5 (scores < 5 are "low", scores ≥ 5 are "high"),
+// mapped client-side to the server's inclusive score range filters. Per the
+// plan: configurable per-operation could land later if teams have different
+// risk appetites; v1 is hardcoded.
+const LOW_MAX = 4
+const HIGH_MIN = 5
+
+interface QuadrantSpec {
+  key: "low-hanging-fruit" | "crown-jewels" | "footholds" | "burn-risks"
+  title: string
+  subtitle: string
+  accent: string
+  // Inclusive bounds piped to the Tasks query.
+  riskScoreMin: number | null
+  riskScoreMax: number | null
+  profitScoreMin: number | null
+  profitScoreMax: number | null
+}
+
+const QUADRANTS: readonly QuadrantSpec[] = [
   {
-    key: "low-hanging-fruit" as const,
+    key: "low-hanging-fruit",
     title: "Low-Hanging Fruit",
     subtitle: "Low risk, high value",
     accent: "text-emerald-600 dark:text-emerald-400",
+    riskScoreMin: null,
+    riskScoreMax: LOW_MAX,
+    profitScoreMin: HIGH_MIN,
+    profitScoreMax: null,
   },
   {
-    key: "crown-jewels" as const,
+    key: "crown-jewels",
     title: "Crown Jewels",
     subtitle: "High risk, high value",
     accent: "text-amber-600 dark:text-amber-400",
+    riskScoreMin: HIGH_MIN,
+    riskScoreMax: null,
+    profitScoreMin: HIGH_MIN,
+    profitScoreMax: null,
   },
   {
-    key: "footholds" as const,
+    key: "footholds",
     title: "Footholds",
     subtitle: "Low risk, low value",
     accent: "text-muted-foreground",
+    riskScoreMin: null,
+    riskScoreMax: LOW_MAX,
+    profitScoreMin: null,
+    profitScoreMax: LOW_MAX,
   },
   {
-    key: "burn-risks" as const,
+    key: "burn-risks",
     title: "Burn Risks",
     subtitle: "High risk, low value",
     accent: "text-rose-600 dark:text-rose-400",
+    riskScoreMin: HIGH_MIN,
+    riskScoreMax: null,
+    profitScoreMin: null,
+    profitScoreMax: LOW_MAX,
   },
 ] as const
 
-type QuadrantKey = (typeof QUADRANTS)[number]["key"]
-
-function quadrantFor(task: TaskFieldsFragment): QuadrantKey {
-  const highProfit = task.profitScore >= 5
-  const highRisk = task.riskScore >= 5
-  if (highProfit && !highRisk) return "low-hanging-fruit"
-  if (highProfit && highRisk) return "crown-jewels"
-  if (!highProfit && !highRisk) return "footholds"
-  return "burn-risks"
-}
-
 interface RiskProfitMatrixProps {
-  tasks: TaskFieldsFragment[]
+  operationId: string
+  search: string
   includeBacklog?: boolean
 }
 
 export function RiskProfitMatrix({
-  tasks,
+  operationId,
+  search,
   includeBacklog = false,
 }: RiskProfitMatrixProps) {
-  const openEditDialog = useTaskStore((s) => s.openEditDialog)
-
   // Done tasks are excluded from the matrix — once shipped, they're no
   // longer something to weigh against open options. Kanban still shows the
   // Done column for history. Backlog is excluded by default so the matrix
   // focuses on committed work; the page header switch flips it on for
   // operators weighing the full pipeline.
-  const grouped = useMemo(() => {
-    const groups: Record<QuadrantKey, TaskFieldsFragment[]> = {
-      "low-hanging-fruit": [],
-      "crown-jewels": [],
-      "footholds": [],
-      "burn-risks": [],
-    }
-    for (const t of tasks) {
-      if (t.stage === "DONE") continue
-      if (!includeBacklog && t.stage === "BACKLOG") continue
-      groups[quadrantFor(t)].push(t)
-    }
-    return groups
-  }, [tasks, includeBacklog])
+  const excludeStages = useMemo<TaskStage[]>(
+    () =>
+      includeBacklog ? (["DONE"] as TaskStage[]) : (["DONE", "BACKLOG"] as TaskStage[]),
+    [includeBacklog],
+  )
 
   return (
     <div className="flex flex-1 flex-col gap-2 p-1 min-h-0">
       <div className="grid flex-1 grid-cols-2 grid-rows-2 gap-2 min-h-0">
         {QUADRANTS.map((q) => (
-          <Quadrant
+          <MatrixQuadrant
             key={q.key}
-            title={q.title}
-            subtitle={q.subtitle}
-            accent={q.accent}
-            count={grouped[q.key].length}
-          >
-            {grouped[q.key].length === 0 ? (
-              <p className="px-1 py-4 text-center text-xs text-muted-foreground">
-                No tasks
-              </p>
-            ) : (
-              <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-                {grouped[q.key].map((t) => (
-                  <TaskCardContextMenu key={t.id} task={t}>
-                    <TaskCard
-                      task={t}
-                      draggable={false}
-                      onClick={() =>
-                        openEditDialog({ id: t.id, name: t.name })
-                      }
-                    />
-                  </TaskCardContextMenu>
-                ))}
-              </div>
-            )}
-          </Quadrant>
+            spec={q}
+            operationId={operationId}
+            search={search}
+            excludeStages={excludeStages}
+          />
         ))}
       </div>
     </div>
   )
 }
 
-function Quadrant({
-  title,
-  subtitle,
-  accent,
-  count,
-  children,
-}: {
-  title: string
-  subtitle: string
-  accent: string
-  count: number
-  children: React.ReactNode
-}) {
+interface MatrixQuadrantProps {
+  spec: QuadrantSpec
+  operationId: string
+  search: string
+  excludeStages: TaskStage[]
+}
+
+function MatrixQuadrant({
+  spec,
+  operationId,
+  search,
+  excludeStages,
+}: MatrixQuadrantProps) {
+  const openEditDialog = useTaskStore((s) => s.openEditDialog)
+
+  const query = useInfiniteTasks({
+    operationId,
+    excludeStages,
+    riskScoreMin: spec.riskScoreMin,
+    riskScoreMax: spec.riskScoreMax,
+    profitScoreMin: spec.profitScoreMin,
+    profitScoreMax: spec.profitScoreMax,
+    search: search.trim() || null,
+    first: 30,
+  })
+
+  const tasks = useMemo<TaskFieldsFragment[]>(
+    () => query.data?.pages.flatMap((p) => p.tasks.edges.map((e) => e.node)) ?? [],
+    [query.data],
+  )
+
+  const total = query.data?.pages[0]?.tasks.totalCount ?? 0
+
   return (
     <div className="flex min-h-0 flex-col overflow-hidden rounded-lg border bg-card/40">
       <header className="flex items-center justify-between gap-2 border-b px-3 py-2">
         <div>
-          <div className={cn("text-sm font-semibold", accent)}>{title}</div>
+          <div className={cn("text-sm font-semibold", spec.accent)}>
+            {spec.title}
+          </div>
           <div className="text-[10px] uppercase tracking-wide text-muted-foreground">
-            {subtitle}
+            {spec.subtitle}
           </div>
         </div>
         <span className="rounded bg-muted px-1.5 py-0.5 text-xs font-mono tabular-nums text-muted-foreground">
-          {count}
+          {total}
         </span>
       </header>
-      <div className="flex-1 overflow-y-auto p-2">{children}</div>
+      <VirtualTaskList
+        tasks={tasks}
+        renderItem={(t) => (
+          <TaskCardContextMenu task={t}>
+            <TaskCard
+              task={t}
+              draggable={false}
+              onClick={() => openEditDialog({ id: t.id, name: t.name })}
+            />
+          </TaskCardContextMenu>
+        )}
+        hasNextPage={!!query.hasNextPage}
+        isFetchingNextPage={query.isFetchingNextPage}
+        isLoading={query.isLoading}
+        fetchNextPage={query.fetchNextPage}
+        emptyMessage="No tasks"
+        lanes={2}
+      />
     </div>
   )
 }
