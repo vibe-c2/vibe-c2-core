@@ -32,7 +32,16 @@ export function AppLayout() {
 
   return (
     <TooltipProvider>
-      <SidebarProvider open={sidebarOpen} onOpenChange={setSidebarOpen}>
+      <SidebarProvider
+        open={sidebarOpen}
+        onOpenChange={setSidebarOpen}
+        // h-svh locks the wrapper to exactly one viewport. Without this
+        // the shadcn primitive uses min-h-svh (a *minimum*), and any
+        // tall content (e.g. the kanban column virtualizer's sizer)
+        // would push the wrapper past the viewport and trigger a global
+        // page scroll instead of the column's internal overflow scroll.
+        className="h-svh"
+      >
         <AppSidebar />
         <SidebarInset className="min-w-0">
           <Outlet />

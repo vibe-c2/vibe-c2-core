@@ -69,7 +69,7 @@ function TasksPageInner({ operationId }: { operationId: string }) {
   useTaskChangedSubscription(operationId)
 
   return (
-    <div className="flex flex-1 flex-col gap-2 p-2">
+    <div className="flex flex-1 flex-col gap-2 p-2 min-h-0">
       <header className="flex items-center justify-between gap-2">
         <div className="flex items-center gap-2">
           <SearchInput
