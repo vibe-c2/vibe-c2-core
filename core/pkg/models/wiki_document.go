@@ -63,4 +63,10 @@ type WikiDocument struct {
 	// sidecar on every persist and used to power the inverse "which wiki docs
 	// cite this credential" lookup for the Findings page.
 	CredentialReferences []uuid.UUID `bson:"credential_references,omitempty" json:"-"`
+	// HashReferences lists the hash IDs that this document cites inline via the
+	// /hash slash command (wikiHashReference nodes). Same rewrite semantics as
+	// CredentialReferences — populated by the Hocuspocus sidecar on every
+	// persist and used to power the inverse "which wiki docs cite this hash"
+	// lookup for the Findings page.
+	HashReferences []uuid.UUID `bson:"hash_references,omitempty" json:"-"`
 }

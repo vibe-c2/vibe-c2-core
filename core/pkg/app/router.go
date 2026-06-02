@@ -58,6 +58,7 @@ func (a *App) NewRouter() *gin.Engine {
 		a.repos.Operation, a.repos.User,
 		a.repos.WikiDocumentVisit,
 		a.repos.Credential,
+		a.repos.Hash,
 		a.repos.Task,
 		a.eventBus, a.presenceTracker,
 	)
@@ -73,8 +74,10 @@ func (a *App) NewRouter() *gin.Engine {
 	// hashRes depends on credRes because MarkHashCracked may need to create a
 	// new credential inline — going through the credential resolver keeps the
 	// validation, event publishing, and timeline write paths consistent.
+	// hashRes also depends on wikiDocRes for the backlinks field resolvers —
+	// same cross-domain join shape as credRes.
 	hashRes := resolver.NewHashResolver(
-		a.repos.Hash, a.repos.Credential, a.repos.Operation, a.repos.User, credRes, a.eventBus,
+		a.repos.Hash, a.repos.Credential, a.repos.Operation, a.repos.User, credRes, wikiDocRes, a.eventBus,
 	)
 	taskRes := resolver.NewTaskResolver(
 		a.repos.Task, a.repos.Operation, a.repos.User, a.repos.WikiDocument, a.repos.Credential, a.eventBus,

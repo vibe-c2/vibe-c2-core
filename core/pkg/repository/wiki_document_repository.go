@@ -136,6 +136,19 @@ type IWikiDocumentRepository interface {
 	// clear dangling pointers from the inverse index. No-op when the credential
 	// was never referenced.
 	PullCredentialReference(ctx context.Context, opID, credentialID uuid.UUID) error
+	// FindHashReferrers returns active documents in opID whose HashReferences
+	// array contains hashID. Sibling of FindCredentialReferrers — same ordering,
+	// cap, and trashed-referrer exclusion. Powers the hash details dialog's
+	// "Referenced in" section.
+	FindHashReferrers(ctx context.Context, opID, hashID uuid.UUID, limit int64) ([]models.WikiDocument, error)
+	// CountHashReferrersBatch returns a map of hashID → count of active
+	// documents in opID whose HashReferences contains that id. Sibling of
+	// CountCredentialReferrersBatch.
+	CountHashReferrersBatch(ctx context.Context, opID uuid.UUID, hashIDs []uuid.UUID) (map[uuid.UUID]int64, error)
+	// PullHashReference removes hashID from every document's hash_references
+	// array in opID. Used on hash hard-delete to clear dangling pointers.
+	// Sibling of PullCredentialReference.
+	PullHashReference(ctx context.Context, opID, hashID uuid.UUID) error
 }
 
 type wikiDocumentRepository struct {
@@ -179,6 +192,10 @@ func NewWikiDocumentRepository(db database.Database) IWikiDocumentRepository {
 		// on the credential_references array with deleted_at trailing so the
 		// resolver can match and filter trashed referrers in one scan.
 		{Key: []string{"operation_id", "credential_references", "deleted_at"}},
+		// Hash backlinks: "documents in this operation that reference hash X".
+		// Same shape as the credential backlinks index above — multikey on the
+		// hash_references array with deleted_at trailing.
+		{Key: []string{"operation_id", "hash_references", "deleted_at"}},
 		// Scoped search ("find docs under this folder"). Multikey index on the
 		// materialized ancestor chain — one index probe replaces the previous
 		// O(depth) FindDescendants BFS in SearchByOperationID.
@@ -845,6 +862,73 @@ func (r *wikiDocumentRepository) PullCredentialReference(ctx context.Context, op
 	)
 	if err != nil {
 		return fmt.Errorf("failed to pull credential reference: %w", err)
+	}
+	return nil
+}
+
+// FindHashReferrers lists active documents in opID whose HashReferences array
+// contains hashID — the inverse of the inline /hash reference. Trashed
+// referrers are excluded. Sorted by most recently updated. Sibling of
+// FindCredentialReferrers.
+func (r *wikiDocumentRepository) FindHashReferrers(ctx context.Context, opID, hashID uuid.UUID, limit int64) ([]models.WikiDocument, error) {
+	var docs []models.WikiDocument
+	err := r.coll.Find(ctx, bson.M{
+		"operation_id":    opID,
+		"hash_references": hashID,
+		"deleted_at":      nil,
+	}).Sort("-updateAt", "-_id").Limit(limit).All(&docs)
+	return docs, err
+}
+
+// CountHashReferrersBatch groups active documents in opID by each hash id they
+// reference, restricted to the supplied hashIDs. Sibling of
+// CountCredentialReferrersBatch.
+func (r *wikiDocumentRepository) CountHashReferrersBatch(ctx context.Context, opID uuid.UUID, hashIDs []uuid.UUID) (map[uuid.UUID]int64, error) {
+	if len(hashIDs) == 0 {
+		return map[uuid.UUID]int64{}, nil
+	}
+	pipeline := bson.A{
+		bson.M{"$match": bson.M{
+			"operation_id":    opID,
+			"deleted_at":      nil,
+			"hash_references": bson.M{"$in": hashIDs},
+		}},
+		bson.M{"$unwind": "$hash_references"},
+		bson.M{"$match": bson.M{
+			"hash_references": bson.M{"$in": hashIDs},
+		}},
+		bson.M{"$group": bson.M{
+			"_id":   "$hash_references",
+			"count": bson.M{"$sum": 1},
+		}},
+	}
+	var rows []struct {
+		ID    uuid.UUID `bson:"_id"`
+		Count int64     `bson:"count"`
+	}
+	if err := r.coll.Aggregate(ctx, pipeline).All(&rows); err != nil {
+		return nil, fmt.Errorf("failed to aggregate hash referrers: %w", err)
+	}
+	out := make(map[uuid.UUID]int64, len(rows))
+	for _, row := range rows {
+		out[row.ID] = row.Count
+	}
+	return out, nil
+}
+
+// PullHashReference removes hashID from hash_references on every document in
+// opID. Called on hash hard-delete so dangling UUIDs don't accumulate in the
+// inverse index. Sibling of PullCredentialReference.
+func (r *wikiDocumentRepository) PullHashReference(ctx context.Context, opID, hashID uuid.UUID) error {
+	_, err := r.coll.UpdateAll(ctx,
+		bson.M{
+			"operation_id":    opID,
+			"hash_references": hashID,
+		},
+		bson.M{"$pull": bson.M{"hash_references": hashID}},
+	)
+	if err != nil {
+		return fmt.Errorf("failed to pull hash reference: %w", err)
 	}
 	return nil
 }

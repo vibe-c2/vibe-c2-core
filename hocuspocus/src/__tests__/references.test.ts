@@ -10,6 +10,7 @@ import * as Y from "yjs";
 import {
   collectCredentialReferenceIds,
   collectDocReferenceIds,
+  collectHashReferenceIds,
 } from "../references.js";
 
 // Helper — must be attached to a live Doc before setAttribute will persist.
@@ -31,6 +32,12 @@ function chip(documentId: string): Y.XmlElement {
 function credChip(credentialId: string): Y.XmlElement {
   const el = new Y.XmlElement("wikiCredentialReference");
   el.setAttribute("credentialId", credentialId);
+  return el;
+}
+
+function hashChip(hashId: string): Y.XmlElement {
+  const el = new Y.XmlElement("wikiHashReference");
+  el.setAttribute("hashId", hashId);
   return el;
 }
 
@@ -223,5 +230,85 @@ test("credential walker does NOT pick up wikiDocumentReference nodes", () => {
 test("credential walker returns an empty set for an empty document", () => {
   const frag = withDoc(() => {});
   const ids = collectCredentialReferenceIds(frag);
+  assert.equal(ids.size, 0);
+});
+
+// --- Hash reference walker — sibling of the credential walker. ---
+
+test("hash walker collects a single inline hash reference", () => {
+  const frag = withDoc((f) => {
+    f.insert(0, [block("paragraph", hashChip(ID_A))]);
+  });
+  const ids = collectHashReferenceIds(frag);
+  assert.deepEqual([...ids], [ID_A]);
+});
+
+test("hash walker dedupes repeated hash references", () => {
+  const frag = withDoc((f) => {
+    f.insert(0, [
+      block("paragraph", hashChip(ID_A), hashChip(ID_A)),
+      block("paragraph", hashChip(ID_A)),
+    ]);
+  });
+  const ids = collectHashReferenceIds(frag);
+  assert.equal(ids.size, 1);
+  assert.ok(ids.has(ID_A));
+});
+
+test("hash walker collects references nested deep inside blocks", () => {
+  const frag = withDoc((f) => {
+    f.insert(0, [
+      block(
+        "bulletList",
+        block(
+          "listItem",
+          block("paragraph", hashChip(ID_A)),
+          block("paragraph", hashChip(ID_B)),
+        ),
+      ),
+      block("blockquote", block("paragraph", hashChip(ID_C))),
+    ]);
+  });
+  const ids = collectHashReferenceIds(frag);
+  assert.equal(ids.size, 3);
+});
+
+test("hash walker ignores malformed hashId", () => {
+  const frag = withDoc((f) => {
+    f.insert(0, [
+      block("paragraph", hashChip("not-a-uuid"), hashChip(""), hashChip(ID_A)),
+    ]);
+  });
+  const ids = collectHashReferenceIds(frag);
+  assert.deepEqual([...ids], [ID_A]);
+});
+
+test("hash walker normalises ids to lowercase", () => {
+  const frag = withDoc((f) => {
+    f.insert(0, [
+      block("paragraph", hashChip(ID_A.toUpperCase()), hashChip(ID_A)),
+    ]);
+  });
+  const ids = collectHashReferenceIds(frag);
+  assert.equal(ids.size, 1);
+  assert.ok(ids.has(ID_A));
+});
+
+test("hash walker stays disjoint from credential and doc walkers", () => {
+  // Symmetry guard: each of the three indexes must ignore the other two
+  // node types so the inverse indexes never cross-contaminate.
+  const frag = withDoc((f) => {
+    f.insert(0, [
+      block("paragraph", chip(ID_A), credChip(ID_B), hashChip(ID_C)),
+    ]);
+  });
+  assert.deepEqual([...collectHashReferenceIds(frag)], [ID_C]);
+  assert.deepEqual([...collectCredentialReferenceIds(frag)], [ID_B]);
+  assert.deepEqual([...collectDocReferenceIds(frag)], [ID_A]);
+});
+
+test("hash walker returns an empty set for an empty document", () => {
+  const frag = withDoc(() => {});
+  const ids = collectHashReferenceIds(frag);
   assert.equal(ids.size, 0);
 });

@@ -4,6 +4,7 @@ import * as Y from "yjs";
 import {
   collectCredentialReferenceIds,
   collectDocReferenceIds,
+  collectHashReferenceIds,
 } from "./references.js";
 
 /**
@@ -161,11 +162,15 @@ export function createDatabaseExtension(): Database {
       let markdown: string;
       let referenceBinaries: Binary[] = [];
       let credentialReferenceBinaries: Binary[] = [];
+      let hashReferenceBinaries: Binary[] = [];
       if (xmlFragment.length > 0) {
         markdown = extractTextFromFragment(xmlFragment);
         referenceBinaries = idsToBinaries(collectDocReferenceIds(xmlFragment));
         credentialReferenceBinaries = idsToBinaries(
           collectCredentialReferenceIds(xmlFragment),
+        );
+        hashReferenceBinaries = idsToBinaries(
+          collectHashReferenceIds(xmlFragment),
         );
       } else {
         markdown = ydoc.getText("content").toString();
@@ -186,6 +191,10 @@ export function createDatabaseExtension(): Database {
       // backlinks (and any cross-domain leak path) stays empty.
       if (ctx?.operationId === PUBLIC_OPERATION_ID) {
         credentialReferenceBinaries = [];
+        // Same security boundary for hashes — hash material is
+        // operation-private, so a /hash chip must never seed the inverse
+        // index on a world-readable public document.
+        hashReferenceBinaries = [];
       }
 
       const now = new Date();
@@ -206,6 +215,10 @@ export function createDatabaseExtension(): Database {
         // removing the last /credential chip clears the array, so the
         // Findings page's backlinks list updates on the next persist.
         credential_references: credentialReferenceBinaries,
+        // Parallel index for hash backlinks — same rewrite semantics as the
+        // credential array above. Powers the "Referenced in" section of the
+        // hash details dialog.
+        hash_references: hashReferenceBinaries,
       };
 
       if (ctx?.userId) {

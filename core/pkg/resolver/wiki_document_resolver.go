@@ -70,6 +70,20 @@ type IWikiDocumentResolver interface {
 	// resolver; the batched variant below is preferred when a page of
 	// credentials is being rendered.
 	CredentialBacklinkCount(ctx context.Context, cred *models.Credential) (int, error)
+	// WikiDocumentsReferencingHash is the standalone counterpart of
+	// Hash.backlinks — the cross-domain join that powers the hash details
+	// dialog's "Referenced in" section. Sibling of
+	// WikiDocumentsReferencingCredential.
+	WikiDocumentsReferencingHash(ctx context.Context, hashID string) ([]*models.WikiDocument, error)
+	// HashBacklinks resolves Hash.backlinks. Same data as the standalone query
+	// but auth happens upstream (gqlgen passes the authorized parent hash).
+	HashBacklinks(ctx context.Context, hash *models.Hash) ([]*models.WikiDocument, error)
+	// HashBacklinkCount resolves Hash.backlinkCount as a single count.
+	HashBacklinkCount(ctx context.Context, hash *models.Hash) (int, error)
+	// CleanupHashReferences strips a deleted hash's id from hash_references
+	// across the operation's wiki documents. Sibling of
+	// CleanupCredentialReferences.
+	CleanupHashReferences(ctx context.Context, operationID, hashID uuid.UUID) error
 	// CleanupCredentialReferences strips a deleted credential's id from
 	// credential_references across the operation's wiki documents. Called
 	// from the credential delete path so dangling UUIDs don't accumulate
@@ -123,6 +137,10 @@ type wikiDocumentResolver struct {
 	// The field resolvers on Credential never need it because gqlgen passes
 	// the parent credential as `obj`.
 	credRepo repository.ICredentialRepository
+	// hashRepo is the hash-backlinks counterpart of credRepo — consulted only
+	// by the standalone `wikiDocumentsReferencingHash` query to resolve a
+	// hash's operation_id before authorizing and querying referrers.
+	hashRepo repository.IHashRepository
 	// taskRepo (optional) is used by the hard-delete paths to strip the
 	// deleted document's UUID from every task's wiki_references array. Nil
 	// is acceptable for tests and any pre-Tasks wiring.
@@ -140,6 +158,7 @@ func NewWikiDocumentResolver(
 	userRepo repository.IUserRepository,
 	visitRepo repository.IWikiDocumentVisitRepository,
 	credRepo repository.ICredentialRepository,
+	hashRepo repository.IHashRepository,
 	taskRepo repository.ITaskRepository,
 	eventBus eventbus.IEventBus,
 	presence *wiki.PresenceTracker,
@@ -151,6 +170,7 @@ func NewWikiDocumentResolver(
 		userRepo:      userRepo,
 		visitRepo:     visitRepo,
 		credRepo:      credRepo,
+		hashRepo:      hashRepo,
 		taskRepo:      taskRepo,
 		eventBus:      eventBus,
 		presence:      presence,
@@ -1822,6 +1842,72 @@ func (r *wikiDocumentResolver) fetchCredentialBacklinks(ctx context.Context, opI
 	referrers, err := r.docRepo.FindCredentialReferrers(ctx, opID, credentialID, maxBacklinks)
 	if err != nil {
 		return nil, fmt.Errorf("failed to list credential backlinks: %w", err)
+	}
+	out := make([]*models.WikiDocument, len(referrers))
+	for i := range referrers {
+		out[i] = &referrers[i]
+	}
+	return out, nil
+}
+
+// WikiDocumentsReferencingHash returns the active wiki documents in the hash's
+// operation that cite it via the inline /hash chip. Sibling of
+// WikiDocumentsReferencingCredential — operation-scoped at the repo level so
+// there's no cross-tenant leak path.
+func (r *wikiDocumentResolver) WikiDocumentsReferencingHash(ctx context.Context, hashID string) ([]*models.WikiDocument, error) {
+	hUID, err := uuid.Parse(hashID)
+	if err != nil {
+		return nil, fmt.Errorf("invalid hash ID: %w", err)
+	}
+
+	hash, err := r.hashRepo.FindByID(ctx, hUID)
+	if err != nil {
+		return nil, fmt.Errorf("hash not found: %w", err)
+	}
+
+	if err := r.authorizeForOperation(ctx, hash.OperationID, models.OperationRoleViewer); err != nil {
+		return nil, err
+	}
+
+	return r.fetchHashBacklinks(ctx, hash.OperationID, hash.HashID)
+}
+
+// HashBacklinks is the field resolver body for Hash.backlinks. Auth happens
+// upstream — gqlgen has already resolved the parent hash from an authorized
+// query.
+func (r *wikiDocumentResolver) HashBacklinks(ctx context.Context, hash *models.Hash) ([]*models.WikiDocument, error) {
+	if hash == nil {
+		return []*models.WikiDocument{}, nil
+	}
+	return r.fetchHashBacklinks(ctx, hash.OperationID, hash.HashID)
+}
+
+// HashBacklinkCount is the field resolver body for Hash.backlinkCount.
+func (r *wikiDocumentResolver) HashBacklinkCount(ctx context.Context, hash *models.Hash) (int, error) {
+	if hash == nil {
+		return 0, nil
+	}
+	counts, err := r.docRepo.CountHashReferrersBatch(ctx, hash.OperationID, []uuid.UUID{hash.HashID})
+	if err != nil {
+		return 0, fmt.Errorf("failed to count hash backlinks: %w", err)
+	}
+	return int(counts[hash.HashID]), nil
+}
+
+// CleanupHashReferences pulls hashID from hash_references across every document
+// in operationID. Best-effort — a failed cleanup leaves dangling pointers but
+// never blocks the hash delete itself. Sibling of CleanupCredentialReferences.
+func (r *wikiDocumentResolver) CleanupHashReferences(ctx context.Context, operationID, hashID uuid.UUID) error {
+	return r.docRepo.PullHashReference(ctx, operationID, hashID)
+}
+
+// fetchHashBacklinks is the shared body of the standalone query and the
+// Hash.backlinks field resolver. Capped at maxBacklinks. Sibling of
+// fetchCredentialBacklinks.
+func (r *wikiDocumentResolver) fetchHashBacklinks(ctx context.Context, opID, hashID uuid.UUID) ([]*models.WikiDocument, error) {
+	referrers, err := r.docRepo.FindHashReferrers(ctx, opID, hashID, maxBacklinks)
+	if err != nil {
+		return nil, fmt.Errorf("failed to list hash backlinks: %w", err)
 	}
 	out := make([]*models.WikiDocument, len(referrers))
 	for i := range referrers {

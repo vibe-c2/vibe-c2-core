@@ -32,6 +32,10 @@ interface HashRowContextMenuProps {
   hash: HashFieldsFragment
   children: ReactNode
   triggerRender?: ReactElement
+  // Optional caller-supplied menu items, rendered in their own separated
+  // group. Used by the wiki hash chip to inject the editor-only "Replace with
+  // credential reference" action, which the table rows have no use for.
+  extraItems?: ReactNode
 }
 
 // CRACKED has its own dedicated flow (markHashCracked) because it requires a
@@ -44,6 +48,7 @@ export function HashRowContextMenu({
   hash,
   children,
   triggerRender,
+  extraItems,
 }: HashRowContextMenuProps) {
   const openDetails = useHashStore((s) => s.openDetailsPanel)
   const openDelete = useHashStore((s) => s.openDeleteDialog)
@@ -123,6 +128,13 @@ export function HashRowContextMenu({
             <KeyIcon className="size-4" />
             Mark as cracked
           </ContextMenuItem>
+        )}
+
+        {extraItems && (
+          <>
+            <ContextMenuSeparator />
+            {extraItems}
+          </>
         )}
 
         <ContextMenuSeparator />

@@ -3,6 +3,7 @@ import {
   CircleAlertIcon,
   CircleCheckIcon,
   FileTextIcon,
+  HashIcon,
   Heading1Icon,
   Heading2Icon,
   Heading3Icon,
@@ -24,6 +25,7 @@ import { pickAndUploadWikiImage } from "@/components/wiki/wiki-image-upload"
 import { pickAndUploadWikiFile } from "@/components/wiki/wiki-file-upload"
 import { startLinkInsert } from "@/components/wiki/wiki-link-popover"
 import { openCredentialPicker } from "@/components/wiki/wiki-credential-picker"
+import { openHashPicker } from "@/components/wiki/wiki-hash-picker"
 import { openDocumentPicker } from "@/components/wiki/wiki-document-picker"
 import type { NoticeVariant } from "@/components/wiki/wiki-notice-node"
 
@@ -269,6 +271,33 @@ export const SLASH_ITEMS: SlashItem[] = [
       editor.chain().focus().deleteRange(range).run()
       const pos = editor.state.selection.from
       openCredentialPicker({
+        editor,
+        operationId: context.operationId,
+        insertPos: pos,
+      })
+    },
+  },
+  {
+    title: "Hash reference",
+    description: "Reference a discovered hash from this operation",
+    keywords: [
+      "findings:hash",
+      "hash",
+      "hashes",
+      "ntlm",
+      "netntlm",
+      "kerberos",
+      "crack",
+      "cracked",
+      "password",
+      "digest",
+    ],
+    icon: HashIcon,
+    command: ({ editor, range, context }) => {
+      // Drop the slash trigger first so the chip lands where the user typed.
+      editor.chain().focus().deleteRange(range).run()
+      const pos = editor.state.selection.from
+      openHashPicker({
         editor,
         operationId: context.operationId,
         insertPos: pos,

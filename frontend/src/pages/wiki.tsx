@@ -38,6 +38,10 @@ import { WikiCredentialPickerDialog } from "@/components/wiki/wiki-credential-pi
 import { CredentialDetailsDialog } from "@/components/findings/credential-details-dialog"
 import { EditCredentialDialog } from "@/components/findings/edit-credential-dialog"
 import { DeleteCredentialDialog } from "@/components/findings/delete-credential-dialog"
+import { WikiHashPickerDialog } from "@/components/wiki/wiki-hash-picker"
+import { HashDetailsDialog } from "@/components/findings/hash-details-dialog"
+import { DeleteHashDialog } from "@/components/findings/delete-hash-dialog"
+import { MarkHashCrackedDialog } from "@/components/findings/mark-hash-cracked-dialog"
 
 export function WikiPage() {
   const { effectiveOperationId, isPublicMode, hasRealScope } =
@@ -317,6 +321,13 @@ function WikiPageInner({
       <EditCredentialDialog />
       <DeleteCredentialDialog />
       <WikiCredentialPickerDialog />
+      {/* Hash reference chips mirror credential chips: the picker inserts the
+          /hash node, and the details / delete / mark-cracked dialogs back the
+          chip click + right-click menu. Store-driven, so dormant until used. */}
+      <HashDetailsDialog />
+      <DeleteHashDialog />
+      <MarkHashCrackedDialog />
+      <WikiHashPickerDialog />
     </div>
   )
 }

@@ -13,9 +13,11 @@ import (
 	"github.com/vibe-c2/vibe-c2-core/core/pkg/eventbus"
 	"github.com/vibe-c2/vibe-c2-core/core/pkg/graphql/gqlctx"
 	"github.com/vibe-c2/vibe-c2-core/core/pkg/graphql/model"
+	"github.com/vibe-c2/vibe-c2-core/core/pkg/logger"
 	"github.com/vibe-c2/vibe-c2-core/core/pkg/models"
 	"github.com/vibe-c2/vibe-c2-core/core/pkg/pagination"
 	"github.com/vibe-c2/vibe-c2-core/core/pkg/repository"
+	"go.uber.org/zap"
 )
 
 // Caps and limits intentionally mirror the credential resolver.
@@ -52,6 +54,11 @@ type IHashResolver interface {
 	CreatedBy(ctx context.Context, obj *models.Hash) (*models.User, error)
 	CreatedAt(ctx context.Context, obj *models.Hash) (string, error)
 	UpdatedAt(ctx context.Context, obj *models.Hash) (string, error)
+	// Backlinks / BacklinkCount: wiki documents that cite this hash inline via
+	// the /hash chip. Delegated to the wiki resolver where the inverse index
+	// lives. Mirrors Credential.backlinks.
+	BacklinkCount(ctx context.Context, obj *models.Hash) (int, error)
+	Backlinks(ctx context.Context, obj *models.Hash) ([]*models.WikiDocument, error)
 
 	// Cross-domain: backlinks from a credential to the hashes that produced it.
 	SourceHashesForCredential(ctx context.Context, credential *models.Credential) ([]*models.Hash, error)
@@ -67,17 +74,24 @@ type hashResolver struct {
 	// preserves the credential's own validation, normalisation, and event
 	// publishing.
 	credResolver ICredentialResolver
-	eventBus     eventbus.IEventBus
+	// wikiDocRes owns the wiki side of the hash backlinks join. Hash.backlinks /
+	// Hash.backlinkCount delegate to it, and DeleteHash uses it to strip the
+	// dead hash id from the inverse index. Mirrors credentialResolver.wikiDocRes.
+	// Optional: nil is acceptable for tests that don't exercise backlinks.
+	wikiDocRes IWikiDocumentResolver
+	eventBus   eventbus.IEventBus
 }
 
 // NewHashResolver wires dependencies. credResolver is required for the
-// "create credential inline" branch of MarkHashCracked.
+// "create credential inline" branch of MarkHashCracked. wikiDocRes powers the
+// hash backlinks field resolvers and may be nil in tests.
 func NewHashResolver(
 	hashRepo repository.IHashRepository,
 	credRepo repository.ICredentialRepository,
 	operationRepo repository.IOperationRepository,
 	userRepo repository.IUserRepository,
 	credResolver ICredentialResolver,
+	wikiDocRes IWikiDocumentResolver,
 	bus eventbus.IEventBus,
 ) IHashResolver {
 	if bus == nil {
@@ -89,6 +103,7 @@ func NewHashResolver(
 		operationRepo: operationRepo,
 		userRepo:      userRepo,
 		credResolver:  credResolver,
+		wikiDocRes:    wikiDocRes,
 		eventBus:      bus,
 	}
 }
@@ -298,6 +313,19 @@ func (r *hashResolver) DeleteHash(ctx context.Context, id string) (bool, error) 
 
 	if err := r.hashRepo.Delete(ctx, &h); err != nil {
 		return false, fmt.Errorf("failed to delete hash: %w", err)
+	}
+
+	// Strip this hash id from hash_references on every wiki doc in the
+	// operation so the inverse index doesn't carry dangling UUIDs. Best-effort,
+	// same rationale as the credential delete path — the chip render handles
+	// "hash not found" gracefully.
+	if r.wikiDocRes != nil {
+		if err := r.wikiDocRes.CleanupHashReferences(ctx, h.OperationID, h.HashID); err != nil {
+			logger.From(ctx).Warn("cleanup of hash backlinks failed",
+				zap.String("hash_id", h.HashID.String()),
+				zap.Error(err),
+			)
+		}
 	}
 
 	auth := gqlctx.AuthFromContext(ctx)
@@ -673,6 +701,25 @@ func (r *hashResolver) CreatedBy(ctx context.Context, obj *models.Hash) (*models
 
 func (r *hashResolver) CreatedAt(_ context.Context, obj *models.Hash) (string, error) {
 	return obj.CreateAt.Format(time.RFC3339), nil
+}
+
+// BacklinkCount resolves the cheap count form of Hash.backlinks. Delegates to
+// the wiki resolver so the query lives in the package that owns the inverse
+// index. Mirrors credentialResolver.BacklinkCount.
+func (r *hashResolver) BacklinkCount(ctx context.Context, obj *models.Hash) (int, error) {
+	if r.wikiDocRes == nil || obj == nil {
+		return 0, nil
+	}
+	return r.wikiDocRes.HashBacklinkCount(ctx, obj)
+}
+
+// Backlinks resolves the full Hash.backlinks list, loaded on demand by the
+// hash details dialog. Delegates to the wiki resolver.
+func (r *hashResolver) Backlinks(ctx context.Context, obj *models.Hash) ([]*models.WikiDocument, error) {
+	if r.wikiDocRes == nil || obj == nil {
+		return []*models.WikiDocument{}, nil
+	}
+	return r.wikiDocRes.HashBacklinks(ctx, obj)
 }
 
 func (r *hashResolver) UpdatedAt(_ context.Context, obj *models.Hash) (string, error) {

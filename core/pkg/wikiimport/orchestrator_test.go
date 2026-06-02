@@ -375,6 +375,15 @@ func (r *fakeDocRepo) CountCredentialReferrersBatch(context.Context, uuid.UUID, 
 func (r *fakeDocRepo) PullCredentialReference(context.Context, uuid.UUID, uuid.UUID) error {
 	return nil
 }
+func (r *fakeDocRepo) FindHashReferrers(context.Context, uuid.UUID, uuid.UUID, int64) ([]models.WikiDocument, error) {
+	return nil, nil
+}
+func (r *fakeDocRepo) CountHashReferrersBatch(context.Context, uuid.UUID, []uuid.UUID) (map[uuid.UUID]int64, error) {
+	return map[uuid.UUID]int64{}, nil
+}
+func (r *fakeDocRepo) PullHashReference(context.Context, uuid.UUID, uuid.UUID) error {
+	return nil
+}
 
 type fakeImageIngestor struct{ count int }
 

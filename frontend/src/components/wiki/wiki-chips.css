@@ -178,6 +178,128 @@
   }
 }
 
+/* --- Hash chip ----------------------------------------------------------- */
+/*
+ * Mirrors the credential chip layout but uses an amber "hash material" accent
+ * (distinct from credential violet and document blue) that flips to emerald
+ * once the hash is cracked — the same at-a-glance status signal the credential
+ * chip gets from valid/invalid, expressed as not-cracked → cracked here.
+ */
+
+.wiki-hash-chip {
+  --chip-accent: oklch(0.6 0.15 75);
+  --chip-fg: oklch(0.42 0.13 70);
+}
+
+.dark .wiki-hash-chip {
+  --chip-accent: oklch(0.78 0.15 78);
+  --chip-fg: oklch(0.88 0.1 82);
+}
+
+.wiki-hash-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  vertical-align: baseline;
+  flex-wrap: wrap;
+  max-width: 100%;
+  font-family: inherit;
+  font-size: 0.875em;
+  font-weight: 500;
+  line-height: 1.2;
+  padding: 0.32em 0.7em;
+  margin: 0 0.15em;
+  border-radius: 6px;
+  color: var(--chip-fg);
+  background: color-mix(in oklch, var(--chip-accent) 14%, transparent);
+  border: 1px solid color-mix(in oklch, var(--chip-accent) 36%, transparent);
+  cursor: pointer;
+  appearance: none;
+  text-align: inherit;
+  transition: background-color 120ms ease-out,
+    border-color 120ms ease-out, color 120ms ease-out,
+    box-shadow 120ms ease-out;
+}
+
+.wiki-hash-chip__icon {
+  flex-shrink: 0;
+  color: var(--chip-accent);
+}
+
+.wiki-hash-chip:hover {
+  background: color-mix(in oklch, var(--chip-accent) 22%, transparent);
+  border-color: color-mix(in oklch, var(--chip-accent) 52%, transparent);
+}
+
+.wiki-hash-chip:focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: 1px;
+}
+
+.wiki-hash-chip.is-selected,
+.tiptap .ProseMirror-selectednode .wiki-hash-chip,
+.tiptap .ProseMirror-selectednode.wiki-hash-chip-wrapper .wiki-hash-chip {
+  background: color-mix(in oklch, var(--chip-accent) 26%, transparent);
+  box-shadow: 0 0 0 2px var(--ring);
+}
+
+/* Cracked override remaps the accent to emerald — the "done" terminal state.
+   Both selectors are spelled out so the rule sits at the same (0,2,0)
+   specificity as `.dark .wiki-hash-chip`, otherwise the theme-scoped amber
+   would beat this in dark mode. */
+.wiki-hash-chip--cracked,
+.dark .wiki-hash-chip--cracked {
+  --chip-accent: oklch(0.62 0.16 152);
+  --chip-fg: oklch(0.4 0.13 152);
+}
+
+.dark .wiki-hash-chip--cracked {
+  --chip-fg: oklch(0.86 0.12 152);
+}
+
+.wiki-hash-chip--missing {
+  color: var(--destructive);
+  background: color-mix(in oklch, var(--destructive) 12%, transparent);
+  border-color: color-mix(in oklch, var(--destructive) 32%, transparent);
+  cursor: default;
+}
+
+.wiki-hash-chip--loading {
+  cursor: progress;
+  opacity: 0.75;
+}
+
+.wiki-hash-chip__name {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 28ch;
+  font-family: var(--font-mono);
+  font-size: 0.9em;
+}
+
+.wiki-hash-chip__status--cracked {
+  color: oklch(0.62 0.16 152);
+}
+
+.dark .wiki-hash-chip__status--cracked {
+  color: oklch(0.72 0.18 152);
+}
+
+.wiki-hash-chip__status--uncracked {
+  color: var(--muted-foreground);
+  opacity: 0.7;
+}
+
+.wiki-hash-chip__skel {
+  display: inline-block;
+  width: 7ch;
+  height: 0.9em;
+  border-radius: 4px;
+  background: color-mix(in oklch, currentColor 22%, transparent);
+  animation: wiki-credential-chip-pulse 1.2s ease-in-out infinite;
+}
+
 /* --- Document chip ------------------------------------------------------- */
 /*
  * Mirrors the credential chip layout but uses a sky/blue accent so the two

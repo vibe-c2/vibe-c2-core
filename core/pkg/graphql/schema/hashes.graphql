@@ -42,6 +42,14 @@ type Hash {
   credentialId: ID
   credential: Credential
   createdBy: User
+  # Number of active wiki documents in this operation that reference this hash
+  # via the /hash slash command. Cheap aggregation — mirrors
+  # Credential.backlinkCount.
+  backlinkCount: Int!
+  # Active wiki documents in this operation that reference this hash via the
+  # /hash slash command. Trashed referrers are excluded. Capped at 200 most
+  # recently updated. Loaded on demand (e.g. when the details dialog opens).
+  backlinks: [WikiDocument!]!
   createdAt: String!
   updatedAt: String!
 }
@@ -153,6 +161,14 @@ extend type Query {
   ): HashConnection!
 
   myHashTags(operationIds: [ID!]): [String!]!
+
+  # Active wiki documents in the hash's operation that reference it via the
+  # inline /hash chip. Standalone counterpart of Hash.backlinks — powers the
+  # "Referenced in" section of the hash details dialog. Resolver checks
+  # operation membership via the hash's operation_id. Mirrors
+  # wikiDocumentsReferencingCredential.
+  wikiDocumentsReferencingHash(hashId: ID!): [WikiDocument!]!
+    @hasPermission(permission: "operation:member")
 }
 
 # --- Mutations ---

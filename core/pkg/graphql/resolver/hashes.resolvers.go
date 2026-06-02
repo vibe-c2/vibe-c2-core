@@ -52,6 +52,16 @@ func (r *hashResolver) CreatedBy(ctx context.Context, obj *models.Hash) (*models
 	return r.HashResolver.CreatedBy(ctx, obj)
 }
 
+// BacklinkCount is the resolver for the backlinkCount field.
+func (r *hashResolver) BacklinkCount(ctx context.Context, obj *models.Hash) (int, error) {
+	return r.HashResolver.BacklinkCount(ctx, obj)
+}
+
+// Backlinks is the resolver for the backlinks field.
+func (r *hashResolver) Backlinks(ctx context.Context, obj *models.Hash) ([]*models.WikiDocument, error) {
+	return r.HashResolver.Backlinks(ctx, obj)
+}
+
 // CreatedAt is the resolver for the createdAt field.
 func (r *hashResolver) CreatedAt(ctx context.Context, obj *models.Hash) (string, error) {
 	return r.HashResolver.CreatedAt(ctx, obj)
@@ -110,6 +120,11 @@ func (r *queryResolver) MyHashes(ctx context.Context, operationIds []string, sea
 // MyHashTags is the resolver for the myHashTags field.
 func (r *queryResolver) MyHashTags(ctx context.Context, operationIds []string) ([]string, error) {
 	return r.HashResolver.MyHashTags(ctx, operationIds)
+}
+
+// WikiDocumentsReferencingHash is the resolver for the wikiDocumentsReferencingHash field.
+func (r *queryResolver) WikiDocumentsReferencingHash(ctx context.Context, hashID string) ([]*models.WikiDocument, error) {
+	return r.WikiDocumentResolver.WikiDocumentsReferencingHash(ctx, hashID)
 }
 
 // HashChanged is the resolver for the hashChanged field.

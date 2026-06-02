@@ -135,18 +135,20 @@ type ComplexityRoot struct {
 	}
 
 	Hash struct {
-		Comment      func(childComplexity int) int
-		CreatedAt    func(childComplexity int) int
-		CreatedBy    func(childComplexity int) int
-		Credential   func(childComplexity int) int
-		CredentialID func(childComplexity int) int
-		ID           func(childComplexity int) int
-		Operation    func(childComplexity int) int
-		OperationID  func(childComplexity int) int
-		Status       func(childComplexity int) int
-		Tags         func(childComplexity int) int
-		UpdatedAt    func(childComplexity int) int
-		Value        func(childComplexity int) int
+		BacklinkCount func(childComplexity int) int
+		Backlinks     func(childComplexity int) int
+		Comment       func(childComplexity int) int
+		CreatedAt     func(childComplexity int) int
+		CreatedBy     func(childComplexity int) int
+		Credential    func(childComplexity int) int
+		CredentialID  func(childComplexity int) int
+		ID            func(childComplexity int) int
+		Operation     func(childComplexity int) int
+		OperationID   func(childComplexity int) int
+		Status        func(childComplexity int) int
+		Tags          func(childComplexity int) int
+		UpdatedAt     func(childComplexity int) int
+		Value         func(childComplexity int) int
 	}
 
 	HashConnection struct {
@@ -320,6 +322,7 @@ type ComplexityRoot struct {
 		WikiDocumentTreeRevealPath         func(childComplexity int, documentID string) int
 		WikiDocuments                      func(childComplexity int, operationID string, parentDocumentID *string, search *string, sort *model.WikiDocumentSort, first *int, after *string, last *int, before *string) int
 		WikiDocumentsReferencingCredential func(childComplexity int, credentialID string) int
+		WikiDocumentsReferencingHash       func(childComplexity int, hashID string) int
 		WikiOperationPresence              func(childComplexity int, operationID string) int
 		WikiSearch                         func(childComplexity int, operationID string, scope *string, query string, offset *int, limit *int) int
 	}
@@ -682,6 +685,8 @@ type HashResolver interface {
 	CredentialID(ctx context.Context, obj *models.Hash) (*string, error)
 	Credential(ctx context.Context, obj *models.Hash) (*models.Credential, error)
 	CreatedBy(ctx context.Context, obj *models.Hash) (*models.User, error)
+	BacklinkCount(ctx context.Context, obj *models.Hash) (int, error)
+	Backlinks(ctx context.Context, obj *models.Hash) ([]*models.WikiDocument, error)
 	CreatedAt(ctx context.Context, obj *models.Hash) (string, error)
 	UpdatedAt(ctx context.Context, obj *models.Hash) (string, error)
 }
@@ -778,6 +783,7 @@ type QueryResolver interface {
 	HashTags(ctx context.Context, operationID string) ([]string, error)
 	MyHashes(ctx context.Context, operationIds []string, search *string, statuses []models.HashStatus, tags []string, hasCredential *bool, first *int, after *string, last *int, before *string) (*model.HashConnection, error)
 	MyHashTags(ctx context.Context, operationIds []string) ([]string, error)
+	WikiDocumentsReferencingHash(ctx context.Context, hashID string) ([]*models.WikiDocument, error)
 	MySessions(ctx context.Context, activeOnly *bool, first *int, after *string, last *int, before *string) (*model.SessionConnection, error)
 	Sessions(ctx context.Context, userID *string, search *string, activeOnly *bool, first *int, after *string, last *int, before *string) (*model.SessionConnection, error)
 	Session(ctx context.Context, id string) (*models.Session, error)
@@ -1231,6 +1237,18 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 
 		return e.ComplexityRoot.CredentialProperty.Value(childComplexity), true
 
+	case "Hash.backlinkCount":
+		if e.ComplexityRoot.Hash.BacklinkCount == nil {
+			break
+		}
+
+		return e.ComplexityRoot.Hash.BacklinkCount(childComplexity), true
+	case "Hash.backlinks":
+		if e.ComplexityRoot.Hash.Backlinks == nil {
+			break
+		}
+
+		return e.ComplexityRoot.Hash.Backlinks(childComplexity), true
 	case "Hash.comment":
 		if e.ComplexityRoot.Hash.Comment == nil {
 			break
@@ -2628,6 +2646,17 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.Query.WikiDocumentsReferencingCredential(childComplexity, args["credentialId"].(string)), true
+	case "Query.wikiDocumentsReferencingHash":
+		if e.ComplexityRoot.Query.WikiDocumentsReferencingHash == nil {
+			break
+		}
+
+		args, err := ec.field_Query_wikiDocumentsReferencingHash_args(ctx, rawArgs)
+		if err != nil {
+			return 0, false
+		}
+
+		return e.ComplexityRoot.Query.WikiDocumentsReferencingHash(childComplexity, args["hashId"].(string)), true
 	case "Query.wikiOperationPresence":
 		if e.ComplexityRoot.Query.WikiOperationPresence == nil {
 			break
@@ -4449,6 +4478,14 @@ type Hash {
   credentialId: ID
   credential: Credential
   createdBy: User
+  # Number of active wiki documents in this operation that reference this hash
+  # via the /hash slash command. Cheap aggregation — mirrors
+  # Credential.backlinkCount.
+  backlinkCount: Int!
+  # Active wiki documents in this operation that reference this hash via the
+  # /hash slash command. Trashed referrers are excluded. Capped at 200 most
+  # recently updated. Loaded on demand (e.g. when the details dialog opens).
+  backlinks: [WikiDocument!]!
   createdAt: String!
   updatedAt: String!
 }
@@ -4560,6 +4597,14 @@ extend type Query {
   ): HashConnection!
 
   myHashTags(operationIds: [ID!]): [String!]!
+
+  # Active wiki documents in the hash's operation that reference it via the
+  # inline /hash chip. Standalone counterpart of Hash.backlinks — powers the
+  # "Referenced in" section of the hash details dialog. Resolver checks
+  # operation membership via the hash's operation_id. Mirrors
+  # wikiDocumentsReferencingCredential.
+  wikiDocumentsReferencingHash(hashId: ID!): [WikiDocument!]!
+    @hasPermission(permission: "operation:member")
 }
 
 # --- Mutations ---
@@ -7906,6 +7951,17 @@ func (ec *executionContext) field_Query_wikiDocumentsReferencingCredential_args(
 	return args, nil
 }
 
+func (ec *executionContext) field_Query_wikiDocumentsReferencingHash_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
+	var err error
+	args := map[string]any{}
+	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "hashId", ec.unmarshalNID2string)
+	if err != nil {
+		return nil, err
+	}
+	args["hashId"] = arg0
+	return args, nil
+}
+
 func (ec *executionContext) field_Query_wikiDocuments_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
 	var err error
 	args := map[string]any{}
@@ -8515,6 +8571,10 @@ func (ec *executionContext) fieldContext_BulkImportHashesResult_hashes(_ context
 				return ec.fieldContext_Hash_credential(ctx, field)
 			case "createdBy":
 				return ec.fieldContext_Hash_createdBy(ctx, field)
+			case "backlinkCount":
+				return ec.fieldContext_Hash_backlinkCount(ctx, field)
+			case "backlinks":
+				return ec.fieldContext_Hash_backlinks(ctx, field)
 			case "createdAt":
 				return ec.fieldContext_Hash_createdAt(ctx, field)
 			case "updatedAt":
@@ -9192,6 +9252,10 @@ func (ec *executionContext) fieldContext_Credential_sourceHashes(_ context.Conte
 				return ec.fieldContext_Hash_credential(ctx, field)
 			case "createdBy":
 				return ec.fieldContext_Hash_createdBy(ctx, field)
+			case "backlinkCount":
+				return ec.fieldContext_Hash_backlinkCount(ctx, field)
+			case "backlinks":
+				return ec.fieldContext_Hash_backlinks(ctx, field)
 			case "createdAt":
 				return ec.fieldContext_Hash_createdAt(ctx, field)
 			case "updatedAt":
@@ -10272,6 +10336,112 @@ func (ec *executionContext) fieldContext_Hash_createdBy(_ context.Context, field
 	return fc, nil
 }
 
+func (ec *executionContext) _Hash_backlinkCount(ctx context.Context, field graphql.CollectedField, obj *models.Hash) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Hash_backlinkCount,
+		func(ctx context.Context) (any, error) {
+			return ec.Resolvers.Hash().BacklinkCount(ctx, obj)
+		},
+		nil,
+		ec.marshalNInt2int,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_Hash_backlinkCount(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Hash",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Int does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Hash_backlinks(ctx context.Context, field graphql.CollectedField, obj *models.Hash) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Hash_backlinks,
+		func(ctx context.Context) (any, error) {
+			return ec.Resolvers.Hash().Backlinks(ctx, obj)
+		},
+		nil,
+		ec.marshalNWikiDocument2ᚕᚖgithubᚗcomᚋvibeᚑc2ᚋvibeᚑc2ᚑcoreᚋcoreᚋpkgᚋmodelsᚐWikiDocumentᚄ,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_Hash_backlinks(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Hash",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "id":
+				return ec.fieldContext_WikiDocument_id(ctx, field)
+			case "operationId":
+				return ec.fieldContext_WikiDocument_operationId(ctx, field)
+			case "parentDocument":
+				return ec.fieldContext_WikiDocument_parentDocument(ctx, field)
+			case "parentDocumentId":
+				return ec.fieldContext_WikiDocument_parentDocumentId(ctx, field)
+			case "childDocuments":
+				return ec.fieldContext_WikiDocument_childDocuments(ctx, field)
+			case "title":
+				return ec.fieldContext_WikiDocument_title(ctx, field)
+			case "content":
+				return ec.fieldContext_WikiDocument_content(ctx, field)
+			case "emoji":
+				return ec.fieldContext_WikiDocument_emoji(ctx, field)
+			case "color":
+				return ec.fieldContext_WikiDocument_color(ctx, field)
+			case "icon":
+				return ec.fieldContext_WikiDocument_icon(ctx, field)
+			case "sortOrder":
+				return ec.fieldContext_WikiDocument_sortOrder(ctx, field)
+			case "childCount":
+				return ec.fieldContext_WikiDocument_childCount(ctx, field)
+			case "backlinks":
+				return ec.fieldContext_WikiDocument_backlinks(ctx, field)
+			case "ancestors":
+				return ec.fieldContext_WikiDocument_ancestors(ctx, field)
+			case "createdBy":
+				return ec.fieldContext_WikiDocument_createdBy(ctx, field)
+			case "lastUpdatedBy":
+				return ec.fieldContext_WikiDocument_lastUpdatedBy(ctx, field)
+			case "lastUpdatedAt":
+				return ec.fieldContext_WikiDocument_lastUpdatedAt(ctx, field)
+			case "lastBackupAt":
+				return ec.fieldContext_WikiDocument_lastBackupAt(ctx, field)
+			case "deletedAt":
+				return ec.fieldContext_WikiDocument_deletedAt(ctx, field)
+			case "deletedBy":
+				return ec.fieldContext_WikiDocument_deletedBy(ctx, field)
+			case "createdAt":
+				return ec.fieldContext_WikiDocument_createdAt(ctx, field)
+			case "updatedAt":
+				return ec.fieldContext_WikiDocument_updatedAt(ctx, field)
+			case "taskBacklinks":
+				return ec.fieldContext_WikiDocument_taskBacklinks(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type WikiDocument", field.Name)
+		},
+	}
+	return fc, nil
+}
+
 func (ec *executionContext) _Hash_createdAt(ctx context.Context, field graphql.CollectedField, obj *models.Hash) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
@@ -10477,6 +10647,10 @@ func (ec *executionContext) fieldContext_HashEdge_node(_ context.Context, field 
 				return ec.fieldContext_Hash_credential(ctx, field)
 			case "createdBy":
 				return ec.fieldContext_Hash_createdBy(ctx, field)
+			case "backlinkCount":
+				return ec.fieldContext_Hash_backlinkCount(ctx, field)
+			case "backlinks":
+				return ec.fieldContext_Hash_backlinks(ctx, field)
 			case "createdAt":
 				return ec.fieldContext_Hash_createdAt(ctx, field)
 			case "updatedAt":
@@ -10648,6 +10822,10 @@ func (ec *executionContext) fieldContext_HashEvent_hash(_ context.Context, field
 				return ec.fieldContext_Hash_credential(ctx, field)
 			case "createdBy":
 				return ec.fieldContext_Hash_createdBy(ctx, field)
+			case "backlinkCount":
+				return ec.fieldContext_Hash_backlinkCount(ctx, field)
+			case "backlinks":
+				return ec.fieldContext_Hash_backlinks(ctx, field)
 			case "createdAt":
 				return ec.fieldContext_Hash_createdAt(ctx, field)
 			case "updatedAt":
@@ -12658,6 +12836,10 @@ func (ec *executionContext) fieldContext_Mutation_createHash(ctx context.Context
 				return ec.fieldContext_Hash_credential(ctx, field)
 			case "createdBy":
 				return ec.fieldContext_Hash_createdBy(ctx, field)
+			case "backlinkCount":
+				return ec.fieldContext_Hash_backlinkCount(ctx, field)
+			case "backlinks":
+				return ec.fieldContext_Hash_backlinks(ctx, field)
 			case "createdAt":
 				return ec.fieldContext_Hash_createdAt(ctx, field)
 			case "updatedAt":
@@ -12743,6 +12925,10 @@ func (ec *executionContext) fieldContext_Mutation_updateHash(ctx context.Context
 				return ec.fieldContext_Hash_credential(ctx, field)
 			case "createdBy":
 				return ec.fieldContext_Hash_createdBy(ctx, field)
+			case "backlinkCount":
+				return ec.fieldContext_Hash_backlinkCount(ctx, field)
+			case "backlinks":
+				return ec.fieldContext_Hash_backlinks(ctx, field)
 			case "createdAt":
 				return ec.fieldContext_Hash_createdAt(ctx, field)
 			case "updatedAt":
@@ -12954,6 +13140,10 @@ func (ec *executionContext) fieldContext_Mutation_markHashCracked(ctx context.Co
 				return ec.fieldContext_Hash_credential(ctx, field)
 			case "createdBy":
 				return ec.fieldContext_Hash_createdBy(ctx, field)
+			case "backlinkCount":
+				return ec.fieldContext_Hash_backlinkCount(ctx, field)
+			case "backlinks":
+				return ec.fieldContext_Hash_backlinks(ctx, field)
 			case "createdAt":
 				return ec.fieldContext_Hash_createdAt(ctx, field)
 			case "updatedAt":
@@ -17193,6 +17383,10 @@ func (ec *executionContext) fieldContext_Query_hash(ctx context.Context, field g
 				return ec.fieldContext_Hash_credential(ctx, field)
 			case "createdBy":
 				return ec.fieldContext_Hash_createdBy(ctx, field)
+			case "backlinkCount":
+				return ec.fieldContext_Hash_backlinkCount(ctx, field)
+			case "backlinks":
+				return ec.fieldContext_Hash_backlinks(ctx, field)
 			case "createdAt":
 				return ec.fieldContext_Hash_createdAt(ctx, field)
 			case "updatedAt":
@@ -17425,6 +17619,113 @@ func (ec *executionContext) fieldContext_Query_myHashTags(ctx context.Context, f
 	}()
 	ctx = graphql.WithFieldContext(ctx, fc)
 	if fc.Args, err = ec.field_Query_myHashTags_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
+		ec.Error(ctx, err)
+		return fc, err
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Query_wikiDocumentsReferencingHash(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Query_wikiDocumentsReferencingHash,
+		func(ctx context.Context) (any, error) {
+			fc := graphql.GetFieldContext(ctx)
+			return ec.Resolvers.Query().WikiDocumentsReferencingHash(ctx, fc.Args["hashId"].(string))
+		},
+		func(ctx context.Context, next graphql.Resolver) graphql.Resolver {
+			directive0 := next
+
+			directive1 := func(ctx context.Context) (any, error) {
+				permission, err := ec.unmarshalNString2string(ctx, "operation:member")
+				if err != nil {
+					var zeroVal []*models.WikiDocument
+					return zeroVal, err
+				}
+				if ec.Directives.HasPermission == nil {
+					var zeroVal []*models.WikiDocument
+					return zeroVal, errors.New("directive hasPermission is not implemented")
+				}
+				return ec.Directives.HasPermission(ctx, nil, directive0, permission)
+			}
+
+			next = directive1
+			return next
+		},
+		ec.marshalNWikiDocument2ᚕᚖgithubᚗcomᚋvibeᚑc2ᚋvibeᚑc2ᚑcoreᚋcoreᚋpkgᚋmodelsᚐWikiDocumentᚄ,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_Query_wikiDocumentsReferencingHash(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Query",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "id":
+				return ec.fieldContext_WikiDocument_id(ctx, field)
+			case "operationId":
+				return ec.fieldContext_WikiDocument_operationId(ctx, field)
+			case "parentDocument":
+				return ec.fieldContext_WikiDocument_parentDocument(ctx, field)
+			case "parentDocumentId":
+				return ec.fieldContext_WikiDocument_parentDocumentId(ctx, field)
+			case "childDocuments":
+				return ec.fieldContext_WikiDocument_childDocuments(ctx, field)
+			case "title":
+				return ec.fieldContext_WikiDocument_title(ctx, field)
+			case "content":
+				return ec.fieldContext_WikiDocument_content(ctx, field)
+			case "emoji":
+				return ec.fieldContext_WikiDocument_emoji(ctx, field)
+			case "color":
+				return ec.fieldContext_WikiDocument_color(ctx, field)
+			case "icon":
+				return ec.fieldContext_WikiDocument_icon(ctx, field)
+			case "sortOrder":
+				return ec.fieldContext_WikiDocument_sortOrder(ctx, field)
+			case "childCount":
+				return ec.fieldContext_WikiDocument_childCount(ctx, field)
+			case "backlinks":
+				return ec.fieldContext_WikiDocument_backlinks(ctx, field)
+			case "ancestors":
+				return ec.fieldContext_WikiDocument_ancestors(ctx, field)
+			case "createdBy":
+				return ec.fieldContext_WikiDocument_createdBy(ctx, field)
+			case "lastUpdatedBy":
+				return ec.fieldContext_WikiDocument_lastUpdatedBy(ctx, field)
+			case "lastUpdatedAt":
+				return ec.fieldContext_WikiDocument_lastUpdatedAt(ctx, field)
+			case "lastBackupAt":
+				return ec.fieldContext_WikiDocument_lastBackupAt(ctx, field)
+			case "deletedAt":
+				return ec.fieldContext_WikiDocument_deletedAt(ctx, field)
+			case "deletedBy":
+				return ec.fieldContext_WikiDocument_deletedBy(ctx, field)
+			case "createdAt":
+				return ec.fieldContext_WikiDocument_createdAt(ctx, field)
+			case "updatedAt":
+				return ec.fieldContext_WikiDocument_updatedAt(ctx, field)
+			case "taskBacklinks":
+				return ec.fieldContext_WikiDocument_taskBacklinks(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type WikiDocument", field.Name)
+		},
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			err = ec.Recover(ctx, r)
+			ec.Error(ctx, err)
+		}
+	}()
+	ctx = graphql.WithFieldContext(ctx, fc)
+	if fc.Args, err = ec.field_Query_wikiDocumentsReferencingHash_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
 		ec.Error(ctx, err)
 		return fc, err
 	}
@@ -31164,6 +31465,78 @@ func (ec *executionContext) _Hash(ctx context.Context, sel ast.SelectionSet, obj
 			}
 
 			out.Concurrently(i, func(ctx context.Context) graphql.Marshaler { return innerFunc(ctx, out) })
+		case "backlinkCount":
+			field := field
+
+			innerFunc := func(ctx context.Context, fs *graphql.FieldSet) (res graphql.Marshaler) {
+				defer func() {
+					if r := recover(); r != nil {
+						ec.Error(ctx, ec.Recover(ctx, r))
+					}
+				}()
+				res = ec._Hash_backlinkCount(ctx, field, obj)
+				if res == graphql.Null {
+					atomic.AddUint32(&fs.Invalids, 1)
+				}
+				return res
+			}
+
+			if field.Deferrable != nil {
+				dfs, ok := deferred[field.Deferrable.Label]
+				di := 0
+				if ok {
+					dfs.AddField(field)
+					di = len(dfs.Values) - 1
+				} else {
+					dfs = graphql.NewFieldSet([]graphql.CollectedField{field})
+					deferred[field.Deferrable.Label] = dfs
+				}
+				dfs.Concurrently(di, func(ctx context.Context) graphql.Marshaler {
+					return innerFunc(ctx, dfs)
+				})
+
+				// don't run the out.Concurrently() call below
+				out.Values[i] = graphql.Null
+				continue
+			}
+
+			out.Concurrently(i, func(ctx context.Context) graphql.Marshaler { return innerFunc(ctx, out) })
+		case "backlinks":
+			field := field
+
+			innerFunc := func(ctx context.Context, fs *graphql.FieldSet) (res graphql.Marshaler) {
+				defer func() {
+					if r := recover(); r != nil {
+						ec.Error(ctx, ec.Recover(ctx, r))
+					}
+				}()
+				res = ec._Hash_backlinks(ctx, field, obj)
+				if res == graphql.Null {
+					atomic.AddUint32(&fs.Invalids, 1)
+				}
+				return res
+			}
+
+			if field.Deferrable != nil {
+				dfs, ok := deferred[field.Deferrable.Label]
+				di := 0
+				if ok {
+					dfs.AddField(field)
+					di = len(dfs.Values) - 1
+				} else {
+					dfs = graphql.NewFieldSet([]graphql.CollectedField{field})
+					deferred[field.Deferrable.Label] = dfs
+				}
+				dfs.Concurrently(di, func(ctx context.Context) graphql.Marshaler {
+					return innerFunc(ctx, dfs)
+				})
+
+				// don't run the out.Concurrently() call below
+				out.Values[i] = graphql.Null
+				continue
+			}
+
+			out.Concurrently(i, func(ctx context.Context) graphql.Marshaler { return innerFunc(ctx, out) })
 		case "createdAt":
 			field := field
 
@@ -32807,6 +33180,28 @@ func (ec *executionContext) _Query(ctx context.Context, sel ast.SelectionSet) gr
 					}
 				}()
 				res = ec._Query_myHashTags(ctx, field)
+				if res == graphql.Null {
+					atomic.AddUint32(&fs.Invalids, 1)
+				}
+				return res
+			}
+
+			rrm := func(ctx context.Context) graphql.Marshaler {
+				return ec.OperationContext.RootResolverMiddleware(ctx,
+					func(ctx context.Context) graphql.Marshaler { return innerFunc(ctx, out) })
+			}
+
+			out.Concurrently(i, func(ctx context.Context) graphql.Marshaler { return rrm(innerCtx) })
+		case "wikiDocumentsReferencingHash":
+			field := field
+
+			innerFunc := func(ctx context.Context, fs *graphql.FieldSet) (res graphql.Marshaler) {
+				defer func() {
+					if r := recover(); r != nil {
+						ec.Error(ctx, ec.Recover(ctx, r))
+					}
+				}()
+				res = ec._Query_wikiDocumentsReferencingHash(ctx, field)
 				if res == graphql.Null {
 					atomic.AddUint32(&fs.Invalids, 1)
 				}

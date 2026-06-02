@@ -292,6 +292,25 @@ export const wikiSchema = new Schema({
       ],
     },
 
+    // Inline atom referencing a hash by id. Matches the editor's
+    // wiki-hash-reference-node.tsx. The only persisted attribute is `hashId`;
+    // the chip's visible text (truncated value + cracked status) is hydrated
+    // client-side from the hashes API. Sibling of wikiCredentialReference.
+    wikiHashReference: {
+      group: "inline",
+      inline: true,
+      atom: true,
+      attrs: { hashId: { default: null } },
+      parseDOM: [{ tag: "span[data-wiki-hash]" }],
+      toDOM: (node) => [
+        "span",
+        {
+          "data-wiki-hash": "true",
+          "data-hash-id": node.attrs.hashId,
+        },
+      ],
+    },
+
     // Block-level companion to wikiCredentialReference. This node is NEVER
     // produced by the editor and NEVER persisted in Y.js — it exists solely
     // at the markdown serialize/parse boundary. The serializer's pre-walk

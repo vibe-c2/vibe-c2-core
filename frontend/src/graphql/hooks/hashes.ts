@@ -17,6 +17,7 @@ import {
   HashDocument,
   HashesDocument,
   HashTagsDocument,
+  HashBacklinksDocument,
   MyHashesDocument,
   MyHashTagsDocument,
   CreateHashDocument,
@@ -61,6 +62,8 @@ export const hashKeys = {
   tagSet: (operationId: string) => [...hashKeys.tagSets(), operationId] as const,
   myTagSet: (operationIds: string[] | null) =>
     [...hashKeys.tagSets(), "my", operationIds] as const,
+  backlinks: (hashId: string) =>
+    [...hashKeys.all, "backlinks", hashId] as const,
 }
 
 // --- Queries ---
@@ -100,6 +103,18 @@ export function useHashTags(operationId: string) {
     queryKey: hashKeys.tagSet(operationId),
     queryFn: () => graphqlClient(HashTagsDocument, { operationId }),
     enabled: !!operationId,
+  })
+}
+
+// Wiki documents that reference this hash inline. Loaded on demand by the hash
+// details dialog — capped at 200 server-side and filtered to active documents.
+// Live-invalidation rides on the hashChanged subscription, which blanket-
+// invalidates the backlinks prefix. Mirrors useCredentialBacklinks.
+export function useHashBacklinks(hashId: string) {
+  return useQuery({
+    queryKey: hashKeys.backlinks(hashId),
+    queryFn: () => graphqlClient(HashBacklinksDocument, { hashId }),
+    enabled: !!hashId,
   })
 }
 
@@ -241,6 +256,12 @@ export function useHashChangedSubscription(operationId: string) {
       queryClient.invalidateQueries({ queryKey: hashKeys.lists() })
       queryClient.invalidateQueries({ queryKey: hashKeys.tagSet(operationId) })
       queryClient.invalidateQueries({ queryKey: ["credentials"] })
+      // A hash delete strips its id from wiki hash_references, so cached
+      // backlinks rows can drift. Refresh them all — the prefix matches every
+      // per-hash entry and the data is light.
+      queryClient.invalidateQueries({
+        queryKey: [...hashKeys.all, "backlinks"],
+      })
     },
     enabled: !!operationId,
   })
@@ -268,6 +289,9 @@ export function useMyHashChangedSubscription(
         queryClient.invalidateQueries({ queryKey: hashKeys.lists() })
         queryClient.invalidateQueries({ queryKey: hashKeys.tagSets() })
         queryClient.invalidateQueries({ queryKey: ["credentials"] })
+        queryClient.invalidateQueries({
+          queryKey: [...hashKeys.all, "backlinks"],
+        })
       },
       enabled: options.enabled ?? true,
     },

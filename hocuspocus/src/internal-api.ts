@@ -13,7 +13,10 @@ import { Binary, MongoClient, type Db } from "mongodb";
 import * as Y from "yjs";
 import { markdownToYjsUpdate } from "./markdown-to-yjs.js";
 import { yjsUpdateToMarkdown } from "./yjs-to-markdown.js";
-import { collectCredentialReferenceIds } from "./references.js";
+import {
+  collectCredentialReferenceIds,
+  collectHashReferenceIds,
+} from "./references.js";
 
 const internalSecret = process.env.HOCUSPOCUS_WEBHOOK_SECRET || "";
 const SIGNATURE_HEADER = "x-internal-signature-256";
@@ -37,6 +40,25 @@ function uuidStringToBinary(value: string): Binary {
     throw new Error(`invalid uuid: ${value}`);
   }
   return new Binary(Buffer.from(hex, "hex"), Binary.SUBTYPE_DEFAULT);
+}
+
+// Hardcoded UUID of the synthetic Public operation. Mirrors
+// models.PublicOperationID (Go) and the same constant in persistence.ts. Wiki
+// documents under this operation are world-readable, so credential and hash
+// references must never seed the inverse index — both are operation-private.
+// The live save path enforces this in persistence.ts; the backfills below
+// apply the same guard so a re-run can't reintroduce the leak the live path
+// already prevents.
+const PUBLIC_OPERATION_ID = "00000000-0000-0000-0000-000000000001";
+const PUBLIC_OPERATION_BINARY = uuidStringToBinary(PUBLIC_OPERATION_ID);
+
+function isPublicOperation(operationId: unknown): boolean {
+  return (
+    operationId instanceof Binary &&
+    Buffer.from(operationId.buffer).equals(
+      Buffer.from(PUBLIC_OPERATION_BINARY.buffer),
+    )
+  );
 }
 
 function verifySignature(rawBody: Buffer, headerValue: string | undefined): boolean {
@@ -93,7 +115,7 @@ async function runCredentialReferenceBackfill(): Promise<BackfillSummary> {
 
   const cursor = collection.find(
     { content_state: { $ne: null } },
-    { projection: { document_id: 1, content_state: 1 }, batchSize },
+    { projection: { document_id: 1, content_state: 1, operation_id: 1 }, batchSize },
   );
 
   for await (const doc of cursor) {
@@ -116,9 +138,69 @@ async function runCredentialReferenceBackfill(): Promise<BackfillSummary> {
         }
       }
 
+      // Public-operation guard — mirrors persistence.ts. A /credential chip in
+      // a world-readable doc must never seed the inverse index.
+      const refs = isPublicOperation(doc.operation_id) ? [] : binaries;
+
       await collection.updateOne(
         { _id: doc._id },
-        { $set: { credential_references: binaries } },
+        { $set: { credential_references: refs } },
+      );
+      summary.updated += 1;
+    } catch (err) {
+      summary.failed += 1;
+      console.error(
+        `backfill: doc ${doc.document_id?.toString?.() ?? "?"} failed:`,
+        err,
+      );
+    }
+  }
+
+  return summary;
+}
+
+// Sibling of runCredentialReferenceBackfill for the hash backlinks index.
+// Sweeps every wiki document, decodes content_state into a transient Y.Doc,
+// runs the hash walker, and writes the result to hash_references. Idempotent.
+async function runHashReferenceBackfill(): Promise<BackfillSummary> {
+  const db = await getBackfillDb();
+  const collection = db.collection("wiki_documents");
+
+  const summary: BackfillSummary = { scanned: 0, updated: 0, failed: 0 };
+  const batchSize = 200;
+
+  const cursor = collection.find(
+    { content_state: { $ne: null } },
+    { projection: { document_id: 1, content_state: 1, operation_id: 1 }, batchSize },
+  );
+
+  for await (const doc of cursor) {
+    summary.scanned += 1;
+    const state = doc.content_state as Binary | undefined;
+    if (!state?.buffer) continue;
+
+    try {
+      const ydoc = new Y.Doc();
+      Y.applyUpdate(ydoc, new Uint8Array(state.buffer));
+      const fragment = ydoc.getXmlFragment("default");
+      const ids = collectHashReferenceIds(fragment);
+
+      const binaries: Binary[] = [];
+      for (const id of ids) {
+        try {
+          binaries.push(uuidStringToBinary(id));
+        } catch {
+          // Bad UUID; skip without aborting the doc.
+        }
+      }
+
+      // Public-operation guard — mirrors persistence.ts. A /hash chip in a
+      // world-readable doc must never seed the inverse index.
+      const refs = isPublicOperation(doc.operation_id) ? [] : binaries;
+
+      await collection.updateOne(
+        { _id: doc._id },
+        { $set: { hash_references: refs } },
       );
       summary.updated += 1;
     } catch (err) {
@@ -325,6 +407,55 @@ export function setupInternalApi(app: Express): void {
         const message =
           err instanceof Error ? err.message : "backfill failed";
         console.error("backfill-credential-references error:", err);
+        res.status(500).json({ error: message });
+      }
+    },
+  );
+
+  // One-shot backfill for hash backlinks. Sibling of the credential backfill
+  // above — sweeps every wiki document, runs the hash walker, and writes
+  // hash_references. Idempotent. Required after deploying the hash backlinks
+  // feature so docs that already embed /hash chips populate the inverse index.
+  app.post(
+    "/internal/backfill-hash-references",
+    (req: Request, res: Response, next: () => void) => {
+      const chunks: Buffer[] = [];
+      req.on("data", (chunk: Buffer) => {
+        chunks.push(chunk);
+        if (chunks.reduce((n, c) => n + c.length, 0) > 1024) {
+          // Backfill takes no body; reject anything over 1 KB outright.
+          res.status(413).json({ error: "request too large" });
+          req.destroy();
+        }
+      });
+      req.on("end", () => {
+        if (res.headersSent) return;
+        (req as Request & { rawBody?: Buffer }).rawBody = Buffer.concat(chunks);
+        next();
+      });
+      req.on("error", (err: Error) => {
+        if (res.headersSent) return;
+        res.status(400).json({ error: err.message });
+      });
+    },
+    async (req: Request, res: Response) => {
+      const rawBody =
+        (req as Request & { rawBody?: Buffer }).rawBody ?? Buffer.alloc(0);
+
+      const sigHeader = req.headers[SIGNATURE_HEADER];
+      const sig = Array.isArray(sigHeader) ? sigHeader[0] : sigHeader;
+      if (!verifySignature(rawBody, sig)) {
+        res.status(401).json({ error: "invalid or missing signature" });
+        return;
+      }
+
+      try {
+        const summary = await runHashReferenceBackfill();
+        res.status(200).json(summary);
+      } catch (err) {
+        const message =
+          err instanceof Error ? err.message : "backfill failed";
+        console.error("backfill-hash-references error:", err);
         res.status(500).json({ error: message });
       }
     },

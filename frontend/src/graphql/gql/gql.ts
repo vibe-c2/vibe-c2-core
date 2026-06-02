@@ -44,6 +44,7 @@ type Documents = {
     "\n  query Hash($id: ID!) {\n    hash(id: $id) {\n      ...HashFieldsWithCredential\n    }\n  }\n": typeof types.HashDocument,
     "\n  query Hashes(\n    $operationId: ID!\n    $search: String\n    $statuses: [HashStatus!]\n    $tags: [String!]\n    $hasCredential: Boolean\n    $first: Int\n    $after: String\n  ) {\n    hashes(\n      operationId: $operationId\n      search: $search\n      statuses: $statuses\n      tags: $tags\n      hasCredential: $hasCredential\n      first: $first\n      after: $after\n    ) {\n      edges {\n        node {\n          ...HashFields\n        }\n        cursor\n      }\n      pageInfo {\n        hasNextPage\n        endCursor\n      }\n      totalCount\n    }\n  }\n": typeof types.HashesDocument,
     "\n  query HashTags($operationId: ID!) {\n    hashTags(operationId: $operationId)\n  }\n": typeof types.HashTagsDocument,
+    "\n  query HashBacklinks($hashId: ID!) {\n    wikiDocumentsReferencingHash(hashId: $hashId) {\n      ...WikiDocumentBacklinkFields\n    }\n  }\n": typeof types.HashBacklinksDocument,
     "\n  query MyHashes(\n    $operationIds: [ID!]\n    $search: String\n    $statuses: [HashStatus!]\n    $tags: [String!]\n    $hasCredential: Boolean\n    $first: Int\n    $after: String\n  ) {\n    myHashes(\n      operationIds: $operationIds\n      search: $search\n      statuses: $statuses\n      tags: $tags\n      hasCredential: $hasCredential\n      first: $first\n      after: $after\n    ) {\n      edges {\n        node {\n          ...HashFieldsWithOperation\n        }\n        cursor\n      }\n      pageInfo {\n        hasNextPage\n        endCursor\n      }\n      totalCount\n    }\n  }\n": typeof types.MyHashesDocument,
     "\n  query MyHashTags($operationIds: [ID!]) {\n    myHashTags(operationIds: $operationIds)\n  }\n": typeof types.MyHashTagsDocument,
     "\n  mutation CreateHash($operationId: ID!, $input: CreateHashInput!) {\n    createHash(operationId: $operationId, input: $input) {\n      ...HashFields\n    }\n  }\n": typeof types.CreateHashDocument,
@@ -181,6 +182,7 @@ const documents: Documents = {
     "\n  query Hash($id: ID!) {\n    hash(id: $id) {\n      ...HashFieldsWithCredential\n    }\n  }\n": types.HashDocument,
     "\n  query Hashes(\n    $operationId: ID!\n    $search: String\n    $statuses: [HashStatus!]\n    $tags: [String!]\n    $hasCredential: Boolean\n    $first: Int\n    $after: String\n  ) {\n    hashes(\n      operationId: $operationId\n      search: $search\n      statuses: $statuses\n      tags: $tags\n      hasCredential: $hasCredential\n      first: $first\n      after: $after\n    ) {\n      edges {\n        node {\n          ...HashFields\n        }\n        cursor\n      }\n      pageInfo {\n        hasNextPage\n        endCursor\n      }\n      totalCount\n    }\n  }\n": types.HashesDocument,
     "\n  query HashTags($operationId: ID!) {\n    hashTags(operationId: $operationId)\n  }\n": types.HashTagsDocument,
+    "\n  query HashBacklinks($hashId: ID!) {\n    wikiDocumentsReferencingHash(hashId: $hashId) {\n      ...WikiDocumentBacklinkFields\n    }\n  }\n": types.HashBacklinksDocument,
     "\n  query MyHashes(\n    $operationIds: [ID!]\n    $search: String\n    $statuses: [HashStatus!]\n    $tags: [String!]\n    $hasCredential: Boolean\n    $first: Int\n    $after: String\n  ) {\n    myHashes(\n      operationIds: $operationIds\n      search: $search\n      statuses: $statuses\n      tags: $tags\n      hasCredential: $hasCredential\n      first: $first\n      after: $after\n    ) {\n      edges {\n        node {\n          ...HashFieldsWithOperation\n        }\n        cursor\n      }\n      pageInfo {\n        hasNextPage\n        endCursor\n      }\n      totalCount\n    }\n  }\n": types.MyHashesDocument,
     "\n  query MyHashTags($operationIds: [ID!]) {\n    myHashTags(operationIds: $operationIds)\n  }\n": types.MyHashTagsDocument,
     "\n  mutation CreateHash($operationId: ID!, $input: CreateHashInput!) {\n    createHash(operationId: $operationId, input: $input) {\n      ...HashFields\n    }\n  }\n": types.CreateHashDocument,
@@ -422,6 +424,10 @@ export function graphql(source: "\n  query Hashes(\n    $operationId: ID!\n    $
  * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
  */
 export function graphql(source: "\n  query HashTags($operationId: ID!) {\n    hashTags(operationId: $operationId)\n  }\n"): (typeof documents)["\n  query HashTags($operationId: ID!) {\n    hashTags(operationId: $operationId)\n  }\n"];
+/**
+ * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
+ */
+export function graphql(source: "\n  query HashBacklinks($hashId: ID!) {\n    wikiDocumentsReferencingHash(hashId: $hashId) {\n      ...WikiDocumentBacklinkFields\n    }\n  }\n"): (typeof documents)["\n  query HashBacklinks($hashId: ID!) {\n    wikiDocumentsReferencingHash(hashId: $hashId) {\n      ...WikiDocumentBacklinkFields\n    }\n  }\n"];
 /**
  * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
  */

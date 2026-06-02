@@ -96,6 +96,18 @@ export const HashTagsQuery = graphql(`
   }
 `)
 
+// Wiki documents that reference the given hash via the inline /hash chip.
+// Powers the "Referenced in" section in the hash details dialog. Mirrors
+// CredentialBacklinksQuery and reuses the same row fragment so both surfaces
+// render identically.
+export const HashBacklinksQuery = graphql(`
+  query HashBacklinks($hashId: ID!) {
+    wikiDocumentsReferencingHash(hashId: $hashId) {
+      ...WikiDocumentBacklinkFields
+    }
+  }
+`)
+
 export const MyHashesQuery = graphql(`
   query MyHashes(
     $operationIds: [ID!]

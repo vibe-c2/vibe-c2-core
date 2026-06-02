@@ -22,6 +22,7 @@ import {
 import { Skeleton } from "@/components/ui/skeleton"
 import { FormattedDateTimeText } from "@/components/ui/formatted-date-time-text"
 import { TagComboboxInput } from "@/components/findings/tag-combobox-input"
+import { HashBacklinkList } from "@/components/findings/hash-backlink-list"
 import { useHashStore } from "@/stores/hashes"
 import { useHash, useHashTags, useUpdateHash } from "@/graphql/hooks/hashes"
 import type { HashStatus, UpdateHashInput } from "@/graphql/gql/graphql"
@@ -254,6 +255,8 @@ export function HashDetailsDialog() {
                 </div>
               </Field>
             )}
+
+            <HashBacklinkList hashId={hash.id} />
 
             <div className="flex flex-wrap items-center gap-2 border-t pt-3">
               {hash.status !== "CRACKED" && (

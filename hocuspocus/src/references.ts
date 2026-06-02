@@ -61,6 +61,11 @@ const CREDENTIAL_REFERENCE_SELECTOR: NodeAttrSelector = {
   attrName: "credentialId",
 };
 
+const HASH_REFERENCE_SELECTOR: NodeAttrSelector = {
+  nodeName: "wikiHashReference",
+  attrName: "hashId",
+};
+
 /**
  * Walk a Y.js TipTap document and return the deduplicated, lowercase set of
  * `documentId` attributes from every `wikiDocumentReference` atom node.
@@ -82,4 +87,17 @@ export function collectCredentialReferenceIds(
   node: Y.XmlFragment | Y.XmlElement,
 ): Set<string> {
   return collectNodeAttrIds(node, CREDENTIAL_REFERENCE_SELECTOR);
+}
+
+/**
+ * Walk a Y.js TipTap document and return the deduplicated, lowercase set of
+ * `hashId` attributes from every `wikiHashReference` atom node. Drives the
+ * hash backlinks index — the inverse mapping that lets the Findings page
+ * surface "this hash is referenced in these wiki docs". Sibling of
+ * collectCredentialReferenceIds.
+ */
+export function collectHashReferenceIds(
+  node: Y.XmlFragment | Y.XmlElement,
+): Set<string> {
+  return collectNodeAttrIds(node, HASH_REFERENCE_SELECTOR);
 }
