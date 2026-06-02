@@ -17,11 +17,11 @@ import {
   useSetTaskWikiReferences,
   useSetTaskCredentialReferences,
 } from "@/graphql/hooks/tasks"
+import { TaskFormFields } from "@/components/tasks/task-form-fields"
 import {
-  TaskFormFields,
   emptyTaskFormValues,
   type TaskFormValues,
-} from "@/components/tasks/task-form-fields"
+} from "@/components/tasks/task-form-types"
 import { TaskRelationsFields } from "@/components/tasks/task-relations-fields"
 import {
   emptyTaskRelationsValues,
@@ -103,6 +103,12 @@ export function EditTaskDialog() {
       })),
     }
 
+    // One-shot hydration of editable local state from the server cache,
+    // gated by seededIdRef so our own autosave-driven cache updates don't
+    // clobber in-flight typing. This is intentionally effect-shaped (sync
+    // external store → local form state); the guard above runs it once per
+    // task id, so there is no cascading-render loop.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setValues(nextValues)
     setRelations(nextRelations)
     lastSavedValuesRef.current = nextValues
@@ -119,6 +125,9 @@ export function EditTaskDialog() {
   useEffect(() => {
     if (editDialogOpen) return
     seededIdRef.current = null
+    // Reset transient UI state only when the dialog transitions to closed;
+    // runs once per close (not every render), so no cascading-render risk.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setError(null)
     setCopied(false)
   }, [editDialogOpen])

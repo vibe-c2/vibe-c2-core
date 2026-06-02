@@ -2,30 +2,9 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { cn } from "@/lib/utils"
-import { ScoreSwatch, scoreTone } from "@/components/tasks/task-badges"
-
-// Shared input shape between create and edit dialogs. Stage and status are
-// not part of this form — those flow through the kanban drag-drop and the
-// status-required modal, where the invariant is enforced uniformly. Risk
-// and profit scores are constrained to 0..10 client-side as a courtesy;
-// the server is the source of truth on the bound.
-export interface TaskFormValues {
-  name: string
-  description: string
-  riskScore: number
-  riskDescription: string
-  profitScore: number
-  profitDescription: string
-}
-
-export const emptyTaskFormValues: TaskFormValues = {
-  name: "",
-  description: "",
-  riskScore: 0,
-  riskDescription: "",
-  profitScore: 0,
-  profitDescription: "",
-}
+import { ScoreSwatch } from "@/components/tasks/task-badges"
+import { scoreTone } from "@/components/tasks/task-badge-tokens"
+import type { TaskFormValues } from "@/components/tasks/task-form-types"
 
 interface TaskFormFieldsProps {
   idPrefix: string

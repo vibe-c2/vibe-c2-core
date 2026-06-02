@@ -73,7 +73,7 @@ const VALID_TYPES: ReadonlySet<string> = new Set([
 const DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/
 
 function TimelinePageInner({ operationId }: { operationId: string }) {
-  const timezone = useMemo(resolveTimezone, [])
+  const timezone = useMemo(() => resolveTimezone(), [])
   const [searchParams, setSearchParams] = useSearchParams()
 
   // --- Read filter state from URL --------------------------------------
@@ -128,35 +128,32 @@ function TimelinePageInner({ operationId }: { operationId: string }) {
 
   const { data: operationData, isLoading: opLoading } = useOperation(operationId)
 
-  // actorLabels is a local cache of id → username. Hydrated from the
-  // operation's members list and extended whenever the user adds a chip via
-  // the picker. Falling back to a truncated ID keeps the chip readable when
-  // the URL carries an unknown actor (e.g. a former member who has since
-  // been removed but whose events still exist).
+  // actorLabels caches id → username for actors the user adds via the picker
+  // (written by setActors). Member usernames come from the operation query and
+  // are derived during render below rather than synced into this state.
   const [actorLabels, setActorLabels] = useState<Record<string, string>>({})
 
-  useEffect(() => {
-    if (!operationData?.operation.members) return
-    setActorLabels((prev) => {
-      let changed = false
-      const next = { ...prev }
-      for (const m of operationData.operation.members) {
-        if (!next[m.user.id]) {
-          next[m.user.id] = m.user.username
-          changed = true
-        }
-      }
-      return changed ? next : prev
-    })
+  // Member labels are derivable from the operation query, so compute them in
+  // render instead of mirroring them into state through an effect.
+  const memberLabels = useMemo(() => {
+    const map: Record<string, string> = {}
+    for (const m of operationData?.operation.members ?? []) {
+      map[m.user.id] = m.user.username
+    }
+    return map
   }, [operationData])
 
+  // Falling back to a truncated ID keeps the chip readable when the URL
+  // carries an unknown actor (e.g. a former member who has since been removed
+  // but whose events still exist).
   const actors: ActorChip[] = useMemo(
     () =>
       actorIds.map((id) => ({
         id,
-        username: actorLabels[id] ?? `User ${id.slice(0, 6)}`,
+        username:
+          actorLabels[id] ?? memberLabels[id] ?? `User ${id.slice(0, 6)}`,
       })),
-    [actorIds, actorLabels],
+    [actorIds, actorLabels, memberLabels],
   )
 
   // --- URL writes -------------------------------------------------------
@@ -166,8 +163,12 @@ function TimelinePageInner({ operationId }: { operationId: string }) {
 
   // searchParams is a fresh URLSearchParams object on each render — capture
   // it by ref so callbacks don't churn React Query keys via identity changes.
+  // Synced in an effect (not during render): mutateParams runs from event
+  // handlers, well after commit, so reading the latest committed value is safe.
   const searchParamsRef = useRef(searchParams)
-  searchParamsRef.current = searchParams
+  useEffect(() => {
+    searchParamsRef.current = searchParams
+  })
 
   const mutateParams = useCallback(
     (mutate: (params: URLSearchParams) => void) => {

@@ -1,4 +1,4 @@
-import { useMemo } from "react"
+import { createElement, useMemo } from "react"
 import { Loader2Icon } from "lucide-react"
 import {
   Dialog,
@@ -118,7 +118,7 @@ export function EventGroupDialog({
   }, [events, isTaskGroup])
 
   const dominantTaskStatus = taskOutcome ? dominantOutcome(taskOutcome) : null
-  const HeaderIcon =
+  const headerIcon =
     dominantTaskStatus !== null
       ? taskStatusIcon(dominantTaskStatus)
       : subjectKind
@@ -142,7 +142,10 @@ export function EventGroupDialog({
       <DialogContent className="sm:max-w-lg">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
-            {HeaderIcon && <HeaderIcon className={cn("size-4", headerAccent)} />}
+            {headerIcon &&
+              createElement(headerIcon, {
+                className: cn("size-4", headerAccent),
+              })}
             {title}
           </DialogTitle>
           <DialogDescription>

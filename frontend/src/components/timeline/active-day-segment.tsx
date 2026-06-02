@@ -1,3 +1,4 @@
+import { createElement } from "react"
 import type { TimelineGranularity } from "@/graphql/gql/graphql"
 import { dayjs } from "./dayjs-setup"
 import { subjectKindIcon, subjectKindAccent } from "./event-icons"
@@ -164,7 +165,7 @@ function EventGroupChip({
   count: number
   onClick: () => void
 }) {
-  const Icon = subjectKindIcon(subjectKind)
+  const icon = subjectKindIcon(subjectKind)
   const accent = subjectKindAccent(subjectKind)
   const tooltip = renderGroupSummary(topic, count)
   const showBadge = count > 1
@@ -182,7 +183,7 @@ function EventGroupChip({
             )}
             aria-label={tooltip}
           >
-            <Icon className={cn("size-4", accent)} />
+            {createElement(icon, { className: cn("size-4", accent) })}
             {showBadge && (
               <span
                 className={cn(

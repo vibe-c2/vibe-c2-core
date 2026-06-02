@@ -183,10 +183,14 @@ export function TimelineCanvas({
   // overflow, and easy to debug because the trigger condition is just a
   // scrollLeft comparison. The refs below are read inside the listener
   // closure so we don't rebuild the listener on every isLoading change.
+  // Synced in an effect (not during render) so the scroll handler reads the
+  // latest committed value lazily without writing refs mid-render.
   const isLoadingOlderRef = useRef(isLoadingOlder)
-  isLoadingOlderRef.current = isLoadingOlder
   const isLoadingInitialRef = useRef(isLoadingInitial)
-  isLoadingInitialRef.current = isLoadingInitial
+  useEffect(() => {
+    isLoadingOlderRef.current = isLoadingOlder
+    isLoadingInitialRef.current = isLoadingInitial
+  })
 
   useEffect(() => {
     if (!hasMoreOlder) return

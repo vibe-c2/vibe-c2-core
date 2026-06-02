@@ -10,11 +10,11 @@ import {
 } from "@/components/ui/dialog"
 import { useTaskStore } from "@/stores/tasks"
 import { useCreateTask } from "@/graphql/hooks/tasks"
+import { TaskFormFields } from "@/components/tasks/task-form-fields"
 import {
-  TaskFormFields,
   emptyTaskFormValues,
   type TaskFormValues,
-} from "@/components/tasks/task-form-fields"
+} from "@/components/tasks/task-form-types"
 import { TaskRelationsFields } from "@/components/tasks/task-relations-fields"
 import {
   emptyTaskRelationsValues,

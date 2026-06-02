@@ -1,6 +1,6 @@
 import { useMemo } from "react"
 import { useDroppable } from "@dnd-kit/core"
-import { stageLabel } from "@/components/tasks/task-badges"
+import { stageLabel } from "@/components/tasks/task-badge-tokens"
 import { TaskCard } from "@/components/tasks/task-card"
 import { TaskCardContextMenu } from "@/components/tasks/task-card-context-menu"
 import { VirtualTaskList } from "@/components/tasks/virtual-task-list"

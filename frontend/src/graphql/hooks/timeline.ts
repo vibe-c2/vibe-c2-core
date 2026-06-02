@@ -343,7 +343,6 @@ export function useTimelineBucketsWindowed(
       return [{ from: userFrom ?? "", to: userTo ?? "" }]
     }
     return [computeInitialWindow(granularity, timezone, pinnedDay ?? null)]
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [hasUserFilter, userFrom, userTo, granularity, timezone, pinnedDay])
 
   const [windows, setWindows] = useState<WindowRange[]>(initialWindows)

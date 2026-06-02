@@ -41,6 +41,27 @@ function lucideFixTsExtension(): Plugin {
 
 export default defineConfig({
   plugins: [lucideFixTsExtension(), react(), tailwindcss()],
+  build: {
+    rollupOptions: {
+      // icon-catalog.ts statically imports a curated set of lucide icons (for
+      // synchronous, Suspense-free rendering) AND enumerates the whole icon
+      // directory via import.meta.glob (for lazily loading the uncurated
+      // long-tail). For the curated icons those two paths overlap, so Rollup
+      // emits INEFFECTIVE_DYNAMIC_IMPORT — correctly noting the dynamic import
+      // can't split them into their own chunk. That overlap is intentional
+      // (curated icons belong in the main bundle), so silence only that code
+      // for lucide icon modules and let every other warning through.
+      onwarn(warning, defaultHandler) {
+        if (
+          warning.code === "INEFFECTIVE_DYNAMIC_IMPORT" &&
+          warning.message.includes("lucide-react/dist/esm/icons/")
+        ) {
+          return
+        }
+        defaultHandler(warning)
+      },
+    },
+  },
   resolve: {
     alias: {
       "@": path.resolve(__dirname, "./src"),

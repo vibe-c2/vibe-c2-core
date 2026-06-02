@@ -1,4 +1,4 @@
-import { useState } from "react"
+import { createElement, useState } from "react"
 import { Link } from "react-router"
 import { Pencil, Trash2 } from "lucide-react"
 import { Button } from "@/components/ui/button"
@@ -57,7 +57,7 @@ export function EventDetailsDialog({
 
   if (!event) return null
 
-  const Icon = eventIcon(event)
+  const icon = eventIcon(event)
   const accent = eventAccent(event)
   const occurred = dayjs(event.occurredAt)
   const description = parseCustomEventDescription(event.metadata)
@@ -97,7 +97,7 @@ export function EventDetailsDialog({
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
-            <Icon className={`size-4 ${accent}`} />
+            {createElement(icon, { className: `size-4 ${accent}` })}
             {renderEventSummary(event)}
           </DialogTitle>
           <DialogDescription>

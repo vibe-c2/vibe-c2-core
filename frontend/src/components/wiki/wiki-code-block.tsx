@@ -114,6 +114,10 @@ export function WikiCodeBlock({ node, updateAttributes, editor, getPos }: ReactN
     const codeEl = preRef.current?.querySelector("code")
     if (!codeEl) return
     const next = computeLineMarks(codeEl, wrap)
+    // Marks are a measurement of the rendered DOM (line count / wrap points),
+    // so they cannot be derived during render — an effect is required. The
+    // marksEqual guard makes this idempotent, so no cascading-render risk.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setMarks((prev) => (marksEqual(prev, next) ? prev : next))
   }, [text, wrap, language])
 
