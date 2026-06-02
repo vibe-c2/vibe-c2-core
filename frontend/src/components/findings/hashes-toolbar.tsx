@@ -1,5 +1,11 @@
 import { useMemo } from "react"
-import { PlusIcon, FilterIcon, UploadIcon } from "lucide-react"
+import {
+  PlusIcon,
+  FilterIcon,
+  UploadIcon,
+  DownloadIcon,
+  Loader2Icon,
+} from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Checkbox } from "@/components/ui/checkbox"
@@ -15,9 +21,16 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover"
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
 import { SearchInput } from "@/components/ui/search-input"
 import { TagFilterPanel } from "@/components/findings/tag-filter-panel"
 import { useHashStore } from "@/stores/hashes"
+import { useHashExport } from "@/hooks/use-hash-export"
 import { useHashTags, useMyHashTags } from "@/graphql/hooks/hashes"
 import {
   HASH_STATUSES,
@@ -190,12 +203,44 @@ export function HashesToolbar({ mode }: HashesToolbarProps) {
             Bulk import
           </Button>
         )}
+        <ExportMenu mode={mode} />
         <Button onClick={openCreate}>
           <PlusIcon className="size-4" />
           Add hash
         </Button>
       </div>
     </div>
+  )
+}
+
+// Export the current (filtered) hash set as JSON or CSV. Paginates through the
+// same `hashes` / `myHashes` query the table uses, so authorization and filter
+// semantics are identical to what's on screen. Mirrors the credentials toolbar.
+function ExportMenu({ mode }: { mode: FindingsMode }) {
+  const { exportHashes, isExporting, progress } = useHashExport(mode)
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger
+        render={
+          <Button variant="outline" disabled={isExporting}>
+            {isExporting ? (
+              <Loader2Icon className="size-4 animate-spin" />
+            ) : (
+              <DownloadIcon className="size-4" />
+            )}
+            {isExporting ? `Exporting ${progress}…` : "Export"}
+          </Button>
+        }
+      />
+      <DropdownMenuContent align="end">
+        <DropdownMenuItem onClick={() => exportHashes("json")}>
+          Export as JSON
+        </DropdownMenuItem>
+        <DropdownMenuItem onClick={() => exportHashes("csv")}>
+          Export as CSV
+        </DropdownMenuItem>
+      </DropdownMenuContent>
+    </DropdownMenu>
   )
 }
 
