@@ -1,10 +1,10 @@
 import {
-  BookOpenIcon,
   CircleCheckIcon,
   CircleDashedIcon,
   CircleXIcon,
+  FileTextIcon,
   HashIcon,
-  KeyRoundIcon,
+  KeyIcon,
   PinIcon,
   type LucideIcon,
 } from "lucide-react"
@@ -43,8 +43,11 @@ export function taskStatusAccent(status: TaskStatus): string {
 }
 
 // subjectKindIcon picks an icon for an event dot based on the entity it
-// concerns. Falls back to KeyRoundIcon so a new subject kind from the
-// backend still renders something rather than an empty slot.
+// concerns. Icons mirror the wiki reference-chip language (KeyIcon for
+// credentials, HashIcon for hashes, FileTextIcon for documents) so an event
+// dot and the chip for the same entity read as the same thing. Falls back to
+// a neutral CircleDashedIcon so a new subject kind from the backend still
+// renders something rather than masquerading as a known type.
 //
 // Used for grouped event dots where a single shared icon represents N
 // events of the same topic+kind. Per-event surfaces should prefer
@@ -52,29 +55,30 @@ export function taskStatusAccent(status: TaskStatus): string {
 export function subjectKindIcon(subjectKind: string): LucideIcon {
   switch (subjectKind) {
     case "credential":
-      return KeyRoundIcon
+      return KeyIcon
     case "hash":
       return HashIcon
     case "wiki_document":
-      return BookOpenIcon
+      return FileTextIcon
     case "custom_event":
       return PinIcon
     case "task":
       return CircleCheckIcon
     default:
-      return KeyRoundIcon
+      return CircleDashedIcon
   }
 }
 
-// subjectKindAccent maps a subject kind to a Tailwind colour class. The
-// timeline reads more clearly when each entity type carries a consistent
-// hue across dots and the details dialog.
+// subjectKindAccent maps a subject kind to a Tailwind colour class. Hues
+// mirror the wiki reference-chip accents (violet for credentials/secrets,
+// amber for hashes, sky for documents) so an entity carries one identity
+// across the timeline dots, the details dialog, and the wiki editor chips.
 export function subjectKindAccent(subjectKind: string): string {
   switch (subjectKind) {
     case "credential":
-      return "text-amber-500"
+      return "text-violet-500"
     case "hash":
-      return "text-purple-500"
+      return "text-amber-500"
     case "wiki_document":
       return "text-sky-500"
     case "custom_event":
