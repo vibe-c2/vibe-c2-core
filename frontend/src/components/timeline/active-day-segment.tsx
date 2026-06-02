@@ -1,8 +1,8 @@
-import { createElement } from "react"
+import { createElement, useMemo } from "react"
 import type { TimelineGranularity } from "@/graphql/gql/graphql"
 import { dayjs } from "./dayjs-setup"
 import { subjectKindIcon, subjectKindAccent } from "./event-icons"
-import { renderGroupSummary } from "./event-summary"
+import { renderSubjectKindSummary } from "./event-summary"
 import { granularityNoun } from "./granularity"
 import type { BucketTopicCount } from "./piecewise-axis"
 import {
@@ -13,9 +13,37 @@ import {
 import { cn } from "@/lib/utils"
 
 // Maximum *group* dots rendered in the vertical stack before we collapse the
-// rest into a "+N more" affordance. Groups collapse same-topic events into a
-// single badge'd icon, so this cap is per topic, not per event.
+// rest into a "+N more" affordance. Groups collapse same-subject-kind events
+// into a single badge'd icon, so this cap is per subject kind, not per event.
 const MAX_VISIBLE_DOTS = 16
+
+// SubjectGroup is the dot-stack rendering unit: one badge'd icon per subject
+// kind, summing every topic that shares that kind. The bucket aggregation
+// returns counts split by (topic, subjectKind) — e.g. hash.created and
+// hash.cracked are two rows that both carry subjectKind "hash" — so we merge
+// them here to render a single hash circle instead of two identical-looking
+// purple dots.
+interface SubjectGroup {
+  subjectKind: string
+  count: number
+}
+
+// mergeBySubjectKind collapses per-topic counts into per-subject-kind groups,
+// preserving the incoming order (server sorts count desc, topic asc) by the
+// first topic seen for each kind.
+function mergeBySubjectKind(topicCounts: BucketTopicCount[]): SubjectGroup[] {
+  const order: string[] = []
+  const byKind = new Map<string, number>()
+  for (const tc of topicCounts) {
+    const prev = byKind.get(tc.subjectKind)
+    if (prev === undefined) order.push(tc.subjectKind)
+    byKind.set(tc.subjectKind, (prev ?? 0) + tc.count)
+  }
+  return order.map((subjectKind) => ({
+    subjectKind,
+    count: byKind.get(subjectKind) ?? 0,
+  }))
+}
 
 interface Props {
   bucketStart: string
@@ -34,13 +62,9 @@ interface Props {
   // renders every event in the bucket.
   onSelectBucket: (bucketStart: string) => void
   // Fired when the user clicks an individual chip. The page opens a modal
-  // that lists just the events in that one (topic, subjectKind) group —
-  // tighter than the day panel, which shows the whole bucket.
-  onSelectGroup: (
-    bucketStart: string,
-    topic: string,
-    subjectKind: string,
-  ) => void
+  // that lists just the events in that one subject-kind group — tighter than
+  // the day panel, which shows the whole bucket.
+  onSelectGroup: (bucketStart: string, subjectKind: string) => void
 }
 
 // ActiveDaySegment renders one active bucket on the axis: a vertical stack of
@@ -61,8 +85,12 @@ export function ActiveDaySegment({
   onSelectBucket,
   onSelectGroup,
 }: Props) {
-  const visibleGroups = topicCounts.slice(0, MAX_VISIBLE_DOTS)
-  const overflowGroups = topicCounts.slice(MAX_VISIBLE_DOTS)
+  const subjectGroups = useMemo(
+    () => mergeBySubjectKind(topicCounts),
+    [topicCounts],
+  )
+  const visibleGroups = subjectGroups.slice(0, MAX_VISIBLE_DOTS)
+  const overflowGroups = subjectGroups.slice(MAX_VISIBLE_DOTS)
   const hiddenCount = overflowGroups.reduce((sum, g) => sum + g.count, 0)
 
   const label = formatBucketLabel(bucketStart, granularity, timezone)
@@ -88,11 +116,10 @@ export function ActiveDaySegment({
           )}
           {visibleGroups.map((g) => (
             <EventGroupChip
-              key={`${g.topic}:${g.subjectKind}`}
-              topic={g.topic}
+              key={g.subjectKind}
               subjectKind={g.subjectKind}
               count={g.count}
-              onClick={() => onSelectGroup(bucketStart, g.topic, g.subjectKind)}
+              onClick={() => onSelectGroup(bucketStart, g.subjectKind)}
             />
           ))}
           {hiddenCount > 0 && (
@@ -151,23 +178,21 @@ export function ActiveDaySegment({
   )
 }
 
-// EventGroupChip renders a single topic group as a count-badged icon button.
-// Clicks fire onSelectGroup so the page can open the group-scoped modal that
-// lists just the events in this (topic, subjectKind) bucket.
+// EventGroupChip renders a single subject-kind group as a count-badged icon
+// button. Clicks fire onSelectGroup so the page can open the group-scoped
+// modal that lists just the events of this subject kind in the bucket.
 function EventGroupChip({
-  topic,
   subjectKind,
   count,
   onClick,
 }: {
-  topic: string
   subjectKind: string
   count: number
   onClick: () => void
 }) {
   const icon = subjectKindIcon(subjectKind)
   const accent = subjectKindAccent(subjectKind)
-  const tooltip = renderGroupSummary(topic, count)
+  const tooltip = renderSubjectKindSummary(subjectKind, count)
   const showBadge = count > 1
 
   return (

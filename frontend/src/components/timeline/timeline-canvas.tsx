@@ -33,11 +33,7 @@ interface Props {
   // Chip click in the dot stack — opens the group-scoped event modal at the
   // page level. The page owns this dialog because the same page also owns
   // the per-event details dialog and threads selection state for both.
-  onSelectGroup: (
-    bucketStart: string,
-    topic: string,
-    subjectKind: string,
-  ) => void
+  onSelectGroup: (bucketStart: string, subjectKind: string) => void
 }
 
 // Fixed pixel height for the canvas. Picked so the dot stack (capped at 16

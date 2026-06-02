@@ -529,6 +529,7 @@ func parseSubjectKinds(in []string) ([]models.SubjectKind, error) {
 		sk := models.SubjectKind(s)
 		switch sk {
 		case models.SubjectKindCredential,
+			models.SubjectKindHash,
 			models.SubjectKindWikiDocument,
 			models.SubjectKindCustomEvent,
 			models.SubjectKindTask:

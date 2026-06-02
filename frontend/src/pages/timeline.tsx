@@ -65,6 +65,7 @@ const VALID_GRANULARITIES: ReadonlySet<TimelineGranularity> = new Set([
 ])
 const VALID_TYPES: ReadonlySet<string> = new Set([
   "credential",
+  "hash",
   "wiki_document",
   "custom_event",
   "task",
@@ -359,21 +360,21 @@ function TimelinePageInner({ operationId }: { operationId: string }) {
 
   // --- Event group dialog state ---------------------------------------
   //
-  // The dot stack's chips open this modal — a focused list of every event
-  // in one (topic, subjectKind) slice of the bucket. Distinct from the
-  // day panel (whole bucket) and the details dialog (single event), so the
-  // user can drill into "10 credentials added" without scrolling past
-  // unrelated rows.
+  // The dot stack's chips open this modal — a focused list of every event of
+  // one subject kind in the bucket. Distinct from the day panel (whole
+  // bucket) and the details dialog (single event), so the user can drill into
+  // "10 credentials" without scrolling past unrelated rows. Scoped by subject
+  // kind (not topic) so a "hash" group surfaces both added and cracked hashes
+  // under the one circle the dot stack renders.
 
   const [groupDialog, setGroupDialog] = useState<{
     bucketStart: string
-    topic: string
     subjectKind: string
   } | null>(null)
 
   const handleGroupClick = useCallback(
-    (bucketStart: string, topic: string, subjectKind: string) => {
-      setGroupDialog({ bucketStart, topic, subjectKind })
+    (bucketStart: string, subjectKind: string) => {
+      setGroupDialog({ bucketStart, subjectKind })
     },
     [],
   )
@@ -499,7 +500,6 @@ function TimelinePageInner({ operationId }: { operationId: string }) {
         bucketStart={groupDialog?.bucketStart ?? null}
         granularity={granularity}
         timezone={timezone}
-        topic={groupDialog?.topic ?? null}
         subjectKind={groupDialog?.subjectKind ?? null}
         actorIds={actorIds.length > 0 ? actorIds : null}
         onEventSelect={handleGroupEventSelect}

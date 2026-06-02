@@ -6,6 +6,7 @@ export const SUBJECT_KIND_OPTIONS: ReadonlyArray<{
   label: string
 }> = [
   { value: "credential", label: "Credentials" },
+  { value: "hash", label: "Hashes" },
   { value: "wiki_document", label: "Wiki documents" },
   { value: "task", label: "Tasks" },
   { value: "custom_event", label: "Custom events" },

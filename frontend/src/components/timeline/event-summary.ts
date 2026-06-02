@@ -39,29 +39,36 @@ export function renderEventSummary(event: TimelineEventFieldsFragment): string {
   }
 }
 
-// renderGroupSummary describes a same-topic stack of N events as a single
-// human phrase — used for the tooltip on grouped event dots when the
-// active-day segment collapses identical events into one badge'd icon.
-export function renderGroupSummary(topic: string, count: number): string {
-  switch (topic) {
-    case "credential.created":
-      return `${count} credentials added`
-    case "hash.created":
-      return `${count} hashes added`
-    case "hash.bulk_imported":
-      return `${count} bulk imports`
-    case "hash.cracked":
-      return `${count} hashes cracked`
-    case "wiki.document.created":
-      return `${count} wiki documents created`
-    case "timeline.custom.created":
-      return `${count} custom events`
-    case "task.stage_changed":
-      return `${count} tasks completed`
-    default: {
-      const verb = humaniseTopic(topic)
-      return `${count} × ${verb}`
-    }
+// renderSubjectKindSummary describes a stack of N events that share a subject
+// kind as a single human phrase — used for the tooltip on grouped event dots
+// and the group dialog title. The dot stack groups by subject kind (not
+// topic), so a "hash" group can mix added/cracked/imported events under one
+// circle; the per-event rows inside the dialog still carry the specific verb
+// via renderEventSummary, so the group-level phrase stays kind-level.
+export function renderSubjectKindSummary(
+  subjectKind: string,
+  count: number,
+): string {
+  const noun = subjectKindNoun(subjectKind, count)
+  return `${count} ${noun}`
+}
+
+// subjectKindNoun returns the pluralised human noun for a subject kind.
+function subjectKindNoun(subjectKind: string, count: number): string {
+  const plural = count === 1 ? "" : "s"
+  switch (subjectKind) {
+    case "credential":
+      return `credential${plural}`
+    case "hash":
+      return `hash${count === 1 ? "" : "es"}`
+    case "wiki_document":
+      return `wiki document${plural}`
+    case "custom_event":
+      return `custom event${plural}`
+    case "task":
+      return `task${plural}`
+    default:
+      return `event${plural}`
   }
 }
 

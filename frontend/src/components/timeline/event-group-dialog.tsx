@@ -20,7 +20,7 @@ import {
   taskStatusAccent,
   taskStatusIcon,
 } from "./event-icons"
-import { renderGroupSummary } from "./event-summary"
+import { renderSubjectKindSummary } from "./event-summary"
 import { EventRow } from "./event-row"
 import { formatRangeLabel } from "./bucket-label"
 import { cn } from "@/lib/utils"
@@ -32,7 +32,6 @@ interface Props {
   bucketStart: string | null
   granularity: TimelineGranularity
   timezone: string
-  topic: string | null
   subjectKind: string | null
   // Mirror the bucket-level actor filter so the modal stays consistent
   // with whatever the page is filtered to.
@@ -40,11 +39,11 @@ interface Props {
   onEventSelect: (event: TimelineEventFieldsFragment) => void
 }
 
-// EventGroupDialog lists every event in one (topic, subjectKind) slice of a
-// bucket. Reuses useTimelineEventsByDay with subjectKind as the type filter
-// and a client-side topic filter to narrow further — (topic, subjectKind)
-// pairs are 1:1 in the current schema, so this rarely drops anything, but
-// the explicit filter guards against future topic additions sharing a kind.
+// EventGroupDialog lists every event of one subject kind inside a bucket,
+// matching the dot stack's per-subject-kind grouping. A "hash" group spans
+// both hash.created and hash.cracked rows; the server-side subjectKind filter
+// returns all of them, and each row's own summary line carries the specific
+// verb. Reuses useTimelineEventsByDay with subjectKind as the type filter.
 export function EventGroupDialog({
   open,
   onOpenChange,
@@ -52,12 +51,11 @@ export function EventGroupDialog({
   bucketStart,
   granularity,
   timezone,
-  topic,
   subjectKind,
   actorIds,
   onEventSelect,
 }: Props) {
-  const ready = open && !!bucketStart && !!topic && !!subjectKind
+  const ready = open && !!bucketStart && !!subjectKind
   const {
     data,
     isLoading,
@@ -76,22 +74,16 @@ export function EventGroupDialog({
 
   const events = useMemo<TimelineEventFieldsFragment[]>(
     () =>
-      data?.pages.flatMap((p) =>
-        p.timelineEventsByDay.edges
-          .map((e) => e.node)
-          .filter((n) => (topic ? n.topic === topic : true)),
-      ) ?? [],
-    [data, topic],
+      data?.pages.flatMap((p) => p.timelineEventsByDay.edges.map((e) => e.node)) ??
+      [],
+    [data],
   )
 
-  // Count is the per-page filtered total; we don't know the unfiltered
-  // server-side count, but the topic filter is essentially a no-op in
-  // practice so this is the visible count either way.
   const loadedLabel = hasNextPage
     ? `${events.length}+ shown`
     : `${events.length} event${events.length === 1 ? "" : "s"}`
 
-  const isTaskGroup = topic === "task.stage_changed"
+  const isTaskGroup = subjectKind === "task"
 
   // Task closures roll up by outcome — a green "tasks completed" header
   // misled readers when every event was actually status=unknown. For task
@@ -131,7 +123,9 @@ export function EventGroupDialog({
         ? subjectKindAccent(subjectKind)
         : ""
 
-  const title = topic ? renderGroupSummary(topic, events.length) : ""
+  const title = subjectKind
+    ? renderSubjectKindSummary(subjectKind, events.length)
+    : ""
 
   const rangeLabel = bucketStart
     ? formatRangeLabel(bucketStart, granularity, timezone)
