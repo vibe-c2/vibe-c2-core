@@ -12,7 +12,6 @@ import { CredentialsTable } from "@/components/findings/credentials-table"
 import { CreateCredentialDialog } from "@/components/findings/create-credential-dialog"
 import { EditCredentialDialog } from "@/components/findings/edit-credential-dialog"
 import { DeleteCredentialDialog } from "@/components/findings/delete-credential-dialog"
-import { CredentialDetailsDialog } from "@/components/findings/credential-details-dialog"
 import type { FindingsMode } from "@/components/findings/findings-mode"
 import { useFindingsOpsParam } from "@/hooks/use-findings-ops-param"
 
@@ -74,7 +73,6 @@ function ScopedCredentialsTab({ operationId }: { operationId: string }) {
       <CreateCredentialDialog operationId={operationId} />
       <EditCredentialDialog />
       <DeleteCredentialDialog />
-      <CredentialDetailsDialog />
     </div>
   )
 }
@@ -175,7 +173,6 @@ function GlobalCredentialsTab() {
       <CreateCredentialDialog />
       <EditCredentialDialog />
       <DeleteCredentialDialog />
-      <CredentialDetailsDialog />
     </div>
   )
 }

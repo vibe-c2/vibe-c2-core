@@ -4,6 +4,7 @@ import { useCredentialDeepLink } from "@/hooks/use-credential-deep-link"
 import { useHashDeepLink } from "@/hooks/use-hash-deep-link"
 import { usePageMetadata } from "@/hooks/use-page-metadata"
 import { useFindingsStore } from "@/stores/findings"
+import { CredentialDetailsDialog } from "@/components/findings/credential-details-dialog"
 import { CredentialsTab } from "@/components/findings/credentials-tab"
 import { HashesTab } from "@/components/findings/hashes-tab"
 import type { FindingsMode } from "@/components/findings/findings-mode"
@@ -55,6 +56,11 @@ function FindingsPageInner({ mode }: { mode: FindingsMode }) {
 
       {activeTab === "credentials" && <CredentialsTab mode={mode} />}
       {activeTab === "hashes" && <HashesTab mode={mode} />}
+
+      {/* Mounted at the page level so the credential details modal opens
+          regardless of the active tab — e.g. clicking a linked credential
+          chip from inside the hash details dialog. */}
+      <CredentialDetailsDialog />
     </div>
   )
 }

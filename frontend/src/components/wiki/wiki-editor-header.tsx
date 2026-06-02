@@ -15,6 +15,7 @@ import { Button } from "@/components/ui/button"
 import { Popover, PopoverTrigger, PopoverContent } from "@/components/ui/popover"
 import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
+import { avatarLabel } from "@/lib/avatar-label"
 import {
   useUpdateWikiDocument,
   useWikiDocumentBacklinks,
@@ -332,7 +333,7 @@ export function WikiEditorHeader({
                   }
                 >
                   <AvatarFallback className="text-[10px]">
-                    {editor.username.slice(0, 2).toUpperCase()}
+                    {avatarLabel(editor.username)}
                   </AvatarFallback>
                 </TooltipTrigger>
                 <TooltipContent>{editor.username}</TooltipContent>

@@ -1,5 +1,20 @@
 import type { HashStatus } from "@/graphql/gql/graphql"
 
+// Max characters of a raw hash value shown in scannable surfaces (table rows,
+// dialog titles, context menus). Long unbroken hashes would otherwise blow out
+// the layout, so they're clipped to a prefix with an ellipsis. Mirrors the
+// backend's hashDisplayName cap in pkg/events/logger.go.
+const HASH_LABEL_MAX = 24
+
+// truncateHashValue trims a hash value and clips it to HASH_LABEL_MAX chars,
+// appending an ellipsis when clipped. Shared by every surface that renders a
+// short hash label.
+export function truncateHashValue(value: string): string {
+  const v = value.trim()
+  if (v.length <= HASH_LABEL_MAX) return v
+  return v.slice(0, HASH_LABEL_MAX) + "…"
+}
+
 export const HASH_STATUSES: readonly HashStatus[] = [
   "NOT_PROCESSED",
   "QUEUED",

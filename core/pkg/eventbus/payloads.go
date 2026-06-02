@@ -259,18 +259,6 @@ func NewHashBulkImportedEvent(actor Actor, p HashBulkImportPayload) Event {
 	return NewEvent(TopicHashBulkImported, actor, p)
 }
 
-func NewHashCommentAddedEvent(actor Actor, p HashEventPayload) Event {
-	return NewEvent(TopicHashCommentAdded, actor, p)
-}
-
-func NewHashCommentUpdatedEvent(actor Actor, p HashEventPayload) Event {
-	return NewEvent(TopicHashCommentUpdated, actor, p)
-}
-
-func NewHashCommentRemovedEvent(actor Actor, p HashEventPayload) Event {
-	return NewEvent(TopicHashCommentRemoved, actor, p)
-}
-
 // --- Task event payloads ---
 
 // TaskEventPayload is the payload for every task topic. The bus stays

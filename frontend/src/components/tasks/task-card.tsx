@@ -18,22 +18,12 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip"
 import { cn } from "@/lib/utils"
+import { avatarLabel } from "@/lib/avatar-label"
 import type { TaskFieldsFragment } from "@/graphql/gql/graphql"
 import {
   ScoreSwatch,
   TaskStatusBadge,
 } from "@/components/tasks/task-badges"
-
-// initials grabs the first 1–2 letters of a username for the avatar
-// fallback. Keeps the avatar dense and legible without depending on user
-// profile pictures (we don't have any).
-function initials(username: string): string {
-  const trimmed = username.trim()
-  if (!trimmed) return "?"
-  const parts = trimmed.split(/[\s._-]+/).filter(Boolean)
-  if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase()
-  return (parts[0][0] + parts[1][0]).toUpperCase()
-}
 
 const MAX_VISIBLE_ASSIGNEES = 3
 
@@ -124,7 +114,7 @@ export function TaskCard({ task, draggable = true, onClick }: TaskCardProps) {
             <AvatarGroup>
               {visibleAssignees.map((u) => (
                 <Avatar key={u.id} size="sm" title={u.username}>
-                  <AvatarFallback>{initials(u.username)}</AvatarFallback>
+                  <AvatarFallback>{avatarLabel(u.username)}</AvatarFallback>
                 </Avatar>
               ))}
               {overflow > 0 && (

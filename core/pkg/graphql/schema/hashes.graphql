@@ -22,42 +22,6 @@ enum HashStatus {
 
 # --- Types ---
 
-# HashTypeSpec advertises a curated hash family operators can pick from. The
-# hashcatMode is included so the UI can show "hashcat -m 1000" alongside the
-# label. Returned by the hashTypes query; not a field on Hash itself.
-type HashTypeSpec {
-  name: String!
-  displayName: String!
-  hashcatMode: Int!
-}
-
-# Operator note attached to a hash. Same shape as CredentialComment.
-type HashComment {
-  id: ID!
-  author: User
-  text: String!
-  createdAt: String!
-  updatedAt: String!
-}
-
-# Operator-defined key/value pair for ad-hoc metadata. Same non-secret /
-# search-indexed semantics as CredentialProperty.
-type HashProperty {
-  name: String!
-  value: String!
-}
-
-# Free-form postmortem fields recorded when a hash is marked CRACKED. Operators
-# self-report; the app does not run hashcat or validate any field.
-type HashCrackingMeta {
-  tool: String!
-  wordlist: String!
-  rules: String!
-  durationSec: Int!
-  crackedBy: User
-  crackedAt: String!
-}
-
 type Hash {
   id: ID!
   operationId: ID!
@@ -66,29 +30,17 @@ type Hash {
   # this field to avoid a DB round-trip per row.
   operation: Operation!
   value: String!
-  # Canonical hash type name (e.g. "NTLM", "NETNTLMV2"). Unknown types pass
-  # through uppercased; see hashTypes query for the curated preset list.
-  hashType: String!
-  # Hashcat -m mode. 0 for unknown / not applicable types.
-  hashcatMode: Int!
-  username: String!
-  domain: String!
   status: HashStatus!
-  source: String!
+  # Free-text operator note. Single field, not a thread — kept deliberately
+  # simple. Empty string when unset.
+  comment: String!
   tags: [String!]!
-  # Linked credential populated once a hash is cracked via markHashCracked.
-  # Null while pending. The credential field resolver does a DB lookup; skip
-  # it on list payloads if you only need the id.
+  # Linked credential populated once a hash is cracked via markHashCracked, or
+  # set/cleared manually via updateHash. Null while unlinked. The credential
+  # field resolver does a DB lookup; skip it on list payloads if you only need
+  # the id.
   credentialId: ID
   credential: Credential
-  # Postmortem details recorded on the markHashCracked call. Null for any
-  # hash that has not yet been cracked.
-  crackingMeta: HashCrackingMeta
-  properties: [HashProperty!]!
-  comments: [HashComment!]!
-  # True when the caller can moderate any comment on this hash regardless of
-  # authorship. Same rule as Credential.viewerCanModerateComments.
-  viewerCanModerateComments: Boolean!
   createdBy: User
   createdAt: String!
   updatedAt: String!
@@ -122,20 +74,12 @@ type BulkImportHashesResult {
 
 # --- Inputs ---
 
-input HashPropertyInput {
-  name: String!
-  value: String!
-}
-
 input CreateHashInput {
   value: String!
-  hashType: String!
-  username: String
-  domain: String
-  source: String
   status: HashStatus
+  comment: String
   tags: [String!]
-  properties: [HashPropertyInput!]
+  credentialId: ID
 }
 
 # UpdateHashInput is the general-purpose mutation surface. Transitioning the
@@ -143,51 +87,32 @@ input CreateHashInput {
 # enforces the credential link.
 input UpdateHashInput {
   value: String
-  hashType: String
-  username: String
-  domain: String
-  source: String
   status: HashStatus
+  comment: String
   tags: [String!]
-  properties: [HashPropertyInput!]
+  # credentialId semantics: omit to leave the link unchanged; pass a UUID to
+  # set or replace; pass an empty string to clear.
+  credentialId: ID
 }
 
-# BulkImportHashesInput accepts a raw paste plus the format hint that drives
-# parsing. format=RAW expects one hash per line. SECRETSDUMP / PWDUMP parse
-# the colon-separated dump formats and pull out username + NT hash. All
-# parsed rows take the same default status, hash type override, source, and
-# tags applied at the input level — per-row metadata can be edited after.
+# BulkImportHashesInput accepts a raw paste of hash values (one per line) plus
+# optional tags and a comment applied to every imported row.
 input BulkImportHashesInput {
   text: String!
-  format: BulkHashFormat!
-  # Default hash type for RAW input. Ignored for SECRETSDUMP/PWDUMP which
-  # always produce NTLM rows.
-  defaultHashType: String
-  source: String
   tags: [String!]
-}
-
-enum BulkHashFormat {
-  RAW
-  SECRETSDUMP
-  PWDUMP
+  # Free-text operator note copied onto every imported hash. Empty/omitted
+  # leaves each row's comment blank.
+  comment: String
 }
 
 # Used by markHashCracked. Exactly one of credentialId or newCredential must
 # be set — the resolver rejects ambiguous / missing combinations with a
 # friendly error.
 input MarkHashCrackedInput {
-  plaintext: String!
   # Link to an existing credential in the same operation.
   credentialId: ID
-  # Or create a new credential inline. Type defaults to PASSWORD; username
-  # pre-fills from the hash if omitted.
+  # Or create a new credential inline.
   newCredential: CreateCredentialInput
-  # Optional postmortem fields. All free-form.
-  tool: String
-  wordlist: String
-  rules: String
-  durationSec: Int
 }
 
 # --- Queries ---
@@ -200,7 +125,6 @@ extend type Query {
     operationId: ID!
     search: String
     statuses: [HashStatus!]
-    hashTypes: [String!]
     tags: [String!]
     hasCredential: Boolean
     first: Int = 20
@@ -220,7 +144,6 @@ extend type Query {
     operationIds: [ID!]
     search: String
     statuses: [HashStatus!]
-    hashTypes: [String!]
     tags: [String!]
     hasCredential: Boolean
     first: Int = 20
@@ -230,13 +153,6 @@ extend type Query {
   ): HashConnection!
 
   myHashTags(operationIds: [ID!]): [String!]!
-
-  # Curated hash-type preset list used by the UI type picker and the bulk
-  # import format hint. Static — does not require auth context, but kept
-  # gated to authenticated users via the operation:member directive so the
-  # surface area matches sibling queries.
-  hashTypes: [HashTypeSpec!]!
-    @hasPermission(permission: "operation:member")
 }
 
 # --- Mutations ---
@@ -247,35 +163,26 @@ extend type Mutation {
 
   # updateHash is the general-purpose modifier. Transitioning to CRACKED is
   # rejected here — that path goes through markHashCracked so the credential
-  # link is enforced.
+  # link is always set together with the status.
   updateHash(id: ID!, input: UpdateHashInput!): Hash!
     @hasPermission(permission: "operation:member")
 
   deleteHash(id: ID!): Boolean!
     @hasPermission(permission: "operation:member")
 
-  # bulkImportHashes parses the supplied text per `format`, dedupes against
-  # existing hashes in the operation, and inserts the survivors. Emits ONE
-  # summary timeline event regardless of batch size. Capped at 5000 rows per
-  # call to keep request timeouts predictable.
+  # bulkImportHashes parses the supplied text as one hash value per line,
+  # dedupes against existing hashes in the operation, and inserts the
+  # survivors. Emits ONE summary timeline event regardless of batch size.
+  # Capped at 5000 rows per call to keep request timeouts predictable.
   bulkImportHashes(operationId: ID!, input: BulkImportHashesInput!): BulkImportHashesResult!
     @hasPermission(permission: "operation:member")
 
   # markHashCracked is the single path that moves a hash into the CRACKED
   # state. Either links to an existing credential or creates a new one
-  # inline, then stamps status + crackingMeta in one atomic-from-the-caller's
-  # point-of-view operation (credential first, hash second — see the
-  # resolver comment for the rationale).
+  # inline, then stamps status + credentialId in one atomic-from-the-caller's
+  # point-of-view operation (credential first, hash second — see the resolver
+  # comment for the rationale).
   markHashCracked(id: ID!, input: MarkHashCrackedInput!): Hash!
-    @hasPermission(permission: "operation:member")
-
-  addHashComment(hashId: ID!, text: String!): Hash!
-    @hasPermission(permission: "operation:member")
-
-  updateHashComment(hashId: ID!, commentId: ID!, text: String!): Hash!
-    @hasPermission(permission: "operation:member")
-
-  deleteHashComment(hashId: ID!, commentId: ID!): Hash!
     @hasPermission(permission: "operation:member")
 }
 

@@ -31,6 +31,7 @@ import { useSessionStore } from "@/stores/sessions"
 import { useAPIKeyStore } from "@/stores/api-keys"
 import { MySessionsDialog } from "@/components/sessions/my-sessions-dialog"
 import { MyAPIKeyDialog } from "@/components/api-keys/my-api-key-dialog"
+import { avatarLabel } from "@/lib/avatar-label"
 
 export function NavUser({
   user,
@@ -53,12 +54,7 @@ export function NavUser({
     navigate("/login", { replace: true })
   }
 
-  const initials = user.name
-    .split(" ")
-    .map((n) => n[0])
-    .join("")
-    .toUpperCase()
-    .slice(0, 2)
+  const initials = avatarLabel(user.name)
 
   return (
     <>

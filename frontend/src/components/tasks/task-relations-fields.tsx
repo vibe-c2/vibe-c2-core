@@ -3,6 +3,7 @@ import { FileTextIcon, KeyRoundIcon, PlusIcon, UserIcon } from "lucide-react"
 import { useDebounced } from "@/hooks/use-debounced"
 import { Label } from "@/components/ui/label"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
+import { avatarLabel } from "@/lib/avatar-label"
 import { type SuggestionOption } from "@/components/ui/suggestion-input"
 import { SuggestionPopover } from "@/components/ui/suggestion-popover"
 import { useOperation } from "@/graphql/hooks/operations"
@@ -60,13 +61,6 @@ export function TaskRelationsFields({
 // small (a dozen at most) and the operation detail query is already cached
 // from the parent operation page. Avoids a second autocomplete round-trip.
 
-function initials(name: string): string {
-  const t = name.trim()
-  if (!t) return "?"
-  const parts = t.split(/[\s._-]+/).filter(Boolean)
-  if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase()
-  return (parts[0][0] + parts[1][0]).toUpperCase()
-}
 
 function AssigneePicker({
   operationId,
@@ -103,7 +97,7 @@ function AssigneePicker({
         hint: m.role.toLowerCase(),
         icon: (
           <Avatar size="sm">
-            <AvatarFallback>{initials(m.user.username)}</AvatarFallback>
+            <AvatarFallback>{avatarLabel(m.user.username)}</AvatarFallback>
           </Avatar>
         ),
       }))

@@ -9,64 +9,34 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog"
 import { Textarea } from "@/components/ui/textarea"
-import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select"
 import { useHashStore } from "@/stores/hashes"
-import { useBulkImportHashes, useHashTypes } from "@/graphql/hooks/hashes"
-import type { BulkHashFormat } from "@/graphql/gql/graphql"
-import { parseTags } from "@/components/findings/parse-tags"
+import { useBulkImportHashes, useHashTags } from "@/graphql/hooks/hashes"
+import { TagComboboxInput } from "@/components/findings/tag-combobox-input"
 
 interface BulkImportDialogProps {
   operationId: string
 }
 
-const FORMAT_OPTIONS: { value: BulkHashFormat; label: string; help: string }[] =
-  [
-    {
-      value: "RAW",
-      label: "Raw (one hash per line)",
-      help: "Each non-empty line becomes a hash of the default type below.",
-    },
-    {
-      value: "SECRETSDUMP",
-      label: "Impacket secretsdump",
-      help: "user:rid:lmhash:nthash::: — NT hashes only, LM dropped.",
-    },
-    {
-      value: "PWDUMP",
-      label: "pwdump format",
-      help: "Same field layout as secretsdump. NT hashes only.",
-    },
-  ]
-
 export function BulkImportHashesDialog({ operationId }: BulkImportDialogProps) {
   const { bulkImportDialogOpen, closeBulkImportDialog } = useHashStore()
   const bulkImport = useBulkImportHashes()
-  const types = useHashTypes()
 
   const [text, setText] = useState("")
-  const [format, setFormat] = useState<BulkHashFormat>("SECRETSDUMP")
-  const [defaultType, setDefaultType] = useState("NTLM")
-  const [source, setSource] = useState("")
-  const [tagsRaw, setTagsRaw] = useState("")
+  const [tags, setTags] = useState<string[]>([])
+  const [comment, setComment] = useState("")
   const [error, setError] = useState<string | null>(null)
   const [result, setResult] = useState<{ added: number; skipped: number } | null>(
     null,
   )
 
+  const tagsQuery = useHashTags(operationId)
+  const tagSuggestions = tagsQuery.data?.hashTags ?? []
+
   function reset() {
     setText("")
-    setFormat("SECRETSDUMP")
-    setDefaultType("NTLM")
-    setSource("")
-    setTagsRaw("")
+    setTags([])
+    setComment("")
     setError(null)
     setResult(null)
   }
@@ -85,11 +55,8 @@ export function BulkImportHashesDialog({ operationId }: BulkImportDialogProps) {
         operationId,
         input: {
           text: trimmed,
-          format,
-          // Only meaningful for RAW; backend ignores it for the structured formats.
-          defaultHashType: format === "RAW" ? defaultType : null,
-          source: source.trim() || null,
-          tags: parseTags(tagsRaw),
+          tags,
+          comment: comment.trim() || null,
         },
       })
       setResult({
@@ -101,8 +68,6 @@ export function BulkImportHashesDialog({ operationId }: BulkImportDialogProps) {
       setError(err instanceof Error ? err.message : "Bulk import failed")
     }
   }
-
-  const formatHelp = FORMAT_OPTIONS.find((o) => o.value === format)?.help
 
   return (
     <Dialog
@@ -118,8 +83,8 @@ export function BulkImportHashesDialog({ operationId }: BulkImportDialogProps) {
         <DialogHeader>
           <DialogTitle>Bulk import hashes</DialogTitle>
           <DialogDescription>
-            Paste many hashes at once. Duplicates within the operation are
-            silently skipped.
+            One hash per line. Duplicates within the operation are silently
+            skipped.
           </DialogDescription>
         </DialogHeader>
         <form onSubmit={handleSubmit} autoComplete="off" className="space-y-3">
@@ -135,49 +100,6 @@ export function BulkImportHashesDialog({ operationId }: BulkImportDialogProps) {
               {result.skipped === 1 ? "" : "s"}.
             </div>
           )}
-          <div className="grid gap-3 sm:grid-cols-2">
-            <div className="grid gap-1.5">
-              <Label>Format</Label>
-              <Select
-                value={format}
-                onValueChange={(v) => setFormat(v as BulkHashFormat)}
-              >
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {FORMAT_OPTIONS.map((o) => (
-                    <SelectItem key={o.value} value={o.value}>
-                      {o.label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              {formatHelp && (
-                <p className="text-xs text-muted-foreground">{formatHelp}</p>
-              )}
-            </div>
-            {format === "RAW" && (
-              <div className="grid gap-1.5">
-                <Label>Default hash type</Label>
-                <Select
-                  value={defaultType}
-                  onValueChange={(v) => setDefaultType(v ?? "")}
-                >
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {types.data?.hashTypes.map((t) => (
-                      <SelectItem key={t.name} value={t.name}>
-                        {t.displayName}
-                      </SelectItem>
-                    )) ?? null}
-                  </SelectContent>
-                </Select>
-              </div>
-            )}
-          </div>
           <div className="grid gap-1.5">
             <Label htmlFor="bulk-hash-text">Paste</Label>
             <Textarea
@@ -187,32 +109,30 @@ export function BulkImportHashesDialog({ operationId }: BulkImportDialogProps) {
               rows={10}
               className="font-mono text-xs"
               placeholder={
-                format === "RAW"
-                  ? "31d6cfe0d16ae931b73c59d7e0c089c0\n8846f7eaee8fb117ad06bdd830b7586c"
-                  : "Administrator:500:aad3b435...:31d6cfe0...:::"
+                "31d6cfe0d16ae931b73c59d7e0c089c0\n8846f7eaee8fb117ad06bdd830b7586c"
               }
               required
             />
           </div>
-          <div className="grid gap-3 sm:grid-cols-2">
-            <div className="grid gap-1.5">
-              <Label htmlFor="bulk-hash-source">Source</Label>
-              <Input
-                id="bulk-hash-source"
-                value={source}
-                onChange={(e) => setSource(e.target.value)}
-                placeholder="secretsdump on DC01"
-              />
-            </div>
-            <div className="grid gap-1.5">
-              <Label htmlFor="bulk-hash-tags">Tags (comma-separated)</Label>
-              <Input
-                id="bulk-hash-tags"
-                value={tagsRaw}
-                onChange={(e) => setTagsRaw(e.target.value)}
-                placeholder="dc01, ntlm"
-              />
-            </div>
+          <div className="grid gap-1.5">
+            <Label htmlFor="bulk-hash-comment">Comment</Label>
+            <Textarea
+              id="bulk-hash-comment"
+              value={comment}
+              onChange={(e) => setComment(e.target.value)}
+              rows={2}
+              placeholder="Applied to every imported hash (source, context, etc.)"
+            />
+          </div>
+          <div className="grid gap-1.5">
+            <Label htmlFor="bulk-hash-tags-input">Tags</Label>
+            <TagComboboxInput
+              value={tags}
+              onChange={setTags}
+              suggestions={tagSuggestions}
+              loading={tagsQuery.isLoading}
+              inputId="bulk-hash-tags-input"
+            />
           </div>
           <DialogFooter>
             {result ? (
@@ -239,4 +159,3 @@ export function BulkImportHashesDialog({ operationId }: BulkImportDialogProps) {
     </Dialog>
   )
 }
-

@@ -163,8 +163,8 @@ func (l *Logger) toRow(ctx context.Context, e eventbus.Event) (*models.Operation
 }
 
 // toHashRow translates a hash.created event into a single timeline row.
-// SubjectName is the hash username if known, otherwise the hash type — gives
-// the timeline card something scannable without showing the raw hash string.
+// SubjectName is the truncated hash value (see hashDisplayName) — enough to
+// keep the timeline card scannable without rendering the full hash string.
 func (l *Logger) toHashRow(ctx context.Context, e eventbus.Event, actorType models.EventActorType, actorID *uuid.UUID) (*models.OperationEvent, error) {
 	p, ok := e.Payload.(eventbus.HashEventPayload)
 	if !ok {
@@ -263,21 +263,16 @@ func (l *Logger) toHashCrackedRow(ctx context.Context, e eventbus.Event, actorTy
 	}, nil
 }
 
-// hashDisplayName produces the SubjectName snapshot for a hash row. Prefers a
-// "domain\user" form if available, falls back to bare username, then to the
-// hash type. Never the raw hash value — the timeline card stays scannable
-// even for long hashes.
+// hashDisplayName produces the SubjectName snapshot for a hash row. Returns
+// a truncated hash value — the timeline card stays scannable even for long
+// hashes by capping at a short prefix.
 func hashDisplayName(h models.Hash) string {
-	if h.Username != "" {
-		if h.Domain != "" {
-			return h.Domain + `\` + h.Username
-		}
-		return h.Username
+	v := h.Value
+	const maxLen = 24
+	if len(v) > maxLen {
+		return v[:maxLen] + "…"
 	}
-	if h.HashType != "" {
-		return h.HashType
-	}
-	return ""
+	return v
 }
 
 // toTaskRow translates a task.stage_changed bus event into a row, but only

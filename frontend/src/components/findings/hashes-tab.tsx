@@ -10,7 +10,6 @@ import { useHashStore } from "@/stores/hashes"
 import { HashesToolbar } from "@/components/findings/hashes-toolbar"
 import { HashesTable } from "@/components/findings/hashes-table"
 import { CreateHashDialog } from "@/components/findings/create-hash-dialog"
-import { EditHashDialog } from "@/components/findings/edit-hash-dialog"
 import { DeleteHashDialog } from "@/components/findings/delete-hash-dialog"
 import { HashDetailsDialog } from "@/components/findings/hash-details-dialog"
 import { BulkImportHashesDialog } from "@/components/findings/bulk-import-hashes-dialog"
@@ -41,7 +40,6 @@ function ScopedHashesTab({ operationId }: { operationId: string }) {
       operationId,
       search: filters.search.trim() || null,
       statuses: filters.statuses.length > 0 ? filters.statuses : null,
-      hashTypes: filters.hashTypes.length > 0 ? filters.hashTypes : null,
       tags: filters.tags,
       hasCredential: filters.hasCredential,
     })
@@ -64,7 +62,6 @@ function ScopedHashesTab({ operationId }: { operationId: string }) {
       />
 
       <CreateHashDialog operationId={operationId} />
-      <EditHashDialog />
       <DeleteHashDialog />
       <HashDetailsDialog />
       <BulkImportHashesDialog operationId={operationId} />
@@ -88,7 +85,6 @@ function GlobalHashesTab() {
         operationIds,
         search: filters.search.trim() || null,
         statuses: filters.statuses.length > 0 ? filters.statuses : null,
-        hashTypes: filters.hashTypes.length > 0 ? filters.hashTypes : null,
         tags: filters.tags,
         hasCredential: filters.hasCredential,
       },
@@ -140,10 +136,9 @@ function GlobalHashesTab() {
       )}
 
       {/* CreateHashDialog without an operationId switches into "pick before
-          save" mode (inline op picker). EditHashDialog / DeleteHashDialog /
-          HashDetailsDialog read the row's operationId from the cached node. */}
+          save" mode (inline op picker). DeleteHashDialog / HashDetailsDialog
+          read the row's operationId from the cached node. */}
       <CreateHashDialog />
-      <EditHashDialog />
       <DeleteHashDialog />
       <HashDetailsDialog />
       <MarkHashCrackedDialog />

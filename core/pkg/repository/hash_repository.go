@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"regexp"
-	"time"
 
 	"github.com/google/uuid"
 	opts "github.com/qiniu/qmgo/options"
@@ -27,15 +26,10 @@ var ErrHashDuplicate = errors.New("hash already exists in this operation")
 // HashFilter bundles optional list filters for hashes. Fields are independent
 // (AND-combined at the Mongo level) and mirror CredentialFilter.
 type HashFilter struct {
-	// Search matches case-insensitively against value, username, source, and
-	// property values. Property names are excluded — same reasoning as
-	// CredentialFilter.Search.
+	// Search matches case-insensitively against value and comment.
 	Search string
 	// Statuses, if non-empty, restricts to hashes whose status is in the set.
 	Statuses []models.HashStatus
-	// HashTypes, if non-empty, restricts to hashes whose canonical type is in
-	// the set. Matches the stored HashType field (already normalised).
-	HashTypes []string
 	// Tags, if non-empty, requires every listed tag to be present ($all).
 	Tags []string
 	// HasCredential: nil = both, true = linked credential only, false = unlinked only.
@@ -48,10 +42,6 @@ type IHashRepository interface {
 	// BulkCreate inserts many hashes in one round-trip. Returns the inserted
 	// rows (with _id populated) and the count of rows skipped due to per-op
 	// duplicate values. An empty input slice is a no-op (nil, 0, nil).
-	// `inserted` carries the rows that actually landed (in input order), with
-	// _id and DefaultField timestamps populated by qmgo on success. Duplicates
-	// counted in `skipped` are dropped from the returned slice. A non-dup error
-	// aborts the batch and returns whatever made it in before the failure.
 	BulkCreate(ctx context.Context, hashes []*models.Hash) (inserted []*models.Hash, skipped int, err error)
 	FindByID(ctx context.Context, id uuid.UUID) (models.Hash, error)
 	FindByOperationIDWithCursor(ctx context.Context, opID uuid.UUID, filter HashFilter, cursor *pagination.Cursor, limit int64, forward bool) ([]models.Hash, error)
@@ -66,9 +56,8 @@ type IHashRepository interface {
 
 	// FindByCredentialID returns every hash linked to the given credential.
 	// Used by the Credential.sourceHashes field resolver — one credential may
-	// have been cracked from several hashes (e.g. NTLM + NetNTLMv2 for the
-	// same user). Bounded by per-operation indexing; not paginated because
-	// the realistic upper bound is tiny.
+	// have been cracked from several hashes. Bounded by per-operation
+	// indexing; not paginated because the realistic upper bound is tiny.
 	FindByCredentialID(ctx context.Context, opID uuid.UUID, credentialID uuid.UUID) ([]models.Hash, error)
 
 	Update(ctx context.Context, h *models.Hash, updates map[string]interface{}) error
@@ -77,14 +66,8 @@ type IHashRepository interface {
 	// ClearCredentialReference removes the credential link from every hash
 	// pointing at the given credentialID inside the operation. Called when a
 	// Credential is deleted so the source-hash chip stops pointing at a dead
-	// row. Best-effort cleanup — a failure here leaves a stale pointer that
-	// the Credential field resolver tolerates.
+	// row.
 	ClearCredentialReference(ctx context.Context, opID uuid.UUID, credentialID uuid.UUID) error
-
-	// Embedded comment operations — same shape as ICredentialRepository.
-	AddComment(ctx context.Context, hashID uuid.UUID, comment models.HashComment) error
-	UpdateComment(ctx context.Context, hashID, commentID uuid.UUID, text string, updatedAt time.Time) error
-	RemoveComment(ctx context.Context, hashID, commentID uuid.UUID) error
 }
 
 type hashRepository struct {
@@ -100,7 +83,6 @@ func NewHashRepository(db database.Database) IHashRepository {
 		// Unique per-operation hash value — the dedupe guarantee for bulk import.
 		{Key: []string{"operation_id", "value"}, IndexOptions: new(options.IndexOptions).SetUnique(true)},
 		{Key: []string{"operation_id", "status"}},
-		{Key: []string{"operation_id", "hash_type"}},
 		{Key: []string{"operation_id", "credential_id"}},
 		{Key: []string{"operation_id", "tags"}},
 		{Key: []string{"operation_id", "-createAt", "-_id"}}, // Supports cursor-based pagination
@@ -118,11 +100,7 @@ func (r *hashRepository) Create(ctx context.Context, h *models.Hash) error {
 }
 
 // BulkCreate inserts each hash one-by-one rather than via InsertMany. The
-// per-row insert lets us count duplicates without aborting the whole batch
-// (InsertMany stops on the first error under default ordered=true; switching
-// to unordered would still return only one error wrapper for the whole batch
-// and we'd have to parse the bulk write exception to get per-row results).
-// Pet-scale: even a 5000-row paste finishes well inside a request timeout.
+// per-row insert lets us count duplicates without aborting the whole batch.
 func (r *hashRepository) BulkCreate(ctx context.Context, hashes []*models.Hash) ([]*models.Hash, int, error) {
 	if len(hashes) == 0 {
 		return nil, 0, nil
@@ -137,8 +115,6 @@ func (r *hashRepository) BulkCreate(ctx context.Context, hashes []*models.Hash) 
 			}
 			return inserted, skipped, err
 		}
-		// qmgo's InsertOne populates _id and DefaultField timestamps on the
-		// passed struct, so `h` is now the full row — no re-fetch needed.
 		inserted = append(inserted, h)
 	}
 	return inserted, skipped, nil
@@ -267,36 +243,9 @@ func (r *hashRepository) DeleteByOperationID(ctx context.Context, operationID uu
 func (r *hashRepository) ClearCredentialReference(ctx context.Context, opID uuid.UUID, credentialID uuid.UUID) error {
 	_, err := r.coll.UpdateAll(ctx,
 		bson.M{"operation_id": opID, "credential_id": credentialID},
-		bson.M{"$unset": bson.M{"credential_id": "", "cracking_meta": ""}},
+		bson.M{"$unset": bson.M{"credential_id": ""}},
 	)
 	return err
-}
-
-func (r *hashRepository) AddComment(ctx context.Context, hashID uuid.UUID, comment models.HashComment) error {
-	return r.coll.UpdateOne(ctx,
-		bson.M{"hash_id": hashID},
-		bson.M{"$push": bson.M{"comments": comment}},
-	)
-}
-
-func (r *hashRepository) UpdateComment(ctx context.Context, hashID, commentID uuid.UUID, text string, updatedAt time.Time) error {
-	return r.coll.UpdateOne(ctx,
-		bson.M{
-			"hash_id":             hashID,
-			"comments.comment_id": commentID,
-		},
-		bson.M{"$set": bson.M{
-			"comments.$.text":       text,
-			"comments.$.updated_at": updatedAt,
-		}},
-	)
-}
-
-func (r *hashRepository) RemoveComment(ctx context.Context, hashID, commentID uuid.UUID) error {
-	return r.coll.UpdateOne(ctx,
-		bson.M{"hash_id": hashID},
-		bson.M{"$pull": bson.M{"comments": bson.M{"comment_id": commentID}}},
-	)
 }
 
 func buildHashFilter(opID uuid.UUID, f HashFilter) bson.M {
@@ -310,9 +259,6 @@ func buildHashFilterMulti(opIDs []uuid.UUID, f HashFilter) bson.M {
 func applyHashFilter(q bson.M, f HashFilter) bson.M {
 	if len(f.Statuses) > 0 {
 		q["status"] = bson.M{"$in": f.Statuses}
-	}
-	if len(f.HashTypes) > 0 {
-		q["hash_type"] = bson.M{"$in": f.HashTypes}
 	}
 	if len(f.Tags) > 0 {
 		q["tags"] = bson.M{"$all": f.Tags}
@@ -332,9 +278,7 @@ func applyHashFilter(q bson.M, f HashFilter) bson.M {
 		rx := bson.M{"$regex": escaped, "$options": "i"}
 		q["$or"] = bson.A{
 			bson.M{"value": rx},
-			bson.M{"username": rx},
-			bson.M{"source": rx},
-			bson.M{"properties.value": rx},
+			bson.M{"comment": rx},
 		}
 	}
 	return q

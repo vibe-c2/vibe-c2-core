@@ -358,9 +358,6 @@ var hashTopics = []eventbus.Topic{
 	eventbus.TopicHashDeleted,
 	eventbus.TopicHashCracked,
 	eventbus.TopicHashBulkImported,
-	eventbus.TopicHashCommentAdded,
-	eventbus.TopicHashCommentUpdated,
-	eventbus.TopicHashCommentRemoved,
 }
 
 // toHashEvent converts an event bus Event to a GraphQL HashEvent. Cracked and

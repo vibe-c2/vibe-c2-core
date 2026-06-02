@@ -32,6 +32,7 @@ import {
   useCredentialSourceHashes,
 } from "@/graphql/hooks/credentials"
 import { credentialTypeLabel } from "@/components/findings/credential-type-utils"
+import { truncateHashValue } from "@/components/findings/hash-status-utils"
 import { CredentialBacklinkList } from "@/components/findings/credential-backlink-list"
 import { buildCredentialShareUrl } from "@/components/findings/credential-share-link"
 import type { CredentialCommentFieldsFragment } from "@/graphql/gql/graphql"
@@ -562,11 +563,7 @@ function CredentialSourceHashesList({ credentialId }: { credentialId: string }) 
       </h3>
       <div className="flex flex-wrap gap-2">
         {hashes.map((h) => {
-          const label = h.username
-            ? h.domain
-              ? `${h.domain}\\${h.username}`
-              : h.username
-            : h.hashType
+          const label = truncateHashValue(h.value)
           return (
             <button
               key={h.id}
@@ -578,8 +575,8 @@ function CredentialSourceHashesList({ credentialId }: { credentialId: string }) 
               className="inline-flex items-center gap-1.5 rounded-md border bg-card px-2 py-1 text-xs hover:bg-muted"
               title={h.value}
             >
-              <span className="font-medium">{label}</span>
-              <span className="text-muted-foreground">{h.hashType}</span>
+              <span className="font-mono">{label}</span>
+              <span className="text-muted-foreground">{h.status}</span>
             </button>
           )
         })}

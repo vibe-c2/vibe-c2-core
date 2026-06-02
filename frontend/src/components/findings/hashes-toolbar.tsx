@@ -1,10 +1,5 @@
 import { useMemo } from "react"
-import {
-  PlusIcon,
-  FilterIcon,
-  UploadIcon,
-  XIcon,
-} from "lucide-react"
+import { PlusIcon, FilterIcon, UploadIcon } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Checkbox } from "@/components/ui/checkbox"
@@ -21,12 +16,9 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover"
 import { SearchInput } from "@/components/ui/search-input"
+import { TagFilterPanel } from "@/components/findings/tag-filter-panel"
 import { useHashStore } from "@/stores/hashes"
-import {
-  useHashTags,
-  useMyHashTags,
-  useHashTypes,
-} from "@/graphql/hooks/hashes"
+import { useHashTags, useMyHashTags } from "@/graphql/hooks/hashes"
 import {
   HASH_STATUSES,
   hashStatusLabel,
@@ -41,6 +33,12 @@ const HAS_CRED_VALUES = {
   uncracked: "__uncracked__",
 } as const
 
+const HAS_CRED_LABELS: Record<string, string> = {
+  [HAS_CRED_VALUES.all]: "All hashes",
+  [HAS_CRED_VALUES.cracked]: "Cracked only",
+  [HAS_CRED_VALUES.uncracked]: "Uncracked only",
+}
+
 interface HashesToolbarProps {
   mode: FindingsMode
 }
@@ -49,7 +47,6 @@ export function HashesToolbar({ mode }: HashesToolbarProps) {
   const filters = useHashStore((s) => s.filters)
   const setSearch = useHashStore((s) => s.setSearch)
   const setStatuses = useHashStore((s) => s.setStatuses)
-  const setHashTypes = useHashStore((s) => s.setHashTypes)
   const setHasCredential = useHashStore((s) => s.setHasCredential)
   const toggleTag = useHashStore((s) => s.toggleTag)
   const setTags = useHashStore((s) => s.setTags)
@@ -66,9 +63,6 @@ export function HashesToolbar({ mode }: HashesToolbarProps) {
     if (!tagsData) return []
     return "hashTags" in tagsData ? tagsData.hashTags : tagsData.myHashTags
   }, [tagsData])
-
-  const types = useHashTypes()
-  const typeSpecs = types.data?.hashTypes ?? []
 
   // Map the tri-state hasCredential filter to / from the single-select value.
   const hasCredValue =
@@ -90,7 +84,7 @@ export function HashesToolbar({ mode }: HashesToolbarProps) {
       <SearchInput
         value={filters.search}
         onValueChange={setSearch}
-        placeholder="Search hash value, username, source..."
+        placeholder="Search hash value or comment..."
         className="relative w-full max-w-md"
       />
 
@@ -149,56 +143,9 @@ export function HashesToolbar({ mode }: HashesToolbarProps) {
         </PopoverContent>
       </Popover>
 
-      <Popover>
-        <PopoverTrigger
-          render={
-            <Button variant="outline" size="sm">
-              <FilterIcon className="size-4" />
-              Type
-              {filters.hashTypes.length > 0 && (
-                <Badge variant="secondary" className="ml-1">
-                  {filters.hashTypes.length}
-                </Badge>
-              )}
-            </Button>
-          }
-        />
-        <PopoverContent align="start" className="w-64 max-h-72 overflow-y-auto p-1">
-          {typeSpecs.length === 0 ? (
-            <p className="px-2 py-3 text-xs text-muted-foreground">Loading…</p>
-          ) : (
-            typeSpecs.map((t) => {
-              const active = filters.hashTypes.includes(t.name)
-              return (
-                <button
-                  key={t.name}
-                  type="button"
-                  onClick={() => {
-                    setHashTypes(
-                      active
-                        ? filters.hashTypes.filter((x) => x !== t.name)
-                        : [...filters.hashTypes, t.name],
-                    )
-                  }}
-                  className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm hover:bg-accent"
-                >
-                  <Checkbox
-                    checked={active}
-                    tabIndex={-1}
-                    aria-hidden
-                    className="pointer-events-none"
-                  />
-                  <span className="truncate">{t.displayName}</span>
-                </button>
-              )
-            })
-          )}
-        </PopoverContent>
-      </Popover>
-
       <Select value={hasCredValue} onValueChange={onHasCredChange}>
         <SelectTrigger className="min-w-[12rem]">
-          <SelectValue />
+          <SelectValue>{(value: string) => HAS_CRED_LABELS[value] ?? value}</SelectValue>
         </SelectTrigger>
         <SelectContent>
           <SelectItem value={HAS_CRED_VALUES.all}>All hashes</SelectItem>
@@ -221,44 +168,14 @@ export function HashesToolbar({ mode }: HashesToolbarProps) {
             </Button>
           }
         />
-        <PopoverContent align="start" className="w-64 max-h-72 overflow-y-auto p-1">
-          {availableTags.length === 0 ? (
-            <p className="px-2 py-3 text-xs text-muted-foreground">
-              No tags yet.
-            </p>
-          ) : (
-            availableTags.map((tag: string) => {
-              const active = filters.tags.includes(tag)
-              return (
-                <button
-                  key={tag}
-                  type="button"
-                  onClick={() => toggleTag(tag)}
-                  className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm hover:bg-accent"
-                >
-                  <Checkbox
-                    checked={active}
-                    tabIndex={-1}
-                    aria-hidden
-                    className="pointer-events-none"
-                  />
-                  <span className="truncate">{tag}</span>
-                </button>
-              )
-            })
-          )}
-          {filters.tags.length > 0 && (
-            <div className="border-t pt-1">
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => setTags([])}
-                className="w-full justify-start text-xs"
-              >
-                <XIcon className="size-3" /> Clear
-              </Button>
-            </div>
-          )}
+        <PopoverContent align="start" className="w-72 p-0">
+          <TagFilterPanel
+            availableTags={availableTags}
+            selectedTags={filters.tags}
+            onToggle={toggleTag}
+            onClear={() => setTags([])}
+            itemNoun="hashes"
+          />
         </PopoverContent>
       </Popover>
 

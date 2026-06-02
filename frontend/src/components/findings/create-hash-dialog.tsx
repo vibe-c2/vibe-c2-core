@@ -8,23 +8,19 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog"
-import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
 import { Label } from "@/components/ui/label"
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select"
 import { useHashStore } from "@/stores/hashes"
-import { useCreateHash, useHashTypes } from "@/graphql/hooks/hashes"
+import {
+  useCreateHash,
+  useHashTags,
+  useMyHashTags,
+} from "@/graphql/hooks/hashes"
 import {
   OperationSinglePicker,
   type OperationSinglePickerValue,
 } from "@/components/findings/operation-single-select"
-import { parseTags } from "@/components/findings/parse-tags"
+import { TagComboboxInput } from "@/components/findings/tag-combobox-input"
 
 interface CreateHashDialogProps {
   // Scoped mode: parent fixes the target operation. Global mode: omit so the
@@ -34,26 +30,19 @@ interface CreateHashDialogProps {
 
 interface HashFormValues {
   value: string
-  hashType: string
-  username: string
-  domain: string
-  source: string
-  tags: string
+  comment: string
+  tags: string[]
 }
 
 const emptyValues: HashFormValues = {
   value: "",
-  hashType: "NTLM",
-  username: "",
-  domain: "",
-  source: "",
-  tags: "",
+  comment: "",
+  tags: [],
 }
 
 export function CreateHashDialog({ operationId }: CreateHashDialogProps) {
   const { createDialogOpen, closeCreateDialog } = useHashStore()
   const createHash = useCreateHash()
-  const types = useHashTypes()
   const [values, setValues] = useState<HashFormValues>(emptyValues)
   const [error, setError] = useState<string | null>(null)
   const [pickedOp, setPickedOp] =
@@ -61,6 +50,20 @@ export function CreateHashDialog({ operationId }: CreateHashDialogProps) {
 
   const isGlobalMode = operationId === undefined
   const targetOpId = operationId ?? pickedOp?.id ?? null
+
+  // Tag suggestions: scoped to the target op when known; otherwise fall back to
+  // the caller's cross-op tag pool during global-mode composition. Mirrors the
+  // pattern in CreateCredentialDialog.
+  const scopedTags = useHashTags(targetOpId ?? "")
+  const myTagsFallback = useMyHashTags(null, {
+    enabled: isGlobalMode && !targetOpId,
+  })
+  const tagSuggestions = targetOpId
+    ? scopedTags.data?.hashTags ?? []
+    : myTagsFallback.data?.myHashTags ?? []
+  const tagSuggestionsLoading = targetOpId
+    ? scopedTags.isLoading
+    : myTagsFallback.isLoading
 
   function reset() {
     setValues(emptyValues)
@@ -80,11 +83,8 @@ export function CreateHashDialog({ operationId }: CreateHashDialogProps) {
         operationId: targetOpId,
         input: {
           value: values.value.trim(),
-          hashType: values.hashType,
-          username: values.username.trim() || null,
-          domain: values.domain.trim() || null,
-          source: values.source.trim() || null,
-          tags: parseTags(values.tags),
+          comment: values.comment.trim() || null,
+          tags: values.tags,
         },
       })
       reset()
@@ -142,71 +142,26 @@ export function CreateHashDialog({ operationId }: CreateHashDialogProps) {
               required
             />
           </div>
-          <div className="grid gap-3 sm:grid-cols-2">
-            <div className="grid gap-1.5">
-              <Label>Type</Label>
-              <Select
-                value={values.hashType}
-                onValueChange={(v) =>
-                  setValues((cur) => ({ ...cur, hashType: v ?? "" }))
-                }
-              >
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {types.data?.hashTypes.map((t) => (
-                    <SelectItem key={t.name} value={t.name}>
-                      {t.displayName}
-                      {t.hashcatMode > 0 ? ` · -m ${t.hashcatMode}` : ""}
-                    </SelectItem>
-                  )) ?? null}
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="grid gap-1.5">
-              <Label htmlFor="hash-source">Source</Label>
-              <Input
-                id="hash-source"
-                value={values.source}
-                onChange={(e) =>
-                  setValues((v) => ({ ...v, source: e.target.value }))
-                }
-                placeholder="secretsdump on DC01"
-              />
-            </div>
-            <div className="grid gap-1.5">
-              <Label htmlFor="hash-username">Username</Label>
-              <Input
-                id="hash-username"
-                value={values.username}
-                onChange={(e) =>
-                  setValues((v) => ({ ...v, username: e.target.value }))
-                }
-                placeholder="alice"
-              />
-            </div>
-            <div className="grid gap-1.5">
-              <Label htmlFor="hash-domain">Domain</Label>
-              <Input
-                id="hash-domain"
-                value={values.domain}
-                onChange={(e) =>
-                  setValues((v) => ({ ...v, domain: e.target.value }))
-                }
-                placeholder="CORP"
-              />
-            </div>
+          <div className="grid gap-1.5">
+            <Label htmlFor="hash-comment">Comment</Label>
+            <Textarea
+              id="hash-comment"
+              value={values.comment}
+              onChange={(e) =>
+                setValues((v) => ({ ...v, comment: e.target.value }))
+              }
+              placeholder="Free-form notes (source, context, etc.)"
+              rows={3}
+            />
           </div>
           <div className="grid gap-1.5">
-            <Label htmlFor="hash-tags">Tags (comma-separated)</Label>
-            <Input
-              id="hash-tags"
+            <Label htmlFor="hash-tags-input">Tags</Label>
+            <TagComboboxInput
               value={values.tags}
-              onChange={(e) =>
-                setValues((v) => ({ ...v, tags: e.target.value }))
-              }
-              placeholder="dc01, kerberoast"
+              onChange={(tags) => setValues((v) => ({ ...v, tags }))}
+              suggestions={tagSuggestions}
+              loading={tagSuggestionsLoading}
+              inputId="hash-tags-input"
             />
           </div>
           <DialogFooter>
@@ -224,4 +179,3 @@ export function CreateHashDialog({ operationId }: CreateHashDialogProps) {
     </Dialog>
   )
 }
-

@@ -123,9 +123,6 @@ export const CredentialSourceHashesQuery = graphql(`
       sourceHashes {
         id
         value
-        hashType
-        username
-        domain
         status
       }
     }

@@ -47,21 +47,6 @@ func (r *hashResolver) Credential(ctx context.Context, obj *models.Hash) (*model
 	return r.HashResolver.Credential(ctx, obj)
 }
 
-// CrackingMeta is the resolver for the crackingMeta field.
-func (r *hashResolver) CrackingMeta(ctx context.Context, obj *models.Hash) (*models.HashCrackingMeta, error) {
-	return r.HashResolver.CrackingMeta(ctx, obj)
-}
-
-// Comments is the resolver for the comments field.
-func (r *hashResolver) Comments(ctx context.Context, obj *models.Hash) ([]*models.HashComment, error) {
-	return r.HashResolver.Comments(ctx, obj)
-}
-
-// ViewerCanModerateComments is the resolver for the viewerCanModerateComments field.
-func (r *hashResolver) ViewerCanModerateComments(ctx context.Context, obj *models.Hash) (bool, error) {
-	return r.HashResolver.ViewerCanModerateComments(ctx, obj)
-}
-
 // CreatedBy is the resolver for the createdBy field.
 func (r *hashResolver) CreatedBy(ctx context.Context, obj *models.Hash) (*models.User, error) {
 	return r.HashResolver.CreatedBy(ctx, obj)
@@ -75,41 +60,6 @@ func (r *hashResolver) CreatedAt(ctx context.Context, obj *models.Hash) (string,
 // UpdatedAt is the resolver for the updatedAt field.
 func (r *hashResolver) UpdatedAt(ctx context.Context, obj *models.Hash) (string, error) {
 	return r.HashResolver.UpdatedAt(ctx, obj)
-}
-
-// ID is the resolver for the id field.
-func (r *hashCommentResolver) ID(ctx context.Context, obj *models.HashComment) (string, error) {
-	return r.HashResolver.CommentID(ctx, obj)
-}
-
-// Author is the resolver for the author field.
-func (r *hashCommentResolver) Author(ctx context.Context, obj *models.HashComment) (*models.User, error) {
-	return r.HashResolver.CommentAuthor(ctx, obj)
-}
-
-// CreatedAt is the resolver for the createdAt field.
-func (r *hashCommentResolver) CreatedAt(ctx context.Context, obj *models.HashComment) (string, error) {
-	return r.HashResolver.CommentCreatedAt(ctx, obj)
-}
-
-// UpdatedAt is the resolver for the updatedAt field.
-func (r *hashCommentResolver) UpdatedAt(ctx context.Context, obj *models.HashComment) (string, error) {
-	return r.HashResolver.CommentUpdatedAt(ctx, obj)
-}
-
-// DurationSec is the resolver for the durationSec field.
-func (r *hashCrackingMetaResolver) DurationSec(ctx context.Context, obj *models.HashCrackingMeta) (int, error) {
-	return r.HashResolver.CrackingMetaDurationSec(ctx, obj)
-}
-
-// CrackedBy is the resolver for the crackedBy field.
-func (r *hashCrackingMetaResolver) CrackedBy(ctx context.Context, obj *models.HashCrackingMeta) (*models.User, error) {
-	return r.HashResolver.CrackingMetaCrackedBy(ctx, obj)
-}
-
-// CrackedAt is the resolver for the crackedAt field.
-func (r *hashCrackingMetaResolver) CrackedAt(ctx context.Context, obj *models.HashCrackingMeta) (string, error) {
-	return r.HashResolver.CrackingMetaCrackedAt(ctx, obj)
 }
 
 // CreateHash is the resolver for the createHash field.
@@ -137,29 +87,14 @@ func (r *mutationResolver) MarkHashCracked(ctx context.Context, id string, input
 	return r.HashResolver.MarkHashCracked(ctx, id, input)
 }
 
-// AddHashComment is the resolver for the addHashComment field.
-func (r *mutationResolver) AddHashComment(ctx context.Context, hashID string, text string) (*models.Hash, error) {
-	return r.HashResolver.AddHashComment(ctx, hashID, text)
-}
-
-// UpdateHashComment is the resolver for the updateHashComment field.
-func (r *mutationResolver) UpdateHashComment(ctx context.Context, hashID string, commentID string, text string) (*models.Hash, error) {
-	return r.HashResolver.UpdateHashComment(ctx, hashID, commentID, text)
-}
-
-// DeleteHashComment is the resolver for the deleteHashComment field.
-func (r *mutationResolver) DeleteHashComment(ctx context.Context, hashID string, commentID string) (*models.Hash, error) {
-	return r.HashResolver.DeleteHashComment(ctx, hashID, commentID)
-}
-
 // Hash is the resolver for the hash field.
 func (r *queryResolver) Hash(ctx context.Context, id string) (*models.Hash, error) {
 	return r.HashResolver.Hash(ctx, id)
 }
 
 // Hashes is the resolver for the hashes field.
-func (r *queryResolver) Hashes(ctx context.Context, operationID string, search *string, statuses []models.HashStatus, hashTypes []string, tags []string, hasCredential *bool, first *int, after *string, last *int, before *string) (*model.HashConnection, error) {
-	return r.HashResolver.Hashes(ctx, operationID, search, statuses, hashTypes, tags, hasCredential, first, after, last, before)
+func (r *queryResolver) Hashes(ctx context.Context, operationID string, search *string, statuses []models.HashStatus, tags []string, hasCredential *bool, first *int, after *string, last *int, before *string) (*model.HashConnection, error) {
+	return r.HashResolver.Hashes(ctx, operationID, search, statuses, tags, hasCredential, first, after, last, before)
 }
 
 // HashTags is the resolver for the hashTags field.
@@ -168,8 +103,8 @@ func (r *queryResolver) HashTags(ctx context.Context, operationID string) ([]str
 }
 
 // MyHashes is the resolver for the myHashes field.
-func (r *queryResolver) MyHashes(ctx context.Context, operationIds []string, search *string, statuses []models.HashStatus, hashTypes []string, tags []string, hasCredential *bool, first *int, after *string, last *int, before *string) (*model.HashConnection, error) {
-	return r.HashResolver.MyHashes(ctx, operationIds, search, statuses, hashTypes, tags, hasCredential, first, after, last, before)
+func (r *queryResolver) MyHashes(ctx context.Context, operationIds []string, search *string, statuses []models.HashStatus, tags []string, hasCredential *bool, first *int, after *string, last *int, before *string) (*model.HashConnection, error) {
+	return r.HashResolver.MyHashes(ctx, operationIds, search, statuses, tags, hasCredential, first, after, last, before)
 }
 
 // MyHashTags is the resolver for the myHashTags field.
@@ -177,17 +112,7 @@ func (r *queryResolver) MyHashTags(ctx context.Context, operationIds []string) (
 	return r.HashResolver.MyHashTags(ctx, operationIds)
 }
 
-// HashTypes is the resolver for the hashTypes field.
-func (r *queryResolver) HashTypes(ctx context.Context) ([]*models.HashTypeSpec, error) {
-	return r.HashResolver.HashTypes(ctx)
-}
-
 // HashChanged is the resolver for the hashChanged field.
-//
-// Mirrors credentialChanged: subscribe to hash events scoped to the given
-// operation, fetch the full hash for non-delete events with a non-empty
-// HashID (bulk import has no single id — clients invalidate the list and
-// refetch), and stream them to the client.
 func (r *subscriptionResolver) HashChanged(ctx context.Context, operationID string) (<-chan *model.HashEvent, error) {
 	auth := gqlctx.AuthFromContext(ctx)
 	if auth.UserID == "" {
@@ -232,8 +157,6 @@ func (r *subscriptionResolver) HashChanged(ctx context.Context, operationID stri
 }
 
 // MyHashChanged is the resolver for the myHashChanged field.
-//
-// Multi-operation sibling of HashChanged.
 func (r *subscriptionResolver) MyHashChanged(ctx context.Context, operationIds []string) (<-chan *model.HashEvent, error) {
 	auth := gqlctx.AuthFromContext(ctx)
 	if auth.UserID == "" {
@@ -280,14 +203,4 @@ func (r *subscriptionResolver) MyHashChanged(ctx context.Context, operationIds [
 // Hash returns generated.HashResolver implementation.
 func (r *Resolver) Hash() generated.HashResolver { return &hashResolver{r} }
 
-// HashComment returns generated.HashCommentResolver implementation.
-func (r *Resolver) HashComment() generated.HashCommentResolver { return &hashCommentResolver{r} }
-
-// HashCrackingMeta returns generated.HashCrackingMetaResolver implementation.
-func (r *Resolver) HashCrackingMeta() generated.HashCrackingMetaResolver {
-	return &hashCrackingMetaResolver{r}
-}
-
 type hashResolver struct{ *Resolver }
-type hashCommentResolver struct{ *Resolver }
-type hashCrackingMetaResolver struct{ *Resolver }

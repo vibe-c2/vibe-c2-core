@@ -11,7 +11,6 @@ import type { HashStatus } from "@/graphql/gql/graphql"
 export interface HashFilters {
   search: string
   statuses: HashStatus[]
-  hashTypes: string[]
   tags: string[]
   // null = both; true = only linked-to-credential; false = only unlinked.
   hasCredential: boolean | null
@@ -30,7 +29,6 @@ interface HashStoreState {
   selected: SelectedHash | null
 
   createDialogOpen: boolean
-  editDialogOpen: boolean
   deleteDialogOpen: boolean
   detailsPanelOpen: boolean
   bulkImportDialogOpen: boolean
@@ -38,20 +36,17 @@ interface HashStoreState {
 
   setSearch: (search: string) => void
   setStatuses: (statuses: HashStatus[]) => void
-  setHashTypes: (hashTypes: string[]) => void
   setTags: (tags: string[]) => void
   toggleTag: (tag: string) => void
   setHasCredential: (hasCredential: boolean | null) => void
   resetFilters: () => void
 
   openCreateDialog: () => void
-  openEditDialog: (h: SelectedHash) => void
   openDeleteDialog: (h: SelectedHash) => void
   openDetailsPanel: (h: SelectedHash) => void
   openBulkImportDialog: () => void
   openMarkCrackedDialog: (h: SelectedHash) => void
   closeCreateDialog: () => void
-  closeEditDialog: () => void
   closeDeleteDialog: () => void
   closeDetailsPanel: () => void
   closeBulkImportDialog: () => void
@@ -61,7 +56,6 @@ interface HashStoreState {
 const defaultFilters: HashFilters = {
   search: "",
   statuses: [],
-  hashTypes: [],
   tags: [],
   hasCredential: null,
 }
@@ -73,7 +67,6 @@ export const useHashStore = create<HashStoreState>()(
       selected: null,
 
       createDialogOpen: false,
-      editDialogOpen: false,
       deleteDialogOpen: false,
       detailsPanelOpen: false,
       bulkImportDialogOpen: false,
@@ -83,8 +76,6 @@ export const useHashStore = create<HashStoreState>()(
         set((s) => ({ filters: { ...s.filters, search } })),
       setStatuses: (statuses) =>
         set((s) => ({ filters: { ...s.filters, statuses } })),
-      setHashTypes: (hashTypes) =>
-        set((s) => ({ filters: { ...s.filters, hashTypes } })),
       setTags: (tags) => set((s) => ({ filters: { ...s.filters, tags } })),
       toggleTag: (tag) => {
         const { filters } = get()
@@ -99,14 +90,12 @@ export const useHashStore = create<HashStoreState>()(
       resetFilters: () => set({ filters: defaultFilters }),
 
       openCreateDialog: () => set({ createDialogOpen: true }),
-      openEditDialog: (h) => set({ editDialogOpen: true, selected: h }),
       openDeleteDialog: (h) => set({ deleteDialogOpen: true, selected: h }),
       openDetailsPanel: (h) => set({ detailsPanelOpen: true, selected: h }),
       openBulkImportDialog: () => set({ bulkImportDialogOpen: true }),
       openMarkCrackedDialog: (h) =>
         set({ markCrackedDialogOpen: true, selected: h }),
       closeCreateDialog: () => set({ createDialogOpen: false }),
-      closeEditDialog: () => set({ editDialogOpen: false }),
       closeDeleteDialog: () => set({ deleteDialogOpen: false }),
       closeDetailsPanel: () =>
         set({ detailsPanelOpen: false, selected: null }),

@@ -1,32 +1,5 @@
 import { graphql } from "@/graphql/gql"
 
-export const HashCommentFields = graphql(`
-  fragment HashCommentFields on HashComment {
-    id
-    text
-    createdAt
-    updatedAt
-    author {
-      id
-      username
-    }
-  }
-`)
-
-export const HashCrackingMetaFields = graphql(`
-  fragment HashCrackingMetaFields on HashCrackingMeta {
-    tool
-    wordlist
-    rules
-    durationSec
-    crackedAt
-    crackedBy {
-      id
-      username
-    }
-  }
-`)
-
 // Light row fragment for the table — leaves `credential` off (a per-row DB
 // lookup) and uses credentialId chip rendering instead. The details dialog
 // query loads the full credential.
@@ -35,25 +8,10 @@ export const HashFields = graphql(`
     id
     operationId
     value
-    hashType
-    hashcatMode
-    username
-    domain
     status
-    source
+    comment
     tags
     credentialId
-    properties {
-      name
-      value
-    }
-    comments {
-      ...HashCommentFields
-    }
-    crackingMeta {
-      ...HashCrackingMetaFields
-    }
-    viewerCanModerateComments
     createdBy {
       id
       username
@@ -103,7 +61,6 @@ export const HashesQuery = graphql(`
     $operationId: ID!
     $search: String
     $statuses: [HashStatus!]
-    $hashTypes: [String!]
     $tags: [String!]
     $hasCredential: Boolean
     $first: Int
@@ -113,7 +70,6 @@ export const HashesQuery = graphql(`
       operationId: $operationId
       search: $search
       statuses: $statuses
-      hashTypes: $hashTypes
       tags: $tags
       hasCredential: $hasCredential
       first: $first
@@ -145,7 +101,6 @@ export const MyHashesQuery = graphql(`
     $operationIds: [ID!]
     $search: String
     $statuses: [HashStatus!]
-    $hashTypes: [String!]
     $tags: [String!]
     $hasCredential: Boolean
     $first: Int
@@ -155,7 +110,6 @@ export const MyHashesQuery = graphql(`
       operationIds: $operationIds
       search: $search
       statuses: $statuses
-      hashTypes: $hashTypes
       tags: $tags
       hasCredential: $hasCredential
       first: $first
@@ -179,16 +133,6 @@ export const MyHashesQuery = graphql(`
 export const MyHashTagsQuery = graphql(`
   query MyHashTags($operationIds: [ID!]) {
     myHashTags(operationIds: $operationIds)
-  }
-`)
-
-export const HashTypesQuery = graphql(`
-  query HashTypes {
-    hashTypes {
-      name
-      displayName
-      hashcatMode
-    }
   }
 `)
 
@@ -230,34 +174,6 @@ export const MarkHashCrackedMutation = graphql(`
   mutation MarkHashCracked($id: ID!, $input: MarkHashCrackedInput!) {
     markHashCracked(id: $id, input: $input) {
       ...HashFieldsWithCredential
-    }
-  }
-`)
-
-export const AddHashCommentMutation = graphql(`
-  mutation AddHashComment($hashId: ID!, $text: String!) {
-    addHashComment(hashId: $hashId, text: $text) {
-      ...HashFields
-    }
-  }
-`)
-
-export const UpdateHashCommentMutation = graphql(`
-  mutation UpdateHashComment(
-    $hashId: ID!
-    $commentId: ID!
-    $text: String!
-  ) {
-    updateHashComment(hashId: $hashId, commentId: $commentId, text: $text) {
-      ...HashFields
-    }
-  }
-`)
-
-export const DeleteHashCommentMutation = graphql(`
-  mutation DeleteHashComment($hashId: ID!, $commentId: ID!) {
-    deleteHashComment(hashId: $hashId, commentId: $commentId) {
-      ...HashFields
     }
   }
 `)
