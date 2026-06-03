@@ -26,6 +26,7 @@ import { dayjs } from "@/components/timeline/dayjs-setup"
 import { truncateToGranularity } from "@/components/timeline/piecewise-axis"
 import { EventDetailsDialog } from "@/components/timeline/event-details-dialog"
 import { EventGroupDialog } from "@/components/timeline/event-group-dialog"
+import type { TimelineGroupIdentity } from "@/components/timeline/event-icon-display"
 import { CustomTimelineEventDialog } from "@/components/timeline/custom-timeline-event-dialog"
 import { CredentialDetailsDialog } from "@/components/findings/credential-details-dialog"
 import { EditCredentialDialog } from "@/components/findings/edit-credential-dialog"
@@ -369,12 +370,12 @@ function TimelinePageInner({ operationId }: { operationId: string }) {
 
   const [groupDialog, setGroupDialog] = useState<{
     bucketStart: string
-    subjectKind: string
+    group: TimelineGroupIdentity
   } | null>(null)
 
   const handleGroupClick = useCallback(
-    (bucketStart: string, subjectKind: string) => {
-      setGroupDialog({ bucketStart, subjectKind })
+    (bucketStart: string, group: TimelineGroupIdentity) => {
+      setGroupDialog({ bucketStart, group })
     },
     [],
   )
@@ -500,7 +501,7 @@ function TimelinePageInner({ operationId }: { operationId: string }) {
         bucketStart={groupDialog?.bucketStart ?? null}
         granularity={granularity}
         timezone={timezone}
-        subjectKind={groupDialog?.subjectKind ?? null}
+        group={groupDialog?.group ?? null}
         actorIds={actorIds.length > 0 ? actorIds : null}
         onEventSelect={handleGroupEventSelect}
       />

@@ -42,6 +42,9 @@ export const TimelineBucketsQuery = graphql(`
         topic
         subjectKind
         count
+        emoji
+        icon
+        color
       }
     }
   }

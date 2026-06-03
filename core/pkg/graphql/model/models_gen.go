@@ -50,6 +50,9 @@ type CreateCustomTimelineEventInput struct {
 	Name        string  `json:"name"`
 	Description *string `json:"description,omitempty"`
 	OccurredAt  string  `json:"occurredAt"`
+	Emoji       *string `json:"emoji,omitempty"`
+	Icon        *string `json:"icon,omitempty"`
+	Color       *string `json:"color,omitempty"`
 }
 
 type CreateHashInput struct {
@@ -267,6 +270,9 @@ type TimelineTopicCount struct {
 	Topic       string `json:"topic"`
 	SubjectKind string `json:"subjectKind"`
 	Count       int    `json:"count"`
+	Emoji       string `json:"emoji"`
+	Icon        string `json:"icon"`
+	Color       string `json:"color"`
 }
 
 type UpdateCredentialInput struct {
@@ -284,6 +290,9 @@ type UpdateCustomTimelineEventInput struct {
 	Name        *string `json:"name,omitempty"`
 	Description *string `json:"description,omitempty"`
 	OccurredAt  *string `json:"occurredAt,omitempty"`
+	Emoji       *string `json:"emoji,omitempty"`
+	Icon        *string `json:"icon,omitempty"`
+	Color       *string `json:"color,omitempty"`
 }
 
 type UpdateHashInput struct {

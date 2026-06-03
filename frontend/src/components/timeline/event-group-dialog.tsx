@@ -20,7 +20,11 @@ import {
   taskStatusAccent,
   taskStatusIcon,
 } from "./event-icons"
-import { renderSubjectKindSummary } from "./event-summary"
+import {
+  GroupGlyph,
+  type TimelineGroupIdentity,
+} from "./event-icon-display"
+import { parseCustomEventIcon, renderSubjectKindSummary } from "./event-summary"
 import { EventRow } from "./event-row"
 import { formatRangeLabel } from "./bucket-label"
 import { cn } from "@/lib/utils"
@@ -32,18 +36,24 @@ interface Props {
   bucketStart: string | null
   granularity: TimelineGranularity
   timezone: string
-  subjectKind: string | null
+  // The clicked chip's identity. subjectKind drives the server-side fetch;
+  // for custom events the emoji/icon/color additionally narrow the list to
+  // the one annotation glyph the user clicked.
+  group: TimelineGroupIdentity | null
   // Mirror the bucket-level actor filter so the modal stays consistent
   // with whatever the page is filtered to.
   actorIds: string[] | null
   onEventSelect: (event: TimelineEventFieldsFragment) => void
 }
 
-// EventGroupDialog lists every event of one subject kind inside a bucket,
-// matching the dot stack's per-subject-kind grouping. A "hash" group spans
-// both hash.created and hash.cracked rows; the server-side subjectKind filter
-// returns all of them, and each row's own summary line carries the specific
-// verb. Reuses useTimelineEventsByDay with subjectKind as the type filter.
+// EventGroupDialog lists every event of one group inside a bucket, matching
+// the dot stack's chip grouping. A "hash" group spans both hash.created and
+// hash.cracked rows; the server-side subjectKind filter returns all of them,
+// and each row's own summary line carries the specific verb. Custom events
+// share one subjectKind but split by glyph on the axis, so the dialog filters
+// the fetched custom rows down to the clicked (emoji, icon, color) identity —
+// custom events are low-volume per bucket, so a client-side filter is cheaper
+// than threading three more params through the by-day query.
 export function EventGroupDialog({
   open,
   onOpenChange,
@@ -51,11 +61,12 @@ export function EventGroupDialog({
   bucketStart,
   granularity,
   timezone,
-  subjectKind,
+  group,
   actorIds,
   onEventSelect,
 }: Props) {
-  const ready = open && !!bucketStart && !!subjectKind
+  const subjectKind = group?.subjectKind ?? null
+  const ready = open && !!bucketStart && !!group
   const {
     data,
     isLoading,
@@ -72,12 +83,24 @@ export function EventGroupDialog({
     ready,
   )
 
-  const events = useMemo<TimelineEventFieldsFragment[]>(
-    () =>
-      data?.pages.flatMap((p) => p.timelineEventsByDay.edges.map((e) => e.node)) ??
-      [],
-    [data],
-  )
+  const events = useMemo<TimelineEventFieldsFragment[]>(() => {
+    const all =
+      data?.pages.flatMap((p) =>
+        p.timelineEventsByDay.edges.map((e) => e.node),
+      ) ?? []
+    // Custom events all share subjectKind "custom_event"; the chip the user
+    // clicked is one specific glyph, so keep only the rows whose authored
+    // identity matches it. Other kinds are already fully scoped by the fetch.
+    if (group?.subjectKind !== "custom_event") return all
+    return all.filter((ev) => {
+      const ic = parseCustomEventIcon(ev.metadata)
+      return (
+        ic.emoji === group.emoji &&
+        ic.icon === group.icon &&
+        ic.color === group.color
+      )
+    })
+  }, [data, group])
 
   const loadedLabel = hasNextPage
     ? `${events.length}+ shown`
@@ -110,18 +133,27 @@ export function EventGroupDialog({
   }, [events, isTaskGroup])
 
   const dominantTaskStatus = taskOutcome ? dominantOutcome(taskOutcome) : null
-  const headerIcon =
-    dominantTaskStatus !== null
-      ? taskStatusIcon(dominantTaskStatus)
-      : subjectKind
-        ? subjectKindIcon(subjectKind)
-        : null
-  const headerAccent =
-    dominantTaskStatus !== null
-      ? taskStatusAccent(dominantTaskStatus)
-      : subjectKind
-        ? subjectKindAccent(subjectKind)
-        : ""
+  // Header glyph: custom groups echo the clicked chip's glyph; task groups
+  // promote the dominant outcome's icon; everything else shows the kind icon.
+  let headerGlyph: React.ReactNode = null
+  if (group?.subjectKind === "custom_event") {
+    headerGlyph = (
+      <GroupGlyph
+        subjectKind={group.subjectKind}
+        emoji={group.emoji}
+        icon={group.icon}
+        color={group.color}
+      />
+    )
+  } else if (dominantTaskStatus !== null) {
+    headerGlyph = createElement(taskStatusIcon(dominantTaskStatus), {
+      className: cn("size-4", taskStatusAccent(dominantTaskStatus)),
+    })
+  } else if (subjectKind) {
+    headerGlyph = createElement(subjectKindIcon(subjectKind), {
+      className: cn("size-4", subjectKindAccent(subjectKind)),
+    })
+  }
 
   const title = subjectKind
     ? renderSubjectKindSummary(subjectKind, events.length)
@@ -136,10 +168,7 @@ export function EventGroupDialog({
       <DialogContent className="sm:max-w-lg">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
-            {headerIcon &&
-              createElement(headerIcon, {
-                className: cn("size-4", headerAccent),
-              })}
+            {headerGlyph}
             {title}
           </DialogTitle>
           <DialogDescription>

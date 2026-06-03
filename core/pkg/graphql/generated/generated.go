@@ -478,7 +478,10 @@ type ComplexityRoot struct {
 	}
 
 	TimelineTopicCount struct {
+		Color       func(childComplexity int) int
 		Count       func(childComplexity int) int
+		Emoji       func(childComplexity int) int
+		Icon        func(childComplexity int) int
 		SubjectKind func(childComplexity int) int
 		Topic       func(childComplexity int) int
 	}
@@ -3346,12 +3349,30 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 
 		return e.ComplexityRoot.TimelineEventEdge.Node(childComplexity), true
 
+	case "TimelineTopicCount.color":
+		if e.ComplexityRoot.TimelineTopicCount.Color == nil {
+			break
+		}
+
+		return e.ComplexityRoot.TimelineTopicCount.Color(childComplexity), true
 	case "TimelineTopicCount.count":
 		if e.ComplexityRoot.TimelineTopicCount.Count == nil {
 			break
 		}
 
 		return e.ComplexityRoot.TimelineTopicCount.Count(childComplexity), true
+	case "TimelineTopicCount.emoji":
+		if e.ComplexityRoot.TimelineTopicCount.Emoji == nil {
+			break
+		}
+
+		return e.ComplexityRoot.TimelineTopicCount.Emoji(childComplexity), true
+	case "TimelineTopicCount.icon":
+		if e.ComplexityRoot.TimelineTopicCount.Icon == nil {
+			break
+		}
+
+		return e.ComplexityRoot.TimelineTopicCount.Icon(childComplexity), true
 	case "TimelineTopicCount.subjectKind":
 		if e.ComplexityRoot.TimelineTopicCount.SubjectKind == nil {
 			break
@@ -5659,10 +5680,20 @@ type TimelineBucket {
 # Per-topic count inside a TimelineBucket. subjectKind is included because
 # the axis dot icon is keyed off subject_kind (events with the same topic
 # always share the same subject_kind, so server-side grouping is safe).
+#
+# emoji/icon/color carry the custom-event chip identity: user-authored
+# annotations are sub-grouped by their chosen glyph + color so two custom
+# events with different icons render as separate chips on the axis. They are
+# always the empty string for system-generated kinds (only custom events can
+# carry an icon/color), so a non-custom group's identity collapses to its
+# subjectKind alone.
 type TimelineTopicCount {
   topic: String!
   subjectKind: String!
   count: Int!
+  emoji: String!
+  icon: String!
+  color: String!
 }
 
 extend type Query {
@@ -5732,12 +5763,25 @@ input CreateCustomTimelineEventInput {
   # When the event happened, in RFC3339. May be in the past or the future —
   # the operator decides what the event represents.
   occurredAt: String!
+  # Optional visual identity, mirroring wiki documents. emoji and icon are
+  # mutually exclusive (icon wins when both are set); icon is a Lucide name
+  # (e.g. "Flag"); color is an OKLCH string from the shared palette, or empty
+  # for the default. Events sharing the same (emoji, icon, color) tuple group
+  # into one chip on the timeline axis.
+  emoji: String
+  icon: String
+  color: String
 }
 
 input UpdateCustomTimelineEventInput {
   name: String
   description: String
   occurredAt: String
+  # See CreateCustomTimelineEventInput. An explicit empty string clears the
+  # field (e.g. switching from an icon back to an emoji clears icon).
+  emoji: String
+  icon: String
+  color: String
 }
 
 extend type Mutation {
@@ -23339,6 +23383,12 @@ func (ec *executionContext) fieldContext_TimelineBucket_topicCounts(_ context.Co
 				return ec.fieldContext_TimelineTopicCount_subjectKind(ctx, field)
 			case "count":
 				return ec.fieldContext_TimelineTopicCount_count(ctx, field)
+			case "emoji":
+				return ec.fieldContext_TimelineTopicCount_emoji(ctx, field)
+			case "icon":
+				return ec.fieldContext_TimelineTopicCount_icon(ctx, field)
+			case "color":
+				return ec.fieldContext_TimelineTopicCount_color(ctx, field)
 			}
 			return nil, fmt.Errorf("no field named %q was found under type TimelineTopicCount", field.Name)
 		},
@@ -23855,6 +23905,93 @@ func (ec *executionContext) fieldContext_TimelineTopicCount_count(_ context.Cont
 		IsResolver: false,
 		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
 			return nil, errors.New("field of type Int does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _TimelineTopicCount_emoji(ctx context.Context, field graphql.CollectedField, obj *model.TimelineTopicCount) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_TimelineTopicCount_emoji,
+		func(ctx context.Context) (any, error) {
+			return obj.Emoji, nil
+		},
+		nil,
+		ec.marshalNString2string,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_TimelineTopicCount_emoji(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "TimelineTopicCount",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _TimelineTopicCount_icon(ctx context.Context, field graphql.CollectedField, obj *model.TimelineTopicCount) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_TimelineTopicCount_icon,
+		func(ctx context.Context) (any, error) {
+			return obj.Icon, nil
+		},
+		nil,
+		ec.marshalNString2string,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_TimelineTopicCount_icon(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "TimelineTopicCount",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _TimelineTopicCount_color(ctx context.Context, field graphql.CollectedField, obj *model.TimelineTopicCount) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_TimelineTopicCount_color,
+		func(ctx context.Context) (any, error) {
+			return obj.Color, nil
+		},
+		nil,
+		ec.marshalNString2string,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_TimelineTopicCount_color(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "TimelineTopicCount",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
 		},
 	}
 	return fc, nil
@@ -28920,7 +29057,7 @@ func (ec *executionContext) unmarshalInputCreateCustomTimelineEventInput(ctx con
 		asMap[k] = v
 	}
 
-	fieldsInOrder := [...]string{"name", "description", "occurredAt"}
+	fieldsInOrder := [...]string{"name", "description", "occurredAt", "emoji", "icon", "color"}
 	for _, k := range fieldsInOrder {
 		v, ok := asMap[k]
 		if !ok {
@@ -28948,6 +29085,27 @@ func (ec *executionContext) unmarshalInputCreateCustomTimelineEventInput(ctx con
 				return it, err
 			}
 			it.OccurredAt = data
+		case "emoji":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("emoji"))
+			data, err := ec.unmarshalOString2ᚖstring(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.Emoji = data
+		case "icon":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("icon"))
+			data, err := ec.unmarshalOString2ᚖstring(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.Icon = data
+		case "color":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("color"))
+			data, err := ec.unmarshalOString2ᚖstring(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.Color = data
 		}
 	}
 	return it, nil
@@ -29622,7 +29780,7 @@ func (ec *executionContext) unmarshalInputUpdateCustomTimelineEventInput(ctx con
 		asMap[k] = v
 	}
 
-	fieldsInOrder := [...]string{"name", "description", "occurredAt"}
+	fieldsInOrder := [...]string{"name", "description", "occurredAt", "emoji", "icon", "color"}
 	for _, k := range fieldsInOrder {
 		v, ok := asMap[k]
 		if !ok {
@@ -29650,6 +29808,27 @@ func (ec *executionContext) unmarshalInputUpdateCustomTimelineEventInput(ctx con
 				return it, err
 			}
 			it.OccurredAt = data
+		case "emoji":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("emoji"))
+			data, err := ec.unmarshalOString2ᚖstring(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.Emoji = data
+		case "icon":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("icon"))
+			data, err := ec.unmarshalOString2ᚖstring(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.Icon = data
+		case "color":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("color"))
+			data, err := ec.unmarshalOString2ᚖstring(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.Color = data
 		}
 	}
 	return it, nil
@@ -35947,6 +36126,21 @@ func (ec *executionContext) _TimelineTopicCount(ctx context.Context, sel ast.Sel
 			}
 		case "count":
 			out.Values[i] = ec._TimelineTopicCount_count(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "emoji":
+			out.Values[i] = ec._TimelineTopicCount_emoji(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "icon":
+			out.Values[i] = ec._TimelineTopicCount_icon(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "color":
+			out.Values[i] = ec._TimelineTopicCount_color(ctx, field, obj)
 			if out.Values[i] == graphql.Null {
 				out.Invalids++
 			}

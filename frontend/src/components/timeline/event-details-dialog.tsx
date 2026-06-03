@@ -1,4 +1,4 @@
-import { createElement, useState } from "react"
+import { useState } from "react"
 import { Link } from "react-router"
 import { Pencil, Trash2 } from "lucide-react"
 import { Button } from "@/components/ui/button"
@@ -17,7 +17,7 @@ import { useTaskStore } from "@/stores/tasks"
 import { useCredentialStore } from "@/stores/credentials"
 import { useHashStore } from "@/stores/hashes"
 import { dayjs } from "./dayjs-setup"
-import { eventIcon, eventAccent } from "./event-icons"
+import { EventGlyph } from "./event-icon-display"
 import {
   parseCustomEventDescription,
   renderEventSummary,
@@ -57,8 +57,6 @@ export function EventDetailsDialog({
 
   if (!event) return null
 
-  const icon = eventIcon(event)
-  const accent = eventAccent(event)
   const occurred = dayjs(event.occurredAt)
   const description = parseCustomEventDescription(event.metadata)
 
@@ -97,7 +95,7 @@ export function EventDetailsDialog({
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
-            {createElement(icon, { className: `size-4 ${accent}` })}
+            <EventGlyph event={event} />
             {renderEventSummary(event)}
           </DialogTitle>
           <DialogDescription>

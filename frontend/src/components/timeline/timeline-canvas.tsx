@@ -5,6 +5,7 @@ import { useTimelineLiveUpdates } from "@/graphql/hooks/timeline"
 import type { TimelineGranularity } from "@/graphql/gql/graphql"
 import type { TimelineBucketFragment } from "@/graphql/hooks/timeline"
 import { buildSegments } from "./piecewise-axis"
+import type { TimelineGroupIdentity } from "./event-icon-display"
 import { ActiveDaySegment } from "./active-day-segment"
 import { CompressedGap } from "./compressed-gap"
 import { OperationCreatedMarker } from "./operation-created-marker"
@@ -32,8 +33,10 @@ interface Props {
   onSelectBucket: (bucketStart: string) => void
   // Chip click in the dot stack — opens the group-scoped event modal at the
   // page level. The page owns this dialog because the same page also owns
-  // the per-event details dialog and threads selection state for both.
-  onSelectGroup: (bucketStart: string, subjectKind: string) => void
+  // the per-event details dialog and threads selection state for both. The
+  // group identity carries the custom-event glyph so the modal can scope to
+  // exactly the chip the user clicked, not every custom event in the bucket.
+  onSelectGroup: (bucketStart: string, group: TimelineGroupIdentity) => void
 }
 
 // Fixed pixel height for the canvas. Picked so the dot stack (capped at 16
@@ -90,6 +93,9 @@ export function TimelineCanvas({
           topic: tc.topic,
           subjectKind: tc.subjectKind,
           count: tc.count,
+          emoji: tc.emoji,
+          icon: tc.icon,
+          color: tc.color,
         })),
       })),
       granularity,

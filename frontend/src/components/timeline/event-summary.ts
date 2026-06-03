@@ -110,3 +110,41 @@ export function parseCustomEventDescription(
     return ""
   }
 }
+
+// CustomEventIcon is the visual identity an operator picked for a custom
+// timeline annotation: an emoji glyph or a Lucide icon name, plus an optional
+// OKLCH color. Mirrors the wiki DocumentIconValue shape. All three default to
+// "" so a legacy annotation (authored before icons existed) and an explicitly
+// glyph-less one are indistinguishable — both render the default pin and
+// group together on the axis.
+export interface CustomEventIcon {
+  emoji: string
+  icon: string
+  color: string
+}
+
+const EMPTY_CUSTOM_EVENT_ICON: CustomEventIcon = {
+  emoji: "",
+  icon: "",
+  color: "",
+}
+
+// parseCustomEventIcon extracts the emoji/icon/color identity from a custom
+// event's JSON metadata bag. Mirrors the empty-string normalisation the
+// server's bucket aggregation applies when it builds the chip-grouping key,
+// so a value parsed here compares equal to a TimelineTopicCount identity.
+export function parseCustomEventIcon(
+  metadata: string | null | undefined,
+): CustomEventIcon {
+  if (!metadata) return EMPTY_CUSTOM_EVENT_ICON
+  try {
+    const parsed = JSON.parse(metadata) as Record<string, unknown>
+    return {
+      emoji: typeof parsed.emoji === "string" ? parsed.emoji : "",
+      icon: typeof parsed.icon === "string" ? parsed.icon : "",
+      color: typeof parsed.color === "string" ? parsed.color : "",
+    }
+  } catch {
+    return EMPTY_CUSTOM_EVENT_ICON
+  }
+}

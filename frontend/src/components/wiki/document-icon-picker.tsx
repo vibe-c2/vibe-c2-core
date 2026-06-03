@@ -59,6 +59,17 @@ interface DocumentIconPickerProps {
    *  the caller knows the doc's children + expansion state. */
   hasChildren?: boolean;
   isExpanded?: boolean;
+  /** Whether to offer the adaptive "Default" icon (page-when-empty /
+   *  folder-when-it-has-children). Meaningful only for the wiki tree, where a
+   *  document's glyph reflects its children. Non-tree callers (e.g. timeline
+   *  events) pass false to hide it. Defaults to true. */
+  allowAdaptive?: boolean;
+  /** A concrete Lucide icon name pinned at the top of the grid as the
+   *  "Default" tile, for callers that don't model a tree and so can't use the
+   *  adaptive default (allowAdaptive=false). Lets the user always reach back
+   *  to the canonical glyph for this surface (e.g. a pin for timeline
+   *  events). Shown only in the browse (empty-query) state. */
+  defaultIconName?: string;
 }
 
 export function DocumentIconPicker({
@@ -69,6 +80,8 @@ export function DocumentIconPicker({
   onOpenChange,
   hasChildren,
   isExpanded,
+  allowAdaptive = true,
+  defaultIconName,
 }: DocumentIconPickerProps) {
   const [internalOpen, setInternalOpen] = useState(false);
   const { resolvedTheme } = useTheme();
@@ -157,6 +170,8 @@ export function DocumentIconPicker({
             <IconGrid
               selectedName={value.icon}
               previewColor={value.color}
+              allowAdaptive={allowAdaptive}
+              defaultIconName={defaultIconName}
               onPick={handleIconPick}
             />
           </TabsContent>
@@ -171,6 +186,12 @@ interface IconGridProps {
   /** Preview color applied to every icon in the grid so users see the result
    *  before committing. Empty string = inherited foreground (default). */
   previewColor: string;
+  /** When false, the adaptive "Default" tile is hidden (and not surfaced by
+   *  search). See DocumentIconPicker.allowAdaptive. */
+  allowAdaptive: boolean;
+  /** Concrete icon pinned as the "Default" tile when allowAdaptive is false.
+   *  See DocumentIconPicker.defaultIconName. */
+  defaultIconName?: string;
   onPick: (name: string) => void;
 }
 
@@ -183,7 +204,13 @@ const EXTENDED_RESULTS_LIMIT = 64;
 // the natural names users reach for since the icon morphs through all three.
 const ADAPTIVE_KEYWORDS = ["default", "adaptive", "auto", "folder", "page", "doc"];
 
-function IconGrid({ selectedName, previewColor, onPick }: IconGridProps) {
+function IconGrid({
+  selectedName,
+  previewColor,
+  allowAdaptive,
+  defaultIconName,
+  onPick,
+}: IconGridProps) {
   const [search, setSearch] = useState("");
   // Snapshot frequent icons on mount. The picker remounts each time the
   // popover opens, so freshly-recorded picks appear on the next open without
@@ -195,7 +222,13 @@ function IconGrid({ selectedName, previewColor, onPick }: IconGridProps) {
   const q = search.trim().toLowerCase();
   // Show the adaptive entry whenever the query is empty or matches any of
   // its keywords, so users can find it either by browsing or by searching.
-  const showAdaptive = !q || ADAPTIVE_KEYWORDS.some((k) => k.includes(q));
+  // Callers that don't model a tree (allowAdaptive=false) never surface it.
+  const showAdaptive =
+    allowAdaptive && (!q || ADAPTIVE_KEYWORDS.some((k) => k.includes(q)));
+  // Concrete-default tile (non-tree callers). Browse-state only: on search,
+  // the icon still surfaces normally via the catalog / "More icons" results,
+  // so pinning it here too would duplicate it.
+  const showDefault = !allowAdaptive && !!defaultIconName && !q;
   // Frequently-used row appears only on the empty-query state — it would
   // duplicate the search results below otherwise.
   const showFrequent = !q && frequentNames.length > 0;
@@ -231,6 +264,7 @@ function IconGrid({ selectedName, previewColor, onPick }: IconGridProps) {
   const totalShown =
     (showFrequent ? frequentNames.length : 0) +
     (showAdaptive ? 1 : 0) +
+    (showDefault ? 1 : 0) +
     filteredGroups.reduce((n, g) => n + g.icons.length, 0) +
     extendedResults.names.length;
 
@@ -283,6 +317,16 @@ function IconGrid({ selectedName, previewColor, onPick }: IconGridProps) {
               <GridSection heading="Default">
                 <AdaptiveIconButton
                   selected={selectedName === ADAPTIVE_ICON_NAME}
+                  previewColor={previewColor}
+                  onPick={onPick}
+                />
+              </GridSection>
+            )}
+            {showDefault && defaultIconName && (
+              <GridSection heading="Default">
+                <ExtendedIconButton
+                  name={defaultIconName}
+                  selected={selectedName === defaultIconName}
                   previewColor={previewColor}
                   onPick={onPick}
                 />

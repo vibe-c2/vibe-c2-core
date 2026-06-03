@@ -136,6 +136,9 @@ func (r *timelineResolver) TimelineBuckets(
 				Topic:       t.Topic,
 				SubjectKind: string(t.SubjectKind),
 				Count:       t.Count,
+				Emoji:       t.Emoji,
+				Icon:        t.Icon,
+				Color:       t.Color,
 			})
 		}
 		out = append(out, &model.TimelineBucket{
@@ -256,11 +259,6 @@ func (r *timelineResolver) CreateCustomTimelineEvent(
 		return nil, fmt.Errorf("forbidden: invalid caller ID")
 	}
 
-	var description string
-	if input.Description != nil {
-		description = *input.Description
-	}
-
 	eventID := uuid.New()
 	row := &models.OperationEvent{
 		EventID:     eventID,
@@ -272,8 +270,13 @@ func (r *timelineResolver) CreateCustomTimelineEvent(
 		SubjectName: name,
 		ActorType:   models.EventActorUser,
 		ActorID:     &callerUID,
-		Metadata:    customEventMetadata(description),
-		OccurredAt:  occurred.UTC(),
+		Metadata: customEventMetadata(
+			strOrEmpty(input.Description),
+			strOrEmpty(input.Emoji),
+			strOrEmpty(input.Icon),
+			strOrEmpty(input.Color),
+		),
+		OccurredAt: occurred.UTC(),
 	}
 
 	if err := r.repo.Insert(ctx, row); err != nil {
@@ -309,6 +312,18 @@ func (r *timelineResolver) UpdateCustomTimelineEvent(
 	if input.Description != nil {
 		desc := *input.Description
 		upd.Description = &desc
+	}
+	if input.Emoji != nil {
+		e := *input.Emoji
+		upd.Emoji = &e
+	}
+	if input.Icon != nil {
+		i := *input.Icon
+		upd.Icon = &i
+	}
+	if input.Color != nil {
+		c := *input.Color
+		upd.Color = &c
 	}
 	if input.OccurredAt != nil {
 		t, err := parseTime(*input.OccurredAt)
@@ -403,13 +418,37 @@ func (r *timelineResolver) publishLogged(userID string, row *models.OperationEve
 }
 
 // customEventMetadata builds the metadata bag for a custom event. Empty
-// descriptions are omitted so the JSON serialised on the wire stays "{}",
-// not '{"description": ""}'.
-func customEventMetadata(description string) map[string]any {
-	if description == "" {
+// fields are omitted so a glyph-less, description-less annotation serialises
+// as "{}" rather than spraying empty-string keys onto the wire. The bucket
+// aggregation coerces any missing emoji/icon/color back to "" when it builds
+// the chip-grouping key, so omitting them here is lossless.
+func customEventMetadata(description, emoji, icon, color string) map[string]any {
+	meta := map[string]any{}
+	if description != "" {
+		meta["description"] = description
+	}
+	if emoji != "" {
+		meta["emoji"] = emoji
+	}
+	if icon != "" {
+		meta["icon"] = icon
+	}
+	if color != "" {
+		meta["color"] = color
+	}
+	if len(meta) == 0 {
 		return nil
 	}
-	return map[string]any{"description": description}
+	return meta
+}
+
+// strOrEmpty dereferences an optional string field, treating nil as "". Keeps
+// the custom-event create path free of repetitive nil checks.
+func strOrEmpty(p *string) string {
+	if p == nil {
+		return ""
+	}
+	return *p
 }
 
 // --- Field resolvers ---

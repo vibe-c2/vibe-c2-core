@@ -21,6 +21,13 @@ export type BucketTopicCount = {
   topic: string
   subjectKind: string
   count: number
+  // Custom-event chip identity. Empty string for system kinds — only
+  // user-authored custom events carry a glyph, so the axis groups them into
+  // a chip per (emoji, icon, color) tuple while system kinds collapse to
+  // their subjectKind. See active-day-segment's mergeByGroupIdentity.
+  emoji: string
+  icon: string
+  color: string
 }
 
 export type BucketInput = {

@@ -79,10 +79,20 @@ type TimelineBucket {
 # Per-topic count inside a TimelineBucket. subjectKind is included because
 # the axis dot icon is keyed off subject_kind (events with the same topic
 # always share the same subject_kind, so server-side grouping is safe).
+#
+# emoji/icon/color carry the custom-event chip identity: user-authored
+# annotations are sub-grouped by their chosen glyph + color so two custom
+# events with different icons render as separate chips on the axis. They are
+# always the empty string for system-generated kinds (only custom events can
+# carry an icon/color), so a non-custom group's identity collapses to its
+# subjectKind alone.
 type TimelineTopicCount {
   topic: String!
   subjectKind: String!
   count: Int!
+  emoji: String!
+  icon: String!
+  color: String!
 }
 
 extend type Query {
@@ -152,12 +162,25 @@ input CreateCustomTimelineEventInput {
   # When the event happened, in RFC3339. May be in the past or the future —
   # the operator decides what the event represents.
   occurredAt: String!
+  # Optional visual identity, mirroring wiki documents. emoji and icon are
+  # mutually exclusive (icon wins when both are set); icon is a Lucide name
+  # (e.g. "Flag"); color is an OKLCH string from the shared palette, or empty
+  # for the default. Events sharing the same (emoji, icon, color) tuple group
+  # into one chip on the timeline axis.
+  emoji: String
+  icon: String
+  color: String
 }
 
 input UpdateCustomTimelineEventInput {
   name: String
   description: String
   occurredAt: String
+  # See CreateCustomTimelineEventInput. An explicit empty string clears the
+  # field (e.g. switching from an icon back to an emoji clears icon).
+  emoji: String
+  icon: String
+  color: String
 }
 
 extend type Mutation {

@@ -90,13 +90,19 @@ type Bucket struct {
 	Topics      []TopicBucket `bson:"topics"`
 }
 
-// TopicBucket is the per-(topic, subject_kind) tally inside a Bucket.
-// Events with the same topic always share the same subject_kind, so the
-// pair is stable and server-side grouping by both is safe.
+// TopicBucket is the per-(topic, subject_kind, emoji, icon, color) tally
+// inside a Bucket. Events with the same topic always share the same
+// subject_kind, so that pair is stable. The emoji/icon/color fields carry
+// the custom-event chip identity and are the empty string for every
+// system-generated kind (only custom events store a glyph in metadata), so
+// system kinds never sub-split — see Buckets for the gating expression.
 type TopicBucket struct {
 	Topic       string             `bson:"topic"`
 	SubjectKind models.SubjectKind `bson:"subject_kind"`
 	Count       int                `bson:"count"`
+	Emoji       string             `bson:"emoji"`
+	Icon        string             `bson:"icon"`
+	Color       string             `bson:"color"`
 }
 
 // DayQuery selects the events that fall within a single bucket at the
@@ -115,11 +121,15 @@ type DayQuery struct {
 }
 
 // CustomEventUpdate carries the editable subset of a custom-event row.
-// Pointer fields are partial-update semantics: nil = leave unchanged.
+// Pointer fields are partial-update semantics: nil = leave unchanged. A
+// non-nil pointer to "" clears the field (e.g. dropping an icon).
 type CustomEventUpdate struct {
 	Name        *string
 	Description *string
 	OccurredAt  *time.Time
+	Emoji       *string
+	Icon        *string
+	Color       *string
 }
 
 // IOperationEventRepository defines persistence and read operations for
@@ -216,11 +226,14 @@ func (r *operationEventRepository) Buckets(ctx context.Context, q BucketQuery) (
 		trunc["startOfWeek"] = "monday"
 	}
 
-	// Two-stage $group: first by (bucket, topic, subject_kind), then fold
-	// per-bucket so each output row carries the bucket total plus the
-	// per-topic breakdown. Scanning the operation_events match set twice
-	// in-pipeline is still far cheaper than the previous frontend N+1
-	// (one timelineEventsByDay query per active bucket on page load).
+	// Two-stage $group: first by (bucket, topic, subject_kind, emoji, icon,
+	// color), then fold per-bucket so each output row carries the bucket
+	// total plus the per-topic breakdown. The emoji/icon/color sub-keys let
+	// custom events split into one chip per chosen glyph; customMetaField
+	// pins them to "" for every non-custom kind so those never sub-split.
+	// Scanning the operation_events match set twice in-pipeline is still far
+	// cheaper than the previous frontend N+1 (one timelineEventsByDay query
+	// per active bucket on page load).
 	pipeline := bson.A{
 		bson.M{"$match": match},
 		bson.M{"$group": bson.M{
@@ -228,6 +241,9 @@ func (r *operationEventRepository) Buckets(ctx context.Context, q BucketQuery) (
 				"bucket":       bson.M{"$dateTrunc": trunc},
 				"topic":        "$topic",
 				"subject_kind": "$subject_kind",
+				"emoji":        customMetaField("$metadata.emoji"),
+				"icon":         customMetaField("$metadata.icon"),
+				"color":        customMetaField("$metadata.color"),
 			},
 			"count": bson.M{"$sum": 1},
 		}},
@@ -237,6 +253,9 @@ func (r *operationEventRepository) Buckets(ctx context.Context, q BucketQuery) (
 			"topics": bson.M{"$push": bson.M{
 				"topic":        "$_id.topic",
 				"subject_kind": "$_id.subject_kind",
+				"emoji":        "$_id.emoji",
+				"icon":         "$_id.icon",
+				"color":        "$_id.color",
 				"count":        "$count",
 			}},
 		}},
@@ -282,7 +301,30 @@ func lessTopicBucket(a, b TopicBucket) bool {
 	if a.Count != b.Count {
 		return a.Count > b.Count
 	}
-	return a.Topic < b.Topic
+	if a.Topic != b.Topic {
+		return a.Topic < b.Topic
+	}
+	// Custom events all share one topic, so break further ties on the glyph
+	// identity to keep the chip order deterministic across requests.
+	if a.Emoji != b.Emoji {
+		return a.Emoji < b.Emoji
+	}
+	if a.Icon != b.Icon {
+		return a.Icon < b.Icon
+	}
+	return a.Color < b.Color
+}
+
+// customMetaField projects a custom-event metadata string field, coercing
+// missing values — and every non-custom row — to the empty string. Keeping
+// "" canonical means the chip-grouping key is always a clean string and
+// system kinds can never sub-split by an icon/color they do not carry.
+func customMetaField(path string) bson.M {
+	return bson.M{"$cond": bson.A{
+		bson.M{"$eq": bson.A{"$subject_kind", string(models.SubjectKindCustomEvent)}},
+		bson.M{"$ifNull": bson.A{path, ""}},
+		"",
+	}}
 }
 
 // ListByDay returns the events in a single bucket, newest first.
@@ -370,6 +412,15 @@ func (r *operationEventRepository) UpdateCustomEvent(
 		// Metadata is a sub-document; using dotted path so we don't
 		// blow away unrelated metadata keys a future schema may add.
 		set["metadata.description"] = *upd.Description
+	}
+	if upd.Emoji != nil {
+		set["metadata.emoji"] = *upd.Emoji
+	}
+	if upd.Icon != nil {
+		set["metadata.icon"] = *upd.Icon
+	}
+	if upd.Color != nil {
+		set["metadata.color"] = *upd.Color
 	}
 	if upd.OccurredAt != nil {
 		set["occurred_at"] = upd.OccurredAt.UTC()
