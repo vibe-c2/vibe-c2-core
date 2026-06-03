@@ -531,7 +531,8 @@ function PaletteRow({
         {/* Breadcrumb — crumbs navigate (search) or select (pick) the ancestor. */}
         <WikiAncestorBreadcrumb
           ancestors={doc.ancestors}
-          className="truncate pl-6"
+          className="pl-6"
+          collapseAfter={3}
           highlightQuery={query}
           {...(isPick
             ? { onCrumbSelect: onPickCrumb }

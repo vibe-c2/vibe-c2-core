@@ -5,6 +5,7 @@ import {
   useRef,
   useState,
   type KeyboardEvent as ReactKeyboardEvent,
+  type MouseEvent as ReactMouseEvent,
 } from "react"
 import { Link, useNavigate } from "react-router"
 import { ClockIcon, XIcon } from "lucide-react"
@@ -148,6 +149,17 @@ function ModalBody({ operationId, isOpen, onClose }: ModalBodyProps) {
     [navigate, onClose],
   )
 
+  // Shared handler for the doc-opening <Link>s in a row (icon, title,
+  // attribution, timestamp). Modifier-clicks fall through to the browser's
+  // new-tab/new-window behavior so the modal only closes on plain navigation.
+  // Mirrors PaletteRow's handleOpenClick in wiki-command-palette.tsx.
+  const handleOpenClick = useCallback(
+    (e: ReactMouseEvent) => {
+      if (isPlainLeftClick(e)) onClose()
+    },
+    [onClose],
+  )
+
   const onKeyDown = useCallback(
     (e: ReactKeyboardEvent<HTMLDivElement>) => {
       if (e.key === "ArrowDown") {
@@ -245,39 +257,61 @@ function ModalBody({ operationId, isOpen, onClose }: ModalBodyProps) {
                     transform: `translateY(${item.start}px)`,
                   }}
                 >
-                  <Link
-                    to={`/wiki/${hit.id}`}
+                  {/* Plain div row — never a single Link — so the title,
+                      attribution, timestamp, and each breadcrumb crumb are
+                      their own interactive elements without nesting anchors.
+                      The doc-opening areas are <Link>s; the breadcrumb crumbs
+                      are their own <Link>s to the ancestor (onCrumbClick). This
+                      mirrors PaletteRow so opening a parent from the breadcrumb
+                      works the same here as in the search modal. */}
+                  <div
                     onMouseMove={() => setActiveIndex(item.index)}
-                    onClick={(e) => {
-                      if (isPlainLeftClick(e)) onClose()
-                    }}
                     className={cn(
-                      "mx-1 flex cursor-pointer items-start gap-2 rounded px-3 py-2 text-left",
+                      "mx-1 flex items-start gap-2 rounded px-3 py-2 text-left",
                       isActive ? "bg-accent" : "hover:bg-muted/60",
                     )}
                   >
-                    <DocumentIcon
-                      emoji={hit.emoji}
-                      icon={hit.icon}
-                      color={hit.color}
-                      className="mt-0.5 shrink-0"
-                    />
+                    <Link
+                      to={`/wiki/${hit.id}`}
+                      onClick={handleOpenClick}
+                      className="shrink-0"
+                    >
+                      <DocumentIcon
+                        emoji={hit.emoji}
+                        icon={hit.icon}
+                        color={hit.color}
+                        className="mt-0.5"
+                      />
+                    </Link>
                     <div className="min-w-0 flex-1">
-                      <span className="block truncate text-sm font-medium">
+                      <Link
+                        to={`/wiki/${hit.id}`}
+                        onClick={handleOpenClick}
+                        className="block truncate text-sm font-medium"
+                      >
                         {hit.title || "Untitled"}
-                      </span>
+                      </Link>
                       <WikiAncestorBreadcrumb
                         ancestors={hit.ancestors}
-                        className="truncate"
+                        collapseAfter={3}
+                        onCrumbClick={onClose}
                       />
-                      <span className="block truncate text-[11px] text-muted-foreground">
+                      <Link
+                        to={`/wiki/${hit.id}`}
+                        onClick={handleOpenClick}
+                        className="block truncate text-[11px] text-muted-foreground"
+                      >
                         {attributionLabel} {attributionUser.username}
-                      </span>
+                      </Link>
                     </div>
-                    <span className="mt-0.5 shrink-0 text-[11px] tabular-nums text-muted-foreground">
+                    <Link
+                      to={`/wiki/${hit.id}`}
+                      onClick={handleOpenClick}
+                      className="mt-0.5 shrink-0 text-[11px] tabular-nums text-muted-foreground"
+                    >
                       {relativeTime(timestampSource, now)}
-                    </span>
-                  </Link>
+                    </Link>
+                  </div>
                 </div>
               )
             })}
