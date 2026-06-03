@@ -278,9 +278,14 @@ func toOperationMemberEvent(event eventbus.Event) *model.OperationMemberEvent {
 func toWikiDocumentEvent(event eventbus.Event) *model.WikiDocumentEvent {
 	evt := &model.WikiDocumentEvent{Action: topicToAction(event.Topic)}
 
-	// Map soft_deleted and restored to appropriate actions
+	// Map delete/restore/move topics to the right action. topicToAction can't
+	// be trusted for the hard-delete topic: it matches the suffix ".deleted",
+	// but the topic is "wiki.document.hard_deleted" (ends "_deleted"), so it
+	// falls through to UPDATED. Both soft- and hard-delete must surface as
+	// DELETED so the client drops per-doc caches and refreshes the trash list
+	// (hard-delete + empty-trash arrive with documentId="").
 	switch event.Topic {
-	case eventbus.TopicWikiDocumentSoftDeleted:
+	case eventbus.TopicWikiDocumentSoftDeleted, eventbus.TopicWikiDocumentHardDeleted:
 		evt.Action = model.EventActionDeleted
 	case eventbus.TopicWikiDocumentRestored:
 		evt.Action = model.EventActionCreated
