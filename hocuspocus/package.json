@@ -9,7 +9,8 @@
     "typecheck": "tsc --noEmit",
     "test": "node --test --import tsx 'src/__tests__/*.ts'",
     "start": "node dist/index.js",
-    "backfill-references": "tsx src/backfill-references.ts"
+    "backfill-references": "tsx src/backfill-references.ts",
+    "audit-references": "tsx src/audit-references.ts"
   },
   "dependencies": {
     "@hocuspocus/server": "^2.15.0",
