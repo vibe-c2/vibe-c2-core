@@ -80,9 +80,6 @@ func (r *wikiDocumentRepository) SearchByOperationID(
 	offset, limit int64,
 ) ([]WikiDocumentSearchHit, int64, error) {
 	query = strings.TrimSpace(query)
-	if query == "" {
-		return nil, 0, nil
-	}
 
 	if offset < 0 {
 		offset = 0
@@ -97,6 +94,14 @@ func (r *wikiDocumentRepository) SearchByOperationID(
 	raw, err := r.coll.RawCollection()
 	if err != nil {
 		return nil, 0, err
+	}
+
+	// Empty query → browse mode: list active documents newest-updated first so
+	// the search palette / document picker shows recent docs to choose from
+	// before the user types anything. The ranked text-search branches below
+	// only make sense once there's a query to rank against.
+	if query == "" {
+		return r.browseByOperationID(ctx, raw, opID, scopeParentID, offset, limit)
 	}
 
 	baseFilter := v1bson.M{
@@ -215,6 +220,97 @@ func (r *wikiDocumentRepository) SearchByOperationID(
 	}
 
 	return page, total, nil
+}
+
+// browseByOperationID is the empty-query path for SearchByOperationID. It lists
+// active documents in the operation (optionally scoped to a subtree) ordered
+// newest-updated first, paginated by offset/limit. No snippet/score — there is
+// no query to highlight or rank against.
+//
+// Ordering: last_updated_at is the curated "content was persisted" signal, but
+// it's nullable on legacy rows and docs that were created and never edited.
+// Sorting on it directly (as the SortByLastUpdatedAt list mode does) would drop
+// those docs from the picker entirely. We coalesce to createAt so every doc is
+// browsable and stably ordered, with _id as the final tiebreaker.
+func (r *wikiDocumentRepository) browseByOperationID(
+	ctx context.Context,
+	raw *mongo.Collection,
+	opID uuid.UUID,
+	scopeParentID *uuid.UUID,
+	offset, limit int64,
+) ([]WikiDocumentSearchHit, int64, error) {
+	match := buildWikiBrowseMatch(opID, scopeParentID)
+
+	total, err := raw.CountDocuments(ctx, match)
+	if err != nil {
+		return nil, 0, fmt.Errorf("browse wiki documents: count: %w", err)
+	}
+	if offset >= total {
+		return nil, total, nil
+	}
+
+	cur, err := raw.Aggregate(ctx, buildWikiBrowsePipeline(match, offset, limit))
+	if err != nil {
+		return nil, 0, fmt.Errorf("browse wiki documents: aggregate: %w", err)
+	}
+	defer cur.Close(ctx)
+
+	var docs []models.WikiDocument
+	if err := cur.All(ctx, &docs); err != nil {
+		return nil, 0, fmt.Errorf("browse wiki documents: decode: %w", err)
+	}
+
+	hits := make([]WikiDocumentSearchHit, len(docs))
+	for i, d := range docs {
+		hits[i] = WikiDocumentSearchHit{Doc: d}
+	}
+	return hits, total, nil
+}
+
+// buildWikiBrowseMatch builds the $match / count filter for browse mode: active
+// docs in the operation, optionally scoped to a subtree. Same subtree semantics
+// as the search path — the scope doc itself plus all descendants via the
+// materialized path_ids chain. Extracted as a pure function so the scope
+// handling is unit-testable without a live Mongo.
+func buildWikiBrowseMatch(opID uuid.UUID, scopeParentID *uuid.UUID) v1bson.M {
+	match := v1bson.M{
+		"operation_id": opID,
+		"deleted_at":   nil,
+	}
+	if scopeParentID != nil {
+		match["$or"] = v1bson.A{
+			v1bson.M{"document_id": *scopeParentID},
+			v1bson.M{"path_ids": *scopeParentID},
+		}
+	}
+	return match
+}
+
+// buildWikiBrowsePipeline builds the aggregation that lists browse-mode docs
+// newest-updated first. last_updated_at is coalesced to createAt so docs that
+// were never edited (null last_updated_at) stay visible and stably ordered,
+// with _id as the final tiebreaker. Content + the synthetic sort key are
+// projected away — browse rows never render a snippet.
+func buildWikiBrowsePipeline(match v1bson.M, offset, limit int64) mongo.Pipeline {
+	return mongo.Pipeline{
+		{{Key: "$match", Value: match}},
+		{{Key: "$addFields", Value: v1bson.M{
+			"effective_updated": v1bson.M{
+				"$ifNull": v1bson.A{"$last_updated_at", "$createAt"},
+			},
+		}}},
+		{{Key: "$sort", Value: v1bson.D{
+			{Key: "effective_updated", Value: -1},
+			{Key: "_id", Value: -1},
+		}}},
+		{{Key: "$skip", Value: offset}},
+		{{Key: "$limit", Value: limit}},
+		{{Key: "$project", Value: v1bson.M{
+			"content":           0,
+			"content_state":     0,
+			"effective_updated": 0,
+		}}},
+	}
 }
 
 // hydratePageContent fetches the `content` field for the documents on the
