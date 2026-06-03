@@ -176,7 +176,7 @@ function PickerBody({ mode, setMode, search, setSearch }: PickerBodyProps) {
       operationId={operationId}
       search={search}
       onSearchChange={setSearch}
-      onPick={insertCredential}
+      onPick={(c) => insertCredential(c.id)}
       onStartCreate={() => setMode("create")}
     />
   )

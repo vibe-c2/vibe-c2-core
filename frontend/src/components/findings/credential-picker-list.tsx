@@ -1,30 +1,43 @@
-import { useEffect, useMemo, useRef, useState, type ReactNode } from "react"
-import { KeyIcon, PlusIcon, SearchIcon } from "lucide-react"
-import { Badge } from "@/components/ui/badge"
-import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
-import { useInfiniteCredentials } from "@/graphql/hooks/credentials"
-import { credentialTypeLabel } from "@/components/findings/credential-type-utils"
-import { cn } from "@/lib/utils"
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { KeyIcon, PlusIcon, SearchIcon } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { useInfiniteCredentials } from "@/graphql/hooks/credentials";
+import { credentialTypeLabel } from "@/components/findings/credential-type-utils";
+import type { CredentialFieldsFragment } from "@/graphql/gql/graphql";
+import { cn } from "@/lib/utils";
 
 /**
  * Searchable credential list with keyboard navigation and infinite scroll.
- * Shared between the wiki "Insert credential reference" picker and the
- * findings "Mark hash as cracked" dialog so both render identical rows,
- * use the same keyboard model, and stay in sync as the design evolves.
+ * Shared across every credential-picking surface — the wiki "Insert credential
+ * reference" picker, the findings "Mark hash as cracked" dialog, and the task
+ * relations editor — so they render identical rows, use the same keyboard
+ * model, and stay in sync as the design evolves.
  *
  * The search input is owned by the caller so it can be reused across modes
- * (e.g. seed the create-new form with the current query in wiki).
+ * (e.g. seed the create-new form with the current query in wiki). Pass
+ * `excludeIds` from multi-select callers (tasks) to hide already-picked rows.
  */
 interface CredentialPickerListProps {
-  operationId: string
-  search: string
-  onSearchChange: (search: string) => void
-  onPick: (credentialId: string) => void
+  operationId: string;
+  search: string;
+  onSearchChange: (search: string) => void;
+  /**
+   * Fired with the full picked credential node so callers can use any field
+   * (id for references, name for a chip label, etc.) without a second fetch.
+   */
+  onPick: (credential: CredentialFieldsFragment) => void;
+  /**
+   * Credential ids to hide from the list — e.g. ones already linked in a
+   * multi-select surface (task relations). Filtered client-side after the
+   * page fetch so keyboard nav and the empty state see the same set.
+   */
+  excludeIds?: ReadonlySet<string>;
   /** When provided, renders a footer with a "Create new credential" CTA. */
-  onStartCreate?: () => void
+  onStartCreate?: () => void;
   /** Optional footer slot (overrides the default create CTA). */
-  footer?: ReactNode
+  footer?: ReactNode;
 }
 
 export function CredentialPickerList({
@@ -32,60 +45,56 @@ export function CredentialPickerList({
   search,
   onSearchChange,
   onPick,
+  excludeIds,
   onStartCreate,
   footer,
 }: CredentialPickerListProps) {
-  const [debounced, setDebounced] = useState(search.trim())
-  const [activeIndex, setActiveIndex] = useState(0)
-  const activeItemRef = useRef<HTMLButtonElement | null>(null)
+  const [debounced, setDebounced] = useState(search.trim());
+  const [activeIndex, setActiveIndex] = useState(0);
+  const activeItemRef = useRef<HTMLButtonElement | null>(null);
 
   useEffect(() => {
-    const t = setTimeout(() => setDebounced(search.trim()), 180)
-    return () => clearTimeout(t)
-  }, [search])
+    const t = setTimeout(() => setDebounced(search.trim()), 180);
+    return () => clearTimeout(t);
+  }, [search]);
 
   useEffect(() => {
-    activeItemRef.current?.scrollIntoView({ block: "nearest" })
-  }, [activeIndex])
+    activeItemRef.current?.scrollIntoView({ block: "nearest" });
+  }, [activeIndex]);
 
-  const [lastDebounced, setLastDebounced] = useState(debounced)
+  const [lastDebounced, setLastDebounced] = useState(debounced);
   if (lastDebounced !== debounced) {
-    setLastDebounced(debounced)
-    setActiveIndex(0)
+    setLastDebounced(debounced);
+    setActiveIndex(0);
   }
 
-  const {
-    data,
-    isLoading,
-    hasNextPage,
-    fetchNextPage,
-    isFetchingNextPage,
-  } = useInfiniteCredentials({
-    operationId,
-    search: debounced || null,
-    validOnly: null,
-    first: 20,
-  })
+  const { data, isLoading, hasNextPage, fetchNextPage, isFetchingNextPage } =
+    useInfiniteCredentials({
+      operationId,
+      search: debounced || null,
+      validOnly: null,
+      first: 20,
+    });
 
-  const credentials = useMemo(
-    () =>
-      data?.pages.flatMap((p) => p.credentials.edges.map((e) => e.node)) ?? [],
-    [data],
-  )
+  const credentials = useMemo(() => {
+    const all =
+      data?.pages.flatMap((p) => p.credentials.edges.map((e) => e.node)) ?? [];
+    return excludeIds ? all.filter((c) => !excludeIds.has(c.id)) : all;
+  }, [data, excludeIds]);
 
   function onKeyDown(e: React.KeyboardEvent<HTMLInputElement>) {
     if (e.key === "ArrowDown") {
-      e.preventDefault()
+      e.preventDefault();
       setActiveIndex((i) =>
         Math.min(i + 1, Math.max(credentials.length - 1, 0)),
-      )
+      );
     } else if (e.key === "ArrowUp") {
-      e.preventDefault()
-      setActiveIndex((i) => Math.max(i - 1, 0))
+      e.preventDefault();
+      setActiveIndex((i) => Math.max(i - 1, 0));
     } else if (e.key === "Enter") {
-      e.preventDefault()
-      const cred = credentials[activeIndex]
-      if (cred) onPick(cred.id)
+      e.preventDefault();
+      const cred = credentials[activeIndex];
+      if (cred) onPick(cred);
     }
   }
 
@@ -106,7 +115,7 @@ export function CredentialPickerList({
           Create new credential
         </Button>
       </div>
-    ) : null)
+    ) : null);
 
   return (
     <div className="flex flex-col gap-2">
@@ -117,20 +126,20 @@ export function CredentialPickerList({
           value={search}
           onChange={(e) => onSearchChange(e.target.value)}
           onKeyDown={onKeyDown}
-          placeholder="Search credentials by name…"
+          placeholder="Search by name, username, or password…"
           className="pl-8"
         />
       </div>
       <div
         className="max-h-72 overflow-y-auto rounded-md border bg-card"
         onScroll={(e) => {
-          const el = e.currentTarget
+          const el = e.currentTarget;
           if (
             hasNextPage &&
             !isFetchingNextPage &&
             el.scrollTop + el.clientHeight >= el.scrollHeight - 32
           ) {
-            void fetchNextPage()
+            void fetchNextPage();
           }
         }}
       >
@@ -144,17 +153,17 @@ export function CredentialPickerList({
           </div>
         ) : (
           credentials.map((c, i) => {
-            const isActive = i === activeIndex
+            const isActive = i === activeIndex;
             return (
               <button
                 key={c.id}
                 ref={(el) => {
-                  if (isActive) activeItemRef.current = el
+                  if (isActive) activeItemRef.current = el;
                 }}
                 type="button"
                 onMouseEnter={() => setActiveIndex(i)}
                 onMouseDown={(e) => e.preventDefault()}
-                onClick={() => onPick(c.id)}
+                onClick={() => onPick(c)}
                 aria-selected={isActive}
                 className={cn(
                   "flex w-full items-center gap-2 border-b px-3 py-2 text-left text-sm outline-hidden last:border-b-0",
@@ -170,13 +179,9 @@ export function CredentialPickerList({
                 <Badge variant="outline" className="shrink-0">
                   {credentialTypeLabel(c.type)}
                 </Badge>
-                {c.username ? (
-                  <span className="hidden max-w-[12ch] shrink-0 truncate text-xs text-muted-foreground sm:inline">
-                    {c.username}
-                  </span>
-                ) : null}
+                <CredentialMeta username={c.username} password={c.password} />
               </button>
-            )
+            );
           })
         )}
         {isFetchingNextPage && (
@@ -187,5 +192,36 @@ export function CredentialPickerList({
       </div>
       {resolvedFooter}
     </div>
-  )
+  );
+}
+
+/**
+ * Trailing username · password hint on a credential row. Hidden below `sm`
+ * where the row is too narrow; password rendered monospace so it reads as a
+ * secret value rather than prose. Renders nothing when the credential carries
+ * neither (e.g. a key-only SSH credential).
+ */
+function CredentialMeta({
+  username,
+  password,
+}: {
+  username: string;
+  password: string;
+}) {
+  if (!username && !password) return null;
+  return (
+    <span className="hidden shrink-0 items-center gap-1.5 text-xs text-muted-foreground sm:flex">
+      {username ? (
+        <span className="max-w-[12ch] truncate">{username}</span>
+      ) : null}
+      {username && password ? (
+        <span className="text-muted-foreground/50">·</span>
+      ) : null}
+      {password ? (
+        <span className="max-w-[12ch] truncate font-mono text-muted-foreground/80">
+          {password}
+        </span>
+      ) : null}
+    </span>
+  );
 }

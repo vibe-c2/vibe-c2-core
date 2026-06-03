@@ -109,7 +109,7 @@ export function MarkHashCrackedDialog() {
               operationId={operationId}
               search={search}
               onSearchChange={setSearch}
-              onPick={linkCredential}
+              onPick={(c) => linkCredential(c.id)}
               onStartCreate={() => setMode("create")}
             />
           )
