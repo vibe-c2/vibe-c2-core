@@ -1,15 +1,15 @@
 import type { Editor } from "@tiptap/core"
-import { openWikiDocumentPicker } from "@/components/wiki/wiki-document-picker-dialog"
+import { openWikiDocumentPicker } from "@/components/wiki/wiki-command-palette"
 
 // Compatibility shim for the /doc slash-command call site. The picker UI
-// itself lives in `wiki-document-picker-dialog.tsx` and is mounted once at
-// the app shell — this wrapper just captures the editor + insertion position
-// at the moment the slash command fires and forwards to the shared dialog
-// with a doc-reference-insert onPick callback.
+// itself is the unified search/picker palette in `wiki-command-palette.tsx`,
+// mounted once at the app shell — this wrapper just captures the editor +
+// insertion position at the moment the slash command fires and forwards to
+// the shared palette (pick mode) with a doc-reference-insert onPick callback.
 //
 // Kept as a separate module so the slash-command items file doesn't need to
 // know about wikiDocumentReference node attrs (the editor-specific bit) or
-// the dialog's imperative store (the surface-agnostic bit).
+// the palette's imperative store (the surface-agnostic bit).
 
 interface PickerArgs {
   editor: Editor

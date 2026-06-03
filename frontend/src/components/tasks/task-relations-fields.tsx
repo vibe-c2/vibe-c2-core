@@ -11,7 +11,7 @@ import { useInfiniteCredentials } from "@/graphql/hooks/credentials"
 import { WikiDocumentChipById } from "@/components/wiki/wiki-document-chip-view"
 import { WikiCredentialChipById } from "@/components/wiki/wiki-credential-chip-view"
 import { WikiUserChipView } from "@/components/wiki/wiki-user-chip-view"
-import { openWikiDocumentPicker } from "@/components/wiki/wiki-document-picker-dialog"
+import { openWikiDocumentPicker } from "@/components/wiki/wiki-command-palette"
 
 import type {
   RelationItem,

@@ -30,6 +30,7 @@ import { Badge } from "@/components/ui/badge"
 import { Skeleton } from "@/components/ui/skeleton"
 import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip"
 import { useWikiStore } from "@/stores/wiki"
+import { openWikiSearch } from "@/components/wiki/wiki-command-palette"
 import { useWikiDragStore, type DropPosition, type DropTarget } from "@/stores/wiki-drag"
 import {
   useWikiDocumentChildren,
@@ -172,7 +173,6 @@ export function WikiTreeSidebar({
   const openImportOutlineDialog = useWikiStore((s) => s.openImportOutlineDialog)
   const openExportDialog = useWikiStore((s) => s.openExportDialog)
   const openTrashPanel = useWikiStore((s) => s.openTrashPanel)
-  const openContentSearch = useWikiStore((s) => s.openContentSearch)
   const openRecentDocs = useWikiStore((s) => s.openRecentDocs)
   // expandMany lives inside useWikiSubtreeExpansion; only collapseMany is
   // used directly here, by the no-fetch Collapse-all handler.
@@ -494,7 +494,13 @@ export function WikiTreeSidebar({
               <Button
                 variant="ghost"
                 size="icon-xs"
-                onClick={() => openContentSearch(null, "All Documents")}
+                onClick={() =>
+                  openWikiSearch({
+                    operationId,
+                    parentDocumentId: null,
+                    parentTitle: "All Documents",
+                  })
+                }
               />
             }
           >

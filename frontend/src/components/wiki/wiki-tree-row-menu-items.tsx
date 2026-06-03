@@ -15,6 +15,7 @@ import {
   DropdownMenuSeparator,
 } from "@/components/ui/dropdown-menu"
 import { useWikiStore } from "@/stores/wiki"
+import { openWikiSearch } from "@/components/wiki/wiki-command-palette"
 import {
   useDuplicateWikiDocument,
   useReorderWikiDocumentSiblings,
@@ -57,7 +58,6 @@ export function WikiTreeRowMenuItems({
   const openDeleteDialog = useWikiStore((s) => s.openDeleteDialog)
   const openDuplicateDialog = useWikiStore((s) => s.openDuplicateDialog)
   const openExportDialog = useWikiStore((s) => s.openExportDialog)
-  const openContentSearch = useWikiStore((s) => s.openContentSearch)
   const reorderSiblings = useReorderWikiDocumentSiblings()
   const duplicateDocument = useDuplicateWikiDocument()
 
@@ -152,7 +152,15 @@ export function WikiTreeRowMenuItems({
         <ExternalLinkIcon className="mr-2 size-4" />
         Open in new tab
       </Item>
-      <Item onClick={() => openContentSearch(node.id, node.title)}>
+      <Item
+        onClick={() =>
+          openWikiSearch({
+            operationId,
+            parentDocumentId: node.id,
+            parentTitle: node.title,
+          })
+        }
+      >
         <SearchIcon className="mr-2 size-4" />
         Search in {node.title}...
       </Item>

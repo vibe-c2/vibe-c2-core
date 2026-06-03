@@ -195,47 +195,6 @@ export const WikiDocumentQuery = graphql(`
   }
 `)
 
-export const WikiDocumentsQuery = graphql(`
-  query WikiDocuments(
-    $operationId: ID!
-    $parentDocumentId: ID
-    $search: String
-    $first: Int
-    $after: String
-  ) {
-    wikiDocuments(
-      operationId: $operationId
-      parentDocumentId: $parentDocumentId
-      search: $search
-      first: $first
-      after: $after
-    ) {
-      edges {
-        node {
-          id
-          operationId
-          parentDocumentId
-          title
-          emoji
-          icon
-          color
-          sortOrder
-          # ancestors is bulk-preloaded by the WikiDocuments resolver via the
-          # per-request WikiTreeLoader, so requesting it adds one Mongo round
-          # trip per page (not per row). Powers the picker breadcrumb.
-          ancestors { id title emoji icon color isDeleted }
-          createdBy { id username }
-          createdAt
-          updatedAt
-        }
-        cursor
-      }
-      pageInfo { hasNextPage endCursor }
-      totalCount
-    }
-  }
-`)
-
 // Recent-documents modal feed. Sort defaults to RECENTLY_CREATED on the
 // server; clients pass RECENTLY_UPDATED for the "Recently updated" toggle.
 // The row projection mirrors what wiki-recent-docs-modal.tsx needs: icon

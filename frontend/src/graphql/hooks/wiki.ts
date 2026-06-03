@@ -15,7 +15,6 @@ import {
   WikiDocumentDocument,
   WikiDocumentLiteDocument,
   WikiDocumentBacklinksDocument,
-  WikiDocumentsDocument,
   WikiRecentDocumentsDocument,
   WikiSearchDocument,
   WikiDocumentTrashDocument,
@@ -65,8 +64,6 @@ export const wikiKeys = {
   details: () => [...wikiKeys.all, "detail"] as const,
   detail: (id: string) => [...wikiKeys.details(), id] as const,
   lists: () => [...wikiKeys.all, "list"] as const,
-  infiniteList: (params: { operationId: string; parentDocumentId?: string | null; search?: string | null }) =>
-    [...wikiKeys.lists(), "infinite", params] as const,
   search: (params: { operationId: string; scope?: string | null; query: string }) =>
     [...wikiKeys.all, "search", params] as const,
   // Recent-documents modal feed. Keyed on (operationId, sort) so the cache
@@ -347,35 +344,10 @@ export function useWikiDocumentBacklinks(documentId: string) {
   })
 }
 
-export function useWikiDocuments(params: {
-  operationId: string
-  parentDocumentId?: string | null
-  search?: string | null
-  first?: number
-}) {
-  return useInfiniteQuery({
-    queryKey: wikiKeys.infiniteList(params),
-    queryFn: ({ pageParam }) =>
-      graphqlClient(WikiDocumentsDocument, {
-        operationId: params.operationId,
-        parentDocumentId: params.parentDocumentId,
-        search: params.search,
-        first: params.first ?? 20,
-        after: pageParam,
-      }),
-    initialPageParam: undefined as string | undefined,
-    getNextPageParam: (lastPage) =>
-      lastPage.wikiDocuments.pageInfo.hasNextPage
-        ? lastPage.wikiDocuments.pageInfo.endCursor ?? undefined
-        : undefined,
-    enabled: !!params.operationId,
-  })
-}
-
-// Recent-documents feed for the "Latest documents" sidebar modal. Same
-// cursor pagination as useWikiDocuments under the hood, but a tighter row
-// projection (ancestors + lastUpdatedAt for the breadcrumb / timestamp
-// column) and a larger page size since the modal renders virtualized.
+// Recent-documents feed for the "Latest documents" sidebar modal. Cursor
+// pagination over the wikiDocuments field with a tight row projection
+// (ancestors + lastUpdatedAt for the breadcrumb / timestamp column) and a
+// larger page size since the modal renders virtualized.
 // `enabled` gates the fetch on modal visibility so closed-modal sessions
 // pay zero round-trips.
 export function useWikiRecentDocuments(params: {
@@ -403,13 +375,16 @@ export function useWikiRecentDocuments(params: {
   })
 }
 
-// useWikiSearch drives the Cmd+K command palette. Offset-based pagination
-// because ranking by text score cannot use the cursor scheme (createdAt) that
-// the list query uses. Caller passes the debounced query; the query key
-// intentionally includes only the debounced value so typing doesn't thrash
-// the cache — `keepPreviousData` keeps the last page visible during re-queries.
+// useWikiSearch drives the unified wiki search/picker palette. Offset-based
+// pagination because ranking by text score cannot use the cursor scheme
+// (createdAt) that the list query uses. Caller passes the debounced query; the
+// query key intentionally includes only the debounced value so typing doesn't
+// thrash the cache — `keepPreviousData` keeps the last page visible during
+// re-queries.
 //
-// Disabled when query is empty so no call fires on an empty palette.
+// Enabled even for an empty query: the backend treats a blank query as a
+// browse request (active docs, newest-updated first) so the palette shows
+// recent documents to pick from before the user types.
 export function useWikiSearch(params: {
   operationId: string
   scope?: string | null
@@ -434,7 +409,7 @@ export function useWikiSearch(params: {
     initialPageParam: 0 as number,
     getNextPageParam: (lastPage, allPages) =>
       lastPage.wikiSearch.hasMore ? allPages.length * limit : undefined,
-    enabled: !!params.operationId && params.query.trim().length > 0,
+    enabled: !!params.operationId,
     staleTime: 15_000,
   })
 }

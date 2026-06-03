@@ -24,6 +24,11 @@ interface WikiAncestorBreadcrumbProps {
    *  `/wiki/<id>` and this callback fires after the click is accepted.
    *  Surfaces like the command palette use this to close the overlay. */
   onCrumbClick?: () => void
+  /** When provided, each non-deleted crumb becomes a <button> that selects
+   *  that ancestor instead of navigating — used by the picker so a reference
+   *  can target a parent document straight from the breadcrumb. Takes
+   *  precedence over onCrumbClick. */
+  onCrumbSelect?: (crumb: AncestorCrumb) => void
 }
 
 // Renders the ancestor path as `icon title › icon title › …` with deleted
@@ -34,6 +39,7 @@ export function WikiAncestorBreadcrumb({
   className,
   highlightQuery,
   onCrumbClick,
+  onCrumbSelect,
 }: WikiAncestorBreadcrumbProps) {
   if (ancestors.length === 0) return null
   // Block-rendered <span> instead of <p> so callers can drop the breadcrumb
@@ -48,6 +54,7 @@ export function WikiAncestorBreadcrumb({
             crumb={a}
             highlightQuery={highlightQuery}
             onCrumbClick={onCrumbClick}
+            onCrumbSelect={onCrumbSelect}
           />
         </span>
       ))}
@@ -59,9 +66,10 @@ interface CrumbProps {
   crumb: AncestorCrumb
   highlightQuery?: string | null
   onCrumbClick?: () => void
+  onCrumbSelect?: (crumb: AncestorCrumb) => void
 }
 
-function Crumb({ crumb, highlightQuery, onCrumbClick }: CrumbProps) {
+function Crumb({ crumb, highlightQuery, onCrumbClick, onCrumbSelect }: CrumbProps) {
   const inner = (
     <>
       <DocumentIcon
@@ -74,13 +82,31 @@ function Crumb({ crumb, highlightQuery, onCrumbClick }: CrumbProps) {
     </>
   )
 
-  // Deleted ancestors aren't navigable — their page is in the trash, the
-  // route would 404. Render them as plain text with the strike-through.
+  // Deleted ancestors aren't navigable or selectable — their page is in the
+  // trash (the route would 404, and a reference to it would dangle). Render
+  // them as plain text with the strike-through.
   if (crumb.isDeleted) {
     return (
       <span className="inline-flex items-center gap-1 text-muted-foreground/70 line-through">
         {inner}
       </span>
+    )
+  }
+
+  // Select mode takes precedence: the crumb picks that ancestor instead of
+  // navigating. A <button> (not a Link) so it can live inside a non-link row.
+  if (onCrumbSelect) {
+    return (
+      <button
+        type="button"
+        onClick={(e) => {
+          e.stopPropagation()
+          onCrumbSelect(crumb)
+        }}
+        className="inline-flex items-center gap-1 rounded hover:bg-accent/60 hover:text-foreground"
+      >
+        {inner}
+      </button>
     )
   }
 

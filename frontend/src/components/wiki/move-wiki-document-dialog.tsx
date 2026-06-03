@@ -17,7 +17,7 @@ import {
 } from "@/graphql/hooks/wiki"
 import { DocumentIcon } from "@/components/wiki/document-icon"
 import { sortByOrder } from "@/components/wiki/wiki-tree-helpers"
-import { openWikiDocumentPicker } from "@/components/wiki/wiki-document-picker-dialog"
+import { openWikiDocumentPicker } from "@/components/wiki/wiki-command-palette"
 import type { WikiDocumentTreeFieldsFragment } from "@/graphql/gql/graphql"
 
 interface MoveWikiDocumentDialogProps {

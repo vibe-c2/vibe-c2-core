@@ -11,7 +11,7 @@ import { EditTaskDialog } from "@/components/tasks/edit-task-dialog"
 import { DeleteTaskDialog } from "@/components/tasks/delete-task-dialog"
 import { StatusRequiredDialog } from "@/components/tasks/status-required-dialog"
 import { ReopenTaskDialog } from "@/components/tasks/reopen-task-dialog"
-import { WikiDocumentPickerDialog } from "@/components/wiki/wiki-document-picker-dialog"
+import { WikiCommandPalette } from "@/components/wiki/wiki-command-palette"
 import { TaskPickerDialog } from "@/components/tasks/task-picker-dialog"
 
 export function AppLayout() {
@@ -50,10 +50,12 @@ export function AppLayout() {
         <DeleteTaskDialog />
         <StatusRequiredDialog />
         <ReopenTaskDialog />
-        {/* Wiki document picker is mounted globally — the /doc slash command
-            (wiki editor) and the task edit dialog's "Wiki references" picker
-            both call openWikiDocumentPicker imperatively. */}
-        <WikiDocumentPickerDialog />
+        {/* Unified wiki search/picker palette, mounted globally. Drives both
+            the Cmd+K / "search within" navigate surface (openWikiSearch) and
+            every document-reference picker (openWikiDocumentPicker): the /doc
+            slash command, the move dialog's parent chooser, and the task edit
+            dialog's "Wiki references". */}
+        <WikiCommandPalette />
         {/* Task picker is the mirror image — the wiki editor's "Add to task"
             button calls openTaskPicker imperatively to attach the current
             document to a task without leaving the wiki page. */}

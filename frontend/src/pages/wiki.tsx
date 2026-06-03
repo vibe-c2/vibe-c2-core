@@ -23,7 +23,7 @@ import { useWikiStore } from "@/stores/wiki"
 import { WikiTreeSidebar } from "@/components/wiki/wiki-tree-sidebar"
 import { ResizeHandle } from "@/components/wiki/resize-handle"
 import { WikiContentArea } from "@/components/wiki/wiki-content-area"
-import { WikiCommandPalette } from "@/components/wiki/wiki-command-palette"
+import { openWikiSearch } from "@/components/wiki/wiki-command-palette"
 import { WikiRecentDocsModal } from "@/components/wiki/wiki-recent-docs-modal"
 import { CreateWikiDocumentDialog } from "@/components/wiki/create-wiki-document-dialog"
 import { DeleteWikiDocumentDialog } from "@/components/wiki/delete-wiki-document-dialog"
@@ -219,7 +219,6 @@ function WikiPageInner({
 
   const sidebarWidth = useWikiStore((s) => s.sidebarWidth)
   const setSidebarWidth = useWikiStore((s) => s.setSidebarWidth)
-  const openContentSearch = useWikiStore((s) => s.openContentSearch)
   const expandMany = useWikiStore((s) => s.expandMany)
 
   // Auto-expand the tree to reveal the open document. The reveal-path hook
@@ -267,12 +266,16 @@ function WikiPageInner({
     const onKey = (e: KeyboardEvent) => {
       if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k") {
         e.preventDefault()
-        openContentSearch(null, "All Documents")
+        openWikiSearch({
+          operationId,
+          parentDocumentId: null,
+          parentTitle: "All Documents",
+        })
       }
     }
     window.addEventListener("keydown", onKey)
     return () => window.removeEventListener("keydown", onKey)
-  }, [openContentSearch])
+  }, [operationId])
 
   // Shared ref so ResizeHandle can mutate the sidebar's `--wiki-sidebar-width`
   // CSS variable directly during a drag (no React render until mouseup).
@@ -310,7 +313,6 @@ function WikiPageInner({
       <PermanentDeleteWikiDocumentDialog />
       <WikiTrashPanel operationId={operationId} />
       <WikiBackupPanel />
-      <WikiCommandPalette operationId={operationId} />
       <WikiRecentDocsModal operationId={operationId} />
 
       {/* Credential surface mounted at the page level so chip-driven flows

@@ -26,6 +26,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 import { WikiTreeRowMenuItems } from "@/components/wiki/wiki-tree-row-menu-items"
+import { openWikiSearch } from "@/components/wiki/wiki-command-palette"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Skeleton } from "@/components/ui/skeleton"
@@ -382,7 +383,6 @@ function WikiTreeRowQuickActionsImpl({
   onStartIconPicker,
 }: WikiTreeRowQuickActionsProps) {
   const openCreateDialog = useWikiStore((s) => s.openCreateDialog)
-  const openContentSearch = useWikiStore((s) => s.openContentSearch)
 
   // Menu state tracks both `open` (Base UI's controlled state) AND `closing`
   // — a brief tail that stays true while the popup animates out. Without the
@@ -484,7 +484,13 @@ function WikiTreeRowQuickActionsImpl({
         size="icon-xs"
         aria-label={`Search in ${node.title}`}
         className="shrink-0 hidden group-hover:inline-flex"
-        onClick={() => openContentSearch(node.id, node.title)}
+        onClick={() =>
+          openWikiSearch({
+            operationId,
+            parentDocumentId: node.id,
+            parentTitle: node.title,
+          })
+        }
       >
         <SearchIcon className="size-3.5" />
       </Button>
