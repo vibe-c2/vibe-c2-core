@@ -61,6 +61,10 @@ type EnvironmentSettings struct {
 	WikiFileSweeperInterval     time.Duration // how often the GC pass runs
 	WikiFileSweeperGrace        time.Duration // minimum age before an unreferenced file is deleted
 
+	// Wiki attachment garbage collector (shared by the image + file sweepers)
+	WikiSweeperEnabled bool // master switch: when false, neither sweeper starts
+	WikiSweeperDryRun  bool // when true, sweepers log what they would delete but delete nothing
+
 	// Wiki Outline-export importer
 	WikiImportZipMaxSize int64 // bytes; total uncompressed zip cap before parsing
 
@@ -107,6 +111,12 @@ func init() {
 	viper.SetDefault("WIKI_FILE_DENIED_CONTENT_TYPES", "")
 	viper.SetDefault("WIKI_FILE_SWEEPER_INTERVAL", "24h")
 	viper.SetDefault("WIKI_FILE_SWEEPER_GRACE", "168h")
+	// Attachment GC is OFF by default and, when enabled, starts in dry-run.
+	// Safe re-enable sequence after the reference-index fix: deploy (refs now
+	// recorded on every save) → run the backfill → set ENABLED=true with
+	// DRY_RUN=true and inspect the "would delete" logs → flip DRY_RUN=false.
+	viper.SetDefault("WIKI_SWEEPER_ENABLED", false)
+	viper.SetDefault("WIKI_SWEEPER_DRY_RUN", true)
 	viper.SetDefault("WIKI_IMPORT_ZIP_MAX_SIZE", int64(200*1024*1024))
 	viper.SetDefault("AUTH_ACCESS_TTL", "15m")
 	viper.SetDefault("AUTH_REFRESH_TTL", "168h")
@@ -161,6 +171,10 @@ func init() {
 		WikiFileDeniedContentTypes: parseCSV(viper.GetString("WIKI_FILE_DENIED_CONTENT_TYPES")),
 		WikiFileSweeperInterval:    parseDurationOrFatal("WIKI_FILE_SWEEPER_INTERVAL", viper.GetString("WIKI_FILE_SWEEPER_INTERVAL")),
 		WikiFileSweeperGrace:       parseDurationOrFatal("WIKI_FILE_SWEEPER_GRACE", viper.GetString("WIKI_FILE_SWEEPER_GRACE")),
+
+		// Wiki attachment garbage collector
+		WikiSweeperEnabled: viper.GetBool("WIKI_SWEEPER_ENABLED"),
+		WikiSweeperDryRun:  viper.GetBool("WIKI_SWEEPER_DRY_RUN"),
 
 		// Wiki Outline import
 		WikiImportZipMaxSize: viper.GetInt64("WIKI_IMPORT_ZIP_MAX_SIZE"),

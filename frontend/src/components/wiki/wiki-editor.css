@@ -683,6 +683,63 @@
   outline-offset: 2px;
 }
 
+/* Placeholder shown when an image fails to load — typically because its blob
+   was deleted but the reference still lives in the document. Replaces a
+   confusing blank gap with an explicit "unavailable" affordance. Mirrors the
+   frame's border/radius so it sits in the layout like a real image would. */
+.tiptap .wiki-image-missing {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  max-width: 100%;
+  /* font-size was zeroed on the wrapper context for the real frame; restore
+     it so the placeholder text renders. */
+  font-size: 0.875rem;
+  line-height: 1.4;
+  padding: 12px 14px;
+  border: 1px dashed var(--border);
+  border-radius: 6px;
+  background: var(--muted);
+  color: var(--muted-foreground);
+}
+
+.tiptap figure.wiki-image-wrapper.ProseMirror-selectednode .wiki-image-missing {
+  outline: 2px solid var(--color-ring);
+  outline-offset: 2px;
+}
+
+.tiptap .wiki-image-missing-icon {
+  flex-shrink: 0;
+  opacity: 0.7;
+}
+
+.tiptap .wiki-image-missing-text {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.tiptap .wiki-image-missing-title {
+  font-weight: 500;
+  color: var(--foreground);
+}
+
+.tiptap .wiki-image-missing-alt {
+  /* The original alt text, when present, helps identify what's missing. */
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* The placeholder has no hover-reveal cluster; the delete button (edit mode
+   only) sits inline so a dead reference is easy to clear. */
+.tiptap .wiki-image-missing-delete {
+  position: static;
+  flex-shrink: 0;
+  margin-left: auto;
+}
+
 /* Action cluster overlay: preview + delete, anchored to the image's top-right
    corner. Hidden until the frame is hovered or a button receives focus.
    Uses `display: none` toggle rather than opacity/transform transitions —

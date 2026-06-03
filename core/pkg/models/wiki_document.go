@@ -69,4 +69,14 @@ type WikiDocument struct {
 	// persist and used to power the inverse "which wiki docs cite this hash"
 	// lookup for the Findings page.
 	HashReferences []uuid.UUID `bson:"hash_references,omitempty" json:"-"`
+	// ImageReferences lists the wiki image IDs embedded in this document's body
+	// (image nodes whose src is /api/v1/wiki/images/<uuid>). FileReferences is
+	// the equivalent for wikiFile attachment nodes. Both are rewritten in full
+	// by the Hocuspocus sidecar on every content persist — the editor state is
+	// the source of truth. They are the authoritative "which attachments does
+	// this document use" record (the Content field is plain text and does NOT
+	// contain attachment URLs), and drive the image/file garbage collectors: a
+	// blob is reclaimed only once no document in the operation references its id.
+	ImageReferences []uuid.UUID `bson:"image_references,omitempty" json:"-"`
+	FileReferences  []uuid.UUID `bson:"file_references,omitempty" json:"-"`
 }

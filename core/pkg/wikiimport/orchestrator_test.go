@@ -385,6 +385,14 @@ func (r *fakeDocRepo) PullHashReference(context.Context, uuid.UUID, uuid.UUID) e
 	return nil
 }
 
+func (r *fakeDocRepo) FilterReferencedImageIDs(context.Context, uuid.UUID, []uuid.UUID) (map[uuid.UUID]struct{}, error) {
+	return map[uuid.UUID]struct{}{}, nil
+}
+
+func (r *fakeDocRepo) FilterReferencedFileIDs(context.Context, uuid.UUID, []uuid.UUID) (map[uuid.UUID]struct{}, error) {
+	return map[uuid.UUID]struct{}{}, nil
+}
+
 type fakeImageIngestor struct{ count int }
 
 func (f *fakeImageIngestor) IngestImage(_ context.Context, doc *models.WikiDocument, _ uuid.UUID, body io.Reader) (*models.WikiImage, *wiki.IngestError) {

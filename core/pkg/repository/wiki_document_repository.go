@@ -149,6 +149,16 @@ type IWikiDocumentRepository interface {
 	// array in opID. Used on hash hard-delete to clear dangling pointers.
 	// Sibling of PullCredentialReference.
 	PullHashReference(ctx context.Context, opID, hashID uuid.UUID) error
+	// FilterReferencedImageIDs returns the subset of imageIDs that are embedded
+	// in at least one document in opID. Spans BOTH active and trashed documents:
+	// a trashed doc is restorable, so its attachments must stay alive until the
+	// doc is permanently deleted. Drives the image garbage collector's liveness
+	// check — any candidate id absent from the returned set is unreferenced and
+	// may be reclaimed. Empty input → empty set (one short-circuit, no query).
+	FilterReferencedImageIDs(ctx context.Context, opID uuid.UUID, imageIDs []uuid.UUID) (map[uuid.UUID]struct{}, error)
+	// FilterReferencedFileIDs is the wikiFile-attachment sibling of
+	// FilterReferencedImageIDs. Same active+trashed liveness semantics.
+	FilterReferencedFileIDs(ctx context.Context, opID uuid.UUID, fileIDs []uuid.UUID) (map[uuid.UUID]struct{}, error)
 }
 
 type wikiDocumentRepository struct {
@@ -196,6 +206,14 @@ func NewWikiDocumentRepository(db database.Database) IWikiDocumentRepository {
 		// Same shape as the credential backlinks index above — multikey on the
 		// hash_references array with deleted_at trailing.
 		{Key: []string{"operation_id", "hash_references", "deleted_at"}},
+		// Attachment liveness: "documents in this operation that embed image /
+		// file X". Multikey on the references array. Unlike the backlinks
+		// indexes above, deleted_at is intentionally NOT part of the key: the
+		// garbage collector treats trashed (restorable) documents as keeping
+		// their attachments alive, so the liveness query spans active and
+		// trashed docs alike and must not filter on deleted_at.
+		{Key: []string{"operation_id", "image_references"}},
+		{Key: []string{"operation_id", "file_references"}},
 		// Scoped search ("find docs under this folder"). Multikey index on the
 		// materialized ancestor chain — one index probe replaces the previous
 		// O(depth) FindDescendants BFS in SearchByOperationID.
@@ -931,6 +949,54 @@ func (r *wikiDocumentRepository) PullHashReference(ctx context.Context, opID, ha
 		return fmt.Errorf("failed to pull hash reference: %w", err)
 	}
 	return nil
+}
+
+// FilterReferencedImageIDs returns which of imageIDs appear in image_references
+// on any document in opID — active OR trashed. Single aggregation: match docs
+// that carry at least one of the ids, unwind the array, keep only the ids we
+// asked about, and group to the distinct set. Deliberately omits a deleted_at
+// filter so a trashed (restorable) document keeps its attachments alive.
+func (r *wikiDocumentRepository) FilterReferencedImageIDs(ctx context.Context, opID uuid.UUID, imageIDs []uuid.UUID) (map[uuid.UUID]struct{}, error) {
+	return r.filterReferencedAttachmentIDs(ctx, opID, "image_references", imageIDs)
+}
+
+// FilterReferencedFileIDs is the wikiFile sibling of FilterReferencedImageIDs.
+func (r *wikiDocumentRepository) FilterReferencedFileIDs(ctx context.Context, opID uuid.UUID, fileIDs []uuid.UUID) (map[uuid.UUID]struct{}, error) {
+	return r.filterReferencedAttachmentIDs(ctx, opID, "file_references", fileIDs)
+}
+
+// filterReferencedAttachmentIDs is the shared implementation behind the image
+// and file liveness queries. `field` selects which multikey array to probe
+// (image_references / file_references). The double $match is intentional: the
+// first uses the {operation_id, <field>} index to find candidate docs, the
+// second (post-$unwind) discards any other ids those docs happen to reference
+// so the result is scoped to the input set.
+func (r *wikiDocumentRepository) filterReferencedAttachmentIDs(ctx context.Context, opID uuid.UUID, field string, ids []uuid.UUID) (map[uuid.UUID]struct{}, error) {
+	if len(ids) == 0 {
+		return map[uuid.UUID]struct{}{}, nil
+	}
+	pipeline := bson.A{
+		bson.M{"$match": bson.M{
+			"operation_id": opID,
+			field:          bson.M{"$in": ids},
+		}},
+		bson.M{"$unwind": "$" + field},
+		bson.M{"$match": bson.M{
+			field: bson.M{"$in": ids},
+		}},
+		bson.M{"$group": bson.M{"_id": "$" + field}},
+	}
+	var rows []struct {
+		ID uuid.UUID `bson:"_id"`
+	}
+	if err := r.coll.Aggregate(ctx, pipeline).All(&rows); err != nil {
+		return nil, fmt.Errorf("failed to filter referenced %s: %w", field, err)
+	}
+	out := make(map[uuid.UUID]struct{}, len(rows))
+	for _, row := range rows {
+		out[row.ID] = struct{}{}
+	}
+	return out, nil
 }
 
 func buildWikiDocumentFilter(opID uuid.UUID, filter WikiDocumentFilter) bson.M {

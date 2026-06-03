@@ -4,7 +4,9 @@ import * as Y from "yjs";
 import {
   collectCredentialReferenceIds,
   collectDocReferenceIds,
+  collectFileReferenceIds,
   collectHashReferenceIds,
+  collectImageReferenceIds,
 } from "./references.js";
 
 /**
@@ -163,6 +165,14 @@ export function createDatabaseExtension(): Database {
       let referenceBinaries: Binary[] = [];
       let credentialReferenceBinaries: Binary[] = [];
       let hashReferenceBinaries: Binary[] = [];
+      // Attachment reference indexes. These power the image/file garbage
+      // collector on the Go side: a blob is kept alive only while its id is
+      // present in some document's image_references / file_references array.
+      // The `content` field below is plain text (search index) and does NOT
+      // carry attachment URLs, so these arrays are the ONLY queryable record
+      // of which attachments a document uses.
+      let imageReferenceBinaries: Binary[] = [];
+      let fileReferenceBinaries: Binary[] = [];
       if (xmlFragment.length > 0) {
         markdown = extractTextFromFragment(xmlFragment);
         referenceBinaries = idsToBinaries(collectDocReferenceIds(xmlFragment));
@@ -171,6 +181,12 @@ export function createDatabaseExtension(): Database {
         );
         hashReferenceBinaries = idsToBinaries(
           collectHashReferenceIds(xmlFragment),
+        );
+        imageReferenceBinaries = idsToBinaries(
+          collectImageReferenceIds(xmlFragment),
+        );
+        fileReferenceBinaries = idsToBinaries(
+          collectFileReferenceIds(xmlFragment),
         );
       } else {
         markdown = ydoc.getText("content").toString();
@@ -219,6 +235,13 @@ export function createDatabaseExtension(): Database {
         // credential array above. Powers the "Referenced in" section of the
         // hash details dialog.
         hash_references: hashReferenceBinaries,
+        // Attachment liveness indexes for the Go garbage collector. Full
+        // rewrite on every save: removing an image/file from the body drops
+        // its id here, and once it's referenced by no document the sweeper
+        // may reclaim the blob. Not gated by the public-operation boundary —
+        // attachment bytes are not operation-private the way credentials are.
+        image_references: imageReferenceBinaries,
+        file_references: fileReferenceBinaries,
       };
 
       if (ctx?.userId) {

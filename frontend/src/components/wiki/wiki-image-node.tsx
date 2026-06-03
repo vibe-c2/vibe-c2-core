@@ -1,6 +1,6 @@
 import { useState } from "react"
 import { NodeViewWrapper, type ReactNodeViewProps } from "@tiptap/react"
-import { MaximizeIcon, Trash2Icon } from "lucide-react"
+import { ImageOffIcon, MaximizeIcon, Trash2Icon } from "lucide-react"
 import Lightbox from "yet-another-react-lightbox"
 import Zoom from "yet-another-react-lightbox/plugins/zoom"
 import Fullscreen from "yet-another-react-lightbox/plugins/fullscreen"
@@ -21,6 +21,16 @@ export function WikiImageNode({ node, editor, getPos }: ReactNodeViewProps) {
   const [isOpen, setIsOpen] = useState(false)
   const src: string = node.attrs.src ?? ""
   const alt: string = node.attrs.alt ?? ""
+
+  // Tracks which src failed to load. The common cause is a deleted blob: the
+  // reference survives in the document but /api/v1/wiki/images/<id> returns
+  // 404. Without handling this the browser renders nothing — a confusing
+  // blank gap; we swap in an explicit placeholder instead (.wiki-image-missing
+  // in wiki-editor.css). Storing the failed src (rather than a bare boolean
+  // reset in an effect) means a swapped-in src — paste, undo — is considered
+  // healthy again automatically: `errored` is derived, not stale state.
+  const [erroredSrc, setErroredSrc] = useState<string | null>(null)
+  const errored = src !== "" && erroredSrc === src
   // Natural dimensions captured at upload time, persisted on the node so
   // the browser can reserve aspect ratio before the image decodes.
   // `null` for legacy nodes uploaded before this attribute existed —
@@ -53,38 +63,28 @@ export function WikiImageNode({ node, editor, getPos }: ReactNodeViewProps) {
       // so clicks don't steal the ProseMirror selection.
       as="figure"
     >
-      <div className="wiki-image-frame" contentEditable={false}>
-        <img
-          src={src}
-          alt={alt}
-          width={width ?? undefined}
-          height={height ?? undefined}
-          // Defer decoding so a long doc full of images doesn't block the
-          // main thread on initial render. The intrinsic dimensions above
-          // give the browser everything it needs to lay the image out
-          // correctly before the bytes arrive. Print mode overrides this
-          // because the page is captured in a single non-scrolled pass.
-          loading={isPrintMode ? "eager" : "lazy"}
-          decoding={isPrintMode ? "sync" : "async"}
-          className="wiki-image"
-          draggable={false}
-          onClick={() => setIsOpen(true)}
-        />
-        <div className="wiki-image-actions" contentEditable={false}>
-          <button
-            type="button"
-            className="wiki-image-action-button"
-            aria-label="Open image preview"
-            title="Preview"
-            onMouseDown={(e) => e.preventDefault()}
-            onClick={() => setIsOpen(true)}
-          >
-            <MaximizeIcon size={14} />
-          </button>
+      {errored ? (
+        <div
+          className="wiki-image-missing"
+          contentEditable={false}
+          // Reserve the image's footprint when we know it, so swapping in the
+          // placeholder doesn't shift surrounding content. Capped to the
+          // container width by the CSS max-width.
+          style={width ? { width } : undefined}
+          role="img"
+          aria-label={alt ? `Image unavailable: ${alt}` : "Image unavailable"}
+        >
+          <ImageOffIcon className="wiki-image-missing-icon" size={20} aria-hidden />
+          <div className="wiki-image-missing-text">
+            <span className="wiki-image-missing-title">Image unavailable</span>
+            {alt ? (
+              <span className="wiki-image-missing-alt">{alt}</span>
+            ) : null}
+          </div>
           {isEditable ? (
             <button
               type="button"
-              className="wiki-image-action-button wiki-image-action-button--danger"
+              className="wiki-image-action-button wiki-image-action-button--danger wiki-image-missing-delete"
               aria-label="Delete image"
               title="Delete"
               onMouseDown={(e) => e.preventDefault()}
@@ -94,9 +94,55 @@ export function WikiImageNode({ node, editor, getPos }: ReactNodeViewProps) {
             </button>
           ) : null}
         </div>
-      </div>
+      ) : (
+        <div className="wiki-image-frame" contentEditable={false}>
+          <img
+            src={src}
+            alt={alt}
+            width={width ?? undefined}
+            height={height ?? undefined}
+            // Defer decoding so a long doc full of images doesn't block the
+            // main thread on initial render. The intrinsic dimensions above
+            // give the browser everything it needs to lay the image out
+            // correctly before the bytes arrive. Print mode overrides this
+            // because the page is captured in a single non-scrolled pass.
+            loading={isPrintMode ? "eager" : "lazy"}
+            decoding={isPrintMode ? "sync" : "async"}
+            className="wiki-image"
+            draggable={false}
+            onClick={() => setIsOpen(true)}
+            // A 404 (e.g. the blob was garbage-collected) flips to the
+            // placeholder above instead of leaving a blank gap.
+            onError={() => setErroredSrc(src)}
+          />
+          <div className="wiki-image-actions" contentEditable={false}>
+            <button
+              type="button"
+              className="wiki-image-action-button"
+              aria-label="Open image preview"
+              title="Preview"
+              onMouseDown={(e) => e.preventDefault()}
+              onClick={() => setIsOpen(true)}
+            >
+              <MaximizeIcon size={14} />
+            </button>
+            {isEditable ? (
+              <button
+                type="button"
+                className="wiki-image-action-button wiki-image-action-button--danger"
+                aria-label="Delete image"
+                title="Delete"
+                onMouseDown={(e) => e.preventDefault()}
+                onClick={handleDelete}
+              >
+                <Trash2Icon size={14} />
+              </button>
+            ) : null}
+          </div>
+        </div>
+      )}
 
-      {isOpen ? (
+      {isOpen && !errored ? (
         <Lightbox
           open={isOpen}
           close={() => setIsOpen(false)}

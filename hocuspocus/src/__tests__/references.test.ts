@@ -10,7 +10,9 @@ import * as Y from "yjs";
 import {
   collectCredentialReferenceIds,
   collectDocReferenceIds,
+  collectFileReferenceIds,
   collectHashReferenceIds,
+  collectImageReferenceIds,
 } from "../references.js";
 
 // Helper — must be attached to a live Doc before setAttribute will persist.
@@ -44,6 +46,21 @@ function hashChip(hashId: string): Y.XmlElement {
 function block(name: string, ...children: Y.XmlElement[]): Y.XmlElement {
   const el = new Y.XmlElement(name);
   if (children.length > 0) el.insert(0, children);
+  return el;
+}
+
+// image atom: the id lives inside the src URL, not a dedicated attribute.
+function imageNode(id: string): Y.XmlElement {
+  const el = new Y.XmlElement("image");
+  el.setAttribute("src", "/api/v1/wiki/images/" + id);
+  return el;
+}
+
+// wikiFile atom: carries the id directly in fileId, like the chips.
+function fileNode(id: string): Y.XmlElement {
+  const el = new Y.XmlElement("wikiFile");
+  el.setAttribute("fileId", id);
+  el.setAttribute("url", "/api/v1/wiki/files/" + id);
   return el;
 }
 
@@ -311,4 +328,99 @@ test("hash walker returns an empty set for an empty document", () => {
   const frag = withDoc(() => {});
   const ids = collectHashReferenceIds(frag);
   assert.equal(ids.size, 0);
+});
+
+// --- Image reference walker — parses the id out of the src URL. ---
+
+test("image walker collects the id from an image src URL", () => {
+  const frag = withDoc((f) => {
+    f.insert(0, [imageNode(ID_A)]);
+  });
+  assert.deepEqual([...collectImageReferenceIds(frag)], [ID_A]);
+});
+
+test("image walker collects images nested inside other blocks", () => {
+  const frag = withDoc((f) => {
+    f.insert(0, [
+      block("bulletList", block("listItem", imageNode(ID_A))),
+      block("blockquote", imageNode(ID_B)),
+    ]);
+  });
+  const ids = collectImageReferenceIds(frag);
+  assert.equal(ids.size, 2);
+  assert.ok(ids.has(ID_A));
+  assert.ok(ids.has(ID_B));
+});
+
+test("image walker dedupes and lowercases", () => {
+  const frag = withDoc((f) => {
+    f.insert(0, [imageNode(ID_A.toUpperCase()), imageNode(ID_A)]);
+  });
+  const ids = collectImageReferenceIds(frag);
+  assert.equal(ids.size, 1);
+  assert.ok(ids.has(ID_A));
+});
+
+test("image walker ignores external (non-wiki) image sources", () => {
+  const frag = withDoc((f) => {
+    const ext = new Y.XmlElement("image");
+    ext.setAttribute("src", "https://example.com/cat.png");
+    f.insert(0, [ext, imageNode(ID_A)]);
+  });
+  // Only the wiki-hosted image contributes; the external URL has no id.
+  assert.deepEqual([...collectImageReferenceIds(frag)], [ID_A]);
+});
+
+test("image walker ignores a malformed id in the src URL", () => {
+  const frag = withDoc((f) => {
+    const bad = new Y.XmlElement("image");
+    bad.setAttribute("src", "/api/v1/wiki/images/not-a-uuid");
+    f.insert(0, [bad, imageNode(ID_A)]);
+  });
+  assert.deepEqual([...collectImageReferenceIds(frag)], [ID_A]);
+});
+
+// --- File reference walker — reads the wikiFile.fileId attribute. ---
+
+test("file walker collects the id from a wikiFile node", () => {
+  const frag = withDoc((f) => {
+    f.insert(0, [fileNode(ID_A)]);
+  });
+  assert.deepEqual([...collectFileReferenceIds(frag)], [ID_A]);
+});
+
+test("file walker collects files nested inside other blocks and dedupes", () => {
+  const frag = withDoc((f) => {
+    f.insert(0, [
+      block("bulletList", block("listItem", fileNode(ID_A))),
+      fileNode(ID_A),
+      block("blockquote", fileNode(ID_B)),
+    ]);
+  });
+  const ids = collectFileReferenceIds(frag);
+  assert.equal(ids.size, 2);
+  assert.ok(ids.has(ID_A));
+  assert.ok(ids.has(ID_B));
+});
+
+test("image and file walkers stay disjoint from each other and the chips", () => {
+  // An image id appearing in a file URL (or vice versa) must never
+  // cross-contaminate — that would let one sweeper keep the other's blobs
+  // alive or, worse, miss a real reference.
+  const frag = withDoc((f) => {
+    f.insert(0, [
+      block("paragraph", chip(ID_A)),
+      imageNode(ID_B),
+      fileNode(ID_C),
+    ]);
+  });
+  assert.deepEqual([...collectImageReferenceIds(frag)], [ID_B]);
+  assert.deepEqual([...collectFileReferenceIds(frag)], [ID_C]);
+  assert.deepEqual([...collectDocReferenceIds(frag)], [ID_A]);
+});
+
+test("image and file walkers return empty sets for an empty document", () => {
+  const frag = withDoc(() => {});
+  assert.equal(collectImageReferenceIds(frag).size, 0);
+  assert.equal(collectFileReferenceIds(frag).size, 0);
 });

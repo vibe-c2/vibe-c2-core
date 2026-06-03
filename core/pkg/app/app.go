@@ -70,6 +70,7 @@ type App struct {
 	imageSweeper    *wiki.ImageSweeper
 	fileStore       blob.ObjectStore
 	fileSweeper     *wiki.FileSweeper
+	sweepersEnabled bool // master switch from WIKI_SWEEPER_ENABLED
 
 	// Future integration points:
 	// rabbitmq         rabbitmq.IRabbitMQ
@@ -183,7 +184,7 @@ func NewApp() (*App, error) {
 	imageProcessor := wiki.NewImageProcessor(e.WikiImageMaxDimension)
 	imageSweeper := wiki.NewImageSweeper(
 		repos.WikiDocument, repos.WikiImage, imageStore, l,
-		e.WikiImageSweeperInterval, e.WikiImageSweeperGrace,
+		e.WikiImageSweeperInterval, e.WikiImageSweeperGrace, e.WikiSweeperDryRun,
 	)
 
 	// File storage: same SeaweedFS S3 gateway, separate bucket so lifecycle
@@ -199,7 +200,7 @@ func NewApp() (*App, error) {
 	}
 	fileSweeper := wiki.NewFileSweeper(
 		repos.WikiDocument, repos.WikiFile, fileStore, l,
-		e.WikiFileSweeperInterval, e.WikiFileSweeperGrace,
+		e.WikiFileSweeperInterval, e.WikiFileSweeperGrace, e.WikiSweeperDryRun,
 	)
 
 	// --- Future integration patterns ---
@@ -288,9 +289,26 @@ func NewApp() (*App, error) {
 		imageSweeper:    imageSweeper,
 		fileStore:       fileStore,
 		fileSweeper:     fileSweeper,
+		sweepersEnabled: e.WikiSweeperEnabled,
 	}
 
 	return app, nil
+}
+
+// startSweepers launches the wiki attachment garbage collectors, but only when
+// WIKI_SWEEPER_ENABLED is set. They stay off by default: enabling them is the
+// final step of the safe re-enable sequence (deploy reference indexing → run
+// the backfill → turn on with dry-run → flip dry-run off). The sweepers'
+// liveness check reads document image_references / file_references arrays, so
+// running them before those arrays are populated would delete live
+// attachments — the flag is the guard against that.
+func (a *App) startSweepers() {
+	if !a.sweepersEnabled {
+		a.logger.Warn("Wiki attachment sweepers are DISABLED (WIKI_SWEEPER_ENABLED=false); orphaned blobs will accumulate until enabled")
+		return
+	}
+	a.imageSweeper.Start()
+	a.fileSweeper.Start()
 }
 
 func (a *App) StartServer() {
@@ -303,15 +321,7 @@ func (a *App) StartServer() {
 
 	a.eventBus.Start()
 	a.backupScheduler.Start()
-	// EMERGENCY PATCH: wiki attachment sweepers disabled. They regex-scan the
-	// document `content` snapshot for /api/v1/wiki/{images,files}/<uuid> URLs,
-	// but the Hocuspocus persistence layer writes `content` as plain text and
-	// strips image src / file url attributes — so every aged attachment looks
-	// orphaned and got hard-deleted while still embedded in the live doc
-	// (content_state), producing "image not found". Re-enable only after the
-	// content snapshot carries attachment URLs (or refs are tracked directly).
-	// a.imageSweeper.Start()
-	// a.fileSweeper.Start()
+	a.startSweepers()
 
 	a.logger.Info("Starting server...", zap.String("address", srv.Addr))
 	if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
@@ -329,15 +339,7 @@ func (a *App) StartServerWithGracefulShutdown() {
 
 	a.eventBus.Start()
 	a.backupScheduler.Start()
-	// EMERGENCY PATCH: wiki attachment sweepers disabled. They regex-scan the
-	// document `content` snapshot for /api/v1/wiki/{images,files}/<uuid> URLs,
-	// but the Hocuspocus persistence layer writes `content` as plain text and
-	// strips image src / file url attributes — so every aged attachment looks
-	// orphaned and got hard-deleted while still embedded in the live doc
-	// (content_state), producing "image not found". Re-enable only after the
-	// content snapshot carries attachment URLs (or refs are tracked directly).
-	// a.imageSweeper.Start()
-	// a.fileSweeper.Start()
+	a.startSweepers()
 
 	idleConnsClosed := make(chan struct{})
 

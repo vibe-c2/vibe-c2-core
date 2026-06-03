@@ -2,8 +2,6 @@ package wiki
 
 import (
 	"context"
-	"regexp"
-	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -13,16 +11,23 @@ import (
 	"go.uber.org/zap"
 )
 
-// imageRefPattern matches image URLs the frontend writes into wiki content.
-// Docs persist as Markdown on the server side (see wiki.graphql's note on the
-// content field), so a textual scan is sufficient to find references.
-var imageRefPattern = regexp.MustCompile(`/api/v1/wiki/images/([0-9a-fA-F-]{36})`)
-
 // ImageSweeper runs a periodic GC pass over wiki_images, deleting entries
 // whose bytes are no longer referenced by any active or trashed document.
+//
+// Liveness is decided by the document's image_references array — the
+// authoritative index the Hocuspocus sidecar rewrites on every content
+// persist. (The older approach of regex-scanning the document's `content`
+// field was unsound: `content` is a plain-text snapshot that never carried
+// attachment URLs, so every aged image looked unreferenced and got deleted
+// while still embedded in the live document.)
+//
 // Only images older than the grace period are considered, which leaves a
 // window for uploads-in-flight (optimistic insert → CRDT sync → Mongo
 // snapshot) to land without getting swept.
+//
+// When dryRun is set the sweeper logs what it WOULD delete but touches
+// nothing — the safety gate used to validate the reference index in
+// production before arming real deletion.
 type ImageSweeper struct {
 	docRepo   repository.IWikiDocumentRepository
 	imageRepo repository.IWikiImageRepository
@@ -30,6 +35,7 @@ type ImageSweeper struct {
 	logger    *zap.Logger
 	interval  time.Duration
 	grace     time.Duration
+	dryRun    bool
 	batchSize int64
 	ctx       context.Context
 	cancel    context.CancelFunc
@@ -42,6 +48,7 @@ func NewImageSweeper(
 	logger *zap.Logger,
 	interval time.Duration,
 	grace time.Duration,
+	dryRun bool,
 ) *ImageSweeper {
 	ctx, cancel := context.WithCancel(context.Background())
 	return &ImageSweeper{
@@ -51,6 +58,7 @@ func NewImageSweeper(
 		logger:    logger,
 		interval:  interval,
 		grace:     grace,
+		dryRun:    dryRun,
 		batchSize: 200,
 		ctx:       ctx,
 		cancel:    cancel,
@@ -65,6 +73,7 @@ func (s *ImageSweeper) Start() {
 		s.logger.Info("Wiki image sweeper started",
 			zap.Duration("interval", s.interval),
 			zap.Duration("grace", s.grace),
+			zap.Bool("dry_run", s.dryRun),
 		)
 
 		for {
@@ -98,28 +107,43 @@ func (s *ImageSweeper) runTick() {
 		return
 	}
 
-	// Group candidates by document so we only load each document once.
-	byDoc := make(map[uuid.UUID][]models.WikiImage, len(candidates))
+	// Group candidates by operation: liveness is checked against the
+	// operation's documents, and a reference only counts within its own
+	// operation (attachment blobs are operation-scoped).
+	byOp := make(map[uuid.UUID][]models.WikiImage, len(candidates))
 	for _, img := range candidates {
-		byDoc[img.DocumentID] = append(byDoc[img.DocumentID], img)
+		byOp[img.OperationID] = append(byOp[img.OperationID], img)
 	}
 
 	deleted := 0
-	for docID, imgs := range byDoc {
-		doc, err := s.docRepo.FindByID(tickCtx, docID)
+	wouldDelete := 0
+	for opID, imgs := range byOp {
+		ids := make([]uuid.UUID, len(imgs))
+		for i, img := range imgs {
+			ids[i] = img.ImageID
+		}
+
+		referenced, err := s.docRepo.FilterReferencedImageIDs(tickCtx, opID, ids)
 		if err != nil {
-			// Owning document is gone — its images are orphans.
-			for _, img := range imgs {
-				if s.hardDelete(tickCtx, img) {
-					deleted++
-				}
-			}
+			// Fail safe: on any query error we must NOT delete — skip this
+			// operation and retry next tick. Deleting on uncertainty is the
+			// exact failure mode that lost data before.
+			s.logger.Warn("Image sweeper: reference lookup failed, skipping operation",
+				zap.String("operation_id", opID.String()),
+				zap.Error(err))
 			continue
 		}
 
-		referenced := extractReferencedImageIDs(doc.Content)
 		for _, img := range imgs {
 			if _, ok := referenced[img.ImageID]; ok {
+				continue
+			}
+			if s.dryRun {
+				wouldDelete++
+				s.logger.Info("Image sweeper (dry-run): would delete unreferenced image",
+					zap.String("image_id", img.ImageID.String()),
+					zap.String("operation_id", opID.String()),
+					zap.String("key", img.ObjectKey))
 				continue
 			}
 			if s.hardDelete(tickCtx, img) {
@@ -128,6 +152,12 @@ func (s *ImageSweeper) runTick() {
 		}
 	}
 
+	if s.dryRun {
+		if wouldDelete > 0 {
+			s.logger.Info("Wiki image sweeper (dry-run) completed", zap.Int("would_delete", wouldDelete))
+		}
+		return
+	}
 	if deleted > 0 {
 		s.logger.Info("Wiki image sweeper completed", zap.Int("deleted", deleted))
 	}
@@ -151,23 +181,4 @@ func (s *ImageSweeper) hardDelete(ctx context.Context, img models.WikiImage) boo
 		return false
 	}
 	return true
-}
-
-// extractReferencedImageIDs returns the set of image UUIDs referenced by the
-// given document content. Exposed so the sweeper logic can be unit-tested
-// without spinning up Mongo.
-func extractReferencedImageIDs(content string) map[uuid.UUID]struct{} {
-	matches := imageRefPattern.FindAllStringSubmatch(content, -1)
-	out := make(map[uuid.UUID]struct{}, len(matches))
-	for _, m := range matches {
-		if len(m) != 2 {
-			continue
-		}
-		id, err := uuid.Parse(strings.ToLower(m[1]))
-		if err != nil {
-			continue
-		}
-		out[id] = struct{}{}
-	}
-	return out
 }
