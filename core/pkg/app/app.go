@@ -303,8 +303,15 @@ func (a *App) StartServer() {
 
 	a.eventBus.Start()
 	a.backupScheduler.Start()
-	a.imageSweeper.Start()
-	a.fileSweeper.Start()
+	// EMERGENCY PATCH: wiki attachment sweepers disabled. They regex-scan the
+	// document `content` snapshot for /api/v1/wiki/{images,files}/<uuid> URLs,
+	// but the Hocuspocus persistence layer writes `content` as plain text and
+	// strips image src / file url attributes — so every aged attachment looks
+	// orphaned and got hard-deleted while still embedded in the live doc
+	// (content_state), producing "image not found". Re-enable only after the
+	// content snapshot carries attachment URLs (or refs are tracked directly).
+	// a.imageSweeper.Start()
+	// a.fileSweeper.Start()
 
 	a.logger.Info("Starting server...", zap.String("address", srv.Addr))
 	if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
@@ -322,8 +329,15 @@ func (a *App) StartServerWithGracefulShutdown() {
 
 	a.eventBus.Start()
 	a.backupScheduler.Start()
-	a.imageSweeper.Start()
-	a.fileSweeper.Start()
+	// EMERGENCY PATCH: wiki attachment sweepers disabled. They regex-scan the
+	// document `content` snapshot for /api/v1/wiki/{images,files}/<uuid> URLs,
+	// but the Hocuspocus persistence layer writes `content` as plain text and
+	// strips image src / file url attributes — so every aged attachment looks
+	// orphaned and got hard-deleted while still embedded in the live doc
+	// (content_state), producing "image not found". Re-enable only after the
+	// content snapshot carries attachment URLs (or refs are tracked directly).
+	// a.imageSweeper.Start()
+	// a.fileSweeper.Start()
 
 	idleConnsClosed := make(chan struct{})
 
