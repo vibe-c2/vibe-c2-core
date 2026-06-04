@@ -30,9 +30,10 @@ type BulkImportHashesResult struct {
 }
 
 type ChangeTaskStageInput struct {
-	TaskID string             `json:"taskId"`
-	Stage  models.TaskStage   `json:"stage"`
-	Status *models.TaskStatus `json:"status,omitempty"`
+	TaskID  string             `json:"taskId"`
+	Stage   models.TaskStage   `json:"stage"`
+	Status  *models.TaskStatus `json:"status,omitempty"`
+	Summary *string            `json:"summary,omitempty"`
 }
 
 type CreateCredentialInput struct {
@@ -94,6 +95,7 @@ type CreateTaskInput struct {
 	CredentialReferenceIds []string           `json:"credentialReferenceIds,omitempty"`
 	Stage                  *models.TaskStage  `json:"stage,omitempty"`
 	Status                 *models.TaskStatus `json:"status,omitempty"`
+	Summary                *string            `json:"summary,omitempty"`
 }
 
 type CreateUserInput struct {

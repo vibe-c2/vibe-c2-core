@@ -9,16 +9,18 @@ import {
   type DragStartEvent,
 } from "@dnd-kit/core"
 import { useQueryClient } from "@tanstack/react-query"
-import { toast } from "sonner"
 import { KanbanColumn } from "@/components/tasks/kanban-column"
 import { TaskCard } from "@/components/tasks/task-card"
-import { useChangeTaskStage, taskKeys } from "@/graphql/hooks/tasks"
-import { useTaskStore } from "@/stores/tasks"
+import { taskKeys } from "@/graphql/hooks/tasks"
+import {
+  ALL_STAGES,
+  useTaskStageTransition,
+} from "@/components/tasks/use-task-stage-transition"
 import type { TaskFieldsFragment, TaskStage } from "@/graphql/gql/graphql"
 
 // Stage column order from left to right. Mirrors the natural workflow
 // progression; the matrix view does not depend on this list.
-const STAGES: TaskStage[] = ["BACKLOG", "TODO", "IN_PROCESS", "DONE"]
+const STAGES: TaskStage[] = ALL_STAGES
 
 interface KanbanBoardProps {
   operationId: string
@@ -34,11 +36,7 @@ export function KanbanBoard({ operationId, search }: KanbanBoardProps) {
   )
 
   const queryClient = useQueryClient()
-  const changeStage = useChangeTaskStage()
-  const openStatusRequiredModal = useTaskStore(
-    (s) => s.openStatusRequiredModal,
-  )
-  const openReopenModal = useTaskStore((s) => s.openReopenModal)
+  const { requestStageChange } = useTaskStageTransition()
 
   const [activeId, setActiveId] = useState<string | null>(null)
 
@@ -70,52 +68,12 @@ export function KanbanBoard({ operationId, search }: KanbanBoardProps) {
     // same lookup to learn its current stage + status without forcing
     // every consumer to thread a `tasks` prop.
     const task = findTaskInCache(queryClient, taskId)
-    if (!task || task.stage === targetStage) return
+    if (!task) return
 
-    // Moving INTO Done without a terminal status: hand off to the
-    // status-required modal. The modal calls changeTaskStage itself once
-    // the operator picks SUCCESS or FAIL; cancelling rolls back via the
-    // standard list invalidation.
-    if (targetStage === "DONE" && task.status === "UNDEFINED") {
-      openStatusRequiredModal({
-        taskId,
-        taskName: task.name,
-        newStage: targetStage,
-      })
-      return
-    }
-
-    // Moving OUT of Done while the task still carries a terminal outcome
-    // (SUCCESS / FAIL) is almost always a re-open. Confirm with the operator
-    // before silently dragging a "done & succeeded" card into an in-progress
-    // column where the green badge would look like a stale label.
-    if (
-      task.stage === "DONE" &&
-      targetStage !== "DONE" &&
-      task.status !== "UNDEFINED"
-    ) {
-      openReopenModal({
-        taskId,
-        taskName: task.name,
-        newStage: targetStage,
-      })
-      return
-    }
-
-    try {
-      await changeStage.mutateAsync({
-        taskId,
-        stage: targetStage,
-        // Preserve the existing status for non-DONE moves. The server
-        // accepts the same status echo; the resolver no-ops when the
-        // value didn't change.
-        status: task.status,
-      })
-    } catch (err) {
-      toast.error(
-        err instanceof Error ? err.message : "Failed to move task",
-      )
-    }
+    // All the DONE-requires-status / reopen-confirm decisioning lives in the
+    // shared transition hook so the drag-drop and edit-dialog paths stay in
+    // lockstep.
+    await requestStageChange(task, targetStage)
   }
 
   return (

@@ -98,7 +98,7 @@ function TasksPageInner({ operationId }: { operationId: string }) {
             </div>
           )}
         </div>
-        <Button size="sm" onClick={openCreateDialog}>
+        <Button size="sm" onClick={() => openCreateDialog()}>
           <PlusIcon className="size-4" />
           New task
         </Button>

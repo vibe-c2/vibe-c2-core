@@ -31,8 +31,8 @@ const (
 // single task can't balloon into a giant BSON document. Chosen to be
 // roomy for any realistic operation team and link-out density.
 const (
-	maxTaskAssignees   = 64
-	maxTaskReferences  = 64
+	maxTaskAssignees  = 64
+	maxTaskReferences = 64
 )
 
 // maxTaskBacklinks caps the reverse-reference listings (the "tasks that
@@ -186,6 +186,16 @@ func (r *taskResolver) CreateTask(ctx context.Context, input model.CreateTaskInp
 		return nil, err
 	}
 
+	// A task created directly in DONE must carry a completion summary, same
+	// rule as a task transitioning into DONE later via ChangeTaskStage.
+	var summary string
+	if stage == models.TaskStageDone {
+		summary, err = models.NormalizeAndValidateDoneSummary(strDeref(input.Summary))
+		if err != nil {
+			return nil, err
+		}
+	}
+
 	assigneeIDs, err := parseTaskUUIDList(input.AssigneeIds, "assigneeIds", maxTaskAssignees)
 	if err != nil {
 		return nil, err
@@ -215,6 +225,7 @@ func (r *taskResolver) CreateTask(ctx context.Context, input model.CreateTaskInp
 		ProfitDescription:    strDeref(input.ProfitDescription),
 		Stage:                stage,
 		Status:               status,
+		Summary:              summary,
 		AssigneeIDs:          assigneeIDs,
 		WikiReferences:       wikiRefs,
 		CredentialReferences: credRefs,
@@ -353,6 +364,18 @@ func (r *taskResolver) ChangeTaskStage(ctx context.Context, input model.ChangeTa
 	oldStage := task.Stage
 	oldStatus := task.Status
 
+	// Entering DONE (from any other stage) requires a fresh completion
+	// summary. Status flips while already in DONE keep the prior summary —
+	// the operator isn't re-completing, just correcting the outcome.
+	enteringDone := newStage == models.TaskStageDone && oldStage != models.TaskStageDone
+	var doneSummary string
+	if enteringDone {
+		doneSummary, err = models.NormalizeAndValidateDoneSummary(strDeref(input.Summary))
+		if err != nil {
+			return nil, err
+		}
+	}
+
 	if newStage == oldStage && newStatus == oldStatus {
 		return &task, nil
 	}
@@ -360,6 +383,9 @@ func (r *taskResolver) ChangeTaskStage(ctx context.Context, input model.ChangeTa
 	updates := map[string]interface{}{
 		"stage":  newStage,
 		"status": newStatus,
+	}
+	if enteringDone {
+		updates["summary"] = doneSummary
 	}
 	// Maintain done_at so the DONE column can sort by completion time:
 	//   - moving INTO DONE stamps a fresh timestamp (re-completing pushes

@@ -53,6 +53,15 @@ export function TaskCard({ task, draggable = true, onClick }: TaskCardProps) {
   const visibleAssignees = task.assignees.slice(0, MAX_VISIBLE_ASSIGNEES)
   const overflow = task.assignees.length - visibleAssignees.length
 
+  // DONE cards lead with the completion summary (what actually happened)
+  // instead of the planning description — on a board of finished work the
+  // outcome is the line worth scanning. Every other stage shows the
+  // description. A DONE task always carries a summary (required to complete),
+  // so the fallback only matters for legacy rows completed before summaries
+  // existed.
+  const cardBody =
+    task.stage === "DONE" ? task.summary || task.description : task.description
+
   return (
     <button
       ref={setNodeRef}
@@ -80,9 +89,9 @@ export function TaskCard({ task, draggable = true, onClick }: TaskCardProps) {
         <TaskStatusBadge status={task.status} />
       </div>
 
-      {task.description && (
+      {cardBody && (
         <p className="line-clamp-2 text-xs text-muted-foreground">
-          {task.description}
+          {cardBody}
         </p>
       )}
 

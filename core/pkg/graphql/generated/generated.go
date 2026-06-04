@@ -427,6 +427,7 @@ type ComplexityRoot struct {
 		RiskScore            func(childComplexity int) int
 		Stage                func(childComplexity int) int
 		Status               func(childComplexity int) int
+		Summary              func(childComplexity int) int
 		UpdatedAt            func(childComplexity int) int
 		WikiReferences       func(childComplexity int) int
 	}
@@ -3179,6 +3180,12 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.Task.Status(childComplexity), true
+	case "Task.summary":
+		if e.ComplexityRoot.Task.Summary == nil {
+			break
+		}
+
+		return e.ComplexityRoot.Task.Summary(childComplexity), true
 	case "Task.updatedAt":
 		if e.ComplexityRoot.Task.UpdatedAt == nil {
 			break
@@ -5359,6 +5366,12 @@ type Task {
   # their last status as history unless explicitly reset.
   status: TaskStatus!
 
+  # summary is the operator's one-line account of how the task resolved,
+  # captured when it enters DONE (required, at most 15 words). Empty string
+  # for tasks that have never been completed. Kept as history across a
+  # re-open, mirroring status; the next completion overwrites it.
+  summary: String!
+
   # Operators responsible for the task. Multiple assignees are supported.
   # Resolved on demand; empty list when nothing is assigned.
   assignees: [User!]!
@@ -5435,6 +5448,9 @@ input CreateTaskInput {
   # terminal status. Ignored for other stages (operators can park a status
   # on a non-DONE task by including it explicitly).
   status: TaskStatus
+  # Required only when stage is DONE — the completion summary (1–15 words).
+  # Ignored for other stages.
+  summary: String
 }
 
 input UpdateTaskInput {
@@ -5454,6 +5470,10 @@ input ChangeTaskStageInput {
   taskId: ID!
   stage: TaskStage!
   status: TaskStatus
+  # Required when this change moves the task INTO DONE: a 1–15 word summary
+  # of how it resolved. Ignored for moves that don't enter DONE (and for
+  # status flips on a task already in DONE, which keep the prior summary).
+  summary: String
 }
 
 # --- Queries ---
@@ -9357,6 +9377,8 @@ func (ec *executionContext) fieldContext_Credential_taskBacklinks(_ context.Cont
 				return ec.fieldContext_Task_stage(ctx, field)
 			case "status":
 				return ec.fieldContext_Task_status(ctx, field)
+			case "summary":
+				return ec.fieldContext_Task_summary(ctx, field)
 			case "assignees":
 				return ec.fieldContext_Task_assignees(ctx, field)
 			case "wikiReferences":
@@ -13499,6 +13521,8 @@ func (ec *executionContext) fieldContext_Mutation_createTask(ctx context.Context
 				return ec.fieldContext_Task_stage(ctx, field)
 			case "status":
 				return ec.fieldContext_Task_status(ctx, field)
+			case "summary":
+				return ec.fieldContext_Task_summary(ctx, field)
 			case "assignees":
 				return ec.fieldContext_Task_assignees(ctx, field)
 			case "wikiReferences":
@@ -13602,6 +13626,8 @@ func (ec *executionContext) fieldContext_Mutation_updateTask(ctx context.Context
 				return ec.fieldContext_Task_stage(ctx, field)
 			case "status":
 				return ec.fieldContext_Task_status(ctx, field)
+			case "summary":
+				return ec.fieldContext_Task_summary(ctx, field)
 			case "assignees":
 				return ec.fieldContext_Task_assignees(ctx, field)
 			case "wikiReferences":
@@ -13705,6 +13731,8 @@ func (ec *executionContext) fieldContext_Mutation_changeTaskStage(ctx context.Co
 				return ec.fieldContext_Task_stage(ctx, field)
 			case "status":
 				return ec.fieldContext_Task_status(ctx, field)
+			case "summary":
+				return ec.fieldContext_Task_summary(ctx, field)
 			case "assignees":
 				return ec.fieldContext_Task_assignees(ctx, field)
 			case "wikiReferences":
@@ -13808,6 +13836,8 @@ func (ec *executionContext) fieldContext_Mutation_setTaskAssignees(ctx context.C
 				return ec.fieldContext_Task_stage(ctx, field)
 			case "status":
 				return ec.fieldContext_Task_status(ctx, field)
+			case "summary":
+				return ec.fieldContext_Task_summary(ctx, field)
 			case "assignees":
 				return ec.fieldContext_Task_assignees(ctx, field)
 			case "wikiReferences":
@@ -13911,6 +13941,8 @@ func (ec *executionContext) fieldContext_Mutation_setTaskWikiReferences(ctx cont
 				return ec.fieldContext_Task_stage(ctx, field)
 			case "status":
 				return ec.fieldContext_Task_status(ctx, field)
+			case "summary":
+				return ec.fieldContext_Task_summary(ctx, field)
 			case "assignees":
 				return ec.fieldContext_Task_assignees(ctx, field)
 			case "wikiReferences":
@@ -14014,6 +14046,8 @@ func (ec *executionContext) fieldContext_Mutation_addTaskWikiReference(ctx conte
 				return ec.fieldContext_Task_stage(ctx, field)
 			case "status":
 				return ec.fieldContext_Task_status(ctx, field)
+			case "summary":
+				return ec.fieldContext_Task_summary(ctx, field)
 			case "assignees":
 				return ec.fieldContext_Task_assignees(ctx, field)
 			case "wikiReferences":
@@ -14117,6 +14151,8 @@ func (ec *executionContext) fieldContext_Mutation_setTaskCredentialReferences(ct
 				return ec.fieldContext_Task_stage(ctx, field)
 			case "status":
 				return ec.fieldContext_Task_status(ctx, field)
+			case "summary":
+				return ec.fieldContext_Task_summary(ctx, field)
 			case "assignees":
 				return ec.fieldContext_Task_assignees(ctx, field)
 			case "wikiReferences":
@@ -14279,6 +14315,8 @@ func (ec *executionContext) fieldContext_Mutation_restoreTask(ctx context.Contex
 				return ec.fieldContext_Task_stage(ctx, field)
 			case "status":
 				return ec.fieldContext_Task_status(ctx, field)
+			case "summary":
+				return ec.fieldContext_Task_summary(ctx, field)
 			case "assignees":
 				return ec.fieldContext_Task_assignees(ctx, field)
 			case "wikiReferences":
@@ -18062,6 +18100,8 @@ func (ec *executionContext) fieldContext_Query_task(ctx context.Context, field g
 				return ec.fieldContext_Task_stage(ctx, field)
 			case "status":
 				return ec.fieldContext_Task_status(ctx, field)
+			case "summary":
+				return ec.fieldContext_Task_summary(ctx, field)
 			case "assignees":
 				return ec.fieldContext_Task_assignees(ctx, field)
 			case "wikiReferences":
@@ -18299,6 +18339,8 @@ func (ec *executionContext) fieldContext_Query_tasksReferencingWikiDocument(ctx 
 				return ec.fieldContext_Task_stage(ctx, field)
 			case "status":
 				return ec.fieldContext_Task_status(ctx, field)
+			case "summary":
+				return ec.fieldContext_Task_summary(ctx, field)
 			case "assignees":
 				return ec.fieldContext_Task_assignees(ctx, field)
 			case "wikiReferences":
@@ -18402,6 +18444,8 @@ func (ec *executionContext) fieldContext_Query_tasksReferencingCredential(ctx co
 				return ec.fieldContext_Task_stage(ctx, field)
 			case "status":
 				return ec.fieldContext_Task_status(ctx, field)
+			case "summary":
+				return ec.fieldContext_Task_summary(ctx, field)
 			case "assignees":
 				return ec.fieldContext_Task_assignees(ctx, field)
 			case "wikiReferences":
@@ -22508,6 +22552,35 @@ func (ec *executionContext) fieldContext_Task_status(_ context.Context, field gr
 	return fc, nil
 }
 
+func (ec *executionContext) _Task_summary(ctx context.Context, field graphql.CollectedField, obj *models.Task) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Task_summary,
+		func(ctx context.Context) (any, error) {
+			return obj.Summary, nil
+		},
+		nil,
+		ec.marshalNString2string,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_Task_summary(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Task",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
 func (ec *executionContext) _Task_assignees(ctx context.Context, field graphql.CollectedField, obj *models.Task) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
@@ -23079,6 +23152,8 @@ func (ec *executionContext) fieldContext_TaskEdge_node(_ context.Context, field 
 				return ec.fieldContext_Task_stage(ctx, field)
 			case "status":
 				return ec.fieldContext_Task_status(ctx, field)
+			case "summary":
+				return ec.fieldContext_Task_summary(ctx, field)
 			case "assignees":
 				return ec.fieldContext_Task_assignees(ctx, field)
 			case "wikiReferences":
@@ -23268,6 +23343,8 @@ func (ec *executionContext) fieldContext_TaskEvent_task(_ context.Context, field
 				return ec.fieldContext_Task_stage(ctx, field)
 			case "status":
 				return ec.fieldContext_Task_status(ctx, field)
+			case "summary":
+				return ec.fieldContext_Task_summary(ctx, field)
 			case "assignees":
 				return ec.fieldContext_Task_assignees(ctx, field)
 			case "wikiReferences":
@@ -25418,6 +25495,8 @@ func (ec *executionContext) fieldContext_WikiDocument_taskBacklinks(_ context.Co
 				return ec.fieldContext_Task_stage(ctx, field)
 			case "status":
 				return ec.fieldContext_Task_status(ctx, field)
+			case "summary":
+				return ec.fieldContext_Task_summary(ctx, field)
 			case "assignees":
 				return ec.fieldContext_Task_assignees(ctx, field)
 			case "wikiReferences":
@@ -28934,7 +29013,7 @@ func (ec *executionContext) unmarshalInputChangeTaskStageInput(ctx context.Conte
 		asMap[k] = v
 	}
 
-	fieldsInOrder := [...]string{"taskId", "stage", "status"}
+	fieldsInOrder := [...]string{"taskId", "stage", "status", "summary"}
 	for _, k := range fieldsInOrder {
 		v, ok := asMap[k]
 		if !ok {
@@ -28962,6 +29041,13 @@ func (ec *executionContext) unmarshalInputChangeTaskStageInput(ctx context.Conte
 				return it, err
 			}
 			it.Status = data
+		case "summary":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("summary"))
+			data, err := ec.unmarshalOString2ᚖstring(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.Summary = data
 		}
 	}
 	return it, nil
@@ -29312,7 +29398,7 @@ func (ec *executionContext) unmarshalInputCreateTaskInput(ctx context.Context, o
 		asMap[k] = v
 	}
 
-	fieldsInOrder := [...]string{"operationId", "name", "description", "riskScore", "riskDescription", "profitScore", "profitDescription", "assigneeIds", "wikiReferenceIds", "credentialReferenceIds", "stage", "status"}
+	fieldsInOrder := [...]string{"operationId", "name", "description", "riskScore", "riskDescription", "profitScore", "profitDescription", "assigneeIds", "wikiReferenceIds", "credentialReferenceIds", "stage", "status", "summary"}
 	for _, k := range fieldsInOrder {
 		v, ok := asMap[k]
 		if !ok {
@@ -29403,6 +29489,13 @@ func (ec *executionContext) unmarshalInputCreateTaskInput(ctx context.Context, o
 				return it, err
 			}
 			it.Status = data
+		case "summary":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("summary"))
+			data, err := ec.unmarshalOString2ᚖstring(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.Summary = data
 		}
 	}
 	return it, nil
@@ -35158,6 +35251,11 @@ func (ec *executionContext) _Task(ctx context.Context, sel ast.SelectionSet, obj
 			}
 		case "status":
 			out.Values[i] = ec._Task_status(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				atomic.AddUint32(&out.Invalids, 1)
+			}
+		case "summary":
+			out.Values[i] = ec._Task_summary(ctx, field, obj)
 			if out.Values[i] == graphql.Null {
 				atomic.AddUint32(&out.Invalids, 1)
 			}

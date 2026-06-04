@@ -3,6 +3,7 @@ package models
 import (
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -96,6 +97,14 @@ type Task struct {
 	Stage  TaskStage  `bson:"stage" json:"stage"`
 	Status TaskStatus `bson:"status" json:"status"`
 
+	// Summary is the operator's one-line account of how the task resolved,
+	// captured at the moment it enters DONE (required, max
+	// MaxTaskSummaryWords words). Empty for tasks that have never been
+	// completed. Kept as history when a task is reopened — same policy as
+	// Status — so the record of "what happened last time" survives a
+	// re-open; the next completion overwrites it with a fresh summary.
+	Summary string `bson:"summary" json:"summary"`
+
 	// DoneAt is stamped each time the task transitions into stage DONE and
 	// cleared on transitions out of DONE. Drives the DONE column's sort
 	// order (newest-completed first); the other three stages sort by
@@ -153,3 +162,35 @@ func ValidateStageStatus(stage TaskStage, status TaskStatus) error {
 	return nil
 }
 
+// MaxTaskSummaryWords caps the completion summary. The product intent is a
+// short, meaningful outcome line — not a paragraph — so the limit is tight
+// and enforced server-side (the UI mirrors it, but the server is the source
+// of truth).
+const MaxTaskSummaryWords = 15
+
+// ErrSummaryRequired and ErrSummaryTooLong are the validation signals for the
+// completion summary. The resolver surfaces them verbatim so the UI can keep
+// its inline messaging in sync with the server rule.
+var (
+	ErrSummaryRequired = errors.New("a completion summary is required when marking a task DONE")
+	ErrSummaryTooLong  = fmt.Errorf("completion summary must be at most %d words", MaxTaskSummaryWords)
+)
+
+// NormalizeAndValidateDoneSummary trims the summary and enforces the
+// "required, at most MaxTaskSummaryWords words" rule applied whenever a task
+// enters DONE. Returns the cleaned summary (collapsed internal whitespace is
+// left to the caller's display layer; we only trim the ends) on success.
+//
+// Word counting uses strings.Fields, which splits on any run of Unicode
+// whitespace and ignores leading/trailing/duplicate spaces — so "  a   b  "
+// counts as two words, matching what an operator visually reads.
+func NormalizeAndValidateDoneSummary(summary string) (string, error) {
+	trimmed := strings.TrimSpace(summary)
+	if trimmed == "" {
+		return "", ErrSummaryRequired
+	}
+	if len(strings.Fields(trimmed)) > MaxTaskSummaryWords {
+		return "", ErrSummaryTooLong
+	}
+	return trimmed, nil
+}

@@ -58,6 +58,12 @@ type Task {
   # their last status as history unless explicitly reset.
   status: TaskStatus!
 
+  # summary is the operator's one-line account of how the task resolved,
+  # captured when it enters DONE (required, at most 15 words). Empty string
+  # for tasks that have never been completed. Kept as history across a
+  # re-open, mirroring status; the next completion overwrites it.
+  summary: String!
+
   # Operators responsible for the task. Multiple assignees are supported.
   # Resolved on demand; empty list when nothing is assigned.
   assignees: [User!]!
@@ -134,6 +140,9 @@ input CreateTaskInput {
   # terminal status. Ignored for other stages (operators can park a status
   # on a non-DONE task by including it explicitly).
   status: TaskStatus
+  # Required only when stage is DONE — the completion summary (1–15 words).
+  # Ignored for other stages.
+  summary: String
 }
 
 input UpdateTaskInput {
@@ -153,6 +162,10 @@ input ChangeTaskStageInput {
   taskId: ID!
   stage: TaskStage!
   status: TaskStatus
+  # Required when this change moves the task INTO DONE: a 1–15 word summary
+  # of how it resolved. Ignored for moves that don't enter DONE (and for
+  # status flips on a task already in DONE, which keep the prior summary).
+  summary: String
 }
 
 # --- Queries ---

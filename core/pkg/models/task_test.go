@@ -111,3 +111,54 @@ func TestValidateStageStatus_RejectsUnknownEnums(t *testing.T) {
 	}
 }
 
+// TestNormalizeAndValidateDoneSummary covers the completion-summary rule
+// applied whenever a task enters DONE: required, trimmed, and capped at
+// MaxTaskSummaryWords words.
+func TestNormalizeAndValidateDoneSummary(t *testing.T) {
+	cases := []struct {
+		name    string
+		in      string
+		want    string
+		wantErr error
+	}{
+		{"empty", "", "", ErrSummaryRequired},
+		{"whitespace only", "   \t\n ", "", ErrSummaryRequired},
+		{"single word", "Done", "Done", nil},
+		{"trims ends", "  popped the box  ", "popped the box", nil},
+		{
+			"collapses count across runs",
+			"a   b\tc\nd",
+			"a   b\tc\nd",
+			nil,
+		},
+		{
+			"exactly fifteen words",
+			"one two three four five six seven eight nine ten eleven twelve thirteen fourteen fifteen",
+			"one two three four five six seven eight nine ten eleven twelve thirteen fourteen fifteen",
+			nil,
+		},
+		{
+			"sixteen words rejected",
+			"one two three four five six seven eight nine ten eleven twelve thirteen fourteen fifteen sixteen",
+			"",
+			ErrSummaryTooLong,
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			got, err := NormalizeAndValidateDoneSummary(tc.in)
+			if tc.wantErr != nil {
+				if !errors.Is(err, tc.wantErr) {
+					t.Fatalf("expected error %v, got %v", tc.wantErr, err)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			if got != tc.want {
+				t.Fatalf("expected %q, got %q", tc.want, got)
+			}
+		})
+	}
+}

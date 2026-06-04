@@ -1,5 +1,7 @@
 import { useMemo } from "react"
 import { useDroppable } from "@dnd-kit/core"
+import { PlusIcon } from "lucide-react"
+import { Button } from "@/components/ui/button"
 import { stageLabel } from "@/components/tasks/task-badge-tokens"
 import { TaskCard } from "@/components/tasks/task-card"
 import { TaskCardContextMenu } from "@/components/tasks/task-card-context-menu"
@@ -34,6 +36,13 @@ export function KanbanColumn({
     data: { stage },
   })
   const openEditDialog = useTaskStore((s) => s.openEditDialog)
+  const openCreateDialog = useTaskStore((s) => s.openCreateDialog)
+
+  // The DONE column has no quick-create button: tasks reach DONE through a
+  // stage transition that forces a terminal status (SUCCESS / FAIL), and a
+  // freshly-created task has none. Creating directly into DONE would either
+  // skip that invariant or require an extra prompt, so we don't offer it.
+  const canQuickCreate = stage !== "DONE"
 
   const query = useInfiniteTasks({
     operationId,
@@ -59,10 +68,25 @@ export function KanbanColumn({
   return (
     <div className="flex h-full min-w-[280px] flex-1 basis-0 flex-col rounded-lg border bg-card/40">
       <header className="flex items-center justify-between border-b px-3 py-2">
-        <h3 className="text-sm font-semibold">{stageLabel(stage)}</h3>
-        <span className="rounded bg-muted px-1.5 py-0.5 text-xs font-mono tabular-nums text-muted-foreground">
-          {total}
-        </span>
+        <div className="flex items-center gap-2">
+          <h3 className="text-sm font-semibold">{stageLabel(stage)}</h3>
+          <span className="rounded bg-muted px-1.5 py-0.5 text-xs font-mono tabular-nums text-muted-foreground">
+            {total}
+          </span>
+        </div>
+        {canQuickCreate && (
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon"
+            className="size-6 text-muted-foreground hover:text-foreground"
+            onClick={() => openCreateDialog(stage)}
+            aria-label={`Create task in ${stageLabel(stage)}`}
+            title={`Create task in ${stageLabel(stage)}`}
+          >
+            <PlusIcon className="size-4" />
+          </Button>
+        )}
       </header>
       <VirtualTaskList
         ref={setNodeRef}

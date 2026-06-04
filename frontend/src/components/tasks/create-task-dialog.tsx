@@ -10,6 +10,7 @@ import {
 } from "@/components/ui/dialog"
 import { useTaskStore } from "@/stores/tasks"
 import { useCreateTask } from "@/graphql/hooks/tasks"
+import { stageLabel } from "@/components/tasks/task-badge-tokens"
 import { TaskFormFields } from "@/components/tasks/task-form-fields"
 import {
   emptyTaskFormValues,
@@ -29,7 +30,7 @@ interface CreateTaskDialogProps {
 }
 
 export function CreateTaskDialog({ operationId }: CreateTaskDialogProps) {
-  const { createDialogOpen, closeCreateDialog } = useTaskStore()
+  const { createDialogOpen, createStage, closeCreateDialog } = useTaskStore()
   const createTask = useCreateTask()
   const [values, setValues] = useState<TaskFormValues>(emptyTaskFormValues)
   const [relations, setRelations] = useState<TaskRelationsValues>(
@@ -65,10 +66,13 @@ export function CreateTaskDialog({ operationId }: CreateTaskDialogProps) {
         assigneeIds: relations.assignees.map((a) => a.id),
         wikiReferenceIds: relations.wikiReferences.map((w) => w.id),
         credentialReferenceIds: relations.credentialReferences.map((c) => c.id),
-        // Stage and status are intentionally omitted — new tasks default
-        // to BACKLOG/UNDEFINED server-side. Operators move them through
-        // the board via drag-drop, which goes through changeTaskStage and
-        // enforces the DONE-requires-status invariant uniformly.
+        // Quick-create from a column header targets that column's stage
+        // (Backlog / To do / In process). Omitted otherwise — the generic
+        // "Create task" entry point leaves stage null and the server
+        // defaults to BACKLOG. Status stays UNDEFINED either way; the
+        // per-column "+" buttons never target DONE, so the
+        // DONE-requires-status invariant is preserved.
+        stage: createStage ?? undefined,
       })
       reset()
       closeCreateDialog()
@@ -91,8 +95,9 @@ export function CreateTaskDialog({ operationId }: CreateTaskDialogProps) {
         <DialogHeader>
           <DialogTitle>Create task</DialogTitle>
           <DialogDescription>
-            New tasks land in the Backlog column. Move them across the board
-            as work progresses.
+            {createStage
+              ? `New task lands in the ${stageLabel(createStage)} column. Move it across the board as work progresses.`
+              : "New tasks land in the Backlog column. Move them across the board as work progresses."}
           </DialogDescription>
         </DialogHeader>
         <form onSubmit={handleSubmit} autoComplete="off">

@@ -17,6 +17,7 @@ export const TaskFields = graphql(`
     profitDescription
     stage
     status
+    summary
     assignees {
       id
       username

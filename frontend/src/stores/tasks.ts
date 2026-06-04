@@ -54,6 +54,10 @@ interface TaskStoreState {
 
   selected: SelectedTask | null
   createDialogOpen: boolean
+  // The stage a quick-create should land in. Set by the per-column "+"
+  // buttons (Backlog / To do / In process); null means the generic
+  // "Create task" entry point, which defaults to BACKLOG server-side.
+  createStage: TaskStage | null
   editDialogOpen: boolean
   deleteDialogOpen: boolean
 
@@ -65,7 +69,7 @@ interface TaskStoreState {
   setViewMode: (mode: TaskViewMode) => void
   setMatrixIncludeBacklog: (include: boolean) => void
 
-  openCreateDialog: () => void
+  openCreateDialog: (stage?: TaskStage) => void
   openEditDialog: (t: SelectedTask) => void
   openDeleteDialog: (t: SelectedTask) => void
   closeCreateDialog: () => void
@@ -92,6 +96,7 @@ export const useTaskStore = create<TaskStoreState>()(
 
       selected: null,
       createDialogOpen: false,
+      createStage: null,
       editDialogOpen: false,
       deleteDialogOpen: false,
       pendingStageChange: null,
@@ -104,14 +109,16 @@ export const useTaskStore = create<TaskStoreState>()(
       setMatrixIncludeBacklog: (matrixIncludeBacklog) =>
         set({ matrixIncludeBacklog }),
 
-      openCreateDialog: () => set({ createDialogOpen: true }),
+      openCreateDialog: (stage) =>
+        set({ createDialogOpen: true, createStage: stage ?? null }),
       openEditDialog: (t) => set({ editDialogOpen: true, selected: t }),
       openDeleteDialog: (t) => set({ deleteDialogOpen: true, selected: t }),
       // Edit dialog is the outermost surface for an existing task (it replaced
       // the read-only details panel), so closing it clears `selected`. Delete
       // dialog opens on top of edit; its close keeps `selected` intact so the
       // edit dialog underneath stays bound to the same task.
-      closeCreateDialog: () => set({ createDialogOpen: false }),
+      closeCreateDialog: () =>
+        set({ createDialogOpen: false, createStage: null }),
       closeEditDialog: () => set({ editDialogOpen: false, selected: null }),
       closeDeleteDialog: () => set({ deleteDialogOpen: false }),
 
