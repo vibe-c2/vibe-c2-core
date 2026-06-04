@@ -1,4 +1,4 @@
-import { useMemo } from "react"
+import { useCallback, useMemo } from "react"
 import { useDroppable } from "@dnd-kit/core"
 import { PlusIcon } from "lucide-react"
 import { Button } from "@/components/ui/button"
@@ -6,6 +6,7 @@ import { stageLabel } from "@/components/tasks/task-badge-tokens"
 import { TaskCard } from "@/components/tasks/task-card"
 import { TaskCardContextMenu } from "@/components/tasks/task-card-context-menu"
 import { VirtualTaskList } from "@/components/tasks/virtual-task-list"
+import { doneDateGroup } from "@/components/tasks/done-date-groups"
 import { useInfiniteTasks } from "@/graphql/hooks/tasks"
 import { useTaskStore } from "@/stores/tasks"
 import type { TaskFieldsFragment, TaskStage } from "@/graphql/gql/graphql"
@@ -43,6 +44,16 @@ export function KanbanColumn({
   // freshly-created task has none. Creating directly into DONE would either
   // skip that invariant or require an extra prompt, so we don't offer it.
   const canQuickCreate = stage !== "DONE"
+
+  // The DONE column is sorted by completion time, so we slice it into
+  // recency buckets (Today / Yesterday / 2–7 days ago / older calendar
+  // dates) with section headers. Other stages render a flat list. The
+  // grouper is memoized so VirtualTaskList's row-flattening only recomputes
+  // when the task set changes, not on every render.
+  const groupOf = useCallback(
+    (task: TaskFieldsFragment) => doneDateGroup(task.doneAt),
+    [],
+  )
 
   const query = useInfiniteTasks({
     operationId,
@@ -105,7 +116,25 @@ export function KanbanColumn({
         fetchNextPage={query.fetchNextPage}
         emptyMessage="Drop a task here"
         isOver={isOver}
+        groupOf={stage === "DONE" ? groupOf : undefined}
+        renderGroupHeader={
+          stage === "DONE" ? renderDoneGroupHeader : undefined
+        }
       />
+    </div>
+  )
+}
+
+// Section divider for the DONE column's recency buckets. A thin centered
+// rule with a centered pill label so it reads as a separator rather than
+// another card. Module-scope so its identity stays stable across renders.
+function renderDoneGroupHeader(label: string) {
+  return (
+    <div className="flex items-center gap-2 px-1 pb-1 pt-2">
+      <span className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
+        {label}
+      </span>
+      <span className="h-px flex-1 bg-border" />
     </div>
   )
 }

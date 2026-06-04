@@ -2,6 +2,7 @@ import {
   forwardRef,
   useCallback,
   useEffect,
+  useMemo,
   useRef,
   type ReactNode,
 } from "react"
@@ -43,8 +44,22 @@ interface VirtualTaskListProps {
   // (single-column list); the matrix quadrants use lanes=2 to match the
   // pre-virtualization sm:grid-cols-2 layout.
   lanes?: number
+  // groupOf assigns each task to a section bucket. When provided, a header
+  // row is inserted before the first task of every new bucket (buckets are
+  // expected to be contiguous — the list must already be sorted so tasks of
+  // the same bucket are adjacent). Grouping is single-lane only; ignored
+  // when lanes > 1. renderGroupHeader must be provided alongside it.
+  groupOf?: (task: TaskFieldsFragment) => { key: string; label: string }
+  renderGroupHeader?: (label: string) => ReactNode
   className?: string
 }
+
+// A virtual row is either a sticky-ish section header or a task card. We
+// flatten tasks + headers into one list so the virtualizer measures and
+// scrolls them as a single column.
+type VirtualRow =
+  | { kind: "header"; key: string; label: string }
+  | { kind: "task"; task: TaskFieldsFragment }
 
 // VirtualTaskList renders a virtualized, infinite-scrolling list of tasks
 // used by both the kanban column body and each matrix quadrant.
@@ -66,11 +81,38 @@ export const VirtualTaskList = forwardRef<HTMLDivElement, VirtualTaskListProps>(
       emptyMessage,
       isOver = false,
       lanes = 1,
+      groupOf,
+      renderGroupHeader,
       className,
     },
     forwardedRef,
   ) {
     const localRef = useRef<HTMLDivElement | null>(null)
+
+    // Grouping only makes sense in single-lane mode; the multi-lane matrix
+    // never groups. Flatten tasks into header + task rows once per task
+    // change so the virtualizer has a single contiguous row list to drive.
+    const grouped = lanes === 1 && !!groupOf && !!renderGroupHeader
+    const rows = useMemo<VirtualRow[]>(() => {
+      if (!grouped || !groupOf) {
+        return tasks.map((task) => ({ kind: "task", task }) as VirtualRow)
+      }
+      const out: VirtualRow[] = []
+      let lastKey: string | null = null
+      for (const task of tasks) {
+        const g = groupOf(task)
+        if (g.key !== lastKey) {
+          lastKey = g.key
+          // An empty label means "group but draw no separator" — e.g. the
+          // leading bucket whose membership is self-evident.
+          if (g.label) {
+            out.push({ kind: "header", key: `header:${g.key}`, label: g.label })
+          }
+        }
+        out.push({ kind: "task", task })
+      }
+      return out
+    }, [tasks, grouped, groupOf])
 
     // Compose the forwarded ref (from the column's useDroppable) with the
     // local ref the virtualizer needs. Callback ref runs on every render
@@ -89,7 +131,7 @@ export const VirtualTaskList = forwardRef<HTMLDivElement, VirtualTaskListProps>(
     )
 
     const virtualizer = useVirtualizer({
-      count: tasks.length,
+      count: rows.length,
       getScrollElement: () => localRef.current,
       estimateSize: () => ROW_ESTIMATE,
       overscan: 6,
@@ -99,8 +141,13 @@ export const VirtualTaskList = forwardRef<HTMLDivElement, VirtualTaskListProps>(
       // don't push their sibling column out of alignment.
       lanes,
       // Stable item key so DnD-driven re-orders don't unmount + remount
-      // the wrong row while the virtualizer is mid-measure.
-      getItemKey: (index) => tasks[index]?.id ?? index,
+      // the wrong row while the virtualizer is mid-measure. Header rows
+      // carry their own bucket-derived key.
+      getItemKey: (index) => {
+        const row = rows[index]
+        if (!row) return index
+        return row.kind === "header" ? row.key : row.task.id
+      },
     })
 
     const virtualItems = virtualizer.getVirtualItems()
@@ -112,10 +159,10 @@ export const VirtualTaskList = forwardRef<HTMLDivElement, VirtualTaskListProps>(
       if (!hasNextPage || isFetchingNextPage) return
       const last = virtualItems[virtualItems.length - 1]
       if (!last) return
-      if (last.index >= tasks.length - PREFETCH_THRESHOLD) {
+      if (last.index >= rows.length - PREFETCH_THRESHOLD) {
         fetchNextPage()
       }
-    }, [virtualItems, tasks.length, hasNextPage, isFetchingNextPage, fetchNextPage])
+    }, [virtualItems, rows.length, hasNextPage, isFetchingNextPage, fetchNextPage])
 
     // Empty / loading states get rendered as a centered message instead
     // of an empty virtual list — both because the virtualizer has nothing
@@ -150,8 +197,31 @@ export const VirtualTaskList = forwardRef<HTMLDivElement, VirtualTaskListProps>(
         {!showSpinner && !showEmpty && (
           <div style={{ height: totalSize }} className="relative w-full">
             {virtualItems.map((item) => {
-              const task = tasks[item.index]
-              if (!task) return null
+              const row = rows[item.index]
+              if (!row) return null
+
+              // Header rows always span the full width (grouping is
+              // single-lane), so they ignore the lane math entirely.
+              if (row.kind === "header") {
+                return (
+                  <div
+                    key={item.key}
+                    ref={virtualizer.measureElement}
+                    data-index={item.index}
+                    style={{
+                      position: "absolute",
+                      top: 0,
+                      left: 0,
+                      width: "100%",
+                      transform: `translateY(${item.start}px)`,
+                      paddingBottom: 8,
+                    }}
+                  >
+                    {renderGroupHeader?.(row.label)}
+                  </div>
+                )
+              }
+
               // In multi-lane mode the virtualizer assigns each item a
               // lane index; we slice the container width evenly and place
               // the item in its lane's column. paddingRight gives the
@@ -173,7 +243,7 @@ export const VirtualTaskList = forwardRef<HTMLDivElement, VirtualTaskListProps>(
                     paddingRight: isLastLane ? 0 : 8,
                   }}
                 >
-                  {renderItem(task)}
+                  {renderItem(row.task)}
                 </div>
               )
             })}
