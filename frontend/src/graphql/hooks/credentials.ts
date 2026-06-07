@@ -10,6 +10,7 @@ import type {
   CreateCredentialInput,
   UpdateCredentialInput,
   CredentialType,
+  CredentialSearchField,
 } from "@/graphql/gql/graphql"
 import {
   CredentialDocument,
@@ -32,6 +33,8 @@ import {
 export type CredentialListParams = {
   operationId: string
   search?: string | null
+  // Empty/omitted = search all fields (backend default).
+  searchFields?: CredentialSearchField[] | null
   type?: CredentialType | null
   tags?: string[] | null
   // validOnly: true hides invalid (default), null shows both, false shows only invalid.
@@ -45,6 +48,7 @@ export type CredentialListParams = {
 export type MyCredentialListParams = {
   operationIds: string[] | null
   search?: string | null
+  searchFields?: CredentialSearchField[] | null
   type?: CredentialType | null
   tags?: string[] | null
   validOnly?: boolean | null
@@ -96,6 +100,10 @@ export function useInfiniteCredentials(params: CredentialListParams) {
       graphqlClient(CredentialsDocument, {
         operationId: params.operationId,
         search: params.search ?? null,
+        searchFields:
+          params.searchFields && params.searchFields.length > 0
+            ? params.searchFields
+            : null,
         type: params.type ?? null,
         tags: params.tags && params.tags.length > 0 ? params.tags : null,
         validOnly: params.validOnly ?? null,
@@ -159,6 +167,10 @@ export function useInfiniteMyCredentials(
       graphqlClient(MyCredentialsDocument, {
         operationIds: params.operationIds,
         search: params.search ?? null,
+        searchFields:
+          params.searchFields && params.searchFields.length > 0
+            ? params.searchFields
+            : null,
         type: params.type ?? null,
         tags: params.tags && params.tags.length > 0 ? params.tags : null,
         validOnly: params.validOnly ?? null,

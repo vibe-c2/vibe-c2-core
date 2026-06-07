@@ -117,7 +117,12 @@ export function CredentialsTable({
                       <XCircleIcon className="size-4 text-muted-foreground/60" />
                     )}
                   </div>
-                  <div className="truncate font-medium">{cred.name}</div>
+                  <div
+                    className="min-w-0 truncate font-medium"
+                    title={cred.name}
+                  >
+                    {cred.name}
+                  </div>
                   {showOperationColumn && (
                     <div
                       className="flex min-w-0 items-center gap-1.5 text-muted-foreground"

@@ -109,6 +109,73 @@ func TestBuildCredentialFilter_SearchEscapesRegexMetachars(t *testing.T) {
 	}
 }
 
+// TestBuildCredentialFilter_SearchFieldsRestrictsOrBranches verifies that a
+// non-empty SearchFields restricts the $or to exactly the selected field paths,
+// while an empty set falls back to the four default fields.
+func TestBuildCredentialFilter_SearchFieldsRestrictsOrBranches(t *testing.T) {
+	opID := uuid.New()
+
+	cases := []struct {
+		name   string
+		fields []CredentialSearchField
+		want   []string
+	}{
+		{
+			"default-when-empty",
+			nil,
+			[]string{"name", "username", "password", "properties.value"},
+		},
+		{
+			"username-only",
+			[]CredentialSearchField{CredentialSearchFieldUsername},
+			[]string{"username"},
+		},
+		{
+			"password-and-properties",
+			[]CredentialSearchField{CredentialSearchFieldPassword, CredentialSearchFieldProperties},
+			[]string{"password", "properties.value"},
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			f := buildCredentialFilter(opID, CredentialFilter{
+				Search:       "needle",
+				SearchFields: tc.fields,
+			})
+
+			orVal, ok := f["$or"].(bson.A)
+			if !ok {
+				t.Fatalf("expected $or bson.A, got %T", f["$or"])
+			}
+			if len(orVal) != len(tc.want) {
+				t.Fatalf("expected %d $or branches, got %d", len(tc.want), len(orVal))
+			}
+			for i, field := range tc.want {
+				branch, ok := orVal[i].(bson.M)
+				if !ok {
+					t.Fatalf("expected $or[%d] to be bson.M", i)
+				}
+				if _, present := branch[field]; !present {
+					t.Fatalf("expected $or[%d] to target %q, got %v", i, field, branch)
+				}
+			}
+		})
+	}
+}
+
+// TestBuildCredentialFilter_SearchFieldsIgnoredWithoutSearch verifies that
+// selecting fields without a search term produces no $or constraint.
+func TestBuildCredentialFilter_SearchFieldsIgnoredWithoutSearch(t *testing.T) {
+	opID := uuid.New()
+	f := buildCredentialFilter(opID, CredentialFilter{
+		SearchFields: []CredentialSearchField{CredentialSearchFieldUsername},
+	})
+	if _, ok := f["$or"]; ok {
+		t.Fatalf("expected no $or when Search is empty, got %v", f["$or"])
+	}
+}
+
 // TestBuildCredentialFilter_ValidOnlyFalseSelectsInvalid verifies that passing
 // ValidOnly=false produces a filter for is_valid=false (invalid-only), not a
 // missing filter. This is the path the UI uses when the user toggles to

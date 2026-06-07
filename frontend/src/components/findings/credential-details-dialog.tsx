@@ -63,10 +63,12 @@ export function CredentialDetailsDialog() {
             className="absolute top-2 right-10"
           />
         )}
-        <DialogHeader>
+        <DialogHeader className="min-w-0">
           <DialogTitle className="flex items-center gap-2 pr-16">
             <KeyIcon className="size-4 shrink-0" />
-            <span className="min-w-0 truncate">{title}</span>
+            <span className="min-w-0 truncate" title={title}>
+              {title}
+            </span>
           </DialogTitle>
           <DialogDescription>
             Credential details, tags, and comments.

@@ -46,6 +46,7 @@ function ScopedCredentialsTab({ operationId }: { operationId: string }) {
   } = useInfiniteCredentials({
     operationId,
     search: filters.search.trim() || null,
+    searchFields: filters.searchFields,
     type: filters.type,
     tags: filters.tags,
     validOnly: filters.validOnly,
@@ -109,6 +110,7 @@ function GlobalCredentialsTab() {
     {
       operationIds,
       search: filters.search.trim() || null,
+      searchFields: filters.searchFields,
       type: filters.type,
       tags: filters.tags,
       validOnly: filters.validOnly,

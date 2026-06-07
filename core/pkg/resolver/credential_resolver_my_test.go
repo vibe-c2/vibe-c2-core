@@ -92,7 +92,7 @@ func TestMyCredentials_NilOpIDs_UsesMembershipSet(t *testing.T) {
 	r := &credentialResolver{credRepo: credRepo, operationRepo: opRepo, userRepo: &mockUserRepo{}}
 	ctx := newCallerCtx(caller)
 
-	conn, err := r.MyCredentials(ctx, nil, nil, nil, nil, nil, nil, nil, nil, nil)
+	conn, err := r.MyCredentials(ctx, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -124,7 +124,7 @@ func TestMyCredentials_NilOpIDs_ZeroMembership_ShortCircuits(t *testing.T) {
 	r := &credentialResolver{credRepo: credRepo, operationRepo: opRepo, userRepo: &mockUserRepo{}}
 	ctx := newCallerCtx(caller)
 
-	conn, err := r.MyCredentials(ctx, nil, nil, nil, nil, nil, nil, nil, nil, nil)
+	conn, err := r.MyCredentials(ctx, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -144,7 +144,7 @@ func TestMyCredentials_EmptyOpIDs_ShortCircuits(t *testing.T) {
 	r := &credentialResolver{credRepo: credRepo, operationRepo: opRepo, userRepo: &mockUserRepo{}}
 	ctx := newCallerCtx(caller)
 
-	conn, err := r.MyCredentials(ctx, []string{}, nil, nil, nil, nil, nil, nil, nil, nil)
+	conn, err := r.MyCredentials(ctx, []string{}, nil, nil, nil, nil, nil, nil, nil, nil, nil)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -177,7 +177,7 @@ func TestMyCredentials_ExplicitOpIDs_NotMember_Forbidden(t *testing.T) {
 	r := &credentialResolver{credRepo: credRepo, operationRepo: opRepo, userRepo: &mockUserRepo{}}
 	ctx := newCallerCtx(caller)
 
-	_, err := r.MyCredentials(ctx, []string{memberID.String(), strangerID.String()}, nil, nil, nil, nil, nil, nil, nil, nil)
+	_, err := r.MyCredentials(ctx, []string{memberID.String(), strangerID.String()}, nil, nil, nil, nil, nil, nil, nil, nil, nil)
 	if err == nil {
 		t.Fatal("expected forbidden error, got nil")
 	}
@@ -201,7 +201,7 @@ func TestMyCredentials_ExplicitOpIDs_OverCap_Rejected(t *testing.T) {
 		tooMany[i] = uuid.New().String()
 	}
 
-	_, err := r.MyCredentials(ctx, tooMany, nil, nil, nil, nil, nil, nil, nil, nil)
+	_, err := r.MyCredentials(ctx, tooMany, nil, nil, nil, nil, nil, nil, nil, nil, nil)
 	if err == nil {
 		t.Fatal("expected over-cap error, got nil")
 	}
@@ -248,7 +248,7 @@ func TestMyCredentials_AppAdmin_NilOpIDs_ReturnsMembershipSet(t *testing.T) {
 	r := &credentialResolver{credRepo: credRepo, operationRepo: opRepo, userRepo: &mockUserRepo{}}
 	ctx := newCallerCtx(admin, "admin")
 
-	_, err := r.MyCredentials(ctx, nil, nil, nil, nil, nil, nil, nil, nil, nil)
+	_, err := r.MyCredentials(ctx, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}

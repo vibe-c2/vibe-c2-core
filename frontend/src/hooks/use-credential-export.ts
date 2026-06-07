@@ -5,6 +5,7 @@ import {
   CredentialsDocument,
   MyCredentialsDocument,
   type CredentialType,
+  type CredentialSearchField,
 } from "@/graphql/gql/graphql"
 import { useCredentialStore } from "@/stores/credentials"
 import { useOperation } from "@/graphql/hooks/operations"
@@ -30,6 +31,7 @@ const MAX_PAGES = 1000
 
 type Filters = {
   search: string | null
+  searchFields: CredentialSearchField[] | null
   type: CredentialType | null
   tags: string[] | null
   validOnly: boolean | null
@@ -66,6 +68,8 @@ export function useCredentialExport(mode: FindingsMode) {
 
       const effectiveFilters: Filters = {
         search: filters.search.trim() || null,
+        searchFields:
+          filters.searchFields.length > 0 ? filters.searchFields : null,
         type: filters.type,
         tags: filters.tags.length > 0 ? filters.tags : null,
         validOnly: filters.validOnly,

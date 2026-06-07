@@ -1,6 +1,9 @@
 import { create } from "zustand"
 import { persist, createJSONStorage } from "zustand/middleware"
-import type { CredentialType } from "@/graphql/gql/graphql"
+import type {
+  CredentialType,
+  CredentialSearchField,
+} from "@/graphql/gql/graphql"
 
 /**
  * UI-only state for the Findings → Credentials surface.
@@ -10,6 +13,9 @@ import type { CredentialType } from "@/graphql/gql/graphql"
  */
 export interface CredentialFilters {
   search: string
+  // Which fields the search term matches against. Empty = all fields (the
+  // backend default). Lets the user scope a query to e.g. usernames only.
+  searchFields: CredentialSearchField[]
   type: CredentialType | null
   tags: string[]
   // null = both, true = valid only (default), false = invalid only.
@@ -32,6 +38,7 @@ interface CredentialStoreState {
 
   // Actions
   setSearch: (search: string) => void
+  setSearchFields: (fields: CredentialSearchField[]) => void
   setType: (type: CredentialType | null) => void
   setTags: (tags: string[]) => void
   toggleTag: (tag: string) => void
@@ -53,6 +60,7 @@ interface CredentialStoreState {
 // unless the user opts in to "only invalid"; null = show both.
 const defaultFilters: CredentialFilters = {
   search: "",
+  searchFields: [],
   type: null,
   tags: [],
   validOnly: true,
@@ -71,6 +79,8 @@ export const useCredentialStore = create<CredentialStoreState>()(
 
       setSearch: (search) =>
         set((s) => ({ filters: { ...s.filters, search } })),
+      setSearchFields: (searchFields) =>
+        set((s) => ({ filters: { ...s.filters, searchFields } })),
       setType: (type) =>
         set((s) => ({ filters: { ...s.filters, type } })),
       setTags: (tags) =>

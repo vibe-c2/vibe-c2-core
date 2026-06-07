@@ -55,7 +55,7 @@ type ICredentialResolver interface {
 
 	// Queries
 	Credential(ctx context.Context, id string) (*models.Credential, error)
-	Credentials(ctx context.Context, operationID string, search *string, typeArg *models.CredentialType, tags []string, validOnly *bool, first *int, after *string, last *int, before *string) (*model.CredentialConnection, error)
+	Credentials(ctx context.Context, operationID string, search *string, searchFields []model.CredentialSearchField, typeArg *models.CredentialType, tags []string, validOnly *bool, first *int, after *string, last *int, before *string) (*model.CredentialConnection, error)
 	CredentialTags(ctx context.Context, operationID string) ([]string, error)
 
 	// Cross-operation queries — power the "global" Findings page. See
@@ -63,7 +63,7 @@ type ICredentialResolver interface {
 	//   nil   ⇒ caller's full membership set
 	//   []    ⇒ explicit empty, returns empty result
 	//   [...] ⇒ resolver authorizes each id (viewer role minimum)
-	MyCredentials(ctx context.Context, operationIDs []string, search *string, typeArg *models.CredentialType, tags []string, validOnly *bool, first *int, after *string, last *int, before *string) (*model.CredentialConnection, error)
+	MyCredentials(ctx context.Context, operationIDs []string, search *string, searchFields []model.CredentialSearchField, typeArg *models.CredentialType, tags []string, validOnly *bool, first *int, after *string, last *int, before *string) (*model.CredentialConnection, error)
 	MyCredentialTags(ctx context.Context, operationIDs []string) ([]string, error)
 
 	// Field resolvers for Credential type
@@ -543,7 +543,7 @@ func (r *credentialResolver) Credential(ctx context.Context, id string) (*models
 
 // Credentials returns a cursor-paginated list of credentials for an operation.
 // Requires at least viewer role in the operation.
-func (r *credentialResolver) Credentials(ctx context.Context, operationID string, search *string, typeArg *models.CredentialType, tags []string, validOnly *bool, first *int, after *string, last *int, before *string) (*model.CredentialConnection, error) {
+func (r *credentialResolver) Credentials(ctx context.Context, operationID string, search *string, searchFields []model.CredentialSearchField, typeArg *models.CredentialType, tags []string, validOnly *bool, first *int, after *string, last *int, before *string) (*model.CredentialConnection, error) {
 	opUID, err := uuid.Parse(operationID)
 	if err != nil {
 		return nil, fmt.Errorf("invalid operation ID: %w", err)
@@ -558,9 +558,15 @@ func (r *credentialResolver) Credentials(ctx context.Context, operationID string
 		return nil, fmt.Errorf("invalid pagination args: %w", err)
 	}
 
+	searchFieldsMapped, err := mapCredentialSearchFields(searchFields)
+	if err != nil {
+		return nil, err
+	}
+
 	filter := repository.CredentialFilter{
-		Tags:      normalizeTags(tags),
-		ValidOnly: validOnly,
+		Tags:         normalizeTags(tags),
+		ValidOnly:    validOnly,
+		SearchFields: searchFieldsMapped,
 	}
 	if search != nil {
 		filter.Search = strings.TrimSpace(*search)
@@ -693,7 +699,7 @@ func (r *credentialResolver) resolveAccessibleOperationIDs(ctx context.Context, 
 // MyCredentials returns a cursor-paginated list of credentials across the
 // caller's accessible operations. See the GraphQL schema doc for the
 // operationIDs semantics. The pagination shape mirrors Credentials exactly.
-func (r *credentialResolver) MyCredentials(ctx context.Context, operationIDs []string, search *string, typeArg *models.CredentialType, tags []string, validOnly *bool, first *int, after *string, last *int, before *string) (*model.CredentialConnection, error) {
+func (r *credentialResolver) MyCredentials(ctx context.Context, operationIDs []string, search *string, searchFields []model.CredentialSearchField, typeArg *models.CredentialType, tags []string, validOnly *bool, first *int, after *string, last *int, before *string) (*model.CredentialConnection, error) {
 	opUIDs, err, ok := r.resolveAccessibleOperationIDs(ctx, operationIDs)
 	if err != nil {
 		return nil, err
@@ -713,9 +719,15 @@ func (r *credentialResolver) MyCredentials(ctx context.Context, operationIDs []s
 		}, nil
 	}
 
+	searchFieldsMapped, err := mapCredentialSearchFields(searchFields)
+	if err != nil {
+		return nil, err
+	}
+
 	filter := repository.CredentialFilter{
-		Tags:      normalizeTags(tags),
-		ValidOnly: validOnly,
+		Tags:         normalizeTags(tags),
+		ValidOnly:    validOnly,
+		SearchFields: searchFieldsMapped,
 	}
 	if search != nil {
 		filter.Search = strings.TrimSpace(*search)
@@ -981,6 +993,35 @@ func normalizeCredentialProperties(in []*model.CredentialPropertyInput) ([]model
 }
 
 // normalizeTags lowercases, trims, deduplicates while preserving first-seen order.
+// mapCredentialSearchFields translates the GraphQL search-field enum into the
+// repository field set. An empty/nil input returns nil, which the repository
+// reads as "search all default fields" (the historical behaviour). An unknown
+// member is rejected rather than skipped: silently dropping it would make the
+// repository fall back to searching *all* fields, widening the scope the caller
+// asked to narrow. gqlgen validates the enum upstream, so this only fires if
+// the schema and this switch ever diverge.
+func mapCredentialSearchFields(in []model.CredentialSearchField) ([]repository.CredentialSearchField, error) {
+	if len(in) == 0 {
+		return nil, nil
+	}
+	out := make([]repository.CredentialSearchField, 0, len(in))
+	for _, f := range in {
+		switch f {
+		case model.CredentialSearchFieldName:
+			out = append(out, repository.CredentialSearchFieldName)
+		case model.CredentialSearchFieldUsername:
+			out = append(out, repository.CredentialSearchFieldUsername)
+		case model.CredentialSearchFieldPassword:
+			out = append(out, repository.CredentialSearchFieldPassword)
+		case model.CredentialSearchFieldProperties:
+			out = append(out, repository.CredentialSearchFieldProperties)
+		default:
+			return nil, fmt.Errorf("invalid credential search field: %s", f)
+		}
+	}
+	return out, nil
+}
+
 func normalizeTags(in []string) []string {
 	if len(in) == 0 {
 		return []string{}

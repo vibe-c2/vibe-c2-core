@@ -16,16 +16,43 @@ import (
 
 const credentialCollection = "credentials"
 
+// CredentialSearchField identifies a single Mongo field path that the text
+// search may target. The string value is the field path used directly in the
+// query, so adding a member is enough to make it searchable.
+type CredentialSearchField string
+
+const (
+	CredentialSearchFieldName       CredentialSearchField = "name"
+	CredentialSearchFieldUsername   CredentialSearchField = "username"
+	CredentialSearchFieldPassword   CredentialSearchField = "password"
+	CredentialSearchFieldProperties CredentialSearchField = "properties.value"
+)
+
+// defaultCredentialSearchFields is the field set used when the caller does not
+// restrict the search. Preserves the historical behaviour of matching name,
+// username, password, and property values in one pass.
+var defaultCredentialSearchFields = []CredentialSearchField{
+	CredentialSearchFieldName,
+	CredentialSearchFieldUsername,
+	CredentialSearchFieldPassword,
+	CredentialSearchFieldProperties,
+}
+
 // CredentialFilter bundles the optional list filters for credentials.
 // All fields are independent — combining them ANDs them together at the
 // MongoDB query level.
 type CredentialFilter struct {
-	// Search matches case-insensitively against name, username, password,
-	// and the values of operator-defined properties (properties.value).
-	// Property *names* are intentionally excluded — they're labels, not
-	// content, and matching them would surface false positives whenever a
-	// generic label like "port" or "url" appears in a query.
+	// Search matches case-insensitively against the fields named in
+	// SearchFields (defaulting to name, username, password, and the values of
+	// operator-defined properties). Property *names* are intentionally
+	// excluded — they're labels, not content, and matching them would surface
+	// false positives whenever a generic label like "port" or "url" appears in
+	// a query.
 	Search string
+	// SearchFields restricts which fields Search matches against. Empty means
+	// "all default fields" (see defaultCredentialSearchFields). Ignored when
+	// Search is empty.
+	SearchFields []CredentialSearchField
 	// Type, if non-nil, restricts to credentials of this type.
 	Type *models.CredentialType
 	// Tags, if non-empty, requires every listed tag to be present ($all).
@@ -268,12 +295,15 @@ func applyCredentialFilter(q bson.M, f CredentialFilter) bson.M {
 	if f.Search != "" {
 		escaped := regexp.QuoteMeta(f.Search)
 		rx := bson.M{"$regex": escaped, "$options": "i"}
-		q["$or"] = bson.A{
-			bson.M{"name": rx},
-			bson.M{"username": rx},
-			bson.M{"password": rx},
-			bson.M{"properties.value": rx},
+		fields := f.SearchFields
+		if len(fields) == 0 {
+			fields = defaultCredentialSearchFields
 		}
+		or := make(bson.A, 0, len(fields))
+		for _, field := range fields {
+			or = append(or, bson.M{string(field): rx})
+		}
+		q["$or"] = or
 	}
 
 	return q

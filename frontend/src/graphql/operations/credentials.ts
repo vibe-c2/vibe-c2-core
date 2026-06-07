@@ -71,6 +71,7 @@ export const CredentialsQuery = graphql(`
   query Credentials(
     $operationId: ID!
     $search: String
+    $searchFields: [CredentialSearchField!]
     $type: CredentialType
     $tags: [String!]
     $validOnly: Boolean
@@ -80,6 +81,7 @@ export const CredentialsQuery = graphql(`
     credentials(
       operationId: $operationId
       search: $search
+      searchFields: $searchFields
       type: $type
       tags: $tags
       validOnly: $validOnly
@@ -145,6 +147,7 @@ export const MyCredentialsQuery = graphql(`
   query MyCredentials(
     $operationIds: [ID!]
     $search: String
+    $searchFields: [CredentialSearchField!]
     $type: CredentialType
     $tags: [String!]
     $validOnly: Boolean
@@ -154,6 +157,7 @@ export const MyCredentialsQuery = graphql(`
     myCredentials(
       operationIds: $operationIds
       search: $search
+      searchFields: $searchFields
       type: $type
       tags: $tags
       validOnly: $validOnly

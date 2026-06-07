@@ -280,14 +280,14 @@ type ComplexityRoot struct {
 	Query struct {
 		Credential                         func(childComplexity int, id string) int
 		CredentialTags                     func(childComplexity int, operationID string) int
-		Credentials                        func(childComplexity int, operationID string, search *string, typeArg *models.CredentialType, tags []string, validOnly *bool, first *int, after *string, last *int, before *string) int
+		Credentials                        func(childComplexity int, operationID string, search *string, searchFields []model.CredentialSearchField, typeArg *models.CredentialType, tags []string, validOnly *bool, first *int, after *string, last *int, before *string) int
 		Hash                               func(childComplexity int, id string) int
 		HashTags                           func(childComplexity int, operationID string) int
 		Hashes                             func(childComplexity int, operationID string, search *string, statuses []models.HashStatus, tags []string, hasCredential *bool, first *int, after *string, last *int, before *string) int
 		Me                                 func(childComplexity int) int
 		MyAPIKey                           func(childComplexity int) int
 		MyCredentialTags                   func(childComplexity int, operationIds []string) int
-		MyCredentials                      func(childComplexity int, operationIds []string, search *string, typeArg *models.CredentialType, tags []string, validOnly *bool, first *int, after *string, last *int, before *string) int
+		MyCredentials                      func(childComplexity int, operationIds []string, search *string, searchFields []model.CredentialSearchField, typeArg *models.CredentialType, tags []string, validOnly *bool, first *int, after *string, last *int, before *string) int
 		MyHashTags                         func(childComplexity int, operationIds []string) int
 		MyHashes                           func(childComplexity int, operationIds []string, search *string, statuses []models.HashStatus, tags []string, hasCredential *bool, first *int, after *string, last *int, before *string) int
 		MyOperationRole                    func(childComplexity int, operationID string) int
@@ -778,9 +778,9 @@ type QueryResolver interface {
 	SchemeNetworkPoints(ctx context.Context, operationID string, search *string, first *int, after *string, last *int, before *string) (*model.SchemeNetworkPointConnection, error)
 	MyAPIKey(ctx context.Context) (*models.APIKey, error)
 	Credential(ctx context.Context, id string) (*models.Credential, error)
-	Credentials(ctx context.Context, operationID string, search *string, typeArg *models.CredentialType, tags []string, validOnly *bool, first *int, after *string, last *int, before *string) (*model.CredentialConnection, error)
+	Credentials(ctx context.Context, operationID string, search *string, searchFields []model.CredentialSearchField, typeArg *models.CredentialType, tags []string, validOnly *bool, first *int, after *string, last *int, before *string) (*model.CredentialConnection, error)
 	CredentialTags(ctx context.Context, operationID string) ([]string, error)
-	MyCredentials(ctx context.Context, operationIds []string, search *string, typeArg *models.CredentialType, tags []string, validOnly *bool, first *int, after *string, last *int, before *string) (*model.CredentialConnection, error)
+	MyCredentials(ctx context.Context, operationIds []string, search *string, searchFields []model.CredentialSearchField, typeArg *models.CredentialType, tags []string, validOnly *bool, first *int, after *string, last *int, before *string) (*model.CredentialConnection, error)
 	MyCredentialTags(ctx context.Context, operationIds []string) ([]string, error)
 	Hash(ctx context.Context, id string) (*models.Hash, error)
 	Hashes(ctx context.Context, operationID string, search *string, statuses []models.HashStatus, tags []string, hasCredential *bool, first *int, after *string, last *int, before *string) (*model.HashConnection, error)
@@ -2207,7 +2207,7 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 			return 0, false
 		}
 
-		return e.ComplexityRoot.Query.Credentials(childComplexity, args["operationId"].(string), args["search"].(*string), args["type"].(*models.CredentialType), args["tags"].([]string), args["validOnly"].(*bool), args["first"].(*int), args["after"].(*string), args["last"].(*int), args["before"].(*string)), true
+		return e.ComplexityRoot.Query.Credentials(childComplexity, args["operationId"].(string), args["search"].(*string), args["searchFields"].([]model.CredentialSearchField), args["type"].(*models.CredentialType), args["tags"].([]string), args["validOnly"].(*bool), args["first"].(*int), args["after"].(*string), args["last"].(*int), args["before"].(*string)), true
 	case "Query.hash":
 		if e.ComplexityRoot.Query.Hash == nil {
 			break
@@ -2275,7 +2275,7 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 			return 0, false
 		}
 
-		return e.ComplexityRoot.Query.MyCredentials(childComplexity, args["operationIds"].([]string), args["search"].(*string), args["type"].(*models.CredentialType), args["tags"].([]string), args["validOnly"].(*bool), args["first"].(*int), args["after"].(*string), args["last"].(*int), args["before"].(*string)), true
+		return e.ComplexityRoot.Query.MyCredentials(childComplexity, args["operationIds"].([]string), args["search"].(*string), args["searchFields"].([]model.CredentialSearchField), args["type"].(*models.CredentialType), args["tags"].([]string), args["validOnly"].(*bool), args["first"].(*int), args["after"].(*string), args["last"].(*int), args["before"].(*string)), true
 	case "Query.myHashTags":
 		if e.ComplexityRoot.Query.MyHashTags == nil {
 			break
@@ -4212,6 +4212,19 @@ enum CredentialType {
   OTHER
 }
 
+# Selectable fields for the credential text search. Passed via the
+# ` + "`" + `searchFields` + "`" + ` argument on the ` + "`" + `credentials` + "`" + ` / ` + "`" + `myCredentials` + "`" + ` queries to
+# restrict which fields the ` + "`" + `search` + "`" + ` term matches against. Omitting the
+# argument (or passing an empty list) searches all of them — the historical
+# default. PROPERTIES matches operator-defined property *values* only; property
+# names are deliberately excluded (they're labels, not content).
+enum CredentialSearchField {
+  NAME
+  USERNAME
+  PASSWORD
+  PROPERTIES
+}
+
 # --- Types ---
 
 type CredentialComment {
@@ -4349,6 +4362,8 @@ extend type Query {
   credentials(
     operationId: ID!
     search: String
+    # Restricts which fields ` + "`" + `search` + "`" + ` matches. Null/empty = all fields.
+    searchFields: [CredentialSearchField!]
     type: CredentialType
     tags: [String!]
     validOnly: Boolean = true
@@ -4383,6 +4398,8 @@ extend type Query {
   myCredentials(
     operationIds: [ID!]
     search: String
+    # Restricts which fields ` + "`" + `search` + "`" + ` matches. Null/empty = all fields.
+    searchFields: [CredentialSearchField!]
     type: CredentialType
     tags: [String!]
     validOnly: Boolean = true
@@ -7119,41 +7136,46 @@ func (ec *executionContext) field_Query_credentials_args(ctx context.Context, ra
 		return nil, err
 	}
 	args["search"] = arg1
-	arg2, err := graphql.ProcessArgField(ctx, rawArgs, "type", ec.unmarshalOCredentialType2ᚖgithubᚗcomᚋvibeᚑc2ᚋvibeᚑc2ᚑcoreᚋcoreᚋpkgᚋmodelsᚐCredentialType)
+	arg2, err := graphql.ProcessArgField(ctx, rawArgs, "searchFields", ec.unmarshalOCredentialSearchField2ᚕgithubᚗcomᚋvibeᚑc2ᚋvibeᚑc2ᚑcoreᚋcoreᚋpkgᚋgraphqlᚋmodelᚐCredentialSearchFieldᚄ)
 	if err != nil {
 		return nil, err
 	}
-	args["type"] = arg2
-	arg3, err := graphql.ProcessArgField(ctx, rawArgs, "tags", ec.unmarshalOString2ᚕstringᚄ)
+	args["searchFields"] = arg2
+	arg3, err := graphql.ProcessArgField(ctx, rawArgs, "type", ec.unmarshalOCredentialType2ᚖgithubᚗcomᚋvibeᚑc2ᚋvibeᚑc2ᚑcoreᚋcoreᚋpkgᚋmodelsᚐCredentialType)
 	if err != nil {
 		return nil, err
 	}
-	args["tags"] = arg3
-	arg4, err := graphql.ProcessArgField(ctx, rawArgs, "validOnly", ec.unmarshalOBoolean2ᚖbool)
+	args["type"] = arg3
+	arg4, err := graphql.ProcessArgField(ctx, rawArgs, "tags", ec.unmarshalOString2ᚕstringᚄ)
 	if err != nil {
 		return nil, err
 	}
-	args["validOnly"] = arg4
-	arg5, err := graphql.ProcessArgField(ctx, rawArgs, "first", ec.unmarshalOInt2ᚖint)
+	args["tags"] = arg4
+	arg5, err := graphql.ProcessArgField(ctx, rawArgs, "validOnly", ec.unmarshalOBoolean2ᚖbool)
 	if err != nil {
 		return nil, err
 	}
-	args["first"] = arg5
-	arg6, err := graphql.ProcessArgField(ctx, rawArgs, "after", ec.unmarshalOString2ᚖstring)
+	args["validOnly"] = arg5
+	arg6, err := graphql.ProcessArgField(ctx, rawArgs, "first", ec.unmarshalOInt2ᚖint)
 	if err != nil {
 		return nil, err
 	}
-	args["after"] = arg6
-	arg7, err := graphql.ProcessArgField(ctx, rawArgs, "last", ec.unmarshalOInt2ᚖint)
+	args["first"] = arg6
+	arg7, err := graphql.ProcessArgField(ctx, rawArgs, "after", ec.unmarshalOString2ᚖstring)
 	if err != nil {
 		return nil, err
 	}
-	args["last"] = arg7
-	arg8, err := graphql.ProcessArgField(ctx, rawArgs, "before", ec.unmarshalOString2ᚖstring)
+	args["after"] = arg7
+	arg8, err := graphql.ProcessArgField(ctx, rawArgs, "last", ec.unmarshalOInt2ᚖint)
 	if err != nil {
 		return nil, err
 	}
-	args["before"] = arg8
+	args["last"] = arg8
+	arg9, err := graphql.ProcessArgField(ctx, rawArgs, "before", ec.unmarshalOString2ᚖstring)
+	if err != nil {
+		return nil, err
+	}
+	args["before"] = arg9
 	return args, nil
 }
 
@@ -7254,41 +7276,46 @@ func (ec *executionContext) field_Query_myCredentials_args(ctx context.Context, 
 		return nil, err
 	}
 	args["search"] = arg1
-	arg2, err := graphql.ProcessArgField(ctx, rawArgs, "type", ec.unmarshalOCredentialType2ᚖgithubᚗcomᚋvibeᚑc2ᚋvibeᚑc2ᚑcoreᚋcoreᚋpkgᚋmodelsᚐCredentialType)
+	arg2, err := graphql.ProcessArgField(ctx, rawArgs, "searchFields", ec.unmarshalOCredentialSearchField2ᚕgithubᚗcomᚋvibeᚑc2ᚋvibeᚑc2ᚑcoreᚋcoreᚋpkgᚋgraphqlᚋmodelᚐCredentialSearchFieldᚄ)
 	if err != nil {
 		return nil, err
 	}
-	args["type"] = arg2
-	arg3, err := graphql.ProcessArgField(ctx, rawArgs, "tags", ec.unmarshalOString2ᚕstringᚄ)
+	args["searchFields"] = arg2
+	arg3, err := graphql.ProcessArgField(ctx, rawArgs, "type", ec.unmarshalOCredentialType2ᚖgithubᚗcomᚋvibeᚑc2ᚋvibeᚑc2ᚑcoreᚋcoreᚋpkgᚋmodelsᚐCredentialType)
 	if err != nil {
 		return nil, err
 	}
-	args["tags"] = arg3
-	arg4, err := graphql.ProcessArgField(ctx, rawArgs, "validOnly", ec.unmarshalOBoolean2ᚖbool)
+	args["type"] = arg3
+	arg4, err := graphql.ProcessArgField(ctx, rawArgs, "tags", ec.unmarshalOString2ᚕstringᚄ)
 	if err != nil {
 		return nil, err
 	}
-	args["validOnly"] = arg4
-	arg5, err := graphql.ProcessArgField(ctx, rawArgs, "first", ec.unmarshalOInt2ᚖint)
+	args["tags"] = arg4
+	arg5, err := graphql.ProcessArgField(ctx, rawArgs, "validOnly", ec.unmarshalOBoolean2ᚖbool)
 	if err != nil {
 		return nil, err
 	}
-	args["first"] = arg5
-	arg6, err := graphql.ProcessArgField(ctx, rawArgs, "after", ec.unmarshalOString2ᚖstring)
+	args["validOnly"] = arg5
+	arg6, err := graphql.ProcessArgField(ctx, rawArgs, "first", ec.unmarshalOInt2ᚖint)
 	if err != nil {
 		return nil, err
 	}
-	args["after"] = arg6
-	arg7, err := graphql.ProcessArgField(ctx, rawArgs, "last", ec.unmarshalOInt2ᚖint)
+	args["first"] = arg6
+	arg7, err := graphql.ProcessArgField(ctx, rawArgs, "after", ec.unmarshalOString2ᚖstring)
 	if err != nil {
 		return nil, err
 	}
-	args["last"] = arg7
-	arg8, err := graphql.ProcessArgField(ctx, rawArgs, "before", ec.unmarshalOString2ᚖstring)
+	args["after"] = arg7
+	arg8, err := graphql.ProcessArgField(ctx, rawArgs, "last", ec.unmarshalOInt2ᚖint)
 	if err != nil {
 		return nil, err
 	}
-	args["before"] = arg8
+	args["last"] = arg8
+	arg9, err := graphql.ProcessArgField(ctx, rawArgs, "before", ec.unmarshalOString2ᚖstring)
+	if err != nil {
+		return nil, err
+	}
+	args["before"] = arg9
 	return args, nil
 }
 
@@ -17194,7 +17221,7 @@ func (ec *executionContext) _Query_credentials(ctx context.Context, field graphq
 		ec.fieldContext_Query_credentials,
 		func(ctx context.Context) (any, error) {
 			fc := graphql.GetFieldContext(ctx)
-			return ec.Resolvers.Query().Credentials(ctx, fc.Args["operationId"].(string), fc.Args["search"].(*string), fc.Args["type"].(*models.CredentialType), fc.Args["tags"].([]string), fc.Args["validOnly"].(*bool), fc.Args["first"].(*int), fc.Args["after"].(*string), fc.Args["last"].(*int), fc.Args["before"].(*string))
+			return ec.Resolvers.Query().Credentials(ctx, fc.Args["operationId"].(string), fc.Args["search"].(*string), fc.Args["searchFields"].([]model.CredentialSearchField), fc.Args["type"].(*models.CredentialType), fc.Args["tags"].([]string), fc.Args["validOnly"].(*bool), fc.Args["first"].(*int), fc.Args["after"].(*string), fc.Args["last"].(*int), fc.Args["before"].(*string))
 		},
 		func(ctx context.Context, next graphql.Resolver) graphql.Resolver {
 			directive0 := next
@@ -17320,7 +17347,7 @@ func (ec *executionContext) _Query_myCredentials(ctx context.Context, field grap
 		ec.fieldContext_Query_myCredentials,
 		func(ctx context.Context) (any, error) {
 			fc := graphql.GetFieldContext(ctx)
-			return ec.Resolvers.Query().MyCredentials(ctx, fc.Args["operationIds"].([]string), fc.Args["search"].(*string), fc.Args["type"].(*models.CredentialType), fc.Args["tags"].([]string), fc.Args["validOnly"].(*bool), fc.Args["first"].(*int), fc.Args["after"].(*string), fc.Args["last"].(*int), fc.Args["before"].(*string))
+			return ec.Resolvers.Query().MyCredentials(ctx, fc.Args["operationIds"].([]string), fc.Args["search"].(*string), fc.Args["searchFields"].([]model.CredentialSearchField), fc.Args["type"].(*models.CredentialType), fc.Args["tags"].([]string), fc.Args["validOnly"].(*bool), fc.Args["first"].(*int), fc.Args["after"].(*string), fc.Args["last"].(*int), fc.Args["before"].(*string))
 		},
 		nil,
 		ec.marshalNCredentialConnection2ᚖgithubᚗcomᚋvibeᚑc2ᚋvibeᚑc2ᚑcoreᚋcoreᚋpkgᚋgraphqlᚋmodelᚐCredentialConnection,
@@ -38937,6 +38964,16 @@ func (ec *executionContext) unmarshalNCredentialPropertyInput2ᚖgithubᚗcomᚋ
 	return &res, graphql.ErrorOnPath(ctx, err)
 }
 
+func (ec *executionContext) unmarshalNCredentialSearchField2githubᚗcomᚋvibeᚑc2ᚋvibeᚑc2ᚑcoreᚋcoreᚋpkgᚋgraphqlᚋmodelᚐCredentialSearchField(ctx context.Context, v any) (model.CredentialSearchField, error) {
+	var res model.CredentialSearchField
+	err := res.UnmarshalGQL(v)
+	return res, graphql.ErrorOnPath(ctx, err)
+}
+
+func (ec *executionContext) marshalNCredentialSearchField2githubᚗcomᚋvibeᚑc2ᚋvibeᚑc2ᚑcoreᚋcoreᚋpkgᚋgraphqlᚋmodelᚐCredentialSearchField(ctx context.Context, sel ast.SelectionSet, v model.CredentialSearchField) graphql.Marshaler {
+	return v
+}
+
 func (ec *executionContext) unmarshalNCredentialType2githubᚗcomᚋvibeᚑc2ᚋvibeᚑc2ᚑcoreᚋcoreᚋpkgᚋmodelsᚐCredentialType(ctx context.Context, v any) (models.CredentialType, error) {
 	tmp, err := graphql.UnmarshalString(v)
 	res := models.CredentialType(tmp)
@@ -40449,6 +40486,43 @@ func (ec *executionContext) unmarshalOCredentialPropertyInput2ᚕᚖgithubᚗcom
 		}
 	}
 	return res, nil
+}
+
+func (ec *executionContext) unmarshalOCredentialSearchField2ᚕgithubᚗcomᚋvibeᚑc2ᚋvibeᚑc2ᚑcoreᚋcoreᚋpkgᚋgraphqlᚋmodelᚐCredentialSearchFieldᚄ(ctx context.Context, v any) ([]model.CredentialSearchField, error) {
+	if v == nil {
+		return nil, nil
+	}
+	var vSlice []any
+	vSlice = graphql.CoerceList(v)
+	var err error
+	res := make([]model.CredentialSearchField, len(vSlice))
+	for i := range vSlice {
+		ctx := graphql.WithPathContext(ctx, graphql.NewPathWithIndex(i))
+		res[i], err = ec.unmarshalNCredentialSearchField2githubᚗcomᚋvibeᚑc2ᚋvibeᚑc2ᚑcoreᚋcoreᚋpkgᚋgraphqlᚋmodelᚐCredentialSearchField(ctx, vSlice[i])
+		if err != nil {
+			return nil, err
+		}
+	}
+	return res, nil
+}
+
+func (ec *executionContext) marshalOCredentialSearchField2ᚕgithubᚗcomᚋvibeᚑc2ᚋvibeᚑc2ᚑcoreᚋcoreᚋpkgᚋgraphqlᚋmodelᚐCredentialSearchFieldᚄ(ctx context.Context, sel ast.SelectionSet, v []model.CredentialSearchField) graphql.Marshaler {
+	if v == nil {
+		return graphql.Null
+	}
+	ret := graphql.MarshalSliceConcurrently(ctx, len(v), 0, false, func(ctx context.Context, i int) graphql.Marshaler {
+		fc := graphql.GetFieldContext(ctx)
+		fc.Result = &v[i]
+		return ec.marshalNCredentialSearchField2githubᚗcomᚋvibeᚑc2ᚋvibeᚑc2ᚑcoreᚋcoreᚋpkgᚋgraphqlᚋmodelᚐCredentialSearchField(ctx, sel, v[i])
+	})
+
+	for _, e := range ret {
+		if e == graphql.Null {
+			return graphql.Null
+		}
+	}
+
+	return ret
 }
 
 func (ec *executionContext) unmarshalOCredentialType2ᚖgithubᚗcomᚋvibeᚑc2ᚋvibeᚑc2ᚑcoreᚋcoreᚋpkgᚋmodelsᚐCredentialType(ctx context.Context, v any) (*models.CredentialType, error) {

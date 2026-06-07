@@ -459,6 +459,65 @@ type WikiSearchMatchRange struct {
 	End   int `json:"end"`
 }
 
+type CredentialSearchField string
+
+const (
+	CredentialSearchFieldName       CredentialSearchField = "NAME"
+	CredentialSearchFieldUsername   CredentialSearchField = "USERNAME"
+	CredentialSearchFieldPassword   CredentialSearchField = "PASSWORD"
+	CredentialSearchFieldProperties CredentialSearchField = "PROPERTIES"
+)
+
+var AllCredentialSearchField = []CredentialSearchField{
+	CredentialSearchFieldName,
+	CredentialSearchFieldUsername,
+	CredentialSearchFieldPassword,
+	CredentialSearchFieldProperties,
+}
+
+func (e CredentialSearchField) IsValid() bool {
+	switch e {
+	case CredentialSearchFieldName, CredentialSearchFieldUsername, CredentialSearchFieldPassword, CredentialSearchFieldProperties:
+		return true
+	}
+	return false
+}
+
+func (e CredentialSearchField) String() string {
+	return string(e)
+}
+
+func (e *CredentialSearchField) UnmarshalGQL(v any) error {
+	str, ok := v.(string)
+	if !ok {
+		return fmt.Errorf("enums must be strings")
+	}
+
+	*e = CredentialSearchField(str)
+	if !e.IsValid() {
+		return fmt.Errorf("%s is not a valid CredentialSearchField", str)
+	}
+	return nil
+}
+
+func (e CredentialSearchField) MarshalGQL(w io.Writer) {
+	fmt.Fprint(w, strconv.Quote(e.String()))
+}
+
+func (e *CredentialSearchField) UnmarshalJSON(b []byte) error {
+	s, err := strconv.Unquote(string(b))
+	if err != nil {
+		return err
+	}
+	return e.UnmarshalGQL(s)
+}
+
+func (e CredentialSearchField) MarshalJSON() ([]byte, error) {
+	var buf bytes.Buffer
+	e.MarshalGQL(&buf)
+	return buf.Bytes(), nil
+}
+
 type EventAction string
 
 const (

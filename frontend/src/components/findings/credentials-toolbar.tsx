@@ -4,9 +4,11 @@ import {
   FilterIcon,
   DownloadIcon,
   Loader2Icon,
+  SlidersHorizontalIcon,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
+import { Checkbox } from "@/components/ui/checkbox"
 import {
   Select,
   SelectContent,
@@ -42,6 +44,12 @@ import {
 import type { FindingsMode } from "@/components/findings/findings-mode"
 import { OperationMultiSelect } from "@/components/findings/operation-multi-select"
 import { useFindingsOpsParam } from "@/hooks/use-findings-ops-param"
+import {
+  CREDENTIAL_SEARCH_FIELDS,
+  credentialSearchFieldLabel,
+  describeSearchFields,
+} from "@/components/findings/credential-search-fields"
+import type { CredentialSearchField } from "@/graphql/gql/graphql"
 
 const ALL_TYPES_VALUE = "__all__"
 
@@ -52,6 +60,7 @@ interface CredentialsToolbarProps {
 export function CredentialsToolbar({ mode }: CredentialsToolbarProps) {
   const filters = useCredentialStore((s) => s.filters)
   const setSearch = useCredentialStore((s) => s.setSearch)
+  const setSearchFields = useCredentialStore((s) => s.setSearchFields)
   const setType = useCredentialStore((s) => s.setType)
   const toggleTag = useCredentialStore((s) => s.toggleTag)
   const setTags = useCredentialStore((s) => s.setTags)
@@ -83,15 +92,43 @@ export function CredentialsToolbar({ mode }: CredentialsToolbarProps) {
     setValidOnly(next ? null : true)
   }
 
+  // Search-field toggle semantics. The store keeps an empty list as the
+  // canonical "all fields" state, but the picker shows every box checked in
+  // that state — so a click there means "deselect this one, keep the rest".
+  // We resolve the empty list to the full set, flip the clicked field, then
+  // re-normalize: a full set collapses back to empty, and deselecting the last
+  // remaining field also resets to "all" (searching zero fields is a dead end).
+  function onToggleSearchField(field: CredentialSearchField) {
+    const effective =
+      filters.searchFields.length > 0
+        ? filters.searchFields
+        : CREDENTIAL_SEARCH_FIELDS
+    const next = effective.includes(field)
+      ? effective.filter((f) => f !== field)
+      : [...effective, field]
+    setSearchFields(
+      next.length === 0 || next.length === CREDENTIAL_SEARCH_FIELDS.length
+        ? []
+        : next,
+    )
+  }
+
   return (
     <div className="flex flex-wrap items-center gap-3">
       {mode.kind === "global" && <GlobalOperationPicker />}
-      <SearchInput
-        value={filters.search}
-        onValueChange={setSearch}
-        placeholder="Search name, username, password..."
-        className="relative w-full max-w-md"
-      />
+      <div className="flex w-full max-w-md items-center gap-1.5">
+        <SearchInput
+          value={filters.search}
+          onValueChange={setSearch}
+          placeholder={`Search ${describeSearchFields(filters.searchFields)}...`}
+          className="relative min-w-0 flex-1"
+        />
+        <SearchFieldsPicker
+          selected={filters.searchFields}
+          onToggle={onToggleSearchField}
+          onReset={() => setSearchFields([])}
+        />
+      </div>
 
       <Select
         value={filters.type ?? ALL_TYPES_VALUE}
@@ -162,6 +199,82 @@ export function CredentialsToolbar({ mode }: CredentialsToolbarProps) {
         </Button>
       </div>
     </div>
+  )
+}
+
+// Lets the user scope the text search to specific credential fields. An empty
+// selection means "search all fields" — the backend default — so the trigger
+// badge and the placeholder both reflect that. Kept adjacent to the search
+// input so the relationship between the query and its target fields is obvious.
+function SearchFieldsPicker({
+  selected,
+  onToggle,
+  onReset,
+}: {
+  selected: readonly CredentialSearchField[]
+  onToggle: (field: CredentialSearchField) => void
+  onReset: () => void
+}) {
+  const isScoped = selected.length > 0
+  return (
+    <Popover>
+      <PopoverTrigger
+        render={
+          <Button
+            variant="outline"
+            size="sm"
+            className="shrink-0"
+            title="Choose which fields the search matches"
+            aria-label="Search fields"
+          >
+            <SlidersHorizontalIcon className="size-4" />
+            {isScoped && (
+              <Badge variant="secondary" className="ml-1">
+                {selected.length}
+              </Badge>
+            )}
+          </Button>
+        }
+      />
+      <PopoverContent align="start" className="w-56 p-0">
+        <div className="flex items-center justify-between gap-2 border-b px-3 py-2">
+          <span className="text-sm font-medium">Search in</span>
+          {isScoped && (
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={onReset}
+              className="h-7 px-2 text-xs"
+            >
+              All fields
+            </Button>
+          )}
+        </div>
+        <div className="py-1">
+          {CREDENTIAL_SEARCH_FIELDS.map((field) => {
+            // Empty selection = all fields active; render every box checked so
+            // the default state reads as "searching everything", not "nothing".
+            const active = !isScoped || selected.includes(field)
+            return (
+              <button
+                key={field}
+                type="button"
+                onClick={() => onToggle(field)}
+                className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-sm transition-colors hover:bg-accent hover:text-accent-foreground focus-visible:bg-accent focus-visible:outline-none"
+              >
+                <Checkbox
+                  checked={active}
+                  tabIndex={-1}
+                  aria-hidden
+                  className="pointer-events-none"
+                />
+                <span>{credentialSearchFieldLabel(field)}</span>
+              </button>
+            )
+          })}
+        </div>
+      </PopoverContent>
+    </Popover>
   )
 }
 
