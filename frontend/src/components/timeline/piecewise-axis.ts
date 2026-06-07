@@ -1,5 +1,6 @@
 import type { TimelineGranularity } from "@/graphql/gql/graphql"
 import { dayjs } from "./dayjs-setup"
+import { computeActiveSegmentWidth, mergeByGroupIdentity } from "./chip-layout"
 
 // Width budget per segment kind. Active segments get more room than gap
 // segments so the timeline reads as "this is where activity happened" rather
@@ -140,7 +141,16 @@ export function buildSegments(opts: BuildSegmentsOptions): Segment[] {
         bucketStart: truncated.format(),
         count: b.count,
         topicCounts: b.topicCounts,
-        widthPx: activeWidth,
+        // Width grows with the chip cloud: a bucket with many distinct group
+        // identities fans into extra columns and takes more horizontal room.
+        // mergeByGroupIdentity is re-run in ActiveDaySegment for rendering;
+        // recomputing the count here keeps widthPx authoritative for the
+        // gap/marker/scroll-anchor math without threading the merged groups
+        // through the Segment type.
+        widthPx: computeActiveSegmentWidth(
+          mergeByGroupIdentity(b.topicCounts).length,
+          activeWidth,
+        ),
       }),
     })
   }

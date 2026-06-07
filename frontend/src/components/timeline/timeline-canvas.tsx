@@ -39,10 +39,13 @@ interface Props {
   onSelectGroup: (bucketStart: string, group: TimelineGroupIdentity) => void
 }
 
-// Fixed pixel height for the canvas. Picked so the dot stack (capped at 16
-// groups @ ~36px each) fits comfortably with the axis line + label without
-// dominating the page — the actual event list lives in the detail panel
-// below, so the canvas is a navigation overview, not the full surface.
+// Fixed pixel height for the canvas. Each bucket's chip cloud is bounded in
+// height (its columns cap at MAX_ROWS_PER_COLUMN chips, see chip-layout) and
+// grows in width instead, so this height only needs to fit one full column of
+// chips plus the axis line and date label. Busy days fan wider, not taller,
+// and never clip. The actual event list lives in the detail panel below, so
+// the canvas is a navigation overview, not the full surface. MAX_ROWS_PER_COLUMN
+// is derived from this value — keep them in sync.
 const CANVAS_HEIGHT_PX = 380
 
 // Trigger threshold for the scroll-driven older-window fetch. When the user
