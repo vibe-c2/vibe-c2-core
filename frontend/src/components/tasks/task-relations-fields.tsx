@@ -5,13 +5,8 @@ import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { avatarLabel } from "@/lib/avatar-label";
 import { type SuggestionOption } from "@/components/ui/suggestion-input";
 import { SuggestionPopover } from "@/components/ui/suggestion-popover";
-import {
-  Popover,
-  PopoverContent,
-  PopoverTrigger,
-} from "@/components/ui/popover";
 import { useOperation } from "@/graphql/hooks/operations";
-import { CredentialPickerList } from "@/components/findings/credential-picker-list";
+import { CredentialPickerDialog } from "@/components/findings/credential-picker-dialog";
 import { credentialTypeLabel } from "@/components/findings/credential-type-utils";
 import type { CredentialFieldsFragment } from "@/graphql/gql/graphql";
 import { WikiDocumentChipById } from "@/components/wiki/wiki-document-chip-view";
@@ -25,7 +20,7 @@ import type {
 } from "@/components/tasks/task-relations";
 
 // Compact dashed "+" trigger shared by the pickers that open their own surface
-// (wiki document dialog, credential popover) rather than an inline SuggestionPopover.
+// (wiki document dialog, credential dialog) rather than an inline SuggestionPopover.
 const PICKER_TRIGGER_CLASS =
   "inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-md border border-dashed border-border text-muted-foreground transition-colors hover:border-foreground/40 hover:bg-accent hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring";
 
@@ -222,11 +217,12 @@ function WikiReferencePicker({
 
 // --- Credential reference picker --------------------------------------------
 
-// Picks from the operation's credential pool via the shared CredentialPickerList
-// — the same list the wiki "Insert credential reference" and findings "Mark hash
-// as cracked" pickers use, so a credential row looks and searches identically
-// everywhere. Multi-select: each pick adds a chip, the picked id is excluded
-// from the list, and the popover stays open so several can be linked in a row.
+// Picks from the operation's credential pool via the shared CredentialPickerDialog
+// — the same modal the wiki "Insert credential reference" and findings "Mark hash
+// as cracked" pickers use, so a credential row looks, searches, and "create new"
+// works identically everywhere. Multi-select: each pick adds a chip, the picked
+// id is excluded from the list, and the dialog stays open so several can be
+// linked in a row (and a freshly created credential is linked too).
 function CredentialReferencePicker({
   operationId,
   selected,
@@ -237,7 +233,6 @@ function CredentialReferencePicker({
   onChange: (items: RelationItem[]) => void;
 }) {
   const [open, setOpen] = useState(false);
-  const [search, setSearch] = useState("");
 
   const selectedIds = useMemo(
     () => new Set(selected.map((s) => s.id)),
@@ -250,7 +245,6 @@ function CredentialReferencePicker({
       ...selected,
       { id: c.id, label: c.name, hint: credentialTypeLabel(c.type) },
     ]);
-    setSearch("");
   }
 
   function removeId(id: string) {
@@ -263,29 +257,28 @@ function CredentialReferencePicker({
       icon={<KeyRoundIcon className="size-3.5" />}
       count={selected.length}
       picker={
-        <Popover
-          open={open}
-          onOpenChange={(next) => {
-            setOpen(next);
-            if (!next) setSearch("");
-          }}
-        >
-          <PopoverTrigger
+        <>
+          <button
+            type="button"
+            onClick={() => setOpen(true)}
             aria-label="Link a credential"
             className={PICKER_TRIGGER_CLASS}
           >
             <PlusIcon className="size-3.5" />
-          </PopoverTrigger>
-          <PopoverContent align="start" sideOffset={6} className="w-80 p-2">
-            <CredentialPickerList
-              operationId={operationId}
-              search={search}
-              onSearchChange={setSearch}
-              onPick={addCredential}
-              excludeIds={selectedIds}
-            />
-          </PopoverContent>
-        </Popover>
+          </button>
+          <CredentialPickerDialog
+            open={open}
+            onOpenChange={setOpen}
+            operationId={operationId}
+            title="Link a credential"
+            description="Pick a credential from this operation to attach to this task."
+            createDescription="Add a credential to this operation and attach it to this task."
+            createSubmitLabel="Create & link"
+            createIdPrefix="task-cred-create"
+            onPick={addCredential}
+            excludeIds={selectedIds}
+          />
+        </>
       }
     >
       {selected.map((item) => (

@@ -166,14 +166,14 @@ export function CredentialPickerList({
                 onClick={() => onPick(c)}
                 aria-selected={isActive}
                 className={cn(
-                  "flex w-full items-center gap-2 border-b px-3 py-2 text-left text-sm outline-hidden last:border-b-0",
+                  "flex w-full items-start gap-2 border-b px-3 py-2 text-left text-sm outline-hidden last:border-b-0",
                   isActive
                     ? "bg-accent text-accent-foreground"
                     : "hover:bg-accent/60",
                 )}
               >
-                <KeyIcon className="size-3.5 shrink-0 text-muted-foreground" />
-                <span className="min-w-0 flex-1 truncate font-medium">
+                <KeyIcon className="mt-0.5 size-3.5 shrink-0 text-muted-foreground" />
+                <span className="min-w-0 flex-1 break-words font-medium">
                   {c.name}
                 </span>
                 <Badge variant="outline" className="shrink-0">

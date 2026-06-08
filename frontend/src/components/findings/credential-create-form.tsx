@@ -10,14 +10,15 @@ import {
   CredentialFormFields,
   type CredentialFormValues,
 } from "@/components/findings/credential-form-fields"
+import type { CredentialFieldsFragment } from "@/graphql/gql/graphql"
 import { keyDraftsToInputs } from "@/components/findings/credential-key-drafts"
 import { propertyDraftsToInputs } from "@/components/findings/credential-property-drafts"
 
 /**
  * Inline "create credential" form shared by every picker that offers a
- * "Create new credential" path (wiki insert, mark-hash-cracked). On success
- * the new credential's id is reported via `onCreated` so the caller can
- * decide what to do next (insert reference, link cracked hash, etc.).
+ * "Create new credential" path (wiki insert, mark-hash-cracked, task relations).
+ * On success the new credential node is reported via `onCreated` so the caller
+ * can decide what to do next (insert reference, link cracked hash, add chip, etc.).
  */
 interface CredentialCreateFormProps {
   operationId: string
@@ -29,7 +30,7 @@ interface CredentialCreateFormProps {
   submitLabel: string
   /** Submit label while the mutation is in flight. */
   submitPendingLabel?: string
-  onCreated: (credentialId: string) => void
+  onCreated: (credential: CredentialFieldsFragment) => void
   onBack: () => void
 }
 
@@ -79,7 +80,7 @@ export function CredentialCreateForm({
           tags: values.tags,
         },
       })
-      onCreated(res.createCredential.id)
+      onCreated(res.createCredential)
     } catch (err) {
       setError(
         err instanceof Error ? err.message : "Failed to create credential",
