@@ -56,7 +56,7 @@ export function CredentialDetailsDialog() {
         if (!open) closeDetailsPanel()
       }}
     >
-      <DialogContent className="sm:max-w-3xl">
+      <DialogContent className="grid-rows-[auto_minmax(0,1fr)] max-h-[calc(100dvh-2rem)] sm:max-w-3xl">
         {shareableId && (
           <CopyShareLinkButton
             credentialId={shareableId}
@@ -102,7 +102,7 @@ export function CredentialDetailsDialog() {
           // items default to min-width:min-content. Without this, a single
           // unbreakable string in the backlinks list (e.g. a long Cyrillic
           // wiki title) would force the dialog wider than its max-width.
-          <div className="flex min-w-0 flex-col gap-6">
+          <div className="-mx-1 flex min-h-0 min-w-0 flex-col gap-6 overflow-y-auto px-1">
             <section className="flex flex-col gap-3 text-sm">
               <div className="flex flex-wrap items-center gap-2">
                 <Badge variant="outline">
