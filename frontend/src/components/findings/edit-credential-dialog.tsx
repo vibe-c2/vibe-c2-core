@@ -41,7 +41,7 @@ export function EditCredentialDialog() {
         if (!open) closeEditDialog()
       }}
     >
-      <DialogContent className="sm:max-w-3xl">
+      <DialogContent className="grid-rows-[auto_minmax(0,1fr)] max-h-[calc(100dvh-2rem)] sm:max-w-3xl">
         <DialogHeader>
           <DialogTitle>Edit credential</DialogTitle>
           <DialogDescription>
@@ -115,19 +115,27 @@ function EditCredentialForm({ credential, onSaved }: EditCredentialFormProps) {
   }
 
   return (
-    <form onSubmit={handleSubmit} autoComplete="off">
-      {error && (
-        <div className="mb-3 rounded-md bg-destructive/15 p-3 text-sm text-destructive">
-          {error}
-        </div>
-      )}
-      <CredentialFormFields
-        idPrefix="edit-cred"
-        values={values}
-        onChange={setValues}
-        tagSuggestions={tagsData?.credentialTags ?? []}
-        tagSuggestionsLoading={tagsLoading}
-      />
+    <form
+      onSubmit={handleSubmit}
+      autoComplete="off"
+      className="flex min-h-0 flex-col"
+    >
+      {/* Body scrolls; header (parent) and footer stay pinned. The negative
+          inset + padding keeps focus rings from being clipped by overflow. */}
+      <div className="-mx-1 min-h-0 flex-1 overflow-y-auto px-1">
+        {error && (
+          <div className="mb-3 rounded-md bg-destructive/15 p-3 text-sm text-destructive">
+            {error}
+          </div>
+        )}
+        <CredentialFormFields
+          idPrefix="edit-cred"
+          values={values}
+          onChange={setValues}
+          tagSuggestions={tagsData?.credentialTags ?? []}
+          tagSuggestionsLoading={tagsLoading}
+        />
+      </div>
       <DialogFooter className="mt-4 flex-row items-center justify-between sm:justify-between">
         <label className="flex cursor-pointer items-center gap-2 text-sm">
           <Switch
