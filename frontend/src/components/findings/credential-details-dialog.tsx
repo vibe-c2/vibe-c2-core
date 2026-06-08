@@ -64,9 +64,9 @@ export function CredentialDetailsDialog() {
           />
         )}
         <DialogHeader className="min-w-0">
-          <DialogTitle className="flex items-center gap-2 pr-16">
-            <KeyIcon className="size-4 shrink-0" />
-            <span className="min-w-0 truncate" title={title}>
+          <DialogTitle className="flex items-start gap-2 pr-16">
+            <KeyIcon className="size-4 shrink-0 translate-y-0.5" />
+            <span className="min-w-0 break-words" title={title}>
               {title}
             </span>
           </DialogTitle>
