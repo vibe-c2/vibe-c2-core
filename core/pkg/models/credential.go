@@ -35,8 +35,7 @@ func (t CredentialType) IsValid() bool {
 }
 
 // CredentialComment is an operator note attached to a credential.
-// Stored as an embedded sub-document within Credential (not a separate collection),
-// mirroring the SchemeNetworkPort pattern in SchemeNetworkPoint.
+// Stored as an embedded sub-document within Credential (not a separate collection).
 type CredentialComment struct {
 	CommentID uuid.UUID `bson:"comment_id" json:"comment_id"`
 	AuthorID  uuid.UUID `bson:"author_id"  json:"author_id"`

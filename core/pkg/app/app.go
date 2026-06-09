@@ -36,7 +36,6 @@ type authConfig struct {
 type Repositories struct {
 	User               repository.IUserRepository
 	Operation          repository.IOperationRepository
-	SchemeNetworkPoint repository.ISchemeNetworkPointRepository
 	Session            repository.ISessionRepository
 	WikiDocument       repository.IWikiDocumentRepository
 	WikiDocumentBackup repository.IWikiDocumentBackupRepository
@@ -99,7 +98,6 @@ func NewApp() (*App, error) {
 	repos := &Repositories{
 		User:               repository.NewUserRepository(db),
 		Operation:          repository.NewOperationRepository(db),
-		SchemeNetworkPoint: repository.NewSchemeNetworkPointRepository(db),
 		Session:            repository.NewSessionRepository(db),
 		WikiDocument:       repository.NewWikiDocumentRepository(db),
 		WikiDocumentBackup: repository.NewWikiDocumentBackupRepository(db),

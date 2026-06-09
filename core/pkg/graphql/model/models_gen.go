@@ -69,19 +69,6 @@ type CreateOperationInput struct {
 	Description *string `json:"description,omitempty"`
 }
 
-type CreateSchemeNetworkPointInput struct {
-	Names       []string `json:"names"`
-	Description *string  `json:"description,omitempty"`
-	Tags        []string `json:"tags,omitempty"`
-}
-
-type CreateSchemeNetworkPortInput struct {
-	Number   int     `json:"number"`
-	Protocol *string `json:"protocol,omitempty"`
-	Service  *string `json:"service,omitempty"`
-	Notes    *string `json:"notes,omitempty"`
-}
-
 type CreateTaskInput struct {
 	OperationID            string             `json:"operationId"`
 	Name                   string             `json:"name"`
@@ -202,17 +189,6 @@ type ReorderWikiDocumentSiblingsInput struct {
 	OrderedIds       []string `json:"orderedIds"`
 }
 
-type SchemeNetworkPointConnection struct {
-	Edges      []*SchemeNetworkPointEdge `json:"edges"`
-	PageInfo   *pagination.PageInfo      `json:"pageInfo"`
-	TotalCount int                       `json:"totalCount"`
-}
-
-type SchemeNetworkPointEdge struct {
-	Node   *models.SchemeNetworkPoint `json:"node"`
-	Cursor string                     `json:"cursor"`
-}
-
 type SessionConnection struct {
 	Edges      []*SessionEdge       `json:"edges"`
 	PageInfo   *pagination.PageInfo `json:"pageInfo"`
@@ -308,19 +284,6 @@ type UpdateHashInput struct {
 type UpdateOperationInput struct {
 	Name        *string `json:"name,omitempty"`
 	Description *string `json:"description,omitempty"`
-}
-
-type UpdateSchemeNetworkPointInput struct {
-	Names       []string `json:"names,omitempty"`
-	Description *string  `json:"description,omitempty"`
-	Tags        []string `json:"tags,omitempty"`
-}
-
-type UpdateSchemeNetworkPortInput struct {
-	Number   *int    `json:"number,omitempty"`
-	Protocol *string `json:"protocol,omitempty"`
-	Service  *string `json:"service,omitempty"`
-	Notes    *string `json:"notes,omitempty"`
 }
 
 type UpdateTaskInput struct {

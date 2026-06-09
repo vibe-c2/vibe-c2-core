@@ -56,7 +56,6 @@ import (
 func NewHandler(
 	users resolver.IUserResolver,
 	operations resolver.IOperationResolver,
-	schemeNetworkPoints resolver.ISchemeNetworkPointResolver,
 	sessions resolver.ISessionResolver,
 	wikiDocuments resolver.IWikiDocumentResolver,
 	wikiVisits resolver.IWikiDocumentVisitResolver,
@@ -82,7 +81,6 @@ func NewHandler(
 	resolverRoot := &gqlresolver.Resolver{
 		UserResolver:               users,
 		OperationResolver:          operations,
-		SchemeNetworkPointResolver: schemeNetworkPoints,
 		SessionResolver:            sessions,
 		WikiDocumentResolver:       wikiDocuments,
 		WikiDocumentVisitResolver:  wikiVisits,

@@ -46,12 +46,10 @@ func (a *App) NewRouter() *gin.Engine {
 	// Resolvers (GraphQL business logic, same pattern as controllers)
 	userRes := resolver.NewUserResolver(a.repos.User, a.eventBus)
 	opRes := resolver.NewOperationResolver(a.repos.Operation, a.repos.User,
-		resolver.WithSchemeNetworkPointRepo(a.repos.SchemeNetworkPoint),
 		resolver.WithWikiDocumentRepo(a.repos.WikiDocument),
 		resolver.WithWikiDocumentBackupRepo(a.repos.WikiDocumentBackup),
 		resolver.WithCredentialRepo(a.repos.Credential),
 		resolver.WithEventBus(a.eventBus))
-	snpRes := resolver.NewSchemeNetworkPointResolver(a.repos.SchemeNetworkPoint, a.repos.Operation)
 	sessRes := resolver.NewSessionResolver(a.repos.Session, a.repos.User, a.tokenStore, a.eventBus)
 	wikiDocRes := resolver.NewWikiDocumentResolver(
 		a.repos.WikiDocument, a.repos.WikiDocumentBackup,
@@ -214,7 +212,7 @@ func (a *App) NewRouter() *gin.Engine {
 		//                       inside gqlgen; one socket multiplexes every
 		//                       active subscription on the page.
 		gqlHandler := gql.NewHandler(
-			userRes, opRes, snpRes, sessRes, wikiDocRes, wikiVisitRes, credRes, hashRes, taskRes, timelineRes, apiKeyRes,
+			userRes, opRes, sessRes, wikiDocRes, wikiVisitRes, credRes, hashRes, taskRes, timelineRes, apiKeyRes,
 			a.eventBus,
 			a.repos.User, a.repos.Operation, a.repos.Session, a.repos.WikiDocument, a.repos.Credential, a.repos.Hash, a.repos.Task,
 			a.presenceTracker,

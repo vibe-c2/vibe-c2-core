@@ -34,7 +34,6 @@ import (
 type Resolver struct {
 	UserResolver               resolver.IUserResolver
 	OperationResolver          resolver.IOperationResolver
-	SchemeNetworkPointResolver resolver.ISchemeNetworkPointResolver
 	SessionResolver            resolver.ISessionResolver
 	WikiDocumentResolver       resolver.IWikiDocumentResolver
 	WikiDocumentVisitResolver  resolver.IWikiDocumentVisitResolver

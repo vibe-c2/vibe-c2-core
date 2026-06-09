@@ -59,7 +59,6 @@ type IOperationResolver interface {
 type operationResolver struct {
 	operationRepo  repository.IOperationRepository
 	userRepo       repository.IUserRepository               // needed for Members field resolver
-	snpRepo        repository.ISchemeNetworkPointRepository  // needed for cascade delete
 	wikiDocRepo    repository.IWikiDocumentRepository        // needed for cascade delete
 	wikiBackupRepo repository.IWikiDocumentBackupRepository  // needed for cascade delete
 	credRepo       repository.ICredentialRepository          // needed for cascade delete
@@ -85,13 +84,6 @@ func NewOperationResolver(
 
 // OperationResolverOption is a functional option for configuring the operation resolver.
 type OperationResolverOption func(*operationResolver)
-
-// WithSchemeNetworkPointRepo adds the SchemeNetworkPoint repository for cascade delete.
-func WithSchemeNetworkPointRepo(repo repository.ISchemeNetworkPointRepository) OperationResolverOption {
-	return func(r *operationResolver) {
-		r.snpRepo = repo
-	}
-}
 
 // WithWikiDocumentRepo adds the WikiDocument repository for cascade delete.
 func WithWikiDocumentRepo(repo repository.IWikiDocumentRepository) OperationResolverOption {
@@ -240,13 +232,6 @@ func (r *operationResolver) DeleteOperation(ctx context.Context, id string) (boo
 	op, err := r.operationRepo.FindByID(ctx, uid)
 	if err != nil {
 		return false, fmt.Errorf("operation not found: %w", err)
-	}
-
-	// Cascade delete: remove all scheme network points belonging to this operation
-	if r.snpRepo != nil {
-		if err := r.snpRepo.DeleteByOperationID(ctx, op.OperationID); err != nil {
-			return false, fmt.Errorf("failed to delete operation's network points: %w", err)
-		}
 	}
 
 	// Cascade delete: remove all credentials (findings) belonging to this operation

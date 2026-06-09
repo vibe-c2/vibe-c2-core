@@ -13,7 +13,7 @@ import (
 // at least the required role in the given operation. Returns nil if authorized.
 //
 // This is the shared authorization check used by all resolvers that need
-// operation-level role enforcement (operations, wiki, scheme network points, etc.).
+// operation-level role enforcement (operations, wiki, findings, etc.).
 //
 // Public operation special case: any authenticated caller is implicitly an
 // operator on the synthetic Public operation. Admin-level requests against

@@ -82,19 +82,6 @@ export type CreateOperationInput = {
   name: Scalars['String']['input'];
 };
 
-export type CreateSchemeNetworkPointInput = {
-  description?: InputMaybe<Scalars['String']['input']>;
-  names: Array<Scalars['String']['input']>;
-  tags?: InputMaybe<Array<Scalars['String']['input']>>;
-};
-
-export type CreateSchemeNetworkPortInput = {
-  notes?: InputMaybe<Scalars['String']['input']>;
-  number: Scalars['Int']['input'];
-  protocol?: InputMaybe<Scalars['String']['input']>;
-  service?: InputMaybe<Scalars['String']['input']>;
-};
-
 export type CreateTaskInput = {
   assigneeIds?: InputMaybe<Array<Scalars['ID']['input']>>;
   credentialReferenceIds?: InputMaybe<Array<Scalars['ID']['input']>>;
@@ -266,7 +253,6 @@ export type MarkHashCrackedInput = {
 export type Mutation = {
   addCredentialComment: Credential;
   addOperationMember: Operation;
-  addSchemeNetworkPort: SchemeNetworkPoint;
   addTaskWikiReference: Task;
   adminRevokeAllUserSessions: Scalars['Int']['output'];
   adminRevokeSession: Scalars['Boolean']['output'];
@@ -277,7 +263,6 @@ export type Mutation = {
   createHash: Hash;
   createMyAPIKey: ApiKeyWithSecret;
   createOperation: Operation;
-  createSchemeNetworkPoint: SchemeNetworkPoint;
   createTask: Task;
   createUser: User;
   createWikiDocument: WikiDocument;
@@ -288,7 +273,6 @@ export type Mutation = {
   deleteHash: Scalars['Boolean']['output'];
   deleteMyAPIKey: Scalars['Boolean']['output'];
   deleteOperation: Scalars['Boolean']['output'];
-  deleteSchemeNetworkPoint: Scalars['Boolean']['output'];
   deleteTask: Scalars['Boolean']['output'];
   deleteUser: Scalars['Boolean']['output'];
   deleteWikiDocument: Scalars['Boolean']['output'];
@@ -300,7 +284,6 @@ export type Mutation = {
   purgeTask: Scalars['Boolean']['output'];
   regenerateMyAPIKey: ApiKeyWithSecret;
   removeOperationMember: Operation;
-  removeSchemeNetworkPort: SchemeNetworkPoint;
   reorderWikiDocumentSiblings: Array<WikiDocument>;
   restoreTask: Task;
   restoreWikiDocument: WikiDocument;
@@ -319,8 +302,6 @@ export type Mutation = {
   updateOperation: Operation;
   updateOperationMemberRole: Operation;
   updateOwnProfile: User;
-  updateSchemeNetworkPoint: SchemeNetworkPoint;
-  updateSchemeNetworkPort: SchemeNetworkPoint;
   updateTask: Task;
   updateUser: User;
   updateWikiDocument: WikiDocument;
@@ -337,12 +318,6 @@ export type MutationAddOperationMemberArgs = {
   operationId: Scalars['ID']['input'];
   role: OperationRole;
   userId: Scalars['ID']['input'];
-};
-
-
-export type MutationAddSchemeNetworkPortArgs = {
-  input: CreateSchemeNetworkPortInput;
-  pointId: Scalars['ID']['input'];
 };
 
 
@@ -396,12 +371,6 @@ export type MutationCreateOperationArgs = {
 };
 
 
-export type MutationCreateSchemeNetworkPointArgs = {
-  input: CreateSchemeNetworkPointInput;
-  operationId: Scalars['ID']['input'];
-};
-
-
 export type MutationCreateTaskArgs = {
   input: CreateTaskInput;
 };
@@ -446,11 +415,6 @@ export type MutationDeleteHashArgs = {
 
 
 export type MutationDeleteOperationArgs = {
-  id: Scalars['ID']['input'];
-};
-
-
-export type MutationDeleteSchemeNetworkPointArgs = {
   id: Scalars['ID']['input'];
 };
 
@@ -505,12 +469,6 @@ export type MutationPurgeTaskArgs = {
 export type MutationRemoveOperationMemberArgs = {
   operationId: Scalars['ID']['input'];
   userId: Scalars['ID']['input'];
-};
-
-
-export type MutationRemoveSchemeNetworkPortArgs = {
-  pointId: Scalars['ID']['input'];
-  portId: Scalars['ID']['input'];
 };
 
 
@@ -612,19 +570,6 @@ export type MutationUpdateOwnProfileArgs = {
 };
 
 
-export type MutationUpdateSchemeNetworkPointArgs = {
-  id: Scalars['ID']['input'];
-  input: UpdateSchemeNetworkPointInput;
-};
-
-
-export type MutationUpdateSchemeNetworkPortArgs = {
-  input: UpdateSchemeNetworkPortInput;
-  pointId: Scalars['ID']['input'];
-  portId: Scalars['ID']['input'];
-};
-
-
 export type MutationUpdateTaskArgs = {
   id: Scalars['ID']['input'];
   input: UpdateTaskInput;
@@ -713,8 +658,6 @@ export type Query = {
   mySessions: SessionConnection;
   operation: Operation;
   operations: OperationConnection;
-  schemeNetworkPoint: SchemeNetworkPoint;
-  schemeNetworkPoints: SchemeNetworkPointConnection;
   session: Session;
   sessions: SessionConnection;
   task: Task;
@@ -855,21 +798,6 @@ export type QueryOperationsArgs = {
   before?: InputMaybe<Scalars['String']['input']>;
   first?: InputMaybe<Scalars['Int']['input']>;
   last?: InputMaybe<Scalars['Int']['input']>;
-  search?: InputMaybe<Scalars['String']['input']>;
-};
-
-
-export type QuerySchemeNetworkPointArgs = {
-  id: Scalars['ID']['input'];
-};
-
-
-export type QuerySchemeNetworkPointsArgs = {
-  after?: InputMaybe<Scalars['String']['input']>;
-  before?: InputMaybe<Scalars['String']['input']>;
-  first?: InputMaybe<Scalars['Int']['input']>;
-  last?: InputMaybe<Scalars['Int']['input']>;
-  operationId: Scalars['ID']['input'];
   search?: InputMaybe<Scalars['String']['input']>;
 };
 
@@ -1084,36 +1012,6 @@ export type ReorderWikiDocumentSiblingsInput = {
   operationId: Scalars['ID']['input'];
   orderedIds: Array<Scalars['ID']['input']>;
   parentDocumentId?: InputMaybe<Scalars['ID']['input']>;
-};
-
-export type SchemeNetworkPoint = {
-  createdAt: Scalars['String']['output'];
-  description: Scalars['String']['output'];
-  id: Scalars['ID']['output'];
-  names: Array<Scalars['String']['output']>;
-  operationId: Scalars['ID']['output'];
-  ports: Array<SchemeNetworkPort>;
-  tags: Array<Scalars['String']['output']>;
-  updatedAt: Scalars['String']['output'];
-};
-
-export type SchemeNetworkPointConnection = {
-  edges: Array<SchemeNetworkPointEdge>;
-  pageInfo: PageInfo;
-  totalCount: Scalars['Int']['output'];
-};
-
-export type SchemeNetworkPointEdge = {
-  cursor: Scalars['String']['output'];
-  node: SchemeNetworkPoint;
-};
-
-export type SchemeNetworkPort = {
-  id: Scalars['ID']['output'];
-  notes: Scalars['String']['output'];
-  number: Scalars['Int']['output'];
-  protocol: Scalars['String']['output'];
-  service: Scalars['String']['output'];
 };
 
 export type Session = {
@@ -1352,19 +1250,6 @@ export type UpdateHashInput = {
 export type UpdateOperationInput = {
   description?: InputMaybe<Scalars['String']['input']>;
   name?: InputMaybe<Scalars['String']['input']>;
-};
-
-export type UpdateSchemeNetworkPointInput = {
-  description?: InputMaybe<Scalars['String']['input']>;
-  names?: InputMaybe<Array<Scalars['String']['input']>>;
-  tags?: InputMaybe<Array<Scalars['String']['input']>>;
-};
-
-export type UpdateSchemeNetworkPortInput = {
-  notes?: InputMaybe<Scalars['String']['input']>;
-  number?: InputMaybe<Scalars['Int']['input']>;
-  protocol?: InputMaybe<Scalars['String']['input']>;
-  service?: InputMaybe<Scalars['String']['input']>;
 };
 
 export type UpdateTaskInput = {
