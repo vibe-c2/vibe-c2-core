@@ -1,12 +1,13 @@
 import { Handle, Position, type Node, type NodeProps } from "@xyflow/react"
-import { HelpCircleIcon, RouteIcon, ServerIcon } from "lucide-react"
+import { HelpCircleIcon, NetworkIcon, RouteIcon, ServerIcon } from "lucide-react"
 import { useHostStore } from "@/stores/hosts"
 import type { HostFieldsFragment } from "@/graphql/gql/graphql"
 
-// Custom React Flow nodes for the derived topology. Layout is left-to-right
-// (see layout.ts), so edges enter on the left and leave on the right. The
-// graph is derived and read-only, so handles exist only as edge anchors —
-// they are invisible and non-connectable.
+// Custom React Flow nodes for the derived topology. Edges are "floating"
+// (see floating-edge.tsx) and compute their own attachment points from node
+// geometry, but React Flow still requires a source/target handle on every
+// node for an edge to register — so each node carries an invisible,
+// non-connectable handle pair that serves only that purpose.
 
 export type HostNodeData = { host: HostFieldsFragment }
 export type SubnetNodeData = { cidr: string; hostCount: number }
@@ -65,18 +66,22 @@ export function HostNode({ data }: NodeProps<Node<HostNodeData>>) {
   )
 }
 
-// Container for a subnet. Hosts are nested inside it as child nodes (positioned
-// by layout.ts), so this renders only the chrome + header label.
+// A subnet, rendered as a compact hub pill. Hosts are NOT nested inside it —
+// every interface is an explicit labeled edge to this pill (see layout.ts), so
+// multi-homed hosts connect to all of their subnets symmetrically. Sized by
+// the layout via the node's style (the layout needs dimensions up front).
 export function SubnetNode({ data }: NodeProps<Node<SubnetNodeData>>) {
   return (
-    <div className="h-full w-full rounded-lg border-2 border-dashed border-border/70 bg-muted/20">
+    <div className="flex h-full w-full items-center justify-center gap-1.5 rounded-full border-2 border-border bg-muted/40 px-3 text-xs font-medium shadow-sm">
       <Anchors />
-      <div className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium">
-        <span className="font-mono">{data.cidr}</span>
-        <span className="text-muted-foreground">
-          · {data.hostCount} host{data.hostCount === 1 ? "" : "s"}
-        </span>
-      </div>
+      <NetworkIcon className="size-3.5 shrink-0 text-muted-foreground" />
+      <span className="font-mono">{data.cidr}</span>
+      <span
+        className="text-muted-foreground"
+        title={`${data.hostCount} known host${data.hostCount === 1 ? "" : "s"} on this segment`}
+      >
+        · {data.hostCount}
+      </span>
     </div>
   )
 }

@@ -25,7 +25,7 @@ const phantomSubnetId = (net: string) => `ps:${net}`
 const phantomGatewayId = (ip: string) => `pg:${ip}`
 
 export type TopoNode =
-  | { kind: "host"; id: string; host: HostFieldsFragment; subnetIds: string[] }
+  | { kind: "host"; id: string; host: HostFieldsFragment }
   | { kind: "subnet"; id: string; cidr: string; hostIds: string[] }
   | { kind: "phantom-gateway"; id: string; ip: string }
   | { kind: "phantom-subnet"; id: string; cidr: string }
@@ -95,13 +95,11 @@ export function deriveTopology(hosts: HostFieldsFragment[]): Topology {
   // 2. Subnets + membership edges. A subnet is the masked network of an
   //    interface CIDR; hosts sharing it collapse onto one node.
   const subnets = new Map<string, { cidr: string; hostIds: string[] }>()
-  const hostSubnets = new Map<string, Set<string>>()
   // Keyed by host+subnet+iface so a host listing two addresses in one subnet on
   // one interface yields a single edge (and never a duplicate React Flow id).
   const membership = new Map<string, TopoEdge>()
 
   for (const h of hosts) {
-    const owned = new Set<string>()
     for (const iface of h.interfaces) {
       for (const a of iface.addresses) {
         const net = networkKey(a)
@@ -110,7 +108,6 @@ export function deriveTopology(hosts: HostFieldsFragment[]): Topology {
         const entry = subnets.get(sid) ?? { cidr: net, hostIds: [] }
         if (!entry.hostIds.includes(h.id)) entry.hostIds.push(h.id)
         subnets.set(sid, entry)
-        owned.add(sid)
 
         const key = `${h.id}|${sid}|${iface.name}`
         if (!membership.has(key)) {
@@ -125,7 +122,6 @@ export function deriveTopology(hosts: HostFieldsFragment[]): Topology {
         }
       }
     }
-    hostSubnets.set(h.id, owned)
   }
 
   // 3. Pivot edges + phantom nodes from gatewayed routes. A route without a
@@ -190,12 +186,7 @@ export function deriveTopology(hosts: HostFieldsFragment[]): Topology {
   }
 
   const nodes: TopoNode[] = [
-    ...hosts.map<TopoNode>((h) => ({
-      kind: "host",
-      id: h.id,
-      host: h,
-      subnetIds: [...(hostSubnets.get(h.id) ?? [])],
-    })),
+    ...hosts.map<TopoNode>((h) => ({ kind: "host", id: h.id, host: h })),
     ...[...subnets].map<TopoNode>(([id, v]) => ({
       kind: "subnet",
       id,

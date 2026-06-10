@@ -171,9 +171,9 @@ describe("deriveTopology", () => {
     ])
     expect(byKind(t.nodes, "host")).toHaveLength(1)
     expect(byKind(t.nodes, "subnet")).toHaveLength(2)
-    expect(edgesOf(t.edges, "membership")).toHaveLength(2)
-    const hostNode = byKind(t.nodes, "host")[0]
-    expect(hostNode.subnetIds.sort()).toEqual([
+    const memberships = edgesOf(t.edges, "membership")
+    expect(memberships.every((e) => e.source === "a")).toBe(true)
+    expect(memberships.map((e) => e.target).sort()).toEqual([
       "subnet:10.0.5.0/24",
       "subnet:10.0.6.0/24",
     ])

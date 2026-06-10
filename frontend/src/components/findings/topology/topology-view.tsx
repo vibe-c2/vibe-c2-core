@@ -1,16 +1,23 @@
-import { useMemo } from "react"
+import { useEffect, useMemo, useState } from "react"
 import {
   Background,
   Controls,
   MiniMap,
   ReactFlow,
   ReactFlowProvider,
+  useNodesState,
 } from "@xyflow/react"
 import "@xyflow/react/dist/style.css"
 import { NetworkIcon, TriangleAlertIcon } from "lucide-react"
 import { MAX_TOPOLOGY_HOSTS, useAllHosts } from "@/graphql/hooks/hosts"
-import { deriveTopology, type TopologyStats } from "@/lib/topology/derive"
+import {
+  deriveTopology,
+  type Topology,
+  type TopologyStats,
+} from "@/lib/topology/derive"
+import { Button } from "@/components/ui/button"
 import { Skeleton } from "@/components/ui/skeleton"
+import { FloatingEdge } from "@/components/findings/topology/floating-edge"
 import { layoutTopology } from "@/components/findings/topology/layout"
 import {
   HostNode,
@@ -30,6 +37,10 @@ const nodeTypes = {
   phantomSubnet: PhantomSubnetNode,
 }
 
+const edgeTypes = {
+  floating: FloatingEdge,
+}
+
 interface TopologyViewProps {
   operationId: string
 }
@@ -37,14 +48,34 @@ interface TopologyViewProps {
 // The Hosts tab's second view: a network map derived entirely from the
 // operation's host data (no manual editing). Fetches ALL hosts (not the
 // paginated list), derives the graph, lays it out, and renders it read-only.
+// Strips subnet hub nodes and their interface edges, leaving only host cards
+// and route-derived elements (pivots, unknown gateways, unexplored subnets).
+// A pure view filter — the underlying derivation is untouched.
+function withoutSubnets(t: Topology): Topology {
+  return {
+    ...t,
+    nodes: t.nodes.filter((n) => n.kind !== "subnet"),
+    edges: t.edges.filter((e) => e.kind !== "membership"),
+  }
+}
+
 export function TopologyView({ operationId }: TopologyViewProps) {
   const { data, isLoading, isError } = useAllHosts(operationId)
+  const [showSubnets, setShowSubnets] = useState(false)
 
   const topology = useMemo(
     () => deriveTopology(data?.hosts ?? []),
     [data?.hosts],
   )
-  const { nodes, edges } = useMemo(() => layoutTopology(topology), [topology])
+  const layout = useMemo(
+    () => layoutTopology(showSubnets ? topology : withoutSubnets(topology)),
+    [topology, showSubnets],
+  )
+
+  // Nodes live in React Flow state so the user can drag them around. Positions
+  // are session-only: any data change re-derives the layout and resets them.
+  const [nodes, setNodes, onNodesChange] = useNodesState(layout.nodes)
+  useEffect(() => setNodes(layout.nodes), [layout.nodes, setNodes])
 
   if (isLoading) {
     return (
@@ -87,12 +118,13 @@ export function TopologyView({ operationId }: TopologyViewProps) {
         <ReactFlowProvider>
           <ReactFlow
             nodes={nodes}
-            edges={edges}
+            edges={layout.edges}
+            onNodesChange={onNodesChange}
             nodeTypes={nodeTypes}
+            edgeTypes={edgeTypes}
             fitView
             minZoom={0.1}
             proOptions={{ hideAttribution: true }}
-            nodesDraggable={false}
             nodesConnectable={false}
             edgesFocusable={false}
           >
@@ -100,6 +132,22 @@ export function TopologyView({ operationId }: TopologyViewProps) {
             <Controls showInteractive={false} />
             <MiniMap pannable zoomable className="!bg-card" />
             <Legend stats={topology.stats} />
+            <div className="absolute right-3 top-3 z-10">
+              <Button
+                variant={showSubnets ? "secondary" : "outline"}
+                size="sm"
+                className="h-7 gap-1.5 bg-card/90 text-xs shadow-sm backdrop-blur"
+                onClick={() => setShowSubnets((v) => !v)}
+                title={
+                  showSubnets
+                    ? "Hide subnet nodes and interface edges"
+                    : "Show subnet nodes and interface edges"
+                }
+              >
+                <NetworkIcon className="size-3.5" />
+                Subnets
+              </Button>
+            </div>
           </ReactFlow>
         </ReactFlowProvider>
       </div>
