@@ -5,6 +5,7 @@ import {
   forceSimulation,
   forceX,
   forceY,
+  type Simulation,
   type SimulationLinkDatum,
   type SimulationNodeDatum,
 } from "d3-force"
@@ -23,11 +24,12 @@ import type { Topology } from "@/lib/topology/derive"
 // edge through one corridor between rank columns, piling labels on top of
 // each other. Forces instead pull linked nodes to a comfortable distance and
 // push everything else apart, so hubs become stars and a dual-homed host
-// settles between its two subnets. The simulation runs synchronously to a
-// fixed tick count at layout time — the result is a static map (still
-// draggable), not an animation. d3-force is deterministic for a given node
-// order (phyllotaxis seeding, LCG jiggle), so the map doesn't reshuffle
-// between reloads of the same data.
+// settles between its two subnets. The simulation is pre-settled synchronously
+// to a fixed tick count, so the first paint is already a finished map — but
+// the simulation instance is returned alive (paused, alpha cooled) so the view
+// can re-heat it on drag for Obsidian-style live physics (see use-simulation).
+// d3-force is deterministic for a given node order (phyllotaxis seeding, LCG
+// jiggle), so the map doesn't reshuffle between reloads of the same data.
 
 const HOST_W = 180
 const HOST_H = 64
@@ -62,9 +64,24 @@ function radiusOf(size: { width: number; height: number }) {
   return Math.hypot(size.width, size.height) / 2
 }
 
-type SimNode = SimulationNodeDatum & { id: string; r: number }
+// width/height ride on the sim node so the live loop can convert the
+// simulation's center coordinates to React Flow's top-left (and back) without
+// a separate size lookup.
+export type SimNode = SimulationNodeDatum & {
+  id: string
+  r: number
+  width: number
+  height: number
+}
 
-type TopologyLayout = { nodes: Node[]; edges: Edge[] }
+type TopologySimulation = Simulation<SimNode, SimulationLinkDatum<SimNode>>
+
+type TopologyLayout = {
+  nodes: Node[]
+  edges: Edge[]
+  simulation: TopologySimulation
+  simNodeById: Map<string, SimNode>
+}
 
 export function layoutTopology(topology: Topology): TopologyLayout {
   const { nodes: topoNodes, edges: topoEdges } = topology
@@ -82,17 +99,20 @@ export function layoutTopology(topology: Topology): TopologyLayout {
   }
 
   // --- force simulation -------------------------------------------------------
-  const simNodes: SimNode[] = topoNodes.map((n) => ({
-    id: n.id,
-    r: radiusOf(sizeById.get(n.id)!),
-  }))
+  const simNodes: SimNode[] = topoNodes.map((n) => {
+    const size = sizeById.get(n.id)!
+    return { id: n.id, r: radiusOf(size), ...size }
+  })
   const simNodeById = new Map(simNodes.map((n) => [n.id, n]))
 
   const links: SimulationLinkDatum<SimNode>[] = topoEdges
     .filter((e) => e.source !== e.target)
     .map((e) => ({ source: e.source, target: e.target }))
 
-  forceSimulation(simNodes)
+  // Stopped immediately so d3's internal timer never runs on its own; the
+  // synchronous ticks settle the layout for the first paint. The instance is
+  // returned (not discarded) so drag interactions can re-heat it later.
+  const simulation: TopologySimulation = forceSimulation(simNodes)
     .force(
       "link",
       forceLink<SimNode, SimulationLinkDatum<SimNode>>(links)
@@ -111,7 +131,8 @@ export function layoutTopology(topology: Topology): TopologyLayout {
     .force("x", forceX(0).strength(CENTERING_STRENGTH))
     .force("y", forceY(0).strength(CENTERING_STRENGTH))
     .stop()
-    .tick(SIMULATION_TICKS)
+
+  simulation.tick(SIMULATION_TICKS)
 
   const nodeType: Record<string, string> = {
     host: "host",
@@ -203,5 +224,10 @@ export function layoutTopology(topology: Topology): TopologyLayout {
 
   // All edges render as "floating": connection points follow the nodes as the
   // user drags them, instead of sticking to fixed left/right handles.
-  return { nodes: rfNodes, edges: rfEdges.map((e) => ({ ...e, type: "floating" })) }
+  return {
+    nodes: rfNodes,
+    edges: rfEdges.map((e) => ({ ...e, type: "floating" })),
+    simulation,
+    simNodeById,
+  }
 }

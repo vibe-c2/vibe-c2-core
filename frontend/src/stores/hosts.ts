@@ -23,20 +23,25 @@ export interface HostFilters {
 }
 
 // The Hosts tab renders the same data two ways: the CRUD table and a derived
-// network topology. Session-only state (defaults to table); not persisted, in
-// keeping with `partialize: () => ({})` below.
+// network topology. Persisted (with showSubnets) so a reload lands the user
+// back in the view they were working in.
 export type HostView = "table" | "topology"
 
 interface HostStoreState {
   filters: HostFilters
   selected: HostFieldsFragment | null
   view: HostView
+  // Topology-only: render subnet hub nodes + interface edges, or hosts/routes
+  // only. Lives here (not component state) so the preference survives reloads
+  // and view switches.
+  showSubnets: boolean
 
   formDialogOpen: boolean
   deleteDialogOpen: boolean
 
   setSearch: (search: string) => void
   setView: (view: HostView) => void
+  toggleSubnets: () => void
   resetFilters: () => void
 
   openCreateDialog: () => void
@@ -56,12 +61,17 @@ export const useHostStore = create<HostStoreState>()(
       filters: defaultFilters,
       selected: null,
       view: "table",
+      showSubnets: false,
 
       formDialogOpen: false,
       deleteDialogOpen: false,
 
       setSearch: (search) => set((s) => ({ filters: { ...s.filters, search } })),
       setView: (view) => set({ view }),
+      // Toggle lives in the store (not `setShowSubnets(!current)` at the call
+      // site) so it reads the latest value — a closure over a stale render
+      // can't turn a double-click into a no-op.
+      toggleSubnets: () => set((s) => ({ showSubnets: !s.showSubnets })),
       resetFilters: () => set({ filters: defaultFilters }),
 
       // Open actions are mutually exclusive: both dialogs render from the
@@ -81,11 +91,27 @@ export const useHostStore = create<HostStoreState>()(
     {
       name: "vibe-c2:hosts",
       storage: createJSONStorage(() => localStorage),
-      // Nothing worth persisting yet — every filter resets per session and
-      // dialog state is transient. Keep the persist wrapper anyway so adding
-      // a sticky preference later is a one-line change.
-      partialize: () => ({}),
-      merge: (_persisted, current) => current,
+      // Only the view preferences are sticky — search resets per session and
+      // dialog state is transient. Custom merge validates the persisted view
+      // so a stale/corrupt localStorage value falls back to the default.
+      partialize: (state) => ({
+        view: state.view,
+        showSubnets: state.showSubnets,
+      }),
+      merge: (persisted, current) => {
+        const p = persisted as
+          | { view?: HostView; showSubnets?: boolean }
+          | undefined
+        return {
+          ...current,
+          view:
+            p?.view === "table" || p?.view === "topology" ? p.view : current.view,
+          showSubnets:
+            typeof p?.showSubnets === "boolean"
+              ? p.showSubnets
+              : current.showSubnets,
+        }
+      },
     },
   ),
 )

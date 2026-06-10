@@ -1,15 +1,15 @@
-import { useEffect, useMemo, useState } from "react"
+import { useMemo } from "react"
 import {
   Background,
   Controls,
   MiniMap,
   ReactFlow,
   ReactFlowProvider,
-  useNodesState,
 } from "@xyflow/react"
 import "@xyflow/react/dist/style.css"
 import { NetworkIcon, TriangleAlertIcon } from "lucide-react"
 import { MAX_TOPOLOGY_HOSTS, useAllHosts } from "@/graphql/hooks/hosts"
+import { useHostStore } from "@/stores/hosts"
 import {
   deriveTopology,
   type Topology,
@@ -18,7 +18,7 @@ import {
 import { Button } from "@/components/ui/button"
 import { Skeleton } from "@/components/ui/skeleton"
 import { FloatingEdge } from "@/components/findings/topology/floating-edge"
-import { layoutTopology } from "@/components/findings/topology/layout"
+import { useTopologySimulation } from "@/components/findings/topology/use-simulation"
 import {
   HostNode,
   PhantomGatewayNode,
@@ -61,21 +61,30 @@ function withoutSubnets(t: Topology): Topology {
 
 export function TopologyView({ operationId }: TopologyViewProps) {
   const { data, isLoading, isError } = useAllHosts(operationId)
-  const [showSubnets, setShowSubnets] = useState(false)
+  // Persisted in the host store so the toggle survives reloads.
+  const showSubnets = useHostStore((s) => s.showSubnets)
+  const toggleSubnets = useHostStore((s) => s.toggleSubnets)
 
   const topology = useMemo(
     () => deriveTopology(data?.hosts ?? []),
     [data?.hosts],
   )
-  const layout = useMemo(
-    () => layoutTopology(showSubnets ? topology : withoutSubnets(topology)),
+  const visibleTopology = useMemo(
+    () => (showSubnets ? topology : withoutSubnets(topology)),
     [topology, showSubnets],
   )
 
-  // Nodes live in React Flow state so the user can drag them around. Positions
-  // are session-only: any data change re-derives the layout and resets them.
-  const [nodes, setNodes, onNodesChange] = useNodesState(layout.nodes)
-  useEffect(() => setNodes(layout.nodes), [layout.nodes, setNodes])
+  // Live force-directed layout: pre-settled for first paint, re-heated while
+  // a node is dragged so neighbors follow. Positions are session-only: any
+  // data change rebuilds the simulation and resets them.
+  const {
+    nodes,
+    edges,
+    onNodesChange,
+    onNodeDragStart,
+    onNodeDrag,
+    onNodeDragStop,
+  } = useTopologySimulation(visibleTopology)
 
   if (isLoading) {
     return (
@@ -118,8 +127,11 @@ export function TopologyView({ operationId }: TopologyViewProps) {
         <ReactFlowProvider>
           <ReactFlow
             nodes={nodes}
-            edges={layout.edges}
+            edges={edges}
             onNodesChange={onNodesChange}
+            onNodeDragStart={onNodeDragStart}
+            onNodeDrag={onNodeDrag}
+            onNodeDragStop={onNodeDragStop}
             nodeTypes={nodeTypes}
             edgeTypes={edgeTypes}
             fitView
@@ -137,7 +149,7 @@ export function TopologyView({ operationId }: TopologyViewProps) {
                 variant={showSubnets ? "secondary" : "outline"}
                 size="sm"
                 className="h-7 gap-1.5 bg-card/90 text-xs shadow-sm backdrop-blur"
-                onClick={() => setShowSubnets((v) => !v)}
+                onClick={toggleSubnets}
                 title={
                   showSubnets
                     ? "Hide subnet nodes and interface edges"
