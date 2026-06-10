@@ -54,6 +54,12 @@ type Documents = {
     "\n  mutation MarkHashCracked($id: ID!, $input: MarkHashCrackedInput!) {\n    markHashCracked(id: $id, input: $input) {\n      ...HashFieldsWithCredential\n    }\n  }\n": typeof types.MarkHashCrackedDocument,
     "\n  subscription HashChanged($operationId: ID!) {\n    hashChanged(operationId: $operationId) {\n      action\n      hashId\n      operationId\n      hash {\n        ...HashFields\n      }\n    }\n  }\n": typeof types.HashChangedDocument,
     "\n  subscription MyHashChanged($operationIds: [ID!]) {\n    myHashChanged(operationIds: $operationIds) {\n      action\n      hashId\n      operationId\n      hash {\n        ...HashFieldsWithOperation\n      }\n    }\n  }\n": typeof types.MyHashChangedDocument,
+    "\n  fragment HostFields on Host {\n    id\n    operationId\n    hostname\n    os\n    interfaces {\n      name\n      mac\n      addresses\n    }\n    routes {\n      destination\n      gateway\n      interface\n    }\n    createdBy {\n      id\n      username\n    }\n    createdAt\n    updatedAt\n  }\n": typeof types.HostFieldsFragmentDoc,
+    "\n  query Hosts($operationId: ID!, $search: String, $first: Int, $after: String) {\n    hosts(\n      operationId: $operationId\n      search: $search\n      first: $first\n      after: $after\n    ) {\n      edges {\n        node {\n          ...HostFields\n        }\n        cursor\n      }\n      pageInfo {\n        hasNextPage\n        endCursor\n      }\n      totalCount\n    }\n  }\n": typeof types.HostsDocument,
+    "\n  mutation CreateHost($operationId: ID!, $input: CreateHostInput!) {\n    createHost(operationId: $operationId, input: $input) {\n      ...HostFields\n    }\n  }\n": typeof types.CreateHostDocument,
+    "\n  mutation UpdateHost($id: ID!, $input: UpdateHostInput!) {\n    updateHost(id: $id, input: $input) {\n      ...HostFields\n    }\n  }\n": typeof types.UpdateHostDocument,
+    "\n  mutation DeleteHost($id: ID!) {\n    deleteHost(id: $id)\n  }\n": typeof types.DeleteHostDocument,
+    "\n  subscription HostChanged($operationId: ID!) {\n    hostChanged(operationId: $operationId) {\n      action\n      hostId\n    }\n  }\n": typeof types.HostChangedDocument,
     "\n  fragment OperationMemberFields on OperationMember {\n    user {\n      id\n      username\n      roles\n      active\n      createdAt\n      updatedAt\n    }\n    role\n  }\n": typeof types.OperationMemberFieldsFragmentDoc,
     "\n  fragment OperationFields on Operation {\n    id\n    name\n    description\n    members {\n      ...OperationMemberFields\n    }\n    createdAt\n    updatedAt\n  }\n": typeof types.OperationFieldsFragmentDoc,
     "\n  query Operation($id: ID!) {\n    operation(id: $id) {\n      ...OperationFields\n    }\n  }\n": typeof types.OperationDocument,
@@ -191,6 +197,12 @@ const documents: Documents = {
     "\n  mutation MarkHashCracked($id: ID!, $input: MarkHashCrackedInput!) {\n    markHashCracked(id: $id, input: $input) {\n      ...HashFieldsWithCredential\n    }\n  }\n": types.MarkHashCrackedDocument,
     "\n  subscription HashChanged($operationId: ID!) {\n    hashChanged(operationId: $operationId) {\n      action\n      hashId\n      operationId\n      hash {\n        ...HashFields\n      }\n    }\n  }\n": types.HashChangedDocument,
     "\n  subscription MyHashChanged($operationIds: [ID!]) {\n    myHashChanged(operationIds: $operationIds) {\n      action\n      hashId\n      operationId\n      hash {\n        ...HashFieldsWithOperation\n      }\n    }\n  }\n": types.MyHashChangedDocument,
+    "\n  fragment HostFields on Host {\n    id\n    operationId\n    hostname\n    os\n    interfaces {\n      name\n      mac\n      addresses\n    }\n    routes {\n      destination\n      gateway\n      interface\n    }\n    createdBy {\n      id\n      username\n    }\n    createdAt\n    updatedAt\n  }\n": types.HostFieldsFragmentDoc,
+    "\n  query Hosts($operationId: ID!, $search: String, $first: Int, $after: String) {\n    hosts(\n      operationId: $operationId\n      search: $search\n      first: $first\n      after: $after\n    ) {\n      edges {\n        node {\n          ...HostFields\n        }\n        cursor\n      }\n      pageInfo {\n        hasNextPage\n        endCursor\n      }\n      totalCount\n    }\n  }\n": types.HostsDocument,
+    "\n  mutation CreateHost($operationId: ID!, $input: CreateHostInput!) {\n    createHost(operationId: $operationId, input: $input) {\n      ...HostFields\n    }\n  }\n": types.CreateHostDocument,
+    "\n  mutation UpdateHost($id: ID!, $input: UpdateHostInput!) {\n    updateHost(id: $id, input: $input) {\n      ...HostFields\n    }\n  }\n": types.UpdateHostDocument,
+    "\n  mutation DeleteHost($id: ID!) {\n    deleteHost(id: $id)\n  }\n": types.DeleteHostDocument,
+    "\n  subscription HostChanged($operationId: ID!) {\n    hostChanged(operationId: $operationId) {\n      action\n      hostId\n    }\n  }\n": types.HostChangedDocument,
     "\n  fragment OperationMemberFields on OperationMember {\n    user {\n      id\n      username\n      roles\n      active\n      createdAt\n      updatedAt\n    }\n    role\n  }\n": types.OperationMemberFieldsFragmentDoc,
     "\n  fragment OperationFields on Operation {\n    id\n    name\n    description\n    members {\n      ...OperationMemberFields\n    }\n    createdAt\n    updatedAt\n  }\n": types.OperationFieldsFragmentDoc,
     "\n  query Operation($id: ID!) {\n    operation(id: $id) {\n      ...OperationFields\n    }\n  }\n": types.OperationDocument,
@@ -462,6 +474,30 @@ export function graphql(source: "\n  subscription HashChanged($operationId: ID!)
  * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
  */
 export function graphql(source: "\n  subscription MyHashChanged($operationIds: [ID!]) {\n    myHashChanged(operationIds: $operationIds) {\n      action\n      hashId\n      operationId\n      hash {\n        ...HashFieldsWithOperation\n      }\n    }\n  }\n"): (typeof documents)["\n  subscription MyHashChanged($operationIds: [ID!]) {\n    myHashChanged(operationIds: $operationIds) {\n      action\n      hashId\n      operationId\n      hash {\n        ...HashFieldsWithOperation\n      }\n    }\n  }\n"];
+/**
+ * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
+ */
+export function graphql(source: "\n  fragment HostFields on Host {\n    id\n    operationId\n    hostname\n    os\n    interfaces {\n      name\n      mac\n      addresses\n    }\n    routes {\n      destination\n      gateway\n      interface\n    }\n    createdBy {\n      id\n      username\n    }\n    createdAt\n    updatedAt\n  }\n"): (typeof documents)["\n  fragment HostFields on Host {\n    id\n    operationId\n    hostname\n    os\n    interfaces {\n      name\n      mac\n      addresses\n    }\n    routes {\n      destination\n      gateway\n      interface\n    }\n    createdBy {\n      id\n      username\n    }\n    createdAt\n    updatedAt\n  }\n"];
+/**
+ * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
+ */
+export function graphql(source: "\n  query Hosts($operationId: ID!, $search: String, $first: Int, $after: String) {\n    hosts(\n      operationId: $operationId\n      search: $search\n      first: $first\n      after: $after\n    ) {\n      edges {\n        node {\n          ...HostFields\n        }\n        cursor\n      }\n      pageInfo {\n        hasNextPage\n        endCursor\n      }\n      totalCount\n    }\n  }\n"): (typeof documents)["\n  query Hosts($operationId: ID!, $search: String, $first: Int, $after: String) {\n    hosts(\n      operationId: $operationId\n      search: $search\n      first: $first\n      after: $after\n    ) {\n      edges {\n        node {\n          ...HostFields\n        }\n        cursor\n      }\n      pageInfo {\n        hasNextPage\n        endCursor\n      }\n      totalCount\n    }\n  }\n"];
+/**
+ * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
+ */
+export function graphql(source: "\n  mutation CreateHost($operationId: ID!, $input: CreateHostInput!) {\n    createHost(operationId: $operationId, input: $input) {\n      ...HostFields\n    }\n  }\n"): (typeof documents)["\n  mutation CreateHost($operationId: ID!, $input: CreateHostInput!) {\n    createHost(operationId: $operationId, input: $input) {\n      ...HostFields\n    }\n  }\n"];
+/**
+ * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
+ */
+export function graphql(source: "\n  mutation UpdateHost($id: ID!, $input: UpdateHostInput!) {\n    updateHost(id: $id, input: $input) {\n      ...HostFields\n    }\n  }\n"): (typeof documents)["\n  mutation UpdateHost($id: ID!, $input: UpdateHostInput!) {\n    updateHost(id: $id, input: $input) {\n      ...HostFields\n    }\n  }\n"];
+/**
+ * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
+ */
+export function graphql(source: "\n  mutation DeleteHost($id: ID!) {\n    deleteHost(id: $id)\n  }\n"): (typeof documents)["\n  mutation DeleteHost($id: ID!) {\n    deleteHost(id: $id)\n  }\n"];
+/**
+ * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
+ */
+export function graphql(source: "\n  subscription HostChanged($operationId: ID!) {\n    hostChanged(operationId: $operationId) {\n      action\n      hostId\n    }\n  }\n"): (typeof documents)["\n  subscription HostChanged($operationId: ID!) {\n    hostChanged(operationId: $operationId) {\n      action\n      hostId\n    }\n  }\n"];
 /**
  * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
  */

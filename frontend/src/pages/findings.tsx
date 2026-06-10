@@ -7,6 +7,7 @@ import { useFindingsStore } from "@/stores/findings"
 import { CredentialDetailsDialog } from "@/components/findings/credential-details-dialog"
 import { CredentialsTab } from "@/components/findings/credentials-tab"
 import { HashesTab } from "@/components/findings/hashes-tab"
+import { HostsTab } from "@/components/findings/hosts-tab"
 import type { FindingsMode } from "@/components/findings/findings-mode"
 
 export function FindingsPage() {
@@ -37,25 +38,44 @@ function FindingsPageInner({ mode }: { mode: FindingsMode }) {
   const activeTab = useFindingsStore((s) => s.activeTab)
   const setActiveTab = useFindingsStore((s) => s.setActiveTab)
 
+  // Hosts only exist scoped to one operation — a cross-operation hosts view
+  // would collide because target networks reuse the same private IP ranges.
+  // In global mode the tab button is hidden and a persisted "hosts" selection
+  // is coerced to credentials at render time. The store keeps "hosts" so
+  // returning to a scoped operation restores the operator's tab choice.
+  const effectiveTab =
+    activeTab === "hosts" && mode.kind === "global" ? "credentials" : activeTab
+
   return (
     <div className="flex flex-1 flex-col gap-2 p-2">
       <div className="flex gap-1 border-b pb-1">
         <TabButton
-          active={activeTab === "credentials"}
+          active={effectiveTab === "credentials"}
           onClick={() => setActiveTab("credentials")}
         >
           Credentials
         </TabButton>
         <TabButton
-          active={activeTab === "hashes"}
+          active={effectiveTab === "hashes"}
           onClick={() => setActiveTab("hashes")}
         >
           Hashes
         </TabButton>
+        {mode.kind === "scoped" && (
+          <TabButton
+            active={effectiveTab === "hosts"}
+            onClick={() => setActiveTab("hosts")}
+          >
+            Hosts
+          </TabButton>
+        )}
       </div>
 
-      {activeTab === "credentials" && <CredentialsTab mode={mode} />}
-      {activeTab === "hashes" && <HashesTab mode={mode} />}
+      {effectiveTab === "credentials" && <CredentialsTab mode={mode} />}
+      {effectiveTab === "hashes" && <HashesTab mode={mode} />}
+      {effectiveTab === "hosts" && mode.kind === "scoped" && (
+        <HostsTab operationId={mode.operationId} />
+      )}
 
       {/* Mounted at the page level so the credential details modal opens
           regardless of the active tab — e.g. clicking a linked credential

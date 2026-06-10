@@ -3,14 +3,18 @@ import { persist, createJSONStorage } from "zustand/middleware"
 
 // The list of tabs on the Findings page. New finding kinds (hashes, files,
 // hosts, ...) are added here and to the page's tab switcher.
-export type FindingsPageTab = "credentials" | "hashes"
+export type FindingsPageTab = "credentials" | "hashes" | "hosts"
 
 interface FindingsStoreState {
   activeTab: FindingsPageTab
   setActiveTab: (tab: FindingsPageTab) => void
 }
 
-const TABS: readonly FindingsPageTab[] = ["credentials", "hashes"] as const
+const TABS: readonly FindingsPageTab[] = [
+  "credentials",
+  "hashes",
+  "hosts",
+] as const
 
 export const useFindingsStore = create<FindingsStoreState>()(
   persist(
