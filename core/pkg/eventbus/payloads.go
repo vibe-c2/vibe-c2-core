@@ -259,6 +259,26 @@ func NewHashBulkImportedEvent(actor Actor, p HashBulkImportPayload) Event {
 	return NewEvent(TopicHashBulkImported, actor, p)
 }
 
+// --- Host event payloads ---
+
+// HostEventPayload is the payload for host create/update/delete events.
+type HostEventPayload struct {
+	HostID      string
+	OperationID string
+}
+
+func NewHostCreatedEvent(actor Actor, p HostEventPayload) Event {
+	return NewEvent(TopicHostCreated, actor, p)
+}
+
+func NewHostUpdatedEvent(actor Actor, p HostEventPayload) Event {
+	return NewEvent(TopicHostUpdated, actor, p)
+}
+
+func NewHostDeletedEvent(actor Actor, p HostEventPayload) Event {
+	return NewEvent(TopicHostDeleted, actor, p)
+}
+
 // --- Task event payloads ---
 
 // TaskEventPayload is the payload for every task topic. The bus stays

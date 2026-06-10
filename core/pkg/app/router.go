@@ -49,6 +49,7 @@ func (a *App) NewRouter() *gin.Engine {
 		resolver.WithWikiDocumentRepo(a.repos.WikiDocument),
 		resolver.WithWikiDocumentBackupRepo(a.repos.WikiDocumentBackup),
 		resolver.WithCredentialRepo(a.repos.Credential),
+		resolver.WithHostRepo(a.repos.Host),
 		resolver.WithEventBus(a.eventBus))
 	sessRes := resolver.NewSessionResolver(a.repos.Session, a.repos.User, a.tokenStore, a.eventBus)
 	wikiDocRes := resolver.NewWikiDocumentResolver(
@@ -76,6 +77,10 @@ func (a *App) NewRouter() *gin.Engine {
 	// same cross-domain join shape as credRes.
 	hashRes := resolver.NewHashResolver(
 		a.repos.Hash, a.repos.Credential, a.repos.Operation, a.repos.User, credRes, wikiDocRes, a.eventBus,
+	)
+	// hostRes is a self-contained Findings entity — no cross-domain joins.
+	hostRes := resolver.NewHostResolver(
+		a.repos.Host, a.repos.Operation, a.repos.User, a.eventBus,
 	)
 	taskRes := resolver.NewTaskResolver(
 		a.repos.Task, a.repos.Operation, a.repos.User, a.repos.WikiDocument, a.repos.Credential, a.eventBus,
@@ -212,9 +217,9 @@ func (a *App) NewRouter() *gin.Engine {
 		//                       inside gqlgen; one socket multiplexes every
 		//                       active subscription on the page.
 		gqlHandler := gql.NewHandler(
-			userRes, opRes, sessRes, wikiDocRes, wikiVisitRes, credRes, hashRes, taskRes, timelineRes, apiKeyRes,
+			userRes, opRes, sessRes, wikiDocRes, wikiVisitRes, credRes, hashRes, hostRes, taskRes, timelineRes, apiKeyRes,
 			a.eventBus,
-			a.repos.User, a.repos.Operation, a.repos.Session, a.repos.WikiDocument, a.repos.Credential, a.repos.Hash, a.repos.Task,
+			a.repos.User, a.repos.Operation, a.repos.Session, a.repos.WikiDocument, a.repos.Credential, a.repos.Hash, a.repos.Host, a.repos.Task,
 			a.presenceTracker,
 			a.env.CORSAllowedOrigins,
 		)

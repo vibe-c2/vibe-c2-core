@@ -44,6 +44,7 @@ type Repositories struct {
 	WikiFile           repository.IWikiFileRepository
 	Credential         repository.ICredentialRepository
 	Hash               repository.IHashRepository
+	Host               repository.IHostRepository
 	Task               repository.ITaskRepository
 	OperationEvent     repository.IOperationEventRepository
 	APIKey             repository.IAPIKeyRepository
@@ -106,6 +107,7 @@ func NewApp() (*App, error) {
 		WikiFile:           repository.NewWikiFileRepository(db),
 		Credential:         repository.NewCredentialRepository(db),
 		Hash:               repository.NewHashRepository(db),
+		Host:               repository.NewHostRepository(db),
 		Task:               repository.NewTaskRepository(db),
 		OperationEvent:     repository.NewOperationEventRepository(db),
 		APIKey:             repository.NewAPIKeyRepository(db),

@@ -64,6 +64,13 @@ type CreateHashInput struct {
 	CredentialID *string            `json:"credentialId,omitempty"`
 }
 
+type CreateHostInput struct {
+	Hostname   string                   `json:"hostname"`
+	Interfaces []*NetworkInterfaceInput `json:"interfaces,omitempty"`
+	Routes     []*RouteInput            `json:"routes,omitempty"`
+	Os         *string                  `json:"os,omitempty"`
+}
+
 type CreateOperationInput struct {
 	Name        string  `json:"name"`
 	Description *string `json:"description,omitempty"`
@@ -148,12 +155,36 @@ type HashEvent struct {
 	Hash        *models.Hash `json:"hash,omitempty"`
 }
 
+type HostConnection struct {
+	Edges      []*HostEdge          `json:"edges"`
+	PageInfo   *pagination.PageInfo `json:"pageInfo"`
+	TotalCount int                  `json:"totalCount"`
+}
+
+type HostEdge struct {
+	Node   *models.Host `json:"node"`
+	Cursor string       `json:"cursor"`
+}
+
+type HostEvent struct {
+	Action      EventAction  `json:"action"`
+	HostID      string       `json:"hostId"`
+	OperationID string       `json:"operationId"`
+	Host        *models.Host `json:"host,omitempty"`
+}
+
 type MarkHashCrackedInput struct {
 	CredentialID  *string                `json:"credentialId,omitempty"`
 	NewCredential *CreateCredentialInput `json:"newCredential,omitempty"`
 }
 
 type Mutation struct {
+}
+
+type NetworkInterfaceInput struct {
+	Name      string   `json:"name"`
+	Mac       *string  `json:"mac,omitempty"`
+	Addresses []string `json:"addresses,omitempty"`
 }
 
 type OperationConnection struct {
@@ -187,6 +218,12 @@ type ReorderWikiDocumentSiblingsInput struct {
 	OperationID      string   `json:"operationId"`
 	ParentDocumentID *string  `json:"parentDocumentId,omitempty"`
 	OrderedIds       []string `json:"orderedIds"`
+}
+
+type RouteInput struct {
+	Destination string  `json:"destination"`
+	Gateway     *string `json:"gateway,omitempty"`
+	Interface   *string `json:"interface,omitempty"`
 }
 
 type SessionConnection struct {
@@ -279,6 +316,13 @@ type UpdateHashInput struct {
 	Comment      *string            `json:"comment,omitempty"`
 	Tags         []string           `json:"tags,omitempty"`
 	CredentialID *string            `json:"credentialId,omitempty"`
+}
+
+type UpdateHostInput struct {
+	Hostname   *string                  `json:"hostname,omitempty"`
+	Interfaces []*NetworkInterfaceInput `json:"interfaces,omitempty"`
+	Routes     []*RouteInput            `json:"routes,omitempty"`
+	Os         *string                  `json:"os,omitempty"`
 }
 
 type UpdateOperationInput struct {

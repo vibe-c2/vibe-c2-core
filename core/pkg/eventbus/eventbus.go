@@ -82,6 +82,12 @@ const (
 	TopicHashCracked      Topic = "hash.cracked"
 	TopicHashBulkImported Topic = "hash.bulk_imported"
 
+	// Host events — emitted by HostResolver. Power the real-time Hosts tab on
+	// the Findings page; subscribers refetch the full host on create/update.
+	TopicHostCreated Topic = "host.created"
+	TopicHostUpdated Topic = "host.updated"
+	TopicHostDeleted Topic = "host.deleted"
+
 	// Timeline events — emitted by pkg/events.Logger after a row has been
 	// persisted to the operation_events collection. Carries only the
 	// (event_id, operation_id) primitives so the eventbus package stays

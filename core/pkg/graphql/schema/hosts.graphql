@@ -1,0 +1,135 @@
+# =============================================================================
+# Findings — Hosts
+# =============================================================================
+#
+# Hosts are an operation-scoped record of discovered machines on a target
+# network. They carry just enough structure — interfaces (network segments) and
+# routes (pivots/gateways) — for the frontend to derive a network topology.
+#
+# Edges are never stored. The topology graph is a projection the client
+# computes: hosts sharing an interface subnet (same CIDR) sit on the same
+# segment, and a route whose gateway IP is owned by another host reveals a
+# pivot. Because edges are derived, the graph can never go stale relative to
+# its hosts.
+
+# --- Types ---
+
+# A single network interface on a host. Addresses are in CIDR form
+# ("10.0.5.12/24") — the prefix length is what lets the client cluster hosts
+# into subnets.
+type NetworkInterface {
+  name: String!
+  mac: String!
+  addresses: [String!]!
+}
+
+# A single routing-table entry. A route's gateway is the next-hop IP used to
+# reach destination; when that gateway belongs to another host it surfaces as a
+# pivot edge. Destination "0.0.0.0/0" is the default route.
+type Route {
+  destination: String!
+  gateway: String!
+  interface: String!
+}
+
+type Host {
+  id: ID!
+  operationId: ID!
+  # Full parent Operation. Used by views where a row may belong to any
+  # operation. In scoped views the operation is implicit — skip this field to
+  # avoid a DB round-trip per row.
+  operation: Operation!
+  hostname: String!
+  interfaces: [NetworkInterface!]!
+  routes: [Route!]!
+  # Free-text OS fingerprint, e.g. "Windows Server 2019". Empty string when unset.
+  os: String!
+  createdBy: User
+  createdAt: String!
+  updatedAt: String!
+}
+
+type HostEdge {
+  node: Host!
+  cursor: String!
+}
+
+type HostConnection {
+  edges: [HostEdge!]!
+  pageInfo: PageInfo!
+  totalCount: Int!
+}
+
+type HostEvent {
+  action: EventAction!
+  hostId: ID!
+  operationId: ID!
+  host: Host
+}
+
+# --- Inputs ---
+
+input NetworkInterfaceInput {
+  name: String!
+  mac: String
+  addresses: [String!]
+}
+
+input RouteInput {
+  destination: String!
+  gateway: String
+  interface: String
+}
+
+input CreateHostInput {
+  hostname: String!
+  interfaces: [NetworkInterfaceInput!]
+  routes: [RouteInput!]
+  os: String
+}
+
+# UpdateHostInput is a partial update — every field is nullable. Omit a field to
+# leave it unchanged; pass interfaces/routes to replace the whole list.
+input UpdateHostInput {
+  hostname: String
+  interfaces: [NetworkInterfaceInput!]
+  routes: [RouteInput!]
+  os: String
+}
+
+# --- Queries ---
+
+extend type Query {
+  host(id: ID!): Host!
+    @hasPermission(permission: "operation:member")
+
+  hosts(
+    operationId: ID!
+    search: String
+    first: Int = 20
+    after: String
+    last: Int
+    before: String
+  ): HostConnection!
+    @hasPermission(permission: "operation:member")
+}
+
+# --- Mutations ---
+
+extend type Mutation {
+  createHost(operationId: ID!, input: CreateHostInput!): Host!
+    @hasPermission(permission: "operation:member")
+
+  updateHost(id: ID!, input: UpdateHostInput!): Host!
+    @hasPermission(permission: "operation:member")
+
+  deleteHost(id: ID!): Boolean!
+    @hasPermission(permission: "operation:member")
+}
+
+# --- Subscriptions ---
+
+extend type Subscription {
+  hostChanged(operationId: ID!): HostEvent!
+    @hasPermission(permission: "operation:member")
+}

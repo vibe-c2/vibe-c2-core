@@ -396,6 +396,32 @@ func toHashEvent(event eventbus.Event) *model.HashEvent {
 	return evt
 }
 
+// hostTopics is the list of host event bus topics for subscriptions.
+var hostTopics = []eventbus.Topic{
+	eventbus.TopicHostCreated,
+	eventbus.TopicHostUpdated,
+	eventbus.TopicHostDeleted,
+}
+
+// toHostEvent converts an event bus Event to a GraphQL HostEvent.
+func toHostEvent(event eventbus.Event) *model.HostEvent {
+	var action model.EventAction
+	switch event.Topic {
+	case eventbus.TopicHostCreated:
+		action = model.EventActionCreated
+	case eventbus.TopicHostDeleted:
+		action = model.EventActionDeleted
+	default:
+		action = model.EventActionUpdated
+	}
+	evt := &model.HostEvent{Action: action}
+	if p, ok := event.Payload.(eventbus.HostEventPayload); ok {
+		evt.HostID = p.HostID
+		evt.OperationID = p.OperationID
+	}
+	return evt
+}
+
 // wikiDocumentTopics is the list of wiki document event bus topics for subscriptions.
 var wikiDocumentTopics = []eventbus.Topic{
 	eventbus.TopicWikiDocumentCreated,
