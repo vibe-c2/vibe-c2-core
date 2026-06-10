@@ -22,14 +22,21 @@ export interface HostFilters {
   search: string
 }
 
+// The Hosts tab renders the same data two ways: the CRUD table and a derived
+// network topology. Session-only state (defaults to table); not persisted, in
+// keeping with `partialize: () => ({})` below.
+export type HostView = "table" | "topology"
+
 interface HostStoreState {
   filters: HostFilters
   selected: HostFieldsFragment | null
+  view: HostView
 
   formDialogOpen: boolean
   deleteDialogOpen: boolean
 
   setSearch: (search: string) => void
+  setView: (view: HostView) => void
   resetFilters: () => void
 
   openCreateDialog: () => void
@@ -48,11 +55,13 @@ export const useHostStore = create<HostStoreState>()(
     (set) => ({
       filters: defaultFilters,
       selected: null,
+      view: "table",
 
       formDialogOpen: false,
       deleteDialogOpen: false,
 
       setSearch: (search) => set((s) => ({ filters: { ...s.filters, search } })),
+      setView: (view) => set({ view }),
       resetFilters: () => set({ filters: defaultFilters }),
 
       // Open actions are mutually exclusive: both dialogs render from the
