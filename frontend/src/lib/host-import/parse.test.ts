@@ -126,6 +126,45 @@ describe("parseCommandOutput — ip a", () => {
     expect(r.interfaces[1].addresses).toEqual(["192.168.50.4/24"])
   })
 
+  it("demotes name/mac highlights of an address-less (dropped) interface to skipped", () => {
+    // eth0 is DOWN with no inet line — it is not imported, so nothing on its
+    // lines may render green ("used"). eth1 has an address and stays used.
+    const r = parseCommandOutput(
+      `ip a
+2: eth0: <BROADCAST,MULTICAST> mtu 1500 qdisc noop state DOWN group default qlen 1000
+    link/ether 00:1d:c3:00:85:fe brd ff:ff:ff:ff:ff:ff
+3: eth1: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1500 qdisc mq state UP group default qlen 1000
+    link/ether 6c:b3:11:5e:ac:70 brd ff:ff:ff:ff:ff:ff
+    inet 10.1.142.65/24 brd 10.1.142.255 scope global eth1`,
+    )
+    expect(r.errorCount).toBe(0)
+    expect(r.interfaces.map((i) => i.name)).toEqual(["eth1"])
+    expect(r.usedCount).toBe(1)
+    expect(r.skippedCount).toBe(1)
+
+    const eth0Header = r.lines.find((l) => l.raw.includes("2: eth0"))!
+    const eth0Mac = r.lines.find((l) => l.raw.includes("00:1d:c3:00:85:fe"))!
+    expect(rolesOf(eth0Header)).toEqual(["skipped"])
+    expect(rolesOf(eth0Mac)).toEqual(["skipped"])
+
+    const eth1Header = r.lines.find((l) => l.raw.includes("3: eth1"))!
+    expect(textWithRole(eth1Header, "used")).toBe("eth1")
+  })
+
+  it("demotes the last interface when it is address-less (flush at end of input)", () => {
+    const r = parseCommandOutput(
+      `ip a
+2: eth0: <UP>
+    inet 10.0.5.12/24 scope global eth0
+3: eth1: <BROADCAST,MULTICAST> mtu 1500 qdisc noop state DOWN
+    link/ether 08:00:27:00:00:02 brd ff:ff:ff:ff:ff:ff`,
+    )
+    expect(r.interfaces.map((i) => i.name)).toEqual(["eth0"])
+    expect(r.skippedCount).toBe(1)
+    const eth1Header = r.lines.find((l) => l.raw.includes("3: eth1"))!
+    expect(rolesOf(eth1Header)).toEqual(["skipped"])
+  })
+
   it("errors on an address with no preceding interface header", () => {
     const r = parseCommandOutput("ip a\n    inet 10.0.5.12/24 scope global")
     expect(r.errorCount).toBe(1)

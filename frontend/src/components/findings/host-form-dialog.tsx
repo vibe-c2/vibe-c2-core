@@ -1,5 +1,4 @@
 import { type FormEvent, useState } from "react"
-import { WandSparklesIcon } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import {
   Dialog,
@@ -142,21 +141,13 @@ function HostForm({ operationId, host, onSaved }: HostFormProps) {
           </div>
         )}
         {/* Shortcut past manual entry: paste `ip a` / `ip ro` output and let
-            the importer fill the interfaces/routes editors below. */}
-        <Button
-          type="button"
-          variant="outline"
-          size="sm"
-          onClick={() => setStep("import")}
-          className="mb-4"
-        >
-          <WandSparklesIcon className="size-3.5" />
-          Paste ip a / ip ro output
-        </Button>
+            the importer fill the interfaces/routes editors below. The trigger
+            lives next to each list's "Add" button (see HostFormFields). */}
         <HostFormFields
           idPrefix={host ? "edit-host" : "create-host"}
           values={values}
           onChange={setValues}
+          onImport={() => setStep("import")}
         />
       </div>
       <DialogFooter className="mt-4">

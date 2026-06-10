@@ -202,18 +202,30 @@ function parseIpAddr(output: string[]): SubParse {
   let skippedCount = 0
 
   // The interface currently being built from successive indented lines.
+  // Whether it will be imported isn't known until the next header (or EOF):
+  // an address-less interface is dropped. Its name/mac segments are tagged
+  // "used" optimistically, so `tentative` holds those lines for demotion on
+  // drop.
   let cur: {
     iface: ParsedInterface
     loopback: boolean
+    tentative: ParsedLine[]
   } | null = null
 
   // Commit (or drop) the current interface. Anything without a usable address
-  // (loopback, or down/address-less) is excluded but counted as skipped.
+  // (loopback, or down/address-less) is excluded but counted as skipped — and
+  // its optimistically-green segments are demoted to skipped so the highlight
+  // never shows "used" on lines that won't be imported.
   const flush = () => {
     if (!cur) return
     if (!cur.loopback && cur.iface.addresses.length > 0) {
       interfaces.push(cur.iface)
     } else {
+      for (const line of cur.tentative) {
+        line.segments = line.segments.map((s) =>
+          s.role === "used" ? { ...s, role: "skipped" } : s,
+        )
+      }
       skippedCount++
     }
     cur = null
@@ -226,7 +238,7 @@ function parseIpAddr(output: string[]): SubParse {
       const name = header[3]
       const rest = raw.slice(header[0].length)
       const loopback = name === "lo" || /\bLOOPBACK\b/.test(rest)
-      cur = { iface: { name, mac: "", addresses: [] }, loopback }
+      cur = { iface: { name, mac: "", addresses: [] }, loopback, tentative: [] }
       const nameStart = raw.indexOf(name, header[1].length + header[2].length)
       const spans: Span[] = [
         {
@@ -235,7 +247,9 @@ function parseIpAddr(output: string[]): SubParse {
           role: loopback ? "skipped" : "used",
         },
       ]
-      lines.push({ raw, segments: segmentLine(raw, spans) })
+      const headerLine: ParsedLine = { raw, segments: segmentLine(raw, spans) }
+      lines.push(headerLine)
+      if (!loopback) cur.tentative.push(headerLine)
       continue
     }
 
@@ -254,7 +268,9 @@ function parseIpAddr(output: string[]): SubParse {
         },
       ]
       if (useMac && cur) cur.iface.mac = mac
-      lines.push({ raw, segments: segmentLine(raw, spans) })
+      const linkLine: ParsedLine = { raw, segments: segmentLine(raw, spans) }
+      lines.push(linkLine)
+      if (useMac && cur) cur.tentative.push(linkLine)
       continue
     }
 

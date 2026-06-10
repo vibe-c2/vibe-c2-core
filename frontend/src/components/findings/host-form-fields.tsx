@@ -1,4 +1,4 @@
-import { GripVerticalIcon, PlusIcon, XIcon } from "lucide-react"
+import { GripVerticalIcon, PlusIcon, WandSparklesIcon, XIcon } from "lucide-react"
 import {
   DndContext,
   PointerSensor,
@@ -32,6 +32,26 @@ interface HostFormFieldsProps {
   values: HostFormValues
   onChange: (next: HostFormValues) => void
   idPrefix: string
+  // Opens the "Magic" command-output importer. Surfaced next to both the
+  // "Add interface" and "Add route" buttons — same action from either list.
+  onImport: () => void
+}
+
+// Compact "paste ip a / ip ro output" trigger, placed beside each list's Add
+// button. Both copies fire the same importer.
+function MagicImportButton({ onImport }: { onImport: () => void }) {
+  return (
+    <Button
+      type="button"
+      variant="ghost"
+      size="sm"
+      onClick={onImport}
+      className="text-muted-foreground"
+    >
+      <WandSparklesIcon className="size-3.5" />
+      Magic paste
+    </Button>
+  )
 }
 
 // Shared form body for the host create/edit dialog. The two list editors are
@@ -41,6 +61,7 @@ export function HostFormFields({
   values,
   onChange,
   idPrefix,
+  onImport,
 }: HostFormFieldsProps) {
   function patch(p: Partial<HostFormValues>) {
     onChange({ ...values, ...p })
@@ -82,6 +103,7 @@ export function HostFormFields({
         <HostInterfacesEditor
           interfaces={values.interfaces}
           onChange={(interfaces) => onChange({ ...values, interfaces })}
+          onImport={onImport}
         />
       </Field>
 
@@ -90,6 +112,7 @@ export function HostFormFields({
         <HostRoutesEditor
           routes={values.routes}
           onChange={(routes) => onChange({ ...values, routes })}
+          onImport={onImport}
         />
       </Field>
     </FieldGroup>
@@ -108,9 +131,11 @@ export function HostFormFields({
 function HostInterfacesEditor({
   interfaces,
   onChange,
+  onImport,
 }: {
   interfaces: InterfaceDraft[]
   onChange: (next: InterfaceDraft[]) => void
+  onImport: () => void
 }) {
   // 8px activation distance so a plain click into an input field isn't
   // swallowed as the start of a drag (same guard the kanban board uses).
@@ -170,16 +195,13 @@ function HostInterfacesEditor({
           ))}
         </SortableContext>
       </DndContext>
-      <Button
-        type="button"
-        variant="outline"
-        size="sm"
-        onClick={add}
-        className="self-start"
-      >
-        <PlusIcon className="size-3.5" />
-        Add interface
-      </Button>
+      <div className="flex flex-wrap items-center gap-2">
+        <Button type="button" variant="outline" size="sm" onClick={add}>
+          <PlusIcon className="size-3.5" />
+          Add interface
+        </Button>
+        <MagicImportButton onImport={onImport} />
+      </div>
     </div>
   )
 }
@@ -285,9 +307,11 @@ function SortableInterfaceRow({
 function HostRoutesEditor({
   routes,
   onChange,
+  onImport,
 }: {
   routes: RouteDraft[]
   onChange: (next: RouteDraft[]) => void
+  onImport: () => void
 }) {
   function update(id: string, patch: Partial<Omit<RouteDraft, "_id">>) {
     onChange(routes.map((r) => (r._id === id ? { ...r, ...patch } : r)))
@@ -372,16 +396,13 @@ function HostRoutesEditor({
           </div>
         )
       })}
-      <Button
-        type="button"
-        variant="outline"
-        size="sm"
-        onClick={add}
-        className="self-start"
-      >
-        <PlusIcon className="size-3.5" />
-        Add route
-      </Button>
+      <div className="flex flex-wrap items-center gap-2">
+        <Button type="button" variant="outline" size="sm" onClick={add}>
+          <PlusIcon className="size-3.5" />
+          Add route
+        </Button>
+        <MagicImportButton onImport={onImport} />
+      </div>
     </div>
   )
 }
