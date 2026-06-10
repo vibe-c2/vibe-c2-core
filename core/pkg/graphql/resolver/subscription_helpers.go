@@ -216,6 +216,8 @@ func extractOperationID(event eventbus.Event) string {
 		return p.OperationID
 	case eventbus.HashBulkImportPayload:
 		return p.OperationID
+	case eventbus.HostEventPayload:
+		return p.OperationID
 	case eventbus.TaskEventPayload:
 		return p.OperationID
 	case eventbus.OperationEventLoggedPayload:
