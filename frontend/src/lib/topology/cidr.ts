@@ -15,6 +15,17 @@ export function isValidCidr(value: string): boolean {
   }
 }
 
+// True if `value` is a bare IPv4/IPv6 address (no prefix). Used to validate
+// route gateways pasted from `ip ro` output before they reach the form.
+export function isValidIp(value: string): boolean {
+  try {
+    ipaddr.parse(value.trim())
+    return true
+  } catch {
+    return false
+  }
+}
+
 // Normalizes a CIDR to its canonical network identity:
 //   "10.0.5.12/24" -> "10.0.5.0/24"
 // This string is the subnet node's stable id, so every host on a segment

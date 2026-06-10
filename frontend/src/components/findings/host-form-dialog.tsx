@@ -1,4 +1,5 @@
 import { type FormEvent, useState } from "react"
+import { WandSparklesIcon } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import {
   Dialog,
@@ -11,6 +12,7 @@ import {
 import { useHostStore } from "@/stores/hosts"
 import { useCreateHost, useUpdateHost } from "@/graphql/hooks/hosts"
 import { HostFormFields } from "@/components/findings/host-form-fields"
+import { HostImportStep } from "@/components/findings/host-import-step"
 import {
   emptyHostFormValues,
   hostFormValuesFromWire,
@@ -75,8 +77,25 @@ function HostForm({ operationId, host, onSaved }: HostFormProps) {
     host ? hostFormValuesFromWire(host) : emptyHostFormValues(),
   )
   const [error, setError] = useState<string | null>(null)
+  // Two sub-views share one set of form values: the normal field editor and the
+  // "Magic" command-output importer. The importer only patches `values` (one
+  // category at a time) and hands control back; saving always happens from the
+  // form view.
+  const [step, setStep] = useState<"form" | "import">("form")
 
   const isPending = createHost.isPending || updateHost.isPending
+
+  if (step === "import") {
+    return (
+      <HostImportStep
+        onBack={() => setStep("form")}
+        onApply={(patch) => {
+          setValues((v) => ({ ...v, ...patch }))
+          setStep("form")
+        }}
+      />
+    )
+  }
 
   async function handleSubmit(e: FormEvent<HTMLFormElement>) {
     e.preventDefault()
@@ -122,6 +141,18 @@ function HostForm({ operationId, host, onSaved }: HostFormProps) {
             {error}
           </div>
         )}
+        {/* Shortcut past manual entry: paste `ip a` / `ip ro` output and let
+            the importer fill the interfaces/routes editors below. */}
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          onClick={() => setStep("import")}
+          className="mb-4"
+        >
+          <WandSparklesIcon className="size-3.5" />
+          Paste ip a / ip ro output
+        </Button>
         <HostFormFields
           idPrefix={host ? "edit-host" : "create-host"}
           values={values}
