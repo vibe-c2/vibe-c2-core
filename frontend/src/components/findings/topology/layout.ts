@@ -11,6 +11,7 @@ import {
 } from "d3-force"
 import { MarkerType, type Edge, type Node } from "@xyflow/react"
 import type { TopoEdge, TopoNode, Topology } from "@/lib/topology/derive"
+import { seedRadial } from "@/lib/topology/seed"
 
 // Maps the framework-free topology model onto React Flow nodes/edges and lays
 // it out. Subnet-as-node design: subnets are compact hub pills, hosts are
@@ -28,8 +29,10 @@ import type { TopoEdge, TopoNode, Topology } from "@/lib/topology/derive"
 // to a fixed tick count, so the first paint is already a finished map — but
 // the simulation instance is returned alive (paused, alpha cooled) so the view
 // can re-heat it on drag for Obsidian-style live physics (see use-simulation).
-// d3-force is deterministic for a given node order (phyllotaxis seeding, LCG
-// jiggle), so the map doesn't reshuffle between reloads of the same data.
+// Initial positions come from radial BFS seeding (see lib/topology/seed.ts),
+// not d3's phyllotaxis spiral, so the settle starts from an already-untangled
+// shape. Everything is deterministic for a given node order — the map doesn't
+// reshuffle between reloads of the same data.
 
 const HOST_W = 180
 const HOST_H = 64
@@ -54,7 +57,20 @@ const LEAF_MIN_W = 170
 const LEAF_ROW_H = 18.5 // 11px row + gap-0.5
 const LEAF_FRAME_H = 40 // py-2 + border + header row
 
-const SIMULATION_TICKS = 300
+// The settle runs in two phases. Collision is the classic force-layout trap:
+// uncrossing two arms of the graph requires nodes to pass THROUGH each other,
+// and forceCollide forbids exactly that move — enabled from tick 1 it freezes
+// early crossings into the cooled layout (a local minimum no amount of extra
+// ticks escapes, since per-tick displacement scales with the decaying alpha).
+// So phase 1 settles topology with links/charge only, letting the graph
+// unwind freely; phase 2 re-heats moderately, adds collision, and pushes the
+// remaining overlaps apart without disturbing the untangled shape.
+const UNTANGLE_TICKS = 150
+const POLISH_TICKS = 150
+// Deliberately the same value as the drag re-heat's alphaTarget in
+// use-simulation: phase 2 and a drag inject the same amount of energy, so
+// grabbing a node never perturbs the map more than the settle itself did.
+const POLISH_ALPHA = 0.3
 const LINK_SLACK = 60 // breathing room added to every link beyond node radii
 const CHARGE_STRENGTH = -1200
 const COLLIDE_PADDING = 16
@@ -216,6 +232,19 @@ export function layoutTopology(topology: Topology): TopologyLayout {
     .filter((e) => e.source !== e.target)
     .map((e) => ({ source: e.source, target: e.target }))
 
+  // Pre-set positions so the simulation starts from an untangled radial shape
+  // instead of d3's input-order spiral (forceSimulation only auto-places
+  // nodes whose x/y are unset). The settle below then relaxes distances
+  // rather than untangling topology.
+  const seeded = seedRadial(simNodes, topoEdges)
+  for (const sim of simNodes) {
+    const p = seeded.get(sim.id)
+    if (p) {
+      sim.x = p.x
+      sim.y = p.y
+    }
+  }
+
   // Stopped immediately so d3's internal timer never runs on its own; the
   // synchronous ticks settle the layout for the first paint. The instance is
   // returned (not discarded) so drag interactions can re-heat it later.
@@ -231,15 +260,26 @@ export function layoutTopology(topology: Topology): TopologyLayout {
         }),
     )
     .force("charge", forceManyBody().strength(CHARGE_STRENGTH))
-    .force(
-      "collide",
-      forceCollide<SimNode>().radius((d) => d.r + COLLIDE_PADDING),
-    )
     .force("x", forceX(0).strength(CENTERING_STRENGTH))
     .force("y", forceY(0).strength(CENTERING_STRENGTH))
     .stop()
 
-  simulation.tick(SIMULATION_TICKS)
+  // Phase 1: untangle (no collision — see the tick constants above).
+  simulation.tick(UNTANGLE_TICKS)
+
+  // Phase 2: polish. Collision joins permanently, so drag physics keep it
+  // too; attaching a force to a live simulation initializes it with the
+  // current nodes (documented d3 behavior). alpha() only resets the cooling
+  // variable that the synchronous tick() loop reads — the internal timer
+  // stays stopped, so no restart() here: that would start async ticking and
+  // race the first paint.
+  simulation
+    .force(
+      "collide",
+      forceCollide<SimNode>().radius((d) => d.r + COLLIDE_PADDING),
+    )
+    .alpha(POLISH_ALPHA)
+  simulation.tick(POLISH_TICKS)
 
   const nodeType: Record<TopoNode["kind"], string> = {
     host: "host",
