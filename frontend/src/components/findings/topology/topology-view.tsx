@@ -67,11 +67,23 @@ interface TopologyViewProps {
 
 const lenses: Record<TopologyRelation, (t: Topology) => Topology> = {
   // Host cards + route-derived elements (pivots, unknown gateways, unexplored
-  // subnets). Subnet hubs and their interface edges are stripped.
+  // subnets). An allowlist, not a denylist: every other relation's nodes/edges
+  // (subnet hubs, identities, login edges) are excluded, so a new node kind
+  // can't silently leak into this lens the way identities once did.
   routes: (t) => ({
     ...t,
-    nodes: t.nodes.filter((n) => n.kind !== "subnet"),
-    edges: t.edges.filter((e) => e.kind !== "membership"),
+    nodes: t.nodes.filter(
+      (n) =>
+        n.kind === "host" ||
+        n.kind === "phantom-gateway" ||
+        n.kind === "phantom-subnet",
+    ),
+    edges: t.edges.filter(
+      (e) =>
+        e.kind === "pivot" ||
+        e.kind === "pivot-unknown" ||
+        e.kind === "reaches",
+    ),
   }),
   // Host cards + subnet hubs + interface edges. Route-derived elements are
   // stripped — phantom gateways/subnets only exist because of routes, so
