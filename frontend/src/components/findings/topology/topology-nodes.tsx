@@ -54,7 +54,7 @@ export function HostNode({ data }: NodeProps<Node<HostNodeData>>) {
   const ips = [...new Set(host.interfaces.flatMap((i) => i.addresses))]
 
   return (
-    <div className="flex w-[180px] cursor-pointer flex-col gap-1 rounded-md border bg-card px-3 py-2 shadow-sm transition-colors hover:border-primary/60 hover:bg-muted/50">
+    <div className="flex w-[180px] cursor-pointer flex-col gap-1 rounded-md border bg-card px-3 py-2 shadow-sm transition-colors hover:border-primary/60 hover:bg-muted">
       <Anchors />
       <div className="flex items-center gap-1.5">
         <ServerIcon className="size-3.5 shrink-0 text-muted-foreground" />
