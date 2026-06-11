@@ -24,6 +24,7 @@ export type PhantomSubnetNodeData = { cidr: string }
 export type LeafSubnetsNodeData = { entries: LeafSubnetEntry[] }
 export type IdentityNodeData = { user: string; wellKnown: boolean }
 export type PhantomHostNodeData = { label: string }
+export type LoneSourcesNodeData = { labels: string[] }
 
 function Anchors() {
   return (
@@ -190,6 +191,37 @@ export function PhantomHostNode({ data }: NodeProps<Node<PhantomHostNodeData>>) 
       <span className="truncate font-mono text-xs" title={data.label}>
         {data.label}
       </span>
+    </div>
+  )
+}
+
+// An identity's lone ghost sources (each seen only for this one account)
+// folded into one list node — the users-lens analog of LeafSubnetsNode. Muted
+// grey and dashed to match the single phantom-host pills it replaces. Width is
+// pinned by the layout; height is natural so rows are never clipped.
+export function LoneSourcesNode({ data }: NodeProps<Node<LoneSourcesNodeData>>) {
+  const { labels } = data
+  const shown = labels.slice(0, LEAF_SUBNET_MAX_ROWS)
+  const hidden = labels.length - shown.length
+
+  return (
+    <div
+      className="flex w-full flex-col gap-0.5 rounded-md border border-dashed border-muted-foreground/40 bg-muted/30 px-3 py-2 text-muted-foreground"
+      title={labels.join("\n")}
+    >
+      <Anchors />
+      <div className="flex items-center gap-1.5">
+        <MonitorIcon className="size-3.5 shrink-0" />
+        <span className="text-[11px] font-medium">
+          {labels.length} unknown sources
+        </span>
+      </div>
+      {shown.map((label) => (
+        <span key={label} className="truncate font-mono text-[11px]">
+          {label}
+        </span>
+      ))}
+      {hidden > 0 && <span className="text-[11px]">+{hidden} more</span>}
     </div>
   )
 }

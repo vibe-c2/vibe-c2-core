@@ -86,3 +86,74 @@ export function collapseLeafSubnets(t: Topology): Topology {
 
   return { ...t, nodes, edges }
 }
+
+// Lone-source aggregation — the users-lens analog of collapseLeafSubnets.
+// Motivating case: an identity logged in from a dozen unknown machines, each
+// seen only for that one account. As-is the lens renders a dozen ghost-host
+// pills fanning off one identity — pure noise. A phantom host tied to exactly
+// one identity links nothing to anything, so all such lone sources of an
+// identity collapse into a single "lone-sources" list node hanging off it.
+// Real hosts and phantom hosts that feed two or more identities stay as nodes
+// (those genuinely relate accounts) and are never touched.
+//
+// Same Topology → Topology contract as collapseLeafSubnets: pure, stats pass
+// through, deterministic for a given input order.
+
+// A single lone source stays a normal pill — merging one into one saves nothing.
+export const MIN_LONE_SOURCES = 2
+
+const loneSourcesNodeId = (identityId: string) => `sources:${identityId}`
+
+export function collapsePhantomHosts(t: Topology): Topology {
+  // Edge degree of each phantom host. Exactly one logged-from edge means it
+  // points at exactly one identity (phantom hosts have no other edge kind).
+  const phantomLabel = new Map<string, string>()
+  for (const n of t.nodes) {
+    if (n.kind === "phantom-host") phantomLabel.set(n.id, n.label)
+  }
+  const degree = new Map<string, number>()
+  for (const e of t.edges) {
+    if (e.kind !== "logged-from" || !phantomLabel.has(e.source)) continue
+    degree.set(e.source, (degree.get(e.source) ?? 0) + 1)
+  }
+
+  // Lone phantom sources grouped by the one identity they feed. Built in edge
+  // order (which follows node/derivation order) for a deterministic result.
+  const loneByIdentity = new Map<string, string[]>() // identityId -> phantom ids
+  for (const e of t.edges) {
+    if (e.kind !== "logged-from" || !phantomLabel.has(e.source)) continue
+    if (degree.get(e.source) !== 1) continue
+    const ids = loneByIdentity.get(e.target) ?? []
+    ids.push(e.source)
+    loneByIdentity.set(e.target, ids)
+  }
+
+  const collapsible = new Map<string, string[]>()
+  const collapsed = new Set<string>()
+  for (const [identityId, ids] of loneByIdentity) {
+    if (ids.length < MIN_LONE_SOURCES) continue
+    collapsible.set(identityId, ids)
+    for (const id of ids) collapsed.add(id)
+  }
+  if (collapsed.size === 0) return t
+
+  const nodes: TopoNode[] = t.nodes.filter((n) => !collapsed.has(n.id))
+  const edges: TopoEdge[] = t.edges.filter(
+    (e) => !(e.kind === "logged-from" && collapsed.has(e.source)),
+  )
+
+  for (const [identityId, ids] of collapsible) {
+    const labels = ids.map((id) => phantomLabel.get(id) ?? "")
+    labels.sort((a, b) => a.localeCompare(b, undefined, { numeric: true }))
+    const id = loneSourcesNodeId(identityId)
+    nodes.push({ kind: "lone-sources", id, identityId, labels })
+    edges.push({
+      kind: "logged-from-group",
+      id: `lfg:${identityId}`,
+      source: id,
+      target: identityId,
+    })
+  }
+
+  return { ...t, nodes, edges }
+}

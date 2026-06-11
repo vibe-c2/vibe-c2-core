@@ -37,5 +37,7 @@ function haystack(n: TopoNode): string[] {
       return [n.user]
     case "phantom-host":
       return [n.label]
+    case "lone-sources":
+      return n.labels
   }
 }

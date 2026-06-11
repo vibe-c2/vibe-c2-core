@@ -1,6 +1,9 @@
 import { describe, expect, it } from "vitest"
 import type { HostFieldsFragment } from "@/graphql/gql/graphql"
-import { collapseLeafSubnets } from "@/lib/topology/aggregate"
+import {
+  collapseLeafSubnets,
+  collapsePhantomHosts,
+} from "@/lib/topology/aggregate"
 import { deriveTopology, type TopoEdge, type TopoNode } from "@/lib/topology/derive"
 
 // --- builders (mirrors derive.test.ts) ----------------------------------------
@@ -179,5 +182,122 @@ describe("collapseLeafSubnets", () => {
       host("b", "bravo", [{ addresses: ["10.0.5.11/24"] }]),
     ])
     expect(collapseLeafSubnets(raw)).toBe(raw)
+  })
+})
+
+// --- collapsePhantomHosts ------------------------------------------------------
+
+// Host carrying login footprints, for building identity-layer fixtures.
+function loginHost(
+  id: string,
+  hostname: string,
+  ip: string,
+  logins: { user: string; from?: string }[],
+): HostFieldsFragment {
+  return {
+    id,
+    operationId: "op1",
+    hostname,
+    os: "",
+    createdAt: "2026-01-01T00:00:00Z",
+    updatedAt: "2026-01-01T00:00:00Z",
+    createdBy: null,
+    interfaces: [{ name: "eth0", mac: "", addresses: [ip] }],
+    routes: [],
+    logins: logins.map((l) => ({
+      user: l.user,
+      from: l.from ?? "",
+      tty: "",
+      lastSeen: "",
+      count: 1,
+    })),
+  }
+}
+
+describe("collapsePhantomHosts", () => {
+  it("folds an identity's many lone unknown sources into one node", () => {
+    // alice logged in from five unmapped machines, each seen only for alice.
+    const froms = ["10.9.0.1", "10.9.0.2", "10.9.0.3", "10.9.0.4", "10.9.0.5"]
+    const t = collapsePhantomHosts(
+      deriveTopology([
+        loginHost("h1", "target", "10.0.0.1/24", froms.map((from) => ({ user: "alice", from }))),
+      ]),
+    )
+    expect(byKind(t.nodes, "phantom-host")).toHaveLength(0)
+    const lone = byKind(t.nodes, "lone-sources")
+    expect(lone).toHaveLength(1)
+    expect(lone[0].labels).toHaveLength(5)
+    expect(lone[0].labels).toContain("10.9.0.3")
+    // One group edge replaces the five logged-from edges; it feeds the identity.
+    expect(edgesOf(t.edges, "logged-from")).toHaveLength(0)
+    const grouped = edgesOf(t.edges, "logged-from-group")
+    expect(grouped).toHaveLength(1)
+    expect(grouped[0].source).toBe(lone[0].id)
+    expect(grouped[0].target).toBe(lone[0].identityId)
+  })
+
+  it("leaves a single lone source as a normal phantom host", () => {
+    const t = collapsePhantomHosts(
+      deriveTopology([
+        loginHost("h1", "target", "10.0.0.1/24", [{ user: "alice", from: "10.9.0.1" }]),
+      ]),
+    )
+    expect(byKind(t.nodes, "lone-sources")).toHaveLength(0)
+    expect(byKind(t.nodes, "phantom-host")).toHaveLength(1)
+  })
+
+  it("never collapses a source that feeds two identities", () => {
+    // 10.9.0.1 is the origin for BOTH alice and bob — it relates the two
+    // accounts, so it stays a node even though each tie is otherwise lone.
+    const t = collapsePhantomHosts(
+      deriveTopology([
+        loginHost("h1", "target", "10.0.0.1/24", [
+          { user: "alice", from: "10.9.0.1" },
+          { user: "bob", from: "10.9.0.1" },
+        ]),
+      ]),
+    )
+    expect(byKind(t.nodes, "lone-sources")).toHaveLength(0)
+    expect(byKind(t.nodes, "phantom-host")).toHaveLength(1)
+    expect(edgesOf(t.edges, "logged-from")).toHaveLength(2)
+  })
+
+  it("never collapses a known host used as a source", () => {
+    // jumpbox is a real enumerated host, not a phantom — leave it alone even
+    // when it's the lone source for one account.
+    const t = collapsePhantomHosts(
+      deriveTopology([
+        loginHost("h1", "jumpbox", "10.0.0.1/24", []),
+        loginHost("h2", "target", "10.0.0.2/24", [
+          { user: "alice", from: "10.0.0.1" },
+          { user: "alice", from: "10.0.0.1" },
+        ]),
+      ]),
+    )
+    expect(byKind(t.nodes, "lone-sources")).toHaveLength(0)
+    expect(byKind(t.nodes, "phantom-host")).toHaveLength(0)
+  })
+
+  it("collapses independently per identity", () => {
+    const t = collapsePhantomHosts(
+      deriveTopology([
+        loginHost("h1", "target", "10.0.0.1/24", [
+          { user: "alice", from: "10.9.0.1" },
+          { user: "alice", from: "10.9.0.2" },
+          { user: "bob", from: "10.9.1.1" },
+          { user: "bob", from: "10.9.1.2" },
+        ]),
+      ]),
+    )
+    const lone = byKind(t.nodes, "lone-sources")
+    expect(lone).toHaveLength(2)
+    expect(lone.every((n) => n.labels.length === 2)).toBe(true)
+  })
+
+  it("returns the topology unchanged when nothing collapses", () => {
+    const t = deriveTopology([
+      loginHost("h1", "target", "10.0.0.1/24", [{ user: "alice", from: "10.9.0.1" }]),
+    ])
+    expect(collapsePhantomHosts(t)).toBe(t)
   })
 })

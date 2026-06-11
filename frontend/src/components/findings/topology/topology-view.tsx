@@ -16,7 +16,10 @@ import {
   type Topology,
   type TopologyStats,
 } from "@/lib/topology/derive"
-import { collapseLeafSubnets } from "@/lib/topology/aggregate"
+import {
+  collapseLeafSubnets,
+  collapsePhantomHosts,
+} from "@/lib/topology/aggregate"
 import { Button } from "@/components/ui/button"
 import { Skeleton } from "@/components/ui/skeleton"
 import { FloatingEdge } from "@/components/findings/topology/floating-edge"
@@ -27,6 +30,7 @@ import {
   HostNode,
   IdentityNode,
   LeafSubnetsNode,
+  LoneSourcesNode,
   PhantomGatewayNode,
   PhantomHostNode,
   PhantomSubnetNode,
@@ -44,6 +48,7 @@ const nodeTypes = {
   phantomGateway: PhantomGatewayNode,
   phantomSubnet: PhantomSubnetNode,
   leafSubnets: LeafSubnetsNode,
+  loneSources: LoneSourcesNode,
   identity: IdentityNode,
   phantomHost: PhantomHostNode,
 }
@@ -152,9 +157,11 @@ export function TopologyView({ operationId }: TopologyViewProps) {
   )
   const visibleTopology = useMemo(() => {
     const lensed = lenses[relation](topology)
-    return relation === "identities" && hideWellKnown
-      ? withoutWellKnownIdentities(lensed)
-      : lensed
+    if (relation !== "identities") return lensed
+    // Hide common accounts first (it can strip a ghost source's only other
+    // edge), THEN collapse the lone sources so the count reflects what's left.
+    const filtered = hideWellKnown ? withoutWellKnownIdentities(lensed) : lensed
+    return collapsePhantomHosts(filtered)
   }, [topology, relation, hideWellKnown])
 
   // Live force-directed layout: pre-settled for first paint, re-heated while

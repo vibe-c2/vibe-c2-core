@@ -79,6 +79,10 @@ export type TopoNode =
   // Produced only by collapseLeafSubnets (aggregate.ts), never by the raw
   // derivation: a host's single-member subnets folded into one list node.
   | { kind: "leaf-subnets"; id: string; hostId: string; entries: LeafSubnetEntry[] }
+  // Produced only by collapsePhantomHosts (aggregate.ts): an identity's lone
+  // ghost sources (each tied only to that one identity) folded into one list
+  // node — the users-lens analog of leaf-subnets.
+  | { kind: "lone-sources"; id: string; identityId: string; labels: string[] }
 
 // All edges carry source/target node ids so the layout maps them onto React
 // Flow edges with no translation.
@@ -136,6 +140,15 @@ export type TopoEdge =
       kind: "logged-from"
       id: string
       source: string // host id or phantom-host id
+      target: string // identity id
+    }
+  | {
+      // Produced only by collapsePhantomHosts: replaces the per-source
+      // logged-from edges of an identity's lone ghost sources. Source is the
+      // merged lone-sources node, target the identity it feeds.
+      kind: "logged-from-group"
+      id: string
+      source: string // lone-sources node id
       target: string // identity id
     }
 
