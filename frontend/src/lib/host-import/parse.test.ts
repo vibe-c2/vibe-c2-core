@@ -170,6 +170,62 @@ describe("parseCommandOutput — ip a", () => {
     expect(r.errorCount).toBe(1)
     expect(r.interfaces).toHaveLength(0)
   })
+
+  it("drops host-local virtual interfaces (docker0, br-*, virbr0, cni0) by name", () => {
+    // Docker host: real eth0 plus docker0 and a custom bridge — both 172.x
+    // ranges that collide across hosts and must not become subnet nodes.
+    const r = parseCommandOutput(
+      `ip a
+2: eth0: <UP>
+    link/ether 08:00:27:00:00:01 brd ff:ff:ff:ff:ff:ff
+    inet 10.0.5.12/24 scope global eth0
+3: docker0: <NO-CARRIER,BROADCAST,MULTICAST,UP>
+    link/ether 02:42:9b:1a:2c:3d brd ff:ff:ff:ff:ff:ff
+    inet 172.17.0.1/16 brd 172.17.255.255 scope global docker0
+4: br-1a2b3c4d5e6f: <UP>
+    link/ether 02:42:aa:bb:cc:dd brd ff:ff:ff:ff:ff:ff
+    inet 172.18.0.1/16 scope global br-1a2b3c4d5e6f
+5: virbr0: <UP>
+    link/ether 52:54:00:11:22:33 brd ff:ff:ff:ff:ff:ff
+    inet 192.168.122.1/24 scope global virbr0`,
+    )
+    expect(r.errorCount).toBe(0)
+    expect(r.interfaces.map((i) => i.name)).toEqual(["eth0"])
+    expect(r.usedCount).toBe(1)
+    expect(r.skippedCount).toBe(3)
+
+    // The docker0 address line never renders green.
+    const docker0Addr = r.lines.find((l) => l.raw.includes("172.17.0.1/16"))!
+    expect(rolesOf(docker0Addr)).toEqual(["skipped"])
+  })
+
+  it("drops a virtual interface caught only by its 02:42 MAC OUI", () => {
+    // Name doesn't match the list, but the locally-administered Docker OUI does.
+    const r = parseCommandOutput(
+      `ip a
+2: myveth42: <UP>
+    link/ether 02:42:de:ad:be:ef brd ff:ff:ff:ff:ff:ff
+    inet 172.20.0.1/16 scope global myveth42`,
+    )
+    expect(r.errorCount).toBe(0)
+    expect(r.interfaces).toHaveLength(0)
+    expect(r.skippedCount).toBe(1)
+
+    const header = r.lines.find((l) => l.raw.includes("2: myveth42"))!
+    expect(rolesOf(header)).toEqual(["skipped"])
+  })
+
+  it("keeps a real bridge named brN that isn't a Docker br-<hex> bridge", () => {
+    // A legitimate host bridge (br0) with a normal MAC stays imported — only
+    // Docker's br-<12 hex> form and the 02:42 OUI are treated as virtual.
+    const r = parseCommandOutput(
+      `ip a
+2: br0: <UP>
+    link/ether 08:00:27:ab:cd:ef brd ff:ff:ff:ff:ff:ff
+    inet 10.10.0.1/24 scope global br0`,
+    )
+    expect(r.interfaces.map((i) => i.name)).toEqual(["br0"])
+  })
 })
 
 describe("parseCommandOutput — ip ro", () => {

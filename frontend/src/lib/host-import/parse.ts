@@ -165,6 +165,26 @@ function emptyResult(lines: ParsedLine[]): ParseResult {
   }
 }
 
+// Host-local virtual interfaces: Docker bridges/veth pairs, libvirt/KVM
+// bridges, and k8s CNI interfaces. Their addresses are host-local and collide
+// across hosts (every Docker host's docker0 is 172.17.0.0/16), so importing
+// them as subnets merges unrelated hosts into one fake network. Recognized but
+// never imported — shown as skipped, like loopback.
+const VIRTUAL_IFACE_NAME_RE =
+  /^(?:docker|br-[0-9a-f]{12}|veth|virbr|cni\d*|cali|flannel|cbr\d+|tunl\d+|kube-ipvs|nodelocaldns)/i
+
+// Docker assigns this locally-administered OUI to its bridge/veth interfaces —
+// a backstop for virtual interfaces whose names don't match the list above.
+const VIRTUAL_MAC_PREFIX = "02:42:"
+
+function isVirtualInterfaceName(name: string): boolean {
+  return VIRTUAL_IFACE_NAME_RE.test(name)
+}
+
+function isVirtualMac(mac: string): boolean {
+  return mac.toLowerCase().startsWith(VIRTUAL_MAC_PREFIX)
+}
+
 // Loopback (127/8, ::1) and link-local (fe80::/10, 169.254/16) addresses are
 // recognized but never useful for topology — treated as skipped, not imported.
 function isNoiseAddress(cidrOrIp: string): boolean {
@@ -205,27 +225,33 @@ function parseIpAddr(output: string[]): SubParse {
   // Whether it will be imported isn't known until the next header (or EOF):
   // an address-less interface is dropped. Its name/mac segments are tagged
   // "used" optimistically, so `tentative` holds those lines for demotion on
-  // drop.
+  // drop. `excluded` covers loopback and host-local virtual interfaces (Docker,
+  // libvirt, k8s CNI) — both recognized but never imported.
   let cur: {
     iface: ParsedInterface
-    loopback: boolean
+    excluded: boolean
     tentative: ParsedLine[]
   } | null = null
 
-  // Commit (or drop) the current interface. Anything without a usable address
-  // (loopback, or down/address-less) is excluded but counted as skipped — and
-  // its optimistically-green segments are demoted to skipped so the highlight
-  // never shows "used" on lines that won't be imported.
+  // Demote optimistic "used" highlights back to skipped, so the rendered
+  // segments never show green on lines that won't be imported.
+  const demote = (toDemote: ParsedLine[]) => {
+    for (const line of toDemote) {
+      line.segments = line.segments.map((s) =>
+        s.role === "used" ? { ...s, role: "skipped" } : s,
+      )
+    }
+  }
+
+  // Commit (or drop) the current interface. Anything excluded (loopback,
+  // virtual) or without a usable address (down/address-less) is dropped but
+  // counted as skipped, and its tentative lines are demoted.
   const flush = () => {
     if (!cur) return
-    if (!cur.loopback && cur.iface.addresses.length > 0) {
+    if (!cur.excluded && cur.iface.addresses.length > 0) {
       interfaces.push(cur.iface)
     } else {
-      for (const line of cur.tentative) {
-        line.segments = line.segments.map((s) =>
-          s.role === "used" ? { ...s, role: "skipped" } : s,
-        )
-      }
+      demote(cur.tentative)
       skippedCount++
     }
     cur = null
@@ -237,19 +263,22 @@ function parseIpAddr(output: string[]): SubParse {
       flush()
       const name = header[3]
       const rest = raw.slice(header[0].length)
-      const loopback = name === "lo" || /\bLOOPBACK\b/.test(rest)
-      cur = { iface: { name, mac: "", addresses: [] }, loopback, tentative: [] }
+      const excluded =
+        name === "lo" ||
+        /\bLOOPBACK\b/.test(rest) ||
+        isVirtualInterfaceName(name)
+      cur = { iface: { name, mac: "", addresses: [] }, excluded, tentative: [] }
       const nameStart = raw.indexOf(name, header[1].length + header[2].length)
       const spans: Span[] = [
         {
           start: nameStart,
           end: nameStart + name.length,
-          role: loopback ? "skipped" : "used",
+          role: excluded ? "skipped" : "used",
         },
       ]
       const headerLine: ParsedLine = { raw, segments: segmentLine(raw, spans) }
       lines.push(headerLine)
-      if (!loopback) cur.tentative.push(headerLine)
+      if (!excluded) cur.tentative.push(headerLine)
       continue
     }
 
@@ -257,8 +286,15 @@ function parseIpAddr(output: string[]): SubParse {
     if (link) {
       const kind = link[2]
       const mac = link[3]
+      // MAC OUI backstop: a Docker bridge/veth interface whose name didn't
+      // match the list is caught here. Demote the header pushed optimistically.
+      if (cur && !cur.excluded && isVirtualMac(mac)) {
+        cur.excluded = true
+        demote(cur.tentative)
+        cur.tentative = []
+      }
       // link/loopback addresses are all-zero placeholders — never used.
-      const useMac = kind === "ether" && cur != null && !cur.loopback
+      const useMac = kind === "ether" && cur != null && !cur.excluded
       const macStart = raw.indexOf(mac, link[1].length + ("link/".length + kind.length))
       const spans: Span[] = [
         {
@@ -298,7 +334,7 @@ function parseIpAddr(output: string[]): SubParse {
         errorCount++
         continue
       }
-      if (cur.loopback || isNoiseAddress(addr)) {
+      if (cur.excluded || isNoiseAddress(addr)) {
         lines.push({ raw, segments: segmentLine(raw, [{ ...addrSpan, role: "skipped" }]) })
         continue
       }
