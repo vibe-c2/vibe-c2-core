@@ -7,8 +7,10 @@ import type { TopologySearchState } from "@/components/findings/topology/use-emp
 // match ids, active index) so search composes with the other emphasis
 // sources; this component owns the input UX and the viewport flying.
 //
-// Keyboard: "/" focuses the input from anywhere on the page, Enter / ↓ and
-// Shift+Enter / ↑ cycle matches, Esc clears and returns to the canvas.
+// Keyboard: "/" focuses the input from anywhere on the page, ↑ / ↓ cycle
+// matches (up = next, down = back — directional, matching the canvas), Enter
+// *selects* the active match (focuses it like a click and leaves search), Esc
+// clears and returns to the canvas. ←/→ are left alone for editing the query.
 // Rendered as a React Flow <Panel> so typing and text-selection drags never
 // pan/zoom the canvas underneath.
 
@@ -18,13 +20,20 @@ const FLY_DURATION_MS = 400
 // sub-pixel node — lift to at least a readable zoom.
 const FLY_MIN_ZOOM = 0.9
 
+interface TopologySearchProps extends TopologySearchState {
+  // Commit the active match: focus it (same as clicking the node) and leave
+  // search. The view owns focus, so it passes the toggle down.
+  onSelect: (nodeId: string) => void
+}
+
 export function TopologySearch({
   query,
   onQueryChange,
   matchIds,
   activeIndex,
   onActiveIndexChange,
-}: TopologySearchState) {
+  onSelect,
+}: TopologySearchProps) {
   const inputRef = useRef<HTMLInputElement>(null)
   const { getNode, setCenter, getZoom } = useReactFlow()
 
@@ -93,17 +102,25 @@ export function TopologySearch({
   const onInputKeyDown = (event: React.KeyboardEvent<HTMLInputElement>) => {
     if (event.key === "Enter") {
       event.preventDefault()
-      cycle(event.shiftKey ? -1 : 1)
-    } else if (event.key === "ArrowDown") {
-      event.preventDefault()
-      cycle(1)
+      // Commit: focus the active match and step out of search. onSelect clears
+      // the query (focus and search are mutually exclusive), so blur to hand
+      // the keyboard back to the canvas.
+      const id = matchIds[activeIndex]
+      if (id) {
+        onSelect(id)
+        inputRef.current?.blur()
+      }
     } else if (event.key === "ArrowUp") {
       event.preventDefault()
-      cycle(-1)
+      cycle(1) // up = next match
+    } else if (event.key === "ArrowDown") {
+      event.preventDefault()
+      cycle(-1) // down = previous match
     } else if (event.key === "Escape") {
       event.preventDefault()
       clear()
     }
+    // ←/→ fall through to the input for caret movement / query editing.
   }
 
   const hasQuery = query.trim().length > 0
@@ -127,7 +144,7 @@ export function TopologySearch({
         <>
           <span
             className="shrink-0 font-mono text-[11px] tabular-nums text-muted-foreground"
-            title="Enter / ↑↓ to cycle matches"
+            title="↑↓ to cycle matches · Enter to select"
           >
             {matchIds.length === 0
               ? "0/0"

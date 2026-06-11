@@ -314,7 +314,7 @@ export function TopologyView({ operationId }: TopologyViewProps) {
                 />
               )}
             </div>
-            <TopologySearch {...search} />
+            <TopologySearch {...search} onSelect={toggleFocus} />
           </ReactFlow>
         </ReactFlowProvider>
         {nodeMenu && (
