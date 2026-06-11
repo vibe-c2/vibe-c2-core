@@ -78,7 +78,9 @@ export function KanbanColumn({
   // instead of squeezing cards into illegible slivers.
   return (
     <div className="flex h-full min-w-[280px] flex-1 basis-0 flex-col rounded-lg border bg-card/40">
-      <header className="flex items-center justify-between border-b px-3 py-2">
+      {/* min-h-10 = py-2 (2×8px) + the size-6 quick-create button (24px), so
+          the DONE column (which has no button) matches the others' height. */}
+      <header className="flex min-h-10 items-center justify-between border-b px-3 py-2">
         <div className="flex items-center gap-2">
           <h3 className="text-sm font-semibold">{stageLabel(stage)}</h3>
           <span className="rounded bg-muted px-1.5 py-0.5 text-xs font-mono tabular-nums text-muted-foreground">
