@@ -214,6 +214,9 @@ export function useTopologySimulation(topology: Topology) {
   return {
     nodes,
     edges: layout.edges,
+    // Pre-settled sim positions (centers), keyed by node id. New map identity
+    // on every rebuild — the view keys "graph was rebuilt" effects off it.
+    simNodeById: layout.simNodeById,
     onNodesChange,
     onNodeDragStart,
     onNodeDrag,

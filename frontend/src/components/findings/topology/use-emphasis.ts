@@ -108,5 +108,12 @@ export function useTopologyEmphasis(
     onActiveIndexChange: setActiveMatch,
   }
 
-  return { displayNodes, displayEdges, toggleFocus, clearEmphasis, search }
+  return {
+    displayNodes,
+    displayEdges,
+    toggleFocus,
+    clearEmphasis,
+    search,
+    focusedId,
+  }
 }

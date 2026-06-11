@@ -1,9 +1,10 @@
-import { useCallback, useMemo, useState } from "react"
+import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import {
   Background,
   Controls,
   ReactFlow,
   ReactFlowProvider,
+  useReactFlow,
   type Node,
 } from "@xyflow/react"
 import "@xyflow/react/dist/style.css"
@@ -34,6 +35,7 @@ import {
   FloatingEdge,
   TopologyEdgeDefs,
 } from "@/components/findings/topology/floating-edge"
+import type { SimNode } from "@/components/findings/topology/layout"
 import { useTopologySimulation } from "@/components/findings/topology/use-simulation"
 import { useTopologyEmphasis } from "@/components/findings/topology/use-emphasis"
 import { TopologySearch } from "@/components/findings/topology/topology-search"
@@ -213,6 +215,7 @@ export function TopologyView({ operationId }: TopologyViewProps) {
   const {
     nodes,
     edges,
+    simNodeById,
     onNodesChange,
     onNodeDragStart,
     onNodeDrag,
@@ -221,8 +224,14 @@ export function TopologyView({ operationId }: TopologyViewProps) {
 
   // Click-to-focus + search emphasis: dims/rings layered over the simulation
   // output. See use-emphasis.ts for the interaction rules.
-  const { displayNodes, displayEdges, toggleFocus, clearEmphasis, search } =
-    useTopologyEmphasis(visibleTopology, nodes, edges)
+  const {
+    displayNodes,
+    displayEdges,
+    toggleFocus,
+    clearEmphasis,
+    search,
+    focusedId,
+  } = useTopologyEmphasis(visibleTopology, nodes, edges)
 
   // Click = focus (toggle on re-click). Editing lives in the right-click menu.
   const onNodeClick = useCallback(
@@ -314,6 +323,10 @@ export function TopologyView({ operationId }: TopologyViewProps) {
               )}
             </div>
             <TopologySearch {...search} onSelect={toggleFocus} />
+            <FollowFocusedNode
+              focusedId={focusedId}
+              simNodeById={simNodeById}
+            />
           </ReactFlow>
         </ReactFlowProvider>
         {nodeMenu && (
@@ -327,6 +340,42 @@ export function TopologyView({ operationId }: TopologyViewProps) {
       </div>
     </div>
   )
+}
+
+// Focus survives a lens switch and a data refresh (it's just a node id), but
+// the layout rebuilds and the node lands somewhere new — possibly off-screen.
+// Whenever the graph is rebuilt (simNodeById gets a new identity) while a node
+// is focused, glide the viewport to its freshly settled position. The focused
+// id is read through a ref on purpose: clicking a node that's already on
+// screen must NOT recenter, only rebuilds do.
+function FollowFocusedNode({
+  focusedId,
+  simNodeById,
+}: {
+  focusedId: string | null
+  simNodeById: Map<string, SimNode>
+}) {
+  const { setCenter, getZoom } = useReactFlow()
+  const focusedRef = useRef(focusedId)
+  // Declared before the recenter effect so it runs first when both fire in
+  // one commit (effects run in declaration order).
+  useEffect(() => {
+    focusedRef.current = focusedId
+  }, [focusedId])
+
+  useEffect(() => {
+    const id = focusedRef.current
+    if (!id) return
+    // Focused node absent from this lens (e.g. an identity on the routes
+    // lens): emphasis already treats it as no focus — don't recenter either.
+    const sim = simNodeById.get(id)
+    if (!sim || sim.x === undefined || sim.y === undefined) return
+    // sim x/y are node centers, which is exactly what setCenter wants. Keep
+    // the operator's zoom — without it setCenter snaps to maxZoom.
+    setCenter(sim.x, sim.y, { zoom: getZoom(), duration: 500 })
+  }, [simNodeById, setCenter, getZoom])
+
+  return null
 }
 
 function Centered({ children }: { children: React.ReactNode }) {
