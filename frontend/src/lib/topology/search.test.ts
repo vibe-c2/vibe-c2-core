@@ -29,6 +29,7 @@ function host(
       gateway: r.gateway ?? "",
       interface: "",
     })),
+    logins: [],
   }
 }
 

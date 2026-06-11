@@ -26,6 +26,7 @@ function host(
       addresses: i.addresses,
     })),
     routes: [],
+    logins: [],
   }
 }
 
