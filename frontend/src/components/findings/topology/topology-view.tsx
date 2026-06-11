@@ -29,7 +29,10 @@ import {
 import { HiddenIdentitiesPanel } from "@/components/findings/topology/hidden-identities-panel"
 import { Button } from "@/components/ui/button"
 import { Skeleton } from "@/components/ui/skeleton"
-import { FloatingEdge } from "@/components/findings/topology/floating-edge"
+import {
+  FloatingEdge,
+  TopologyEdgeDefs,
+} from "@/components/findings/topology/floating-edge"
 import { useTopologySimulation } from "@/components/findings/topology/use-simulation"
 import { useTopologyEmphasis } from "@/components/findings/topology/use-emphasis"
 import { TopologySearch } from "@/components/findings/topology/topology-search"
@@ -296,6 +299,7 @@ export function TopologyView({ operationId }: TopologyViewProps) {
             // from this read-only derived view.
             deleteKeyCode={null}
           >
+            <TopologyEdgeDefs />
             <Background gap={16} className="!bg-muted/20" />
             <Controls showInteractive={false} />
             <Legend stats={topology.stats} relation={relation} />

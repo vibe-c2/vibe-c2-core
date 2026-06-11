@@ -151,3 +151,12 @@
     --xy-minimap-node-background-color: var(--color-muted-foreground);
     --xy-minimap-node-stroke-color: transparent;
 }
+/* Topology login edges: when an edge is "lit" (its node focused/searched) it
+   marches its dashes source→target. Bounded to the scoped set, so it never
+   repaints the whole graph at idle (the reason global edge animation was
+   removed). Offset equals the dasharray sum (8 + 6) for a seamless loop. */
+@keyframes topo-edge-flow {
+    to {
+        stroke-dashoffset: -14;
+    }
+}
