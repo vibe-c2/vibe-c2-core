@@ -1,4 +1,11 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react"
+import {
+  useCallback,
+  useDeferredValue,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react"
 import {
   Background,
   Controls,
@@ -8,7 +15,13 @@ import {
   type Node,
 } from "@xyflow/react"
 import "@xyflow/react/dist/style.css"
-import { NetworkIcon, RouteIcon, TriangleAlertIcon, UsersIcon } from "lucide-react"
+import {
+  Loader2Icon,
+  NetworkIcon,
+  RouteIcon,
+  TriangleAlertIcon,
+  UsersIcon,
+} from "lucide-react"
 import { MAX_TOPOLOGY_HOSTS, useAllHosts } from "@/graphql/hooks/hosts"
 import { useMe, useSetHiddenIdentities } from "@/graphql/hooks/users"
 import { useHostStore, type TopologyRelation } from "@/stores/hosts"
@@ -198,7 +211,7 @@ export function TopologyView({ operationId }: TopologyViewProps) {
     () => deriveTopology(data?.hosts ?? []),
     [data?.hosts],
   )
-  const visibleTopology = useMemo(() => {
+  const targetTopology = useMemo(() => {
     const lensed = lenses[relation](topology)
     if (relation !== "identities") return lensed
     // Hide accounts first (it can strip a ghost source's only other edge), THEN
@@ -208,6 +221,16 @@ export function TopologyView({ operationId }: TopologyViewProps) {
     const filtered = withoutHiddenIdentities(lensed, hiddenUsers)
     return collapseLocalIdentities(collapsePhantomHosts(filtered))
   }, [topology, relation, hiddenUsers])
+
+  // Rebuilding the layout (pre-settle ticks + crossing reduction in
+  // layoutTopology) is a synchronous main-thread chunk — noticeable on the
+  // dense users lens. Deferring the topology splits any rebuild into two
+  // renders: an urgent one that keeps the old graph up (lens button + the
+  // overlay below paint immediately), then the heavy one at deferred
+  // priority. One mechanism for every rebuild source: lens switch, hiding
+  // identities, data refresh.
+  const visibleTopology = useDeferredValue(targetTopology)
+  const isRebuilding = visibleTopology !== targetTopology
 
   // Live force-directed layout: pre-settled for first paint, re-heated while
   // a node is dragged so neighbors follow. Positions are session-only: any
@@ -274,6 +297,16 @@ export function TopologyView({ operationId }: TopologyViewProps) {
           <TriangleAlertIcon className="size-3.5 shrink-0" />
           Showing the first {MAX_TOPOLOGY_HOSTS} hosts — the map may be
           incomplete.
+        </div>
+      )}
+      {isRebuilding && (
+        <div className="absolute inset-x-0 top-12 z-20 flex justify-center">
+          <div className="flex items-center gap-2 rounded-md border bg-card/95 px-3 py-1.5 text-xs text-muted-foreground shadow-sm backdrop-blur">
+            {/* CSS spin runs on the compositor, so it keeps turning while the
+                layout rebuild blocks the JS thread. */}
+            <Loader2Icon className="size-3.5 animate-spin" />
+            Building map…
+          </div>
         </div>
       )}
       <div className="min-h-0 flex-1">
