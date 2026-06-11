@@ -13,6 +13,12 @@ import { isPillNodeType } from "@/components/findings/topology/layout"
 
 export const DIM_OPACITY = 0.15
 
+// Resting opacity for "quiet" edges (the login edges on the users lens). Faint
+// enough that the nodes own the view, strong enough that the wiring is still
+// legible. Lighter than full, well above DIM_OPACITY — a quiet edge isn't a
+// dimmed one. See FloatingEdge.
+export const REST_EDGE_OPACITY = 0.4
+
 export type EmphasisSets = {
   lit: Set<string> // node ids that stay at full opacity
   active: string | null // the one node that gets the strong ring
@@ -128,12 +134,11 @@ export function applyEdgeEmphasis(
 ): Edge[] {
   if (!sets) return edges
   // An edge stays lit only when both of its endpoints are — in focus mode
-  // that's exactly the focused node's spokes (plus edges among neighbors).
-  return edges.map((edge) => ({
-    ...edge,
-    data: {
-      ...edge.data,
-      dimmed: !(sets.lit.has(edge.source) && sets.lit.has(edge.target)),
-    },
-  }))
+  // that's exactly the focused node's spokes (plus edges among neighbors). The
+  // `lit` flag is the cue FloatingEdge uses to fire a quiet edge up to its full
+  // color; everything else dims.
+  return edges.map((edge) => {
+    const lit = sets.lit.has(edge.source) && sets.lit.has(edge.target)
+    return { ...edge, data: { ...edge.data, dimmed: !lit, lit } }
+  })
 }

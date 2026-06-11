@@ -105,6 +105,20 @@ const MONO_LABEL = {
   fill: "var(--color-foreground)",
 } as const
 
+// The dense users lens reads as a hairball when every login edge carries its
+// full stroke. So login edges render QUIET at rest — a neutral grey at reduced
+// opacity (FloatingEdge applies it from this data flag) — and only snap to
+// their real color when focus/search lights them (see emphasis.ts). The strong
+// color stays in `style.stroke`; this is just the resting override.
+const LOGIN_REST_STROKE = "var(--color-muted-foreground)"
+
+// Baseline z for every node. Edges top out at z 0 (see floating-edge / the
+// React Flow z-index model), and an unstyled node also defaults to 0 — a tie
+// that only DOM order breaks, and that a dimmed (near-transparent) node loses
+// visually to any edge crossing it. Pinning nodes one level up guarantees
+// edges always sit beneath them; a selected node still elevates above this.
+const NODE_Z = 1
+
 function subnetWidth(cidr: string, hostCount: number) {
   const label = `${cidr} · ${hostCount}`
   return Math.max(SUBNET_MIN_W, Math.ceil(label.length * SUBNET_CHAR_W) + SUBNET_EXTRA_W)
@@ -253,6 +267,7 @@ function edgeOf(e: TopoEdge): Edge {
         ...base,
         markerEnd: { type: MarkerType.ArrowClosed },
         style: { stroke: "var(--color-primary)", strokeWidth: 2 },
+        data: { restStroke: LOGIN_REST_STROKE },
       }
     case "logged-from":
     case "logged-from-group":
@@ -260,7 +275,7 @@ function edgeOf(e: TopoEdge): Edge {
       // primary "logged into") so the origin reads as the quieter half of the
       // pair; the arrowhead shows direction. Not animated — see "logged-into".
       // The grouped variant (one merged lone-sources node → identity) renders
-      // identically.
+      // identically. Quiet at rest like its "logged-into" partner.
       return {
         ...base,
         markerEnd: { type: MarkerType.ArrowClosed },
@@ -268,6 +283,7 @@ function edgeOf(e: TopoEdge): Edge {
           stroke: "var(--color-muted-foreground)",
           strokeWidth: 1.5,
         },
+        data: { restStroke: LOGIN_REST_STROKE },
       }
   }
 }
@@ -376,6 +392,8 @@ export function layoutTopology(topology: Topology): TopologyLayout {
     return {
       id: n.id,
       type: nodeType[n.kind],
+      // Keep every node above the edge layer (see NODE_Z).
+      zIndex: NODE_Z,
       // Simulation positions are node centers; React Flow wants top-left.
       position: { x: (sim.x ?? 0) - size.width / 2, y: (sim.y ?? 0) - size.height / 2 },
       // The subnet pill is fully sized by the layout (rounded-full needs real

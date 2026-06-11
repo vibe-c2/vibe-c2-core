@@ -165,8 +165,8 @@ export function IdentityNode({ data }: NodeProps<Node<IdentityNodeData>>) {
     <div
       className={`flex h-full w-full cursor-pointer items-center justify-center gap-1.5 rounded-full border-2 px-3 text-xs font-medium shadow-sm transition-colors ${
         data.wellKnown
-          ? "border-dashed border-border bg-muted/30 text-muted-foreground"
-          : "border-primary/50 bg-primary/10 text-foreground"
+          ? "border-dashed border-border bg-muted text-muted-foreground"
+          : "border-primary/60 bg-card text-foreground"
       }`}
       title={
         data.wellKnown
@@ -188,7 +188,7 @@ export function IdentityNode({ data }: NodeProps<Node<IdentityNodeData>>) {
 export function PhantomHostNode({ data }: NodeProps<Node<PhantomHostNodeData>>) {
   return (
     <div
-      className="flex w-[150px] items-center gap-1.5 rounded-md border border-dashed border-muted-foreground/40 bg-muted/30 px-3 py-1.5 text-muted-foreground"
+      className="flex w-[150px] items-center gap-1.5 rounded-md border border-dashed border-muted-foreground/40 bg-muted px-3 py-1.5 text-muted-foreground"
       title={`Unknown source — a login origin owned by no known host: ${data.label}`}
     >
       <Anchors />
@@ -211,7 +211,7 @@ export function LoneSourcesNode({ data }: NodeProps<Node<LoneSourcesNodeData>>) 
 
   return (
     <div
-      className="flex w-full flex-col gap-0.5 rounded-md border border-dashed border-muted-foreground/40 bg-muted/30 px-3 py-2 text-muted-foreground"
+      className="flex w-full flex-col gap-0.5 rounded-md border border-dashed border-muted-foreground/40 bg-muted px-3 py-2 text-muted-foreground"
       title={labels.join("\n")}
     >
       <Anchors />

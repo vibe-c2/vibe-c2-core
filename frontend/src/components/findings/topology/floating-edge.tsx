@@ -6,7 +6,10 @@ import {
   type EdgeProps,
   type InternalNode,
 } from "@xyflow/react"
-import { DIM_OPACITY } from "@/components/findings/topology/emphasis"
+import {
+  DIM_OPACITY,
+  REST_EDGE_OPACITY,
+} from "@/components/findings/topology/emphasis"
 
 // A "floating" edge: instead of attaching to fixed handles, it connects the
 // two nodes wherever they currently sit — the path runs center-to-center and
@@ -66,10 +69,26 @@ export function FloatingEdge({
 
   if (!sourceNode || !targetNode) return null
 
-  // Set by the emphasis pass (focus/search). Applied here — not via the edge's
-  // style prop — so the label and its background pill dim along with the path.
-  const dimmed = Boolean((data as { dimmed?: boolean } | undefined)?.dimmed)
-  const opacity = dimmed ? DIM_OPACITY : undefined
+  // Set by the emphasis pass (focus/search) and the layout. Applied here — not
+  // via the edge's style prop — so the label and its background pill track the
+  // path. Three resting states for a login edge ("quiet" via restStroke):
+  //   - lit (its node is scoped): full strong color, full opacity.
+  //   - dimmed (far from the scoped node): the faintest state.
+  //   - neither (nothing scoped): quiet — neutral grey at reduced opacity, so
+  //     the nodes own the resting view instead of a wall of colored wiring.
+  // Edges without a restStroke (routes/subnets lenses) ignore the quiet path
+  // and keep their strong color at rest, as before.
+  const d = data as
+    | { dimmed?: boolean; lit?: boolean; restStroke?: string }
+    | undefined
+  const dimmed = Boolean(d?.dimmed)
+  const quiet = d?.restStroke !== undefined && !d?.lit && !dimmed
+  const opacity = dimmed
+    ? DIM_OPACITY
+    : quiet
+      ? REST_EDGE_OPACITY
+      : undefined
+  const restStroke = quiet ? d?.restStroke : undefined
 
   const sourcePoint = getNodeIntersection(sourceNode, targetNode)
   const targetPoint = getNodeIntersection(targetNode, sourceNode)
@@ -88,7 +107,12 @@ export function FloatingEdge({
       id={id}
       path={path}
       markerEnd={markerEnd}
-      style={{ ...style, opacity, transition: "opacity 150ms" }}
+      style={{
+        ...style,
+        ...(restStroke ? { stroke: restStroke } : {}),
+        opacity,
+        transition: "opacity 150ms, stroke 150ms",
+      }}
       label={label}
       labelX={labelX}
       labelY={labelY}
