@@ -24,9 +24,9 @@ import { cn } from "@/lib/utils"
  * Both an existing-row pick and a freshly-created credential funnel through the
  * single `onPick` callback, which receives the full credential node. Callers
  * decide what to do next (insert a reference, link a hash, add a chip) and
- * whether to close: single-pick callers call `onOpenChange(false)` from inside
- * `onPick`; multi-select callers (task relations) leave it open and pass
- * `excludeIds` so the just-picked row drops out of the list.
+ * whether to close: every current caller closes from inside `onPick`, but a
+ * multi-select caller could leave it open and pass `excludeIds` so the
+ * just-picked row drops out of the list.
  */
 interface CredentialPickerDialogProps {
   open: boolean

@@ -220,9 +220,9 @@ function WikiReferencePicker({
 // Picks from the operation's credential pool via the shared CredentialPickerDialog
 // — the same modal the wiki "Insert credential reference" and findings "Mark hash
 // as cracked" pickers use, so a credential row looks, searches, and "create new"
-// works identically everywhere. Multi-select: each pick adds a chip, the picked
-// id is excluded from the list, and the dialog stays open so several can be
-// linked in a row (and a freshly created credential is linked too).
+// works identically everywhere. Each pick adds a chip and closes the dialog —
+// keeping it open for multi-select read as "nothing happened" since the chip
+// lands behind the modal. Linking several means re-opening per pick.
 function CredentialReferencePicker({
   operationId,
   selected,
@@ -241,6 +241,7 @@ function CredentialReferencePicker({
 
   function addCredential(c: CredentialFieldsFragment) {
     if (selectedIds.has(c.id)) return;
+    setOpen(false);
     onChange([
       ...selected,
       { id: c.id, label: c.name, hint: credentialTypeLabel(c.type) },
