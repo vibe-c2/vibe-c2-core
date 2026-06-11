@@ -1,10 +1,11 @@
-import { useMemo } from "react"
+import { useCallback, useMemo } from "react"
 import {
   Background,
   Controls,
   MiniMap,
   ReactFlow,
   ReactFlowProvider,
+  type Node,
 } from "@xyflow/react"
 import "@xyflow/react/dist/style.css"
 import { NetworkIcon, RouteIcon, TriangleAlertIcon } from "lucide-react"
@@ -15,15 +16,20 @@ import {
   type Topology,
   type TopologyStats,
 } from "@/lib/topology/derive"
+import { collapseLeafSubnets } from "@/lib/topology/aggregate"
 import { Button } from "@/components/ui/button"
 import { Skeleton } from "@/components/ui/skeleton"
 import { FloatingEdge } from "@/components/findings/topology/floating-edge"
 import { useTopologySimulation } from "@/components/findings/topology/use-simulation"
+import { useTopologyEmphasis } from "@/components/findings/topology/use-emphasis"
+import { TopologySearch } from "@/components/findings/topology/topology-search"
 import {
   HostNode,
+  LeafSubnetsNode,
   PhantomGatewayNode,
   PhantomSubnetNode,
   SubnetNode,
+  type HostNodeData,
 } from "@/components/findings/topology/topology-nodes"
 
 // Defined here (not in topology-nodes.tsx) so that file can stay a pure
@@ -35,6 +41,7 @@ const nodeTypes = {
   subnet: SubnetNode,
   phantomGateway: PhantomGatewayNode,
   phantomSubnet: PhantomSubnetNode,
+  leafSubnets: LeafSubnetsNode,
 }
 
 const edgeTypes = {
@@ -64,12 +71,15 @@ const lenses: Record<TopologyRelation, (t: Topology) => Topology> = {
   }),
   // Host cards + subnet hubs + interface edges. Route-derived elements are
   // stripped — phantom gateways/subnets only exist because of routes, so
-  // keeping them would smuggle the second relation back in.
-  subnets: (t) => ({
-    ...t,
-    nodes: t.nodes.filter((n) => n.kind === "host" || n.kind === "subnet"),
-    edges: t.edges.filter((e) => e.kind === "membership"),
-  }),
+  // keeping them would smuggle the second relation back in. Single-host
+  // subnets then fold into one list node per host (the VPN-concentrator
+  // case: ten tun networks orbiting one card said nothing).
+  subnets: (t) =>
+    collapseLeafSubnets({
+      ...t,
+      nodes: t.nodes.filter((n) => n.kind === "host" || n.kind === "subnet"),
+      edges: t.edges.filter((e) => e.kind === "membership"),
+    }),
 }
 
 export function TopologyView({ operationId }: TopologyViewProps) {
@@ -77,6 +87,7 @@ export function TopologyView({ operationId }: TopologyViewProps) {
   // Persisted in the host store so the choice survives reloads.
   const relation = useHostStore((s) => s.topologyRelation)
   const setRelation = useHostStore((s) => s.setTopologyRelation)
+  const openEditDialog = useHostStore((s) => s.openEditDialog)
 
   const topology = useMemo(
     () => deriveTopology(data?.hosts ?? []),
@@ -98,6 +109,26 @@ export function TopologyView({ operationId }: TopologyViewProps) {
     onNodeDrag,
     onNodeDragStop,
   } = useTopologySimulation(visibleTopology)
+
+  // Click-to-focus + search emphasis: dims/rings layered over the simulation
+  // output. See use-emphasis.ts for the interaction rules.
+  const { displayNodes, displayEdges, toggleFocus, clearEmphasis, search } =
+    useTopologyEmphasis(visibleTopology, nodes, edges)
+
+  // Click = focus (toggle on re-click); double-click a host = edit dialog,
+  // the same entry point as a table row, so topology and table share one
+  // editing path.
+  const onNodeClick = useCallback(
+    (_e: React.MouseEvent, node: Node) => toggleFocus(node.id),
+    [toggleFocus],
+  )
+
+  const onNodeDoubleClick = useCallback(
+    (_e: React.MouseEvent, node: Node) => {
+      if (node.type === "host") openEditDialog((node.data as HostNodeData).host)
+    },
+    [openEditDialog],
+  )
 
   if (isLoading) {
     return (
@@ -139,12 +170,15 @@ export function TopologyView({ operationId }: TopologyViewProps) {
       <div className="min-h-0 flex-1">
         <ReactFlowProvider>
           <ReactFlow
-            nodes={nodes}
-            edges={edges}
+            nodes={displayNodes}
+            edges={displayEdges}
             onNodesChange={onNodesChange}
             onNodeDragStart={onNodeDragStart}
             onNodeDrag={onNodeDrag}
             onNodeDragStop={onNodeDragStop}
+            onNodeClick={onNodeClick}
+            onNodeDoubleClick={onNodeDoubleClick}
+            onPaneClick={clearEmphasis}
             nodeTypes={nodeTypes}
             edgeTypes={edgeTypes}
             fitView
@@ -152,12 +186,20 @@ export function TopologyView({ operationId }: TopologyViewProps) {
             proOptions={{ hideAttribution: true }}
             nodesConnectable={false}
             edgesFocusable={false}
+            // Double-click is "edit host", not "zoom in".
+            zoomOnDoubleClick={false}
+            // Clicking now selects nodes routinely (click = focus), and React
+            // Flow's default Backspace would visually delete the selection
+            // from this read-only derived view.
+            deleteKeyCode={null}
           >
             <Background gap={16} className="!bg-muted/20" />
             <Controls showInteractive={false} />
-            <MiniMap pannable zoomable className="!bg-card" />
+            {/* Colors come from the --xy-minimap-* mappings in index.css. */}
+            <MiniMap pannable zoomable />
             <Legend stats={topology.stats} relation={relation} />
             <RelationPicker relation={relation} onChange={setRelation} />
+            <TopologySearch {...search} />
           </ReactFlow>
         </ReactFlowProvider>
       </div>

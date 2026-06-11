@@ -134,3 +134,20 @@
     @apply font-sans;
     }
 }
+
+/* React Flow's built-in UI (zoom controls, minimap) ships a hardcoded light
+   palette. Remap its CSS hooks onto the app tokens so every piece follows the
+   active theme — these vars resolve through .dark automatically. */
+.react-flow {
+    --xy-controls-button-background-color: var(--color-card);
+    --xy-controls-button-background-color-hover: var(--color-muted);
+    --xy-controls-button-color: var(--color-muted-foreground);
+    --xy-controls-button-color-hover: var(--color-foreground);
+    --xy-controls-button-border-color: var(--color-border);
+    --xy-controls-box-shadow: 0 1px 2px 0 rgb(0 0 0 / 0.05);
+
+    --xy-minimap-background-color: var(--color-card);
+    --xy-minimap-mask-background-color: color-mix(in oklab, var(--color-background) 65%, transparent);
+    --xy-minimap-node-background-color: var(--color-muted-foreground);
+    --xy-minimap-node-stroke-color: transparent;
+}

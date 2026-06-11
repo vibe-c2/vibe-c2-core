@@ -1,7 +1,8 @@
 import { Handle, Position, type Node, type NodeProps } from "@xyflow/react"
 import { HelpCircleIcon, NetworkIcon, RouteIcon, ServerIcon } from "lucide-react"
-import { useHostStore } from "@/stores/hosts"
 import type { HostFieldsFragment } from "@/graphql/gql/graphql"
+import type { LeafSubnetEntry } from "@/lib/topology/derive"
+import { LEAF_SUBNET_MAX_ROWS } from "@/components/findings/topology/layout"
 
 // Custom React Flow nodes for the derived topology. Edges are "floating"
 // (see floating-edge.tsx) and compute their own attachment points from node
@@ -13,6 +14,7 @@ export type HostNodeData = { host: HostFieldsFragment }
 export type SubnetNodeData = { cidr: string; hostCount: number }
 export type PhantomGatewayNodeData = { ip: string }
 export type PhantomSubnetNodeData = { cidr: string }
+export type LeafSubnetsNodeData = { entries: LeafSubnetEntry[] }
 
 function Anchors() {
   return (
@@ -33,19 +35,15 @@ function Anchors() {
   )
 }
 
-// A single host. Clicking opens the existing edit dialog — the same entry
-// point as a table row, so topology and table share one editing path.
+// A single host. Click/double-click behavior lives on the view (focus /
+// edit dialog via React Flow's node handlers), not here — the card is pure
+// presentation.
 export function HostNode({ data }: NodeProps<Node<HostNodeData>>) {
-  const openEdit = useHostStore((s) => s.openEditDialog)
   const { host } = data
   const ips = [...new Set(host.interfaces.flatMap((i) => i.addresses))]
 
   return (
-    <button
-      type="button"
-      onClick={() => openEdit(host)}
-      className="flex w-[180px] flex-col gap-1 rounded-md border bg-card px-3 py-2 text-left shadow-sm transition-colors hover:border-primary/60 hover:bg-muted/50"
-    >
+    <div className="flex w-[180px] cursor-pointer flex-col gap-1 rounded-md border bg-card px-3 py-2 shadow-sm transition-colors hover:border-primary/60 hover:bg-muted/50">
       <Anchors />
       <div className="flex items-center gap-1.5">
         <ServerIcon className="size-3.5 shrink-0 text-muted-foreground" />
@@ -62,7 +60,45 @@ export function HostNode({ data }: NodeProps<Node<HostNodeData>>) {
         {ips[0] ?? "—"}
         {ips.length > 1 && ` +${ips.length - 1}`}
       </span>
-    </button>
+    </div>
+  )
+}
+
+// A host's single-member subnets folded into one list node (see
+// lib/topology/aggregate.ts) — e.g. a VPN concentrator's ten tun networks.
+// Width comes from the layout (needed up front for the simulation); height is
+// natural so the row list can never be clipped by a bad estimate.
+export function LeafSubnetsNode({ data }: NodeProps<Node<LeafSubnetsNodeData>>) {
+  const { entries } = data
+  const shown = entries.slice(0, LEAF_SUBNET_MAX_ROWS)
+  const hidden = entries.length - shown.length
+
+  return (
+    <div
+      className="flex w-full flex-col gap-0.5 rounded-md border-2 border-border bg-muted/40 px-3 py-2 shadow-sm"
+      title={entries.map((e) => `${e.iface} · ${e.cidr} (${e.ip})`).join("\n")}
+    >
+      <Anchors />
+      <div className="flex items-center gap-1.5">
+        <NetworkIcon className="size-3.5 shrink-0 text-muted-foreground" />
+        <span className="text-[11px] font-medium">
+          {entries.length} local subnets
+        </span>
+      </div>
+      {shown.map((e) => (
+        <span
+          key={`${e.iface}|${e.cidr}`}
+          className="truncate font-mono text-[11px] text-muted-foreground"
+        >
+          {e.iface} · {e.cidr}
+        </span>
+      ))}
+      {hidden > 0 && (
+        <span className="text-[11px] text-muted-foreground">
+          +{hidden} more
+        </span>
+      )}
+    </div>
   )
 }
 

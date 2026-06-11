@@ -24,11 +24,19 @@ const subnetId = (net: string) => `subnet:${net}`
 const phantomSubnetId = (net: string) => `ps:${net}`
 const phantomGatewayId = (ip: string) => `pg:${ip}`
 
+// One row of an aggregated leaf-subnets node: which interface puts the host
+// on which subnet. Carries the ip so the detail the merged membership-edge
+// labels used to show survives the merge.
+export type LeafSubnetEntry = { cidr: string; iface: string; ip: string }
+
 export type TopoNode =
   | { kind: "host"; id: string; host: HostFieldsFragment }
   | { kind: "subnet"; id: string; cidr: string; hostIds: string[] }
   | { kind: "phantom-gateway"; id: string; ip: string }
   | { kind: "phantom-subnet"; id: string; cidr: string }
+  // Produced only by collapseLeafSubnets (aggregate.ts), never by the raw
+  // derivation: a host's single-member subnets folded into one list node.
+  | { kind: "leaf-subnets"; id: string; hostId: string; entries: LeafSubnetEntry[] }
 
 // All edges carry source/target node ids so the layout maps them onto React
 // Flow edges with no translation.
@@ -62,6 +70,15 @@ export type TopoEdge =
       id: string
       source: string // gateway host id
       target: string // phantom-subnet id
+    }
+  | {
+      // Produced only by collapseLeafSubnets: replaces the per-interface
+      // membership edges of the merged subnets. Unlabeled — the iface/cidr
+      // detail lives inside the leaf-subnets node it points at.
+      kind: "membership-group"
+      id: string
+      source: string // host id
+      target: string // leaf-subnets node id
     }
 
 export type TopologyStats = {

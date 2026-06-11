@@ -6,6 +6,7 @@ import {
   type EdgeProps,
   type InternalNode,
 } from "@xyflow/react"
+import { DIM_OPACITY } from "@/components/findings/topology/emphasis"
 
 // A "floating" edge: instead of attaching to fixed handles, it connects the
 // two nodes wherever they currently sit — the path runs center-to-center and
@@ -58,11 +59,17 @@ export function FloatingEdge({
   style,
   label,
   labelStyle,
+  data,
 }: EdgeProps) {
   const sourceNode = useInternalNode(source)
   const targetNode = useInternalNode(target)
 
   if (!sourceNode || !targetNode) return null
+
+  // Set by the emphasis pass (focus/search). Applied here — not via the edge's
+  // style prop — so the label and its background pill dim along with the path.
+  const dimmed = Boolean((data as { dimmed?: boolean } | undefined)?.dimmed)
+  const opacity = dimmed ? DIM_OPACITY : undefined
 
   const sourcePoint = getNodeIntersection(sourceNode, targetNode)
   const targetPoint = getNodeIntersection(targetNode, sourceNode)
@@ -81,14 +88,18 @@ export function FloatingEdge({
       id={id}
       path={path}
       markerEnd={markerEnd}
-      style={style}
+      style={{ ...style, opacity, transition: "opacity 150ms" }}
       label={label}
       labelX={labelX}
       labelY={labelY}
-      labelStyle={labelStyle}
+      labelStyle={{ ...labelStyle, opacity, transition: "opacity 150ms" }}
       // Opaque pill behind the label so it stays readable where edges cross.
       labelShowBg
-      labelBgStyle={{ fill: "var(--color-card)", fillOpacity: 0.92 }}
+      labelBgStyle={{
+        fill: "var(--color-card)",
+        fillOpacity: dimmed ? DIM_OPACITY : 0.92,
+        transition: "fill-opacity 150ms",
+      }}
       labelBgPadding={[6, 3]}
       labelBgBorderRadius={4}
     />
