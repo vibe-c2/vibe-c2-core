@@ -25,6 +25,12 @@ interface HostFormDialogProps {
   operationId: string
 }
 
+// Two sub-views share one set of form values: the normal field editor and the
+// "Magic" command-output importer. The importer only patches `values` (one
+// category at a time) and hands control back; saving always happens from the
+// form view.
+type HostFormStep = "form" | "import"
+
 // One dialog covers both create and edit (selected === null → create).
 // Unlike credentials, create never needs an operation picker (the Hosts tab
 // only exists scoped) and edit never needs a fetch (the row fragment already
@@ -32,12 +38,35 @@ interface HostFormDialogProps {
 // which mutation fires.
 export function HostFormDialog({ operationId }: HostFormDialogProps) {
   const { formDialogOpen, selected, closeFormDialog } = useHostStore()
+  // Step lives here (not in HostForm) so the dialog's close request (X button,
+  // Escape, backdrop) can be intercepted: closing from the "Magic" import step
+  // returns to the form instead of dismissing the whole dialog.
+  const [step, setStep] = useState<HostFormStep>("form")
+
+  // If the subject changes while open (HostForm remounts via its key), the
+  // form state resets — reset the step with it so the new subject never
+  // mounts straight into a stale import screen. Render-time reset, same
+  // pattern as credential-picker-dialog.tsx.
+  const subjectKey = selected?.id ?? "create"
+  const [prevSubjectKey, setPrevSubjectKey] = useState(subjectKey)
+  if (prevSubjectKey !== subjectKey) {
+    setPrevSubjectKey(subjectKey)
+    setStep("form")
+  }
+
+  // Resets the step so reopening never lands on a stale import screen.
+  function handleClose() {
+    setStep("form")
+    closeFormDialog()
+  }
 
   return (
     <Dialog
       open={formDialogOpen}
       onOpenChange={(open) => {
-        if (!open) closeFormDialog()
+        if (open) return
+        if (step === "import") setStep("form")
+        else handleClose()
       }}
     >
       <DialogContent className="grid-rows-[auto_minmax(0,1fr)] max-h-[calc(100dvh-2rem)] sm:max-w-3xl">
@@ -56,7 +85,9 @@ export function HostFormDialog({ operationId }: HostFormDialogProps) {
           key={selected?.id ?? "create"}
           operationId={operationId}
           host={selected}
-          onSaved={closeFormDialog}
+          step={step}
+          onStepChange={setStep}
+          onSaved={handleClose}
         />
       </DialogContent>
     </Dialog>
@@ -66,31 +97,36 @@ export function HostFormDialog({ operationId }: HostFormDialogProps) {
 interface HostFormProps {
   operationId: string
   host: HostFieldsFragment | null
+  // Owned by the dialog (not local state) so its close request can step back
+  // from the importer instead of dismissing. See HostFormStep.
+  step: HostFormStep
+  onStepChange: (step: HostFormStep) => void
   onSaved: () => void
 }
 
-function HostForm({ operationId, host, onSaved }: HostFormProps) {
+function HostForm({
+  operationId,
+  host,
+  step,
+  onStepChange,
+  onSaved,
+}: HostFormProps) {
   const createHost = useCreateHost()
   const updateHost = useUpdateHost()
   const [values, setValues] = useState<HostFormValues>(() =>
     host ? hostFormValuesFromWire(host) : emptyHostFormValues(),
   )
   const [error, setError] = useState<string | null>(null)
-  // Two sub-views share one set of form values: the normal field editor and the
-  // "Magic" command-output importer. The importer only patches `values` (one
-  // category at a time) and hands control back; saving always happens from the
-  // form view.
-  const [step, setStep] = useState<"form" | "import">("form")
 
   const isPending = createHost.isPending || updateHost.isPending
 
   if (step === "import") {
     return (
       <HostImportStep
-        onBack={() => setStep("form")}
+        onBack={() => onStepChange("form")}
         onApply={(patch) => {
           setValues((v) => ({ ...v, ...patch }))
-          setStep("form")
+          onStepChange("form")
         }}
       />
     )
@@ -147,7 +183,7 @@ function HostForm({ operationId, host, onSaved }: HostFormProps) {
           idPrefix={host ? "edit-host" : "create-host"}
           values={values}
           onChange={setValues}
-          onImport={() => setStep("import")}
+          onImport={() => onStepChange("import")}
         />
       </div>
       <DialogFooter className="mt-4">
