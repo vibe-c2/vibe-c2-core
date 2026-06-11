@@ -15,6 +15,7 @@ export const MeQuery = graphql(`
   query Me {
     me {
       ...UserFields
+      hiddenIdentities
     }
   }
 `)
@@ -73,6 +74,18 @@ export const UpdateOwnProfileMutation = graphql(`
   mutation UpdateOwnProfile($input: UpdateUserInput!) {
     updateOwnProfile(input: $input) {
       ...UserFields
+    }
+  }
+`)
+
+// Replaces the caller's hidden-identity list (usernames hidden from the host
+// topology Users lens). The server normalizes the names and scopes the write
+// to the JWT user, so we only echo back the canonical result.
+export const SetHiddenIdentitiesMutation = graphql(`
+  mutation SetHiddenIdentities($names: [String!]!) {
+    setHiddenIdentities(names: $names) {
+      id
+      hiddenIdentities
     }
   }
 `)

@@ -3,6 +3,7 @@ package resolver
 import (
 	"context"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -23,6 +24,7 @@ type IUserResolver interface {
 	UpdateUser(ctx context.Context, id string, input model.UpdateUserInput) (*models.User, error)
 	DeleteUser(ctx context.Context, id string) (bool, error)
 	UpdateOwnProfile(ctx context.Context, input model.UpdateUserInput) (*models.User, error)
+	SetHiddenIdentities(ctx context.Context, names []string) (*models.User, error)
 
 	// Queries
 	Me(ctx context.Context) (*models.User, error)
@@ -231,6 +233,46 @@ func (r *userResolver) UpdateOwnProfile(ctx context.Context, input model.UpdateU
 	return &updated, nil
 }
 
+// maxHiddenIdentities bounds the per-operator hidden list so a single user
+// document can't grow without limit.
+const maxHiddenIdentities = 500
+
+// SetHiddenIdentities replaces the caller's hidden-identity list — the
+// usernames hidden from the host topology Users lens. The target user comes
+// from the JWT (not client input) so a caller can only edit their own list.
+// Names are normalized (trimmed, lowercased, deduped) so the frontend can
+// compare against them case-insensitively without further work.
+func (r *userResolver) SetHiddenIdentities(ctx context.Context, names []string) (*models.User, error) {
+	authInfo := gqlctx.AuthFromContext(ctx)
+	uid, err := uuid.Parse(authInfo.UserID)
+	if err != nil {
+		return nil, fmt.Errorf("invalid user ID in token: %w", err)
+	}
+
+	user, err := r.userRepo.FindByID(ctx, uid)
+	if err != nil {
+		return nil, fmt.Errorf("user not found: %w", err)
+	}
+
+	normalized := normalizeHiddenIdentities(names)
+	if err := r.userRepo.Update(ctx, &user, map[string]interface{}{
+		"hidden_identities": normalized,
+	}); err != nil {
+		return nil, fmt.Errorf("failed to update hidden identities: %w", err)
+	}
+
+	updated, err := r.userRepo.FindByID(ctx, uid)
+	if err != nil {
+		return nil, fmt.Errorf("failed to fetch updated user: %w", err)
+	}
+
+	r.eventBus.Publish(eventbus.NewUserUpdatedEvent(eventbus.UserActor(authInfo.UserID), eventbus.UserEventPayload{
+		UserID: updated.UserID.String(), Username: updated.Username,
+	}))
+
+	return &updated, nil
+}
+
 // Me returns the currently authenticated user.
 // The user ID is extracted from the JWT token in the context.
 func (r *userResolver) Me(ctx context.Context) (*models.User, error) {
@@ -370,6 +412,30 @@ func (r *userResolver) CreatedAt(ctx context.Context, obj *models.User) (string,
 // UpdatedAt converts the qmgo DefaultField timestamp to an ISO 8601 string.
 func (r *userResolver) UpdatedAt(ctx context.Context, obj *models.User) (string, error) {
 	return obj.UpdateAt.Format(time.RFC3339), nil
+}
+
+// normalizeHiddenIdentities trims, lowercases, and dedupes the names, dropping
+// empties and preserving first-seen order. The result is capped at
+// maxHiddenIdentities. It always returns a non-nil slice so the stored value
+// (and the GraphQL [String!]! field) is a concrete list, never null.
+func normalizeHiddenIdentities(names []string) []string {
+	out := make([]string, 0, len(names))
+	seen := make(map[string]struct{}, len(names))
+	for _, n := range names {
+		name := strings.ToLower(strings.TrimSpace(n))
+		if name == "" {
+			continue
+		}
+		if _, dup := seen[name]; dup {
+			continue
+		}
+		seen[name] = struct{}{}
+		out = append(out, name)
+		if len(out) >= maxHiddenIdentities {
+			break
+		}
+	}
+	return out
 }
 
 // buildUpdateMap converts an UpdateUserInput into a map of field names to values.

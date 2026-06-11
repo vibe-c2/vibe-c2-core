@@ -1,4 +1,4 @@
-import { useCallback, useMemo } from "react"
+import { useCallback, useMemo, useState } from "react"
 import {
   Background,
   Controls,
@@ -10,9 +10,12 @@ import {
 import "@xyflow/react/dist/style.css"
 import { NetworkIcon, RouteIcon, TriangleAlertIcon, UsersIcon } from "lucide-react"
 import { MAX_TOPOLOGY_HOSTS, useAllHosts } from "@/graphql/hooks/hosts"
+import { useMe, useSetHiddenIdentities } from "@/graphql/hooks/users"
 import { useHostStore, type TopologyRelation } from "@/stores/hosts"
 import {
   deriveTopology,
+  withoutHiddenIdentities,
+  WELL_KNOWN_ACCOUNTS,
   type Topology,
   type TopologyStats,
 } from "@/lib/topology/derive"
@@ -20,6 +23,11 @@ import {
   collapseLeafSubnets,
   collapsePhantomHosts,
 } from "@/lib/topology/aggregate"
+import {
+  NodeContextMenu,
+  type NodeMenuState,
+} from "@/components/findings/topology/node-context-menu"
+import { HiddenIdentitiesPanel } from "@/components/findings/topology/hidden-identities-panel"
 import { Button } from "@/components/ui/button"
 import { Skeleton } from "@/components/ui/skeleton"
 import { FloatingEdge } from "@/components/findings/topology/floating-edge"
@@ -117,39 +125,64 @@ const lenses: Record<TopologyRelation, (t: Topology) => Topology> = {
   }),
 }
 
-// Users lens only: drop the ubiquitous accounts (root, ubuntu, …) and any edges
-// touching them. A phantom (unknown-source) host whose only edges led to a
-// hidden account is now an artifact, so prune the disconnected ones. Real host
-// nodes are always kept as anchors even when isolated — consistent with how the
-// routes/subnets lenses leave lone hosts on the canvas.
-function withoutWellKnownIdentities(t: Topology): Topology {
-  const hidden = new Set(
-    t.nodes
-      .filter((n) => n.kind === "identity" && n.wellKnown)
-      .map((n) => n.id),
-  )
-  if (hidden.size === 0) return t
-
-  const edges = t.edges.filter(
-    (e) => !hidden.has(e.source) && !hidden.has(e.target),
-  )
-  const connected = new Set(edges.flatMap((e) => [e.source, e.target]))
-  const nodes = t.nodes.filter(
-    (n) =>
-      !hidden.has(n.id) &&
-      (n.kind !== "phantom-host" || connected.has(n.id)),
-  )
-  return { ...t, nodes, edges }
-}
-
 export function TopologyView({ operationId }: TopologyViewProps) {
   const { data, isLoading, isError } = useAllHosts(operationId)
   // Persisted in the host store so the choice survives reloads.
   const relation = useHostStore((s) => s.topologyRelation)
   const setRelation = useHostStore((s) => s.setTopologyRelation)
+  // Layer 1 (built-in well-known group): a localStorage toggle in the store.
   const hideWellKnown = useHostStore((s) => s.hideWellKnownIdentities)
   const setHideWellKnown = useHostStore((s) => s.setHideWellKnownIdentities)
   const openEditDialog = useHostStore((s) => s.openEditDialog)
+
+  // Layer 2 (per-operator custom list): server state, normalized server-side.
+  const { data: meData } = useMe()
+  const setHiddenIdentities = useSetHiddenIdentities()
+  const customHidden = useMemo(
+    () => meData?.me.hiddenIdentities ?? [],
+    [meData?.me.hiddenIdentities],
+  )
+
+  // Both layers feed one set of usernames to hide (already lowercased: the
+  // built-in set is lowercase and the custom list is normalized on the server).
+  const hiddenUsers = useMemo(() => {
+    const set = new Set<string>(customHidden)
+    if (hideWellKnown) for (const a of WELL_KNOWN_ACCOUNTS) set.add(a)
+    return set
+  }, [customHidden, hideWellKnown])
+
+  // Right-click "Hide" / panel "unhide" both rewrite the whole list (the
+  // mutation replaces it). Compute the next array from the current one.
+  const hideIdentity = useCallback(
+    (user: string) => {
+      const name = user.trim().toLowerCase()
+      if (!name || customHidden.includes(name)) return
+      setHiddenIdentities.mutate([...customHidden, name])
+    },
+    [customHidden, setHiddenIdentities],
+  )
+  const unhideIdentity = useCallback(
+    (user: string) => {
+      const name = user.trim().toLowerCase()
+      setHiddenIdentities.mutate(customHidden.filter((n) => n !== name))
+    },
+    [customHidden, setHiddenIdentities],
+  )
+
+  // One shared right-click menu for all identity pills (see node-context-menu).
+  const [nodeMenu, setNodeMenu] = useState<NodeMenuState | null>(null)
+  const onNodeContextMenu = useCallback(
+    (event: React.MouseEvent, node: Node) => {
+      if (node.type !== "identity") return
+      event.preventDefault()
+      setNodeMenu({
+        x: event.clientX,
+        y: event.clientY,
+        user: (node.data as { user: string }).user,
+      })
+    },
+    [],
+  )
 
   const topology = useMemo(
     () => deriveTopology(data?.hosts ?? []),
@@ -158,11 +191,11 @@ export function TopologyView({ operationId }: TopologyViewProps) {
   const visibleTopology = useMemo(() => {
     const lensed = lenses[relation](topology)
     if (relation !== "identities") return lensed
-    // Hide common accounts first (it can strip a ghost source's only other
-    // edge), THEN collapse the lone sources so the count reflects what's left.
-    const filtered = hideWellKnown ? withoutWellKnownIdentities(lensed) : lensed
+    // Hide accounts first (it can strip a ghost source's only other edge),
+    // THEN collapse the lone sources so the count reflects what's left.
+    const filtered = withoutHiddenIdentities(lensed, hiddenUsers)
     return collapsePhantomHosts(filtered)
-  }, [topology, relation, hideWellKnown])
+  }, [topology, relation, hiddenUsers])
 
   // Live force-directed layout: pre-settled for first paint, re-heated while
   // a node is dragged so neighbors follow. Positions are session-only: any
@@ -244,6 +277,7 @@ export function TopologyView({ operationId }: TopologyViewProps) {
             onNodeDragStop={onNodeDragStop}
             onNodeClick={onNodeClick}
             onNodeDoubleClick={onNodeDoubleClick}
+            onNodeContextMenu={onNodeContextMenu}
             onPaneClick={clearEmphasis}
             nodeTypes={nodeTypes}
             edgeTypes={edgeTypes}
@@ -267,15 +301,24 @@ export function TopologyView({ operationId }: TopologyViewProps) {
             <div className="absolute right-3 top-3 z-10 flex flex-col items-end gap-2">
               <RelationPicker relation={relation} onChange={setRelation} />
               {relation === "identities" && (
-                <WellKnownToggle
-                  hide={hideWellKnown}
-                  onChange={setHideWellKnown}
+                <HiddenIdentitiesPanel
+                  hideWellKnown={hideWellKnown}
+                  onToggleWellKnown={setHideWellKnown}
+                  customHidden={customHidden}
+                  onUnhide={unhideIdentity}
                 />
               )}
             </div>
             <TopologySearch {...search} />
           </ReactFlow>
         </ReactFlowProvider>
+        {nodeMenu && (
+          <NodeContextMenu
+            menu={nodeMenu}
+            onHide={hideIdentity}
+            onClose={() => setNodeMenu(null)}
+          />
+        )}
       </div>
     </div>
   )
@@ -343,30 +386,6 @@ function RelationPicker({
         </Button>
       ))}
     </div>
-  )
-}
-
-// Top-right toggle (users lens only): hide the ubiquitous accounts so the
-// distinctive identities stand out. Matches the RelationPicker's pill styling.
-function WellKnownToggle({
-  hide,
-  onChange,
-}: {
-  hide: boolean
-  onChange: (hide: boolean) => void
-}) {
-  return (
-    <Button
-      variant={hide ? "secondary" : "ghost"}
-      size="sm"
-      className="h-7 gap-1.5 rounded-md border bg-card/90 text-xs shadow-sm backdrop-blur"
-      onClick={() => onChange(!hide)}
-      aria-pressed={hide}
-      title="Hide root, ubuntu, and other accounts every host shares — they link by default but carry weak reuse signal"
-    >
-      <UsersIcon className="size-3.5" />
-      {hide ? "Common accounts hidden" : "Hide common accounts"}
-    </Button>
   )
 }
 

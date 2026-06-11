@@ -1,7 +1,7 @@
 import { useQuery, useInfiniteQuery, useMutation, useQueryClient } from "@tanstack/react-query"
 import { graphqlClient } from "@/lib/graphql-client"
 import { useSubscription } from "@/hooks/use-subscription"
-import type { CreateUserInput, UpdateUserInput } from "@/graphql/gql/graphql"
+import type { CreateUserInput, UpdateUserInput, MeQuery } from "@/graphql/gql/graphql"
 import {
   MeDocument,
   UserDocument,
@@ -10,6 +10,7 @@ import {
   UpdateUserDocument,
   DeleteUserDocument,
   UpdateOwnProfileDocument,
+  SetHiddenIdentitiesDocument,
   UserChangedDocument,
 } from "@/graphql/gql/graphql"
 
@@ -120,6 +121,39 @@ export function useUpdateOwnProfile() {
       graphqlClient(UpdateOwnProfileDocument, { input }),
     onSuccess: () => {
       // Own profile isn't covered by the userChanged subscription.
+      queryClient.invalidateQueries({ queryKey: userKeys.me() })
+    },
+  })
+}
+
+/**
+ * Replace the caller's hidden-identity list (usernames hidden from the host
+ * topology Users lens). Optimistically patches the `me` cache so right-click
+ * "Hide" feels instant; the server response (normalized names) reconciles it,
+ * and any error rolls the cache back.
+ */
+export function useSetHiddenIdentities() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (names: string[]) =>
+      graphqlClient(SetHiddenIdentitiesDocument, { names }),
+    onMutate: async (names) => {
+      await queryClient.cancelQueries({ queryKey: userKeys.me() })
+      const previous = queryClient.getQueryData<MeQuery>(userKeys.me())
+      if (previous?.me) {
+        queryClient.setQueryData<MeQuery>(userKeys.me(), {
+          ...previous,
+          me: { ...previous.me, hiddenIdentities: names },
+        })
+      }
+      return { previous }
+    },
+    onError: (_err, _names, context) => {
+      if (context?.previous) {
+        queryClient.setQueryData(userKeys.me(), context.previous)
+      }
+    },
+    onSettled: () => {
       queryClient.invalidateQueries({ queryKey: userKeys.me() })
     },
   })

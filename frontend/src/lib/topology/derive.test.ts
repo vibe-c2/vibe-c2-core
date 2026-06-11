@@ -1,7 +1,12 @@
 import { describe, expect, it } from "vitest"
 import type { HostFieldsFragment } from "@/graphql/gql/graphql"
 import { hostAddr, isValidCidr, networkKey } from "@/lib/topology/cidr"
-import { deriveTopology, type TopoEdge, type TopoNode } from "@/lib/topology/derive"
+import {
+  deriveTopology,
+  withoutHiddenIdentities,
+  type TopoEdge,
+  type TopoNode,
+} from "@/lib/topology/derive"
 
 // --- builders ----------------------------------------------------------------
 
@@ -325,5 +330,71 @@ describe("deriveTopology — identity layer (logins)", () => {
     expect(byKind(t.nodes, "identity")).toHaveLength(0)
     expect(edgesOf(t.edges, "logged-into")).toHaveLength(0)
     expect(t.stats.identities).toBe(0)
+  })
+})
+
+describe("withoutHiddenIdentities", () => {
+  it("removes a hidden identity node and the edges touching it", () => {
+    const t = deriveTopology([
+      host("h1", "alpha", [{ addresses: ["10.0.0.1/24"] }], [], [
+        { user: "alice" },
+        { user: "default" },
+      ]),
+    ])
+    const out = withoutHiddenIdentities(t, new Set(["default"]))
+
+    const ids = byKind(out.nodes, "identity")
+    expect(ids).toHaveLength(1)
+    expect(ids[0].user).toBe("alice")
+    // No edge may reference the removed identity node.
+    const goneId = byKind(t.nodes, "identity").find((n) => n.user === "default")!.id
+    expect(out.edges.some((e) => e.source === goneId || e.target === goneId)).toBe(
+      false,
+    )
+  })
+
+  it("matches case-insensitively", () => {
+    const t = deriveTopology([
+      host("h1", "alpha", [{ addresses: ["10.0.0.1/24"] }], [], [{ user: "Default" }]),
+    ])
+    const out = withoutHiddenIdentities(t, new Set(["default"]))
+    expect(byKind(out.nodes, "identity")).toHaveLength(0)
+  })
+
+  it("prunes a phantom host orphaned by hiding its only identity", () => {
+    // svc logged into h1 FROM an unmapped source -> spawns a phantom host whose
+    // only edge is to svc. Hiding svc should drop the phantom too.
+    const t = deriveTopology([
+      host("h1", "alpha", [{ addresses: ["10.0.0.1/24"] }], [], [
+        { user: "svc", from: "10.9.9.9" },
+      ]),
+    ])
+    expect(byKind(t.nodes, "phantom-host")).toHaveLength(1)
+
+    const out = withoutHiddenIdentities(t, new Set(["svc"]))
+    expect(byKind(out.nodes, "identity")).toHaveLength(0)
+    expect(byKind(out.nodes, "phantom-host")).toHaveLength(0)
+  })
+
+  it("keeps real hosts as anchors even when isolated by hiding", () => {
+    const t = deriveTopology([
+      host("h1", "alpha", [{ addresses: ["10.0.0.1/24"] }], [], [{ user: "default" }]),
+    ])
+    const out = withoutHiddenIdentities(t, new Set(["default"]))
+    expect(byKind(out.nodes, "host").map((n) => n.id)).toContain("h1")
+  })
+
+  it("is a no-op (returns the input) for an empty hidden set", () => {
+    const t = deriveTopology([
+      host("h1", "alpha", [{ addresses: ["10.0.0.1/24"] }], [], [{ user: "alice" }]),
+    ])
+    expect(withoutHiddenIdentities(t, new Set())).toBe(t)
+  })
+
+  it("is a no-op when no identity matches the hidden set", () => {
+    const t = deriveTopology([
+      host("h1", "alpha", [{ addresses: ["10.0.0.1/24"] }], [], [{ user: "alice" }]),
+    ])
+    expect(withoutHiddenIdentities(t, new Set(["nobody-here"]))).toBe(t)
   })
 })

@@ -155,6 +155,11 @@ export function PhantomGatewayNode({ data }: NodeProps<Node<PhantomGatewayNodeDa
 // seen on several hosts becomes a star linking them. Well-known accounts
 // (root, ubuntu, …) read muted: they link by default but carry weaker signal.
 // Sized by the layout via the node's style.
+//
+// Right-click → "Hide" is handled at the graph level (one shared menu via React
+// Flow's onNodeContextMenu in topology-view), not per node: wrapping every
+// identity pill in its own context-menu provider mounted one provider per node
+// on the exact lens that already struggles with density.
 export function IdentityNode({ data }: NodeProps<Node<IdentityNodeData>>) {
   return (
     <div

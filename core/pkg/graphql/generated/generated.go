@@ -250,6 +250,7 @@ type ComplexityRoot struct {
 		RestoreWikiDocumentBackup     func(childComplexity int, documentID string, backupID string) int
 		RevokeAllMySessions           func(childComplexity int) int
 		RevokeSession                 func(childComplexity int, id string) int
+		SetHiddenIdentities           func(childComplexity int, names []string) int
 		SetMyAPIKeyEnabled            func(childComplexity int, enabled bool) int
 		SetTaskAssignees              func(childComplexity int, taskID string, assigneeIds []string) int
 		SetTaskCredentialReferences   func(childComplexity int, taskID string, credentialIds []string) int
@@ -507,12 +508,13 @@ type ComplexityRoot struct {
 	}
 
 	User struct {
-		Active    func(childComplexity int) int
-		CreatedAt func(childComplexity int) int
-		ID        func(childComplexity int) int
-		Roles     func(childComplexity int) int
-		UpdatedAt func(childComplexity int) int
-		Username  func(childComplexity int) int
+		Active           func(childComplexity int) int
+		CreatedAt        func(childComplexity int) int
+		HiddenIdentities func(childComplexity int) int
+		ID               func(childComplexity int) int
+		Roles            func(childComplexity int) int
+		UpdatedAt        func(childComplexity int) int
+		Username         func(childComplexity int) int
 	}
 
 	UserConnection struct {
@@ -727,6 +729,7 @@ type MutationResolver interface {
 	UpdateUser(ctx context.Context, id string, input model.UpdateUserInput) (*models.User, error)
 	DeleteUser(ctx context.Context, id string) (bool, error)
 	UpdateOwnProfile(ctx context.Context, input model.UpdateUserInput) (*models.User, error)
+	SetHiddenIdentities(ctx context.Context, names []string) (*models.User, error)
 	CreateOperation(ctx context.Context, input model.CreateOperationInput) (*models.Operation, error)
 	UpdateOperation(ctx context.Context, id string, input model.UpdateOperationInput) (*models.Operation, error)
 	DeleteOperation(ctx context.Context, id string) (bool, error)
@@ -1984,6 +1987,17 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.Mutation.RevokeSession(childComplexity, args["id"].(string)), true
+	case "Mutation.setHiddenIdentities":
+		if e.ComplexityRoot.Mutation.SetHiddenIdentities == nil {
+			break
+		}
+
+		args, err := ec.field_Mutation_setHiddenIdentities_args(ctx, rawArgs)
+		if err != nil {
+			return 0, false
+		}
+
+		return e.ComplexityRoot.Mutation.SetHiddenIdentities(childComplexity, args["names"].([]string)), true
 	case "Mutation.setMyAPIKeyEnabled":
 		if e.ComplexityRoot.Mutation.SetMyAPIKeyEnabled == nil {
 			break
@@ -3479,6 +3493,12 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.User.CreatedAt(childComplexity), true
+	case "User.hiddenIdentities":
+		if e.ComplexityRoot.User.HiddenIdentities == nil {
+			break
+		}
+
+		return e.ComplexityRoot.User.HiddenIdentities(childComplexity), true
 	case "User.id":
 		if e.ComplexityRoot.User.ID == nil {
 			break
@@ -5000,6 +5020,9 @@ type User {
   active: Boolean!         # Whether this account is enabled
   createdAt: String!       # ISO 8601 timestamp
   updatedAt: String!       # ISO 8601 timestamp
+  # Usernames this operator hides from the host topology Users lens.
+  # Per-operator, global across operations. Normalized (trimmed, lowercased).
+  hiddenIdentities: [String!]!
 }
 
 # Minimal user info for autocomplete pickers (e.g., adding operation members).
@@ -5205,6 +5228,13 @@ type Mutation {
   # Requires user:update:own permission (any authenticated user).
   # The server determines which user to update from the JWT token.
   updateOwnProfile(input: UpdateUserInput!): User!
+    @hasPermission(permission: "user:update:own")
+
+  # setHiddenIdentities replaces the caller's hidden-identity list (the
+  # usernames hidden from the host topology Users lens). The server determines
+  # which user to update from the JWT token and normalizes the names.
+  # Requires user:update:own permission (any authenticated user).
+  setHiddenIdentities(names: [String!]!): User!
     @hasPermission(permission: "user:update:own")
 
   # createOperation registers a new operation.
@@ -6899,6 +6929,17 @@ func (ec *executionContext) field_Mutation_revokeSession_args(ctx context.Contex
 		return nil, err
 	}
 	args["id"] = arg0
+	return args, nil
+}
+
+func (ec *executionContext) field_Mutation_setHiddenIdentities_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
+	var err error
+	args := map[string]any{}
+	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "names", ec.unmarshalNString2ᚕstringᚄ)
+	if err != nil {
+		return nil, err
+	}
+	args["names"] = arg0
 	return args, nil
 }
 
@@ -9202,6 +9243,8 @@ func (ec *executionContext) fieldContext_Credential_createdBy(_ context.Context,
 				return ec.fieldContext_User_createdAt(ctx, field)
 			case "updatedAt":
 				return ec.fieldContext_User_updatedAt(ctx, field)
+			case "hiddenIdentities":
+				return ec.fieldContext_User_hiddenIdentities(ctx, field)
 			}
 			return nil, fmt.Errorf("no field named %q was found under type User", field.Name)
 		},
@@ -9572,6 +9615,8 @@ func (ec *executionContext) fieldContext_CredentialComment_author(_ context.Cont
 				return ec.fieldContext_User_createdAt(ctx, field)
 			case "updatedAt":
 				return ec.fieldContext_User_updatedAt(ctx, field)
+			case "hiddenIdentities":
+				return ec.fieldContext_User_hiddenIdentities(ctx, field)
 			}
 			return nil, fmt.Errorf("no field named %q was found under type User", field.Name)
 		},
@@ -10496,6 +10541,8 @@ func (ec *executionContext) fieldContext_Hash_createdBy(_ context.Context, field
 				return ec.fieldContext_User_createdAt(ctx, field)
 			case "updatedAt":
 				return ec.fieldContext_User_updatedAt(ctx, field)
+			case "hiddenIdentities":
+				return ec.fieldContext_User_hiddenIdentities(ctx, field)
 			}
 			return nil, fmt.Errorf("no field named %q was found under type User", field.Name)
 		},
@@ -11314,6 +11361,8 @@ func (ec *executionContext) fieldContext_Host_createdBy(_ context.Context, field
 				return ec.fieldContext_User_createdAt(ctx, field)
 			case "updatedAt":
 				return ec.fieldContext_User_updatedAt(ctx, field)
+			case "hiddenIdentities":
+				return ec.fieldContext_User_hiddenIdentities(ctx, field)
 			}
 			return nil, fmt.Errorf("no field named %q was found under type User", field.Name)
 		},
@@ -11904,6 +11953,8 @@ func (ec *executionContext) fieldContext_Mutation_createUser(ctx context.Context
 				return ec.fieldContext_User_createdAt(ctx, field)
 			case "updatedAt":
 				return ec.fieldContext_User_updatedAt(ctx, field)
+			case "hiddenIdentities":
+				return ec.fieldContext_User_hiddenIdentities(ctx, field)
 			}
 			return nil, fmt.Errorf("no field named %q was found under type User", field.Name)
 		},
@@ -11977,6 +12028,8 @@ func (ec *executionContext) fieldContext_Mutation_updateUser(ctx context.Context
 				return ec.fieldContext_User_createdAt(ctx, field)
 			case "updatedAt":
 				return ec.fieldContext_User_updatedAt(ctx, field)
+			case "hiddenIdentities":
+				return ec.fieldContext_User_hiddenIdentities(ctx, field)
 			}
 			return nil, fmt.Errorf("no field named %q was found under type User", field.Name)
 		},
@@ -12109,6 +12162,8 @@ func (ec *executionContext) fieldContext_Mutation_updateOwnProfile(ctx context.C
 				return ec.fieldContext_User_createdAt(ctx, field)
 			case "updatedAt":
 				return ec.fieldContext_User_updatedAt(ctx, field)
+			case "hiddenIdentities":
+				return ec.fieldContext_User_hiddenIdentities(ctx, field)
 			}
 			return nil, fmt.Errorf("no field named %q was found under type User", field.Name)
 		},
@@ -12121,6 +12176,81 @@ func (ec *executionContext) fieldContext_Mutation_updateOwnProfile(ctx context.C
 	}()
 	ctx = graphql.WithFieldContext(ctx, fc)
 	if fc.Args, err = ec.field_Mutation_updateOwnProfile_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
+		ec.Error(ctx, err)
+		return fc, err
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Mutation_setHiddenIdentities(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Mutation_setHiddenIdentities,
+		func(ctx context.Context) (any, error) {
+			fc := graphql.GetFieldContext(ctx)
+			return ec.Resolvers.Mutation().SetHiddenIdentities(ctx, fc.Args["names"].([]string))
+		},
+		func(ctx context.Context, next graphql.Resolver) graphql.Resolver {
+			directive0 := next
+
+			directive1 := func(ctx context.Context) (any, error) {
+				permission, err := ec.unmarshalNString2string(ctx, "user:update:own")
+				if err != nil {
+					var zeroVal *models.User
+					return zeroVal, err
+				}
+				if ec.Directives.HasPermission == nil {
+					var zeroVal *models.User
+					return zeroVal, errors.New("directive hasPermission is not implemented")
+				}
+				return ec.Directives.HasPermission(ctx, nil, directive0, permission)
+			}
+
+			next = directive1
+			return next
+		},
+		ec.marshalNUser2ᚖgithubᚗcomᚋvibeᚑc2ᚋvibeᚑc2ᚑcoreᚋcoreᚋpkgᚋmodelsᚐUser,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_Mutation_setHiddenIdentities(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Mutation",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "id":
+				return ec.fieldContext_User_id(ctx, field)
+			case "username":
+				return ec.fieldContext_User_username(ctx, field)
+			case "roles":
+				return ec.fieldContext_User_roles(ctx, field)
+			case "active":
+				return ec.fieldContext_User_active(ctx, field)
+			case "createdAt":
+				return ec.fieldContext_User_createdAt(ctx, field)
+			case "updatedAt":
+				return ec.fieldContext_User_updatedAt(ctx, field)
+			case "hiddenIdentities":
+				return ec.fieldContext_User_hiddenIdentities(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type User", field.Name)
+		},
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			err = ec.Recover(ctx, r)
+			ec.Error(ctx, err)
+		}
+	}()
+	ctx = graphql.WithFieldContext(ctx, fc)
+	if fc.Args, err = ec.field_Mutation_setHiddenIdentities_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
 		ec.Error(ctx, err)
 		return fc, err
 	}
@@ -16990,6 +17120,8 @@ func (ec *executionContext) fieldContext_OperationMember_user(_ context.Context,
 				return ec.fieldContext_User_createdAt(ctx, field)
 			case "updatedAt":
 				return ec.fieldContext_User_updatedAt(ctx, field)
+			case "hiddenIdentities":
+				return ec.fieldContext_User_hiddenIdentities(ctx, field)
 			}
 			return nil, fmt.Errorf("no field named %q was found under type User", field.Name)
 		},
@@ -17283,6 +17415,8 @@ func (ec *executionContext) fieldContext_Query_me(_ context.Context, field graph
 				return ec.fieldContext_User_createdAt(ctx, field)
 			case "updatedAt":
 				return ec.fieldContext_User_updatedAt(ctx, field)
+			case "hiddenIdentities":
+				return ec.fieldContext_User_hiddenIdentities(ctx, field)
 			}
 			return nil, fmt.Errorf("no field named %q was found under type User", field.Name)
 		},
@@ -17345,6 +17479,8 @@ func (ec *executionContext) fieldContext_Query_user(ctx context.Context, field g
 				return ec.fieldContext_User_createdAt(ctx, field)
 			case "updatedAt":
 				return ec.fieldContext_User_updatedAt(ctx, field)
+			case "hiddenIdentities":
+				return ec.fieldContext_User_hiddenIdentities(ctx, field)
 			}
 			return nil, fmt.Errorf("no field named %q was found under type User", field.Name)
 		},
@@ -21077,6 +21213,8 @@ func (ec *executionContext) fieldContext_Session_user(_ context.Context, field g
 				return ec.fieldContext_User_createdAt(ctx, field)
 			case "updatedAt":
 				return ec.fieldContext_User_updatedAt(ctx, field)
+			case "hiddenIdentities":
+				return ec.fieldContext_User_hiddenIdentities(ctx, field)
 			}
 			return nil, fmt.Errorf("no field named %q was found under type User", field.Name)
 		},
@@ -23025,6 +23163,8 @@ func (ec *executionContext) fieldContext_Task_assignees(_ context.Context, field
 				return ec.fieldContext_User_createdAt(ctx, field)
 			case "updatedAt":
 				return ec.fieldContext_User_updatedAt(ctx, field)
+			case "hiddenIdentities":
+				return ec.fieldContext_User_hiddenIdentities(ctx, field)
 			}
 			return nil, fmt.Errorf("no field named %q was found under type User", field.Name)
 		},
@@ -23216,6 +23356,8 @@ func (ec *executionContext) fieldContext_Task_createdBy(_ context.Context, field
 				return ec.fieldContext_User_createdAt(ctx, field)
 			case "updatedAt":
 				return ec.fieldContext_User_updatedAt(ctx, field)
+			case "hiddenIdentities":
+				return ec.fieldContext_User_hiddenIdentities(ctx, field)
 			}
 			return nil, fmt.Errorf("no field named %q was found under type User", field.Name)
 		},
@@ -23259,6 +23401,8 @@ func (ec *executionContext) fieldContext_Task_lastUpdatedBy(_ context.Context, f
 				return ec.fieldContext_User_createdAt(ctx, field)
 			case "updatedAt":
 				return ec.fieldContext_User_updatedAt(ctx, field)
+			case "hiddenIdentities":
+				return ec.fieldContext_User_hiddenIdentities(ctx, field)
 			}
 			return nil, fmt.Errorf("no field named %q was found under type User", field.Name)
 		},
@@ -24091,6 +24235,8 @@ func (ec *executionContext) fieldContext_TimelineEvent_actor(_ context.Context, 
 				return ec.fieldContext_User_createdAt(ctx, field)
 			case "updatedAt":
 				return ec.fieldContext_User_updatedAt(ctx, field)
+			case "hiddenIdentities":
+				return ec.fieldContext_User_hiddenIdentities(ctx, field)
 			}
 			return nil, fmt.Errorf("no field named %q was found under type User", field.Name)
 		},
@@ -24656,6 +24802,35 @@ func (ec *executionContext) fieldContext_User_updatedAt(_ context.Context, field
 	return fc, nil
 }
 
+func (ec *executionContext) _User_hiddenIdentities(ctx context.Context, field graphql.CollectedField, obj *models.User) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_User_hiddenIdentities,
+		func(ctx context.Context) (any, error) {
+			return obj.HiddenIdentities, nil
+		},
+		nil,
+		ec.marshalNString2ᚕstringᚄ,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_User_hiddenIdentities(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "User",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
 func (ec *executionContext) _UserConnection_edges(ctx context.Context, field graphql.CollectedField, obj *model.UserConnection) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
@@ -24795,6 +24970,8 @@ func (ec *executionContext) fieldContext_UserEdge_node(_ context.Context, field 
 				return ec.fieldContext_User_createdAt(ctx, field)
 			case "updatedAt":
 				return ec.fieldContext_User_updatedAt(ctx, field)
+			case "hiddenIdentities":
+				return ec.fieldContext_User_hiddenIdentities(ctx, field)
 			}
 			return nil, fmt.Errorf("no field named %q was found under type User", field.Name)
 		},
@@ -24954,6 +25131,8 @@ func (ec *executionContext) fieldContext_UserEvent_user(_ context.Context, field
 				return ec.fieldContext_User_createdAt(ctx, field)
 			case "updatedAt":
 				return ec.fieldContext_User_updatedAt(ctx, field)
+			case "hiddenIdentities":
+				return ec.fieldContext_User_hiddenIdentities(ctx, field)
 			}
 			return nil, fmt.Errorf("no field named %q was found under type User", field.Name)
 		},
@@ -25619,6 +25798,8 @@ func (ec *executionContext) fieldContext_WikiDocument_createdBy(_ context.Contex
 				return ec.fieldContext_User_createdAt(ctx, field)
 			case "updatedAt":
 				return ec.fieldContext_User_updatedAt(ctx, field)
+			case "hiddenIdentities":
+				return ec.fieldContext_User_hiddenIdentities(ctx, field)
 			}
 			return nil, fmt.Errorf("no field named %q was found under type User", field.Name)
 		},
@@ -25662,6 +25843,8 @@ func (ec *executionContext) fieldContext_WikiDocument_lastUpdatedBy(_ context.Co
 				return ec.fieldContext_User_createdAt(ctx, field)
 			case "updatedAt":
 				return ec.fieldContext_User_updatedAt(ctx, field)
+			case "hiddenIdentities":
+				return ec.fieldContext_User_hiddenIdentities(ctx, field)
 			}
 			return nil, fmt.Errorf("no field named %q was found under type User", field.Name)
 		},
@@ -25792,6 +25975,8 @@ func (ec *executionContext) fieldContext_WikiDocument_deletedBy(_ context.Contex
 				return ec.fieldContext_User_createdAt(ctx, field)
 			case "updatedAt":
 				return ec.fieldContext_User_updatedAt(ctx, field)
+			case "hiddenIdentities":
+				return ec.fieldContext_User_hiddenIdentities(ctx, field)
 			}
 			return nil, fmt.Errorf("no field named %q was found under type User", field.Name)
 		},
@@ -26345,6 +26530,8 @@ func (ec *executionContext) fieldContext_WikiDocumentBackup_createdBy(_ context.
 				return ec.fieldContext_User_createdAt(ctx, field)
 			case "updatedAt":
 				return ec.fieldContext_User_updatedAt(ctx, field)
+			case "hiddenIdentities":
+				return ec.fieldContext_User_hiddenIdentities(ctx, field)
 			}
 			return nil, fmt.Errorf("no field named %q was found under type User", field.Name)
 		},
@@ -33050,6 +33237,13 @@ func (ec *executionContext) _Mutation(ctx context.Context, sel ast.SelectionSet)
 			if out.Values[i] == graphql.Null {
 				out.Invalids++
 			}
+		case "setHiddenIdentities":
+			out.Values[i] = ec.OperationContext.RootResolverMiddleware(innerCtx, func(ctx context.Context) (res graphql.Marshaler) {
+				return ec._Mutation_setHiddenIdentities(ctx, field)
+			})
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
 		case "createOperation":
 			out.Values[i] = ec.OperationContext.RootResolverMiddleware(innerCtx, func(ctx context.Context) (res graphql.Marshaler) {
 				return ec._Mutation_createOperation(ctx, field)
@@ -37021,6 +37215,11 @@ func (ec *executionContext) _User(ctx context.Context, sel ast.SelectionSet, obj
 			}
 
 			out.Concurrently(i, func(ctx context.Context) graphql.Marshaler { return innerFunc(ctx, out) })
+		case "hiddenIdentities":
+			out.Values[i] = ec._User_hiddenIdentities(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				atomic.AddUint32(&out.Invalids, 1)
+			}
 		default:
 			panic("unknown field " + strconv.Quote(field.Name))
 		}

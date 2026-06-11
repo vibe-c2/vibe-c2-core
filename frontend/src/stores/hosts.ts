@@ -52,8 +52,11 @@ interface HostStoreState {
   // Topology-only: which relation type builds the graph. Lives here (not
   // component state) so the preference survives reloads and view switches.
   topologyRelation: TopologyRelation
-  // Users lens only: hide the ubiquitous accounts (root, ubuntu, …) so the
-  // genuinely interesting identities stand out. Persisted with the relation.
+  // Users lens, layer 1: hide the built-in ubiquitous accounts (root, ubuntu, …)
+  // as a group so the genuinely interesting identities stand out. A per-browser
+  // preference, persisted with the relation. Layer 2 — the operator's custom
+  // hidden usernames — is per-operator server state (User.hiddenIdentities via
+  // useMe/useSetHiddenIdentities), not stored here.
   hideWellKnownIdentities: boolean
 
   formDialogOpen: boolean

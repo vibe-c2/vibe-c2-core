@@ -33,6 +33,11 @@ func (r *mutationResolver) UpdateOwnProfile(ctx context.Context, input model.Upd
 	return r.UserResolver.UpdateOwnProfile(ctx, input)
 }
 
+// SetHiddenIdentities replaces the caller's hidden-identity list.
+func (r *mutationResolver) SetHiddenIdentities(ctx context.Context, names []string) (*models.User, error) {
+	return r.UserResolver.SetHiddenIdentities(ctx, names)
+}
+
 // CreateOperation creates a new operation.
 func (r *mutationResolver) CreateOperation(ctx context.Context, input model.CreateOperationInput) (*models.Operation, error) {
 	return r.OperationResolver.CreateOperation(ctx, input)

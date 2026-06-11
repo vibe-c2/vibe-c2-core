@@ -110,13 +110,14 @@ type Documents = {
     "\n  mutation UpdateCustomTimelineEvent(\n    $id: ID!\n    $input: UpdateCustomTimelineEventInput!\n  ) {\n    updateCustomTimelineEvent(id: $id, input: $input) {\n      ...TimelineEventFields\n    }\n  }\n": typeof types.UpdateCustomTimelineEventDocument,
     "\n  mutation DeleteCustomTimelineEvent($id: ID!) {\n    deleteCustomTimelineEvent(id: $id)\n  }\n": typeof types.DeleteCustomTimelineEventDocument,
     "\n  fragment UserFields on User {\n    id\n    username\n    roles\n    active\n    createdAt\n    updatedAt\n  }\n": typeof types.UserFieldsFragmentDoc,
-    "\n  query Me {\n    me {\n      ...UserFields\n    }\n  }\n": typeof types.MeDocument,
+    "\n  query Me {\n    me {\n      ...UserFields\n      hiddenIdentities\n    }\n  }\n": typeof types.MeDocument,
     "\n  query User($id: ID!) {\n    user(id: $id) {\n      ...UserFields\n    }\n  }\n": typeof types.UserDocument,
     "\n  query Users($search: String, $first: Int, $after: String) {\n    users(search: $search, first: $first, after: $after) {\n      edges {\n        node {\n          ...UserFields\n        }\n        cursor\n      }\n      pageInfo {\n        hasNextPage\n        hasPreviousPage\n        startCursor\n        endCursor\n      }\n      totalCount\n    }\n  }\n": typeof types.UsersDocument,
     "\n  mutation CreateUser($input: CreateUserInput!) {\n    createUser(input: $input) {\n      ...UserFields\n    }\n  }\n": typeof types.CreateUserDocument,
     "\n  mutation UpdateUser($id: ID!, $input: UpdateUserInput!) {\n    updateUser(id: $id, input: $input) {\n      ...UserFields\n    }\n  }\n": typeof types.UpdateUserDocument,
     "\n  mutation DeleteUser($id: ID!) {\n    deleteUser(id: $id)\n  }\n": typeof types.DeleteUserDocument,
     "\n  mutation UpdateOwnProfile($input: UpdateUserInput!) {\n    updateOwnProfile(input: $input) {\n      ...UserFields\n    }\n  }\n": typeof types.UpdateOwnProfileDocument,
+    "\n  mutation SetHiddenIdentities($names: [String!]!) {\n    setHiddenIdentities(names: $names) {\n      id\n      hiddenIdentities\n    }\n  }\n": typeof types.SetHiddenIdentitiesDocument,
     "\n  subscription UserChanged {\n    userChanged {\n      action\n      userId\n      username\n      user {\n        ...UserFields\n      }\n    }\n  }\n": typeof types.UserChangedDocument,
     "\n  fragment WikiDocumentTreeFields on WikiDocument {\n    id\n    # operationId is required so per-parent cache writes (revealPath,\n    # ensureWikiTree) can key on the row's *actual* operation rather than\n    # trusting whichever operationId the caller had in scope at fetch time.\n    # Without it, opening a /wiki/<operationDocId> URL while the Public tab\n    # is active silently pollutes the Public children cache with operation\n    # rows — sidebar then renders the wrong tree under Public.\n    operationId\n    parentDocumentId\n    title\n    emoji\n    icon\n    color\n    sortOrder\n    childCount\n    lastUpdatedAt\n    updatedAt\n  }\n": typeof types.WikiDocumentTreeFieldsFragmentDoc,
     "\n  fragment WikiDocumentLiteFields on WikiDocument {\n    id\n    title\n    emoji\n    icon\n    color\n    deletedAt\n  }\n": typeof types.WikiDocumentLiteFieldsFragmentDoc,
@@ -253,13 +254,14 @@ const documents: Documents = {
     "\n  mutation UpdateCustomTimelineEvent(\n    $id: ID!\n    $input: UpdateCustomTimelineEventInput!\n  ) {\n    updateCustomTimelineEvent(id: $id, input: $input) {\n      ...TimelineEventFields\n    }\n  }\n": types.UpdateCustomTimelineEventDocument,
     "\n  mutation DeleteCustomTimelineEvent($id: ID!) {\n    deleteCustomTimelineEvent(id: $id)\n  }\n": types.DeleteCustomTimelineEventDocument,
     "\n  fragment UserFields on User {\n    id\n    username\n    roles\n    active\n    createdAt\n    updatedAt\n  }\n": types.UserFieldsFragmentDoc,
-    "\n  query Me {\n    me {\n      ...UserFields\n    }\n  }\n": types.MeDocument,
+    "\n  query Me {\n    me {\n      ...UserFields\n      hiddenIdentities\n    }\n  }\n": types.MeDocument,
     "\n  query User($id: ID!) {\n    user(id: $id) {\n      ...UserFields\n    }\n  }\n": types.UserDocument,
     "\n  query Users($search: String, $first: Int, $after: String) {\n    users(search: $search, first: $first, after: $after) {\n      edges {\n        node {\n          ...UserFields\n        }\n        cursor\n      }\n      pageInfo {\n        hasNextPage\n        hasPreviousPage\n        startCursor\n        endCursor\n      }\n      totalCount\n    }\n  }\n": types.UsersDocument,
     "\n  mutation CreateUser($input: CreateUserInput!) {\n    createUser(input: $input) {\n      ...UserFields\n    }\n  }\n": types.CreateUserDocument,
     "\n  mutation UpdateUser($id: ID!, $input: UpdateUserInput!) {\n    updateUser(id: $id, input: $input) {\n      ...UserFields\n    }\n  }\n": types.UpdateUserDocument,
     "\n  mutation DeleteUser($id: ID!) {\n    deleteUser(id: $id)\n  }\n": types.DeleteUserDocument,
     "\n  mutation UpdateOwnProfile($input: UpdateUserInput!) {\n    updateOwnProfile(input: $input) {\n      ...UserFields\n    }\n  }\n": types.UpdateOwnProfileDocument,
+    "\n  mutation SetHiddenIdentities($names: [String!]!) {\n    setHiddenIdentities(names: $names) {\n      id\n      hiddenIdentities\n    }\n  }\n": types.SetHiddenIdentitiesDocument,
     "\n  subscription UserChanged {\n    userChanged {\n      action\n      userId\n      username\n      user {\n        ...UserFields\n      }\n    }\n  }\n": types.UserChangedDocument,
     "\n  fragment WikiDocumentTreeFields on WikiDocument {\n    id\n    # operationId is required so per-parent cache writes (revealPath,\n    # ensureWikiTree) can key on the row's *actual* operation rather than\n    # trusting whichever operationId the caller had in scope at fetch time.\n    # Without it, opening a /wiki/<operationDocId> URL while the Public tab\n    # is active silently pollutes the Public children cache with operation\n    # rows — sidebar then renders the wrong tree under Public.\n    operationId\n    parentDocumentId\n    title\n    emoji\n    icon\n    color\n    sortOrder\n    childCount\n    lastUpdatedAt\n    updatedAt\n  }\n": types.WikiDocumentTreeFieldsFragmentDoc,
     "\n  fragment WikiDocumentLiteFields on WikiDocument {\n    id\n    title\n    emoji\n    icon\n    color\n    deletedAt\n  }\n": types.WikiDocumentLiteFieldsFragmentDoc,
@@ -701,7 +703,7 @@ export function graphql(source: "\n  fragment UserFields on User {\n    id\n    
 /**
  * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
  */
-export function graphql(source: "\n  query Me {\n    me {\n      ...UserFields\n    }\n  }\n"): (typeof documents)["\n  query Me {\n    me {\n      ...UserFields\n    }\n  }\n"];
+export function graphql(source: "\n  query Me {\n    me {\n      ...UserFields\n      hiddenIdentities\n    }\n  }\n"): (typeof documents)["\n  query Me {\n    me {\n      ...UserFields\n      hiddenIdentities\n    }\n  }\n"];
 /**
  * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
  */
@@ -726,6 +728,10 @@ export function graphql(source: "\n  mutation DeleteUser($id: ID!) {\n    delete
  * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
  */
 export function graphql(source: "\n  mutation UpdateOwnProfile($input: UpdateUserInput!) {\n    updateOwnProfile(input: $input) {\n      ...UserFields\n    }\n  }\n"): (typeof documents)["\n  mutation UpdateOwnProfile($input: UpdateUserInput!) {\n    updateOwnProfile(input: $input) {\n      ...UserFields\n    }\n  }\n"];
+/**
+ * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
+ */
+export function graphql(source: "\n  mutation SetHiddenIdentities($names: [String!]!) {\n    setHiddenIdentities(names: $names) {\n      id\n      hiddenIdentities\n    }\n  }\n"): (typeof documents)["\n  mutation SetHiddenIdentities($names: [String!]!) {\n    setHiddenIdentities(names: $names) {\n      id\n      hiddenIdentities\n    }\n  }\n"];
 /**
  * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
  */

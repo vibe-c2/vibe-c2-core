@@ -32,7 +32,7 @@ const phantomHostId = (label: string) => `ph:${label}`
 // still links them by default (an operator may have set a shared password), but
 // a toggle hides them so the genuinely interesting accounts stand out. Matched
 // case-insensitively.
-const WELL_KNOWN_ACCOUNTS = new Set([
+export const WELL_KNOWN_ACCOUNTS = new Set([
   "root",
   "admin",
   "administrator",
@@ -389,4 +389,37 @@ export function deriveTopology(hosts: HostFieldsFragment[]): Topology {
       phantomHosts: phantomHosts.size,
     },
   }
+}
+
+// Users lens only: drop identities whose username is in `hidden` (normalized,
+// lowercased — built-in well-known set and/or the operator's custom list) and
+// any edges touching them. A phantom (unknown-source) host whose only edges led
+// to a hidden account is now an artifact, so prune the disconnected ones. Real
+// host nodes are always kept as anchors even when isolated — consistent with
+// how the routes/subnets lenses leave lone hosts on the canvas.
+export function withoutHiddenIdentities(
+  t: Topology,
+  hidden: ReadonlySet<string>,
+): Topology {
+  if (hidden.size === 0) return t
+
+  const hiddenIds = new Set(
+    t.nodes
+      .filter(
+        (n) => n.kind === "identity" && hidden.has(n.user.trim().toLowerCase()),
+      )
+      .map((n) => n.id),
+  )
+  if (hiddenIds.size === 0) return t
+
+  const edges = t.edges.filter(
+    (e) => !hiddenIds.has(e.source) && !hiddenIds.has(e.target),
+  )
+  const connected = new Set(edges.flatMap((e) => [e.source, e.target]))
+  const nodes = t.nodes.filter(
+    (n) =>
+      !hiddenIds.has(n.id) &&
+      (n.kind !== "phantom-host" || connected.has(n.id)),
+  )
+  return { ...t, nodes, edges }
 }

@@ -57,6 +57,9 @@ type User {
   active: Boolean!         # Whether this account is enabled
   createdAt: String!       # ISO 8601 timestamp
   updatedAt: String!       # ISO 8601 timestamp
+  # Usernames this operator hides from the host topology Users lens.
+  # Per-operator, global across operations. Normalized (trimmed, lowercased).
+  hiddenIdentities: [String!]!
 }
 
 # Minimal user info for autocomplete pickers (e.g., adding operation members).
@@ -262,6 +265,13 @@ type Mutation {
   # Requires user:update:own permission (any authenticated user).
   # The server determines which user to update from the JWT token.
   updateOwnProfile(input: UpdateUserInput!): User!
+    @hasPermission(permission: "user:update:own")
+
+  # setHiddenIdentities replaces the caller's hidden-identity list (the
+  # usernames hidden from the host topology Users lens). The server determines
+  # which user to update from the JWT token and normalizes the names.
+  # Requires user:update:own permission (any authenticated user).
+  setHiddenIdentities(names: [String!]!): User!
     @hasPermission(permission: "user:update:own")
 
   # createOperation registers a new operation.
