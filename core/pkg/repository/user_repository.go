@@ -9,8 +9,8 @@ import (
 	"github.com/vibe-c2/vibe-c2-core/core/pkg/database"
 	"github.com/vibe-c2/vibe-c2-core/core/pkg/models"
 	"github.com/vibe-c2/vibe-c2-core/core/pkg/pagination"
-	"go.mongodb.org/mongo-driver/v2/bson"
 	"go.mongodb.org/mongo-driver/mongo/options"
+	"go.mongodb.org/mongo-driver/v2/bson"
 )
 
 const userCollection = "users"
@@ -79,13 +79,7 @@ func (r *userRepository) FindAll(ctx context.Context, search string, offset, lim
 }
 
 func (r *userRepository) FindWithCursor(ctx context.Context, search string, cursor *pagination.Cursor, limit int64, forward bool) ([]models.User, error) {
-	filter := buildSearchFilter(search)
-
-	if cursorFilter := pagination.BuildCursorFilter(cursor, forward); len(cursorFilter) > 0 {
-		for k, v := range cursorFilter {
-			filter[k] = v
-		}
-	}
+	filter := pagination.ApplyCursorFilter(buildSearchFilter(search), cursor, forward)
 
 	var users []models.User
 	err := r.coll.Find(ctx, filter).

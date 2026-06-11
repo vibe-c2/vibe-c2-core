@@ -8,8 +8,8 @@ import (
 	"github.com/vibe-c2/vibe-c2-core/core/pkg/database"
 	"github.com/vibe-c2/vibe-c2-core/core/pkg/models"
 	"github.com/vibe-c2/vibe-c2-core/core/pkg/pagination"
-	"go.mongodb.org/mongo-driver/v2/bson"
 	"go.mongodb.org/mongo-driver/mongo/options"
+	"go.mongodb.org/mongo-driver/v2/bson"
 )
 
 const sessionCollection = "sessions"
@@ -90,13 +90,7 @@ func (r *sessionRepository) Count(ctx context.Context, userIDs []uuid.UUID) (int
 func (r *sessionRepository) FindWithCursor(ctx context.Context, userIDs []uuid.UUID,
 	cursor *pagination.Cursor, limit int64, forward bool) ([]models.Session, error) {
 
-	filter := buildSessionFilter(userIDs)
-
-	if cursorFilter := pagination.BuildCursorFilter(cursor, forward); len(cursorFilter) > 0 {
-		for k, v := range cursorFilter {
-			filter[k] = v
-		}
-	}
+	filter := pagination.ApplyCursorFilter(buildSessionFilter(userIDs), cursor, forward)
 
 	var sessions []models.Session
 	err := r.coll.Find(ctx, filter).

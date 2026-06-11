@@ -199,11 +199,7 @@ func (r *taskRepository) FindByOperationIDWithCursor(ctx context.Context, opID u
 		sortField = "done_at"
 	}
 
-	if cursorFilter := pagination.BuildCursorFilterOn(cursor, forward, sortField); len(cursorFilter) > 0 {
-		for k, v := range cursorFilter {
-			q[k] = v
-		}
-	}
+	q = pagination.ApplyCursorFilterOn(q, cursor, forward, sortField)
 
 	var tasks []models.Task
 	err := r.coll.Find(ctx, q).

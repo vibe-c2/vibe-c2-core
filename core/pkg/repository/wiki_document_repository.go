@@ -11,8 +11,8 @@ import (
 	"github.com/vibe-c2/vibe-c2-core/core/pkg/database"
 	"github.com/vibe-c2/vibe-c2-core/core/pkg/models"
 	"github.com/vibe-c2/vibe-c2-core/core/pkg/pagination"
-	"go.mongodb.org/mongo-driver/v2/bson"
 	"go.mongodb.org/mongo-driver/mongo/options"
+	"go.mongodb.org/mongo-driver/v2/bson"
 )
 
 const wikiDocumentCollection = "wiki_documents"
@@ -360,11 +360,7 @@ func (r *wikiDocumentRepository) FindByOperationIDWithCursor(ctx context.Context
 		mongoFilter["last_updated_at"] = bson.M{"$exists": true, "$ne": nil}
 	}
 
-	if cursorFilter := pagination.BuildCursorFilterOn(cursor, forward, sortField); len(cursorFilter) > 0 {
-		for k, v := range cursorFilter {
-			mongoFilter[k] = v
-		}
-	}
+	mongoFilter = pagination.ApplyCursorFilterOn(mongoFilter, cursor, forward, sortField)
 
 	var docs []models.WikiDocument
 	err := r.coll.Find(ctx, mongoFilter).
@@ -383,12 +379,12 @@ func (r *wikiDocumentRepository) FindByOperationIDWithCursor(ctx context.Context
 
 // FindTrashedByOperationIDWithCursor sorts trash entries by:
 //
-//	1. deleted_at DESC — most recently trashed item first. Within a single
-//	   cascade delete, the root is trashed after its descendants (see
-//	   DeleteWikiDocument), so the user-facing root sits above its subtree.
-//	2. _id ASC — tie-breaker within a cascade batch. All descendants share a
-//	   single deleted_at from SoftDeleteBatch; _id roughly reflects creation
-//	   order, so direct children (created first) appear above grandchildren.
+//  1. deleted_at DESC — most recently trashed item first. Within a single
+//     cascade delete, the root is trashed after its descendants (see
+//     DeleteWikiDocument), so the user-facing root sits above its subtree.
+//  2. _id ASC — tie-breaker within a cascade batch. All descendants share a
+//     single deleted_at from SoftDeleteBatch; _id roughly reflects creation
+//     order, so direct children (created first) appear above grandchildren.
 //
 // Mixed sort direction means the cursor filter is hand-built rather than
 // reusing pagination.BuildCursorFilterOn, which assumes both fields go the

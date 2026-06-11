@@ -127,13 +127,7 @@ func (r *hashRepository) FindByID(ctx context.Context, id uuid.UUID) (models.Has
 }
 
 func (r *hashRepository) FindByOperationIDWithCursor(ctx context.Context, opID uuid.UUID, filter HashFilter, cursor *pagination.Cursor, limit int64, forward bool) ([]models.Hash, error) {
-	q := buildHashFilter(opID, filter)
-
-	if cursorFilter := pagination.BuildCursorFilter(cursor, forward); len(cursorFilter) > 0 {
-		for k, v := range cursorFilter {
-			q[k] = v
-		}
-	}
+	q := pagination.ApplyCursorFilter(buildHashFilter(opID, filter), cursor, forward)
 
 	var hashes []models.Hash
 	err := r.coll.Find(ctx, q).
@@ -168,13 +162,7 @@ func (r *hashRepository) FindByOperationIDsWithCursor(ctx context.Context, opIDs
 		return []models.Hash{}, nil
 	}
 
-	q := buildHashFilterMulti(opIDs, filter)
-
-	if cursorFilter := pagination.BuildCursorFilter(cursor, forward); len(cursorFilter) > 0 {
-		for k, v := range cursorFilter {
-			q[k] = v
-		}
-	}
+	q := pagination.ApplyCursorFilter(buildHashFilterMulti(opIDs, filter), cursor, forward)
 
 	var hashes []models.Hash
 	err := r.coll.Find(ctx, q).

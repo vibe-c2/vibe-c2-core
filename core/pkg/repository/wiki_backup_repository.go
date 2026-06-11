@@ -8,8 +8,8 @@ import (
 	"github.com/vibe-c2/vibe-c2-core/core/pkg/database"
 	"github.com/vibe-c2/vibe-c2-core/core/pkg/models"
 	"github.com/vibe-c2/vibe-c2-core/core/pkg/pagination"
-	"go.mongodb.org/mongo-driver/v2/bson"
 	"go.mongodb.org/mongo-driver/mongo/options"
+	"go.mongodb.org/mongo-driver/v2/bson"
 )
 
 const wikiDocumentBackupCollection = "wiki_document_backups"
@@ -59,11 +59,7 @@ func (r *wikiDocumentBackupRepository) FindByDocumentIDWithCursor(ctx context.Co
 		filter["trigger"] = *trigger
 	}
 
-	if cursorFilter := pagination.BuildCursorFilter(cursor, forward); len(cursorFilter) > 0 {
-		for k, v := range cursorFilter {
-			filter[k] = v
-		}
-	}
+	filter = pagination.ApplyCursorFilter(filter, cursor, forward)
 
 	var backups []models.WikiDocumentBackup
 	err := r.coll.Find(ctx, filter).

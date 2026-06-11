@@ -356,11 +356,7 @@ func (r *operationEventRepository) ListByDay(ctx context.Context, q DayQuery) ([
 		}
 		cursor = &c
 	}
-	if cursorFilter := pagination.BuildCursorFilterOn(cursor, true, "occurred_at"); len(cursorFilter) > 0 {
-		for k, v := range cursorFilter {
-			filter[k] = v
-		}
-	}
+	filter = pagination.ApplyCursorFilterOn(filter, cursor, true, "occurred_at")
 
 	limit := q.First
 	if limit <= 0 {

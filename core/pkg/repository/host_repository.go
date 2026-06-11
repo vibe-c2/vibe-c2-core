@@ -66,13 +66,7 @@ func (r *hostRepository) FindByID(ctx context.Context, id uuid.UUID) (models.Hos
 }
 
 func (r *hostRepository) FindByOperationIDWithCursor(ctx context.Context, opID uuid.UUID, filter HostFilter, cursor *pagination.Cursor, limit int64, forward bool) ([]models.Host, error) {
-	q := buildHostFilter(opID, filter)
-
-	if cursorFilter := pagination.BuildCursorFilter(cursor, forward); len(cursorFilter) > 0 {
-		for k, v := range cursorFilter {
-			q[k] = v
-		}
-	}
+	q := pagination.ApplyCursorFilter(buildHostFilter(opID, filter), cursor, forward)
 
 	var hosts []models.Host
 	err := r.coll.Find(ctx, q).

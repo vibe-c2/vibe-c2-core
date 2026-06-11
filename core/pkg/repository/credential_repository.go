@@ -124,13 +124,7 @@ func (r *credentialRepository) FindByID(ctx context.Context, id uuid.UUID) (mode
 }
 
 func (r *credentialRepository) FindByOperationIDWithCursor(ctx context.Context, opID uuid.UUID, filter CredentialFilter, cursor *pagination.Cursor, limit int64, forward bool) ([]models.Credential, error) {
-	q := buildCredentialFilter(opID, filter)
-
-	if cursorFilter := pagination.BuildCursorFilter(cursor, forward); len(cursorFilter) > 0 {
-		for k, v := range cursorFilter {
-			q[k] = v
-		}
-	}
+	q := pagination.ApplyCursorFilter(buildCredentialFilter(opID, filter), cursor, forward)
 
 	var creds []models.Credential
 	err := r.coll.Find(ctx, q).
@@ -170,13 +164,7 @@ func (r *credentialRepository) FindByOperationIDsWithCursor(ctx context.Context,
 		return []models.Credential{}, nil
 	}
 
-	q := buildCredentialFilterMulti(opIDs, filter)
-
-	if cursorFilter := pagination.BuildCursorFilter(cursor, forward); len(cursorFilter) > 0 {
-		for k, v := range cursorFilter {
-			q[k] = v
-		}
-	}
+	q := pagination.ApplyCursorFilter(buildCredentialFilterMulti(opIDs, filter), cursor, forward)
 
 	var creds []models.Credential
 	err := r.coll.Find(ctx, q).

@@ -2,9 +2,11 @@ package repository
 
 import (
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/vibe-c2/vibe-c2-core/core/pkg/models"
+	"github.com/vibe-c2/vibe-c2-core/core/pkg/pagination"
 	"go.mongodb.org/mongo-driver/v2/bson"
 )
 
@@ -257,5 +259,42 @@ func TestBuildCredentialFilterMulti_SingleOp(t *testing.T) {
 	}
 	if _, ok := opPred["$in"]; !ok {
 		t.Fatalf("expected $in predicate even for single op")
+	}
+}
+
+// TestCredentialSearchSurvivesCursorPagination is the regression test for the
+// "page 2 ignores the search" bug: buildCredentialFilter puts the multi-field
+// text search under $or, and the cursor keyset filter is also a $or. The old
+// key-merge composition let the cursor overwrite the search, so every page
+// after the first returned unfiltered results. The $and composition must keep
+// both predicates.
+func TestCredentialSearchSurvivesCursorPagination(t *testing.T) {
+	opID := uuid.New()
+	base := buildCredentialFilter(opID, CredentialFilter{Search: "psp"})
+
+	cur := &pagination.Cursor{CreateAt: time.Now()}
+	q := pagination.ApplyCursorFilter(base, cur, true)
+
+	and, ok := q["$and"].(bson.A)
+	if !ok || len(and) != 2 {
+		t.Fatalf("expected $and composition of base + cursor, got %v", q)
+	}
+
+	gotBase := and[0].(bson.M)
+	searchOr, ok := gotBase["$or"].(bson.A)
+	if !ok {
+		t.Fatalf("search $or was dropped from the paginated query: %v", gotBase)
+	}
+	if len(searchOr) != len(defaultCredentialSearchFields) {
+		t.Fatalf("expected %d search branches, got %d",
+			len(defaultCredentialSearchFields), len(searchOr))
+	}
+	if gotBase["operation_id"] != opID {
+		t.Fatalf("operation scope was dropped: %v", gotBase)
+	}
+
+	cursorBranch := and[1].(bson.M)
+	if _, ok := cursorBranch["$or"]; !ok {
+		t.Fatalf("cursor keyset $or missing: %v", cursorBranch)
 	}
 }

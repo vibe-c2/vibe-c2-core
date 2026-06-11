@@ -133,6 +133,27 @@ func BuildCursorFilterOn(cursor *Cursor, forward bool, field string) bson.M {
 	}}
 }
 
+// ApplyCursorFilter combines a base query with the cursor's keyset filter.
+// See ApplyCursorFilterOn for why this must be used instead of merging the
+// cursor filter's keys into the base map.
+func ApplyCursorFilter(base bson.M, cursor *Cursor, forward bool) bson.M {
+	return ApplyCursorFilterOn(base, cursor, forward, "createAt")
+}
+
+// ApplyCursorFilterOn combines a base query with the cursor's keyset filter
+// via $and. The cursor filter is a {$or: [...]} document, and several base
+// filters carry their own $or (text search across multiple fields) — copying
+// the cursor's keys into the base map would silently overwrite that $or and
+// drop the search predicate on every page after the first. $and composition
+// has no key-collision risk regardless of what the base filter contains.
+func ApplyCursorFilterOn(base bson.M, cursor *Cursor, forward bool, field string) bson.M {
+	cursorFilter := BuildCursorFilterOn(cursor, forward, field)
+	if len(cursorFilter) == 0 {
+		return base
+	}
+	return bson.M{"$and": bson.A{base, cursorFilter}}
+}
+
 // SortFields returns the MongoDB sort fields for the given direction.
 func SortFields(forward bool) []string {
 	return SortFieldsOn(forward, "createAt")
