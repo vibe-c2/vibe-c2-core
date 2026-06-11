@@ -128,8 +128,9 @@ function WikiPageInner({
     }
 
     const docNavigated = lastDoc.current !== documentId
-    // A pure op change while the same doc stays open is a user toggle —
-    // either via the in-tab toggle or via the cross-tab storage event.
+    // A pure op change while the same doc stays open is a user toggle.
+    // (Tree mode is per-tab sessionStorage state, so the toggle is the only
+    // way the effective op changes without a navigation.)
     const userToggled =
       !docNavigated && lastOp.current !== null && lastOp.current !== operationId
 
