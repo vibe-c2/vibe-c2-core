@@ -12,6 +12,7 @@ import {
 import { MarkerType, type Edge, type Node } from "@xyflow/react"
 import type { TopoEdge, TopoNode, Topology } from "@/lib/topology/derive"
 import { seedRadial } from "@/lib/topology/seed"
+import { reduceCrossings } from "@/lib/topology/untangle"
 
 // Maps the framework-free topology model onto React Flow nodes/edges and lays
 // it out. Subnet-as-node design: subnets are compact hub pills, hosts are
@@ -95,6 +96,26 @@ const LINK_SLACK = 60 // breathing room added to every link beyond node radii
 const CHARGE_STRENGTH = -1200
 const COLLIDE_PADDING = 16
 const CENTERING_STRENGTH = 0.06 // weak pull keeps disconnected pieces nearby
+
+// The users lens is a dense bipartite mesh (shared accounts wire many hosts
+// together), not the tree-ish hub-and-spoke the subnet lens is. It needs more
+// room to breathe and a longer untangle phase before collision freezes the
+// shape, so it runs hotter than the network lenses — which stay on the tuned
+// defaults the user is happy with. Detected by the presence of any login-layer
+// node so no lens flag has to be threaded through the layout.
+const LOGIN_NODE_KINDS = new Set<TopoNode["kind"]>([
+  "identity",
+  "local-identities",
+  "lone-sources",
+  "phantom-host",
+])
+const DENSE_CHARGE_STRENGTH = -2200
+const DENSE_LINK_SLACK = 110
+const DENSE_UNTANGLE_TICKS = 260
+
+function isDenseLoginLens(nodes: ReadonlyArray<TopoNode>): boolean {
+  return nodes.some((n) => LOGIN_NODE_KINDS.has(n.kind))
+}
 
 // Shared look for the iface/route text riding on edges. SVG text doesn't
 // inherit the page color — without an explicit themed fill it renders black,
@@ -330,9 +351,17 @@ export function layoutTopology(topology: Topology): TopologyLayout {
   })
   const simNodeById = new Map(simNodes.map((n) => [n.id, n]))
 
-  const links: SimulationLinkDatum<SimNode>[] = topoEdges
-    .filter((e) => e.source !== e.target)
-    .map((e) => ({ source: e.source, target: e.target }))
+  const realEdges = topoEdges.filter((e) => e.source !== e.target)
+  const links: SimulationLinkDatum<SimNode>[] = realEdges.map((e) => ({
+    source: e.source,
+    target: e.target,
+  }))
+
+  // Hotter, roomier settle for the dense login mesh; defaults elsewhere.
+  const dense = isDenseLoginLens(topoNodes)
+  const chargeStrength = dense ? DENSE_CHARGE_STRENGTH : CHARGE_STRENGTH
+  const linkSlack = dense ? DENSE_LINK_SLACK : LINK_SLACK
+  const untangleTicks = dense ? DENSE_UNTANGLE_TICKS : UNTANGLE_TICKS
 
   // Pre-set positions so the simulation starts from an untangled radial shape
   // instead of d3's input-order spiral (forceSimulation only auto-places
@@ -358,16 +387,16 @@ export function layoutTopology(topology: Topology): TopologyLayout {
         .distance((l) => {
           const s = l.source as SimNode
           const t = l.target as SimNode
-          return s.r + t.r + LINK_SLACK
+          return s.r + t.r + linkSlack
         }),
     )
-    .force("charge", forceManyBody().strength(CHARGE_STRENGTH))
+    .force("charge", forceManyBody().strength(chargeStrength))
     .force("x", forceX(0).strength(CENTERING_STRENGTH))
     .force("y", forceY(0).strength(CENTERING_STRENGTH))
     .stop()
 
   // Phase 1: untangle (no collision — see the tick constants above).
-  simulation.tick(UNTANGLE_TICKS)
+  simulation.tick(untangleTicks)
 
   // Phase 2: polish. Collision joins permanently, so drag physics keep it
   // too; attaching a force to a live simulation initializes it with the
@@ -382,6 +411,16 @@ export function layoutTopology(topology: Topology): TopologyLayout {
     )
     .alpha(POLISH_ALPHA)
   simulation.tick(POLISH_TICKS)
+
+  // Phase 3: the global uncross the springs can't do. The settle leaves
+  // local-minimum crossings frozen in (collision forbids the pass-through move
+  // that would fix them); this relocates nodes to strictly cut edge crossings.
+  // Mutates sim positions in place, before they're read into React Flow nodes.
+  // Runs on every lens — cheap and a no-op when there's nothing to uncross.
+  reduceCrossings(
+    simNodes,
+    realEdges.map((e) => ({ a: e.source, b: e.target })),
+  )
 
   const nodeType: Record<TopoNode["kind"], string> = {
     host: "host",
