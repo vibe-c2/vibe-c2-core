@@ -514,10 +514,20 @@ const WEEKDAYS = new Set(["mon", "tue", "wed", "thu", "fri", "sat", "sun"])
 const isWeekday = (text: string) => WEEKDAYS.has(text.toLowerCase())
 
 // A `from` value that names no remote origin: a local console/display session
-// (":0", ":1"), or the all-zero placeholder `last -i` prints for local logins.
-// Treated as "no source host" so it never spawns a bogus phantom-host node.
+// (":0", "::1" both start with ":"), the all-zero placeholder `last -i` prints
+// for local logins, or the loopback host some `last` builds record for a local
+// session (localhost / localhost.localdomain / 127.x). Treated as "no source
+// host" so it never spawns a bogus phantom-host node.
 function isLocalOrigin(from: string): boolean {
-  return from === "" || from === "0.0.0.0" || from.startsWith(":")
+  const f = from.toLowerCase()
+  return (
+    from === "" ||
+    from === "0.0.0.0" ||
+    from.startsWith(":") ||
+    f === "localhost" ||
+    f === "localhost.localdomain" ||
+    from.startsWith("127.")
+  )
 }
 
 // `last` reports login sessions from wtmp: one line per session, most-recent

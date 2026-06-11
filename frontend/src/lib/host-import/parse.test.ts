@@ -411,4 +411,15 @@ describe("parseCommandOutput — last", () => {
     const r = parseCommandOutput(out)
     expect(r.logins[0]).toMatchObject({ user: "carol", from: "workstation.corp" })
   })
+
+  it("treats localhost / loopback sources as local (no source host)", () => {
+    const out = [
+      "last",
+      "alice    pts/0        localhost        Tue Jun 10 14:02   still logged in",
+      "bob      pts/1        localhost.localdomain Tue Jun 10 13:00 - 13:45  (00:45)",
+      "carol    pts/2        127.0.0.1        Mon Jun  9 09:00 - 09:30  (00:30)",
+    ].join("\n")
+    const r = parseCommandOutput(out)
+    expect(r.logins.map((l) => l.from)).toEqual(["", "", ""])
+  })
 })
