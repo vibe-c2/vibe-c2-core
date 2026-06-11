@@ -7,9 +7,10 @@ import { isValidCidr, isValidIp, hostAddr } from "@/lib/topology/cidr"
 // (skipped), and what's malformed (error, blocks the import). No React, never
 // throws — every address goes through the defensive cidr.ts helpers.
 //
-// Supported commands (MVP): `ip a` (interfaces) and `ip ro` (routes).
+// Supported commands (MVP): `ip a` (interfaces), `ip ro` (routes), and `last`
+// (user footprints — the identity layer of the topology).
 
-export type CommandKind = "ip-addr" | "ip-route"
+export type CommandKind = "ip-addr" | "ip-route" | "last"
 export type SegRole = "used" | "skipped" | "error"
 
 // One run of characters of a source line, tagged with how the parser treats it.
@@ -37,12 +38,23 @@ export interface ParsedRoute {
   interface: string
 }
 
+// One user footprint, deduplicated to a distinct (user, from) pair. `from` is
+// the source host/IP the session originated from, "" for a local login.
+export interface ParsedLogin {
+  user: string
+  from: string
+  tty: string
+  lastSeen: string
+  count: number
+}
+
 // Shared shape produced by each command sub-parser; parseCommandOutput returns
 // it with the command metadata added (see ParseResult).
 interface SubParse {
   lines: ParsedLine[]
   interfaces: ParsedInterface[]
   routes: ParsedRoute[]
+  logins: ParsedLogin[]
   errorCount: number
   usedCount: number
   skippedCount: number
@@ -53,7 +65,7 @@ export interface ParseResult extends SubParse {
   commandError: string | null
 }
 
-const SUPPORTED_HINT = "Supported commands: ip a, ip ro"
+const SUPPORTED_HINT = "Supported commands: ip a, ip ro, last"
 
 export function parseCommandOutput(text: string): ParseResult {
   const rawLines = text.replace(/\r/g, "").split("\n")
@@ -86,6 +98,7 @@ export function parseCommandOutput(text: string): ParseResult {
       lines,
       interfaces: [],
       routes: [],
+      logins: [],
       errorCount: 1,
       usedCount: 0,
       skippedCount: 0,
@@ -100,7 +113,11 @@ export function parseCommandOutput(text: string): ParseResult {
 
   const output = rawLines.slice(cmdIdx + 1)
   const parsed =
-    command === "ip-addr" ? parseIpAddr(output) : parseIpRoute(output)
+    command === "ip-addr"
+      ? parseIpAddr(output)
+      : command === "ip-route"
+        ? parseIpRoute(output)
+        : parseLast(output)
   lines.push(...parsed.lines)
 
   // `lines` (with the command line prepended) overrides parsed.lines.
@@ -114,12 +131,20 @@ export function parseCommandOutput(text: string): ParseResult {
 // forms (`ip address show`).
 function detectCommand(line: string): CommandKind | null {
   const norm = line.trim().toLowerCase().replace(/\s+/g, " ").replace(/^sudo /, "")
+  if (detectLastCommand(norm)) return "last"
   const m = /^ip(?:\s+-\S+)*\s+(\S+)/.exec(norm)
   if (!m) return null
   const obj = m[1]
   if (/^a(ddr(ess)?)?$/.test(obj)) return "ip-addr"
   if (/^r(o(ute)?)?$/.test(obj)) return "ip-route"
   return null
+}
+
+// `last` (and its read-only twin `lastb`) is its own top-level command, not an
+// `ip` object — matched separately. Tolerates a leading sudo and any flags
+// (`last -i`, `last -F -a`, `last -n 50`).
+function detectLastCommand(norm: string): boolean {
+  return /^lastb?(\s|$)/.test(norm)
 }
 
 // --- shared line model -------------------------------------------------------
@@ -159,6 +184,7 @@ function emptyResult(lines: ParsedLine[]): ParseResult {
     lines,
     interfaces: [],
     routes: [],
+    logins: [],
     errorCount: 0,
     usedCount: 0,
     skippedCount: 0,
@@ -352,6 +378,7 @@ function parseIpAddr(output: string[]): SubParse {
     lines,
     interfaces,
     routes: [],
+    logins: [],
     errorCount,
     usedCount: interfaces.length,
     skippedCount,
@@ -459,8 +486,109 @@ function parseIpRoute(output: string[]): SubParse {
     lines,
     interfaces: [],
     routes,
+    logins: [],
     errorCount,
     usedCount: routes.length,
+    skippedCount,
+  }
+}
+
+// --- last --------------------------------------------------------------------
+
+// Pseudo-users `last` emits for power events plus the wtmp/btmp footer markers
+// ("wtmp begins <date>") — not real logins, never imported.
+const LAST_PSEUDO_USERS = new Set([
+  "reboot",
+  "shutdown",
+  "runlevel",
+  "wtmp",
+  "btmp",
+])
+
+// The login-time column always starts with an abbreviated weekday, both in the
+// default locale and under `last -F`. That anchor is what separates an optional
+// `from` host (column 3) from the date: if column 3 IS a weekday there was no
+// from. Robust against hostnames that look like anything else.
+const WEEKDAYS = new Set(["mon", "tue", "wed", "thu", "fri", "sat", "sun"])
+
+const isWeekday = (text: string) => WEEKDAYS.has(text.toLowerCase())
+
+// A `from` value that names no remote origin: a local console/display session
+// (":0", ":1"), or the all-zero placeholder `last -i` prints for local logins.
+// Treated as "no source host" so it never spawns a bogus phantom-host node.
+function isLocalOrigin(from: string): boolean {
+  return from === "" || from === "0.0.0.0" || from.startsWith(":")
+}
+
+// `last` reports login sessions from wtmp: one line per session, most-recent
+// first, columns `USER TTY [FROM] WEEKDAY MON DAY TIME ...`. We keep the user
+// (the identity), the optional FROM (the source host — an observed access
+// path), and the first login time for context, then collapse repeated sessions
+// of the same (user, from) pair into a single footprint with a count. Reboot/
+// shutdown pseudo-users and the trailing "wtmp begins …" footer are dropped as
+// noise, the same way loopback/veth interfaces are.
+function parseLast(output: string[]): SubParse {
+  const lines: ParsedLine[] = []
+  let skippedCount = 0
+
+  // Keyed by `user|from` so repeated sessions collapse; insertion order (the
+  // first, most-recent occurrence) is preserved for a stable, useful display.
+  const byKey = new Map<string, ParsedLogin>()
+
+  for (const raw of output) {
+    const toks = tokenize(raw)
+    if (toks.length === 0) {
+      lines.push(skippedLine(raw))
+      continue
+    }
+
+    const user = toks[0].text
+    const weekdayIdx = toks.findIndex((t) => isWeekday(t.text))
+
+    // No date column (the "wtmp begins …" footer, a header, or a truncated
+    // line) or a power-event pseudo-user → pure noise, like a skipped iface.
+    if (weekdayIdx < 2 || LAST_PSEUDO_USERS.has(user.toLowerCase())) {
+      lines.push(skippedLine(raw))
+      skippedCount++
+      continue
+    }
+
+    // Column 3 is the source host only when it sits before the date column;
+    // when weekdayIdx === 2 the third token IS the date, so there's no from.
+    const fromTok = weekdayIdx > 2 ? toks[2] : undefined
+    const from =
+      fromTok && !isLocalOrigin(fromTok.text) ? fromTok.text : ""
+    const tty = toks[1]?.text ?? ""
+    // The login-time column is 4 tokens: weekday, month, day, time
+    // ("Tue Jun 10 14:02"). What follows (- logout / still logged in) is churn.
+    const lastSeen = toks
+      .slice(weekdayIdx, weekdayIdx + 4)
+      .map((t) => t.text)
+      .join(" ")
+
+    const spans: Span[] = [{ start: toks[0].start, end: toks[0].end, role: "used" }]
+    if (from && fromTok) {
+      spans.push({ start: fromTok.start, end: fromTok.end, role: "used" })
+    }
+    lines.push({ raw, segments: segmentLine(raw, spans) })
+
+    const key = `${user}|${from}`
+    const existing = byKey.get(key)
+    if (existing) {
+      existing.count++
+    } else {
+      byKey.set(key, { user, from, tty, lastSeen, count: 1 })
+    }
+  }
+
+  const logins = [...byKey.values()]
+  return {
+    lines,
+    interfaces: [],
+    routes: [],
+    logins,
+    errorCount: 0,
+    usedCount: logins.length,
     skippedCount,
   }
 }

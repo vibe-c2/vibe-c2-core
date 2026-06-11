@@ -1,6 +1,7 @@
 import { makeClientId } from "@/components/findings/credential-key-drafts"
 import type {
   HostFieldsFragment,
+  LoginInput,
   NetworkInterfaceInput,
   RouteInput,
 } from "@/graphql/gql/graphql"
@@ -29,11 +30,24 @@ export interface RouteDraft {
   interface: string
 }
 
+// A user footprint row. `count` is carried from the `last` importer (sessions
+// collapsed into this user+from pair) and defaults to 1 for a manual add; it's
+// surfaced read-only in the editor, not an input the operator types.
+export interface LoginDraft {
+  _id: string
+  user: string
+  from: string
+  tty: string
+  lastSeen: string
+  count: number
+}
+
 export interface HostFormValues {
   hostname: string
   os: string
   interfaces: InterfaceDraft[]
   routes: RouteDraft[]
+  logins: LoginDraft[]
 }
 
 export function hostFormValuesFromWire(
@@ -54,11 +68,32 @@ export function hostFormValuesFromWire(
       gateway: r.gateway,
       interface: r.interface,
     })),
+    logins: host.logins.map(loginToDraft),
+  }
+}
+
+// Builds a login row from any source carrying the five footprint fields — the
+// wire fragment (edit prefill) or a ParsedLogin from the `last` importer — so
+// the projection and the client-id assignment live in exactly one place.
+export function loginToDraft(l: {
+  user: string
+  from: string
+  tty: string
+  lastSeen: string
+  count: number
+}): LoginDraft {
+  return {
+    _id: makeClientId(),
+    user: l.user,
+    from: l.from,
+    tty: l.tty,
+    lastSeen: l.lastSeen,
+    count: l.count,
   }
 }
 
 export function emptyHostFormValues(): HostFormValues {
-  return { hostname: "", os: "", interfaces: [], routes: [] }
+  return { hostname: "", os: "", interfaces: [], routes: [], logins: [] }
 }
 
 // Mirrors the backend's normalizeInterfaces: trim everything, split the
@@ -88,6 +123,25 @@ export function routeDraftsToInputs(drafts: RouteDraft[]): RouteInput[] {
     const iface = d.interface.trim()
     if (!destination && !gateway && !iface) continue
     out.push({ destination, gateway, interface: iface })
+  }
+  return out
+}
+
+// Mirrors the backend's normalizeLogins: a footprint with no user is
+// meaningless (the identity is the whole record), so trim and drop userless
+// rows; count falls back to 1.
+export function loginDraftsToInputs(drafts: LoginDraft[]): LoginInput[] {
+  const out: LoginInput[] = []
+  for (const d of drafts) {
+    const user = d.user.trim()
+    if (!user) continue
+    out.push({
+      user,
+      from: d.from.trim(),
+      tty: d.tty.trim(),
+      lastSeen: d.lastSeen.trim(),
+      count: d.count > 0 ? d.count : 1,
+    })
   }
   return out
 }

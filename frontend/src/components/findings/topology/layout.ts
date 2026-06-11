@@ -39,6 +39,18 @@ const HOST_H = 64
 const SUBNET_H = 36
 const PHANTOM_W = 160
 const PHANTOM_H = 56
+// Unknown-source nodes are a compact single-row pill, smaller than the
+// two-line phantom gateway/subnet cards.
+const PHANTOM_HOST_W = 150
+const PHANTOM_HOST_H = 34
+
+// Node types rendered as a full pill (rounded-full) rather than a card: they
+// need explicit dimensions from the layout AND a matching focus-ring radius
+// (see emphasis.ts). One list so a new pill type can't be added to one place
+// and forgotten in the other.
+const PILL_NODE_TYPES = new Set(["subnet", "identity"])
+export const isPillNodeType = (type: string | undefined): boolean =>
+  type !== undefined && PILL_NODE_TYPES.has(type)
 
 // Node dimensions must be known before render (collision radii, center →
 // top-left conversion), so the pill width is estimated from its label —
@@ -46,6 +58,13 @@ const PHANTOM_H = 56
 const SUBNET_CHAR_W = 7.5
 const SUBNET_EXTRA_W = 64 // horizontal padding + icon + gaps
 const SUBNET_MIN_W = 150
+
+// Identity pill (users lens). Same pill geometry as a subnet, sized from the
+// username so the collision radius is right before render.
+const IDENTITY_CHAR_W = 7
+const IDENTITY_EXTRA_W = 52 // padding + user icon + gaps
+const IDENTITY_MIN_W = 96
+const IDENTITY_H = 36
 
 // Leaf-subnets list node. Rows beyond the cap render as "+k more" (the full
 // list lives in the tooltip), so the node — and its collision radius — stays
@@ -90,6 +109,13 @@ function subnetWidth(cidr: string, hostCount: number) {
   return Math.max(SUBNET_MIN_W, Math.ceil(label.length * SUBNET_CHAR_W) + SUBNET_EXTRA_W)
 }
 
+function identityWidth(user: string) {
+  return Math.max(
+    IDENTITY_MIN_W,
+    Math.ceil(user.length * IDENTITY_CHAR_W) + IDENTITY_EXTRA_W,
+  )
+}
+
 function leafSubnetsSize(entries: { cidr: string; iface: string }[]) {
   const longestRow = entries.reduce(
     (max, e) => Math.max(max, `${e.iface} · ${e.cidr}`.length),
@@ -112,6 +138,10 @@ function sizeOf(n: TopoNode): { width: number; height: number } {
       return { width: subnetWidth(n.cidr, n.hostIds.length), height: SUBNET_H }
     case "leaf-subnets":
       return leafSubnetsSize(n.entries)
+    case "identity":
+      return { width: identityWidth(n.user), height: IDENTITY_H }
+    case "phantom-host":
+      return { width: PHANTOM_HOST_W, height: PHANTOM_HOST_H }
     case "phantom-gateway":
     case "phantom-subnet":
       return { width: PHANTOM_W, height: PHANTOM_H }
@@ -136,6 +166,10 @@ function nodeData(n: TopoNode): Node["data"] {
       return { cidr: n.cidr }
     case "leaf-subnets":
       return { entries: n.entries }
+    case "identity":
+      return { user: n.user, wellKnown: n.wellKnown }
+    case "phantom-host":
+      return { label: n.label }
   }
 }
 
@@ -189,6 +223,27 @@ function edgeOf(e: TopoEdge): Edge {
           stroke: "var(--color-sky-500, #0ea5e9)",
           strokeWidth: 1.5,
           strokeDasharray: "4 4",
+        },
+      }
+    case "logged-into":
+      // identity → host: the account lands on the host. Animated, primary.
+      return {
+        ...base,
+        markerEnd: { type: MarkerType.ArrowClosed },
+        animated: true,
+        style: { stroke: "var(--color-primary)", strokeWidth: 2 },
+      }
+    case "logged-from":
+      // source host → identity: where the session came from. Muted grey (vs the
+      // primary "logged into") so the origin reads as the quieter half of the
+      // pair; still animated to show direction.
+      return {
+        ...base,
+        markerEnd: { type: MarkerType.ArrowClosed },
+        animated: true,
+        style: {
+          stroke: "var(--color-muted-foreground)",
+          strokeWidth: 1.5,
         },
       }
   }
@@ -287,6 +342,8 @@ export function layoutTopology(topology: Topology): TopologyLayout {
     "phantom-gateway": "phantomGateway",
     "phantom-subnet": "phantomSubnet",
     "leaf-subnets": "leafSubnets",
+    identity: "identity",
+    "phantom-host": "phantomHost",
   }
 
   const rfNodes: Node[] = topoNodes.map((n) => {
@@ -301,12 +358,14 @@ export function layoutTopology(topology: Topology): TopologyLayout {
       // dimensions); the leaf list gets its width pinned (rows truncate
       // against it) but keeps natural height so rows can never be clipped by
       // an estimate. Other node types size themselves.
-      style:
-        n.kind === "subnet"
-          ? { width: size.width, height: size.height }
-          : n.kind === "leaf-subnets"
-            ? { width: size.width }
-            : undefined,
+      // Pill nodes (subnet, identity) are fully sized by the layout because
+      // rounded-full needs real dimensions; the leaf list gets its width pinned
+      // (rows truncate against it) but keeps natural height. Others self-size.
+      style: isPillNodeType(n.kind)
+        ? { width: size.width, height: size.height }
+        : n.kind === "leaf-subnets"
+          ? { width: size.width }
+          : undefined,
       data: nodeData(n),
       selectable: n.kind === "subnet" ? false : undefined,
     }

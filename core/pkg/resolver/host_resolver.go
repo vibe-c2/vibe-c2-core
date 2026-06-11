@@ -97,6 +97,10 @@ func (r *hostResolver) CreateHost(ctx context.Context, operationID string, input
 	if err != nil {
 		return nil, err
 	}
+	logins, err := normalizeLogins(input.Logins)
+	if err != nil {
+		return nil, err
+	}
 
 	auth := gqlctx.AuthFromContext(ctx)
 	callerUID, err := uuid.Parse(auth.UserID)
@@ -110,6 +114,7 @@ func (r *hostResolver) CreateHost(ctx context.Context, operationID string, input
 		Hostname:    hostname,
 		Interfaces:  interfaces,
 		Routes:      routes,
+		Logins:      logins,
 		OS:          strings.TrimSpace(strDeref(input.Os)),
 		CreatedByID: callerUID,
 	}
@@ -167,6 +172,13 @@ func (r *hostResolver) UpdateHost(ctx context.Context, id string, input model.Up
 			return nil, err
 		}
 		updates["routes"] = routes
+	}
+	if input.Logins != nil {
+		logins, err := normalizeLogins(input.Logins)
+		if err != nil {
+			return nil, err
+		}
+		updates["logins"] = logins
 	}
 	if input.Os != nil {
 		updates["os"] = strings.TrimSpace(*input.Os)
@@ -420,6 +432,41 @@ func normalizeRoutes(in []*model.RouteInput) ([]models.Route, error) {
 			return nil, fmt.Errorf("invalid route gateway %q (expected an IP address)", gateway)
 		}
 		out = append(out, models.Route{Destination: destination, Gateway: gateway, Interface: iface})
+	}
+	return out, nil
+}
+
+// normalizeLogins trims each footprint, requires a non-empty user (the identity
+// is the whole point of the record), defaults an absent/zero count to 1, and
+// drops entries that carry no user. Unlike interfaces/routes the fields are
+// free-text (a `from` may be a hostname, an IP, or empty for a local login), so
+// nothing is shape-validated here — the parser already filtered noise and the
+// topology derivation tolerates whatever survives. Returns a non-nil empty
+// slice for nil input to keep BSON arrays consistent.
+func normalizeLogins(in []*model.LoginInput) ([]models.Login, error) {
+	if len(in) == 0 {
+		return []models.Login{}, nil
+	}
+	out := make([]models.Login, 0, len(in))
+	for _, l := range in {
+		if l == nil {
+			continue
+		}
+		user := strings.TrimSpace(l.User)
+		if user == "" {
+			continue
+		}
+		count := 1
+		if l.Count != nil && *l.Count > 0 {
+			count = *l.Count
+		}
+		out = append(out, models.Login{
+			User:     user,
+			From:     strings.TrimSpace(strDeref(l.From)),
+			TTY:      strings.TrimSpace(strDeref(l.Tty)),
+			LastSeen: strings.TrimSpace(strDeref(l.LastSeen)),
+			Count:    count,
+		})
 	}
 	return out, nil
 }

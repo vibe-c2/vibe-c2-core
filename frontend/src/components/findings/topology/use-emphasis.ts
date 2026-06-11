@@ -47,16 +47,25 @@ export function useTopologyEmphasis(
     () => new Set(topology.nodes.map((n) => n.id)),
     [topology],
   )
+  // Drives the users-lens focus expansion (host → identities → their hosts);
+  // empty on the routes/subnets lenses, which keeps plain 1-hop focus.
+  const identityIds = useMemo(
+    () =>
+      new Set(
+        topology.nodes.filter((n) => n.kind === "identity").map((n) => n.id),
+      ),
+    [topology],
+  )
 
   const emphasis = useMemo(() => {
     // A focused node can vanish on lens switch or refetch — treat as no focus
     // rather than dimming the whole map around a ghost.
     if (focusedId && nodeIds.has(focusedId)) {
-      return focusSets(focusedId, adjacency)
+      return focusSets(focusedId, adjacency, identityIds)
     }
     if (matchIds.length > 0) return searchSets(matchIds, activeIndex)
     return null
-  }, [focusedId, nodeIds, adjacency, matchIds, activeIndex])
+  }, [focusedId, nodeIds, adjacency, identityIds, matchIds, activeIndex])
 
   // `nodes` gets a new array identity on every simulation tick during drag,
   // so the node pass re-runs per tick while emphasis is active — see the

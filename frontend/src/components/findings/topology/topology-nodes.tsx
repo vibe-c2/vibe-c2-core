@@ -1,5 +1,12 @@
 import { Handle, Position, type Node, type NodeProps } from "@xyflow/react"
-import { HelpCircleIcon, NetworkIcon, RouteIcon, ServerIcon } from "lucide-react"
+import {
+  HelpCircleIcon,
+  MonitorIcon,
+  NetworkIcon,
+  RouteIcon,
+  ServerIcon,
+  UserIcon,
+} from "lucide-react"
 import type { HostFieldsFragment } from "@/graphql/gql/graphql"
 import type { LeafSubnetEntry } from "@/lib/topology/derive"
 import { LEAF_SUBNET_MAX_ROWS } from "@/components/findings/topology/layout"
@@ -15,6 +22,8 @@ export type SubnetNodeData = { cidr: string; hostCount: number }
 export type PhantomGatewayNodeData = { ip: string }
 export type PhantomSubnetNodeData = { cidr: string }
 export type LeafSubnetsNodeData = { entries: LeafSubnetEntry[] }
+export type IdentityNodeData = { user: string; wellKnown: boolean }
+export type PhantomHostNodeData = { label: string }
 
 function Anchors() {
   return (
@@ -136,6 +145,51 @@ export function PhantomGatewayNode({ data }: NodeProps<Node<PhantomGatewayNodeDa
         <span className="text-[11px] font-medium">Unknown gateway</span>
       </div>
       <span className="font-mono text-xs">{data.ip}</span>
+    </div>
+  )
+}
+
+// An identity (user account) on the users lens, rendered as a pill like a
+// subnet hub — every login is an explicit edge to this pill, so an account
+// seen on several hosts becomes a star linking them. Well-known accounts
+// (root, ubuntu, …) read muted: they link by default but carry weaker signal.
+// Sized by the layout via the node's style.
+export function IdentityNode({ data }: NodeProps<Node<IdentityNodeData>>) {
+  return (
+    <div
+      className={`flex h-full w-full cursor-pointer items-center justify-center gap-1.5 rounded-full border-2 px-3 text-xs font-medium shadow-sm transition-colors ${
+        data.wellKnown
+          ? "border-dashed border-border bg-muted/30 text-muted-foreground"
+          : "border-primary/50 bg-primary/10 text-foreground"
+      }`}
+      title={
+        data.wellKnown
+          ? `${data.user} — well-known account (shared by most hosts; weak reuse signal)`
+          : data.user
+      }
+    >
+      <Anchors />
+      <UserIcon className="size-3.5 shrink-0" />
+      <span className="truncate font-mono">{data.user}</span>
+    </div>
+  )
+}
+
+// A login source (`from`) that resolves to no enumerated host — a machine
+// someone pivoted from but that isn't mapped yet. Kept deliberately plain:
+// muted grey, dashed, to read as "not yet confirmed" without competing with
+// the host cards and identity pills for attention.
+export function PhantomHostNode({ data }: NodeProps<Node<PhantomHostNodeData>>) {
+  return (
+    <div
+      className="flex w-[150px] items-center gap-1.5 rounded-md border border-dashed border-muted-foreground/40 bg-muted/30 px-3 py-1.5 text-muted-foreground"
+      title={`Unknown source — a login origin owned by no known host: ${data.label}`}
+    >
+      <Anchors />
+      <MonitorIcon className="size-3.5 shrink-0" />
+      <span className="truncate font-mono text-xs" title={data.label}>
+        {data.label}
+      </span>
     </div>
   )
 }

@@ -27,10 +27,23 @@ export interface HostFilters {
 // user back in the view they were working in.
 export type HostView = "table" | "topology"
 
-// Which relation the topology graph is built from. The two edge semantics
-// (L3 "routes through" vs L2 "sits on segment") are mutually exclusive lenses:
-// drawing both at once produced an unreadable hairball on real operations.
-export type TopologyRelation = "routes" | "subnets"
+// Which relation the topology graph is built from. The edge semantics (L3
+// "routes through", L2 "sits on segment", identity "logged in to/from") are
+// mutually exclusive lenses: drawing them at once produced an unreadable
+// hairball on real operations.
+export type TopologyRelation = "routes" | "subnets" | "identities"
+
+// Keep in sync with TopologyRelation — backs isTopologyRelation, which guards
+// the persisted value on rehydration.
+const TOPOLOGY_RELATIONS: readonly TopologyRelation[] = [
+  "routes",
+  "subnets",
+  "identities",
+]
+
+function isTopologyRelation(v: unknown): v is TopologyRelation {
+  return TOPOLOGY_RELATIONS.includes(v as TopologyRelation)
+}
 
 interface HostStoreState {
   filters: HostFilters
@@ -39,6 +52,9 @@ interface HostStoreState {
   // Topology-only: which relation type builds the graph. Lives here (not
   // component state) so the preference survives reloads and view switches.
   topologyRelation: TopologyRelation
+  // Users lens only: hide the ubiquitous accounts (root, ubuntu, …) so the
+  // genuinely interesting identities stand out. Persisted with the relation.
+  hideWellKnownIdentities: boolean
 
   formDialogOpen: boolean
   deleteDialogOpen: boolean
@@ -46,6 +62,7 @@ interface HostStoreState {
   setSearch: (search: string) => void
   setView: (view: HostView) => void
   setTopologyRelation: (relation: TopologyRelation) => void
+  setHideWellKnownIdentities: (hide: boolean) => void
   resetFilters: () => void
 
   openCreateDialog: () => void
@@ -66,6 +83,7 @@ export const useHostStore = create<HostStoreState>()(
       selected: null,
       view: "table",
       topologyRelation: "routes",
+      hideWellKnownIdentities: false,
 
       formDialogOpen: false,
       deleteDialogOpen: false,
@@ -73,6 +91,8 @@ export const useHostStore = create<HostStoreState>()(
       setSearch: (search) => set((s) => ({ filters: { ...s.filters, search } })),
       setView: (view) => set({ view }),
       setTopologyRelation: (topologyRelation) => set({ topologyRelation }),
+      setHideWellKnownIdentities: (hideWellKnownIdentities) =>
+        set({ hideWellKnownIdentities }),
       resetFilters: () => set({ filters: defaultFilters }),
 
       // Open actions are mutually exclusive: both dialogs render from the
@@ -98,22 +118,29 @@ export const useHostStore = create<HostStoreState>()(
       partialize: (state) => ({
         view: state.view,
         topologyRelation: state.topologyRelation,
+        hideWellKnownIdentities: state.hideWellKnownIdentities,
       }),
       // Old persisted state may still carry the retired `showSubnets` boolean;
       // anything but a valid relation falls back to the default ("routes").
       merge: (persisted, current) => {
         const p = persisted as
-          | { view?: HostView; topologyRelation?: TopologyRelation }
+          | {
+              view?: HostView
+              topologyRelation?: TopologyRelation
+              hideWellKnownIdentities?: boolean
+            }
           | undefined
         return {
           ...current,
           view:
             p?.view === "table" || p?.view === "topology" ? p.view : current.view,
-          topologyRelation:
-            p?.topologyRelation === "routes" ||
-            p?.topologyRelation === "subnets"
-              ? p.topologyRelation
-              : current.topologyRelation,
+          topologyRelation: isTopologyRelation(p?.topologyRelation)
+            ? p.topologyRelation
+            : current.topologyRelation,
+          hideWellKnownIdentities:
+            typeof p?.hideWellKnownIdentities === "boolean"
+              ? p.hideWellKnownIdentities
+              : current.hideWellKnownIdentities,
         }
       },
     },

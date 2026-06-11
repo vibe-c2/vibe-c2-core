@@ -23,6 +23,41 @@ const DEFAULT_ROUTES = new Set(["0.0.0.0/0", "::/0"])
 const subnetId = (net: string) => `subnet:${net}`
 const phantomSubnetId = (net: string) => `ps:${net}`
 const phantomGatewayId = (ip: string) => `pg:${ip}`
+const identityId = (user: string) => `identity:${user}`
+const phantomHostId = (label: string) => `ph:${label}`
+
+// Accounts that ship on virtually every box (or every box of a given distro/
+// cloud image), so "same username on two hosts" is NOT evidence of credential
+// reuse for them — every Linux host trivially shares `root`. The identity lens
+// still links them by default (an operator may have set a shared password), but
+// a toggle hides them so the genuinely interesting accounts stand out. Matched
+// case-insensitively.
+const WELL_KNOWN_ACCOUNTS = new Set([
+  "root",
+  "admin",
+  "administrator",
+  "user",
+  "guest",
+  "ubuntu",
+  "debian",
+  "centos",
+  "fedora",
+  "ec2-user",
+  "azureuser",
+  "vagrant",
+  "pi",
+  "nobody",
+  "daemon",
+  "www-data",
+  "postgres",
+  "mysql",
+  "sshd",
+  "systemd-network",
+])
+
+export function isWellKnownAccount(user: string): boolean {
+  return WELL_KNOWN_ACCOUNTS.has(user.trim().toLowerCase())
+}
 
 // One row of an aggregated leaf-subnets node: which interface puts the host
 // on which subnet. Carries the ip so the detail the merged membership-edge
@@ -34,6 +69,13 @@ export type TopoNode =
   | { kind: "subnet"; id: string; cidr: string; hostIds: string[] }
   | { kind: "phantom-gateway"; id: string; ip: string }
   | { kind: "phantom-subnet"; id: string; cidr: string }
+  // Identity layer (logins). An identity is a username seen on one or more
+  // hosts; wellKnown flags the ubiquitous accounts the lens can hide.
+  | { kind: "identity"; id: string; user: string; wellKnown: boolean }
+  // A login source (`from`) that resolves to no enumerated host — a machine
+  // someone pivoted from but that isn't mapped yet. The host analog of a
+  // phantom gateway.
+  | { kind: "phantom-host"; id: string; label: string }
   // Produced only by collapseLeafSubnets (aggregate.ts), never by the raw
   // derivation: a host's single-member subnets folded into one list node.
   | { kind: "leaf-subnets"; id: string; hostId: string; entries: LeafSubnetEntry[] }
@@ -80,6 +122,22 @@ export type TopoEdge =
       source: string // host id
       target: string // leaf-subnets node id
     }
+  | {
+      // Identity → host: this account was seen logged into this host. Direction
+      // (and the animation) reads "the user lands on the host".
+      kind: "logged-into"
+      id: string
+      source: string // identity id
+      target: string // host id
+    }
+  | {
+      // Source host → identity: this account's session originated here. Chained
+      // with logged-into, the flow reads sourceHost → user → accessedHost.
+      kind: "logged-from"
+      id: string
+      source: string // host id or phantom-host id
+      target: string // identity id
+    }
 
 export type TopologyStats = {
   hosts: number
@@ -87,6 +145,8 @@ export type TopologyStats = {
   pivots: number
   phantomGateways: number
   phantomSubnets: number
+  identities: number
+  phantomHosts: number
 }
 
 export type Topology = {
@@ -202,6 +262,74 @@ export function deriveTopology(hosts: HostFieldsFragment[]): Topology {
     }
   }
 
+  // 4. Identity layer from login footprints. A username becomes one identity
+  //    node shared across every host it appears on (that sharing is the
+  //    credential-reuse signal). A login's `from` resolves to a known host
+  //    (via interface IP or hostname) or, failing that, a phantom host — a
+  //    source someone pivoted from that we haven't enumerated.
+  const hostByName = new Map<string, string>() // lowercased hostname -> host id
+  for (const h of hosts) {
+    const name = h.hostname.trim().toLowerCase()
+    // First writer wins, mirroring the ipOwner index: if two hosts claim the
+    // same hostname the source is ambiguous anyway, so resolve by input order.
+    if (name && !hostByName.has(name)) hostByName.set(name, h.id)
+  }
+
+  const identities = new Map<string, { user: string; wellKnown: boolean }>()
+  const phantomHosts = new Map<string, string>() // id -> label
+  const identityEdges: TopoEdge[] = []
+  const edgeSeen = new Set<string>() // dedupe edge ids across repeated footprints
+
+  for (const h of hosts) {
+    for (const l of h.logins ?? []) {
+      const user = l.user.trim()
+      if (!user) continue
+      const iid = identityId(user)
+      if (!identities.has(iid)) {
+        identities.set(iid, { user, wellKnown: isWellKnownAccount(user) })
+      }
+
+      // logged-into: identity -> this host.
+      const intoId = `li:${iid}->${h.id}`
+      if (!edgeSeen.has(intoId)) {
+        edgeSeen.add(intoId)
+        identityEdges.push({
+          kind: "logged-into",
+          id: intoId,
+          source: iid,
+          target: h.id,
+        })
+      }
+
+      // logged-from: source host (or phantom) -> identity.
+      const from = l.from.trim()
+      if (!from) continue
+      // Resolve the source against host IPs first, then hostnames. hostAddr
+      // tolerates a CIDR (defensive — `last` emits bare IPs/hostnames), and the
+      // name lookup always uses the raw `from`, never the IP-stripped form.
+      const ownerId =
+        ipOwner.get(hostAddr(from) ?? from) ?? hostByName.get(from.toLowerCase())
+      let sourceId: string
+      if (ownerId) {
+        sourceId = ownerId
+      } else {
+        const phid = phantomHostId(from)
+        phantomHosts.set(phid, from)
+        sourceId = phid
+      }
+      const fromId = `lf:${sourceId}->${iid}`
+      if (!edgeSeen.has(fromId)) {
+        edgeSeen.add(fromId)
+        identityEdges.push({
+          kind: "logged-from",
+          id: fromId,
+          source: sourceId,
+          target: iid,
+        })
+      }
+    }
+  }
+
   const nodes: TopoNode[] = [
     ...hosts.map<TopoNode>((h) => ({ kind: "host", id: h.id, host: h })),
     ...[...subnets].map<TopoNode>(([id, v]) => ({
@@ -220,9 +348,20 @@ export function deriveTopology(hosts: HostFieldsFragment[]): Topology {
       id,
       cidr,
     })),
+    ...[...identities].map<TopoNode>(([id, v]) => ({
+      kind: "identity",
+      id,
+      user: v.user,
+      wellKnown: v.wellKnown,
+    })),
+    ...[...phantomHosts].map<TopoNode>(([id, label]) => ({
+      kind: "phantom-host",
+      id,
+      label,
+    })),
   ]
 
-  const edges: TopoEdge[] = [...membership.values(), ...pivots]
+  const edges: TopoEdge[] = [...membership.values(), ...pivots, ...identityEdges]
 
   return {
     nodes,
@@ -233,6 +372,8 @@ export function deriveTopology(hosts: HostFieldsFragment[]): Topology {
       pivots: pivots.filter((e) => e.kind === "pivot").length,
       phantomGateways: phantomGateways.size,
       phantomSubnets: phantomSubnets.size,
+      identities: identities.size,
+      phantomHosts: phantomHosts.size,
     },
   }
 }

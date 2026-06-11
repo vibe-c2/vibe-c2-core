@@ -34,11 +34,30 @@ type Route struct {
 	Interface   string `bson:"interface"   json:"interface"`   // optional exiting iface name
 }
 
+// Login is a user footprint observed on a Host, parsed from `last` output.
+// Embedded sub-document, like Interface and Route.
+//
+// Where interfaces reveal segments and routes reveal network pivots, logins
+// reveal the IDENTITY layer: the same username seen on two hosts is a
+// credential-reuse lead, and the From field — the source host a session
+// originated from — is an observed access path (A → user → B). The frontend
+// derives an identity graph from these the same way it derives segments and
+// pivots: nodes for users, edges to the hosts they logged into and the hosts
+// they came from. Nothing about the relation is stored — it is recomputed from
+// this data, so it can never go stale.
+type Login struct {
+	User     string `bson:"user"      json:"user"`      // account name, e.g. "root", "alice"
+	From     string `bson:"from"      json:"from"`      // source host/IP the session came from; empty for local logins
+	TTY      string `bson:"tty"       json:"tty"`       // line/terminal, e.g. "pts/0"; optional
+	LastSeen string `bson:"last_seen" json:"last_seen"` // free-text login time from `last`; optional
+	Count    int    `bson:"count"     json:"count"`     // sessions collapsed into this (user, from) footprint
+}
+
 // Host is a discovered machine recorded by operators against an operation's
-// target network. It carries just enough structure — interfaces (segments) and
-// routes (pivots) — for the frontend to derive a network topology. Edges are
-// never stored: they are computed from this data, so the graph can never go
-// stale relative to its hosts.
+// target network. It carries just enough structure — interfaces (segments),
+// routes (pivots), and logins (identity footprints) — for the frontend to
+// derive a network topology. Edges are never stored: they are computed from
+// this data, so the graph can never go stale relative to its hosts.
 type Host struct {
 	field.DefaultField `bson:",inline"`
 	HostID             uuid.UUID   `bson:"host_id"       json:"host_id"`
@@ -46,6 +65,7 @@ type Host struct {
 	Hostname           string      `bson:"hostname"      json:"hostname"`
 	Interfaces         []Interface `bson:"interfaces"    json:"interfaces"`
 	Routes             []Route     `bson:"routes"        json:"routes"`
+	Logins             []Login     `bson:"logins"        json:"logins"`
 	OS                 string      `bson:"os"            json:"os"` // free-text fingerprint, e.g. "Windows Server 2019"
 	CreatedByID        uuid.UUID   `bson:"created_by_id" json:"created_by_id"`
 }

@@ -55,6 +55,7 @@ func newHostResolver(hostRepo repository.IHostRepository, opRepo repository.IOpe
 }
 
 func strptr(s string) *string { return &s }
+func intptr(i int) *int       { return &i }
 
 // --- CreateHost ---
 
@@ -318,5 +319,29 @@ func TestNormalizeRoutes_InvalidGatewayRejected(t *testing.T) {
 	in := []*model.RouteInput{{Destination: "10.0.0.0/8", Gateway: strptr("not-an-ip")}}
 	if _, err := normalizeRoutes(in); err == nil {
 		t.Fatal("expected invalid-gateway error")
+	}
+}
+
+func TestNormalizeLogins_TrimsDefaultsCountAndDropsUserless(t *testing.T) {
+	in := []*model.LoginInput{
+		{User: " alice ", From: strptr(" 10.0.5.12 "), Tty: strptr("pts/0")},
+		{User: "bob", Count: intptr(5)},
+		{User: "   ", From: strptr("10.0.0.9")}, // userless -> dropped
+	}
+	out, err := normalizeLogins(in)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(out) != 2 {
+		t.Fatalf("expected 2 logins (userless dropped), got %d", len(out))
+	}
+	if out[0].User != "alice" || out[0].From != "10.0.5.12" {
+		t.Errorf("login[0] = %+v (expected trimmed user/from)", out[0])
+	}
+	if out[0].Count != 1 {
+		t.Errorf("absent count should default to 1, got %d", out[0].Count)
+	}
+	if out[1].Count != 5 {
+		t.Errorf("explicit count should be preserved, got %d", out[1].Count)
 	}
 }

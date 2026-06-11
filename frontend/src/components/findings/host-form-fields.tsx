@@ -25,6 +25,7 @@ import {
   splitAddresses,
   type HostFormValues,
   type InterfaceDraft,
+  type LoginDraft,
   type RouteDraft,
 } from "@/components/findings/host-drafts"
 
@@ -112,6 +113,15 @@ export function HostFormFields({
         <HostRoutesEditor
           routes={values.routes}
           onChange={(routes) => onChange({ ...values, routes })}
+          onImport={onImport}
+        />
+      </Field>
+
+      <Field>
+        <FieldLabel>User footprints</FieldLabel>
+        <HostLoginsEditor
+          logins={values.logins}
+          onChange={(logins) => onChange({ ...values, logins })}
           onImport={onImport}
         />
       </Field>
@@ -400,6 +410,106 @@ function HostRoutesEditor({
         <Button type="button" variant="outline" size="sm" onClick={add}>
           <PlusIcon className="size-3.5" />
           Add route
+        </Button>
+        <MagicImportButton onImport={onImport} />
+      </div>
+    </div>
+  )
+}
+
+// --- Logins editor ---
+//
+// User footprints (parsed from `last`, or added by hand). Compact single-line
+// rows like routes: user + source host + tty. `count` (sessions collapsed by
+// the importer) and lastSeen ride along read-only — they're context, not
+// inputs. `user` is the only required field: it's the identity the topology's
+// users lens hangs everything off, and `from` is what turns a footprint into an
+// observed access path (source host → user → this host).
+
+function HostLoginsEditor({
+  logins,
+  onChange,
+  onImport,
+}: {
+  logins: LoginDraft[]
+  onChange: (next: LoginDraft[]) => void
+  onImport: () => void
+}) {
+  function update(id: string, patch: Partial<Omit<LoginDraft, "_id">>) {
+    onChange(logins.map((l) => (l._id === id ? { ...l, ...patch } : l)))
+  }
+
+  function add() {
+    onChange([
+      ...logins,
+      { _id: makeClientId(), user: "", from: "", tty: "", lastSeen: "", count: 1 },
+    ])
+  }
+
+  function remove(id: string) {
+    onChange(logins.filter((l) => l._id !== id))
+  }
+
+  return (
+    <div className="flex flex-col gap-2">
+      {logins.length === 0 && (
+        <p className="text-xs text-muted-foreground">
+          No user footprints yet. Add the accounts seen on this host — the same
+          user across hosts is a credential-reuse lead, and a source host is an
+          observed access path. Paste <code>last</code> output to fill these.
+        </p>
+      )}
+      {logins.map((l) => (
+        <div key={l._id} className="flex items-center gap-2">
+          <Input
+            value={l.user}
+            onChange={(e) => update(l._id, { user: e.target.value })}
+            placeholder="root"
+            aria-label="Login user"
+            className="flex-1 font-mono"
+            spellCheck={false}
+          />
+          <Input
+            value={l.from}
+            onChange={(e) => update(l._id, { from: e.target.value })}
+            placeholder="10.0.5.12 (source, optional)"
+            aria-label="Login source host"
+            className="flex-1 font-mono"
+            spellCheck={false}
+          />
+          {/* tty is the narrowest column — least operator interest of the
+              three, mirrors the routes editor's interface column. */}
+          <Input
+            value={l.tty}
+            onChange={(e) => update(l._id, { tty: e.target.value })}
+            placeholder="pts/0"
+            aria-label="Login tty"
+            className="w-1/5 font-mono"
+            spellCheck={false}
+          />
+          {l.count > 1 && (
+            <span
+              className="shrink-0 text-xs text-muted-foreground"
+              title={`${l.count} sessions${l.lastSeen ? ` · last ${l.lastSeen}` : ""}`}
+            >
+              ×{l.count}
+            </span>
+          )}
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon-sm"
+            onClick={() => remove(l._id)}
+            aria-label="Remove login"
+          >
+            <XIcon className="size-4" />
+          </Button>
+        </div>
+      ))}
+      <div className="flex flex-wrap items-center gap-2">
+        <Button type="button" variant="outline" size="sm" onClick={add}>
+          <PlusIcon className="size-3.5" />
+          Add footprint
         </Button>
         <MagicImportButton onImport={onImport} />
       </div>

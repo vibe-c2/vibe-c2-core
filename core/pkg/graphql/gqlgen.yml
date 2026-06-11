@@ -317,6 +317,12 @@ models:
     model:
       - github.com/vibe-c2/vibe-c2-core/core/pkg/models.Route
 
+  # Map the GraphQL "Login" type to our existing models.Login. Field names line
+  # up (User, From, Tty, LastSeen, Count) so no field resolvers needed.
+  Login:
+    model:
+      - github.com/vibe-c2/vibe-c2-core/core/pkg/models.Login
+
   # --- Tasks ---
 
   # TaskStage / TaskStatus are mapped to the Go enum types so gqlgen marshals

@@ -68,6 +68,7 @@ type CreateHostInput struct {
 	Hostname   string                   `json:"hostname"`
 	Interfaces []*NetworkInterfaceInput `json:"interfaces,omitempty"`
 	Routes     []*RouteInput            `json:"routes,omitempty"`
+	Logins     []*LoginInput            `json:"logins,omitempty"`
 	Os         *string                  `json:"os,omitempty"`
 }
 
@@ -171,6 +172,14 @@ type HostEvent struct {
 	HostID      string       `json:"hostId"`
 	OperationID string       `json:"operationId"`
 	Host        *models.Host `json:"host,omitempty"`
+}
+
+type LoginInput struct {
+	User     string  `json:"user"`
+	From     *string `json:"from,omitempty"`
+	Tty      *string `json:"tty,omitempty"`
+	LastSeen *string `json:"lastSeen,omitempty"`
+	Count    *int    `json:"count,omitempty"`
 }
 
 type MarkHashCrackedInput struct {
@@ -322,6 +331,7 @@ type UpdateHostInput struct {
 	Hostname   *string                  `json:"hostname,omitempty"`
 	Interfaces []*NetworkInterfaceInput `json:"interfaces,omitempty"`
 	Routes     []*RouteInput            `json:"routes,omitempty"`
+	Logins     []*LoginInput            `json:"logins,omitempty"`
 	Os         *string                  `json:"os,omitempty"`
 }
 

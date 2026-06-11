@@ -7,12 +7,20 @@ import { deriveTopology, type TopoEdge, type TopoNode } from "@/lib/topology/der
 
 type IfaceInput = { name?: string; mac?: string; addresses: string[] }
 type RouteInput = { destination?: string; gateway?: string; interface?: string }
+type LoginInput = {
+  user: string
+  from?: string
+  tty?: string
+  lastSeen?: string
+  count?: number
+}
 
 function host(
   id: string,
   hostname: string,
   interfaces: IfaceInput[],
   routes: RouteInput[] = [],
+  logins: LoginInput[] = [],
 ): HostFieldsFragment {
   return {
     id,
@@ -31,6 +39,13 @@ function host(
       destination: r.destination ?? "",
       gateway: r.gateway ?? "",
       interface: r.interface ?? "",
+    })),
+    logins: logins.map((l) => ({
+      user: l.user,
+      from: l.from ?? "",
+      tty: l.tty ?? "",
+      lastSeen: l.lastSeen ?? "",
+      count: l.count ?? 1,
     })),
   }
 }
@@ -226,5 +241,89 @@ describe("deriveTopology", () => {
     expect(edgesOf(t.edges, "pivot")).toHaveLength(0)
     expect(edgesOf(t.edges, "pivot-unknown")).toHaveLength(0)
     expect(byKind(t.nodes, "phantom-gateway")).toHaveLength(0)
+  })
+})
+
+describe("deriveTopology — identity layer (logins)", () => {
+  it("shares one identity node across hosts and links them via logged-into", () => {
+    const t = deriveTopology([
+      host("h1", "alpha", [{ addresses: ["10.0.0.1/24"] }], [], [{ user: "alice" }]),
+      host("h2", "beta", [{ addresses: ["10.0.0.2/24"] }], [], [{ user: "alice" }]),
+    ])
+    const ids = byKind(t.nodes, "identity")
+    expect(ids).toHaveLength(1)
+    expect(ids[0].user).toBe("alice")
+    expect(ids[0].wellKnown).toBe(false)
+    // One logged-into edge per host, both from the shared identity.
+    const into = edgesOf(t.edges, "logged-into")
+    expect(into).toHaveLength(2)
+    expect(into.every((e) => e.source === ids[0].id)).toBe(true)
+    expect(new Set(into.map((e) => e.target))).toEqual(new Set(["h1", "h2"]))
+    expect(t.stats.identities).toBe(1)
+  })
+
+  it("flags well-known accounts", () => {
+    const t = deriveTopology([
+      host("h1", "alpha", [{ addresses: ["10.0.0.1/24"] }], [], [{ user: "root" }]),
+    ])
+    expect(byKind(t.nodes, "identity")[0].wellKnown).toBe(true)
+  })
+
+  it("resolves a from-IP to a known host as the source (logged-from)", () => {
+    // alice logged into h2 FROM 10.0.0.1, which is h1's interface IP.
+    const t = deriveTopology([
+      host("h1", "alpha", [{ addresses: ["10.0.0.1/24"] }]),
+      host("h2", "beta", [{ addresses: ["10.0.0.2/24"] }], [], [
+        { user: "alice", from: "10.0.0.1" },
+      ]),
+    ])
+    const from = edgesOf(t.edges, "logged-from")
+    expect(from).toHaveLength(1)
+    expect(from[0].source).toBe("h1") // resolved to the real host
+    const identity = byKind(t.nodes, "identity")[0]
+    expect(from[0].target).toBe(identity.id)
+    expect(byKind(t.nodes, "phantom-host")).toHaveLength(0)
+  })
+
+  it("resolves a from-hostname to a known host", () => {
+    const t = deriveTopology([
+      host("h1", "jumpbox", [{ addresses: ["10.0.0.1/24"] }]),
+      host("h2", "beta", [{ addresses: ["10.0.0.2/24"] }], [], [
+        { user: "alice", from: "jumpbox" },
+      ]),
+    ])
+    expect(edgesOf(t.edges, "logged-from")[0].source).toBe("h1")
+  })
+
+  it("spawns a phantom host for an unresolved login source", () => {
+    const t = deriveTopology([
+      host("h1", "beta", [{ addresses: ["10.0.0.2/24"] }], [], [
+        { user: "alice", from: "10.9.9.9" },
+      ]),
+    ])
+    const phantoms = byKind(t.nodes, "phantom-host")
+    expect(phantoms).toHaveLength(1)
+    expect(phantoms[0].label).toBe("10.9.9.9")
+    expect(t.stats.phantomHosts).toBe(1)
+    expect(edgesOf(t.edges, "logged-from")[0].source).toBe(phantoms[0].id)
+  })
+
+  it("deduplicates repeated footprints into single edges", () => {
+    const t = deriveTopology([
+      host("h1", "beta", [{ addresses: ["10.0.0.2/24"] }], [], [
+        { user: "alice", from: "10.9.9.9", count: 5 },
+        { user: "alice", from: "10.9.9.9", count: 2 },
+      ]),
+    ])
+    expect(edgesOf(t.edges, "logged-into")).toHaveLength(1)
+    expect(edgesOf(t.edges, "logged-from")).toHaveLength(1)
+    expect(byKind(t.nodes, "identity")).toHaveLength(1)
+  })
+
+  it("emits no identity nodes or edges when there are no logins", () => {
+    const t = deriveTopology([host("h1", "alpha", [{ addresses: ["10.0.0.1/24"] }])])
+    expect(byKind(t.nodes, "identity")).toHaveLength(0)
+    expect(edgesOf(t.edges, "logged-into")).toHaveLength(0)
+    expect(t.stats.identities).toBe(0)
   })
 })

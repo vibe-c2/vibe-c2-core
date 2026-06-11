@@ -32,6 +32,18 @@ type Route {
   interface: String!
 }
 
+# A user footprint parsed from `last` output — the identity layer of the
+# topology. The same `user` across hosts is a credential-reuse lead; `from`
+# (the source host a session came from) is an observed access path. `count`
+# collapses repeated sessions of the same (user, from) pair.
+type Login {
+  user: String!
+  from: String!
+  tty: String!
+  lastSeen: String!
+  count: Int!
+}
+
 type Host {
   id: ID!
   operationId: ID!
@@ -42,6 +54,7 @@ type Host {
   hostname: String!
   interfaces: [NetworkInterface!]!
   routes: [Route!]!
+  logins: [Login!]!
   # Free-text OS fingerprint, e.g. "Windows Server 2019". Empty string when unset.
   os: String!
   createdBy: User
@@ -81,19 +94,31 @@ input RouteInput {
   interface: String
 }
 
+# A user footprint to record on a host. Only `user` is required; `from`/`tty`/
+# `lastSeen` are optional context and `count` defaults to 1 when omitted.
+input LoginInput {
+  user: String!
+  from: String
+  tty: String
+  lastSeen: String
+  count: Int
+}
+
 input CreateHostInput {
   hostname: String!
   interfaces: [NetworkInterfaceInput!]
   routes: [RouteInput!]
+  logins: [LoginInput!]
   os: String
 }
 
 # UpdateHostInput is a partial update — every field is nullable. Omit a field to
-# leave it unchanged; pass interfaces/routes to replace the whole list.
+# leave it unchanged; pass interfaces/routes/logins to replace the whole list.
 input UpdateHostInput {
   hostname: String
   interfaces: [NetworkInterfaceInput!]
   routes: [RouteInput!]
+  logins: [LoginInput!]
   os: String
 }
 

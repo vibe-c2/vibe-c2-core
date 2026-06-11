@@ -326,3 +326,89 @@ describe("parseCommandOutput — IPv6", () => {
     ])
   })
 })
+
+describe("detectCommand — last", () => {
+  it("recognizes last variants", () => {
+    for (const cmd of ["last", "last -i", "last -F -a", "sudo last -n 50", "lastb"]) {
+      expect(parseCommandOutput(cmd).command).toBe("last")
+    }
+  })
+})
+
+describe("parseCommandOutput — last", () => {
+  it("parses a remote login: user + source host", () => {
+    const out = [
+      "last",
+      "alice    pts/0        10.0.5.12        Tue Jun 10 14:02   still logged in",
+    ].join("\n")
+    const r = parseCommandOutput(out)
+    expect(r.command).toBe("last")
+    expect(r.errorCount).toBe(0)
+    expect(r.logins).toEqual([
+      {
+        user: "alice",
+        from: "10.0.5.12",
+        tty: "pts/0",
+        lastSeen: "Tue Jun 10 14:02",
+        count: 1,
+      },
+    ])
+    // user and source host are highlighted as used.
+    const line = r.lines[1]
+    expect(textWithRole(line, "used")).toBe("alice")
+    expect(reassemble(line)).toBe(
+      "alice    pts/0        10.0.5.12        Tue Jun 10 14:02   still logged in",
+    )
+  })
+
+  it("treats a local console login as having no source host", () => {
+    const out = ["last", "root     tty1                          Mon Jun  9 09:00 - 09:30  (00:30)"].join("\n")
+    const r = parseCommandOutput(out)
+    expect(r.logins).toEqual([
+      { user: "root", from: "", tty: "tty1", lastSeen: "Mon Jun 9 09:00", count: 1 },
+    ])
+  })
+
+  it("drops reboot/shutdown pseudo-users and the wtmp footer as noise", () => {
+    const out = [
+      "last",
+      "reboot   system boot  5.15.0-generic   Tue Jun 10 12:00   still running",
+      "shutdown system down  5.15.0-generic   Tue Jun 10 11:59 - 12:00  (00:01)",
+      "",
+      "wtmp begins Mon Jun  9 09:00:00 2026",
+    ].join("\n")
+    const r = parseCommandOutput(out)
+    expect(r.logins).toHaveLength(0)
+    expect(r.usedCount).toBe(0)
+    expect(r.skippedCount).toBeGreaterThanOrEqual(3)
+  })
+
+  it("collapses repeated sessions of the same (user, from) into a count", () => {
+    const out = [
+      "last",
+      "alice    pts/0        10.0.5.12        Tue Jun 10 14:02   still logged in",
+      "alice    pts/1        10.0.5.12        Tue Jun 10 09:10 - 11:00  (01:50)",
+      "alice    pts/0        10.0.9.99        Mon Jun  9 18:00 - 19:00  (01:00)",
+    ].join("\n")
+    const r = parseCommandOutput(out)
+    expect(r.logins).toEqual([
+      { user: "alice", from: "10.0.5.12", tty: "pts/0", lastSeen: "Tue Jun 10 14:02", count: 2 },
+      { user: "alice", from: "10.0.9.99", tty: "pts/0", lastSeen: "Mon Jun 9 18:00", count: 1 },
+    ])
+    expect(r.usedCount).toBe(2)
+  })
+
+  it("ignores the all-zero placeholder from `last -i` local logins", () => {
+    const out = ["last -i", "bob      pts/2        0.0.0.0          Wed Jun 11 08:00   still logged in"].join("\n")
+    const r = parseCommandOutput(out)
+    expect(r.logins).toEqual([
+      { user: "bob", from: "", tty: "pts/2", lastSeen: "Wed Jun 11 08:00", count: 1 },
+    ])
+  })
+
+  it("keeps a hostname source (not just IPs)", () => {
+    const out = ["last", "carol    pts/3        workstation.corp Thu Jun  5 13:00 - 14:00  (01:00)"].join("\n")
+    const r = parseCommandOutput(out)
+    expect(r.logins[0]).toMatchObject({ user: "carol", from: "workstation.corp" })
+  })
+})

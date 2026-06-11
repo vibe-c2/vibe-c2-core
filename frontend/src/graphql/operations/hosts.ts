@@ -22,6 +22,13 @@ export const HostFields = graphql(`
       gateway
       interface
     }
+    logins {
+      user
+      from
+      tty
+      lastSeen
+      count
+    }
     createdBy {
       id
       username

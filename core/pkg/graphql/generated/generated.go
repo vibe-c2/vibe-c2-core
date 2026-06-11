@@ -174,6 +174,7 @@ type ComplexityRoot struct {
 		Hostname    func(childComplexity int) int
 		ID          func(childComplexity int) int
 		Interfaces  func(childComplexity int) int
+		Logins      func(childComplexity int) int
 		OS          func(childComplexity int) int
 		Operation   func(childComplexity int) int
 		OperationID func(childComplexity int) int
@@ -197,6 +198,14 @@ type ComplexityRoot struct {
 		Host        func(childComplexity int) int
 		HostID      func(childComplexity int) int
 		OperationID func(childComplexity int) int
+	}
+
+	Login struct {
+		Count    func(childComplexity int) int
+		From     func(childComplexity int) int
+		LastSeen func(childComplexity int) int
+		TTY      func(childComplexity int) int
+		User     func(childComplexity int) int
 	}
 
 	Mutation struct {
@@ -1419,6 +1428,12 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.Host.Interfaces(childComplexity), true
+	case "Host.logins":
+		if e.ComplexityRoot.Host.Logins == nil {
+			break
+		}
+
+		return e.ComplexityRoot.Host.Logins(childComplexity), true
 	case "Host.os":
 		if e.ComplexityRoot.Host.OS == nil {
 			break
@@ -1506,6 +1521,37 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.HostEvent.OperationID(childComplexity), true
+
+	case "Login.count":
+		if e.ComplexityRoot.Login.Count == nil {
+			break
+		}
+
+		return e.ComplexityRoot.Login.Count(childComplexity), true
+	case "Login.from":
+		if e.ComplexityRoot.Login.From == nil {
+			break
+		}
+
+		return e.ComplexityRoot.Login.From(childComplexity), true
+	case "Login.lastSeen":
+		if e.ComplexityRoot.Login.LastSeen == nil {
+			break
+		}
+
+		return e.ComplexityRoot.Login.LastSeen(childComplexity), true
+	case "Login.tty":
+		if e.ComplexityRoot.Login.TTY == nil {
+			break
+		}
+
+		return e.ComplexityRoot.Login.TTY(childComplexity), true
+	case "Login.user":
+		if e.ComplexityRoot.Login.User == nil {
+			break
+		}
+
+		return e.ComplexityRoot.Login.User(childComplexity), true
 
 	case "Mutation.addCredentialComment":
 		if e.ComplexityRoot.Mutation.AddCredentialComment == nil {
@@ -4051,6 +4097,7 @@ func (e *executableSchema) Exec(ctx context.Context) graphql.ResponseHandler {
 		ec.unmarshalInputCreateWikiDocumentInput,
 		ec.unmarshalInputCredentialKeyInput,
 		ec.unmarshalInputCredentialPropertyInput,
+		ec.unmarshalInputLoginInput,
 		ec.unmarshalInputMarkHashCrackedInput,
 		ec.unmarshalInputNetworkInterfaceInput,
 		ec.unmarshalInputReorderWikiDocumentSiblingsInput,
@@ -4767,6 +4814,18 @@ type Route {
   interface: String!
 }
 
+# A user footprint parsed from ` + "`" + `last` + "`" + ` output — the identity layer of the
+# topology. The same ` + "`" + `user` + "`" + ` across hosts is a credential-reuse lead; ` + "`" + `from` + "`" + `
+# (the source host a session came from) is an observed access path. ` + "`" + `count` + "`" + `
+# collapses repeated sessions of the same (user, from) pair.
+type Login {
+  user: String!
+  from: String!
+  tty: String!
+  lastSeen: String!
+  count: Int!
+}
+
 type Host {
   id: ID!
   operationId: ID!
@@ -4777,6 +4836,7 @@ type Host {
   hostname: String!
   interfaces: [NetworkInterface!]!
   routes: [Route!]!
+  logins: [Login!]!
   # Free-text OS fingerprint, e.g. "Windows Server 2019". Empty string when unset.
   os: String!
   createdBy: User
@@ -4816,19 +4876,31 @@ input RouteInput {
   interface: String
 }
 
+# A user footprint to record on a host. Only ` + "`" + `user` + "`" + ` is required; ` + "`" + `from` + "`" + `/` + "`" + `tty` + "`" + `/
+# ` + "`" + `lastSeen` + "`" + ` are optional context and ` + "`" + `count` + "`" + ` defaults to 1 when omitted.
+input LoginInput {
+  user: String!
+  from: String
+  tty: String
+  lastSeen: String
+  count: Int
+}
+
 input CreateHostInput {
   hostname: String!
   interfaces: [NetworkInterfaceInput!]
   routes: [RouteInput!]
+  logins: [LoginInput!]
   os: String
 }
 
 # UpdateHostInput is a partial update — every field is nullable. Omit a field to
-# leave it unchanged; pass interfaces/routes to replace the whole list.
+# leave it unchanged; pass interfaces/routes/logins to replace the whole list.
 input UpdateHostInput {
   hostname: String
   interfaces: [NetworkInterfaceInput!]
   routes: [RouteInput!]
+  logins: [LoginInput!]
   os: String
 }
 
@@ -11136,6 +11208,47 @@ func (ec *executionContext) fieldContext_Host_routes(_ context.Context, field gr
 	return fc, nil
 }
 
+func (ec *executionContext) _Host_logins(ctx context.Context, field graphql.CollectedField, obj *models.Host) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Host_logins,
+		func(ctx context.Context) (any, error) {
+			return obj.Logins, nil
+		},
+		nil,
+		ec.marshalNLogin2ᚕgithubᚗcomᚋvibeᚑc2ᚋvibeᚑc2ᚑcoreᚋcoreᚋpkgᚋmodelsᚐLoginᚄ,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_Host_logins(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Host",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "user":
+				return ec.fieldContext_Login_user(ctx, field)
+			case "from":
+				return ec.fieldContext_Login_from(ctx, field)
+			case "tty":
+				return ec.fieldContext_Login_tty(ctx, field)
+			case "lastSeen":
+				return ec.fieldContext_Login_lastSeen(ctx, field)
+			case "count":
+				return ec.fieldContext_Login_count(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type Login", field.Name)
+		},
+	}
+	return fc, nil
+}
+
 func (ec *executionContext) _Host_os(ctx context.Context, field graphql.CollectedField, obj *models.Host) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
@@ -11405,6 +11518,8 @@ func (ec *executionContext) fieldContext_HostEdge_node(_ context.Context, field 
 				return ec.fieldContext_Host_interfaces(ctx, field)
 			case "routes":
 				return ec.fieldContext_Host_routes(ctx, field)
+			case "logins":
+				return ec.fieldContext_Host_logins(ctx, field)
 			case "os":
 				return ec.fieldContext_Host_os(ctx, field)
 			case "createdBy":
@@ -11572,6 +11687,8 @@ func (ec *executionContext) fieldContext_HostEvent_host(_ context.Context, field
 				return ec.fieldContext_Host_interfaces(ctx, field)
 			case "routes":
 				return ec.fieldContext_Host_routes(ctx, field)
+			case "logins":
+				return ec.fieldContext_Host_logins(ctx, field)
 			case "os":
 				return ec.fieldContext_Host_os(ctx, field)
 			case "createdBy":
@@ -11582,6 +11699,151 @@ func (ec *executionContext) fieldContext_HostEvent_host(_ context.Context, field
 				return ec.fieldContext_Host_updatedAt(ctx, field)
 			}
 			return nil, fmt.Errorf("no field named %q was found under type Host", field.Name)
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Login_user(ctx context.Context, field graphql.CollectedField, obj *models.Login) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Login_user,
+		func(ctx context.Context) (any, error) {
+			return obj.User, nil
+		},
+		nil,
+		ec.marshalNString2string,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_Login_user(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Login",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Login_from(ctx context.Context, field graphql.CollectedField, obj *models.Login) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Login_from,
+		func(ctx context.Context) (any, error) {
+			return obj.From, nil
+		},
+		nil,
+		ec.marshalNString2string,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_Login_from(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Login",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Login_tty(ctx context.Context, field graphql.CollectedField, obj *models.Login) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Login_tty,
+		func(ctx context.Context) (any, error) {
+			return obj.TTY, nil
+		},
+		nil,
+		ec.marshalNString2string,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_Login_tty(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Login",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Login_lastSeen(ctx context.Context, field graphql.CollectedField, obj *models.Login) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Login_lastSeen,
+		func(ctx context.Context) (any, error) {
+			return obj.LastSeen, nil
+		},
+		nil,
+		ec.marshalNString2string,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_Login_lastSeen(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Login",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Login_count(ctx context.Context, field graphql.CollectedField, obj *models.Login) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Login_count,
+		func(ctx context.Context) (any, error) {
+			return obj.Count, nil
+		},
+		nil,
+		ec.marshalNInt2int,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_Login_count(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Login",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Int does not have child fields")
 		},
 	}
 	return fc, nil
@@ -13527,6 +13789,8 @@ func (ec *executionContext) fieldContext_Mutation_createHost(ctx context.Context
 				return ec.fieldContext_Host_interfaces(ctx, field)
 			case "routes":
 				return ec.fieldContext_Host_routes(ctx, field)
+			case "logins":
+				return ec.fieldContext_Host_logins(ctx, field)
 			case "os":
 				return ec.fieldContext_Host_os(ctx, field)
 			case "createdBy":
@@ -13608,6 +13872,8 @@ func (ec *executionContext) fieldContext_Mutation_updateHost(ctx context.Context
 				return ec.fieldContext_Host_interfaces(ctx, field)
 			case "routes":
 				return ec.fieldContext_Host_routes(ctx, field)
+			case "logins":
+				return ec.fieldContext_Host_logins(ctx, field)
 			case "os":
 				return ec.fieldContext_Host_os(ctx, field)
 			case "createdBy":
@@ -18273,6 +18539,8 @@ func (ec *executionContext) fieldContext_Query_host(ctx context.Context, field g
 				return ec.fieldContext_Host_interfaces(ctx, field)
 			case "routes":
 				return ec.fieldContext_Host_routes(ctx, field)
+			case "logins":
+				return ec.fieldContext_Host_logins(ctx, field)
 			case "os":
 				return ec.fieldContext_Host_os(ctx, field)
 			case "createdBy":
@@ -29406,7 +29674,7 @@ func (ec *executionContext) unmarshalInputCreateHostInput(ctx context.Context, o
 		asMap[k] = v
 	}
 
-	fieldsInOrder := [...]string{"hostname", "interfaces", "routes", "os"}
+	fieldsInOrder := [...]string{"hostname", "interfaces", "routes", "logins", "os"}
 	for _, k := range fieldsInOrder {
 		v, ok := asMap[k]
 		if !ok {
@@ -29434,6 +29702,13 @@ func (ec *executionContext) unmarshalInputCreateHostInput(ctx context.Context, o
 				return it, err
 			}
 			it.Routes = data
+		case "logins":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("logins"))
+			data, err := ec.unmarshalOLoginInput2ᚕᚖgithubᚗcomᚋvibeᚑc2ᚋvibeᚑc2ᚑcoreᚋcoreᚋpkgᚋgraphqlᚋmodelᚐLoginInputᚄ(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.Logins = data
 		case "os":
 			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("os"))
 			data, err := ec.unmarshalOString2ᚖstring(ctx, v)
@@ -29793,6 +30068,64 @@ func (ec *executionContext) unmarshalInputCredentialPropertyInput(ctx context.Co
 				return it, err
 			}
 			it.Value = data
+		}
+	}
+	return it, nil
+}
+
+func (ec *executionContext) unmarshalInputLoginInput(ctx context.Context, obj any) (model.LoginInput, error) {
+	var it model.LoginInput
+	if obj == nil {
+		return it, nil
+	}
+
+	asMap := map[string]any{}
+	for k, v := range obj.(map[string]any) {
+		asMap[k] = v
+	}
+
+	fieldsInOrder := [...]string{"user", "from", "tty", "lastSeen", "count"}
+	for _, k := range fieldsInOrder {
+		v, ok := asMap[k]
+		if !ok {
+			continue
+		}
+		switch k {
+		case "user":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("user"))
+			data, err := ec.unmarshalNString2string(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.User = data
+		case "from":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("from"))
+			data, err := ec.unmarshalOString2ᚖstring(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.From = data
+		case "tty":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("tty"))
+			data, err := ec.unmarshalOString2ᚖstring(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.Tty = data
+		case "lastSeen":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("lastSeen"))
+			data, err := ec.unmarshalOString2ᚖstring(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.LastSeen = data
+		case "count":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("count"))
+			data, err := ec.unmarshalOInt2ᚖint(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.Count = data
 		}
 	}
 	return it, nil
@@ -30180,7 +30513,7 @@ func (ec *executionContext) unmarshalInputUpdateHostInput(ctx context.Context, o
 		asMap[k] = v
 	}
 
-	fieldsInOrder := [...]string{"hostname", "interfaces", "routes", "os"}
+	fieldsInOrder := [...]string{"hostname", "interfaces", "routes", "logins", "os"}
 	for _, k := range fieldsInOrder {
 		v, ok := asMap[k]
 		if !ok {
@@ -30208,6 +30541,13 @@ func (ec *executionContext) unmarshalInputUpdateHostInput(ctx context.Context, o
 				return it, err
 			}
 			it.Routes = data
+		case "logins":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("logins"))
+			data, err := ec.unmarshalOLoginInput2ᚕᚖgithubᚗcomᚋvibeᚑc2ᚋvibeᚑc2ᚑcoreᚋcoreᚋpkgᚋgraphqlᚋmodelᚐLoginInputᚄ(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.Logins = data
 		case "os":
 			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("os"))
 			data, err := ec.unmarshalOString2ᚖstring(ctx, v)
@@ -32322,6 +32662,11 @@ func (ec *executionContext) _Host(ctx context.Context, sel ast.SelectionSet, obj
 			if out.Values[i] == graphql.Null {
 				atomic.AddUint32(&out.Invalids, 1)
 			}
+		case "logins":
+			out.Values[i] = ec._Host_logins(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				atomic.AddUint32(&out.Invalids, 1)
+			}
 		case "os":
 			out.Values[i] = ec._Host_os(ctx, field, obj)
 			if out.Values[i] == graphql.Null {
@@ -32576,6 +32921,65 @@ func (ec *executionContext) _HostEvent(ctx context.Context, sel ast.SelectionSet
 			}
 		case "host":
 			out.Values[i] = ec._HostEvent_host(ctx, field, obj)
+		default:
+			panic("unknown field " + strconv.Quote(field.Name))
+		}
+	}
+	out.Dispatch(ctx)
+	if out.Invalids > 0 {
+		return graphql.Null
+	}
+
+	atomic.AddInt32(&ec.Deferred, int32(len(deferred)))
+
+	for label, dfs := range deferred {
+		ec.ProcessDeferredGroup(graphql.DeferredGroup{
+			Label:    label,
+			Path:     graphql.GetPath(ctx),
+			FieldSet: dfs,
+			Context:  ctx,
+		})
+	}
+
+	return out
+}
+
+var loginImplementors = []string{"Login"}
+
+func (ec *executionContext) _Login(ctx context.Context, sel ast.SelectionSet, obj *models.Login) graphql.Marshaler {
+	fields := graphql.CollectFields(ec.OperationContext, sel, loginImplementors)
+
+	out := graphql.NewFieldSet(fields)
+	deferred := make(map[string]*graphql.FieldSet)
+	for i, field := range fields {
+		switch field.Name {
+		case "__typename":
+			out.Values[i] = graphql.MarshalString("Login")
+		case "user":
+			out.Values[i] = ec._Login_user(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "from":
+			out.Values[i] = ec._Login_from(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "tty":
+			out.Values[i] = ec._Login_tty(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "lastSeen":
+			out.Values[i] = ec._Login_lastSeen(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "count":
+			out.Values[i] = ec._Login_count(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
 		default:
 			panic("unknown field " + strconv.Quote(field.Name))
 		}
@@ -39418,6 +39822,31 @@ func (ec *executionContext) marshalNInt2int(ctx context.Context, sel ast.Selecti
 	return res
 }
 
+func (ec *executionContext) marshalNLogin2githubᚗcomᚋvibeᚑc2ᚋvibeᚑc2ᚑcoreᚋcoreᚋpkgᚋmodelsᚐLogin(ctx context.Context, sel ast.SelectionSet, v models.Login) graphql.Marshaler {
+	return ec._Login(ctx, sel, &v)
+}
+
+func (ec *executionContext) marshalNLogin2ᚕgithubᚗcomᚋvibeᚑc2ᚋvibeᚑc2ᚑcoreᚋcoreᚋpkgᚋmodelsᚐLoginᚄ(ctx context.Context, sel ast.SelectionSet, v []models.Login) graphql.Marshaler {
+	ret := graphql.MarshalSliceConcurrently(ctx, len(v), 0, false, func(ctx context.Context, i int) graphql.Marshaler {
+		fc := graphql.GetFieldContext(ctx)
+		fc.Result = &v[i]
+		return ec.marshalNLogin2githubᚗcomᚋvibeᚑc2ᚋvibeᚑc2ᚑcoreᚋcoreᚋpkgᚋmodelsᚐLogin(ctx, sel, v[i])
+	})
+
+	for _, e := range ret {
+		if e == graphql.Null {
+			return graphql.Null
+		}
+	}
+
+	return ret
+}
+
+func (ec *executionContext) unmarshalNLoginInput2ᚖgithubᚗcomᚋvibeᚑc2ᚋvibeᚑc2ᚑcoreᚋcoreᚋpkgᚋgraphqlᚋmodelᚐLoginInput(ctx context.Context, v any) (*model.LoginInput, error) {
+	res, err := ec.unmarshalInputLoginInput(ctx, v)
+	return &res, graphql.ErrorOnPath(ctx, err)
+}
+
 func (ec *executionContext) unmarshalNMarkHashCrackedInput2githubᚗcomᚋvibeᚑc2ᚋvibeᚑc2ᚑcoreᚋcoreᚋpkgᚋgraphqlᚋmodelᚐMarkHashCrackedInput(ctx context.Context, v any) (model.MarkHashCrackedInput, error) {
 	res, err := ec.unmarshalInputMarkHashCrackedInput(ctx, v)
 	return res, graphql.ErrorOnPath(ctx, err)
@@ -40920,6 +41349,24 @@ func (ec *executionContext) marshalOInt2ᚖint(ctx context.Context, sel ast.Sele
 	_ = ctx
 	res := graphql.MarshalInt(*v)
 	return res
+}
+
+func (ec *executionContext) unmarshalOLoginInput2ᚕᚖgithubᚗcomᚋvibeᚑc2ᚋvibeᚑc2ᚑcoreᚋcoreᚋpkgᚋgraphqlᚋmodelᚐLoginInputᚄ(ctx context.Context, v any) ([]*model.LoginInput, error) {
+	if v == nil {
+		return nil, nil
+	}
+	var vSlice []any
+	vSlice = graphql.CoerceList(v)
+	var err error
+	res := make([]*model.LoginInput, len(vSlice))
+	for i := range vSlice {
+		ctx := graphql.WithPathContext(ctx, graphql.NewPathWithIndex(i))
+		res[i], err = ec.unmarshalNLoginInput2ᚖgithubᚗcomᚋvibeᚑc2ᚋvibeᚑc2ᚑcoreᚋcoreᚋpkgᚋgraphqlᚋmodelᚐLoginInput(ctx, vSlice[i])
+		if err != nil {
+			return nil, err
+		}
+	}
+	return res, nil
 }
 
 func (ec *executionContext) unmarshalONetworkInterfaceInput2ᚕᚖgithubᚗcomᚋvibeᚑc2ᚋvibeᚑc2ᚑcoreᚋcoreᚋpkgᚋgraphqlᚋmodelᚐNetworkInterfaceInputᚄ(ctx context.Context, v any) ([]*model.NetworkInterfaceInput, error) {

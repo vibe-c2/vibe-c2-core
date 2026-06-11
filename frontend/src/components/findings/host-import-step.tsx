@@ -4,7 +4,10 @@ import { Button } from "@/components/ui/button"
 import { Textarea } from "@/components/ui/textarea"
 import { DialogFooter } from "@/components/ui/dialog"
 import { makeClientId } from "@/components/findings/credential-key-drafts"
-import type { HostFormValues } from "@/components/findings/host-drafts"
+import {
+  loginToDraft,
+  type HostFormValues,
+} from "@/components/findings/host-drafts"
 import {
   parseCommandOutput,
   type ParsedLine,
@@ -13,9 +16,12 @@ import {
 } from "@/lib/host-import/parse"
 
 interface HostImportStepProps {
-  // A patch over the form values — exactly one category (interfaces OR routes)
-  // depending on the pasted command. The dialog merges it, replacing that list.
-  onApply: (patch: Partial<Pick<HostFormValues, "interfaces" | "routes">>) => void
+  // A patch over the form values — exactly one category (interfaces, routes, OR
+  // logins) depending on the pasted command. The dialog merges it, replacing
+  // that list.
+  onApply: (
+    patch: Partial<Pick<HostFormValues, "interfaces" | "routes" | "logins">>,
+  ) => void
   onBack: () => void
 }
 
@@ -28,7 +34,12 @@ const PLACEHOLDER = `ip a
 
 ip ro
 default via 10.0.5.1 dev eth0 proto dhcp metric 100
-10.0.8.0/24 via 10.0.5.1 dev eth0`
+10.0.8.0/24 via 10.0.5.1 dev eth0
+
+— or —
+
+last
+alice    pts/0   10.0.5.12   Tue Jun 10 14:02   still logged in`
 
 const ROLE_CLASS: Record<SegRole, string> = {
   used: "text-emerald-600 dark:text-emerald-400",
@@ -58,7 +69,7 @@ export function HostImportStep({ onApply, onBack }: HostImportStepProps) {
           addresses: i.addresses.join("\n"),
         })),
       })
-    } else {
+    } else if (result.command === "ip-route") {
       onApply({
         routes: result.routes.map((r) => ({
           _id: makeClientId(),
@@ -67,6 +78,8 @@ export function HostImportStep({ onApply, onBack }: HostImportStepProps) {
           interface: r.interface,
         })),
       })
+    } else {
+      onApply({ logins: result.logins.map(loginToDraft) })
     }
     onBack()
   }
@@ -77,9 +90,11 @@ export function HostImportStep({ onApply, onBack }: HostImportStepProps) {
         <p className="text-sm text-muted-foreground">
           Paste a command and its output (command on the first line). Supported:{" "}
           <code className="rounded bg-muted px-1 py-0.5 text-xs">ip a</code> for
-          interfaces and{" "}
+          interfaces,{" "}
           <code className="rounded bg-muted px-1 py-0.5 text-xs">ip ro</code> for
-          routes.
+          routes, and{" "}
+          <code className="rounded bg-muted px-1 py-0.5 text-xs">last</code> for
+          user footprints.
         </p>
 
         <Textarea
@@ -264,7 +279,12 @@ function Summary({ result }: { result: ParseResult }) {
       </span>
     )
   }
-  const noun = result.command === "ip-route" ? "route" : "interface"
+  const noun =
+    result.command === "ip-route"
+      ? "route"
+      : result.command === "last"
+        ? "login"
+        : "interface"
   const label = `${noun}${result.usedCount === 1 ? "" : "s"}`
   return (
     <span className="text-muted-foreground">

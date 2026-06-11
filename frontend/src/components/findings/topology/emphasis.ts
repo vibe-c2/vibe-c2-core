@@ -1,5 +1,6 @@
 import type { Edge, Node } from "@xyflow/react"
 import type { Topology } from "@/lib/topology/derive"
+import { isPillNodeType } from "@/components/findings/topology/layout"
 
 // Visual emphasis over the rendered graph: click-to-focus dims everything
 // outside a node's neighborhood; search dims everything but the matches.
@@ -36,15 +37,31 @@ export function buildAdjacency(t: Topology): Map<string, Set<string>> {
   return adj
 }
 
+// Clicking a node lights its neighborhood. Normally that's a 1-hop ring. On the
+// users lens, though, hosts never connect directly — they connect THROUGH an
+// identity — so a 1-hop focus on a host would only reach its identities, not
+// the hosts those identities tie it to. When `identityIds` is non-empty and the
+// clicked node is not itself an identity, we take a second hop but only through
+// identity neighbors: from a host that reaches its identities, then every host
+// those identities touch (the sources they came from and the other hosts they
+// reached). Other lenses pass an empty set and keep the plain 1-hop behavior.
 export function focusSets(
   nodeId: string,
   adjacency: Map<string, Set<string>>,
+  identityIds: Set<string> = new Set(),
 ): EmphasisSets {
-  return {
-    lit: new Set([nodeId, ...(adjacency.get(nodeId) ?? [])]),
-    active: nodeId,
-    ringMatches: false,
+  const lit = new Set<string>([nodeId])
+  const neighbors = adjacency.get(nodeId) ?? new Set<string>()
+  for (const n of neighbors) lit.add(n)
+
+  if (identityIds.size > 0 && !identityIds.has(nodeId)) {
+    for (const n of neighbors) {
+      if (!identityIds.has(n)) continue
+      for (const m of adjacency.get(n) ?? []) lit.add(m)
+    }
   }
+
+  return { lit, active: nodeId, ringMatches: false }
 }
 
 export function searchSets(
@@ -59,9 +76,9 @@ export function searchSets(
 }
 
 // The ring is drawn on React Flow's node wrapper div, so its radius must
-// match the shape the node component renders inside it.
+// match the shape the node component renders inside it — pills are round.
 const ringRadius = (nodeType: string | undefined) =>
-  nodeType === "subnet" ? "rounded-full" : "rounded-md"
+  isPillNodeType(nodeType) ? "rounded-full" : "rounded-md"
 
 // Dim/ring styling for one node.
 function decorateNode(node: Node, sets: EmphasisSets): Node {

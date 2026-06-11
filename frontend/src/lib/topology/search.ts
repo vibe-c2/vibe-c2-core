@@ -33,5 +33,9 @@ function haystack(n: TopoNode): string[] {
       return [n.cidr]
     case "leaf-subnets":
       return n.entries.flatMap((e) => [e.cidr, e.iface, e.ip])
+    case "identity":
+      return [n.user]
+    case "phantom-host":
+      return [n.label]
   }
 }

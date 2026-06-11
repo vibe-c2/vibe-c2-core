@@ -8,7 +8,7 @@ import {
   type Node,
 } from "@xyflow/react"
 import "@xyflow/react/dist/style.css"
-import { NetworkIcon, RouteIcon, TriangleAlertIcon } from "lucide-react"
+import { NetworkIcon, RouteIcon, TriangleAlertIcon, UsersIcon } from "lucide-react"
 import { MAX_TOPOLOGY_HOSTS, useAllHosts } from "@/graphql/hooks/hosts"
 import { useHostStore, type TopologyRelation } from "@/stores/hosts"
 import {
@@ -25,8 +25,10 @@ import { useTopologyEmphasis } from "@/components/findings/topology/use-emphasis
 import { TopologySearch } from "@/components/findings/topology/topology-search"
 import {
   HostNode,
+  IdentityNode,
   LeafSubnetsNode,
   PhantomGatewayNode,
+  PhantomHostNode,
   PhantomSubnetNode,
   SubnetNode,
   type HostNodeData,
@@ -42,6 +44,8 @@ const nodeTypes = {
   phantomGateway: PhantomGatewayNode,
   phantomSubnet: PhantomSubnetNode,
   leafSubnets: LeafSubnetsNode,
+  identity: IdentityNode,
+  phantomHost: PhantomHostNode,
 }
 
 const edgeTypes = {
@@ -80,6 +84,45 @@ const lenses: Record<TopologyRelation, (t: Topology) => Topology> = {
       nodes: t.nodes.filter((n) => n.kind === "host" || n.kind === "subnet"),
       edges: t.edges.filter((e) => e.kind === "membership"),
     }),
+  // Host cards + identity pills + unknown-source hosts, joined by the two login
+  // edges (logged into / logged in from). Hosts never connect directly here —
+  // only through an identity — so this lens reads as "who touched what, and
+  // from where". Network-derived elements are all stripped.
+  identities: (t) => ({
+    ...t,
+    nodes: t.nodes.filter(
+      (n) =>
+        n.kind === "host" || n.kind === "identity" || n.kind === "phantom-host",
+    ),
+    edges: t.edges.filter(
+      (e) => e.kind === "logged-into" || e.kind === "logged-from",
+    ),
+  }),
+}
+
+// Users lens only: drop the ubiquitous accounts (root, ubuntu, …) and any edges
+// touching them. A phantom (unknown-source) host whose only edges led to a
+// hidden account is now an artifact, so prune the disconnected ones. Real host
+// nodes are always kept as anchors even when isolated — consistent with how the
+// routes/subnets lenses leave lone hosts on the canvas.
+function withoutWellKnownIdentities(t: Topology): Topology {
+  const hidden = new Set(
+    t.nodes
+      .filter((n) => n.kind === "identity" && n.wellKnown)
+      .map((n) => n.id),
+  )
+  if (hidden.size === 0) return t
+
+  const edges = t.edges.filter(
+    (e) => !hidden.has(e.source) && !hidden.has(e.target),
+  )
+  const connected = new Set(edges.flatMap((e) => [e.source, e.target]))
+  const nodes = t.nodes.filter(
+    (n) =>
+      !hidden.has(n.id) &&
+      (n.kind !== "phantom-host" || connected.has(n.id)),
+  )
+  return { ...t, nodes, edges }
 }
 
 export function TopologyView({ operationId }: TopologyViewProps) {
@@ -87,16 +130,20 @@ export function TopologyView({ operationId }: TopologyViewProps) {
   // Persisted in the host store so the choice survives reloads.
   const relation = useHostStore((s) => s.topologyRelation)
   const setRelation = useHostStore((s) => s.setTopologyRelation)
+  const hideWellKnown = useHostStore((s) => s.hideWellKnownIdentities)
+  const setHideWellKnown = useHostStore((s) => s.setHideWellKnownIdentities)
   const openEditDialog = useHostStore((s) => s.openEditDialog)
 
   const topology = useMemo(
     () => deriveTopology(data?.hosts ?? []),
     [data?.hosts],
   )
-  const visibleTopology = useMemo(
-    () => lenses[relation](topology),
-    [topology, relation],
-  )
+  const visibleTopology = useMemo(() => {
+    const lensed = lenses[relation](topology)
+    return relation === "identities" && hideWellKnown
+      ? withoutWellKnownIdentities(lensed)
+      : lensed
+  }, [topology, relation, hideWellKnown])
 
   // Live force-directed layout: pre-settled for first paint, re-heated while
   // a node is dragged so neighbors follow. Positions are session-only: any
@@ -198,7 +245,15 @@ export function TopologyView({ operationId }: TopologyViewProps) {
             {/* Colors come from the --xy-minimap-* mappings in index.css. */}
             <MiniMap pannable zoomable />
             <Legend stats={topology.stats} relation={relation} />
-            <RelationPicker relation={relation} onChange={setRelation} />
+            <div className="absolute right-3 top-3 z-10 flex flex-col items-end gap-2">
+              <RelationPicker relation={relation} onChange={setRelation} />
+              {relation === "identities" && (
+                <WellKnownToggle
+                  hide={hideWellKnown}
+                  onChange={setHideWellKnown}
+                />
+              )}
+            </div>
             <TopologySearch {...search} />
           </ReactFlow>
         </ReactFlowProvider>
@@ -235,6 +290,12 @@ const relationOptions: {
     Icon: NetworkIcon,
     title: "Build the map from subnet membership — who shares a segment",
   },
+  {
+    value: "identities",
+    label: "Users",
+    Icon: UsersIcon,
+    title: "Build the map from user footprints — who logged in where, from where",
+  },
 ]
 
 // Top-right selector for the relation the graph is built from. Mutually
@@ -247,7 +308,7 @@ function RelationPicker({
   onChange: (relation: TopologyRelation) => void
 }) {
   return (
-    <div className="absolute right-3 top-3 z-10 flex overflow-hidden rounded-md border bg-card/90 shadow-sm backdrop-blur">
+    <div className="flex overflow-hidden rounded-md border bg-card/90 shadow-sm backdrop-blur">
       {relationOptions.map(({ value, label, Icon, title }) => (
         <Button
           key={value}
@@ -263,6 +324,30 @@ function RelationPicker({
         </Button>
       ))}
     </div>
+  )
+}
+
+// Top-right toggle (users lens only): hide the ubiquitous accounts so the
+// distinctive identities stand out. Matches the RelationPicker's pill styling.
+function WellKnownToggle({
+  hide,
+  onChange,
+}: {
+  hide: boolean
+  onChange: (hide: boolean) => void
+}) {
+  return (
+    <Button
+      variant={hide ? "secondary" : "ghost"}
+      size="sm"
+      className="h-7 gap-1.5 rounded-md border bg-card/90 text-xs shadow-sm backdrop-blur"
+      onClick={() => onChange(!hide)}
+      aria-pressed={hide}
+      title="Hide root, ubuntu, and other accounts every host shares — they link by default but carry weak reuse signal"
+    >
+      <UsersIcon className="size-3.5" />
+      {hide ? "Common accounts hidden" : "Hide common accounts"}
+    </Button>
   )
 }
 
@@ -283,6 +368,21 @@ function Legend({
         <span className="font-medium">
           {stats.hosts} hosts · {stats.subnets} subnets
         </span>
+      ) : relation === "identities" ? (
+        <>
+          <span className="font-medium">
+            {stats.hosts} hosts · {stats.identities} identit
+            {stats.identities === 1 ? "y" : "ies"}
+          </span>
+          <LegendRow color="bg-primary" label="logged into" />
+          <LegendRow color="bg-muted-foreground/50" label="logged in from" />
+          {stats.phantomHosts > 0 && (
+            <LegendRow
+              color="bg-muted-foreground/50"
+              label={`${stats.phantomHosts} unknown source${stats.phantomHosts === 1 ? "" : "s"}`}
+            />
+          )}
+        </>
       ) : (
         <>
           <span className="font-medium">{stats.hosts} hosts</span>

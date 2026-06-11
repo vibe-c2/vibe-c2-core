@@ -16,6 +16,7 @@ import {
   emptyHostFormValues,
   hostFormValuesFromWire,
   interfaceDraftsToInputs,
+  loginDraftsToInputs,
   routeDraftsToInputs,
   type HostFormValues,
 } from "@/components/findings/host-drafts"
@@ -143,6 +144,7 @@ function HostForm({
       os: values.os.trim(),
       interfaces: interfaceDraftsToInputs(values.interfaces),
       routes: routeDraftsToInputs(values.routes),
+      logins: loginDraftsToInputs(values.logins),
     }
     try {
       if (host) {
