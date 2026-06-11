@@ -7,9 +7,9 @@ import {
   ReactFlowProvider,
 } from "@xyflow/react"
 import "@xyflow/react/dist/style.css"
-import { NetworkIcon, TriangleAlertIcon } from "lucide-react"
+import { NetworkIcon, RouteIcon, TriangleAlertIcon } from "lucide-react"
 import { MAX_TOPOLOGY_HOSTS, useAllHosts } from "@/graphql/hooks/hosts"
-import { useHostStore } from "@/stores/hosts"
+import { useHostStore, type TopologyRelation } from "@/stores/hosts"
 import {
   deriveTopology,
   type Topology,
@@ -48,30 +48,43 @@ interface TopologyViewProps {
 // The Hosts tab's second view: a network map derived entirely from the
 // operation's host data (no manual editing). Fetches ALL hosts (not the
 // paginated list), derives the graph, lays it out, and renders it read-only.
-// Strips subnet hub nodes and their interface edges, leaving only host cards
-// and route-derived elements (pivots, unknown gateways, unexplored subnets).
-// A pure view filter — the underlying derivation is untouched.
-function withoutSubnets(t: Topology): Topology {
-  return {
+//
+// The graph is built from exactly ONE relation type at a time. Routes and
+// subnet membership are different semantics (L3 "routes through" vs L2 "sits
+// on segment"); overlaying both turned real operations into a hairball. Both
+// lenses are pure view filters — the underlying derivation is untouched.
+
+const lenses: Record<TopologyRelation, (t: Topology) => Topology> = {
+  // Host cards + route-derived elements (pivots, unknown gateways, unexplored
+  // subnets). Subnet hubs and their interface edges are stripped.
+  routes: (t) => ({
     ...t,
     nodes: t.nodes.filter((n) => n.kind !== "subnet"),
     edges: t.edges.filter((e) => e.kind !== "membership"),
-  }
+  }),
+  // Host cards + subnet hubs + interface edges. Route-derived elements are
+  // stripped — phantom gateways/subnets only exist because of routes, so
+  // keeping them would smuggle the second relation back in.
+  subnets: (t) => ({
+    ...t,
+    nodes: t.nodes.filter((n) => n.kind === "host" || n.kind === "subnet"),
+    edges: t.edges.filter((e) => e.kind === "membership"),
+  }),
 }
 
 export function TopologyView({ operationId }: TopologyViewProps) {
   const { data, isLoading, isError } = useAllHosts(operationId)
-  // Persisted in the host store so the toggle survives reloads.
-  const showSubnets = useHostStore((s) => s.showSubnets)
-  const toggleSubnets = useHostStore((s) => s.toggleSubnets)
+  // Persisted in the host store so the choice survives reloads.
+  const relation = useHostStore((s) => s.topologyRelation)
+  const setRelation = useHostStore((s) => s.setTopologyRelation)
 
   const topology = useMemo(
     () => deriveTopology(data?.hosts ?? []),
     [data?.hosts],
   )
   const visibleTopology = useMemo(
-    () => (showSubnets ? topology : withoutSubnets(topology)),
-    [topology, showSubnets],
+    () => lenses[relation](topology),
+    [topology, relation],
   )
 
   // Live force-directed layout: pre-settled for first paint, re-heated while
@@ -143,23 +156,8 @@ export function TopologyView({ operationId }: TopologyViewProps) {
             <Background gap={16} className="!bg-muted/20" />
             <Controls showInteractive={false} />
             <MiniMap pannable zoomable className="!bg-card" />
-            <Legend stats={topology.stats} />
-            <div className="absolute right-3 top-3 z-10">
-              <Button
-                variant={showSubnets ? "secondary" : "outline"}
-                size="sm"
-                className="h-7 gap-1.5 bg-card/90 text-xs shadow-sm backdrop-blur"
-                onClick={toggleSubnets}
-                title={
-                  showSubnets
-                    ? "Hide subnet nodes and interface edges"
-                    : "Show subnet nodes and interface edges"
-                }
-              >
-                <NetworkIcon className="size-3.5" />
-                Subnets
-              </Button>
-            </div>
+            <Legend stats={topology.stats} relation={relation} />
+            <RelationPicker relation={relation} onChange={setRelation} />
           </ReactFlow>
         </ReactFlowProvider>
       </div>
@@ -175,26 +173,91 @@ function Centered({ children }: { children: React.ReactNode }) {
   )
 }
 
+// One entry per relation the picker offers; the lens table above must have a
+// matching key (TypeScript enforces both via TopologyRelation).
+const relationOptions: {
+  value: TopologyRelation
+  label: string
+  Icon: typeof RouteIcon
+  title: string
+}[] = [
+  {
+    value: "routes",
+    label: "Routes",
+    Icon: RouteIcon,
+    title: "Build the map from routes — who pivots through whom",
+  },
+  {
+    value: "subnets",
+    label: "Subnets",
+    Icon: NetworkIcon,
+    title: "Build the map from subnet membership — who shares a segment",
+  },
+]
+
+// Top-right selector for the relation the graph is built from. Mutually
+// exclusive by design — see the lens comments above.
+function RelationPicker({
+  relation,
+  onChange,
+}: {
+  relation: TopologyRelation
+  onChange: (relation: TopologyRelation) => void
+}) {
+  return (
+    <div className="absolute right-3 top-3 z-10 flex overflow-hidden rounded-md border bg-card/90 shadow-sm backdrop-blur">
+      {relationOptions.map(({ value, label, Icon, title }) => (
+        <Button
+          key={value}
+          variant={relation === value ? "secondary" : "ghost"}
+          size="sm"
+          className="h-7 gap-1.5 rounded-none text-xs"
+          onClick={() => onChange(value)}
+          aria-pressed={relation === value}
+          title={title}
+        >
+          <Icon className="size-3.5" />
+          {label}
+        </Button>
+      ))}
+    </div>
+  )
+}
+
 // Compact key + counts, top-left over the canvas. Counts double as a summary
-// of what the operator has (and hasn't) mapped.
-function Legend({ stats }: { stats: TopologyStats }) {
+// of what the operator has (and hasn't) mapped. Only rows that exist in the
+// current lens are shown — pivot/phantom counts are meaningless on the
+// subnets lens and vice versa.
+function Legend({
+  stats,
+  relation,
+}: {
+  stats: TopologyStats
+  relation: TopologyRelation
+}) {
   return (
     <div className="absolute left-3 top-3 z-10 flex flex-col gap-1 rounded-md border bg-card/90 px-3 py-2 text-[11px] shadow-sm backdrop-blur">
-      <span className="font-medium">
-        {stats.hosts} hosts · {stats.subnets} subnets
-      </span>
-      <LegendRow color="bg-primary" label={`${stats.pivots} pivots`} />
-      {stats.phantomGateways > 0 && (
-        <LegendRow
-          color="bg-amber-500"
-          label={`${stats.phantomGateways} unknown gateway${stats.phantomGateways === 1 ? "" : "s"}`}
-        />
-      )}
-      {stats.phantomSubnets > 0 && (
-        <LegendRow
-          color="bg-sky-500"
-          label={`${stats.phantomSubnets} unexplored subnet${stats.phantomSubnets === 1 ? "" : "s"}`}
-        />
+      {relation === "subnets" ? (
+        <span className="font-medium">
+          {stats.hosts} hosts · {stats.subnets} subnets
+        </span>
+      ) : (
+        <>
+          <span className="font-medium">{stats.hosts} hosts</span>
+          <LegendRow color="bg-primary" label={`${stats.pivots} pivots`} />
+          {stats.phantomGateways > 0 && (
+            <LegendRow
+              color="bg-amber-500"
+              label={`${stats.phantomGateways} unknown gateway${stats.phantomGateways === 1 ? "" : "s"}`}
+            />
+          )}
+          {stats.phantomSubnets > 0 && (
+            <LegendRow
+              color="bg-sky-500"
+              label={`${stats.phantomSubnets} unexplored subnet${stats.phantomSubnets === 1 ? "" : "s"}`}
+            />
+          )}
+        </>
       )}
     </div>
   )

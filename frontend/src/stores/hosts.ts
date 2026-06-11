@@ -23,25 +23,29 @@ export interface HostFilters {
 }
 
 // The Hosts tab renders the same data two ways: the CRUD table and a derived
-// network topology. Persisted (with showSubnets) so a reload lands the user
-// back in the view they were working in.
+// network topology. Persisted (with topologyRelation) so a reload lands the
+// user back in the view they were working in.
 export type HostView = "table" | "topology"
+
+// Which relation the topology graph is built from. The two edge semantics
+// (L3 "routes through" vs L2 "sits on segment") are mutually exclusive lenses:
+// drawing both at once produced an unreadable hairball on real operations.
+export type TopologyRelation = "routes" | "subnets"
 
 interface HostStoreState {
   filters: HostFilters
   selected: HostFieldsFragment | null
   view: HostView
-  // Topology-only: render subnet hub nodes + interface edges, or hosts/routes
-  // only. Lives here (not component state) so the preference survives reloads
-  // and view switches.
-  showSubnets: boolean
+  // Topology-only: which relation type builds the graph. Lives here (not
+  // component state) so the preference survives reloads and view switches.
+  topologyRelation: TopologyRelation
 
   formDialogOpen: boolean
   deleteDialogOpen: boolean
 
   setSearch: (search: string) => void
   setView: (view: HostView) => void
-  toggleSubnets: () => void
+  setTopologyRelation: (relation: TopologyRelation) => void
   resetFilters: () => void
 
   openCreateDialog: () => void
@@ -61,17 +65,14 @@ export const useHostStore = create<HostStoreState>()(
       filters: defaultFilters,
       selected: null,
       view: "table",
-      showSubnets: false,
+      topologyRelation: "routes",
 
       formDialogOpen: false,
       deleteDialogOpen: false,
 
       setSearch: (search) => set((s) => ({ filters: { ...s.filters, search } })),
       setView: (view) => set({ view }),
-      // Toggle lives in the store (not `setShowSubnets(!current)` at the call
-      // site) so it reads the latest value — a closure over a stale render
-      // can't turn a double-click into a no-op.
-      toggleSubnets: () => set((s) => ({ showSubnets: !s.showSubnets })),
+      setTopologyRelation: (topologyRelation) => set({ topologyRelation }),
       resetFilters: () => set({ filters: defaultFilters }),
 
       // Open actions are mutually exclusive: both dialogs render from the
@@ -96,20 +97,23 @@ export const useHostStore = create<HostStoreState>()(
       // so a stale/corrupt localStorage value falls back to the default.
       partialize: (state) => ({
         view: state.view,
-        showSubnets: state.showSubnets,
+        topologyRelation: state.topologyRelation,
       }),
+      // Old persisted state may still carry the retired `showSubnets` boolean;
+      // anything but a valid relation falls back to the default ("routes").
       merge: (persisted, current) => {
         const p = persisted as
-          | { view?: HostView; showSubnets?: boolean }
+          | { view?: HostView; topologyRelation?: TopologyRelation }
           | undefined
         return {
           ...current,
           view:
             p?.view === "table" || p?.view === "topology" ? p.view : current.view,
-          showSubnets:
-            typeof p?.showSubnets === "boolean"
-              ? p.showSubnets
-              : current.showSubnets,
+          topologyRelation:
+            p?.topologyRelation === "routes" ||
+            p?.topologyRelation === "subnets"
+              ? p.topologyRelation
+              : current.topologyRelation,
         }
       },
     },
