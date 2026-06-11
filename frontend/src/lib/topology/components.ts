@@ -1,22 +1,26 @@
-// Connected-component grouping and fixed-slot packing for the topology layout.
-// Framework-free (like derive.ts) so it can be unit-tested in isolation; the
-// layout layer consumes it to give each disconnected island its own home on the
-// canvas instead of pulling every node toward a single shared origin.
+// Connected-component grouping and initial-slot packing for the topology
+// layout. Framework-free (like derive.ts) so it can be unit-tested in
+// isolation; the layout layer consumes it to give each disconnected island a
+// tidy, non-overlapping starting position on the canvas.
 //
 // Why this exists: the force simulation is global and has no notion of islands.
-// A single origin-centering force binds every island to one point, and an
-// all-pairs charge force makes them repel across the gaps — so dragging one
-// island perturbs the rest. Anchoring each component to its own slot (paired
-// with a distance-bounded charge in layout.ts) decouples them.
+// A single origin-centering force binds every island to one point; a fixed
+// per-island anchor springs each island back to a home it can't leave. We want
+// neither — islands should float freely. So the slots here are used ONLY to
+// SEED the layout (a clean, deterministic first paint). There is no centering
+// force pulling nodes back: a connected component holds its own shape via its
+// link springs, and a distance-bounded charge (see layout.ts) means islands
+// only push on each other when dragged close. The result is free-floating
+// islands that stay where you leave them.
 
-export type Anchor = { x: number; y: number }
+export type Slot = { x: number; y: number }
 
 type Edge = { source: string; target: string }
 type Size = { width: number; height: number }
 
-// Options that tie packing to the simulation's force constants. The gap MUST be
-// >= the charge's distanceMax so neighboring islands sit outside each other's
-// repulsion range — that's what keeps a dragged island from nudging the others.
+// Options that tie slot spacing to the simulation's force constants. The gap
+// should be >= the charge's distanceMax so islands SEED outside each other's
+// repulsion range and the first paint doesn't shuffle them around.
 export type PackOptions = {
   interIslandGap: number
   collidePadding: number
@@ -66,7 +70,7 @@ function buildComponents(nodeIds: string[], edges: Edge[]): string[][] {
   return [...groups.values()]
 }
 
-// Deterministic ordering so anchor assignment is stable across reloads of the
+// Deterministic ordering so slot assignment is stable across reloads of the
 // same data: largest island first, ties broken by smallest member id. Members
 // within a component are also sorted for a stable representative id.
 function orderComponents(components: string[][]): string[][] {
@@ -98,18 +102,20 @@ function estimateRadius(
   return (Math.sqrt(members.length) * avgDiameter) / 2
 }
 
-// Assign each component a fixed slot on a uniform grid centered on the origin
-// and return a per-node-id map of slot centers. Uniform cells (sized to the
-// largest island) keep this simple and robust for the handful of islands a
-// topology has; the cell is wide enough that charge cannot bridge neighbors.
-export function packComponentAnchors(
+// Assign each component a starting slot on a uniform grid centered on the
+// origin and return a per-node-id map of slot centers. Uniform cells (sized to
+// the largest island) keep this simple and robust for the handful of islands a
+// topology has; the cell is wide enough that islands seed beyond each other's
+// charge range. These are seed positions only — no force pulls nodes back to
+// them.
+export function packComponentSlots(
   components: string[][],
   sizeById: Map<string, Size>,
   opts: PackOptions,
-): Map<string, Anchor> {
-  const anchorByNodeId = new Map<string, Anchor>()
+): Map<string, Slot> {
+  const slotByNodeId = new Map<string, Slot>()
   const count = components.length
-  if (count === 0) return anchorByNodeId
+  if (count === 0) return slotByNodeId
 
   const radii = components.map((c) => estimateRadius(c, sizeById, opts.collidePadding))
   const maxRadius = Math.max(0, ...radii)
@@ -117,17 +123,17 @@ export function packComponentAnchors(
 
   const cols = Math.ceil(Math.sqrt(count))
   const rows = Math.ceil(count / cols)
-  // Center the whole grid on the origin so the map stays balanced around (0,0),
-  // matching the previous origin-centered behavior at the macro level.
+  // Center the whole grid on the origin so the first paint stays balanced
+  // around (0,0).
   const offsetX = ((cols - 1) * cell) / 2
   const offsetY = ((rows - 1) * cell) / 2
 
   components.forEach((members, i) => {
     const col = i % cols
     const row = Math.floor(i / cols)
-    const anchor: Anchor = { x: col * cell - offsetX, y: row * cell - offsetY }
-    for (const id of members) anchorByNodeId.set(id, anchor)
+    const slot: Slot = { x: col * cell - offsetX, y: row * cell - offsetY }
+    for (const id of members) slotByNodeId.set(id, slot)
   })
 
-  return anchorByNodeId
+  return slotByNodeId
 }
