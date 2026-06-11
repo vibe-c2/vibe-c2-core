@@ -43,30 +43,20 @@ export function buildAdjacency(t: Topology): Map<string, Set<string>> {
   return adj
 }
 
-// Clicking a node lights its neighborhood. Normally that's a 1-hop ring. On the
-// users lens, though, hosts never connect directly — they connect THROUGH an
-// identity — so a 1-hop focus on a host would only reach its identities, not
-// the hosts those identities tie it to. When `identityIds` is non-empty and the
-// clicked node is not itself an identity, we take a second hop but only through
-// identity neighbors: from a host that reaches its identities, then every host
-// those identities touch (the sources they came from and the other hosts they
-// reached). Other lenses pass an empty set and keep the plain 1-hop behavior.
+// Clicking a node lights its 1-hop neighborhood. On the users lens that reads
+// naturally because hosts and identities are wired together directly: clicking
+// an identity lights every host it touches (its source and accessed hosts);
+// clicking a host lights every identity seen on it. We deliberately do NOT take
+// a second hop through identities — lighting every *other* host a shared
+// account (root, default, …) ever touched would blast far past "what relates to
+// this node" and drown the signal. The relation to the clicked node is the
+// users on it, not the whole transitive reach of those users.
 export function focusSets(
   nodeId: string,
   adjacency: Map<string, Set<string>>,
-  identityIds: Set<string> = new Set(),
 ): EmphasisSets {
   const lit = new Set<string>([nodeId])
-  const neighbors = adjacency.get(nodeId) ?? new Set<string>()
-  for (const n of neighbors) lit.add(n)
-
-  if (identityIds.size > 0 && !identityIds.has(nodeId)) {
-    for (const n of neighbors) {
-      if (!identityIds.has(n)) continue
-      for (const m of adjacency.get(n) ?? []) lit.add(m)
-    }
-  }
-
+  for (const n of adjacency.get(nodeId) ?? []) lit.add(n)
   return { lit, active: nodeId, ringMatches: false }
 }
 
