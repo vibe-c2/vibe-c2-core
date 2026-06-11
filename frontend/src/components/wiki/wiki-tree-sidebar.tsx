@@ -596,8 +596,13 @@ export function WikiTreeSidebar({
         </Tooltip>
       </div>
 
-      {/* Tree body */}
-      <div ref={setRootDropRef} className="flex-1 overflow-y-auto px-1 py-1">
+      {/* Tree body. data-wiki-tree-scroll marks this as the scroll container
+          for the selected-row auto-centering in wiki-tree-node.tsx. */}
+      <div
+        ref={setRootDropRef}
+        data-wiki-tree-scroll
+        className="flex-1 overflow-y-auto px-1 py-1"
+      >
         {rootsLoading ? (
           <div className="flex flex-col gap-1 px-1">
             {Array.from({ length: 4 }, (_, i) => (

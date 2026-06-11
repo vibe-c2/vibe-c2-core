@@ -53,6 +53,15 @@ interface WikiTreeNodeProps {
   operationId: string
 }
 
+/** Is the row entirely inside the container's visible viewport? */
+function isFullyVisibleIn(row: Element, container: Element): boolean {
+  const rowRect = row.getBoundingClientRect()
+  const containerRect = container.getBoundingClientRect()
+  return (
+    rowRect.top >= containerRect.top && rowRect.bottom <= containerRect.bottom
+  )
+}
+
 function WikiTreeNodeImpl({
   node,
   depth,
@@ -108,11 +117,18 @@ function WikiTreeNodeImpl({
   // When the row becomes the selected document — usually because the user
   // navigated from search or pasted a deep link — bring it into view. The
   // page-level effect already expanded the ancestors by the time this fires.
+  // Center the row in the tree's scroll container instead of `block:
+  // "nearest"`: nearest scrolls minimally, so on large expanded trees the
+  // row lands pinned at the very bottom edge. Skip entirely when the row is
+  // already fully visible — clicking a visible row must not yank the tree.
   const rowRef = useRef<HTMLDivElement | null>(null)
   useEffect(() => {
-    if (isSelected) {
-      rowRef.current?.scrollIntoView({ block: "nearest", behavior: "smooth" })
-    }
+    if (!isSelected) return
+    const row = rowRef.current
+    if (!row) return
+    const container = row.closest("[data-wiki-tree-scroll]")
+    if (container && isFullyVisibleIn(row, container)) return
+    row.scrollIntoView({ block: "center", behavior: "smooth" })
   }, [isSelected])
 
   // Per-row drag subscriptions: each selector returns a primitive (boolean
