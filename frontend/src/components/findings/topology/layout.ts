@@ -86,9 +86,10 @@ const LEAF_FRAME_H = 40 // py-2 + border + header row
 // remaining overlaps apart without disturbing the untangled shape.
 const UNTANGLE_TICKS = 150
 const POLISH_TICKS = 150
-// Deliberately the same value as the drag re-heat's alphaTarget in
-// use-simulation: phase 2 and a drag inject the same amount of energy, so
-// grabbing a node never perturbs the map more than the settle itself did.
+// A moderate re-heat: enough energy to push the remaining overlaps apart
+// without disturbing the untangled shape. The drag re-heat (use-simulation)
+// now runs cooler (0.2) and localized to the grabbed node's neighborhood, so
+// grabbing a node perturbs the map less than this one-time settle does.
 const POLISH_ALPHA = 0.3
 const LINK_SLACK = 60 // breathing room added to every link beyond node radii
 const CHARGE_STRENGTH = -1200
@@ -244,23 +245,25 @@ function edgeOf(e: TopoEdge): Edge {
         },
       }
     case "logged-into":
-      // identity → host: the account lands on the host. Animated, primary.
+      // identity → host: the account lands on the host. Direction is carried by
+      // the arrowhead, not a marching-ants animation: the users lens animated
+      // every login edge, and on a dense graph hundreds of infinitely-animating
+      // SVG paths repaint every frame at idle (fans spin up). Static + arrow.
       return {
         ...base,
         markerEnd: { type: MarkerType.ArrowClosed },
-        animated: true,
         style: { stroke: "var(--color-primary)", strokeWidth: 2 },
       }
     case "logged-from":
     case "logged-from-group":
       // source host → identity: where the session came from. Muted grey (vs the
       // primary "logged into") so the origin reads as the quieter half of the
-      // pair; still animated to show direction. The grouped variant (one merged
-      // lone-sources node → identity) renders identically.
+      // pair; the arrowhead shows direction. Not animated — see "logged-into".
+      // The grouped variant (one merged lone-sources node → identity) renders
+      // identically.
       return {
         ...base,
         markerEnd: { type: MarkerType.ArrowClosed },
-        animated: true,
         style: {
           stroke: "var(--color-muted-foreground)",
           strokeWidth: 1.5,

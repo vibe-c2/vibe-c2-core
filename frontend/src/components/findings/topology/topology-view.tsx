@@ -2,7 +2,6 @@ import { useCallback, useMemo, useState } from "react"
 import {
   Background,
   Controls,
-  MiniMap,
   ReactFlow,
   ReactFlowProvider,
   type Node,
@@ -286,6 +285,10 @@ export function TopologyView({ operationId }: TopologyViewProps) {
             proOptions={{ hideAttribution: true }}
             nodesConnectable={false}
             edgesFocusable={false}
+            // Virtualize: only mount nodes/edges intersecting the viewport.
+            // The users lens can carry hundreds of identity edges; rendering the
+            // off-screen ones (and, before, animating them) was dead weight.
+            onlyRenderVisibleElements
             // Double-click is "edit host", not "zoom in".
             zoomOnDoubleClick={false}
             // Clicking now selects nodes routinely (click = focus), and React
@@ -295,8 +298,6 @@ export function TopologyView({ operationId }: TopologyViewProps) {
           >
             <Background gap={16} className="!bg-muted/20" />
             <Controls showInteractive={false} />
-            {/* Colors come from the --xy-minimap-* mappings in index.css. */}
-            <MiniMap pannable zoomable />
             <Legend stats={topology.stats} relation={relation} />
             <div className="absolute right-3 top-3 z-10 flex flex-col items-end gap-2">
               <RelationPicker relation={relation} onChange={setRelation} />
