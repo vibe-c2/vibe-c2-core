@@ -1,25 +1,32 @@
 import { useEffect, useRef } from "react"
-import { EyeOffIcon } from "lucide-react"
+import { EyeOffIcon, PencilIcon } from "lucide-react"
+import type { HostFieldsFragment } from "@/graphql/gql/graphql"
 
-// A single, graph-level context menu shared by every identity node — opened by
-// React Flow's onNodeContextMenu in topology-view and positioned at the cursor.
-// Replaces the previous per-node base-ui ContextMenu (one mounted provider per
-// identity pill), which was pure overhead on a dense users lens. Self-dismisses
-// on outside pointer-down, Esc, scroll, or window blur.
+// A single, graph-level context menu shared by every host card and identity
+// node — opened by React Flow's onNodeContextMenu in topology-view and
+// positioned at the cursor. Replaces the previous per-node base-ui ContextMenu
+// (one mounted provider per identity pill), which was pure overhead on a dense
+// users lens. Self-dismisses on outside pointer-down, Esc, scroll, or window
+// blur.
 
-export interface NodeMenuState {
-  x: number
-  y: number
-  user: string
-}
+export type NodeMenuState = { x: number; y: number } & (
+  | { kind: "identity"; user: string }
+  | { kind: "host"; host: HostFieldsFragment }
+)
 
 interface NodeContextMenuProps {
   menu: NodeMenuState
   onHide: (user: string) => void
+  onEdit: (host: HostFieldsFragment) => void
   onClose: () => void
 }
 
-export function NodeContextMenu({ menu, onHide, onClose }: NodeContextMenuProps) {
+export function NodeContextMenu({
+  menu,
+  onHide,
+  onEdit,
+  onClose,
+}: NodeContextMenuProps) {
   const ref = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
@@ -50,20 +57,50 @@ export function NodeContextMenu({ menu, onHide, onClose }: NodeContextMenuProps)
       className="fixed z-50 min-w-44 overflow-hidden rounded-md border bg-popover p-1 text-sm shadow-md"
       style={{ left: menu.x, top: menu.y }}
     >
-      <button
-        type="button"
-        role="menuitem"
-        onClick={() => {
-          onHide(menu.user)
-          onClose()
-        }}
-        className="flex w-full items-center gap-2 rounded px-2 py-1.5 text-left hover:bg-muted"
-      >
-        <EyeOffIcon className="size-3.5 shrink-0 text-muted-foreground" />
-        <span className="truncate">
+      {menu.kind === "host" ? (
+        <MenuItem
+          Icon={PencilIcon}
+          onClick={() => onEdit(menu.host)}
+          onClose={onClose}
+        >
+          Edit
+        </MenuItem>
+      ) : (
+        <MenuItem
+          Icon={EyeOffIcon}
+          onClick={() => onHide(menu.user)}
+          onClose={onClose}
+        >
           Hide <span className="font-mono">{menu.user}</span>
-        </span>
-      </button>
+        </MenuItem>
+      )}
     </div>
+  )
+}
+
+function MenuItem({
+  Icon,
+  onClick,
+  onClose,
+  children,
+}: {
+  Icon: typeof EyeOffIcon
+  onClick: () => void
+  onClose: () => void
+  children: React.ReactNode
+}) {
+  return (
+    <button
+      type="button"
+      role="menuitem"
+      onClick={() => {
+        onClick()
+        onClose()
+      }}
+      className="flex w-full items-center gap-2 rounded px-2 py-1.5 text-left hover:bg-muted"
+    >
+      <Icon className="size-3.5 shrink-0 text-muted-foreground" />
+      <span className="truncate">{children}</span>
+    </button>
   )
 }

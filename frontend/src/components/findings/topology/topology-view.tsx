@@ -174,17 +174,20 @@ export function TopologyView({ operationId }: TopologyViewProps) {
     [customHidden, setHiddenIdentities],
   )
 
-  // One shared right-click menu for all identity pills (see node-context-menu).
+  // One shared right-click menu for all host cards and identity pills (see
+  // node-context-menu). Host "Edit" opens the same dialog as a table row, so
+  // topology and table share one editing path.
   const [nodeMenu, setNodeMenu] = useState<NodeMenuState | null>(null)
   const onNodeContextMenu = useCallback(
     (event: React.MouseEvent, node: Node) => {
-      if (node.type !== "identity") return
+      if (node.type !== "identity" && node.type !== "host") return
       event.preventDefault()
-      setNodeMenu({
-        x: event.clientX,
-        y: event.clientY,
-        user: (node.data as { user: string }).user,
-      })
+      const at = { x: event.clientX, y: event.clientY }
+      setNodeMenu(
+        node.type === "host"
+          ? { ...at, kind: "host", host: (node.data as HostNodeData).host }
+          : { ...at, kind: "identity", user: (node.data as { user: string }).user },
+      )
     },
     [],
   )
@@ -221,19 +224,10 @@ export function TopologyView({ operationId }: TopologyViewProps) {
   const { displayNodes, displayEdges, toggleFocus, clearEmphasis, search } =
     useTopologyEmphasis(visibleTopology, nodes, edges)
 
-  // Click = focus (toggle on re-click); double-click a host = edit dialog,
-  // the same entry point as a table row, so topology and table share one
-  // editing path.
+  // Click = focus (toggle on re-click). Editing lives in the right-click menu.
   const onNodeClick = useCallback(
     (_e: React.MouseEvent, node: Node) => toggleFocus(node.id),
     [toggleFocus],
-  )
-
-  const onNodeDoubleClick = useCallback(
-    (_e: React.MouseEvent, node: Node) => {
-      if (node.type === "host") openEditDialog((node.data as HostNodeData).host)
-    },
-    [openEditDialog],
   )
 
   if (isLoading) {
@@ -283,7 +277,6 @@ export function TopologyView({ operationId }: TopologyViewProps) {
             onNodeDrag={onNodeDrag}
             onNodeDragStop={onNodeDragStop}
             onNodeClick={onNodeClick}
-            onNodeDoubleClick={onNodeDoubleClick}
             onNodeContextMenu={onNodeContextMenu}
             onPaneClick={clearEmphasis}
             nodeTypes={nodeTypes}
@@ -297,7 +290,8 @@ export function TopologyView({ operationId }: TopologyViewProps) {
             // The users lens can carry hundreds of identity edges; rendering the
             // off-screen ones (and, before, animating them) was dead weight.
             onlyRenderVisibleElements
-            // Double-click is "edit host", not "zoom in".
+            // An accidental double-click while focusing/dragging shouldn't
+            // lurch the viewport.
             zoomOnDoubleClick={false}
             // Clicking now selects nodes routinely (click = focus), and React
             // Flow's default Backspace would visually delete the selection
@@ -326,6 +320,7 @@ export function TopologyView({ operationId }: TopologyViewProps) {
           <NodeContextMenu
             menu={nodeMenu}
             onHide={hideIdentity}
+            onEdit={openEditDialog}
             onClose={() => setNodeMenu(null)}
           />
         )}
