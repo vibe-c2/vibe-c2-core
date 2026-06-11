@@ -11,6 +11,11 @@ import {
 } from "d3-force"
 import { MarkerType, type Edge, type Node } from "@xyflow/react"
 import type { Topology } from "@/lib/topology/derive"
+import {
+  connectedComponents,
+  packComponentAnchors,
+  type Anchor,
+} from "@/lib/topology/components"
 
 // Maps the framework-free topology model onto React Flow nodes/edges and lays
 // it out. Subnet-as-node design: subnets are compact hub pills, hosts are
@@ -47,8 +52,19 @@ const SUBNET_MIN_W = 150
 const SIMULATION_TICKS = 300
 const LINK_SLACK = 60 // breathing room added to every link beyond node radii
 const CHARGE_STRENGTH = -1200
+// Cap the charge's reach to roughly one island's span. Without this, repulsion
+// is all-pairs: dragging one island shifts the force field every other island
+// sits in, so they jiggle. Bounding it keeps repulsion local to a cluster.
+const CHARGE_DISTANCE_MAX = 500
 const COLLIDE_PADDING = 16
-const CENTERING_STRENGTH = 0.06 // weak pull keeps disconnected pieces nearby
+// Each connected component is pulled toward its own grid slot (not a shared
+// origin), so islands are positionally independent. Weak enough that links and
+// charge still shape the island; strong enough to hold it in its slot.
+const CENTERING_STRENGTH = 0.06
+// Spacing between island slots. Must be >= CHARGE_DISTANCE_MAX so neighboring
+// islands fall outside each other's repulsion range — this is what actually
+// decouples a dragged island from the rest.
+const INTER_ISLAND_GAP = CHARGE_DISTANCE_MAX
 
 // Shared look for the iface/route text riding on edges.
 const MONO_LABEL = { fontSize: 10, fontFamily: "monospace" } as const
@@ -72,6 +88,26 @@ export type SimNode = SimulationNodeDatum & {
   r: number
   width: number
   height: number
+}
+
+// Deterministic phyllotaxis offset used to seed nodes around their slot — no
+// Math.random, so the layout stays reproducible across reloads.
+const GOLDEN_ANGLE = Math.PI * (3 - Math.sqrt(5))
+const SEED_SPREAD = 12
+
+// Seed each node near its component slot before the synchronous settle. d3's
+// default phyllotaxis seeds every node around the origin, which would force
+// distant islands to travel across the canvas within the fixed tick budget;
+// seeding at the slot avoids that while spreading members so charge has room
+// to separate them.
+function seedNearAnchors(simNodes: SimNode[], anchorOf: (id: string) => Anchor) {
+  simNodes.forEach((n, i) => {
+    const a = anchorOf(n.id)
+    const radius = SEED_SPREAD * Math.sqrt(i)
+    const angle = i * GOLDEN_ANGLE
+    n.x = a.x + radius * Math.cos(angle)
+    n.y = a.y + radius * Math.sin(angle)
+  })
 }
 
 type TopologySimulation = Simulation<SimNode, SimulationLinkDatum<SimNode>>
@@ -109,6 +145,21 @@ export function layoutTopology(topology: Topology): TopologyLayout {
     .filter((e) => e.source !== e.target)
     .map((e) => ({ source: e.source, target: e.target }))
 
+  // Group nodes into connected components (islands) and give each a fixed slot
+  // on a grid. Every node is then centered on its own slot instead of a shared
+  // origin, so islands are positionally independent.
+  const components = connectedComponents(
+    simNodes.map((n) => n.id),
+    links.map((l) => ({ source: l.source as string, target: l.target as string })),
+  )
+  const anchorByNodeId = packComponentAnchors(components, sizeById, {
+    interIslandGap: INTER_ISLAND_GAP,
+    collidePadding: COLLIDE_PADDING,
+  })
+  const anchorOf = (id: string) => anchorByNodeId.get(id) ?? { x: 0, y: 0 }
+
+  seedNearAnchors(simNodes, anchorOf)
+
   // Stopped immediately so d3's internal timer never runs on its own; the
   // synchronous ticks settle the layout for the first paint. The instance is
   // returned (not discarded) so drag interactions can re-heat it later.
@@ -123,13 +174,18 @@ export function layoutTopology(topology: Topology): TopologyLayout {
           return s.r + t.r + LINK_SLACK
         }),
     )
-    .force("charge", forceManyBody().strength(CHARGE_STRENGTH))
+    .force(
+      "charge",
+      forceManyBody<SimNode>()
+        .strength(CHARGE_STRENGTH)
+        .distanceMax(CHARGE_DISTANCE_MAX),
+    )
     .force(
       "collide",
       forceCollide<SimNode>().radius((d) => d.r + COLLIDE_PADDING),
     )
-    .force("x", forceX(0).strength(CENTERING_STRENGTH))
-    .force("y", forceY(0).strength(CENTERING_STRENGTH))
+    .force("x", forceX<SimNode>((d) => anchorOf(d.id).x).strength(CENTERING_STRENGTH))
+    .force("y", forceY<SimNode>((d) => anchorOf(d.id).y).strength(CENTERING_STRENGTH))
     .stop()
 
   simulation.tick(SIMULATION_TICKS)
