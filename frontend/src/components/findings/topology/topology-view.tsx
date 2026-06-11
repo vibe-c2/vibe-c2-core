@@ -20,6 +20,7 @@ import {
 } from "@/lib/topology/derive"
 import {
   collapseLeafSubnets,
+  collapseLocalIdentities,
   collapsePhantomHosts,
 } from "@/lib/topology/aggregate"
 import {
@@ -40,6 +41,7 @@ import {
   HostNode,
   IdentityNode,
   LeafSubnetsNode,
+  LocalIdentitiesNode,
   LoneSourcesNode,
   PhantomGatewayNode,
   PhantomHostNode,
@@ -59,6 +61,7 @@ const nodeTypes = {
   phantomSubnet: PhantomSubnetNode,
   leafSubnets: LeafSubnetsNode,
   loneSources: LoneSourcesNode,
+  localIdentities: LocalIdentitiesNode,
   identity: IdentityNode,
   phantomHost: PhantomHostNode,
 }
@@ -193,10 +196,12 @@ export function TopologyView({ operationId }: TopologyViewProps) {
   const visibleTopology = useMemo(() => {
     const lensed = lenses[relation](topology)
     if (relation !== "identities") return lensed
-    // Hide accounts first (it can strip a ghost source's only other edge),
-    // THEN collapse the lone sources so the count reflects what's left.
+    // Hide accounts first (it can strip a ghost source's only other edge), THEN
+    // collapse: lone unknown sources into one pill per identity, and each host's
+    // single-host accounts into one "local accounts" pill — the leaf-merge that
+    // unwinds the hairball, leaving only the shared accounts wiring hosts.
     const filtered = withoutHiddenIdentities(lensed, hiddenUsers)
-    return collapsePhantomHosts(filtered)
+    return collapseLocalIdentities(collapsePhantomHosts(filtered))
   }, [topology, relation, hiddenUsers])
 
   // Live force-directed layout: pre-settled for first paint, re-heated while

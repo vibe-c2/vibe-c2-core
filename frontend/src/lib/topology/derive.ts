@@ -83,6 +83,12 @@ export type TopoNode =
   // ghost sources (each tied only to that one identity) folded into one list
   // node — the users-lens analog of leaf-subnets.
   | { kind: "lone-sources"; id: string; identityId: string; labels: string[] }
+  // Produced only by collapseLocalIdentities (aggregate.ts): a host's
+  // single-host accounts (each seen only on this one host, relating it to
+  // nothing) folded into one list node — the bipartite dual of leaf-subnets on
+  // the users lens. What stays a standalone pill is exactly the shared accounts
+  // that wire hosts together, which is the whole point of the lens.
+  | { kind: "local-identities"; id: string; hostId: string; users: string[] }
 
 // All edges carry source/target node ids so the layout maps them onto React
 // Flow edges with no translation.
@@ -150,6 +156,15 @@ export type TopoEdge =
       id: string
       source: string // lone-sources node id
       target: string // identity id
+    }
+  | {
+      // Produced only by collapseLocalIdentities: replaces the logged-into (and
+      // any same-host logged-from) edges of a host's collapsed local accounts.
+      // Source is the merged local-identities node, target the host it sits on.
+      kind: "local-group"
+      id: string
+      source: string // local-identities node id
+      target: string // host id
     }
 
 export type TopologyStats = {

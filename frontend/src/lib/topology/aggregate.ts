@@ -157,3 +157,94 @@ export function collapsePhantomHosts(t: Topology): Topology {
 
   return { ...t, nodes, edges }
 }
+
+// Local-identity aggregation — the bipartite dual of collapseLeafSubnets on the
+// users lens. Motivating case: a host carrying a dozen service/system accounts
+// (postgres, www-data, sshd, …) each seen only on that one host. As-is every
+// such account fans off the host as its own pill, and across the whole map this
+// is the bulk of what makes the lens a hairball. An account whose ENTIRE
+// footprint is one host relates that host to nothing — it carries no
+// credential-reuse signal, which is the whole point of this lens — so all such
+// accounts of a host collapse into one "local-identities" list node hanging off
+// it. What survives as a standalone pill is exactly the accounts shared across
+// two or more hosts (or pivoted in from another host): the relational signal.
+//
+// Same Topology → Topology contract as the collapses above: pure, stats pass
+// through, deterministic for a given input order. Run on the users-lens graph
+// after hiding + collapsePhantomHosts; a phantom/lone source gives an identity a
+// non-host neighbor, so those identities are never "local" and order is moot.
+
+// A single local account stays a normal pill — merging one into one saves nothing.
+export const MIN_LOCAL_IDENTITIES = 2
+
+const localIdentitiesNodeId = (hostId: string) => `locals:${hostId}`
+
+export function collapseLocalIdentities(t: Topology): Topology {
+  const isHost = new Set<string>()
+  const userById = new Map<string, string>()
+  for (const n of t.nodes) {
+    if (n.kind === "host") isHost.add(n.id)
+    else if (n.kind === "identity") userById.set(n.id, n.user)
+  }
+
+  // Distinct non-identity neighbors of each identity, across both login edge
+  // directions (logged-into target, logged-from source). An identity is "local"
+  // when that set is exactly one host — every account starts with at least one
+  // logged-into edge, so a size-1 neighbor set is always that host.
+  const neighbors = new Map<string, Set<string>>()
+  const note = (identityId: string, other: string) => {
+    const set = neighbors.get(identityId) ?? new Set<string>()
+    set.add(other)
+    neighbors.set(identityId, set)
+  }
+  for (const e of t.edges) {
+    if (e.kind === "logged-into") note(e.source, e.target)
+    else if (e.kind === "logged-from" || e.kind === "logged-from-group")
+      note(e.target, e.source)
+  }
+
+  // Local accounts grouped by their one host, in node input order so the merged
+  // rows come out deterministically.
+  const localByHost = new Map<string, string[]>() // hostId -> identity ids
+  for (const n of t.nodes) {
+    if (n.kind !== "identity") continue
+    const nbrs = neighbors.get(n.id)
+    if (!nbrs || nbrs.size !== 1) continue
+    const host = [...nbrs][0]
+    if (!isHost.has(host)) continue
+    const ids = localByHost.get(host) ?? []
+    ids.push(n.id)
+    localByHost.set(host, ids)
+  }
+
+  const collapsible = new Map<string, string[]>()
+  const collapsed = new Set<string>()
+  for (const [hostId, ids] of localByHost) {
+    if (ids.length < MIN_LOCAL_IDENTITIES) continue
+    collapsible.set(hostId, ids)
+    for (const id of ids) collapsed.add(id)
+  }
+  if (collapsed.size === 0) return t
+
+  const nodes: TopoNode[] = t.nodes.filter((n) => !collapsed.has(n.id))
+  // A collapsed account's only neighbor is its host, so every edge it carries
+  // (logged-into, and any same-host logged-from) is replaced by the group edge.
+  const edges: TopoEdge[] = t.edges.filter(
+    (e) => !collapsed.has(e.source) && !collapsed.has(e.target),
+  )
+
+  for (const [hostId, ids] of collapsible) {
+    const users = ids.map((id) => userById.get(id) ?? "")
+    users.sort((a, b) => a.localeCompare(b, undefined, { numeric: true }))
+    const id = localIdentitiesNodeId(hostId)
+    nodes.push({ kind: "local-identities", id, hostId, users })
+    edges.push({
+      kind: "local-group",
+      id: `lg:${hostId}`,
+      source: id,
+      target: hostId,
+    })
+  }
+
+  return { ...t, nodes, edges }
+}

@@ -39,5 +39,7 @@ function haystack(n: TopoNode): string[] {
       return [n.label]
     case "lone-sources":
       return n.labels
+    case "local-identities":
+      return n.users
   }
 }

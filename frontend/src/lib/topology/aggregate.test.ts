@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest"
 import type { HostFieldsFragment } from "@/graphql/gql/graphql"
 import {
   collapseLeafSubnets,
+  collapseLocalIdentities,
   collapsePhantomHosts,
 } from "@/lib/topology/aggregate"
 import { deriveTopology, type TopoEdge, type TopoNode } from "@/lib/topology/derive"
@@ -299,5 +300,128 @@ describe("collapsePhantomHosts", () => {
       loginHost("h1", "target", "10.0.0.1/24", [{ user: "alice", from: "10.9.0.1" }]),
     ])
     expect(collapsePhantomHosts(t)).toBe(t)
+  })
+})
+
+// --- collapseLocalIdentities ---------------------------------------------------
+
+describe("collapseLocalIdentities", () => {
+  it("folds a host's single-host accounts into one local node", () => {
+    // Three accounts seen only on h1, no remote origin: pure local noise.
+    const t = collapseLocalIdentities(
+      deriveTopology([
+        loginHost("h1", "db", "10.0.0.1/24", [
+          { user: "deploy" },
+          { user: "backup" },
+          { user: "appsvc" },
+        ]),
+      ]),
+    )
+    expect(byKind(t.nodes, "identity")).toHaveLength(0)
+    const locals = byKind(t.nodes, "local-identities")
+    expect(locals).toHaveLength(1)
+    expect(locals[0].hostId).toBe("h1")
+    expect(locals[0].users).toEqual(["appsvc", "backup", "deploy"]) // sorted
+    // Every logged-into edge is replaced by one group edge feeding the host.
+    expect(edgesOf(t.edges, "logged-into")).toHaveLength(0)
+    const grouped = edgesOf(t.edges, "local-group")
+    expect(grouped).toHaveLength(1)
+    expect(grouped[0].source).toBe(locals[0].id)
+    expect(grouped[0].target).toBe("h1")
+  })
+
+  it("treats a self-host (logged-in-locally) source as still local", () => {
+    // Both accounts log in FROM h1's own IP — origin is the host itself, so
+    // their only neighbor is still h1 and they collapse. The same-host
+    // logged-from edges go with them.
+    const t = collapseLocalIdentities(
+      deriveTopology([
+        loginHost("h1", "db", "10.0.0.1/24", [
+          { user: "deploy", from: "10.0.0.1" },
+          { user: "backup", from: "10.0.0.1" },
+        ]),
+      ]),
+    )
+    expect(byKind(t.nodes, "local-identities")).toHaveLength(1)
+    expect(byKind(t.nodes, "identity")).toHaveLength(0)
+    expect(edgesOf(t.edges, "logged-from")).toHaveLength(0)
+  })
+
+  it("never folds an account shared across two hosts", () => {
+    // alice is on both hosts — the credential-reuse signal the lens exists for.
+    // h1 also carries two locals, which DO fold; alice must stay a pill.
+    const t = collapseLocalIdentities(
+      deriveTopology([
+        loginHost("h1", "web", "10.0.0.1/24", [
+          { user: "alice" },
+          { user: "deploy" },
+          { user: "backup" },
+        ]),
+        loginHost("h2", "app", "10.0.0.2/24", [{ user: "alice" }]),
+      ]),
+    )
+    const ids = byKind(t.nodes, "identity")
+    expect(ids.map((n) => n.user)).toEqual(["alice"])
+    const locals = byKind(t.nodes, "local-identities")
+    expect(locals).toHaveLength(1)
+    expect(locals[0].users).toEqual(["backup", "deploy"])
+  })
+
+  it("never folds an account logged in from an unknown source", () => {
+    // bob's session came from an unmapped machine — a phantom neighbor — so his
+    // footprint isn't a single host and he stays a standalone account.
+    const t = collapseLocalIdentities(
+      deriveTopology([
+        loginHost("h1", "db", "10.0.0.1/24", [
+          { user: "deploy" },
+          { user: "backup" },
+          { user: "bob", from: "203.0.113.9" },
+        ]),
+      ]),
+    )
+    expect(byKind(t.nodes, "identity").map((n) => n.user)).toEqual(["bob"])
+    expect(byKind(t.nodes, "phantom-host")).toHaveLength(1)
+    const [local] = byKind(t.nodes, "local-identities")
+    expect(local.users).toEqual(["backup", "deploy"])
+  })
+
+  it("leaves a single local account as a normal pill", () => {
+    const t = collapseLocalIdentities(
+      deriveTopology([
+        loginHost("h1", "db", "10.0.0.1/24", [{ user: "deploy" }]),
+      ]),
+    )
+    expect(byKind(t.nodes, "local-identities")).toHaveLength(0)
+    expect(byKind(t.nodes, "identity")).toHaveLength(1)
+  })
+
+  it("collapses independently per host", () => {
+    const t = collapseLocalIdentities(
+      deriveTopology([
+        loginHost("h1", "db", "10.0.0.1/24", [{ user: "a1" }, { user: "a2" }]),
+        loginHost("h2", "web", "10.0.0.2/24", [{ user: "b1" }, { user: "b2" }]),
+      ]),
+    )
+    const locals = byKind(t.nodes, "local-identities")
+    expect(locals.map((l) => l.hostId).sort()).toEqual(["h1", "h2"])
+    expect(edgesOf(t.edges, "local-group")).toHaveLength(2)
+  })
+
+  it("passes stats through unchanged — the legend keeps counting accounts", () => {
+    const raw = deriveTopology([
+      loginHost("h1", "db", "10.0.0.1/24", [{ user: "deploy" }, { user: "backup" }]),
+    ])
+    const t = collapseLocalIdentities(raw)
+    expect(t.stats).toEqual(raw.stats)
+    expect(t.stats.identities).toBe(2)
+  })
+
+  it("returns the topology unchanged when nothing collapses", () => {
+    // Two hosts sharing alice — no single-host account anywhere.
+    const raw = deriveTopology([
+      loginHost("h1", "web", "10.0.0.1/24", [{ user: "alice" }]),
+      loginHost("h2", "app", "10.0.0.2/24", [{ user: "alice" }]),
+    ])
+    expect(collapseLocalIdentities(raw)).toBe(raw)
   })
 })

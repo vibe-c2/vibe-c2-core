@@ -145,14 +145,16 @@ function leafSubnetsSize(entries: { cidr: string; iface: string }[]) {
   }
 }
 
-// Lone-sources list node (users lens). Same framed-list geometry as
-// leaf-subnets — one row per ghost source, capped with a "+k more" row — so the
-// node and its collision radius stay bounded however many sources collapse.
-function loneSourcesSize(labels: string[]) {
-  const longestRow = labels.reduce((max, l) => Math.max(max, l.length), 0)
+// A framed string-list node (users lens) — the lone-sources (ghost origins) and
+// local-identities (single-host accounts) pills, both one row per entry capped
+// with a "+k more" row. Same geometry as leaf-subnets, sized from plain row
+// strings, so the node and its collision radius stay bounded however many
+// entries collapse into it.
+function framedListSize(rows: string[]) {
+  const longestRow = rows.reduce((max, r) => Math.max(max, r.length), 0)
   const visibleRows =
-    Math.min(labels.length, LEAF_SUBNET_MAX_ROWS) +
-    (labels.length > LEAF_SUBNET_MAX_ROWS ? 1 : 0)
+    Math.min(rows.length, LEAF_SUBNET_MAX_ROWS) +
+    (rows.length > LEAF_SUBNET_MAX_ROWS ? 1 : 0)
   return {
     width: Math.max(LEAF_MIN_W, Math.ceil(longestRow * LEAF_CHAR_W) + LEAF_EXTRA_W),
     height: LEAF_FRAME_H + Math.ceil(visibleRows * LEAF_ROW_H),
@@ -168,7 +170,9 @@ function sizeOf(n: TopoNode): { width: number; height: number } {
     case "leaf-subnets":
       return leafSubnetsSize(n.entries)
     case "lone-sources":
-      return loneSourcesSize(n.labels)
+      return framedListSize(n.labels)
+    case "local-identities":
+      return framedListSize(n.users)
     case "identity":
       return { width: identityWidth(n.user), height: IDENTITY_H }
     case "phantom-host":
@@ -199,6 +203,8 @@ function nodeData(n: TopoNode): Node["data"] {
       return { entries: n.entries }
     case "lone-sources":
       return { labels: n.labels }
+    case "local-identities":
+      return { users: n.users }
     case "identity":
       return { user: n.user, wellKnown: n.wellKnown }
     case "phantom-host":
@@ -271,11 +277,13 @@ function edgeOf(e: TopoEdge): Edge {
       }
     case "logged-from":
     case "logged-from-group":
-      // source host → identity: where the session came from. Muted grey (vs the
-      // primary "logged into") so the origin reads as the quieter half of the
-      // pair; the arrowhead shows direction. Not animated — see "logged-into".
-      // The grouped variant (one merged lone-sources node → identity) renders
-      // identically. Quiet at rest like its "logged-into" partner.
+    case "local-group":
+      // The quiet half of the login wiring, all rendered identically: muted grey
+      // (vs the primary "logged into") so the origin reads as the quieter side,
+      // arrowhead for direction, not animated (see "logged-into"). Covers the raw
+      // source-host → identity edge, the merged lone-sources → identity edge, and
+      // the merged local-identities → host edge. Quiet at rest; snaps to color
+      // when an endpoint is focused/searched.
       return {
         ...base,
         markerEnd: { type: MarkerType.ArrowClosed },
@@ -382,6 +390,7 @@ export function layoutTopology(topology: Topology): TopologyLayout {
     "phantom-subnet": "phantomSubnet",
     "leaf-subnets": "leafSubnets",
     "lone-sources": "loneSources",
+    "local-identities": "localIdentities",
     identity: "identity",
     "phantom-host": "phantomHost",
   }
@@ -405,7 +414,9 @@ export function layoutTopology(topology: Topology): TopologyLayout {
       // (rows truncate against it) but keeps natural height. Others self-size.
       style: isPillNodeType(n.kind)
         ? { width: size.width, height: size.height }
-        : n.kind === "leaf-subnets" || n.kind === "lone-sources"
+        : n.kind === "leaf-subnets" ||
+            n.kind === "lone-sources" ||
+            n.kind === "local-identities"
           ? { width: size.width }
           : undefined,
       data: nodeData(n),

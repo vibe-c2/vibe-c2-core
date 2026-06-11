@@ -25,6 +25,7 @@ export type LeafSubnetsNodeData = { entries: LeafSubnetEntry[] }
 export type IdentityNodeData = { user: string; wellKnown: boolean }
 export type PhantomHostNodeData = { label: string }
 export type LoneSourcesNodeData = { labels: string[] }
+export type LocalIdentitiesNodeData = { users: string[] }
 
 function Anchors() {
   return (
@@ -224,6 +225,41 @@ export function LoneSourcesNode({ data }: NodeProps<Node<LoneSourcesNodeData>>) 
       {shown.map((label) => (
         <span key={label} className="truncate font-mono text-[11px]">
           {label}
+        </span>
+      ))}
+      {hidden > 0 && <span className="text-[11px]">+{hidden} more</span>}
+    </div>
+  )
+}
+
+// A host's single-host accounts (each seen only on this one host) folded into
+// one list node — the bipartite dual of LeafSubnetsNode on the users lens. These
+// are local accounts that relate the host to nothing, so they read quiet: a
+// muted card with the user icon, leaving the shared-account pills to own the
+// view. Width is pinned by the layout; height is natural so rows are never
+// clipped.
+export function LocalIdentitiesNode({
+  data,
+}: NodeProps<Node<LocalIdentitiesNodeData>>) {
+  const { users } = data
+  const shown = users.slice(0, LEAF_SUBNET_MAX_ROWS)
+  const hidden = users.length - shown.length
+
+  return (
+    <div
+      className="flex w-full flex-col gap-0.5 rounded-md border-2 border-border bg-muted/40 px-3 py-2 text-muted-foreground shadow-sm"
+      title={users.join("\n")}
+    >
+      <Anchors />
+      <div className="flex items-center gap-1.5">
+        <UserIcon className="size-3.5 shrink-0" />
+        <span className="text-[11px] font-medium">
+          {users.length} local accounts
+        </span>
+      </div>
+      {shown.map((user) => (
+        <span key={user} className="truncate font-mono text-[11px]">
+          {user}
         </span>
       ))}
       {hidden > 0 && <span className="text-[11px]">+{hidden} more</span>}
