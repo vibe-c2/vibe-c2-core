@@ -3,6 +3,8 @@ import {
   forceLink,
   forceManyBody,
   forceSimulation,
+  forceX,
+  forceY,
   type Simulation,
   type SimulationLinkDatum,
   type SimulationNodeDatum,
@@ -11,8 +13,8 @@ import { MarkerType, type Edge, type Node } from "@xyflow/react"
 import type { Topology } from "@/lib/topology/derive"
 import {
   connectedComponents,
-  packComponentSlots,
-  type Slot,
+  packComponentAnchors,
+  type Anchor,
 } from "@/lib/topology/components"
 
 // Maps the framework-free topology model onto React Flow nodes/edges and lays
@@ -55,10 +57,13 @@ const CHARGE_STRENGTH = -1200
 // sits in, so they jiggle. Bounding it keeps repulsion local to a cluster.
 const CHARGE_DISTANCE_MAX = 500
 const COLLIDE_PADDING = 16
-// Spacing between island SEED slots. There is no centering force — islands
-// float freely once settled. The gap is >= CHARGE_DISTANCE_MAX so islands
-// start outside each other's repulsion range and the first paint doesn't
-// shuffle them; thereafter they only push on each other when dragged close.
+// Each connected component is pulled toward its own grid slot (not a shared
+// origin), so islands are positionally independent. Weak enough that links and
+// charge still shape the island; strong enough to hold it in its slot.
+const CENTERING_STRENGTH = 0.06
+// Spacing between island slots. Must be >= CHARGE_DISTANCE_MAX so neighboring
+// islands fall outside each other's repulsion range — this is what actually
+// decouples a dragged island from the rest.
 const INTER_ISLAND_GAP = CHARGE_DISTANCE_MAX
 
 // Shared look for the iface/route text riding on edges.
@@ -90,18 +95,18 @@ export type SimNode = SimulationNodeDatum & {
 const GOLDEN_ANGLE = Math.PI * (3 - Math.sqrt(5))
 const SEED_SPREAD = 12
 
-// Seed each node near its component slot before the synchronous settle. With no
-// centering force, the seed is what gives islands a tidy, non-overlapping
-// starting arrangement; d3's default phyllotaxis would instead pile every node
-// around the origin and leave the bounded charge to untangle them. The small
-// per-node offset spreads members so charge has room to separate them.
-function seedNearSlots(simNodes: SimNode[], slotOf: (id: string) => Slot) {
+// Seed each node near its component slot before the synchronous settle. d3's
+// default phyllotaxis seeds every node around the origin, which would force
+// distant islands to travel across the canvas within the fixed tick budget;
+// seeding at the slot avoids that while spreading members so charge has room
+// to separate them.
+function seedNearAnchors(simNodes: SimNode[], anchorOf: (id: string) => Anchor) {
   simNodes.forEach((n, i) => {
-    const s = slotOf(n.id)
+    const a = anchorOf(n.id)
     const radius = SEED_SPREAD * Math.sqrt(i)
     const angle = i * GOLDEN_ANGLE
-    n.x = s.x + radius * Math.cos(angle)
-    n.y = s.y + radius * Math.sin(angle)
+    n.x = a.x + radius * Math.cos(angle)
+    n.y = a.y + radius * Math.sin(angle)
   })
 }
 
@@ -140,20 +145,20 @@ export function layoutTopology(topology: Topology): TopologyLayout {
     .filter((e) => e.source !== e.target)
     .map((e) => ({ source: e.source, target: e.target }))
 
-  // Group nodes into connected components (islands) and give each a starting
-  // slot on a grid, used only to seed a tidy non-overlapping first paint —
-  // there is no force pulling nodes back to it, so islands float freely.
+  // Group nodes into connected components (islands) and give each a fixed slot
+  // on a grid. Every node is then centered on its own slot instead of a shared
+  // origin, so islands are positionally independent.
   const components = connectedComponents(
     simNodes.map((n) => n.id),
     links.map((l) => ({ source: l.source as string, target: l.target as string })),
   )
-  const slotByNodeId = packComponentSlots(components, sizeById, {
+  const anchorByNodeId = packComponentAnchors(components, sizeById, {
     interIslandGap: INTER_ISLAND_GAP,
     collidePadding: COLLIDE_PADDING,
   })
-  const slotOf = (id: string) => slotByNodeId.get(id) ?? { x: 0, y: 0 }
+  const anchorOf = (id: string) => anchorByNodeId.get(id) ?? { x: 0, y: 0 }
 
-  seedNearSlots(simNodes, slotOf)
+  seedNearAnchors(simNodes, anchorOf)
 
   // Stopped immediately so d3's internal timer never runs on its own; the
   // synchronous ticks settle the layout for the first paint. The instance is
@@ -179,9 +184,8 @@ export function layoutTopology(topology: Topology): TopologyLayout {
       "collide",
       forceCollide<SimNode>().radius((d) => d.r + COLLIDE_PADDING),
     )
-    // No centering force: a connected component holds its shape via its link
-    // springs, and the distance-bounded charge keeps far islands from
-    // interacting — so islands drift freely and stay where the user drops them.
+    .force("x", forceX<SimNode>((d) => anchorOf(d.id).x).strength(CENTERING_STRENGTH))
+    .force("y", forceY<SimNode>((d) => anchorOf(d.id).y).strength(CENTERING_STRENGTH))
     .stop()
 
   simulation.tick(SIMULATION_TICKS)

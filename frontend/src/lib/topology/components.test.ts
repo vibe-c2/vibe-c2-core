@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest"
 import {
   connectedComponents,
-  packComponentSlots,
+  packComponentAnchors,
 } from "@/lib/topology/components"
 
 type Edge = { source: string; target: string }
@@ -70,29 +70,29 @@ describe("connectedComponents", () => {
   })
 })
 
-describe("packComponentSlots", () => {
+describe("packComponentAnchors", () => {
   const opts = { interIslandGap: 500, collidePadding: 16 }
 
-  it("assigns a slot to every node", () => {
+  it("returns an anchor for every node", () => {
     const ids = ["a", "b", "c", "d"]
     const comps = connectedComponents(ids, [
       { source: "a", target: "b" },
       { source: "c", target: "d" },
     ])
-    const slots = packComponentSlots(comps, sizes(ids), opts)
-    expect(new Set(slots.keys())).toEqual(new Set(ids))
+    const anchors = packComponentAnchors(comps, sizes(ids), opts)
+    expect(new Set(anchors.keys())).toEqual(new Set(ids))
   })
 
-  it("places members of the same component at the same slot", () => {
+  it("places members of the same component at the same anchor", () => {
     const ids = ["a", "b", "c", "d"]
     const comps = connectedComponents(ids, [
       { source: "a", target: "b" },
       { source: "c", target: "d" },
     ])
-    const slots = packComponentSlots(comps, sizes(ids), opts)
-    expect(slots.get("a")).toEqual(slots.get("b"))
-    expect(slots.get("c")).toEqual(slots.get("d"))
-    expect(slots.get("a")).not.toEqual(slots.get("c"))
+    const anchors = packComponentAnchors(comps, sizes(ids), opts)
+    expect(anchors.get("a")).toEqual(anchors.get("b"))
+    expect(anchors.get("c")).toEqual(anchors.get("d"))
+    expect(anchors.get("a")).not.toEqual(anchors.get("c"))
   })
 
   it("spaces neighboring island slots by at least the inter-island gap", () => {
@@ -101,9 +101,9 @@ describe("packComponentSlots", () => {
       { source: "a", target: "b" },
       { source: "c", target: "d" },
     ])
-    const slots = packComponentSlots(comps, sizes(ids), opts)
-    const dx = Math.abs(slots.get("a")!.x - slots.get("c")!.x)
-    const dy = Math.abs(slots.get("a")!.y - slots.get("c")!.y)
+    const anchors = packComponentAnchors(comps, sizes(ids), opts)
+    const dx = Math.abs(anchors.get("a")!.x - anchors.get("c")!.x)
+    const dy = Math.abs(anchors.get("a")!.y - anchors.get("c")!.y)
     expect(Math.max(dx, dy)).toBeGreaterThanOrEqual(opts.interIslandGap)
   })
 
@@ -113,21 +113,21 @@ describe("packComponentSlots", () => {
       { source: "a", target: "b" },
       { source: "c", target: "d" },
     ])
-    const first = packComponentSlots(comps, sizes(ids), opts)
-    const second = packComponentSlots(comps, sizes(ids), opts)
+    const first = packComponentAnchors(comps, sizes(ids), opts)
+    const second = packComponentAnchors(comps, sizes(ids), opts)
     expect([...first.entries()]).toEqual([...second.entries()])
   })
 
   it("centers a single component on the origin", () => {
-    const slots = packComponentSlots(
+    const anchors = packComponentAnchors(
       [["a"]],
       sizes(["a"]),
       opts,
     )
-    expect(slots.get("a")).toEqual({ x: 0, y: 0 })
+    expect(anchors.get("a")).toEqual({ x: 0, y: 0 })
   })
 
   it("returns an empty map for no components", () => {
-    expect(packComponentSlots([], new Map(), opts).size).toBe(0)
+    expect(packComponentAnchors([], new Map(), opts).size).toBe(0)
   })
 })
