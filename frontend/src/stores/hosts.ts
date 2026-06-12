@@ -53,7 +53,8 @@ interface HostStoreState {
   // component state) so the preference survives reloads and view switches.
   topologyRelation: TopologyRelation
   // Users lens, layer 1: hide the built-in ubiquitous accounts (root, ubuntu, …)
-  // as a group so the genuinely interesting identities stand out. A per-browser
+  // as a group so the genuinely interesting identities stand out. Hidden by
+  // default — the noise accounts are noise until proven otherwise. A per-browser
   // preference, persisted with the relation. Layer 2 — the operator's custom
   // hidden usernames — is per-operator server state (User.hiddenIdentities via
   // useMe/useSetHiddenIdentities), not stored here.
@@ -86,7 +87,7 @@ export const useHostStore = create<HostStoreState>()(
       selected: null,
       view: "table",
       topologyRelation: "routes",
-      hideWellKnownIdentities: false,
+      hideWellKnownIdentities: true,
 
       formDialogOpen: false,
       deleteDialogOpen: false,
@@ -115,6 +116,20 @@ export const useHostStore = create<HostStoreState>()(
     {
       name: "vibe-c2:hosts",
       storage: createJSONStorage(() => localStorage),
+      // v0 → v1: the hideWellKnownIdentities default flipped to true. Under
+      // v0, partialize persisted `false` for everyone who ever touched the
+      // store, so an explicit "show them" choice is indistinguishable from
+      // the old default. Drop the flag once; merge() then falls back to the
+      // new default, and a deliberate opt-out is one re-uncheck away.
+      version: 1,
+      migrate: (persisted, version) => {
+        if (version === 0 && persisted && typeof persisted === "object") {
+          const rest = { ...(persisted as Record<string, unknown>) }
+          delete rest.hideWellKnownIdentities
+          return rest
+        }
+        return persisted
+      },
       // Only the view preferences are sticky — search resets per session and
       // dialog state is transient. Custom merge validates the persisted view
       // so a stale/corrupt localStorage value falls back to the default.
