@@ -11,8 +11,9 @@ import {
   VirtualizedDataTable,
   dataTableRowClass,
 } from "@/components/ui/virtualized-data-table"
+import { SortableHeader } from "@/components/ui/sortable-header"
 import { useAuthStore } from "@/stores/auth"
-import { useUserStore } from "@/stores/users"
+import { useUserStore, type UserSort } from "@/stores/users"
 import { Permissions } from "@/constants/permissions"
 import { FormattedDateTimeText } from "@/components/ui/formatted-date-time-text"
 import type { UserFieldsFragment } from "@/graphql/gql/graphql"
@@ -23,6 +24,10 @@ interface UsersTableProps {
   isFetchingNextPage: boolean
   hasNextPage: boolean
   fetchNextPage: () => void
+  // Active column sort + change handler. The parent owns the state (it also
+  // feeds the list query); the table only renders the sortable headers.
+  sort: UserSort
+  onSortChange: (sort: UserSort) => void
 }
 
 const GRID_COLS = "grid-cols-[2fr_1fr_1fr_1fr_48px]"
@@ -34,6 +39,8 @@ export function UsersTable({
   isFetchingNextPage,
   hasNextPage,
   fetchNextPage,
+  sort,
+  onSortChange,
 }: UsersTableProps) {
   const hasPermission = useAuthStore((s) => s.hasPermission)
   const currentUserId = useAuthStore((s) => s.user?.userId)
@@ -55,10 +62,21 @@ export function UsersTable({
       entityNoun="users"
       header={
         <>
-          <div>Username</div>
+          <SortableHeader
+            label="Username"
+            field="USERNAME"
+            sort={sort}
+            onSortChange={onSortChange}
+          />
           <div>Roles</div>
           <div>Status</div>
-          <div>Created</div>
+          <SortableHeader
+            label="Created"
+            field="CREATED_AT"
+            sort={sort}
+            onSortChange={onSortChange}
+            initialDirection="DESC"
+          />
           {hasActions && <div />}
         </>
       }

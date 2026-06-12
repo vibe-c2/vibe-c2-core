@@ -22,13 +22,61 @@ type HostFilter struct {
 	Search string
 }
 
+// HostSortField identifies a Mongo column the hosts list can be ordered by.
+// The string value is the field path used in the sort and in the keyset
+// cursor filter.
+type HostSortField string
+
+const (
+	HostSortFieldCreatedAt HostSortField = "createAt"
+	HostSortFieldHostname  HostSortField = "hostname"
+	HostSortFieldOS        HostSortField = "os"
+)
+
+// HostSort bundles the sort column and direction for the hosts list query.
+// The zero value is NOT valid — use DefaultHostSort() (createAt descending,
+// the historical order) when the caller doesn't choose.
+type HostSort struct {
+	Field     HostSortField
+	Ascending bool
+}
+
+// DefaultHostSort returns the historical list order: newest first.
+func DefaultHostSort() HostSort {
+	return HostSort{Field: HostSortFieldCreatedAt, Ascending: false}
+}
+
+// SortKey maps the host sort to the pagination layer's representation.
+// hostname/os are string columns, so their cursors carry the string sort key;
+// createAt keeps the legacy time-keyed cursor shape.
+func (s HostSort) SortKey() pagination.SortKey {
+	return pagination.SortKey{
+		Field:     string(s.Field),
+		Ascending: s.Ascending,
+		String:    s.Field != HostSortFieldCreatedAt,
+	}
+}
+
+// Cursor encodes the edge cursor for a host row under this sort — the value
+// of the active sort column plus the _id tiebreaker.
+func (s HostSort) Cursor(h *models.Host) string {
+	switch s.Field {
+	case HostSortFieldHostname:
+		return pagination.EncodeStringCursor(h.Hostname, h.Id)
+	case HostSortFieldOS:
+		return pagination.EncodeStringCursor(h.OS, h.Id)
+	default:
+		return pagination.EncodeCursor(h.CreateAt, h.Id)
+	}
+}
+
 // IHostRepository defines the interface for Host database operations. It is a
 // trimmed sibling of ICredentialRepository — per-operation only, no tags,
 // comments, or cross-operation fan-out.
 type IHostRepository interface {
 	Create(ctx context.Context, h *models.Host) error
 	FindByID(ctx context.Context, id uuid.UUID) (models.Host, error)
-	FindByOperationIDWithCursor(ctx context.Context, opID uuid.UUID, filter HostFilter, cursor *pagination.Cursor, limit int64, forward bool) ([]models.Host, error)
+	FindByOperationIDWithCursor(ctx context.Context, opID uuid.UUID, filter HostFilter, sort HostSort, cursor *pagination.Cursor, limit int64, forward bool) ([]models.Host, error)
 	CountByOperationID(ctx context.Context, opID uuid.UUID, filter HostFilter) (int64, error)
 	Update(ctx context.Context, h *models.Host, updates map[string]interface{}) error
 	Delete(ctx context.Context, h *models.Host) error
@@ -48,6 +96,12 @@ func NewHostRepository(db database.Database) IHostRepository {
 		{Key: []string{"host_id"}, IndexOptions: new(options.IndexOptions).SetUnique(true)},
 		{Key: []string{"operation_id"}},
 		{Key: []string{"operation_id", "-createAt", "-_id"}}, // Supports cursor-based pagination
+		// Collated indexes backing the hostname / os column sorts. One index
+		// per column serves both directions (a reversed sort walks the index
+		// backwards); see the credential repository's index comment for the
+		// full rationale.
+		{Key: []string{"operation_id", "hostname", "_id"}, IndexOptions: new(options.IndexOptions).SetCollation(caseInsensitiveSortCollation)},
+		{Key: []string{"operation_id", "os", "_id"}, IndexOptions: new(options.IndexOptions).SetCollation(caseInsensitiveSortCollation)},
 	})
 
 	return &hostRepository{coll: coll}
@@ -64,12 +118,20 @@ func (r *hostRepository) FindByID(ctx context.Context, id uuid.UUID) (models.Hos
 	return h, err
 }
 
-func (r *hostRepository) FindByOperationIDWithCursor(ctx context.Context, opID uuid.UUID, filter HostFilter, cursor *pagination.Cursor, limit int64, forward bool) ([]models.Host, error) {
-	q := pagination.ApplyCursorFilter(buildHostFilter(opID, filter), cursor, forward)
+func (r *hostRepository) FindByOperationIDWithCursor(ctx context.Context, opID uuid.UUID, filter HostFilter, sort HostSort, cursor *pagination.Cursor, limit int64, forward bool) ([]models.Host, error) {
+	key := sort.SortKey()
+	if err := key.ValidateCursor(cursor); err != nil {
+		return nil, err
+	}
+
+	q := r.coll.Find(ctx, pagination.ApplyCursorFilterKey(buildHostFilter(opID, filter), cursor, forward, key))
+	if key.String {
+		q = q.Collation(caseInsensitiveSortCollation)
+	}
 
 	var hosts []models.Host
-	err := r.coll.Find(ctx, q).
-		Sort(pagination.SortFields(forward)...).
+	err := q.
+		Sort(pagination.SortFieldsKey(forward, key)...).
 		Limit(limit).
 		All(&hosts)
 

@@ -79,7 +79,7 @@ type mockOpRepo struct {
 	createFn                func(ctx context.Context, op *models.Operation) error
 	findByIDFn              func(ctx context.Context, id uuid.UUID) (models.Operation, error)
 	findAllFn               func(ctx context.Context, search string, offset, limit int64, memberID *uuid.UUID) ([]models.Operation, error)
-	findWithCursorFn        func(ctx context.Context, search string, cursor *pagination.Cursor, limit int64, forward bool, memberID *uuid.UUID) ([]models.Operation, error)
+	findWithCursorFn        func(ctx context.Context, search string, sort repository.OperationSort, cursor *pagination.Cursor, limit int64, forward bool, memberID *uuid.UUID) ([]models.Operation, error)
 	countFn                 func(ctx context.Context, search string, memberID *uuid.UUID) (int64, error)
 	updateFn                func(ctx context.Context, op *models.Operation, updates map[string]interface{}) error
 	deleteFn                func(ctx context.Context, op *models.Operation) error
@@ -100,8 +100,8 @@ func (m *mockOpRepo) FindByID(ctx context.Context, id uuid.UUID) (models.Operati
 func (m *mockOpRepo) FindAll(ctx context.Context, search string, offset, limit int64, memberID *uuid.UUID) ([]models.Operation, error) {
 	return m.findAllFn(ctx, search, offset, limit, memberID)
 }
-func (m *mockOpRepo) FindWithCursor(ctx context.Context, search string, cursor *pagination.Cursor, limit int64, forward bool, memberID *uuid.UUID) ([]models.Operation, error) {
-	return m.findWithCursorFn(ctx, search, cursor, limit, forward, memberID)
+func (m *mockOpRepo) FindWithCursor(ctx context.Context, search string, sort repository.OperationSort, cursor *pagination.Cursor, limit int64, forward bool, memberID *uuid.UUID) ([]models.Operation, error) {
+	return m.findWithCursorFn(ctx, search, sort, cursor, limit, forward, memberID)
 }
 func (m *mockOpRepo) Count(ctx context.Context, search string, memberID *uuid.UUID) (int64, error) {
 	return m.countFn(ctx, search, memberID)
@@ -140,7 +140,7 @@ type mockUserRepo struct {
 	createFn           func(ctx context.Context, user *models.User) error
 	countFn            func(ctx context.Context, search string) (int64, error)
 	findAllFn          func(ctx context.Context, search string, offset, limit int64) ([]models.User, error)
-	findWithCursorFn   func(ctx context.Context, search string, cursor *pagination.Cursor, limit int64, forward bool) ([]models.User, error)
+	findWithCursorFn   func(ctx context.Context, search string, sort repository.UserSort, cursor *pagination.Cursor, limit int64, forward bool) ([]models.User, error)
 	findByIDFn         func(ctx context.Context, id uuid.UUID) (models.User, error)
 	findSuggestionsFn  func(ctx context.Context, search string, limit int64) ([]models.User, error)
 	updateFn           func(ctx context.Context, user *models.User, updates map[string]interface{}) error
@@ -162,8 +162,8 @@ func (m *mockUserRepo) Count(ctx context.Context, search string) (int64, error) 
 func (m *mockUserRepo) FindAll(ctx context.Context, search string, offset, limit int64) ([]models.User, error) {
 	return m.findAllFn(ctx, search, offset, limit)
 }
-func (m *mockUserRepo) FindWithCursor(ctx context.Context, search string, cursor *pagination.Cursor, limit int64, forward bool) ([]models.User, error) {
-	return m.findWithCursorFn(ctx, search, cursor, limit, forward)
+func (m *mockUserRepo) FindWithCursor(ctx context.Context, search string, sort repository.UserSort, cursor *pagination.Cursor, limit int64, forward bool) ([]models.User, error) {
+	return m.findWithCursorFn(ctx, search, sort, cursor, limit, forward)
 }
 func (m *mockUserRepo) FindByID(ctx context.Context, id uuid.UUID) (models.User, error) {
 	return m.findByIDFn(ctx, id)

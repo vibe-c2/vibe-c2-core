@@ -9,6 +9,7 @@ import (
 	"github.com/vibe-c2/vibe-c2-core/core/pkg/graphql/model"
 	"github.com/vibe-c2/vibe-c2-core/core/pkg/models"
 	"github.com/vibe-c2/vibe-c2-core/core/pkg/pagination"
+	"github.com/vibe-c2/vibe-c2-core/core/pkg/repository"
 )
 
 // Tests for the synthetic Public operation surface on operationResolver:
@@ -26,7 +27,7 @@ func panicRepo() *mockOpRepo {
 		createFn:               func(context.Context, *models.Operation) error { panicAny(); return nil },
 		findByIDFn:             func(context.Context, uuid.UUID) (models.Operation, error) { panicAny(); return models.Operation{}, nil },
 		findAllFn:              func(context.Context, string, int64, int64, *uuid.UUID) ([]models.Operation, error) { panicAny(); return nil, nil },
-		findWithCursorFn:       func(context.Context, string, *pagination.Cursor, int64, bool, *uuid.UUID) ([]models.Operation, error) { panicAny(); return nil, nil },
+		findWithCursorFn:       func(context.Context, string, repository.OperationSort, *pagination.Cursor, int64, bool, *uuid.UUID) ([]models.Operation, error) { panicAny(); return nil, nil },
 		countFn:                func(context.Context, string, *uuid.UUID) (int64, error) { panicAny(); return 0, nil },
 		updateFn:               func(context.Context, *models.Operation, map[string]interface{}) error { panicAny(); return nil },
 		deleteFn:               func(context.Context, *models.Operation) error { panicAny(); return nil },

@@ -104,8 +104,8 @@ func (r *queryResolver) User(ctx context.Context, id string) (*models.User, erro
 }
 
 // Users returns a paginated list of users with optional search.
-func (r *queryResolver) Users(ctx context.Context, search *string, first *int, after *string, last *int, before *string) (*model.UserConnection, error) {
-	return r.UserResolver.Users(ctx, search, first, after, last, before)
+func (r *queryResolver) Users(ctx context.Context, search *string, sortBy *model.UserSortField, sortDirection *model.SortDirection, first *int, after *string, last *int, before *string) (*model.UserConnection, error) {
+	return r.UserResolver.Users(ctx, search, sortBy, sortDirection, first, after, last, before)
 }
 
 // UserSuggestions is the resolver for the userSuggestions field.
@@ -119,8 +119,8 @@ func (r *queryResolver) Operation(ctx context.Context, id string) (*models.Opera
 }
 
 // Operations returns a paginated list of operations with optional search.
-func (r *queryResolver) Operations(ctx context.Context, search *string, first *int, after *string, last *int, before *string) (*model.OperationConnection, error) {
-	return r.OperationResolver.Operations(ctx, search, first, after, last, before)
+func (r *queryResolver) Operations(ctx context.Context, search *string, sortBy *model.OperationSortField, sortDirection *model.SortDirection, first *int, after *string, last *int, before *string) (*model.OperationConnection, error) {
+	return r.OperationResolver.Operations(ctx, search, sortBy, sortDirection, first, after, last, before)
 }
 
 // MyOperationRole returns the caller's role in a specific operation.

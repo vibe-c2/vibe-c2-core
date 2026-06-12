@@ -36,8 +36,20 @@ export const OperationQuery = graphql(`
 `)
 
 export const OperationsQuery = graphql(`
-  query Operations($search: String, $first: Int, $after: String) {
-    operations(search: $search, first: $first, after: $after) {
+  query Operations(
+    $search: String
+    $sortBy: OperationSortField
+    $sortDirection: SortDirection
+    $first: Int
+    $after: String
+  ) {
+    operations(
+      search: $search
+      sortBy: $sortBy
+      sortDirection: $sortDirection
+      first: $first
+      after: $after
+    ) {
       edges {
         node {
           ...OperationFields

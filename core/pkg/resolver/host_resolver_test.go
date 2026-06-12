@@ -17,7 +17,7 @@ import (
 type mockHostRepo struct {
 	createFn                      func(ctx context.Context, h *models.Host) error
 	findByIDFn                    func(ctx context.Context, id uuid.UUID) (models.Host, error)
-	findByOperationIDWithCursorFn func(ctx context.Context, opID uuid.UUID, filter repository.HostFilter, cursor *pagination.Cursor, limit int64, forward bool) ([]models.Host, error)
+	findByOperationIDWithCursorFn func(ctx context.Context, opID uuid.UUID, filter repository.HostFilter, sort repository.HostSort, cursor *pagination.Cursor, limit int64, forward bool) ([]models.Host, error)
 	countByOperationIDFn          func(ctx context.Context, opID uuid.UUID, filter repository.HostFilter) (int64, error)
 	updateFn                      func(ctx context.Context, h *models.Host, updates map[string]interface{}) error
 	deleteFn                      func(ctx context.Context, h *models.Host) error
@@ -30,8 +30,8 @@ func (m *mockHostRepo) Create(ctx context.Context, h *models.Host) error {
 func (m *mockHostRepo) FindByID(ctx context.Context, id uuid.UUID) (models.Host, error) {
 	return m.findByIDFn(ctx, id)
 }
-func (m *mockHostRepo) FindByOperationIDWithCursor(ctx context.Context, opID uuid.UUID, filter repository.HostFilter, cursor *pagination.Cursor, limit int64, forward bool) ([]models.Host, error) {
-	return m.findByOperationIDWithCursorFn(ctx, opID, filter, cursor, limit, forward)
+func (m *mockHostRepo) FindByOperationIDWithCursor(ctx context.Context, opID uuid.UUID, filter repository.HostFilter, sort repository.HostSort, cursor *pagination.Cursor, limit int64, forward bool) ([]models.Host, error) {
+	return m.findByOperationIDWithCursorFn(ctx, opID, filter, sort, cursor, limit, forward)
 }
 func (m *mockHostRepo) CountByOperationID(ctx context.Context, opID uuid.UUID, filter repository.HostFilter) (int64, error) {
 	return m.countByOperationIDFn(ctx, opID, filter)
@@ -275,7 +275,7 @@ func TestHosts_BuildsConnection(t *testing.T) {
 		countByOperationIDFn: func(_ context.Context, _ uuid.UUID, _ repository.HostFilter) (int64, error) {
 			return 2, nil
 		},
-		findByOperationIDWithCursorFn: func(_ context.Context, _ uuid.UUID, _ repository.HostFilter, _ *pagination.Cursor, _ int64, _ bool) ([]models.Host, error) {
+		findByOperationIDWithCursorFn: func(_ context.Context, _ uuid.UUID, _ repository.HostFilter, _ repository.HostSort, _ *pagination.Cursor, _ int64, _ bool) ([]models.Host, error) {
 			return []models.Host{
 				{HostID: uuid.New(), OperationID: opID, Hostname: "a"},
 				{HostID: uuid.New(), OperationID: opID, Hostname: "b"},
@@ -289,7 +289,7 @@ func TestHosts_BuildsConnection(t *testing.T) {
 	}
 	r := newHostResolver(hostRepo, opRepo)
 
-	conn, err := r.Hosts(newCallerCtx(caller), opID.String(), nil, nil, nil, nil, nil)
+	conn, err := r.Hosts(newCallerCtx(caller), opID.String(), nil, nil, nil, nil, nil, nil, nil)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -311,7 +311,7 @@ func TestHosts_NonMemberForbidden(t *testing.T) {
 	}
 	r := newHostResolver(&mockHostRepo{}, opRepo)
 
-	_, err := r.Hosts(newCallerCtx(caller), opID.String(), nil, nil, nil, nil, nil)
+	_, err := r.Hosts(newCallerCtx(caller), opID.String(), nil, nil, nil, nil, nil, nil, nil)
 	if err == nil {
 		t.Fatal("expected forbidden error for non-member listing hosts")
 	}
@@ -365,5 +365,57 @@ func TestNormalizeLogins_TrimsDefaultsCountAndDropsUserless(t *testing.T) {
 	}
 	if out[1].Count != 5 {
 		t.Errorf("explicit count should be preserved, got %d", out[1].Count)
+	}
+}
+
+// TestHosts_SortByHostname_ThreadsSortAndMintsStringCursors verifies the sort
+// plumbing end-to-end at the resolver boundary: the GraphQL sortBy /
+// sortDirection arguments reach the repository as a HostSort, and the minted
+// edge cursors carry the hostname (string key) rather than the timestamp —
+// the cursor shape the repo's keyset filter expects back on the next page.
+func TestHosts_SortByHostname_ThreadsSortAndMintsStringCursors(t *testing.T) {
+	caller := uuid.New()
+	opID := uuid.New()
+
+	var capturedSort repository.HostSort
+
+	hostRepo := &mockHostRepo{
+		countByOperationIDFn: func(_ context.Context, _ uuid.UUID, _ repository.HostFilter) (int64, error) {
+			return 1, nil
+		},
+		findByOperationIDWithCursorFn: func(_ context.Context, _ uuid.UUID, _ repository.HostFilter, sort repository.HostSort, _ *pagination.Cursor, _ int64, _ bool) ([]models.Host, error) {
+			capturedSort = sort
+			return []models.Host{
+				{HostID: uuid.New(), OperationID: opID, Hostname: "web01"},
+			}, nil
+		},
+	}
+	opRepo := &mockOpRepo{
+		findByIDFn: func(_ context.Context, id uuid.UUID) (models.Operation, error) {
+			return memberOp(id, caller, models.OperationRoleViewer), nil
+		},
+	}
+	r := newHostResolver(hostRepo, opRepo)
+
+	sortBy := model.HostSortFieldHostname
+	dir := model.SortDirectionAsc
+	conn, err := r.Hosts(newCallerCtx(caller), opID.String(), nil, &sortBy, &dir, nil, nil, nil, nil)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if capturedSort.Field != repository.HostSortFieldHostname || !capturedSort.Ascending {
+		t.Fatalf("repo received wrong sort: %+v", capturedSort)
+	}
+
+	if len(conn.Edges) != 1 {
+		t.Fatalf("expected 1 edge, got %d", len(conn.Edges))
+	}
+	cur, err := pagination.DecodeCursor(conn.Edges[0].Cursor)
+	if err != nil {
+		t.Fatalf("decode edge cursor: %v", err)
+	}
+	if cur.Str == nil || *cur.Str != "web01" {
+		t.Fatalf("edge cursor should carry the hostname sort key, got %+v", cur)
 	}
 }

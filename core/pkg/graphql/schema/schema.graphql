@@ -101,6 +101,22 @@ enum SortDirection {
   DESC
 }
 
+# Sortable columns for the `users` query. Only the columns the UI exposes as
+# sortable are listed; the default (and the historical order) is CREATED_AT
+# descending. USERNAME sorts case-insensitively.
+enum UserSortField {
+  USERNAME
+  CREATED_AT
+}
+
+# Sortable columns for the `operations` query. Only the columns the UI exposes
+# as sortable are listed; the default (and the historical order) is CREATED_AT
+# descending. NAME sorts case-insensitively.
+enum OperationSortField {
+  NAME
+  CREATED_AT
+}
+
 type UserEdge {
   node: User!                # The actual user object
   cursor: String!            # Opaque cursor for this user's position
@@ -174,6 +190,10 @@ type Query {
   # - search: optional text filter (matches username and roles)
   users(
     search: String
+    # Sort column + direction. Cursors are minted per sort mode, so
+    # changing the sort restarts pagination (see SortDirection).
+    sortBy: UserSortField = CREATED_AT
+    sortDirection: SortDirection = DESC
     first: Int = 20
     after: String
     last: Int
@@ -193,6 +213,10 @@ type Query {
   # operations returns a paginated, searchable list of all operations.
   operations(
     search: String
+    # Sort column + direction. Cursors are minted per sort mode, so
+    # changing the sort restarts pagination (see SortDirection).
+    sortBy: OperationSortField = CREATED_AT
+    sortDirection: SortDirection = DESC
     first: Int = 20
     after: String
     last: Int

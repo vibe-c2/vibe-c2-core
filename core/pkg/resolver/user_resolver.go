@@ -29,7 +29,7 @@ type IUserResolver interface {
 	// Queries
 	Me(ctx context.Context) (*models.User, error)
 	User(ctx context.Context, id string) (*models.User, error)
-	Users(ctx context.Context, search *string, first *int, after *string, last *int, before *string) (*model.UserConnection, error)
+	Users(ctx context.Context, search *string, sortBy *model.UserSortField, sortDirection *model.SortDirection, first *int, after *string, last *int, before *string) (*model.UserConnection, error)
 	UserSuggestions(ctx context.Context, search string, first *int) ([]*model.UserSuggestion, error)
 
 	// Field resolvers — these handle fields where the Go model doesn't
@@ -318,10 +318,15 @@ func (r *userResolver) User(ctx context.Context, id string) (*models.User, error
 //	        totalCount
 //	    }
 //	}
-func (r *userResolver) Users(ctx context.Context, search *string, first *int, after *string, last *int, before *string) (*model.UserConnection, error) {
+func (r *userResolver) Users(ctx context.Context, search *string, sortBy *model.UserSortField, sortDirection *model.SortDirection, first *int, after *string, last *int, before *string) (*model.UserConnection, error) {
 	args, err := pagination.ParseArgs(first, after, last, before)
 	if err != nil {
 		return nil, fmt.Errorf("invalid pagination args: %w", err)
+	}
+
+	sortSpec, err := mapUserSort(sortBy, sortDirection)
+	if err != nil {
+		return nil, err
 	}
 
 	s := ""
@@ -335,7 +340,7 @@ func (r *userResolver) Users(ctx context.Context, search *string, first *int, af
 	}
 
 	// Fetch limit+1 to detect if there are more items beyond this page.
-	users, err := r.userRepo.FindWithCursor(ctx, s, args.Cursor, args.Limit+1, args.Forward)
+	users, err := r.userRepo.FindWithCursor(ctx, s, sortSpec, args.Cursor, args.Limit+1, args.Forward)
 	if err != nil {
 		return nil, fmt.Errorf("failed to list users: %w", err)
 	}
@@ -347,10 +352,9 @@ func (r *userResolver) Users(ctx context.Context, search *string, first *int, af
 
 	edges := make([]*model.UserEdge, len(users))
 	for i := range users {
-		cursor := pagination.EncodeCursor(users[i].CreateAt, users[i].Id)
 		edges[i] = &model.UserEdge{
 			Node:   &users[i],
-			Cursor: cursor,
+			Cursor: sortSpec.Cursor(&users[i]),
 		}
 	}
 
@@ -465,4 +469,35 @@ func buildUpdateMap(input model.UpdateUserInput) map[string]interface{} {
 	}
 
 	return updates
+}
+
+// mapUserSort converts the GraphQL sort args to the repository's sort spec.
+// Nil args fall back to the default (createAt descending) — gqlgen fills the
+// schema defaults, so nils only appear when a client sends explicit nulls.
+func mapUserSort(sortBy *model.UserSortField, sortDirection *model.SortDirection) (repository.UserSort, error) {
+	sort := repository.DefaultUserSort()
+
+	if sortBy != nil {
+		switch *sortBy {
+		case model.UserSortFieldUsername:
+			sort.Field = repository.UserSortFieldUsername
+		case model.UserSortFieldCreatedAt:
+			sort.Field = repository.UserSortFieldCreatedAt
+		default:
+			return repository.UserSort{}, fmt.Errorf("invalid user sort field: %s", *sortBy)
+		}
+	}
+
+	if sortDirection != nil {
+		switch *sortDirection {
+		case model.SortDirectionAsc:
+			sort.Ascending = true
+		case model.SortDirectionDesc:
+			sort.Ascending = false
+		default:
+			return repository.UserSort{}, fmt.Errorf("invalid sort direction: %s", *sortDirection)
+		}
+	}
+
+	return sort, nil
 }

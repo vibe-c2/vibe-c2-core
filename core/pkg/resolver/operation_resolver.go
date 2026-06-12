@@ -43,7 +43,7 @@ type IOperationResolver interface {
 
 	// Queries
 	Operation(ctx context.Context, id string) (*models.Operation, error)
-	Operations(ctx context.Context, search *string, first *int, after *string, last *int, before *string) (*model.OperationConnection, error)
+	Operations(ctx context.Context, search *string, sortBy *model.OperationSortField, sortDirection *model.SortDirection, first *int, after *string, last *int, before *string) (*model.OperationConnection, error)
 	MyOperationRole(ctx context.Context, operationID string) (*models.OperationRole, error)
 
 	// Field resolvers for Operation type
@@ -471,11 +471,16 @@ func (r *operationResolver) Operation(ctx context.Context, id string) (*models.O
 //	        totalCount
 //	    }
 //	}
-func (r *operationResolver) Operations(ctx context.Context, search *string, first *int, after *string, last *int, before *string) (*model.OperationConnection, error) {
+func (r *operationResolver) Operations(ctx context.Context, search *string, sortBy *model.OperationSortField, sortDirection *model.SortDirection, first *int, after *string, last *int, before *string) (*model.OperationConnection, error) {
 	auth := gqlctx.AuthFromContext(ctx)
 	args, err := pagination.ParseArgs(first, after, last, before)
 	if err != nil {
 		return nil, fmt.Errorf("invalid pagination args: %w", err)
+	}
+
+	sortSpec, err := mapOperationSort(sortBy, sortDirection)
+	if err != nil {
+		return nil, err
 	}
 
 	s := ""
@@ -498,7 +503,7 @@ func (r *operationResolver) Operations(ctx context.Context, search *string, firs
 		return nil, fmt.Errorf("failed to count operations: %w", err)
 	}
 
-	ops, err := r.operationRepo.FindWithCursor(ctx, s, args.Cursor, args.Limit+1, args.Forward, memberID)
+	ops, err := r.operationRepo.FindWithCursor(ctx, s, sortSpec, args.Cursor, args.Limit+1, args.Forward, memberID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to list operations: %w", err)
 	}
@@ -510,10 +515,9 @@ func (r *operationResolver) Operations(ctx context.Context, search *string, firs
 
 	edges := make([]*model.OperationEdge, len(ops))
 	for i := range ops {
-		cursor := pagination.EncodeCursor(ops[i].CreateAt, ops[i].Id)
 		edges[i] = &model.OperationEdge{
 			Node:   &ops[i],
-			Cursor: cursor,
+			Cursor: sortSpec.Cursor(&ops[i]),
 		}
 	}
 
@@ -609,4 +613,35 @@ func (r *operationResolver) OperationMemberUser(ctx context.Context, obj *models
 		return nil, fmt.Errorf("member user not found: %w", err)
 	}
 	return &user, nil
+}
+
+// mapOperationSort converts the GraphQL sort args to the repository's sort
+// spec. Nil args fall back to the default (createAt descending) — gqlgen fills
+// the schema defaults, so nils only appear when a client sends explicit nulls.
+func mapOperationSort(sortBy *model.OperationSortField, sortDirection *model.SortDirection) (repository.OperationSort, error) {
+	sort := repository.DefaultOperationSort()
+
+	if sortBy != nil {
+		switch *sortBy {
+		case model.OperationSortFieldName:
+			sort.Field = repository.OperationSortFieldName
+		case model.OperationSortFieldCreatedAt:
+			sort.Field = repository.OperationSortFieldCreatedAt
+		default:
+			return repository.OperationSort{}, fmt.Errorf("invalid operation sort field: %s", *sortBy)
+		}
+	}
+
+	if sortDirection != nil {
+		switch *sortDirection {
+		case model.SortDirectionAsc:
+			sort.Ascending = true
+		case model.SortDirectionDesc:
+			sort.Ascending = false
+		default:
+			return repository.OperationSort{}, fmt.Errorf("invalid sort direction: %s", *sortDirection)
+		}
+	}
+
+	return sort, nil
 }

@@ -8,7 +8,10 @@ import (
 	"github.com/google/uuid"
 	"github.com/vibe-c2/vibe-c2-core/core/pkg/eventbus"
 	"github.com/vibe-c2/vibe-c2-core/core/pkg/graphql/gqlctx"
+	"github.com/vibe-c2/vibe-c2-core/core/pkg/graphql/model"
 	"github.com/vibe-c2/vibe-c2-core/core/pkg/models"
+	"github.com/vibe-c2/vibe-c2-core/core/pkg/pagination"
+	"github.com/vibe-c2/vibe-c2-core/core/pkg/repository"
 )
 
 // normalizeHiddenIdentities is the canonicalizer the SetHiddenIdentities
@@ -133,5 +136,49 @@ func TestSetHiddenIdentitiesInvalidToken(t *testing.T) {
 
 	if _, err := r.SetHiddenIdentities(ctx, []string{"x"}); err == nil {
 		t.Fatal("expected error for invalid user ID in token, got nil")
+	}
+}
+
+// TestUsers_SortByUsername_ThreadsSortAndMintsStringCursors verifies the sort
+// plumbing end-to-end at the resolver boundary: the GraphQL sortBy /
+// sortDirection arguments reach the repository as a UserSort, and the minted
+// edge cursors carry the username (string key) rather than the timestamp —
+// the cursor shape the repo's keyset filter expects back on the next page.
+func TestUsers_SortByUsername_ThreadsSortAndMintsStringCursors(t *testing.T) {
+	var capturedSort repository.UserSort
+
+	userRepo := &mockUserRepo{
+		countFn: func(_ context.Context, _ string) (int64, error) {
+			return 1, nil
+		},
+		findWithCursorFn: func(_ context.Context, _ string, sort repository.UserSort, _ *pagination.Cursor, _ int64, _ bool) ([]models.User, error) {
+			capturedSort = sort
+			return []models.User{
+				{UserID: uuid.New(), Username: "operator1"},
+			}, nil
+		},
+	}
+	r := NewUserResolver(userRepo, nil)
+
+	sortBy := model.UserSortFieldUsername
+	dir := model.SortDirectionAsc
+	conn, err := r.Users(context.Background(), nil, &sortBy, &dir, nil, nil, nil, nil)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if capturedSort.Field != repository.UserSortFieldUsername || !capturedSort.Ascending {
+		t.Fatalf("repo received wrong sort: %+v", capturedSort)
+	}
+
+	if len(conn.Edges) != 1 {
+		t.Fatalf("expected 1 edge, got %d", len(conn.Edges))
+	}
+	cur, err := pagination.DecodeCursor(conn.Edges[0].Cursor)
+	if err != nil {
+		t.Fatalf("decode edge cursor: %v", err)
+	}
+	if cur.Str == nil || *cur.Str != "operator1" {
+		t.Fatalf("edge cursor should carry the username sort key, got %+v", cur)
 	}
 }

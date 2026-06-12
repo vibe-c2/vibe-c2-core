@@ -9,6 +9,8 @@ import { useSubscription } from "@/hooks/use-subscription"
 import type {
   CreateHostInput,
   HostFieldsFragment,
+  HostSortField,
+  SortDirection,
   UpdateHostInput,
 } from "@/graphql/gql/graphql"
 import {
@@ -22,6 +24,10 @@ import {
 export type HostListParams = {
   operationId: string
   search?: string | null
+  // Sort params live in the query key (via the params object), so changing
+  // the sort automatically restarts pagination from the first page.
+  sortBy?: HostSortField | null
+  sortDirection?: SortDirection | null
   first?: number
 }
 
@@ -60,6 +66,8 @@ export function useInfiniteHosts(params: HostListParams) {
       graphqlClient(HostsDocument, {
         operationId: params.operationId,
         search: params.search ?? null,
+        sortBy: params.sortBy ?? null,
+        sortDirection: params.sortDirection ?? null,
         first: params.first ?? 20,
         after: pageParam,
       }),

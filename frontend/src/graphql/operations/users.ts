@@ -29,8 +29,20 @@ export const UserQuery = graphql(`
 `)
 
 export const UsersQuery = graphql(`
-  query Users($search: String, $first: Int, $after: String) {
-    users(search: $search, first: $first, after: $after) {
+  query Users(
+    $search: String
+    $sortBy: UserSortField
+    $sortDirection: SortDirection
+    $first: Int
+    $after: String
+  ) {
+    users(
+      search: $search
+      sortBy: $sortBy
+      sortDirection: $sortDirection
+      first: $first
+      after: $after
+    ) {
       edges {
         node {
           ...UserFields

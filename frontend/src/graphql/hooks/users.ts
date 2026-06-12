@@ -1,7 +1,13 @@
 import { useQuery, useInfiniteQuery, useMutation, useQueryClient } from "@tanstack/react-query"
 import { graphqlClient } from "@/lib/graphql-client"
 import { useSubscription } from "@/hooks/use-subscription"
-import type { CreateUserInput, UpdateUserInput, MeQuery } from "@/graphql/gql/graphql"
+import type {
+  CreateUserInput,
+  UpdateUserInput,
+  MeQuery,
+  UserSortField,
+  SortDirection,
+} from "@/graphql/gql/graphql"
 import {
   MeDocument,
   UserDocument,
@@ -23,7 +29,7 @@ export const userKeys = {
   list: (params: { search?: string | null; first?: number; after?: string }) =>
     [...userKeys.lists(), params] as const,
   infiniteLists: () => [...userKeys.all, "infinite"] as const,
-  infiniteList: (params: { search?: string | null; first?: number }) =>
+  infiniteList: (params: UserInfiniteListParams) =>
     [...userKeys.infiniteLists(), params] as const,
   details: () => [...userKeys.all, "detail"] as const,
   detail: (id: string) => [...userKeys.details(), id] as const,
@@ -52,12 +58,23 @@ export function useUsers(params: { search?: string | null; first?: number; after
   })
 }
 
-export function useInfiniteUsers(params: { search?: string | null; first?: number }) {
+export type UserInfiniteListParams = {
+  search?: string | null
+  // Sort params live in the query key (via the params object), so changing
+  // the sort automatically restarts pagination from the first page.
+  sortBy?: UserSortField | null
+  sortDirection?: SortDirection | null
+  first?: number
+}
+
+export function useInfiniteUsers(params: UserInfiniteListParams) {
   return useInfiniteQuery({
     queryKey: userKeys.infiniteList(params),
     queryFn: ({ pageParam }) =>
       graphqlClient(UsersDocument, {
         search: params.search,
+        sortBy: params.sortBy ?? null,
+        sortDirection: params.sortDirection ?? null,
         first: params.first ?? 20,
         after: pageParam,
       }),

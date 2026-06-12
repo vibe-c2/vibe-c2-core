@@ -68,8 +68,8 @@ func (r *queryResolver) Host(ctx context.Context, id string) (*models.Host, erro
 }
 
 // Hosts is the resolver for the hosts field.
-func (r *queryResolver) Hosts(ctx context.Context, operationID string, search *string, first *int, after *string, last *int, before *string) (*model.HostConnection, error) {
-	return r.HostResolver.Hosts(ctx, operationID, search, first, after, last, before)
+func (r *queryResolver) Hosts(ctx context.Context, operationID string, search *string, sortBy *model.HostSortField, sortDirection *model.SortDirection, first *int, after *string, last *int, before *string) (*model.HostConnection, error) {
+	return r.HostResolver.Hosts(ctx, operationID, search, sortBy, sortDirection, first, after, last, before)
 }
 
 // HostChanged is the resolver for the hostChanged field.

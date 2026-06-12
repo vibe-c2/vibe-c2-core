@@ -29,13 +29,19 @@ export function UsersPage() {
   useUserChangedSubscription()
 
   const search = useUserStore((s) => s.search)
+  const sort = useUserStore((s) => s.sort)
+  const setSort = useUserStore((s) => s.setSort)
   const {
     data,
     isLoading,
     isFetchingNextPage,
     hasNextPage,
     fetchNextPage,
-  } = useInfiniteUsers({ search: search || null })
+  } = useInfiniteUsers({
+    search: search || null,
+    sortBy: sort.field,
+    sortDirection: sort.direction,
+  })
 
   const users = useConnectionNodes(data, (p) => p.users)
 
@@ -76,6 +82,8 @@ export function UsersPage() {
             isFetchingNextPage={isFetchingNextPage}
             hasNextPage={hasNextPage}
             fetchNextPage={fetchNextPage}
+            sort={sort}
+            onSortChange={setSort}
           />
           <CreateUserDialog />
           <EditUserDialog />

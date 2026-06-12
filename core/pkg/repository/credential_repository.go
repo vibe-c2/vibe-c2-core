@@ -85,14 +85,6 @@ func (s CredentialSort) Cursor(c *models.Credential) string {
 	}
 }
 
-// credentialSortCollation is applied to string-sorted list queries so names
-// order case-insensitively (strength 2 = compare letters and accents, ignore
-// case). Without it Mongo sorts by byte value and every uppercase name lands
-// before every lowercase one. The same collation is baked into the supporting
-// indexes below, and — because the collation applies to the whole query — the
-// keyset cursor comparisons stay consistent with the sort order.
-var credentialSortCollation = &options.Collation{Locale: "en", Strength: 2}
-
 // CredentialFilter bundles the optional list filters for credentials.
 // All fields are independent — combining them ANDs them together at the
 // MongoDB query level.
@@ -163,15 +155,15 @@ func NewCredentialRepository(db database.Database) ICredentialRepository {
 		{Key: []string{"operation_id", "is_valid"}},
 		{Key: []string{"operation_id", "-createAt", "-_id"}}, // Supports cursor-based pagination
 		// Collated indexes backing the name / username column sorts. The
-		// collation must match credentialSortCollation exactly or Mongo won't
+		// collation must match caseInsensitiveSortCollation exactly or Mongo won't
 		// use the index for those queries (it would fall back to an in-memory
 		// sort, still correct but slower — result order always follows the
 		// query's collation regardless of index use). One index per column
 		// serves both directions: a sort that is the exact reverse of the
 		// index pattern walks the index backwards, so no -name/-_id mirror
 		// indexes are needed.
-		{Key: []string{"operation_id", "name", "_id"}, IndexOptions: new(options.IndexOptions).SetCollation(credentialSortCollation)},
-		{Key: []string{"operation_id", "username", "_id"}, IndexOptions: new(options.IndexOptions).SetCollation(credentialSortCollation)},
+		{Key: []string{"operation_id", "name", "_id"}, IndexOptions: new(options.IndexOptions).SetCollation(caseInsensitiveSortCollation)},
+		{Key: []string{"operation_id", "username", "_id"}, IndexOptions: new(options.IndexOptions).SetCollation(caseInsensitiveSortCollation)},
 	})
 
 	return &credentialRepository{coll: coll}
@@ -203,7 +195,7 @@ func (r *credentialRepository) findWithCursor(ctx context.Context, base bson.M, 
 
 	q := r.coll.Find(ctx, pagination.ApplyCursorFilterKey(base, cursor, forward, key))
 	if key.String {
-		q = q.Collation(credentialSortCollation)
+		q = q.Collation(caseInsensitiveSortCollation)
 	}
 
 	var creds []models.Credential

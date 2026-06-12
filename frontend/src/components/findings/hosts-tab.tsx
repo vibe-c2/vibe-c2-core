@@ -31,6 +31,8 @@ export function HostsTab({ operationId }: HostsTabProps) {
 
   const filters = useHostStore((s) => s.filters)
   const setSearch = useHostStore((s) => s.setSearch)
+  const sort = useHostStore((s) => s.sort)
+  const setSort = useHostStore((s) => s.setSort)
   const openCreate = useHostStore((s) => s.openCreateDialog)
   const view = useHostStore((s) => s.view)
   const setView = useHostStore((s) => s.setView)
@@ -39,6 +41,8 @@ export function HostsTab({ operationId }: HostsTabProps) {
     useInfiniteHosts({
       operationId,
       search: filters.search.trim() || null,
+      sortBy: sort.field,
+      sortDirection: sort.direction,
     })
 
   const hosts = useConnectionNodes(data, (p) => p.hosts)
@@ -72,6 +76,8 @@ export function HostsTab({ operationId }: HostsTabProps) {
           isFetchingNextPage={isFetchingNextPage}
           hasNextPage={hasNextPage}
           fetchNextPage={fetchNextPage}
+          sort={sort}
+          onSortChange={setSort}
           hasActiveSearch={filters.search.trim().length > 0}
         />
       ) : (

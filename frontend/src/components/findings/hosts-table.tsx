@@ -14,6 +14,7 @@ import {
   VirtualizedDataTable,
   dataTableRowClass,
 } from "@/components/ui/virtualized-data-table"
+import { SortableHeader } from "@/components/ui/sortable-header"
 import { FormattedDateTimeText } from "@/components/ui/formatted-date-time-text"
 import {
   ContextMenu,
@@ -22,7 +23,7 @@ import {
   ContextMenuSeparator,
   ContextMenuTrigger,
 } from "@/components/ui/context-menu"
-import { useHostStore } from "@/stores/hosts"
+import { useHostStore, type HostSort } from "@/stores/hosts"
 import type { HostFieldsFragment } from "@/graphql/gql/graphql"
 
 interface HostsTableProps {
@@ -31,6 +32,10 @@ interface HostsTableProps {
   isFetchingNextPage: boolean
   hasNextPage: boolean
   fetchNextPage: () => void
+  // Active column sort + change handler. The parent owns the state (it also
+  // feeds the list query); the table only renders the sortable headers.
+  sort: HostSort
+  onSortChange: (sort: HostSort) => void
   // Distinguishes "your search matched nothing" from "this operation has no
   // hosts yet" — the latter should nudge towards the Add button instead.
   hasActiveSearch: boolean
@@ -49,6 +54,8 @@ export function HostsTable({
   isFetchingNextPage,
   hasNextPage,
   fetchNextPage,
+  sort,
+  onSortChange,
   hasActiveSearch,
 }: HostsTableProps) {
   const openEdit = useHostStore((s) => s.openEditDialog)
@@ -64,8 +71,18 @@ export function HostsTable({
       entityNoun="hosts"
       header={
         <>
-          <div>Hostname</div>
-          <div>OS</div>
+          <SortableHeader
+            label="Hostname"
+            field="HOSTNAME"
+            sort={sort}
+            onSortChange={onSortChange}
+          />
+          <SortableHeader
+            label="OS"
+            field="OS"
+            sort={sort}
+            onSortChange={onSortChange}
+          />
           <div>IP addresses</div>
           <div className="text-center" title="Interfaces">
             <NetworkIcon className="mx-auto size-3.5" />
@@ -73,7 +90,13 @@ export function HostsTable({
           <div className="text-center" title="Routes">
             <RouteIcon className="mx-auto size-3.5" />
           </div>
-          <div>Created</div>
+          <SortableHeader
+            label="Created"
+            field="CREATED_AT"
+            sort={sort}
+            onSortChange={onSortChange}
+            initialDirection="DESC"
+          />
         </>
       }
       emptyState={

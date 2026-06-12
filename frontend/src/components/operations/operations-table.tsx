@@ -17,8 +17,9 @@ import {
   VirtualizedDataTable,
   dataTableRowClass,
 } from "@/components/ui/virtualized-data-table"
+import { SortableHeader } from "@/components/ui/sortable-header"
 import { useAuthStore } from "@/stores/auth"
-import { useOperationStore } from "@/stores/operations"
+import { useOperationStore, type OperationSort } from "@/stores/operations"
 import { useScopedOperationStore } from "@/stores/scoped-operation"
 import { Permissions } from "@/constants/permissions"
 import { FormattedDateTimeText } from "@/components/ui/formatted-date-time-text"
@@ -30,6 +31,10 @@ interface OperationsTableProps {
   isFetchingNextPage: boolean
   hasNextPage: boolean
   fetchNextPage: () => void
+  // Active column sort + change handler. The parent owns the state (it also
+  // feeds the list query); the table only renders the sortable headers.
+  sort: OperationSort
+  onSortChange: (sort: OperationSort) => void
 }
 
 const GRID_COLS = "grid-cols-[40px_2fr_3fr_80px_1fr_48px]"
@@ -41,6 +46,8 @@ export function OperationsTable({
   isFetchingNextPage,
   hasNextPage,
   fetchNextPage,
+  sort,
+  onSortChange,
 }: OperationsTableProps) {
   const hasPermission = useAuthStore((s) => s.hasPermission)
   const currentUserId = useAuthStore((s) => s.user?.userId)
@@ -75,10 +82,21 @@ export function OperationsTable({
       header={
         <>
           <div />
-          <div>Name</div>
+          <SortableHeader
+            label="Name"
+            field="NAME"
+            sort={sort}
+            onSortChange={onSortChange}
+          />
           <div>Description</div>
           <div>Members</div>
-          <div>Created</div>
+          <SortableHeader
+            label="Created"
+            field="CREATED_AT"
+            sort={sort}
+            onSortChange={onSortChange}
+            initialDirection="DESC"
+          />
           {hasActions && <div />}
         </>
       }

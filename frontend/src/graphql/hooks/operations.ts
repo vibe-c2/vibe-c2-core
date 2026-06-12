@@ -1,7 +1,13 @@
 import { useQuery, useInfiniteQuery, useMutation, useQueryClient } from "@tanstack/react-query"
 import { graphqlClient } from "@/lib/graphql-client"
 import { useSubscription } from "@/hooks/use-subscription"
-import type { CreateOperationInput, UpdateOperationInput, OperationRole } from "@/graphql/gql/graphql"
+import type {
+  CreateOperationInput,
+  UpdateOperationInput,
+  OperationRole,
+  OperationSortField,
+  SortDirection,
+} from "@/graphql/gql/graphql"
 // Note: OperationRole is a string union type ("ADMIN" | "OPERATOR" | "VIEWER"), not an enum
 import {
   OperationDocument,
@@ -25,7 +31,7 @@ export const operationKeys = {
   list: (params: { search?: string | null; first?: number; after?: string }) =>
     [...operationKeys.lists(), params] as const,
   infiniteLists: () => [...operationKeys.all, "infinite"] as const,
-  infiniteList: (params: { search?: string | null; first?: number }) =>
+  infiniteList: (params: OperationInfiniteListParams) =>
     [...operationKeys.infiniteLists(), params] as const,
   details: () => [...operationKeys.all, "detail"] as const,
   detail: (id: string) => [...operationKeys.details(), id] as const,
@@ -40,8 +46,17 @@ export function useOperation(id: string) {
   })
 }
 
+export type OperationInfiniteListParams = {
+  search?: string | null
+  // Sort params live in the query key (via the params object), so changing
+  // the sort automatically restarts pagination from the first page.
+  sortBy?: OperationSortField | null
+  sortDirection?: SortDirection | null
+  first?: number
+}
+
 export function useInfiniteOperations(
-  params: { search?: string | null; first?: number },
+  params: OperationInfiniteListParams,
   options?: { enabled?: boolean },
 ) {
   return useInfiniteQuery({
@@ -49,6 +64,8 @@ export function useInfiniteOperations(
     queryFn: ({ pageParam }) =>
       graphqlClient(OperationsDocument, {
         search: params.search,
+        sortBy: params.sortBy ?? null,
+        sortDirection: params.sortDirection ?? null,
         first: params.first ?? 20,
         after: pageParam,
       }),

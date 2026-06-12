@@ -1,4 +1,6 @@
 import { create } from "zustand"
+import type { UserSortField } from "@/graphql/gql/graphql"
+import type { DataTableSort } from "@/lib/data-table-sort"
 
 interface SelectedUser {
   id: string
@@ -7,8 +9,21 @@ interface SelectedUser {
 
 type UsersPageTab = "users" | "sessions"
 
+// The active column sort for the users table. Field values are the GraphQL
+// UserSortField enum, so the sort passes straight into the list query
+// variables.
+export type UserSort = DataTableSort<UserSortField>
+
+// Matches the server default (and the historical order): newest first.
+const defaultSort: UserSort = {
+  field: "CREATED_AT",
+  direction: "DESC",
+}
+
 interface UserStoreState {
   search: string
+  // Session-scoped column sort for the users table.
+  sort: UserSort
 
   // Active tab on the Users page
   activeTab: UsersPageTab
@@ -24,6 +39,7 @@ interface UserStoreState {
 
   // Actions
   setSearch: (search: string) => void
+  setSort: (sort: UserSort) => void
   openCreateDialog: () => void
   openEditDialog: (user: SelectedUser) => void
   openDeleteDialog: (user: SelectedUser) => void
@@ -32,6 +48,7 @@ interface UserStoreState {
 
 export const useUserStore = create<UserStoreState>((set) => ({
   search: "",
+  sort: defaultSort,
   activeTab: "users",
   setActiveTab: (tab) => set({ activeTab: tab }),
 
@@ -42,6 +59,7 @@ export const useUserStore = create<UserStoreState>((set) => ({
   deleteDialogOpen: false,
 
   setSearch: (search) => set({ search }),
+  setSort: (sort) => set({ sort }),
 
   openCreateDialog: () => set({ createDialogOpen: true }),
   openEditDialog: (user) => set({ editDialogOpen: true, selectedUser: user }),

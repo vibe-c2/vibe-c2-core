@@ -12,6 +12,15 @@
 # pivot. Because edges are derived, the graph can never go stale relative to
 # its hosts.
 
+# Sortable columns for the `hosts` query. Only the columns the UI exposes as
+# sortable are listed; the default (and the historical order) is CREATED_AT
+# descending. HOSTNAME and OS sort case-insensitively.
+enum HostSortField {
+  HOSTNAME
+  OS
+  CREATED_AT
+}
+
 # --- Types ---
 
 # A single network interface on a host. Addresses are in CIDR form
@@ -145,6 +154,10 @@ extend type Query {
   hosts(
     operationId: ID!
     search: String
+    # Sort column + direction. Cursors are minted per sort mode, so
+    # changing the sort restarts pagination (see SortDirection).
+    sortBy: HostSortField = CREATED_AT
+    sortDirection: SortDirection = DESC
     first: Int = 20
     after: String
     last: Int

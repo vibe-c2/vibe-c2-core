@@ -52,7 +52,7 @@ func (f *fakeOperationRepo) Create(context.Context, *models.Operation) error { p
 func (f *fakeOperationRepo) FindAll(context.Context, string, int64, int64, *uuid.UUID) ([]models.Operation, error) {
 	panic("unused")
 }
-func (f *fakeOperationRepo) FindWithCursor(context.Context, string, *pagination.Cursor, int64, bool, *uuid.UUID) ([]models.Operation, error) {
+func (f *fakeOperationRepo) FindWithCursor(context.Context, string, repository.OperationSort, *pagination.Cursor, int64, bool, *uuid.UUID) ([]models.Operation, error) {
 	panic("unused")
 }
 func (f *fakeOperationRepo) Count(context.Context, string, *uuid.UUID) (int64, error) {

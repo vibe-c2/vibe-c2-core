@@ -14,6 +14,49 @@ import (
 
 const userCollection = "users"
 
+// UserSortField identifies a Mongo column the users list can be ordered by.
+// The string value is the field path used in the sort and in the keyset
+// cursor filter.
+type UserSortField string
+
+const (
+	UserSortFieldCreatedAt UserSortField = "createAt"
+	UserSortFieldUsername  UserSortField = "username"
+)
+
+// UserSort bundles the sort column and direction for the users list query.
+// The zero value is NOT valid — use DefaultUserSort() (createAt descending,
+// the historical order) when the caller doesn't choose.
+type UserSort struct {
+	Field     UserSortField
+	Ascending bool
+}
+
+// DefaultUserSort returns the historical list order: newest first.
+func DefaultUserSort() UserSort {
+	return UserSort{Field: UserSortFieldCreatedAt, Ascending: false}
+}
+
+// SortKey maps the user sort to the pagination layer's representation.
+// username is a string column, so its cursors carry the string sort key;
+// createAt keeps the legacy time-keyed cursor shape.
+func (s UserSort) SortKey() pagination.SortKey {
+	return pagination.SortKey{
+		Field:     string(s.Field),
+		Ascending: s.Ascending,
+		String:    s.Field != UserSortFieldCreatedAt,
+	}
+}
+
+// Cursor encodes the edge cursor for a user row under this sort — the value
+// of the active sort column plus the _id tiebreaker.
+func (s UserSort) Cursor(u *models.User) string {
+	if s.Field == UserSortFieldUsername {
+		return pagination.EncodeStringCursor(u.Username, u.Id)
+	}
+	return pagination.EncodeCursor(u.CreateAt, u.Id)
+}
+
 // IUserRepository defines the interface for user database operations.
 type IUserRepository interface {
 	ExistsByUsername(ctx context.Context, username string) (bool, error)
@@ -22,7 +65,7 @@ type IUserRepository interface {
 
 	Count(ctx context.Context, search string) (int64, error)
 	FindAll(ctx context.Context, search string, offset, limit int64) ([]models.User, error)
-	FindWithCursor(ctx context.Context, search string, cursor *pagination.Cursor, limit int64, forward bool) ([]models.User, error)
+	FindWithCursor(ctx context.Context, search string, sort UserSort, cursor *pagination.Cursor, limit int64, forward bool) ([]models.User, error)
 
 	FindByID(ctx context.Context, id uuid.UUID) (models.User, error)
 	FindSuggestions(ctx context.Context, search string, limit int64) ([]models.User, error)
@@ -41,6 +84,12 @@ func NewUserRepository(db database.Database) IUserRepository {
 		{Key: []string{"username"}, IndexOptions: new(options.IndexOptions).SetUnique(true)},
 		{Key: []string{"user_id"}, IndexOptions: new(options.IndexOptions).SetUnique(true)},
 		{Key: []string{"-createAt", "-_id"}}, // Supports cursor-based pagination
+		// Collated index backing the username column sort. The unique username
+		// index above can't serve it — its collation differs, so Mongo would
+		// sort case-sensitively. One index serves both directions (a reversed
+		// sort walks the index backwards); see the credential repository's
+		// index comment for the full rationale.
+		{Key: []string{"username", "_id"}, IndexOptions: new(options.IndexOptions).SetCollation(caseInsensitiveSortCollation)},
 	})
 
 	return &userRepository{coll: coll}
@@ -77,18 +126,26 @@ func (r *userRepository) FindAll(ctx context.Context, search string, offset, lim
 	return users, err
 }
 
-func (r *userRepository) FindWithCursor(ctx context.Context, search string, cursor *pagination.Cursor, limit int64, forward bool) ([]models.User, error) {
-	filter := pagination.ApplyCursorFilter(buildSearchFilter(search), cursor, forward)
+func (r *userRepository) FindWithCursor(ctx context.Context, search string, sort UserSort, cursor *pagination.Cursor, limit int64, forward bool) ([]models.User, error) {
+	key := sort.SortKey()
+	if err := key.ValidateCursor(cursor); err != nil {
+		return nil, err
+	}
+
+	q := r.coll.Find(ctx, pagination.ApplyCursorFilterKey(buildSearchFilter(search), cursor, forward, key))
+	if key.String {
+		q = q.Collation(caseInsensitiveSortCollation)
+	}
 
 	var users []models.User
-	err := r.coll.Find(ctx, filter).
-		Sort(pagination.SortFields(forward)...).
+	err := q.
+		Sort(pagination.SortFieldsKey(forward, key)...).
 		Limit(limit).
 		All(&users)
 
 	if !forward && len(users) > 0 {
-		// Backward pagination fetches in ascending order; reverse to maintain
-		// descending createAt order that the client expects.
+		// Backward pagination fetches in reversed order; flip the page back to
+		// the list order the client expects.
 		for i, j := 0, len(users)-1; i < j; i, j = i+1, j-1 {
 			users[i], users[j] = users[j], users[i]
 		}

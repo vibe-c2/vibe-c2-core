@@ -331,7 +331,7 @@ type ComplexityRoot struct {
 		HashTags                           func(childComplexity int, operationID string) int
 		Hashes                             func(childComplexity int, operationID string, search *string, statuses []models.HashStatus, tags []string, hasCredential *bool, first *int, after *string, last *int, before *string) int
 		Host                               func(childComplexity int, id string) int
-		Hosts                              func(childComplexity int, operationID string, search *string, first *int, after *string, last *int, before *string) int
+		Hosts                              func(childComplexity int, operationID string, search *string, sortBy *model.HostSortField, sortDirection *model.SortDirection, first *int, after *string, last *int, before *string) int
 		Me                                 func(childComplexity int) int
 		MyAPIKey                           func(childComplexity int) int
 		MyCredentialTags                   func(childComplexity int, operationIds []string) int
@@ -341,7 +341,7 @@ type ComplexityRoot struct {
 		MyOperationRole                    func(childComplexity int, operationID string) int
 		MySessions                         func(childComplexity int, activeOnly *bool, first *int, after *string, last *int, before *string) int
 		Operation                          func(childComplexity int, id string) int
-		Operations                         func(childComplexity int, search *string, first *int, after *string, last *int, before *string) int
+		Operations                         func(childComplexity int, search *string, sortBy *model.OperationSortField, sortDirection *model.SortDirection, first *int, after *string, last *int, before *string) int
 		Session                            func(childComplexity int, id string) int
 		Sessions                           func(childComplexity int, userID *string, search *string, activeOnly *bool, first *int, after *string, last *int, before *string) int
 		Task                               func(childComplexity int, id string) int
@@ -353,7 +353,7 @@ type ComplexityRoot struct {
 		TimelineEventsByDay                func(childComplexity int, operationID string, date string, timezone string, granularity *repository.TimelineGranularity, types []string, actorIds []string, first *int, after *string) int
 		User                               func(childComplexity int, id string) int
 		UserSuggestions                    func(childComplexity int, search string, first *int) int
-		Users                              func(childComplexity int, search *string, first *int, after *string, last *int, before *string) int
+		Users                              func(childComplexity int, search *string, sortBy *model.UserSortField, sortDirection *model.SortDirection, first *int, after *string, last *int, before *string) int
 		WikiDocument                       func(childComplexity int, id string) int
 		WikiDocumentBacklinks              func(childComplexity int, documentID string) int
 		WikiDocumentBackup                 func(childComplexity int, id string) int
@@ -800,10 +800,10 @@ type OperationMemberResolver interface {
 type QueryResolver interface {
 	Me(ctx context.Context) (*models.User, error)
 	User(ctx context.Context, id string) (*models.User, error)
-	Users(ctx context.Context, search *string, first *int, after *string, last *int, before *string) (*model.UserConnection, error)
+	Users(ctx context.Context, search *string, sortBy *model.UserSortField, sortDirection *model.SortDirection, first *int, after *string, last *int, before *string) (*model.UserConnection, error)
 	UserSuggestions(ctx context.Context, search string, first *int) ([]*model.UserSuggestion, error)
 	Operation(ctx context.Context, id string) (*models.Operation, error)
-	Operations(ctx context.Context, search *string, first *int, after *string, last *int, before *string) (*model.OperationConnection, error)
+	Operations(ctx context.Context, search *string, sortBy *model.OperationSortField, sortDirection *model.SortDirection, first *int, after *string, last *int, before *string) (*model.OperationConnection, error)
 	MyOperationRole(ctx context.Context, operationID string) (*models.OperationRole, error)
 	MyAPIKey(ctx context.Context) (*models.APIKey, error)
 	Credential(ctx context.Context, id string) (*models.Credential, error)
@@ -818,7 +818,7 @@ type QueryResolver interface {
 	MyHashTags(ctx context.Context, operationIds []string) ([]string, error)
 	WikiDocumentsReferencingHash(ctx context.Context, hashID string) ([]*models.WikiDocument, error)
 	Host(ctx context.Context, id string) (*models.Host, error)
-	Hosts(ctx context.Context, operationID string, search *string, first *int, after *string, last *int, before *string) (*model.HostConnection, error)
+	Hosts(ctx context.Context, operationID string, search *string, sortBy *model.HostSortField, sortDirection *model.SortDirection, first *int, after *string, last *int, before *string) (*model.HostConnection, error)
 	MySessions(ctx context.Context, activeOnly *bool, first *int, after *string, last *int, before *string) (*model.SessionConnection, error)
 	Sessions(ctx context.Context, userID *string, search *string, activeOnly *bool, first *int, after *string, last *int, before *string) (*model.SessionConnection, error)
 	Session(ctx context.Context, id string) (*models.Session, error)
@@ -2453,7 +2453,7 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 			return 0, false
 		}
 
-		return e.ComplexityRoot.Query.Hosts(childComplexity, args["operationId"].(string), args["search"].(*string), args["first"].(*int), args["after"].(*string), args["last"].(*int), args["before"].(*string)), true
+		return e.ComplexityRoot.Query.Hosts(childComplexity, args["operationId"].(string), args["search"].(*string), args["sortBy"].(*model.HostSortField), args["sortDirection"].(*model.SortDirection), args["first"].(*int), args["after"].(*string), args["last"].(*int), args["before"].(*string)), true
 
 	case "Query.me":
 		if e.ComplexityRoot.Query.Me == nil {
@@ -2554,7 +2554,7 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 			return 0, false
 		}
 
-		return e.ComplexityRoot.Query.Operations(childComplexity, args["search"].(*string), args["first"].(*int), args["after"].(*string), args["last"].(*int), args["before"].(*string)), true
+		return e.ComplexityRoot.Query.Operations(childComplexity, args["search"].(*string), args["sortBy"].(*model.OperationSortField), args["sortDirection"].(*model.SortDirection), args["first"].(*int), args["after"].(*string), args["last"].(*int), args["before"].(*string)), true
 	case "Query.session":
 		if e.ComplexityRoot.Query.Session == nil {
 			break
@@ -2686,7 +2686,7 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 			return 0, false
 		}
 
-		return e.ComplexityRoot.Query.Users(childComplexity, args["search"].(*string), args["first"].(*int), args["after"].(*string), args["last"].(*int), args["before"].(*string)), true
+		return e.ComplexityRoot.Query.Users(childComplexity, args["search"].(*string), args["sortBy"].(*model.UserSortField), args["sortDirection"].(*model.SortDirection), args["first"].(*int), args["after"].(*string), args["last"].(*int), args["before"].(*string)), true
 	case "Query.wikiDocument":
 		if e.ComplexityRoot.Query.WikiDocument == nil {
 			break
@@ -4853,6 +4853,15 @@ extend type Credential {
 # pivot. Because edges are derived, the graph can never go stale relative to
 # its hosts.
 
+# Sortable columns for the ` + "`" + `hosts` + "`" + ` query. Only the columns the UI exposes as
+# sortable are listed; the default (and the historical order) is CREATED_AT
+# descending. HOSTNAME and OS sort case-insensitively.
+enum HostSortField {
+  HOSTNAME
+  OS
+  CREATED_AT
+}
+
 # --- Types ---
 
 # A single network interface on a host. Addresses are in CIDR form
@@ -4986,6 +4995,10 @@ extend type Query {
   hosts(
     operationId: ID!
     search: String
+    # Sort column + direction. Cursors are minted per sort mode, so
+    # changing the sort restarts pagination (see SortDirection).
+    sortBy: HostSortField = CREATED_AT
+    sortDirection: SortDirection = DESC
     first: Int = 20
     after: String
     last: Int
@@ -5117,6 +5130,22 @@ enum SortDirection {
   DESC
 }
 
+# Sortable columns for the ` + "`" + `users` + "`" + ` query. Only the columns the UI exposes as
+# sortable are listed; the default (and the historical order) is CREATED_AT
+# descending. USERNAME sorts case-insensitively.
+enum UserSortField {
+  USERNAME
+  CREATED_AT
+}
+
+# Sortable columns for the ` + "`" + `operations` + "`" + ` query. Only the columns the UI exposes
+# as sortable are listed; the default (and the historical order) is CREATED_AT
+# descending. NAME sorts case-insensitively.
+enum OperationSortField {
+  NAME
+  CREATED_AT
+}
+
 type UserEdge {
   node: User!                # The actual user object
   cursor: String!            # Opaque cursor for this user's position
@@ -5190,6 +5219,10 @@ type Query {
   # - search: optional text filter (matches username and roles)
   users(
     search: String
+    # Sort column + direction. Cursors are minted per sort mode, so
+    # changing the sort restarts pagination (see SortDirection).
+    sortBy: UserSortField = CREATED_AT
+    sortDirection: SortDirection = DESC
     first: Int = 20
     after: String
     last: Int
@@ -5209,6 +5242,10 @@ type Query {
   # operations returns a paginated, searchable list of all operations.
   operations(
     search: String
+    # Sort column + direction. Cursors are minted per sort mode, so
+    # changing the sort restarts pagination (see SortDirection).
+    sortBy: OperationSortField = CREATED_AT
+    sortDirection: SortDirection = DESC
     first: Int = 20
     after: String
     last: Int
@@ -7453,26 +7490,36 @@ func (ec *executionContext) field_Query_hosts_args(ctx context.Context, rawArgs 
 		return nil, err
 	}
 	args["search"] = arg1
-	arg2, err := graphql.ProcessArgField(ctx, rawArgs, "first", ec.unmarshalOInt2ᚖint)
+	arg2, err := graphql.ProcessArgField(ctx, rawArgs, "sortBy", ec.unmarshalOHostSortField2ᚖgithubᚗcomᚋvibeᚑc2ᚋvibeᚑc2ᚑcoreᚋcoreᚋpkgᚋgraphqlᚋmodelᚐHostSortField)
 	if err != nil {
 		return nil, err
 	}
-	args["first"] = arg2
-	arg3, err := graphql.ProcessArgField(ctx, rawArgs, "after", ec.unmarshalOString2ᚖstring)
+	args["sortBy"] = arg2
+	arg3, err := graphql.ProcessArgField(ctx, rawArgs, "sortDirection", ec.unmarshalOSortDirection2ᚖgithubᚗcomᚋvibeᚑc2ᚋvibeᚑc2ᚑcoreᚋcoreᚋpkgᚋgraphqlᚋmodelᚐSortDirection)
 	if err != nil {
 		return nil, err
 	}
-	args["after"] = arg3
-	arg4, err := graphql.ProcessArgField(ctx, rawArgs, "last", ec.unmarshalOInt2ᚖint)
+	args["sortDirection"] = arg3
+	arg4, err := graphql.ProcessArgField(ctx, rawArgs, "first", ec.unmarshalOInt2ᚖint)
 	if err != nil {
 		return nil, err
 	}
-	args["last"] = arg4
-	arg5, err := graphql.ProcessArgField(ctx, rawArgs, "before", ec.unmarshalOString2ᚖstring)
+	args["first"] = arg4
+	arg5, err := graphql.ProcessArgField(ctx, rawArgs, "after", ec.unmarshalOString2ᚖstring)
 	if err != nil {
 		return nil, err
 	}
-	args["before"] = arg5
+	args["after"] = arg5
+	arg6, err := graphql.ProcessArgField(ctx, rawArgs, "last", ec.unmarshalOInt2ᚖint)
+	if err != nil {
+		return nil, err
+	}
+	args["last"] = arg6
+	arg7, err := graphql.ProcessArgField(ctx, rawArgs, "before", ec.unmarshalOString2ᚖstring)
+	if err != nil {
+		return nil, err
+	}
+	args["before"] = arg7
 	return args, nil
 }
 
@@ -7676,26 +7723,36 @@ func (ec *executionContext) field_Query_operations_args(ctx context.Context, raw
 		return nil, err
 	}
 	args["search"] = arg0
-	arg1, err := graphql.ProcessArgField(ctx, rawArgs, "first", ec.unmarshalOInt2ᚖint)
+	arg1, err := graphql.ProcessArgField(ctx, rawArgs, "sortBy", ec.unmarshalOOperationSortField2ᚖgithubᚗcomᚋvibeᚑc2ᚋvibeᚑc2ᚑcoreᚋcoreᚋpkgᚋgraphqlᚋmodelᚐOperationSortField)
 	if err != nil {
 		return nil, err
 	}
-	args["first"] = arg1
-	arg2, err := graphql.ProcessArgField(ctx, rawArgs, "after", ec.unmarshalOString2ᚖstring)
+	args["sortBy"] = arg1
+	arg2, err := graphql.ProcessArgField(ctx, rawArgs, "sortDirection", ec.unmarshalOSortDirection2ᚖgithubᚗcomᚋvibeᚑc2ᚋvibeᚑc2ᚑcoreᚋcoreᚋpkgᚋgraphqlᚋmodelᚐSortDirection)
 	if err != nil {
 		return nil, err
 	}
-	args["after"] = arg2
-	arg3, err := graphql.ProcessArgField(ctx, rawArgs, "last", ec.unmarshalOInt2ᚖint)
+	args["sortDirection"] = arg2
+	arg3, err := graphql.ProcessArgField(ctx, rawArgs, "first", ec.unmarshalOInt2ᚖint)
 	if err != nil {
 		return nil, err
 	}
-	args["last"] = arg3
-	arg4, err := graphql.ProcessArgField(ctx, rawArgs, "before", ec.unmarshalOString2ᚖstring)
+	args["first"] = arg3
+	arg4, err := graphql.ProcessArgField(ctx, rawArgs, "after", ec.unmarshalOString2ᚖstring)
 	if err != nil {
 		return nil, err
 	}
-	args["before"] = arg4
+	args["after"] = arg4
+	arg5, err := graphql.ProcessArgField(ctx, rawArgs, "last", ec.unmarshalOInt2ᚖint)
+	if err != nil {
+		return nil, err
+	}
+	args["last"] = arg5
+	arg6, err := graphql.ProcessArgField(ctx, rawArgs, "before", ec.unmarshalOString2ᚖstring)
+	if err != nil {
+		return nil, err
+	}
+	args["before"] = arg6
 	return args, nil
 }
 
@@ -8003,26 +8060,36 @@ func (ec *executionContext) field_Query_users_args(ctx context.Context, rawArgs 
 		return nil, err
 	}
 	args["search"] = arg0
-	arg1, err := graphql.ProcessArgField(ctx, rawArgs, "first", ec.unmarshalOInt2ᚖint)
+	arg1, err := graphql.ProcessArgField(ctx, rawArgs, "sortBy", ec.unmarshalOUserSortField2ᚖgithubᚗcomᚋvibeᚑc2ᚋvibeᚑc2ᚑcoreᚋcoreᚋpkgᚋgraphqlᚋmodelᚐUserSortField)
 	if err != nil {
 		return nil, err
 	}
-	args["first"] = arg1
-	arg2, err := graphql.ProcessArgField(ctx, rawArgs, "after", ec.unmarshalOString2ᚖstring)
+	args["sortBy"] = arg1
+	arg2, err := graphql.ProcessArgField(ctx, rawArgs, "sortDirection", ec.unmarshalOSortDirection2ᚖgithubᚗcomᚋvibeᚑc2ᚋvibeᚑc2ᚑcoreᚋcoreᚋpkgᚋgraphqlᚋmodelᚐSortDirection)
 	if err != nil {
 		return nil, err
 	}
-	args["after"] = arg2
-	arg3, err := graphql.ProcessArgField(ctx, rawArgs, "last", ec.unmarshalOInt2ᚖint)
+	args["sortDirection"] = arg2
+	arg3, err := graphql.ProcessArgField(ctx, rawArgs, "first", ec.unmarshalOInt2ᚖint)
 	if err != nil {
 		return nil, err
 	}
-	args["last"] = arg3
-	arg4, err := graphql.ProcessArgField(ctx, rawArgs, "before", ec.unmarshalOString2ᚖstring)
+	args["first"] = arg3
+	arg4, err := graphql.ProcessArgField(ctx, rawArgs, "after", ec.unmarshalOString2ᚖstring)
 	if err != nil {
 		return nil, err
 	}
-	args["before"] = arg4
+	args["after"] = arg4
+	arg5, err := graphql.ProcessArgField(ctx, rawArgs, "last", ec.unmarshalOInt2ᚖint)
+	if err != nil {
+		return nil, err
+	}
+	args["last"] = arg5
+	arg6, err := graphql.ProcessArgField(ctx, rawArgs, "before", ec.unmarshalOString2ᚖstring)
+	if err != nil {
+		return nil, err
+	}
+	args["before"] = arg6
 	return args, nil
 }
 
@@ -17701,7 +17768,7 @@ func (ec *executionContext) _Query_users(ctx context.Context, field graphql.Coll
 		ec.fieldContext_Query_users,
 		func(ctx context.Context) (any, error) {
 			fc := graphql.GetFieldContext(ctx)
-			return ec.Resolvers.Query().Users(ctx, fc.Args["search"].(*string), fc.Args["first"].(*int), fc.Args["after"].(*string), fc.Args["last"].(*int), fc.Args["before"].(*string))
+			return ec.Resolvers.Query().Users(ctx, fc.Args["search"].(*string), fc.Args["sortBy"].(*model.UserSortField), fc.Args["sortDirection"].(*model.SortDirection), fc.Args["first"].(*int), fc.Args["after"].(*string), fc.Args["last"].(*int), fc.Args["before"].(*string))
 		},
 		func(ctx context.Context, next graphql.Resolver) graphql.Resolver {
 			directive0 := next
@@ -17906,7 +17973,7 @@ func (ec *executionContext) _Query_operations(ctx context.Context, field graphql
 		ec.fieldContext_Query_operations,
 		func(ctx context.Context) (any, error) {
 			fc := graphql.GetFieldContext(ctx)
-			return ec.Resolvers.Query().Operations(ctx, fc.Args["search"].(*string), fc.Args["first"].(*int), fc.Args["after"].(*string), fc.Args["last"].(*int), fc.Args["before"].(*string))
+			return ec.Resolvers.Query().Operations(ctx, fc.Args["search"].(*string), fc.Args["sortBy"].(*model.OperationSortField), fc.Args["sortDirection"].(*model.SortDirection), fc.Args["first"].(*int), fc.Args["after"].(*string), fc.Args["last"].(*int), fc.Args["before"].(*string))
 		},
 		func(ctx context.Context, next graphql.Resolver) graphql.Resolver {
 			directive0 := next
@@ -18911,7 +18978,7 @@ func (ec *executionContext) _Query_hosts(ctx context.Context, field graphql.Coll
 		ec.fieldContext_Query_hosts,
 		func(ctx context.Context) (any, error) {
 			fc := graphql.GetFieldContext(ctx)
-			return ec.Resolvers.Query().Hosts(ctx, fc.Args["operationId"].(string), fc.Args["search"].(*string), fc.Args["first"].(*int), fc.Args["after"].(*string), fc.Args["last"].(*int), fc.Args["before"].(*string))
+			return ec.Resolvers.Query().Hosts(ctx, fc.Args["operationId"].(string), fc.Args["search"].(*string), fc.Args["sortBy"].(*model.HostSortField), fc.Args["sortDirection"].(*model.SortDirection), fc.Args["first"].(*int), fc.Args["after"].(*string), fc.Args["last"].(*int), fc.Args["before"].(*string))
 		},
 		func(ctx context.Context, next graphql.Resolver) graphql.Resolver {
 			directive0 := next
@@ -41751,6 +41818,22 @@ func (ec *executionContext) marshalOHost2ᚖgithubᚗcomᚋvibeᚑc2ᚋvibeᚑc2
 	return ec._Host(ctx, sel, v)
 }
 
+func (ec *executionContext) unmarshalOHostSortField2ᚖgithubᚗcomᚋvibeᚑc2ᚋvibeᚑc2ᚑcoreᚋcoreᚋpkgᚋgraphqlᚋmodelᚐHostSortField(ctx context.Context, v any) (*model.HostSortField, error) {
+	if v == nil {
+		return nil, nil
+	}
+	var res = new(model.HostSortField)
+	err := res.UnmarshalGQL(v)
+	return res, graphql.ErrorOnPath(ctx, err)
+}
+
+func (ec *executionContext) marshalOHostSortField2ᚖgithubᚗcomᚋvibeᚑc2ᚋvibeᚑc2ᚑcoreᚋcoreᚋpkgᚋgraphqlᚋmodelᚐHostSortField(ctx context.Context, sel ast.SelectionSet, v *model.HostSortField) graphql.Marshaler {
+	if v == nil {
+		return graphql.Null
+	}
+	return v
+}
+
 func (ec *executionContext) unmarshalOID2ᚕstringᚄ(ctx context.Context, v any) ([]string, error) {
 	if v == nil {
 		return nil, nil
@@ -41876,6 +41959,22 @@ func (ec *executionContext) unmarshalOOperationRole2ᚖgithubᚗcomᚋvibeᚑc2�
 }
 
 func (ec *executionContext) marshalOOperationRole2ᚖgithubᚗcomᚋvibeᚑc2ᚋvibeᚑc2ᚑcoreᚋcoreᚋpkgᚋmodelsᚐOperationRole(ctx context.Context, sel ast.SelectionSet, v *models.OperationRole) graphql.Marshaler {
+	if v == nil {
+		return graphql.Null
+	}
+	return v
+}
+
+func (ec *executionContext) unmarshalOOperationSortField2ᚖgithubᚗcomᚋvibeᚑc2ᚋvibeᚑc2ᚑcoreᚋcoreᚋpkgᚋgraphqlᚋmodelᚐOperationSortField(ctx context.Context, v any) (*model.OperationSortField, error) {
+	if v == nil {
+		return nil, nil
+	}
+	var res = new(model.OperationSortField)
+	err := res.UnmarshalGQL(v)
+	return res, graphql.ErrorOnPath(ctx, err)
+}
+
+func (ec *executionContext) marshalOOperationSortField2ᚖgithubᚗcomᚋvibeᚑc2ᚋvibeᚑc2ᚑcoreᚋcoreᚋpkgᚋgraphqlᚋmodelᚐOperationSortField(ctx context.Context, sel ast.SelectionSet, v *model.OperationSortField) graphql.Marshaler {
 	if v == nil {
 		return graphql.Null
 	}
@@ -42110,6 +42209,22 @@ func (ec *executionContext) marshalOUser2ᚖgithubᚗcomᚋvibeᚑc2ᚋvibeᚑc2
 		return graphql.Null
 	}
 	return ec._User(ctx, sel, v)
+}
+
+func (ec *executionContext) unmarshalOUserSortField2ᚖgithubᚗcomᚋvibeᚑc2ᚋvibeᚑc2ᚑcoreᚋcoreᚋpkgᚋgraphqlᚋmodelᚐUserSortField(ctx context.Context, v any) (*model.UserSortField, error) {
+	if v == nil {
+		return nil, nil
+	}
+	var res = new(model.UserSortField)
+	err := res.UnmarshalGQL(v)
+	return res, graphql.ErrorOnPath(ctx, err)
+}
+
+func (ec *executionContext) marshalOUserSortField2ᚖgithubᚗcomᚋvibeᚑc2ᚋvibeᚑc2ᚑcoreᚋcoreᚋpkgᚋgraphqlᚋmodelᚐUserSortField(ctx context.Context, sel ast.SelectionSet, v *model.UserSortField) graphql.Marshaler {
+	if v == nil {
+		return graphql.Null
+	}
+	return v
 }
 
 func (ec *executionContext) marshalOWikiDocument2ᚖgithubᚗcomᚋvibeᚑc2ᚋvibeᚑc2ᚑcoreᚋcoreᚋpkgᚋmodelsᚐWikiDocument(ctx context.Context, sel ast.SelectionSet, v *models.WikiDocument) graphql.Marshaler {

@@ -28,13 +28,19 @@ export function OperationsPage() {
   useOperationMemberChangedSubscription()
 
   const search = useOperationStore((s) => s.search)
+  const sort = useOperationStore((s) => s.sort)
+  const setSort = useOperationStore((s) => s.setSort)
   const {
     data,
     isLoading,
     isFetchingNextPage,
     hasNextPage,
     fetchNextPage,
-  } = useInfiniteOperations({ search: search || null })
+  } = useInfiniteOperations({
+    search: search || null,
+    sortBy: sort.field,
+    sortDirection: sort.direction,
+  })
 
   const operations = useConnectionNodes(data, (p) => p.operations)
 
@@ -47,6 +53,8 @@ export function OperationsPage() {
         isFetchingNextPage={isFetchingNextPage}
         hasNextPage={hasNextPage}
         fetchNextPage={fetchNextPage}
+        sort={sort}
+        onSortChange={setSort}
       />
       <CreateOperationDialog />
       <EditOperationDialog />

@@ -19,12 +19,55 @@ var ErrLastAdmin = errors.New("cannot remove or demote the last admin")
 
 const operationCollection = "operations"
 
+// OperationSortField identifies a Mongo column the operations list can be
+// ordered by. The string value is the field path used in the sort and in the
+// keyset cursor filter.
+type OperationSortField string
+
+const (
+	OperationSortFieldCreatedAt OperationSortField = "createAt"
+	OperationSortFieldName      OperationSortField = "name"
+)
+
+// OperationSort bundles the sort column and direction for the operations list
+// query. The zero value is NOT valid — use DefaultOperationSort() (createAt
+// descending, the historical order) when the caller doesn't choose.
+type OperationSort struct {
+	Field     OperationSortField
+	Ascending bool
+}
+
+// DefaultOperationSort returns the historical list order: newest first.
+func DefaultOperationSort() OperationSort {
+	return OperationSort{Field: OperationSortFieldCreatedAt, Ascending: false}
+}
+
+// SortKey maps the operation sort to the pagination layer's representation.
+// name is a string column, so its cursors carry the string sort key; createAt
+// keeps the legacy time-keyed cursor shape.
+func (s OperationSort) SortKey() pagination.SortKey {
+	return pagination.SortKey{
+		Field:     string(s.Field),
+		Ascending: s.Ascending,
+		String:    s.Field != OperationSortFieldCreatedAt,
+	}
+}
+
+// Cursor encodes the edge cursor for an operation row under this sort — the
+// value of the active sort column plus the _id tiebreaker.
+func (s OperationSort) Cursor(op *models.Operation) string {
+	if s.Field == OperationSortFieldName {
+		return pagination.EncodeStringCursor(op.Name, op.Id)
+	}
+	return pagination.EncodeCursor(op.CreateAt, op.Id)
+}
+
 // IOperationRepository defines the interface for operation database operations.
 type IOperationRepository interface {
 	Create(ctx context.Context, op *models.Operation) error
 	FindByID(ctx context.Context, id uuid.UUID) (models.Operation, error)
 	FindAll(ctx context.Context, search string, offset, limit int64, memberID *uuid.UUID) ([]models.Operation, error)
-	FindWithCursor(ctx context.Context, search string, cursor *pagination.Cursor, limit int64, forward bool, memberID *uuid.UUID) ([]models.Operation, error)
+	FindWithCursor(ctx context.Context, search string, sort OperationSort, cursor *pagination.Cursor, limit int64, forward bool, memberID *uuid.UUID) ([]models.Operation, error)
 	Count(ctx context.Context, search string, memberID *uuid.UUID) (int64, error)
 	Update(ctx context.Context, op *models.Operation, updates map[string]interface{}) error
 	Delete(ctx context.Context, op *models.Operation) error
@@ -53,6 +96,12 @@ func NewOperationRepository(db database.Database) IOperationRepository {
 		{Key: []string{"name"}, IndexOptions: new(options.IndexOptions).SetUnique(true)},
 		{Key: []string{"members.user_id"}},
 		{Key: []string{"-createAt", "-_id"}}, // Supports cursor-based pagination
+		// Collated index backing the name column sort. The unique name index
+		// above can't serve it — its collation differs, so Mongo would sort
+		// case-sensitively. One index serves both directions (a reversed sort
+		// walks the index backwards); see the credential repository's index
+		// comment for the full rationale.
+		{Key: []string{"name", "_id"}, IndexOptions: new(options.IndexOptions).SetCollation(caseInsensitiveSortCollation)},
 	})
 
 	return &operationRepository{coll: coll}
@@ -92,16 +141,25 @@ func (r *operationRepository) FindAll(ctx context.Context, search string, offset
 	return ops, err
 }
 
-func (r *operationRepository) FindWithCursor(ctx context.Context, search string, cursor *pagination.Cursor, limit int64, forward bool, memberID *uuid.UUID) ([]models.Operation, error) {
+func (r *operationRepository) FindWithCursor(ctx context.Context, search string, sort OperationSort, cursor *pagination.Cursor, limit int64, forward bool, memberID *uuid.UUID) ([]models.Operation, error) {
+	key := sort.SortKey()
+	if err := key.ValidateCursor(cursor); err != nil {
+		return nil, err
+	}
+
 	filter := buildOperationSearchFilter(search)
 	if memberID != nil {
 		filter["members.user_id"] = *memberID
 	}
-	filter = pagination.ApplyCursorFilter(filter, cursor, forward)
+
+	q := r.coll.Find(ctx, pagination.ApplyCursorFilterKey(filter, cursor, forward, key))
+	if key.String {
+		q = q.Collation(caseInsensitiveSortCollation)
+	}
 
 	var ops []models.Operation
-	err := r.coll.Find(ctx, filter).
-		Sort(pagination.SortFields(forward)...).
+	err := q.
+		Sort(pagination.SortFieldsKey(forward, key)...).
 		Limit(limit).
 		All(&ops)
 

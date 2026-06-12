@@ -42,10 +42,19 @@ export const HostFields = graphql(`
 `)
 
 export const HostsQuery = graphql(`
-  query Hosts($operationId: ID!, $search: String, $first: Int, $after: String) {
+  query Hosts(
+    $operationId: ID!
+    $search: String
+    $sortBy: HostSortField
+    $sortDirection: SortDirection
+    $first: Int
+    $after: String
+  ) {
     hosts(
       operationId: $operationId
       search: $search
+      sortBy: $sortBy
+      sortDirection: $sortDirection
       first: $first
       after: $after
     ) {

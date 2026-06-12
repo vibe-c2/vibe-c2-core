@@ -1,6 +1,7 @@
 import { create } from "zustand"
 import { persist, createJSONStorage } from "zustand/middleware"
-import type { HostFieldsFragment } from "@/graphql/gql/graphql"
+import type { HostFieldsFragment, HostSortField } from "@/graphql/gql/graphql"
+import type { DataTableSort } from "@/lib/data-table-sort"
 
 /**
  * UI-only state for the Findings → Hosts surface.
@@ -21,6 +22,11 @@ import type { HostFieldsFragment } from "@/graphql/gql/graphql"
 export interface HostFilters {
   search: string
 }
+
+// The active column sort for the hosts table. Field values are the GraphQL
+// HostSortField enum, so the sort passes straight into the list query
+// variables.
+export type HostSort = DataTableSort<HostSortField>
 
 // The Hosts tab renders the same data two ways: the CRUD table and a derived
 // network topology. Persisted (with topologyRelation) so a reload lands the
@@ -47,6 +53,10 @@ function isTopologyRelation(v: unknown): v is TopologyRelation {
 
 interface HostStoreState {
   filters: HostFilters
+  // Kept outside `filters` on purpose: resetFilters clears what narrows the
+  // result set, while the sort merely reorders it and survives a reset.
+  // Session-scoped (not persisted).
+  sort: HostSort
   selected: HostFieldsFragment | null
   view: HostView
   // Topology-only: which relation type builds the graph. Lives here (not
@@ -64,6 +74,7 @@ interface HostStoreState {
   deleteDialogOpen: boolean
 
   setSearch: (search: string) => void
+  setSort: (sort: HostSort) => void
   setView: (view: HostView) => void
   setTopologyRelation: (relation: TopologyRelation) => void
   setHideWellKnownIdentities: (hide: boolean) => void
@@ -80,10 +91,17 @@ const defaultFilters: HostFilters = {
   search: "",
 }
 
+// Matches the server default (and the historical order): newest first.
+const defaultSort: HostSort = {
+  field: "CREATED_AT",
+  direction: "DESC",
+}
+
 export const useHostStore = create<HostStoreState>()(
   persist(
     (set) => ({
       filters: defaultFilters,
+      sort: defaultSort,
       selected: null,
       view: "table",
       topologyRelation: "routes",
@@ -93,6 +111,7 @@ export const useHostStore = create<HostStoreState>()(
       deleteDialogOpen: false,
 
       setSearch: (search) => set((s) => ({ filters: { ...s.filters, search } })),
+      setSort: (sort) => set({ sort }),
       setView: (view) => set({ view }),
       setTopologyRelation: (topologyRelation) => set({ topologyRelation }),
       setHideWellKnownIdentities: (hideWellKnownIdentities) =>

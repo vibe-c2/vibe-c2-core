@@ -1,12 +1,27 @@
 import { create } from "zustand"
+import type { OperationSortField } from "@/graphql/gql/graphql"
+import type { DataTableSort } from "@/lib/data-table-sort"
 
 interface SelectedOperation {
   id: string
   name: string
 }
 
+// The active column sort for the operations table. Field values are the
+// GraphQL OperationSortField enum, so the sort passes straight into the list
+// query variables.
+export type OperationSort = DataTableSort<OperationSortField>
+
+// Matches the server default (and the historical order): newest first.
+const defaultSort: OperationSort = {
+  field: "CREATED_AT",
+  direction: "DESC",
+}
+
 interface OperationStoreState {
   search: string
+  // Session-scoped column sort for the operations table.
+  sort: OperationSort
 
   // Selected operation for edit/delete/members actions
   selectedOperation: SelectedOperation | null
@@ -19,6 +34,7 @@ interface OperationStoreState {
 
   // Actions
   setSearch: (search: string) => void
+  setSort: (sort: OperationSort) => void
   openCreateDialog: () => void
   openEditDialog: (op: SelectedOperation) => void
   openDeleteDialog: (op: SelectedOperation) => void
@@ -28,6 +44,7 @@ interface OperationStoreState {
 
 export const useOperationStore = create<OperationStoreState>((set) => ({
   search: "",
+  sort: defaultSort,
 
   selectedOperation: null,
 
@@ -37,6 +54,7 @@ export const useOperationStore = create<OperationStoreState>((set) => ({
   membersDialogOpen: false,
 
   setSearch: (search) => set({ search }),
+  setSort: (sort) => set({ sort }),
 
   openCreateDialog: () => set({ createDialogOpen: true }),
   openEditDialog: (op) => set({ editDialogOpen: true, selectedOperation: op }),

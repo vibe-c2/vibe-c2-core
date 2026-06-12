@@ -27,7 +27,7 @@ type IHostResolver interface {
 
 	// Queries
 	Host(ctx context.Context, id string) (*models.Host, error)
-	Hosts(ctx context.Context, operationID string, search *string, first *int, after *string, last *int, before *string) (*model.HostConnection, error)
+	Hosts(ctx context.Context, operationID string, search *string, sortBy *model.HostSortField, sortDirection *model.SortDirection, first *int, after *string, last *int, before *string) (*model.HostConnection, error)
 
 	// Field resolvers for Host type
 	ID(ctx context.Context, obj *models.Host) (string, error)
@@ -276,7 +276,7 @@ func (r *hostResolver) Host(ctx context.Context, id string) (*models.Host, error
 
 // Hosts returns a cursor-paginated list of hosts for an operation.
 // Requires at least viewer role in the operation.
-func (r *hostResolver) Hosts(ctx context.Context, operationID string, search *string, first *int, after *string, last *int, before *string) (*model.HostConnection, error) {
+func (r *hostResolver) Hosts(ctx context.Context, operationID string, search *string, sortBy *model.HostSortField, sortDirection *model.SortDirection, first *int, after *string, last *int, before *string) (*model.HostConnection, error) {
 	opUID, err := uuid.Parse(operationID)
 	if err != nil {
 		return nil, fmt.Errorf("invalid operation ID: %w", err)
@@ -291,6 +291,11 @@ func (r *hostResolver) Hosts(ctx context.Context, operationID string, search *st
 		return nil, fmt.Errorf("invalid pagination args: %w", err)
 	}
 
+	sortSpec, err := mapHostSort(sortBy, sortDirection)
+	if err != nil {
+		return nil, err
+	}
+
 	filter := repository.HostFilter{}
 	if search != nil {
 		filter.Search = strings.TrimSpace(*search)
@@ -301,7 +306,7 @@ func (r *hostResolver) Hosts(ctx context.Context, operationID string, search *st
 		return nil, fmt.Errorf("failed to count hosts: %w", err)
 	}
 
-	hosts, err := r.hostRepo.FindByOperationIDWithCursor(ctx, opUID, filter, args.Cursor, args.Limit+1, args.Forward)
+	hosts, err := r.hostRepo.FindByOperationIDWithCursor(ctx, opUID, filter, sortSpec, args.Cursor, args.Limit+1, args.Forward)
 	if err != nil {
 		return nil, fmt.Errorf("failed to list hosts: %w", err)
 	}
@@ -313,10 +318,9 @@ func (r *hostResolver) Hosts(ctx context.Context, operationID string, search *st
 
 	edges := make([]*model.HostEdge, len(hosts))
 	for i := range hosts {
-		cursor := pagination.EncodeCursor(hosts[i].CreateAt, hosts[i].Id)
 		edges[i] = &model.HostEdge{
 			Node:   &hosts[i],
-			Cursor: cursor,
+			Cursor: sortSpec.Cursor(&hosts[i]),
 		}
 	}
 
@@ -382,6 +386,39 @@ func (r *hostResolver) UpdatedAt(ctx context.Context, obj *models.Host) (string,
 
 // --- helpers ---
 // strDeref lives in helpers.go.
+
+// mapHostSort converts the GraphQL sort args to the repository's sort spec.
+// Nil args fall back to the default (createAt descending) — gqlgen fills the
+// schema defaults, so nils only appear when a client sends explicit nulls.
+func mapHostSort(sortBy *model.HostSortField, sortDirection *model.SortDirection) (repository.HostSort, error) {
+	sort := repository.DefaultHostSort()
+
+	if sortBy != nil {
+		switch *sortBy {
+		case model.HostSortFieldHostname:
+			sort.Field = repository.HostSortFieldHostname
+		case model.HostSortFieldOs:
+			sort.Field = repository.HostSortFieldOS
+		case model.HostSortFieldCreatedAt:
+			sort.Field = repository.HostSortFieldCreatedAt
+		default:
+			return repository.HostSort{}, fmt.Errorf("invalid host sort field: %s", *sortBy)
+		}
+	}
+
+	if sortDirection != nil {
+		switch *sortDirection {
+		case model.SortDirectionAsc:
+			sort.Ascending = true
+		case model.SortDirectionDesc:
+			sort.Ascending = false
+		default:
+			return repository.HostSort{}, fmt.Errorf("invalid sort direction: %s", *sortDirection)
+		}
+	}
+
+	return sort, nil
+}
 
 // normalizeInterfaces trims each interface, validates that every address parses
 // as CIDR (the prefix length is load-bearing for topology derivation), and

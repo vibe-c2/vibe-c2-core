@@ -118,7 +118,7 @@ func (f *fakeUserRepo) Count(_ context.Context, _ string) (int64, error) {
 func (f *fakeUserRepo) FindAll(_ context.Context, _ string, _ int64, _ int64) ([]models.User, error) {
 	return nil, nil
 }
-func (f *fakeUserRepo) FindWithCursor(_ context.Context, _ string, _ *pagination.Cursor, _ int64, _ bool) ([]models.User, error) {
+func (f *fakeUserRepo) FindWithCursor(_ context.Context, _ string, _ repository.UserSort, _ *pagination.Cursor, _ int64, _ bool) ([]models.User, error) {
 	return nil, nil
 }
 func (f *fakeUserRepo) FindByID(_ context.Context, id uuid.UUID) (models.User, error) {
