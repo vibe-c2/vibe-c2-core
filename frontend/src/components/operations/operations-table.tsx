@@ -1,5 +1,10 @@
-import { Virtuoso } from "react-virtuoso"
-import { SwordsIcon, EllipsisIcon, LoaderIcon, PencilIcon, TrashIcon, UsersIcon } from "lucide-react"
+import {
+  SwordsIcon,
+  EllipsisIcon,
+  PencilIcon,
+  TrashIcon,
+  UsersIcon,
+} from "lucide-react"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import {
@@ -8,7 +13,10 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
-import { Skeleton } from "@/components/ui/skeleton"
+import {
+  VirtualizedDataTable,
+  dataTableRowClass,
+} from "@/components/ui/virtualized-data-table"
 import { useAuthStore } from "@/stores/auth"
 import { useOperationStore } from "@/stores/operations"
 import { useScopedOperationStore } from "@/stores/scoped-operation"
@@ -48,9 +56,6 @@ export function OperationsTable({
   const hasActions = isAppAdmin || canManageMembers
   const gridCols = hasActions ? GRID_COLS : GRID_COLS_NO_ACTIONS
 
-  const showEmpty = !isLoading && operations.length === 0
-  const showList = !isLoading && operations.length > 0
-
   // Check if the current user is an admin of the given operation
   function isOperationAdmin(op: OperationFieldsFragment) {
     return op.members.some(
@@ -59,147 +64,114 @@ export function OperationsTable({
   }
 
   return (
-    <div className="rounded-lg border bg-card flex-1 flex flex-col min-h-0 overflow-hidden">
-      {/* Fixed header */}
-      <div className="border-b bg-muted/50 shrink-0">
-        <div className={`grid ${gridCols} gap-4 px-4 py-2 text-sm font-medium`}>
+    <VirtualizedDataTable
+      items={operations}
+      isLoading={isLoading}
+      isFetchingNextPage={isFetchingNextPage}
+      hasNextPage={hasNextPage}
+      fetchNextPage={fetchNextPage}
+      gridCols={gridCols}
+      entityNoun="operations"
+      header={
+        <>
           <div />
           <div>Name</div>
           <div>Description</div>
           <div>Members</div>
           <div>Created</div>
           {hasActions && <div />}
-        </div>
-      </div>
+        </>
+      }
+      emptyState={
+        <>
+          <SwordsIcon className="size-8 opacity-50" />
+          <p className="text-sm">No operations found.</p>
+        </>
+      }
+      renderRow={(op) => {
+        const canEdit = isAppAdmin || isOperationAdmin(op)
 
-      {/* Body */}
-      {isLoading && (
-        <div className="p-4 space-y-3">
-          {Array.from({ length: 5 }).map((_, i) => (
-            <Skeleton key={i} className="h-12 w-full" />
-          ))}
-        </div>
-      )}
+        const isScoped = scopedOperation?.id === op.id
 
-      {showEmpty && (
-        <div className="flex items-center justify-center py-12 text-muted-foreground">
-          No operations found.
-        </div>
-      )}
-
-      {showList && (
-        <div className="flex flex-col flex-1 min-h-0">
-          <Virtuoso
-            data={operations}
-            endReached={() => {
-              if (hasNextPage && !isFetchingNextPage) fetchNextPage()
-            }}
-            overscan={200}
-            style={{ height: "100%" }}
-            className="flex-1 min-h-0"
-            itemContent={(_index, op) => {
-              const canEdit = isAppAdmin || isOperationAdmin(op)
-
-              const isScoped = scopedOperation?.id === op.id
-
-              return (
-                <div
-                  className={`grid ${gridCols} gap-4 px-4 py-2 border-b hover:bg-muted/50 transition-colors items-center text-sm ${isScoped ? "bg-primary/5 border-l-2 border-l-primary" : ""}`}
-                >
-                  <div>
-                    <Button
-                      variant="ghost"
-                      size="icon-sm"
-                      onClick={() =>
-                        isScoped
-                          ? unscopeOperation()
-                          : scopeOperation({ id: op.id, name: op.name, description: op.description })
-                      }
-                      className={isScoped ? "text-primary" : "text-muted-foreground"}
-                      title={isScoped ? "Clear active operation" : "Set as active operation"}
-                    >
-                      <SwordsIcon className="size-4" />
-                    </Button>
-                  </div>
-                  <div className="font-medium truncate">{op.name}</div>
-                  <div className="truncate text-muted-foreground">
-                    {op.description || "\u2014"}
-                  </div>
-                  <div>
-                    <Badge variant="secondary">{op.members.length}</Badge>
-                  </div>
-                  <div className="text-sm text-muted-foreground">
-                    <FormattedDateTimeText date={op.createdAt} />
-                  </div>
-                  {hasActions && (
-                    <div>
-                      <DropdownMenu>
-                        <DropdownMenuTrigger
-                          render={<Button variant="ghost" size="icon-sm" />}
-                        >
-                          <EllipsisIcon className="size-4" />
-                        </DropdownMenuTrigger>
-                        <DropdownMenuContent align="end">
-                          {canEdit && (
-                            <DropdownMenuItem
-                              onClick={() =>
-                                openEditDialog({ id: op.id, name: op.name })
-                              }
-                            >
-                              <PencilIcon className="size-4" />
-                              Edit
-                            </DropdownMenuItem>
-                          )}
-                          {canManageMembers && (
-                            <DropdownMenuItem
-                              onClick={() =>
-                                openMembersDialog({ id: op.id, name: op.name })
-                              }
-                            >
-                              <UsersIcon className="size-4" />
-                              Members
-                            </DropdownMenuItem>
-                          )}
-                          {canDelete && (
-                            <DropdownMenuItem
-                              variant="destructive"
-                              onClick={() =>
-                                openDeleteDialog({ id: op.id, name: op.name })
-                              }
-                            >
-                              <TrashIcon className="size-4" />
-                              Delete
-                            </DropdownMenuItem>
-                          )}
-                        </DropdownMenuContent>
-                      </DropdownMenu>
-                    </div>
-                  )}
-                </div>
-              )
-            }}
-            components={{
-              Footer: () => {
-                if (isFetchingNextPage) {
-                  return (
-                    <div className="flex items-center justify-center py-4">
-                      <LoaderIcon className="size-4 animate-spin" />
-                    </div>
-                  )
+        return (
+          <div
+            className={dataTableRowClass(
+              gridCols,
+              isScoped ? "bg-primary/5 border-l-2 border-l-primary" : undefined,
+            )}
+          >
+            <div>
+              <Button
+                variant="ghost"
+                size="icon-sm"
+                onClick={() =>
+                  isScoped
+                    ? unscopeOperation()
+                    : scopeOperation({ id: op.id, name: op.name, description: op.description })
                 }
-                if (!hasNextPage && operations.length > 0) {
-                  return (
-                    <div className="flex items-center justify-center py-4 text-sm text-muted-foreground">
-                      No more operations to load
-                    </div>
-                  )
-                }
-                return null
-              },
-            }}
-          />
-        </div>
-      )}
-    </div>
+                className={isScoped ? "text-primary" : "text-muted-foreground"}
+                title={isScoped ? "Clear active operation" : "Set as active operation"}
+              >
+                <SwordsIcon className="size-4" />
+              </Button>
+            </div>
+            <div className="font-medium truncate">{op.name}</div>
+            <div className="truncate text-muted-foreground">
+              {op.description || "—"}
+            </div>
+            <div>
+              <Badge variant="secondary">{op.members.length}</Badge>
+            </div>
+            <div className="text-sm text-muted-foreground">
+              <FormattedDateTimeText date={op.createdAt} />
+            </div>
+            {hasActions && (
+              <div>
+                <DropdownMenu>
+                  <DropdownMenuTrigger
+                    render={<Button variant="ghost" size="icon-sm" />}
+                  >
+                    <EllipsisIcon className="size-4" />
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end">
+                    {canEdit && (
+                      <DropdownMenuItem
+                        onClick={() =>
+                          openEditDialog({ id: op.id, name: op.name })
+                        }
+                      >
+                        <PencilIcon className="size-4" />
+                        Edit
+                      </DropdownMenuItem>
+                    )}
+                    {canManageMembers && (
+                      <DropdownMenuItem
+                        onClick={() =>
+                          openMembersDialog({ id: op.id, name: op.name })
+                        }
+                      >
+                        <UsersIcon className="size-4" />
+                        Members
+                      </DropdownMenuItem>
+                    )}
+                    {canDelete && (
+                      <DropdownMenuItem
+                        variant="destructive"
+                        onClick={() =>
+                          openDeleteDialog({ id: op.id, name: op.name })
+                        }
+                      >
+                        <TrashIcon className="size-4" />
+                        Delete
+                      </DropdownMenuItem>
+                    )}
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              </div>
+            )}
+          </div>
+        )
+      }}
+    />
   )
 }

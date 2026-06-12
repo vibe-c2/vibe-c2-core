@@ -1,4 +1,4 @@
-import { useCallback, useMemo } from "react"
+import { useCallback } from "react"
 import { useDroppable } from "@dnd-kit/core"
 import { PlusIcon } from "lucide-react"
 import { Button } from "@/components/ui/button"
@@ -8,6 +8,7 @@ import { TaskCardContextMenu } from "@/components/tasks/task-card-context-menu"
 import { VirtualTaskList } from "@/components/tasks/virtual-task-list"
 import { doneDateGroup } from "@/components/tasks/done-date-groups"
 import { useInfiniteTasks } from "@/graphql/hooks/tasks"
+import { useConnectionNodes } from "@/hooks/use-connection-nodes"
 import { useTaskStore } from "@/stores/tasks"
 import type { TaskFieldsFragment, TaskStage } from "@/graphql/gql/graphql"
 
@@ -62,10 +63,7 @@ export function KanbanColumn({
     first: 30,
   })
 
-  const tasks = useMemo<TaskFieldsFragment[]>(
-    () => query.data?.pages.flatMap((p) => p.tasks.edges.map((e) => e.node)) ?? [],
-    [query.data],
-  )
+  const tasks = useConnectionNodes(query.data, (p) => p.tasks)
 
   // Server-side total — stable across pages, drives the column count
   // badge and also feeds the page-level "empty board" detection.

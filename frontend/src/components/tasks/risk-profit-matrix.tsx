@@ -1,7 +1,8 @@
 import { useMemo } from "react"
+import { useConnectionNodes } from "@/hooks/use-connection-nodes"
 import { useTaskStore } from "@/stores/tasks"
 import { cn } from "@/lib/utils"
-import type { TaskFieldsFragment, TaskStage } from "@/graphql/gql/graphql"
+import type { TaskStage } from "@/graphql/gql/graphql"
 import { TaskCard } from "@/components/tasks/task-card"
 import { TaskCardContextMenu } from "@/components/tasks/task-card-context-menu"
 import { VirtualTaskList } from "@/components/tasks/virtual-task-list"
@@ -142,10 +143,7 @@ function MatrixQuadrant({
     first: 30,
   })
 
-  const tasks = useMemo<TaskFieldsFragment[]>(
-    () => query.data?.pages.flatMap((p) => p.tasks.edges.map((e) => e.node)) ?? [],
-    [query.data],
-  )
+  const tasks = useConnectionNodes(query.data, (p) => p.tasks)
 
   const total = query.data?.pages[0]?.tasks.totalCount ?? 0
 

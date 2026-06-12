@@ -1,12 +1,12 @@
 import {
   useCallback,
   useEffect,
-  useMemo,
   useRef,
   useState,
   type KeyboardEvent as ReactKeyboardEvent,
   type MouseEvent as ReactMouseEvent,
 } from "react"
+import { useConnectionNodes } from "@/hooks/use-connection-nodes"
 import { Link, useNavigate } from "react-router"
 import { ClockIcon, XIcon } from "lucide-react"
 import { Dialog as DialogPrimitive } from "@base-ui/react/dialog"
@@ -92,10 +92,7 @@ function ModalBody({ operationId, isOpen, onClose }: ModalBodyProps) {
   const { data, isLoading, hasNextPage, fetchNextPage, isFetchingNextPage } =
     useWikiRecentDocuments({ operationId, sort, enabled: isOpen })
 
-  const hits = useMemo(
-    () => data?.pages.flatMap((p) => p.wikiDocuments.edges.map((e) => e.node)) ?? [],
-    [data],
-  )
+  const hits = useConnectionNodes(data, (p) => p.wikiDocuments)
   const total = data?.pages[0]?.wikiDocuments.totalCount ?? 0
 
   const [activeIndex, setActiveIndex] = useState(0)

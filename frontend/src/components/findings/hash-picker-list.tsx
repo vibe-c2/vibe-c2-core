@@ -1,4 +1,5 @@
-import { useEffect, useMemo, useRef, useState } from "react"
+import { useEffect, useRef, useState } from "react"
+import { useConnectionNodes } from "@/hooks/use-connection-nodes"
 import { HashIcon, SearchIcon } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
 import { Input } from "@/components/ui/input"
@@ -54,10 +55,7 @@ export function HashPickerList({
       first: 20,
     })
 
-  const hashes = useMemo(
-    () => data?.pages.flatMap((p) => p.hashes.edges.map((e) => e.node)) ?? [],
-    [data],
-  )
+  const hashes = useConnectionNodes(data, (p) => p.hashes)
 
   function onKeyDown(e: React.KeyboardEvent<HTMLInputElement>) {
     if (e.key === "ArrowDown") {

@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
+import { useConnectionNodes } from "@/hooks/use-connection-nodes"
 import { Virtuoso } from "react-virtuoso"
 import { CheckIcon, LoaderIcon, SearchIcon, SwordsIcon } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
@@ -36,12 +37,7 @@ export function OperationMultiSelect({ value, onChange }: OperationMultiSelectPr
   const { data, isLoading, isFetchingNextPage, hasNextPage, fetchNextPage } =
     useInfiniteOperations({ search: debouncedSearch || null, first: 20 })
 
-  const operations = useMemo(
-    () =>
-      data?.pages.flatMap((page) => page.operations.edges.map((e) => e.node)) ??
-      [],
-    [data],
-  )
+  const operations = useConnectionNodes(data, (p) => p.operations)
 
   // Cached operation metadata so we can render a friendly trigger label even
   // when the currently-selected ids aren't in the current search page.

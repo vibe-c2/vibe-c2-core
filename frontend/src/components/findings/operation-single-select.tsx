@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useMemo, useState } from "react"
+import { useCallback, useEffect, useState } from "react"
+import { useConnectionNodes } from "@/hooks/use-connection-nodes"
 import { Virtuoso } from "react-virtuoso"
 import { CheckIcon, LoaderIcon, SearchIcon, SwordsIcon } from "lucide-react"
 import { Button } from "@/components/ui/button"
@@ -46,12 +47,7 @@ export function OperationSinglePicker({
   const { data, isLoading, isFetchingNextPage, hasNextPage, fetchNextPage } =
     useInfiniteOperations({ search: debouncedSearch || null, first: 20 })
 
-  const operations = useMemo(
-    () =>
-      data?.pages.flatMap((page) => page.operations.edges.map((e) => e.node)) ??
-      [],
-    [data],
-  )
+  const operations = useConnectionNodes(data, (p) => p.operations)
 
   // Reset search when popover opens.
   const [lastOpen, setLastOpen] = useState(open)

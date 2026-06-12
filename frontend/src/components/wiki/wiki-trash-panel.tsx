@@ -1,4 +1,5 @@
-import { useMemo, useState } from "react"
+import { useState } from "react"
+import { useConnectionNodes } from "@/hooks/use-connection-nodes"
 import { Virtuoso } from "react-virtuoso"
 import { useQueryClient } from "@tanstack/react-query"
 import { LoaderIcon, RotateCcwIcon, Trash2Icon, TrashIcon } from "lucide-react"
@@ -100,10 +101,7 @@ export function WikiTrashPanel({ operationId }: WikiTrashPanelProps) {
   // restore button without disabling restore on every other row.
   const [probingId, setProbingId] = useState<string | null>(null)
 
-  const trashDocs = useMemo(
-    () => data?.pages.flatMap((p) => p.wikiDocumentTrash.edges.map((e) => e.node)) ?? [],
-    [data],
-  )
+  const trashDocs = useConnectionNodes(data, (p) => p.wikiDocumentTrash)
   const totalCount = data?.pages[0]?.wikiDocumentTrash.totalCount ?? 0
 
   async function handleRestoreClick(doc: TrashDoc) {

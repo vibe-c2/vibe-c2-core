@@ -4,6 +4,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useInfiniteCredentials } from "@/graphql/hooks/credentials";
+import { flattenConnection } from "@/lib/connection";
 import { credentialTypeLabel } from "@/components/findings/credential-type-utils";
 import type { CredentialFieldsFragment } from "@/graphql/gql/graphql";
 import { cn } from "@/lib/utils";
@@ -77,8 +78,7 @@ export function CredentialPickerList({
     });
 
   const credentials = useMemo(() => {
-    const all =
-      data?.pages.flatMap((p) => p.credentials.edges.map((e) => e.node)) ?? [];
+    const all = flattenConnection(data, (p) => p.credentials);
     return excludeIds ? all.filter((c) => !excludeIds.has(c.id)) : all;
   }, [data, excludeIds]);
 

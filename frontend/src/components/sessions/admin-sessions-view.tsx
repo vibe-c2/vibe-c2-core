@@ -1,8 +1,9 @@
-import { useMemo, useState } from "react"
+import { useState } from "react"
 import {
   useInfiniteAdminSessions,
   useSessionChangedSubscription,
 } from "@/graphql/hooks/sessions"
+import { useConnectionNodes } from "@/hooks/use-connection-nodes"
 import { AdminSessionsToolbar } from "./admin-sessions-toolbar"
 import { AdminSessionsTable } from "./admin-sessions-table"
 import { RevokeSessionDialog } from "./revoke-session-dialog"
@@ -27,10 +28,7 @@ export function AdminSessionsView() {
   // Subscribe to real-time session changes
   useSessionChangedSubscription(null)
 
-  const sessions = useMemo(
-    () => data?.pages.flatMap((page) => page.sessions.edges.map((e) => e.node)) ?? [],
-    [data],
-  )
+  const sessions = useConnectionNodes(data, (p) => p.sessions)
 
   return (
     <div className="flex flex-1 flex-col gap-2 min-h-0">

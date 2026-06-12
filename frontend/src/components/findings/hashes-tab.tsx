@@ -1,4 +1,3 @@
-import { useMemo } from "react"
 import {
   useInfiniteHashes,
   useInfiniteMyHashes,
@@ -16,6 +15,7 @@ import { BulkImportHashesDialog } from "@/components/findings/bulk-import-hashes
 import { MarkHashCrackedDialog } from "@/components/findings/mark-hash-cracked-dialog"
 import type { FindingsMode } from "@/components/findings/findings-mode"
 import { useFindingsOpsParam } from "@/hooks/use-findings-ops-param"
+import { useConnectionNodes } from "@/hooks/use-connection-nodes"
 
 interface HashesTabProps {
   mode: FindingsMode
@@ -44,11 +44,7 @@ function ScopedHashesTab({ operationId }: { operationId: string }) {
       hasCredential: filters.hasCredential,
     })
 
-  const hashes = useMemo(
-    () =>
-      data?.pages.flatMap((page) => page.hashes.edges.map((e) => e.node)) ?? [],
-    [data],
-  )
+  const hashes = useConnectionNodes(data, (p) => p.hashes)
 
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-3">
@@ -91,12 +87,7 @@ function GlobalHashesTab() {
       { enabled: !isExplicitEmpty },
     )
 
-  const hashes = useMemo(
-    () =>
-      data?.pages.flatMap((page) => page.myHashes.edges.map((e) => e.node)) ??
-      [],
-    [data],
-  )
+  const hashes = useConnectionNodes(data, (p) => p.myHashes)
 
   // Same zero-membership detection as credentials.
   const opsProbe = useInfiniteOperations({ first: 1 })

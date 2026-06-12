@@ -1,9 +1,7 @@
 import type { ReactNode } from "react"
-import { Virtuoso } from "react-virtuoso"
 import { toast } from "sonner"
 import {
   CopyIcon,
-  LoaderIcon,
   NetworkIcon,
   PencilIcon,
   RouteIcon,
@@ -12,7 +10,10 @@ import {
 } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
 import { HostIcon } from "@/components/findings/host-icon"
-import { Skeleton } from "@/components/ui/skeleton"
+import {
+  VirtualizedDataTable,
+  dataTableRowClass,
+} from "@/components/ui/virtualized-data-table"
 import { FormattedDateTimeText } from "@/components/ui/formatted-date-time-text"
 import {
   ContextMenu,
@@ -52,15 +53,17 @@ export function HostsTable({
 }: HostsTableProps) {
   const openEdit = useHostStore((s) => s.openEditDialog)
 
-  const showEmpty = !isLoading && hosts.length === 0
-  const showList = !isLoading && hosts.length > 0
-
   return (
-    <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-lg border bg-card">
-      <div className="shrink-0 border-b bg-muted/50">
-        <div
-          className={`grid ${GRID_COLS} gap-3 px-4 py-2 text-xs font-medium text-muted-foreground uppercase tracking-wide`}
-        >
+    <VirtualizedDataTable
+      items={hosts}
+      isLoading={isLoading}
+      isFetchingNextPage={isFetchingNextPage}
+      hasNextPage={hasNextPage}
+      fetchNextPage={fetchNextPage}
+      gridCols={GRID_COLS}
+      entityNoun="hosts"
+      header={
+        <>
           <div>Hostname</div>
           <div>OS</div>
           <div>IP addresses</div>
@@ -71,128 +74,77 @@ export function HostsTable({
             <RouteIcon className="mx-auto size-3.5" />
           </div>
           <div>Created</div>
-        </div>
-      </div>
-
-      {isLoading && (
-        <div className="space-y-3 p-4">
-          {Array.from({ length: 5 }).map((_, i) => (
-            <Skeleton key={i} className="h-12 w-full" />
-          ))}
-        </div>
-      )}
-
-      {showEmpty && (
-        <div className="flex flex-1 flex-col items-center justify-center gap-2 py-16 text-muted-foreground">
+        </>
+      }
+      emptyState={
+        <>
           <ServerIcon className="size-8 opacity-50" />
           <p className="text-sm">
             {hasActiveSearch
               ? "No hosts match this search."
               : "No hosts yet. Add the first discovered machine."}
           </p>
-        </div>
-      )}
-
-      {showList && (
-        <div className="flex min-h-0 flex-1 flex-col">
-          <Virtuoso
-            data={hosts}
-            endReached={() => {
-              if (hasNextPage && !isFetchingNextPage) fetchNextPage()
-            }}
-            overscan={200}
-            style={{ height: "100%" }}
-            className="min-h-0 flex-1"
-            itemContent={(_index, h) => {
-              const ips = hostAddresses(h)
-              return (
-                <HostRowContextMenu host={h}>
-                  <button
-                    type="button"
-                    onClick={() => openEdit(h)}
-                    className={`grid ${GRID_COLS} w-full cursor-pointer items-center gap-3 border-b px-4 py-2 text-left text-sm transition-colors hover:bg-muted/50`}
-                  >
-                    <div
-                      className="flex min-w-0 items-center gap-1.5"
-                      title={h.hostname}
-                    >
-                      <HostIcon
-                        emoji={h.emoji}
-                        icon={h.icon}
-                        color={h.color}
-                        os={h.os}
-                        size={14}
-                        className="text-muted-foreground"
-                      />
-                      <span className="truncate font-mono text-xs">
-                        {h.hostname}
-                      </span>
-                    </div>
-                    <div
-                      className="truncate text-muted-foreground"
-                      title={h.os}
-                    >
-                      {h.os || "—"}
-                    </div>
-                    <div
-                      className="flex flex-wrap gap-1 overflow-hidden"
-                      title={ips.join("\n")}
-                    >
-                      {ips.length === 0 ? (
-                        <span className="text-muted-foreground">—</span>
-                      ) : (
-                        ips.slice(0, MAX_INLINE_IPS).map((ip) => (
-                          <Badge
-                            key={ip}
-                            variant="secondary"
-                            className="font-mono"
-                          >
-                            {ip}
-                          </Badge>
-                        ))
-                      )}
-                      {ips.length > MAX_INLINE_IPS && (
-                        <Badge variant="ghost">
-                          +{ips.length - MAX_INLINE_IPS}
-                        </Badge>
-                      )}
-                    </div>
-                    <div className="text-center text-muted-foreground">
-                      {h.interfaces.length || "—"}
-                    </div>
-                    <div className="text-center text-muted-foreground">
-                      {h.routes.length || "—"}
-                    </div>
-                    <div className="text-muted-foreground">
-                      <FormattedDateTimeText date={h.createdAt} />
-                    </div>
-                  </button>
-                </HostRowContextMenu>
-              )
-            }}
-            components={{
-              Footer: () => {
-                if (isFetchingNextPage) {
-                  return (
-                    <div className="flex items-center justify-center py-4">
-                      <LoaderIcon className="size-4 animate-spin" />
-                    </div>
-                  )
-                }
-                if (!hasNextPage && hosts.length > 0) {
-                  return (
-                    <div className="flex items-center justify-center py-4 text-sm text-muted-foreground">
-                      No more hosts to load
-                    </div>
-                  )
-                }
-                return null
-              },
-            }}
-          />
-        </div>
-      )}
-    </div>
+        </>
+      }
+      renderRow={(h) => {
+        const ips = hostAddresses(h)
+        return (
+          <HostRowContextMenu host={h}>
+            <button
+              type="button"
+              onClick={() => openEdit(h)}
+              className={dataTableRowClass(GRID_COLS, "cursor-pointer")}
+            >
+              <div
+                className="flex min-w-0 items-center gap-1.5"
+                title={h.hostname}
+              >
+                <HostIcon
+                  emoji={h.emoji}
+                  icon={h.icon}
+                  color={h.color}
+                  os={h.os}
+                  size={14}
+                  className="text-muted-foreground"
+                />
+                <span className="truncate font-mono text-xs">
+                  {h.hostname}
+                </span>
+              </div>
+              <div className="truncate text-muted-foreground" title={h.os}>
+                {h.os || "—"}
+              </div>
+              <div
+                className="flex flex-wrap gap-1 overflow-hidden"
+                title={ips.join("\n")}
+              >
+                {ips.length === 0 ? (
+                  <span className="text-muted-foreground">—</span>
+                ) : (
+                  ips.slice(0, MAX_INLINE_IPS).map((ip) => (
+                    <Badge key={ip} variant="secondary" className="font-mono">
+                      {ip}
+                    </Badge>
+                  ))
+                )}
+                {ips.length > MAX_INLINE_IPS && (
+                  <Badge variant="ghost">+{ips.length - MAX_INLINE_IPS}</Badge>
+                )}
+              </div>
+              <div className="text-center text-muted-foreground">
+                {h.interfaces.length || "—"}
+              </div>
+              <div className="text-center text-muted-foreground">
+                {h.routes.length || "—"}
+              </div>
+              <div className="text-muted-foreground">
+                <FormattedDateTimeText date={h.createdAt} />
+              </div>
+            </button>
+          </HostRowContextMenu>
+        )
+      }}
+    />
   )
 }
 

@@ -1,4 +1,5 @@
-import { useEffect, useMemo, useRef } from "react"
+import { useEffect, useRef } from "react"
+import { useConnectionNodes } from "@/hooks/use-connection-nodes"
 import { CalendarOffIcon, Loader2Icon, XIcon } from "lucide-react"
 import { useVirtualizer } from "@tanstack/react-virtual"
 import { useTimelineEventsByDay } from "@/graphql/hooks/timeline"
@@ -106,13 +107,7 @@ function DayPanelLoaded({
     actorIds,
   )
 
-  const events = useMemo<TimelineEventFieldsFragment[]>(
-    () =>
-      data?.pages.flatMap((p) =>
-        p.timelineEventsByDay.edges.map((e) => e.node),
-      ) ?? [],
-    [data],
-  )
+  const events = useConnectionNodes(data, (p) => p.timelineEventsByDay)
 
   const title = formatRangeLabel(bucketStart, granularity, timezone)
 

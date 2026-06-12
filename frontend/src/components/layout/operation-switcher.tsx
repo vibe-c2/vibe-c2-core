@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { useConnectionNodes } from "@/hooks/use-connection-nodes";
 import { Virtuoso, type VirtuosoHandle } from "react-virtuoso";
 import {
   CheckIcon,
@@ -55,12 +56,7 @@ export function OperationSwitcher() {
       { enabled: open },
     );
 
-  const operations = useMemo(
-    () =>
-      data?.pages.flatMap((page) => page.operations.edges.map((e) => e.node)) ??
-      [],
-    [data],
-  );
+  const operations = useConnectionNodes(data, (p) => p.operations);
 
   // Reset search and highlight when popover transitions to open, and reset
   // highlight when operations list reference changes. Done during render via

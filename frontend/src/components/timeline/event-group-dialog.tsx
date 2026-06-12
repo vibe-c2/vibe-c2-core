@@ -1,4 +1,5 @@
 import { createElement, useMemo } from "react"
+import { flattenConnection } from "@/lib/connection"
 import { Loader2Icon } from "lucide-react"
 import {
   Dialog,
@@ -84,10 +85,7 @@ export function EventGroupDialog({
   )
 
   const events = useMemo<TimelineEventFieldsFragment[]>(() => {
-    const all =
-      data?.pages.flatMap((p) =>
-        p.timelineEventsByDay.edges.map((e) => e.node),
-      ) ?? []
+    const all = flattenConnection(data, (p) => p.timelineEventsByDay)
     // Custom events all share subjectKind "custom_event"; the chip the user
     // clicked is one specific glyph, so keep only the rows whose authored
     // identity matches it. Other kinds are already fully scoped by the fetch.

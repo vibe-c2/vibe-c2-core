@@ -1,4 +1,3 @@
-import { useMemo } from "react"
 import {
   useInfiniteCredentials,
   useInfiniteMyCredentials,
@@ -14,6 +13,7 @@ import { EditCredentialDialog } from "@/components/findings/edit-credential-dial
 import { DeleteCredentialDialog } from "@/components/findings/delete-credential-dialog"
 import type { FindingsMode } from "@/components/findings/findings-mode"
 import { useFindingsOpsParam } from "@/hooks/use-findings-ops-param"
+import { useConnectionNodes } from "@/hooks/use-connection-nodes"
 
 interface CredentialsTabProps {
   mode: FindingsMode
@@ -52,13 +52,7 @@ function ScopedCredentialsTab({ operationId }: { operationId: string }) {
     validOnly: filters.validOnly,
   })
 
-  const credentials = useMemo(
-    () =>
-      data?.pages.flatMap((page) =>
-        page.credentials.edges.map((e) => e.node),
-      ) ?? [],
-    [data],
-  )
+  const credentials = useConnectionNodes(data, (p) => p.credentials)
 
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-3">
@@ -118,13 +112,7 @@ function GlobalCredentialsTab() {
     { enabled: !isExplicitEmpty },
   )
 
-  const credentials = useMemo(
-    () =>
-      data?.pages.flatMap((page) =>
-        page.myCredentials.edges.map((e) => e.node),
-      ) ?? [],
-    [data],
-  )
+  const credentials = useConnectionNodes(data, (p) => p.myCredentials)
 
   // Detect the "user is not a member of any operation" case so we can show a
   // dedicated empty state instead of the generic "no credentials match these

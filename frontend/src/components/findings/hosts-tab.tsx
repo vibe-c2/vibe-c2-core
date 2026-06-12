@@ -1,4 +1,3 @@
-import { useMemo } from "react"
 import { NetworkIcon, PlusIcon, TableIcon } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { SearchInput } from "@/components/ui/search-input"
@@ -8,6 +7,7 @@ import {
   useHostChangedSubscription,
 } from "@/graphql/hooks/hosts"
 import { useHostStore, type HostView } from "@/stores/hosts"
+import { useConnectionNodes } from "@/hooks/use-connection-nodes"
 import { HostsTable } from "@/components/findings/hosts-table"
 import { TopologyView } from "@/components/findings/topology/topology-view"
 import { HostFormDialog } from "@/components/findings/host-form-dialog"
@@ -41,11 +41,7 @@ export function HostsTab({ operationId }: HostsTabProps) {
       search: filters.search.trim() || null,
     })
 
-  const hosts = useMemo(
-    () =>
-      data?.pages.flatMap((page) => page.hosts.edges.map((e) => e.node)) ?? [],
-    [data],
-  )
+  const hosts = useConnectionNodes(data, (p) => p.hosts)
 
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-3">

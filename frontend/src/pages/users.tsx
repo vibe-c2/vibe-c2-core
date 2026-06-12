@@ -1,6 +1,6 @@
-import { useMemo } from "react"
 import { UsersIcon } from "lucide-react"
 import { useInfiniteUsers, useUserChangedSubscription } from "@/graphql/hooks/users"
+import { useConnectionNodes } from "@/hooks/use-connection-nodes"
 import { useUserStore } from "@/stores/users"
 import { useAuthStore } from "@/stores/auth"
 import { usePageMetadata } from "@/hooks/use-page-metadata"
@@ -37,10 +37,7 @@ export function UsersPage() {
     fetchNextPage,
   } = useInfiniteUsers({ search: search || null })
 
-  const users = useMemo(
-    () => data?.pages.flatMap((page) => page.users.edges.map((e) => e.node)) ?? [],
-    [data],
-  )
+  const users = useConnectionNodes(data, (p) => p.users)
 
   return (
     <div className="flex flex-1 flex-col gap-2 p-2">

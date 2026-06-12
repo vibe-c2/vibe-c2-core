@@ -10,6 +10,7 @@ import { useWikiStore } from "@/stores/wiki"
 import { useWikiDocumentBackups, useCreateWikiDocumentBackup } from "@/graphql/hooks/wiki"
 import { relativeTime, formatAbsolute, dayGroup } from "@/lib/relative-time"
 import { formatBytes } from "@/lib/format-bytes"
+import { flattenConnection } from "@/lib/connection"
 import { getBackupVisual } from "./wiki-backup-visual"
 import { WikiBackupPreviewDialog } from "./wiki-backup-preview-dialog"
 import { WikiBackupConfirmDialog } from "./wiki-backup-confirm-dialog"
@@ -50,8 +51,10 @@ function BackupPanelContent({ documentId }: { documentId: string }) {
   const createBackup = useCreateWikiDocumentBackup()
 
   const groups = useMemo(() => {
-    const flat: BackupListNode[] =
-      data?.pages.flatMap((p) => p.wikiDocumentBackups.edges.map((e) => e.node)) ?? []
+    const flat: BackupListNode[] = flattenConnection(
+      data,
+      (p) => p.wikiDocumentBackups,
+    )
     return groupByDay(flat)
   }, [data])
 

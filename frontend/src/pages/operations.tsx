@@ -1,4 +1,3 @@
-import { useMemo } from "react"
 import { SwordsIcon } from "lucide-react"
 import {
   useInfiniteOperations,
@@ -6,6 +5,7 @@ import {
   useOperationMemberChangedSubscription,
 } from "@/graphql/hooks/operations"
 import { useOperationStore } from "@/stores/operations"
+import { useConnectionNodes } from "@/hooks/use-connection-nodes"
 import { usePageMetadata } from "@/hooks/use-page-metadata"
 import { OperationsToolbar } from "@/components/operations/operations-toolbar"
 import { OperationsTable } from "@/components/operations/operations-table"
@@ -36,10 +36,7 @@ export function OperationsPage() {
     fetchNextPage,
   } = useInfiniteOperations({ search: search || null })
 
-  const operations = useMemo(
-    () => data?.pages.flatMap((page) => page.operations.edges.map((e) => e.node)) ?? [],
-    [data],
-  )
+  const operations = useConnectionNodes(data, (p) => p.operations)
 
   return (
     <div className="flex flex-1 flex-col gap-2 p-2">

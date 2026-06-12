@@ -1,4 +1,5 @@
 import { useMemo, useState } from "react"
+import { useConnectionNodes } from "@/hooks/use-connection-nodes"
 import { Virtuoso } from "react-virtuoso"
 import { LoaderIcon, ShieldAlertIcon, ShieldXIcon } from "lucide-react"
 import { Button } from "@/components/ui/button"
@@ -84,10 +85,7 @@ function MySessionsDialogBody({
   // Session subscription runs globally in useSessionGuard (ProtectedRoute).
   // Cache invalidation is handled there — no need for a duplicate subscription.
 
-  const sessions = useMemo(
-    () => data?.pages.flatMap((page) => page.mySessions.edges.map((e) => e.node)) ?? [],
-    [data],
-  )
+  const sessions = useConnectionNodes(data, (p) => p.mySessions)
 
   const activeCount = useMemo(
     () => sessions.filter((s) => s.status === "ACTIVE").length,

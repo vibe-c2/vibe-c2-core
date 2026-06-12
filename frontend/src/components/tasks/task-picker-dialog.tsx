@@ -19,6 +19,7 @@ import {
 } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
 import { useDebounced } from "@/hooks/use-debounced"
+import { useConnectionNodes } from "@/hooks/use-connection-nodes"
 import { useInfiniteTasks } from "@/graphql/hooks/tasks"
 import { TaskStageBadge, TaskStatusBadge } from "@/components/tasks/task-badges"
 import type { TaskFieldsFragment } from "@/graphql/gql/graphql"
@@ -165,15 +166,9 @@ function PickerBody() {
 
   const excludeSet = useMemo(() => new Set(excludeIds), [excludeIds])
 
-  // Flatten paginated edges into a single row list. Server already sorts
-  // by createAt DESC and filters by name/description — no client ranking.
-  const rows = useMemo(
-    () =>
-      data?.pages.flatMap((p) =>
-        p.tasks.edges.map((e) => e.node),
-      ) ?? [],
-    [data],
-  )
+  // Server already sorts by createAt DESC and filters by name/description —
+  // no client ranking.
+  const rows = useConnectionNodes(data, (p) => p.tasks)
 
   const [rawActiveIndex, setRawActiveIndex] = useState(0)
   const activeIndex =
