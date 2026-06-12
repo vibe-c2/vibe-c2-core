@@ -39,6 +39,7 @@ export function SearchInput({
         placeholder={placeholder}
         value={inputValue}
         onChange={(e) => setInputValue(e.target.value)}
+        title={'Wrap in "quotes" to match whole values — "10.1.142.1" won’t match 10.1.142.13'}
         className={inputClassName ?? (inputValue ? "pl-9 pr-8" : "pl-9")}
       />
       {inputValue && (

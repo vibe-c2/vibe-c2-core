@@ -159,6 +159,7 @@ export function TopologySearch({
         onKeyDown={onInputKeyDown}
         placeholder="Search hosts, IPs, subnets…"
         aria-label="Search topology"
+        title={'Wrap in "quotes" to match whole values — "10.1.142.1" won’t match 10.1.142.13'}
         className="h-8 w-full bg-transparent text-xs outline-none placeholder:text-muted-foreground"
       />
       {hasQuery && (

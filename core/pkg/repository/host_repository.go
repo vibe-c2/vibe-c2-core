@@ -2,7 +2,6 @@ package repository
 
 import (
 	"context"
-	"regexp"
 
 	"github.com/google/uuid"
 	opts "github.com/qiniu/qmgo/options"
@@ -108,8 +107,7 @@ func (r *hostRepository) DeleteByOperationID(ctx context.Context, operationID uu
 func buildHostFilter(opID uuid.UUID, f HostFilter) bson.M {
 	q := bson.M{"operation_id": opID}
 	if f.Search != "" {
-		escaped := regexp.QuoteMeta(f.Search)
-		rx := bson.M{"$regex": escaped, "$options": "i"}
+		rx := bson.M{"$regex": searchPattern(f.Search), "$options": "i"}
 		q["$or"] = bson.A{
 			bson.M{"hostname": rx},
 			bson.M{"os": rx},

@@ -3,7 +3,6 @@ package repository
 import (
 	"context"
 	"errors"
-	"regexp"
 
 	"github.com/google/uuid"
 	opts "github.com/qiniu/qmgo/options"
@@ -262,8 +261,7 @@ func applyHashFilter(q bson.M, f HashFilter) bson.M {
 		}
 	}
 	if f.Search != "" {
-		escaped := regexp.QuoteMeta(f.Search)
-		rx := bson.M{"$regex": escaped, "$options": "i"}
+		rx := bson.M{"$regex": searchPattern(f.Search), "$options": "i"}
 		q["$or"] = bson.A{
 			bson.M{"value": rx},
 			bson.M{"comment": rx},

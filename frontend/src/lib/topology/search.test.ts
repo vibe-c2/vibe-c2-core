@@ -86,6 +86,32 @@ describe("matchTopology", () => {
     expect(matchTopology(t, "10.8.7")).toEqual(["vpn", "leaf:vpn"])
   })
 
+  it("quoted query matches whole tokens only", () => {
+    const t = deriveTopology([
+      host("x", "db01", "", [{ addresses: ["10.1.142.1/24"] }]),
+      host("y", "db02", "", [{ addresses: ["10.1.142.13/24"] }]),
+    ])
+    // Unquoted keeps substring semantics: the prefix hits both hosts.
+    expect(matchTopology(t, "10.1.142.1")).toEqual(["x", "y"])
+    // Quoted anchors on word boundaries: only the exact address. The /24
+    // suffix after the address is a boundary, not a digit, so it still hits.
+    expect(matchTopology(t, '"10.1.142.1"')).toEqual(["x"])
+  })
+
+  it("quoted hostname rejects suffixed hostnames", () => {
+    const t = deriveTopology([
+      host("x", "web", "", [{ addresses: ["10.0.0.1/24"] }]),
+      host("y", "web2", "", [{ addresses: ["10.0.0.2/24"] }]),
+    ])
+    expect(matchTopology(t, '"web"')).toEqual(["x"])
+  })
+
+  it("lone or unbalanced quotes fall back to literal substring", () => {
+    expect(matchTopology(fixture, '"')).toEqual([])
+    expect(matchTopology(fixture, '"web')).toEqual([])
+    expect(matchTopology(fixture, '""')).toEqual([])
+  })
+
   it("returns nothing for a blank or whitespace query", () => {
     expect(matchTopology(fixture, "")).toEqual([])
     expect(matchTopology(fixture, "   ")).toEqual([])

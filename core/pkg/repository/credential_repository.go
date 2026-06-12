@@ -2,7 +2,6 @@ package repository
 
 import (
 	"context"
-	"regexp"
 	"time"
 
 	"github.com/google/uuid"
@@ -281,8 +280,7 @@ func applyCredentialFilter(q bson.M, f CredentialFilter) bson.M {
 		q["tags"] = bson.M{"$all": f.Tags}
 	}
 	if f.Search != "" {
-		escaped := regexp.QuoteMeta(f.Search)
-		rx := bson.M{"$regex": escaped, "$options": "i"}
+		rx := bson.M{"$regex": searchPattern(f.Search), "$options": "i"}
 		fields := f.SearchFields
 		if len(fields) == 0 {
 			fields = defaultCredentialSearchFields

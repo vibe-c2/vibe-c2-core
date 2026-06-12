@@ -2,7 +2,6 @@ package repository
 
 import (
 	"context"
-	"regexp"
 
 	"github.com/google/uuid"
 	opts "github.com/qiniu/qmgo/options"
@@ -125,8 +124,7 @@ func buildSearchFilter(search string) bson.M {
 	if search == "" {
 		return bson.M{}
 	}
-	escaped := regexp.QuoteMeta(search)
-	regex := bson.M{"$regex": escaped, "$options": "i"}
+	regex := bson.M{"$regex": searchPattern(search), "$options": "i"}
 	return bson.M{"$or": bson.A{
 		bson.M{"username": regex},
 		bson.M{"roles": regex},
