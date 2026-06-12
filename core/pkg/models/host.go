@@ -67,5 +67,13 @@ type Host struct {
 	Routes             []Route     `bson:"routes"        json:"routes"`
 	Logins             []Login     `bson:"logins"        json:"logins"`
 	OS                 string      `bson:"os"            json:"os"` // free-text fingerprint, e.g. "Windows Server 2019"
-	CreatedByID        uuid.UUID   `bson:"created_by_id" json:"created_by_id"`
+	// Visual identity, same triple as WikiDocument: an emoji glyph OR a lucide
+	// icon name, plus an optional color for the icon variant. When emoji and
+	// icon are both empty the frontend derives a glyph from the OS field
+	// (linux/windows/generic server) — that derivation is presentation, so it
+	// is never persisted here.
+	Emoji       string    `bson:"emoji"         json:"emoji"`
+	Icon        string    `bson:"icon"          json:"icon"`
+	Color       string    `bson:"color"         json:"color"`
+	CreatedByID uuid.UUID `bson:"created_by_id" json:"created_by_id"`
 }

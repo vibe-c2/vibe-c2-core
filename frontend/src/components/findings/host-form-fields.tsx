@@ -19,6 +19,8 @@ import { Field, FieldGroup, FieldLabel } from "@/components/ui/field"
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
 import { makeClientId } from "@/components/findings/credential-key-drafts"
+import { HostIcon } from "@/components/findings/host-icon"
+import { DocumentIconPicker } from "@/components/wiki/document-icon-picker"
 import {
   looksLikeCidr,
   looksLikeIp,
@@ -73,17 +75,42 @@ export function HostFormFields({
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
         <Field>
           <FieldLabel htmlFor={`${idPrefix}-hostname`}>Hostname</FieldLabel>
-          <Input
-            id={`${idPrefix}-hostname`}
-            name="hostname"
-            type="text"
-            required
-            value={values.hostname}
-            onChange={(e) => patch({ hostname: e.target.value })}
-            placeholder="dc01.corp.local"
-            spellCheck={false}
-            autoFocus
-          />
+          <div className="flex items-center gap-1.5">
+            {/* Same selector as wiki documents / timeline events. The
+                "Default" tile clears emoji+icon so the glyph derives from
+                whatever the OS field says at render time — which is why the
+                derived glyph is rebuilt from the live form values here. */}
+            <DocumentIconPicker
+              value={{
+                emoji: values.emoji,
+                icon: values.icon,
+                color: values.color,
+              }}
+              onSelect={({ emoji, icon, color }) =>
+                patch({ emoji, icon, color })
+              }
+              allowAdaptive={false}
+              derivedDefault={{
+                glyph: (
+                  <HostIcon os={values.os} color={values.color} size={18} />
+                ),
+                label: "Default (derived from OS)",
+                title:
+                  "Default — derived from the OS field: Tux for Linux, the Windows logo for Windows, a server otherwise",
+              }}
+            />
+            <Input
+              id={`${idPrefix}-hostname`}
+              name="hostname"
+              type="text"
+              required
+              value={values.hostname}
+              onChange={(e) => patch({ hostname: e.target.value })}
+              placeholder="dc01.corp.local"
+              spellCheck={false}
+              autoFocus
+            />
+          </div>
         </Field>
 
         <Field>

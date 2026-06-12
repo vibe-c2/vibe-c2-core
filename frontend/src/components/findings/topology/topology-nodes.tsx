@@ -4,10 +4,10 @@ import {
   MonitorIcon,
   NetworkIcon,
   RouteIcon,
-  ServerIcon,
   UserIcon,
 } from "lucide-react"
 import type { HostFieldsFragment } from "@/graphql/gql/graphql"
+import { HostIcon } from "@/components/findings/host-icon"
 import type { LeafSubnetEntry } from "@/lib/topology/derive"
 import { LEAF_SUBNET_MAX_ROWS } from "@/components/findings/topology/layout"
 
@@ -57,7 +57,17 @@ export function HostNode({ data }: NodeProps<Node<HostNodeData>>) {
     <div className="flex w-[180px] cursor-pointer flex-col gap-1 rounded-md border bg-card px-3 py-2 shadow-sm transition-colors hover:border-primary/60 hover:bg-muted">
       <Anchors />
       <div className="flex items-center gap-1.5">
-        <ServerIcon className="size-3.5 shrink-0 text-muted-foreground" />
+        {/* Operator-assigned emoji/icon, or an OS-derived default (Tux /
+            Windows / generic server). text-muted-foreground only tints the
+            un-colored default; an assigned color overrides via inline style. */}
+        <HostIcon
+          emoji={host.emoji}
+          icon={host.icon}
+          color={host.color}
+          os={host.os}
+          size={14}
+          className="text-muted-foreground"
+        />
         <span className="truncate font-mono text-xs font-medium" title={host.hostname}>
           {host.hostname}
         </span>

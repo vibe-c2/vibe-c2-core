@@ -11,6 +11,7 @@ import {
   TrashIcon,
 } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
+import { HostIcon } from "@/components/findings/host-icon"
 import { Skeleton } from "@/components/ui/skeleton"
 import { FormattedDateTimeText } from "@/components/ui/formatted-date-time-text"
 import {
@@ -112,10 +113,20 @@ export function HostsTable({
                     className={`grid ${GRID_COLS} w-full cursor-pointer items-center gap-3 border-b px-4 py-2 text-left text-sm transition-colors hover:bg-muted/50`}
                   >
                     <div
-                      className="truncate font-mono text-xs"
+                      className="flex min-w-0 items-center gap-1.5"
                       title={h.hostname}
                     >
-                      {h.hostname}
+                      <HostIcon
+                        emoji={h.emoji}
+                        icon={h.icon}
+                        color={h.color}
+                        os={h.os}
+                        size={14}
+                        className="text-muted-foreground"
+                      />
+                      <span className="truncate font-mono text-xs">
+                        {h.hostname}
+                      </span>
                     </div>
                     <div
                       className="truncate text-muted-foreground"

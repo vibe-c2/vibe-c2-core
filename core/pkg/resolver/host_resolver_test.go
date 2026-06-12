@@ -81,6 +81,8 @@ func TestCreateHost_Success_PopulatesCreatedByAndNormalizes(t *testing.T) {
 	input := model.CreateHostInput{
 		Hostname: "  DC01  ",
 		Os:       strptr("Windows Server 2019"),
+		Icon:     strptr("  Castle  "),
+		Color:    strptr("oklch(0.6 0.1 240)"),
 		Interfaces: []*model.NetworkInterfaceInput{
 			{Name: "eth0", Mac: strptr("00:11:22:33:44:55"), Addresses: []string{"10.0.5.12/24", "  "}},
 		},
@@ -113,6 +115,15 @@ func TestCreateHost_Success_PopulatesCreatedByAndNormalizes(t *testing.T) {
 	}
 	if captured == nil || captured.HostID != host.HostID {
 		t.Error("expected the created host to be persisted via the repo")
+	}
+	if host.Icon != "Castle" {
+		t.Errorf("Icon = %q, want trimmed %q", host.Icon, "Castle")
+	}
+	if host.Color != "oklch(0.6 0.1 240)" {
+		t.Errorf("Color = %q, want %q", host.Color, "oklch(0.6 0.1 240)")
+	}
+	if host.Emoji != "" {
+		t.Errorf("Emoji = %q, want empty (not provided)", host.Emoji)
 	}
 }
 
@@ -204,7 +215,12 @@ func TestUpdateHost_PartialUpdateOnlyTouchesProvidedFields(t *testing.T) {
 	}
 	r := newHostResolver(hostRepo, opRepo)
 
-	_, err := r.UpdateHost(newCallerCtx(caller), hostID.String(), model.UpdateHostInput{Hostname: strptr("new")})
+	_, err := r.UpdateHost(newCallerCtx(caller), hostID.String(), model.UpdateHostInput{
+		Hostname: strptr("new"),
+		// An explicit empty string clears the glyph back to the OS-derived
+		// default, so unlike the omitted os it MUST land in the update set.
+		Icon: strptr(""),
+	})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -213,6 +229,12 @@ func TestUpdateHost_PartialUpdateOnlyTouchesProvidedFields(t *testing.T) {
 	}
 	if _, ok := capturedUpdates["os"]; ok {
 		t.Error("os was not provided and must not appear in the update set")
+	}
+	if icon, ok := capturedUpdates["icon"]; !ok || icon != "" {
+		t.Errorf("icon = %v (present=%t), want explicit empty string in update set", icon, ok)
+	}
+	if _, ok := capturedUpdates["emoji"]; ok {
+		t.Error("emoji was not provided and must not appear in the update set")
 	}
 }
 

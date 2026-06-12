@@ -45,6 +45,11 @@ export interface LoginDraft {
 export interface HostFormValues {
   hostname: string
   os: string
+  // Visual identity triple (see DocumentIconValue): emoji XOR lucide icon
+  // name, plus an optional color. All empty = OS-derived default glyph.
+  emoji: string
+  icon: string
+  color: string
   interfaces: InterfaceDraft[]
   routes: RouteDraft[]
   logins: LoginDraft[]
@@ -56,6 +61,9 @@ export function hostFormValuesFromWire(
   return {
     hostname: host.hostname,
     os: host.os,
+    emoji: host.emoji,
+    icon: host.icon,
+    color: host.color,
     interfaces: host.interfaces.map((i) => ({
       _id: makeClientId(),
       name: i.name,
@@ -93,7 +101,16 @@ export function loginToDraft(l: {
 }
 
 export function emptyHostFormValues(): HostFormValues {
-  return { hostname: "", os: "", interfaces: [], routes: [], logins: [] }
+  return {
+    hostname: "",
+    os: "",
+    emoji: "",
+    icon: "",
+    color: "",
+    interfaces: [],
+    routes: [],
+    logins: [],
+  }
 }
 
 // Mirrors the backend's normalizeInterfaces: trim everything, split the

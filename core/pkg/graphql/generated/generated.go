@@ -169,10 +169,13 @@ type ComplexityRoot struct {
 	}
 
 	Host struct {
+		Color       func(childComplexity int) int
 		CreatedAt   func(childComplexity int) int
 		CreatedBy   func(childComplexity int) int
+		Emoji       func(childComplexity int) int
 		Hostname    func(childComplexity int) int
 		ID          func(childComplexity int) int
+		Icon        func(childComplexity int) int
 		Interfaces  func(childComplexity int) int
 		Logins      func(childComplexity int) int
 		OS          func(childComplexity int) int
@@ -1401,6 +1404,12 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 
 		return e.ComplexityRoot.HashEvent.OperationID(childComplexity), true
 
+	case "Host.color":
+		if e.ComplexityRoot.Host.Color == nil {
+			break
+		}
+
+		return e.ComplexityRoot.Host.Color(childComplexity), true
 	case "Host.createdAt":
 		if e.ComplexityRoot.Host.CreatedAt == nil {
 			break
@@ -1413,6 +1422,12 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.Host.CreatedBy(childComplexity), true
+	case "Host.emoji":
+		if e.ComplexityRoot.Host.Emoji == nil {
+			break
+		}
+
+		return e.ComplexityRoot.Host.Emoji(childComplexity), true
 	case "Host.hostname":
 		if e.ComplexityRoot.Host.Hostname == nil {
 			break
@@ -1425,6 +1440,12 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.Host.ID(childComplexity), true
+	case "Host.icon":
+		if e.ComplexityRoot.Host.Icon == nil {
+			break
+		}
+
+		return e.ComplexityRoot.Host.Icon(childComplexity), true
 	case "Host.interfaces":
 		if e.ComplexityRoot.Host.Interfaces == nil {
 			break
@@ -4859,6 +4880,12 @@ type Host {
   logins: [Login!]!
   # Free-text OS fingerprint, e.g. "Windows Server 2019". Empty string when unset.
   os: String!
+  # Visual identity, same triple as WikiDocument: emoji glyph OR lucide icon
+  # name (mutually exclusive), plus an optional color for the icon variant.
+  # All empty = default — the client derives a glyph from the OS field.
+  emoji: String!
+  icon: String!
+  color: String!
   createdBy: User
   createdAt: String!
   updatedAt: String!
@@ -4912,6 +4939,9 @@ input CreateHostInput {
   routes: [RouteInput!]
   logins: [LoginInput!]
   os: String
+  emoji: String
+  icon: String
+  color: String
 }
 
 # UpdateHostInput is a partial update — every field is nullable. Omit a field to
@@ -4922,6 +4952,11 @@ input UpdateHostInput {
   routes: [RouteInput!]
   logins: [LoginInput!]
   os: String
+  # Pass an explicit empty string to clear emoji/icon/color back to the
+  # OS-derived default; omit (null) to leave unchanged.
+  emoji: String
+  icon: String
+  color: String
 }
 
 # --- Queries ---
@@ -11325,6 +11360,93 @@ func (ec *executionContext) fieldContext_Host_os(_ context.Context, field graphq
 	return fc, nil
 }
 
+func (ec *executionContext) _Host_emoji(ctx context.Context, field graphql.CollectedField, obj *models.Host) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Host_emoji,
+		func(ctx context.Context) (any, error) {
+			return obj.Emoji, nil
+		},
+		nil,
+		ec.marshalNString2string,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_Host_emoji(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Host",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Host_icon(ctx context.Context, field graphql.CollectedField, obj *models.Host) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Host_icon,
+		func(ctx context.Context) (any, error) {
+			return obj.Icon, nil
+		},
+		nil,
+		ec.marshalNString2string,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_Host_icon(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Host",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Host_color(ctx context.Context, field graphql.CollectedField, obj *models.Host) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Host_color,
+		func(ctx context.Context) (any, error) {
+			return obj.Color, nil
+		},
+		nil,
+		ec.marshalNString2string,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_Host_color(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Host",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
 func (ec *executionContext) _Host_createdBy(ctx context.Context, field graphql.CollectedField, obj *models.Host) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
@@ -11571,6 +11693,12 @@ func (ec *executionContext) fieldContext_HostEdge_node(_ context.Context, field 
 				return ec.fieldContext_Host_logins(ctx, field)
 			case "os":
 				return ec.fieldContext_Host_os(ctx, field)
+			case "emoji":
+				return ec.fieldContext_Host_emoji(ctx, field)
+			case "icon":
+				return ec.fieldContext_Host_icon(ctx, field)
+			case "color":
+				return ec.fieldContext_Host_color(ctx, field)
 			case "createdBy":
 				return ec.fieldContext_Host_createdBy(ctx, field)
 			case "createdAt":
@@ -11740,6 +11868,12 @@ func (ec *executionContext) fieldContext_HostEvent_host(_ context.Context, field
 				return ec.fieldContext_Host_logins(ctx, field)
 			case "os":
 				return ec.fieldContext_Host_os(ctx, field)
+			case "emoji":
+				return ec.fieldContext_Host_emoji(ctx, field)
+			case "icon":
+				return ec.fieldContext_Host_icon(ctx, field)
+			case "color":
+				return ec.fieldContext_Host_color(ctx, field)
 			case "createdBy":
 				return ec.fieldContext_Host_createdBy(ctx, field)
 			case "createdAt":
@@ -13923,6 +14057,12 @@ func (ec *executionContext) fieldContext_Mutation_createHost(ctx context.Context
 				return ec.fieldContext_Host_logins(ctx, field)
 			case "os":
 				return ec.fieldContext_Host_os(ctx, field)
+			case "emoji":
+				return ec.fieldContext_Host_emoji(ctx, field)
+			case "icon":
+				return ec.fieldContext_Host_icon(ctx, field)
+			case "color":
+				return ec.fieldContext_Host_color(ctx, field)
 			case "createdBy":
 				return ec.fieldContext_Host_createdBy(ctx, field)
 			case "createdAt":
@@ -14006,6 +14146,12 @@ func (ec *executionContext) fieldContext_Mutation_updateHost(ctx context.Context
 				return ec.fieldContext_Host_logins(ctx, field)
 			case "os":
 				return ec.fieldContext_Host_os(ctx, field)
+			case "emoji":
+				return ec.fieldContext_Host_emoji(ctx, field)
+			case "icon":
+				return ec.fieldContext_Host_icon(ctx, field)
+			case "color":
+				return ec.fieldContext_Host_color(ctx, field)
 			case "createdBy":
 				return ec.fieldContext_Host_createdBy(ctx, field)
 			case "createdAt":
@@ -18679,6 +18825,12 @@ func (ec *executionContext) fieldContext_Query_host(ctx context.Context, field g
 				return ec.fieldContext_Host_logins(ctx, field)
 			case "os":
 				return ec.fieldContext_Host_os(ctx, field)
+			case "emoji":
+				return ec.fieldContext_Host_emoji(ctx, field)
+			case "icon":
+				return ec.fieldContext_Host_icon(ctx, field)
+			case "color":
+				return ec.fieldContext_Host_color(ctx, field)
 			case "createdBy":
 				return ec.fieldContext_Host_createdBy(ctx, field)
 			case "createdAt":
@@ -29861,7 +30013,7 @@ func (ec *executionContext) unmarshalInputCreateHostInput(ctx context.Context, o
 		asMap[k] = v
 	}
 
-	fieldsInOrder := [...]string{"hostname", "interfaces", "routes", "logins", "os"}
+	fieldsInOrder := [...]string{"hostname", "interfaces", "routes", "logins", "os", "emoji", "icon", "color"}
 	for _, k := range fieldsInOrder {
 		v, ok := asMap[k]
 		if !ok {
@@ -29903,6 +30055,27 @@ func (ec *executionContext) unmarshalInputCreateHostInput(ctx context.Context, o
 				return it, err
 			}
 			it.Os = data
+		case "emoji":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("emoji"))
+			data, err := ec.unmarshalOString2ᚖstring(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.Emoji = data
+		case "icon":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("icon"))
+			data, err := ec.unmarshalOString2ᚖstring(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.Icon = data
+		case "color":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("color"))
+			data, err := ec.unmarshalOString2ᚖstring(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.Color = data
 		}
 	}
 	return it, nil
@@ -30700,7 +30873,7 @@ func (ec *executionContext) unmarshalInputUpdateHostInput(ctx context.Context, o
 		asMap[k] = v
 	}
 
-	fieldsInOrder := [...]string{"hostname", "interfaces", "routes", "logins", "os"}
+	fieldsInOrder := [...]string{"hostname", "interfaces", "routes", "logins", "os", "emoji", "icon", "color"}
 	for _, k := range fieldsInOrder {
 		v, ok := asMap[k]
 		if !ok {
@@ -30742,6 +30915,27 @@ func (ec *executionContext) unmarshalInputUpdateHostInput(ctx context.Context, o
 				return it, err
 			}
 			it.Os = data
+		case "emoji":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("emoji"))
+			data, err := ec.unmarshalOString2ᚖstring(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.Emoji = data
+		case "icon":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("icon"))
+			data, err := ec.unmarshalOString2ᚖstring(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.Icon = data
+		case "color":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("color"))
+			data, err := ec.unmarshalOString2ᚖstring(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.Color = data
 		}
 	}
 	return it, nil
@@ -32856,6 +33050,21 @@ func (ec *executionContext) _Host(ctx context.Context, sel ast.SelectionSet, obj
 			}
 		case "os":
 			out.Values[i] = ec._Host_os(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				atomic.AddUint32(&out.Invalids, 1)
+			}
+		case "emoji":
+			out.Values[i] = ec._Host_emoji(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				atomic.AddUint32(&out.Invalids, 1)
+			}
+		case "icon":
+			out.Values[i] = ec._Host_icon(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				atomic.AddUint32(&out.Invalids, 1)
+			}
+		case "color":
+			out.Values[i] = ec._Host_color(ctx, field, obj)
 			if out.Values[i] == graphql.Null {
 				atomic.AddUint32(&out.Invalids, 1)
 			}

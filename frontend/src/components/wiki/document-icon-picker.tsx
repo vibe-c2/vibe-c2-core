@@ -70,6 +70,19 @@ interface DocumentIconPickerProps {
    *  to the canonical glyph for this surface (e.g. a pin for timeline
    *  events). Shown only in the browse (empty-query) state. */
   defaultIconName?: string;
+  /** "Default" tile for callers whose default glyph is DERIVED at render time
+   *  rather than stored (e.g. hosts derive theirs from the OS field), so
+   *  unlike defaultIconName it can't be expressed as a concrete lucide name.
+   *  Picking it clears both emoji and icon back to empty (color is preserved,
+   *  same as icon swaps); the caller's renderer then applies its derivation.
+   *  The glyph also replaces the trigger's glyph while the value is in the
+   *  default (no emoji, no icon) state. Browse-state only, like
+   *  defaultIconName; mutually exclusive with it and with allowAdaptive. */
+  derivedDefault?: {
+    glyph: React.ReactNode;
+    label: string;
+    title?: string;
+  };
 }
 
 export function DocumentIconPicker({
@@ -82,6 +95,7 @@ export function DocumentIconPicker({
   isExpanded,
   allowAdaptive = true,
   defaultIconName,
+  derivedDefault,
 }: DocumentIconPickerProps) {
   const [internalOpen, setInternalOpen] = useState(false);
   const { resolvedTheme } = useTheme();
@@ -110,6 +124,13 @@ export function DocumentIconPicker({
     setOpen(false);
   }
 
+  function handleDerivedDefaultPick() {
+    // Clear back to the caller-derived default. Color survives (mirroring
+    // handleIconPick) so "default glyph, but tinted" stays expressible.
+    onSelect({ emoji: "", icon: "", color: value.color });
+    setOpen(false);
+  }
+
   function handleColorPick(color: string) {
     // Stage the color without clearing the existing emoji/icon. If the doc
     // currently shows an emoji, it stays visible until the user actually
@@ -133,13 +154,17 @@ export function DocumentIconPicker({
           />
         }
       >
-        <DocumentIcon
-          emoji={value.emoji}
-          icon={value.icon}
-          color={value.color}
-          hasChildren={hasChildren}
-          isExpanded={isExpanded}
-        />
+        {derivedDefault && !value.emoji && !value.icon ? (
+          derivedDefault.glyph
+        ) : (
+          <DocumentIcon
+            emoji={value.emoji}
+            icon={value.icon}
+            color={value.color}
+            hasChildren={hasChildren}
+            isExpanded={isExpanded}
+          />
+        )}
       </PopoverTrigger>
       <PopoverContent className="w-88 border-none p-2 shadow-lg" align="start">
         <Tabs defaultValue={defaultTab}>
@@ -172,7 +197,10 @@ export function DocumentIconPicker({
               previewColor={value.color}
               allowAdaptive={allowAdaptive}
               defaultIconName={defaultIconName}
+              derivedDefault={derivedDefault}
+              derivedDefaultSelected={!value.emoji && !value.icon}
               onPick={handleIconPick}
+              onPickDerivedDefault={handleDerivedDefaultPick}
             />
           </TabsContent>
         </Tabs>
@@ -192,7 +220,11 @@ interface IconGridProps {
   /** Concrete icon pinned as the "Default" tile when allowAdaptive is false.
    *  See DocumentIconPicker.defaultIconName. */
   defaultIconName?: string;
+  /** Render-time-derived "Default" tile. See DocumentIconPicker.derivedDefault. */
+  derivedDefault?: DocumentIconPickerProps["derivedDefault"];
+  derivedDefaultSelected?: boolean;
   onPick: (name: string) => void;
+  onPickDerivedDefault?: () => void;
 }
 
 // Cap on the "More icons" section so a query like "a" doesn't try to lazy-load
@@ -209,7 +241,10 @@ function IconGrid({
   previewColor,
   allowAdaptive,
   defaultIconName,
+  derivedDefault,
+  derivedDefaultSelected = false,
   onPick,
+  onPickDerivedDefault,
 }: IconGridProps) {
   const [search, setSearch] = useState("");
   // Snapshot frequent icons on mount. The picker remounts each time the
@@ -229,6 +264,9 @@ function IconGrid({
   // the icon still surfaces normally via the catalog / "More icons" results,
   // so pinning it here too would duplicate it.
   const showDefault = !allowAdaptive && !!defaultIconName && !q;
+  // Derived-default tile (e.g. hosts' OS-derived glyph). Browse-state only,
+  // same reasoning as showDefault.
+  const showDerivedDefault = !allowAdaptive && !!derivedDefault && !q;
   // Frequently-used row appears only on the empty-query state — it would
   // duplicate the search results below otherwise.
   const showFrequent = !q && frequentNames.length > 0;
@@ -265,6 +303,7 @@ function IconGrid({
     (showFrequent ? frequentNames.length : 0) +
     (showAdaptive ? 1 : 0) +
     (showDefault ? 1 : 0) +
+    (showDerivedDefault ? 1 : 0) +
     filteredGroups.reduce((n, g) => n + g.icons.length, 0) +
     extendedResults.names.length;
 
@@ -330,6 +369,18 @@ function IconGrid({
                   previewColor={previewColor}
                   onPick={onPick}
                 />
+              </GridSection>
+            )}
+            {showDerivedDefault && derivedDefault && (
+              <GridSection heading="Default">
+                <PickerTile
+                  label={derivedDefault.label}
+                  title={derivedDefault.title}
+                  selected={derivedDefaultSelected}
+                  onClick={() => onPickDerivedDefault?.()}
+                >
+                  {derivedDefault.glyph}
+                </PickerTile>
               </GridSection>
             )}
             {filteredGroups.map((group) => (

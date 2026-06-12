@@ -70,6 +70,9 @@ type CreateHostInput struct {
 	Routes     []*RouteInput            `json:"routes,omitempty"`
 	Logins     []*LoginInput            `json:"logins,omitempty"`
 	Os         *string                  `json:"os,omitempty"`
+	Emoji      *string                  `json:"emoji,omitempty"`
+	Icon       *string                  `json:"icon,omitempty"`
+	Color      *string                  `json:"color,omitempty"`
 }
 
 type CreateOperationInput struct {
@@ -333,6 +336,9 @@ type UpdateHostInput struct {
 	Routes     []*RouteInput            `json:"routes,omitempty"`
 	Logins     []*LoginInput            `json:"logins,omitempty"`
 	Os         *string                  `json:"os,omitempty"`
+	Emoji      *string                  `json:"emoji,omitempty"`
+	Icon       *string                  `json:"icon,omitempty"`
+	Color      *string                  `json:"color,omitempty"`
 }
 
 type UpdateOperationInput struct {

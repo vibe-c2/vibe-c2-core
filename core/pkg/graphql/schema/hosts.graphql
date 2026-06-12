@@ -57,6 +57,12 @@ type Host {
   logins: [Login!]!
   # Free-text OS fingerprint, e.g. "Windows Server 2019". Empty string when unset.
   os: String!
+  # Visual identity, same triple as WikiDocument: emoji glyph OR lucide icon
+  # name (mutually exclusive), plus an optional color for the icon variant.
+  # All empty = default — the client derives a glyph from the OS field.
+  emoji: String!
+  icon: String!
+  color: String!
   createdBy: User
   createdAt: String!
   updatedAt: String!
@@ -110,6 +116,9 @@ input CreateHostInput {
   routes: [RouteInput!]
   logins: [LoginInput!]
   os: String
+  emoji: String
+  icon: String
+  color: String
 }
 
 # UpdateHostInput is a partial update — every field is nullable. Omit a field to
@@ -120,6 +129,11 @@ input UpdateHostInput {
   routes: [RouteInput!]
   logins: [LoginInput!]
   os: String
+  # Pass an explicit empty string to clear emoji/icon/color back to the
+  # OS-derived default; omit (null) to leave unchanged.
+  emoji: String
+  icon: String
+  color: String
 }
 
 # --- Queries ---

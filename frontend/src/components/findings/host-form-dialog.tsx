@@ -142,6 +142,12 @@ function HostForm({
     const input = {
       hostname: values.hostname.trim(),
       os: values.os.trim(),
+      // Always sent (never omitted) for the same reason as the lists:
+      // empty string = "clear back to the OS-derived default", and an
+      // omitted field would mean "leave unchanged" on update.
+      emoji: values.emoji,
+      icon: values.icon,
+      color: values.color,
       interfaces: interfaceDraftsToInputs(values.interfaces),
       routes: routeDraftsToInputs(values.routes),
       logins: loginDraftsToInputs(values.logins),
