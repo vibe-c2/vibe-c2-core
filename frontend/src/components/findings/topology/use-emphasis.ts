@@ -116,29 +116,41 @@ export function useTopologyEmphasis(
     setQuery("")
   }, [])
 
-  // Esc anywhere on the page: if the current focus came from a search, pop
-  // back to that search (restore the query + active match, hand the keyboard
-  // to the input via restoreSignal); otherwise clear focus/search outright.
-  // The search input's own Esc handler runs first and preventDefaults, so
-  // this never double-fires while typing; dialogs likewise consume Esc before
-  // it reaches the window.
+  // The single Esc authority. If the current focus was entered FROM a search,
+  // pop back to that search (restore query + active match, bump restoreSignal
+  // so the box refocuses); otherwise clear focus/search outright. Returns which
+  // branch ran so the caller can decide whether to blur the input.
+  //
+  // Both the window listener (below, fires when focus is on the canvas) and the
+  // search input's own Esc handler call this. Routing both through one function
+  // means the outcome no longer depends on *where* the keydown lands — the
+  // earlier window-only version silently dropped focus whenever the input kept
+  // focus after Enter, because the input's handler cleared instead.
+  const handleEscape = useCallback((): "restored" | "cleared" => {
+    const saved = searchReturnRef.current
+    if (saved && focusedId) {
+      searchReturnRef.current = null
+      setFocusedId(null)
+      setQuery(saved.query)
+      setActiveMatch(saved.activeMatch)
+      setRestoreSignal((n) => n + 1)
+      return "restored"
+    }
+    clearEmphasis()
+    return "cleared"
+  }, [focusedId, clearEmphasis])
+
+  // Esc while focus is on the canvas (the search input is blurred after Enter).
+  // The input's own Esc handler runs first and preventDefaults, so this never
+  // double-fires while typing; dialogs likewise consume Esc before the window.
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key !== "Escape" || event.defaultPrevented) return
-      const saved = searchReturnRef.current
-      if (saved && focusedId) {
-        searchReturnRef.current = null
-        setFocusedId(null)
-        setQuery(saved.query)
-        setActiveMatch(saved.activeMatch)
-        setRestoreSignal((n) => n + 1)
-        return
-      }
-      clearEmphasis()
+      handleEscape()
     }
     window.addEventListener("keydown", onKeyDown)
     return () => window.removeEventListener("keydown", onKeyDown)
-  }, [focusedId, clearEmphasis])
+  }, [handleEscape])
 
   const search: TopologySearchState = {
     query,
@@ -154,6 +166,7 @@ export function useTopologyEmphasis(
     displayEdges,
     toggleFocus,
     focusFromSearch,
+    handleEscape,
     clearEmphasis,
     search,
     focusedId,

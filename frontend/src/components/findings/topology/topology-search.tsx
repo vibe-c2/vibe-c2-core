@@ -27,6 +27,10 @@ interface TopologySearchProps extends TopologySearchState {
   // search, remembering the search so Esc can return to it. The view owns
   // focus, so it passes the hook's focusFromSearch down.
   onSelect: (nodeId: string) => void
+  // The shared Esc authority (hook's handleEscape). Returns "restored" when it
+  // popped a search-initiated focus back to search, "cleared" when it cleared
+  // outright — the input blurs only in the latter case.
+  onEscape: () => "restored" | "cleared"
 }
 
 export function TopologySearch({
@@ -37,6 +41,7 @@ export function TopologySearch({
   onActiveIndexChange,
   restoreSignal,
   onSelect,
+  onEscape,
 }: TopologySearchProps) {
   const inputRef = useRef<HTMLInputElement>(null)
   const { getNode, setCenter, getZoom } = useReactFlow()
@@ -129,8 +134,12 @@ export function TopologySearch({
       event.preventDefault()
       cycle(-1) // down = previous match
     } else if (event.key === "Escape") {
+      // preventDefault marks the event handled so the window-level Esc listener
+      // skips it (no double-fire). Route through the shared authority: it
+      // restores a search-initiated focus or clears outright. Blur only when it
+      // cleared — a restore wants the keyboard to stay here for ↑ / ↓.
       event.preventDefault()
-      clear()
+      if (onEscape() === "cleared") inputRef.current?.blur()
     }
     // ←/→ fall through to the input for caret movement / query editing.
   }
