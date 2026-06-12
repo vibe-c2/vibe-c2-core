@@ -10,7 +10,9 @@ import type { TopologySearchState } from "@/components/findings/topology/use-emp
 // Keyboard: "/" focuses the input from anywhere on the page, ↑ / ↓ cycle
 // matches (up = next, down = back — directional, matching the canvas), Enter
 // *selects* the active match (focuses it like a click and leaves search), Esc
-// clears and returns to the canvas. ←/→ are left alone for editing the query.
+// clears and returns to the canvas — unless the current focus came from
+// Enter, in which case Esc steps back into the search where it left off (see
+// use-emphasis). ←/→ are left alone for editing the query.
 // Rendered as a React Flow <Panel> so typing and text-selection drags never
 // pan/zoom the canvas underneath.
 
@@ -22,7 +24,8 @@ const FLY_MIN_ZOOM = 0.9
 
 interface TopologySearchProps extends TopologySearchState {
   // Commit the active match: focus it (same as clicking the node) and leave
-  // search. The view owns focus, so it passes the toggle down.
+  // search, remembering the search so Esc can return to it. The view owns
+  // focus, so it passes the hook's focusFromSearch down.
   onSelect: (nodeId: string) => void
 }
 
@@ -32,6 +35,7 @@ export function TopologySearch({
   matchIds,
   activeIndex,
   onActiveIndexChange,
+  restoreSignal,
   onSelect,
 }: TopologySearchProps) {
   const inputRef = useRef<HTMLInputElement>(null)
@@ -86,6 +90,14 @@ export function TopologySearch({
     window.addEventListener("keydown", onKeyDown)
     return () => window.removeEventListener("keydown", onKeyDown)
   }, [])
+
+  // Esc popped a search-initiated focus back to search. The hook already
+  // restored the query and active match; take the keyboard back so ↑ / ↓
+  // continue cycling from where the user left off. No select() — the query
+  // is being resumed, not replaced.
+  useEffect(() => {
+    if (restoreSignal > 0) inputRef.current?.focus()
+  }, [restoreSignal])
 
   const cycle = (direction: 1 | -1) => {
     if (matchIds.length === 0) return

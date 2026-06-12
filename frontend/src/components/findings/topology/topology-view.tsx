@@ -251,6 +251,7 @@ export function TopologyView({ operationId }: TopologyViewProps) {
     displayNodes,
     displayEdges,
     toggleFocus,
+    focusFromSearch,
     clearEmphasis,
     search,
     focusedId,
@@ -355,7 +356,9 @@ export function TopologyView({ operationId }: TopologyViewProps) {
                 />
               )}
             </div>
-            <TopologySearch {...search} onSelect={toggleFocus} />
+            {/* focusFromSearch (not toggleFocus): remembers the search so Esc
+                can step back into it. */}
+            <TopologySearch {...search} onSelect={focusFromSearch} />
             <FollowFocusedNode
               focusedId={focusedId}
               simNodeById={simNodeById}

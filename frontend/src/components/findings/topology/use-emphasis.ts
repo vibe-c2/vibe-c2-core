@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react"
+import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import type { Edge, Node } from "@xyflow/react"
 import type { Topology } from "@/lib/topology/derive"
 import { matchTopology } from "@/lib/topology/search"
@@ -24,6 +24,9 @@ export type TopologySearchState = {
   matchIds: string[]
   activeIndex: number
   onActiveIndexChange: (index: number) => void
+  // Bumped when Esc pops a search-initiated focus back to search, so the
+  // search box knows to grab the keyboard again (the hook has no DOM access).
+  restoreSignal: number
 }
 
 export function useTopologyEmphasis(
@@ -34,6 +37,15 @@ export function useTopologyEmphasis(
   const [focusedId, setFocusedId] = useState<string | null>(null)
   const [query, setQuery] = useState("")
   const [activeMatch, setActiveMatch] = useState(0)
+  // When focus was entered FROM search (Enter on a match), Esc should step
+  // back to the search — query, position in the matches, keyboard — not drop
+  // everything. The snapshot lives in a ref (it's history, not render input)
+  // and is voided by any interaction that breaks the search → focus chain:
+  // clicking a node, typing a new query, clicking the pane.
+  const searchReturnRef = useRef<{ query: string; activeMatch: number } | null>(
+    null,
+  )
+  const [restoreSignal, setRestoreSignal] = useState(0)
 
   const matchIds = useMemo(
     () => matchTopology(topology, query),
@@ -72,33 +84,61 @@ export function useTopologyEmphasis(
     [edges, emphasis],
   )
 
-  // Click = focus, re-click = unfocus.
+  // Click = focus, re-click = unfocus. A deliberate click supersedes any
+  // pending "back to search" — the user has left the search flow.
   const toggleFocus = useCallback((nodeId: string) => {
+    searchReturnRef.current = null
     setQuery("")
     setFocusedId((prev) => (prev === nodeId ? null : nodeId))
   }, [])
 
+  // Enter on a search match: focus it like a click, but remember where in the
+  // search we were so Esc can return there.
+  const focusFromSearch = useCallback(
+    (nodeId: string) => {
+      searchReturnRef.current = { query, activeMatch: activeIndex }
+      setQuery("")
+      setFocusedId(nodeId)
+    },
+    [query, activeIndex],
+  )
+
   const onQueryChange = useCallback((q: string) => {
+    searchReturnRef.current = null
     setQuery(q)
     setActiveMatch(0)
     setFocusedId(null)
   }, [])
 
   const clearEmphasis = useCallback(() => {
+    searchReturnRef.current = null
     setFocusedId(null)
     setQuery("")
   }, [])
 
-  // Esc anywhere on the page clears focus/search. The search input's own Esc
-  // handler runs first and preventDefaults, so this never double-fires while
-  // typing; dialogs likewise consume Esc before it reaches the window.
+  // Esc anywhere on the page: if the current focus came from a search, pop
+  // back to that search (restore the query + active match, hand the keyboard
+  // to the input via restoreSignal); otherwise clear focus/search outright.
+  // The search input's own Esc handler runs first and preventDefaults, so
+  // this never double-fires while typing; dialogs likewise consume Esc before
+  // it reaches the window.
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape" && !event.defaultPrevented) clearEmphasis()
+      if (event.key !== "Escape" || event.defaultPrevented) return
+      const saved = searchReturnRef.current
+      if (saved && focusedId) {
+        searchReturnRef.current = null
+        setFocusedId(null)
+        setQuery(saved.query)
+        setActiveMatch(saved.activeMatch)
+        setRestoreSignal((n) => n + 1)
+        return
+      }
+      clearEmphasis()
     }
     window.addEventListener("keydown", onKeyDown)
     return () => window.removeEventListener("keydown", onKeyDown)
-  }, [clearEmphasis])
+  }, [focusedId, clearEmphasis])
 
   const search: TopologySearchState = {
     query,
@@ -106,12 +146,14 @@ export function useTopologyEmphasis(
     matchIds,
     activeIndex,
     onActiveIndexChange: setActiveMatch,
+    restoreSignal,
   }
 
   return {
     displayNodes,
     displayEdges,
     toggleFocus,
+    focusFromSearch,
     clearEmphasis,
     search,
     focusedId,
