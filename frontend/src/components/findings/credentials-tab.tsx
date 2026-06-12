@@ -35,6 +35,8 @@ function ScopedCredentialsTab({ operationId }: { operationId: string }) {
   useCredentialChangedSubscription(operationId)
 
   const filters = useCredentialStore((s) => s.filters)
+  const sort = useCredentialStore((s) => s.sort)
+  const setSort = useCredentialStore((s) => s.setSort)
   const mode: FindingsMode = { kind: "scoped", operationId }
 
   const {
@@ -50,6 +52,8 @@ function ScopedCredentialsTab({ operationId }: { operationId: string }) {
     type: filters.type,
     tags: filters.tags,
     validOnly: filters.validOnly,
+    sortBy: sort.field,
+    sortDirection: sort.direction,
   })
 
   const credentials = useConnectionNodes(data, (p) => p.credentials)
@@ -63,6 +67,8 @@ function ScopedCredentialsTab({ operationId }: { operationId: string }) {
         isFetchingNextPage={isFetchingNextPage}
         hasNextPage={hasNextPage}
         fetchNextPage={fetchNextPage}
+        sort={sort}
+        onSortChange={setSort}
       />
 
       <CreateCredentialDialog operationId={operationId} />
@@ -76,6 +82,8 @@ function ScopedCredentialsTab({ operationId }: { operationId: string }) {
 // above the toolbar, and shows the Operation column in the table.
 function GlobalCredentialsTab() {
   const filters = useCredentialStore((s) => s.filters)
+  const sort = useCredentialStore((s) => s.sort)
+  const setSort = useCredentialStore((s) => s.setSort)
   // The toolbar owns the picker UI; the tab reads the URL hook for its own
   // data fetching. Both observers see the same react-router source of truth.
   const { operationIds } = useFindingsOpsParam()
@@ -108,6 +116,8 @@ function GlobalCredentialsTab() {
       type: filters.type,
       tags: filters.tags,
       validOnly: filters.validOnly,
+      sortBy: sort.field,
+      sortDirection: sort.direction,
     },
     { enabled: !isExplicitEmpty },
   )
@@ -153,6 +163,8 @@ function GlobalCredentialsTab() {
           isFetchingNextPage={isFetchingNextPage}
           hasNextPage={hasNextPage}
           fetchNextPage={fetchNextPage}
+          sort={sort}
+          onSortChange={setSort}
           showOperationColumn
         />
       )}

@@ -41,7 +41,7 @@ func (f *fakeCredRepo) FindByID(_ context.Context, id uuid.UUID) (models.Credent
 
 // --- the rest of ICredentialRepository (unused in these tests) ---
 
-func (f *fakeCredRepo) FindByOperationIDWithCursor(context.Context, uuid.UUID, repository.CredentialFilter, *pagination.Cursor, int64, bool) ([]models.Credential, error) {
+func (f *fakeCredRepo) FindByOperationIDWithCursor(context.Context, uuid.UUID, repository.CredentialFilter, repository.CredentialSort, *pagination.Cursor, int64, bool) ([]models.Credential, error) {
 	panic("unused")
 }
 func (f *fakeCredRepo) CountByOperationID(context.Context, uuid.UUID, repository.CredentialFilter) (int64, error) {
@@ -50,7 +50,7 @@ func (f *fakeCredRepo) CountByOperationID(context.Context, uuid.UUID, repository
 func (f *fakeCredRepo) DistinctTagsByOperationID(context.Context, uuid.UUID) ([]string, error) {
 	panic("unused")
 }
-func (f *fakeCredRepo) FindByOperationIDsWithCursor(context.Context, []uuid.UUID, repository.CredentialFilter, *pagination.Cursor, int64, bool) ([]models.Credential, error) {
+func (f *fakeCredRepo) FindByOperationIDsWithCursor(context.Context, []uuid.UUID, repository.CredentialFilter, repository.CredentialSort, *pagination.Cursor, int64, bool) ([]models.Credential, error) {
 	panic("unused")
 }
 func (f *fakeCredRepo) CountByOperationIDs(context.Context, []uuid.UUID, repository.CredentialFilter) (int64, error) {

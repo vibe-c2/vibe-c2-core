@@ -37,6 +37,62 @@ var defaultCredentialSearchFields = []CredentialSearchField{
 	CredentialSearchFieldProperties,
 }
 
+// CredentialSortField identifies a Mongo column the credentials list can be
+// ordered by. The string value is the field path used in the sort and in the
+// keyset cursor filter.
+type CredentialSortField string
+
+const (
+	CredentialSortFieldCreatedAt CredentialSortField = "createAt"
+	CredentialSortFieldName      CredentialSortField = "name"
+	CredentialSortFieldUsername  CredentialSortField = "username"
+)
+
+// CredentialSort bundles the sort column and direction for the credentials
+// list queries. The zero value is NOT valid — use DefaultCredentialSort()
+// (createAt descending, the historical order) when the caller doesn't choose.
+type CredentialSort struct {
+	Field     CredentialSortField
+	Ascending bool
+}
+
+// DefaultCredentialSort returns the historical list order: newest first.
+func DefaultCredentialSort() CredentialSort {
+	return CredentialSort{Field: CredentialSortFieldCreatedAt, Ascending: false}
+}
+
+// SortKey maps the credential sort to the pagination layer's representation.
+// name/username are string columns, so their cursors carry the string sort
+// key; createAt keeps the legacy time-keyed cursor shape.
+func (s CredentialSort) SortKey() pagination.SortKey {
+	return pagination.SortKey{
+		Field:     string(s.Field),
+		Ascending: s.Ascending,
+		String:    s.Field != CredentialSortFieldCreatedAt,
+	}
+}
+
+// Cursor encodes the edge cursor for a credential row under this sort —
+// the value of the active sort column plus the _id tiebreaker.
+func (s CredentialSort) Cursor(c *models.Credential) string {
+	switch s.Field {
+	case CredentialSortFieldName:
+		return pagination.EncodeStringCursor(c.Name, c.Id)
+	case CredentialSortFieldUsername:
+		return pagination.EncodeStringCursor(c.Username, c.Id)
+	default:
+		return pagination.EncodeCursor(c.CreateAt, c.Id)
+	}
+}
+
+// credentialSortCollation is applied to string-sorted list queries so names
+// order case-insensitively (strength 2 = compare letters and accents, ignore
+// case). Without it Mongo sorts by byte value and every uppercase name lands
+// before every lowercase one. The same collation is baked into the supporting
+// indexes below, and — because the collation applies to the whole query — the
+// keyset cursor comparisons stay consistent with the sort order.
+var credentialSortCollation = &options.Collation{Locale: "en", Strength: 2}
+
 // CredentialFilter bundles the optional list filters for credentials.
 // All fields are independent — combining them ANDs them together at the
 // MongoDB query level.
@@ -64,7 +120,7 @@ type CredentialFilter struct {
 type ICredentialRepository interface {
 	Create(ctx context.Context, c *models.Credential) error
 	FindByID(ctx context.Context, id uuid.UUID) (models.Credential, error)
-	FindByOperationIDWithCursor(ctx context.Context, opID uuid.UUID, filter CredentialFilter, cursor *pagination.Cursor, limit int64, forward bool) ([]models.Credential, error)
+	FindByOperationIDWithCursor(ctx context.Context, opID uuid.UUID, filter CredentialFilter, sort CredentialSort, cursor *pagination.Cursor, limit int64, forward bool) ([]models.Credential, error)
 	CountByOperationID(ctx context.Context, opID uuid.UUID, filter CredentialFilter) (int64, error)
 	DistinctTagsByOperationID(ctx context.Context, opID uuid.UUID) ([]string, error)
 
@@ -78,7 +134,7 @@ type ICredentialRepository interface {
 	// Index note: the existing {operation_id, -createAt, -_id} compound index
 	// supports these queries via index union. Acceptable for moderate fan-out
 	// (~tens of ops); revisit for very large op sets.
-	FindByOperationIDsWithCursor(ctx context.Context, opIDs []uuid.UUID, filter CredentialFilter, cursor *pagination.Cursor, limit int64, forward bool) ([]models.Credential, error)
+	FindByOperationIDsWithCursor(ctx context.Context, opIDs []uuid.UUID, filter CredentialFilter, sort CredentialSort, cursor *pagination.Cursor, limit int64, forward bool) ([]models.Credential, error)
 	CountByOperationIDs(ctx context.Context, opIDs []uuid.UUID, filter CredentialFilter) (int64, error)
 	DistinctTagsByOperationIDs(ctx context.Context, opIDs []uuid.UUID) ([]string, error)
 
@@ -106,6 +162,16 @@ func NewCredentialRepository(db database.Database) ICredentialRepository {
 		{Key: []string{"operation_id", "type"}},
 		{Key: []string{"operation_id", "is_valid"}},
 		{Key: []string{"operation_id", "-createAt", "-_id"}}, // Supports cursor-based pagination
+		// Collated indexes backing the name / username column sorts. The
+		// collation must match credentialSortCollation exactly or Mongo won't
+		// use the index for those queries (it would fall back to an in-memory
+		// sort, still correct but slower — result order always follows the
+		// query's collation regardless of index use). One index per column
+		// serves both directions: a sort that is the exact reverse of the
+		// index pattern walks the index backwards, so no -name/-_id mirror
+		// indexes are needed.
+		{Key: []string{"operation_id", "name", "_id"}, IndexOptions: new(options.IndexOptions).SetCollation(credentialSortCollation)},
+		{Key: []string{"operation_id", "username", "_id"}, IndexOptions: new(options.IndexOptions).SetCollation(credentialSortCollation)},
 	})
 
 	return &credentialRepository{coll: coll}
@@ -122,12 +188,27 @@ func (r *credentialRepository) FindByID(ctx context.Context, id uuid.UUID) (mode
 	return c, err
 }
 
-func (r *credentialRepository) FindByOperationIDWithCursor(ctx context.Context, opID uuid.UUID, filter CredentialFilter, cursor *pagination.Cursor, limit int64, forward bool) ([]models.Credential, error) {
-	q := pagination.ApplyCursorFilter(buildCredentialFilter(opID, filter), cursor, forward)
+func (r *credentialRepository) FindByOperationIDWithCursor(ctx context.Context, opID uuid.UUID, filter CredentialFilter, sort CredentialSort, cursor *pagination.Cursor, limit int64, forward bool) ([]models.Credential, error) {
+	return r.findWithCursor(ctx, buildCredentialFilter(opID, filter), sort, cursor, limit, forward)
+}
+
+// findWithCursor is the shared list body for the single-op and multi-op
+// variants: keyset cursor filter + sort derived from the CredentialSort, with
+// the case-insensitive collation switched on for string-sorted columns.
+func (r *credentialRepository) findWithCursor(ctx context.Context, base bson.M, sort CredentialSort, cursor *pagination.Cursor, limit int64, forward bool) ([]models.Credential, error) {
+	key := sort.SortKey()
+	if err := key.ValidateCursor(cursor); err != nil {
+		return nil, err
+	}
+
+	q := r.coll.Find(ctx, pagination.ApplyCursorFilterKey(base, cursor, forward, key))
+	if key.String {
+		q = q.Collation(credentialSortCollation)
+	}
 
 	var creds []models.Credential
-	err := r.coll.Find(ctx, q).
-		Sort(pagination.SortFields(forward)...).
+	err := q.
+		Sort(pagination.SortFieldsKey(forward, key)...).
 		Limit(limit).
 		All(&creds)
 
@@ -158,26 +239,11 @@ func (r *credentialRepository) DistinctTagsByOperationID(ctx context.Context, op
 // FindByOperationIDsWithCursor lists credentials across multiple operations.
 // Returns an empty slice (and no error) when opIDs is empty so callers can
 // model "explicit empty selection" without a DB round-trip.
-func (r *credentialRepository) FindByOperationIDsWithCursor(ctx context.Context, opIDs []uuid.UUID, filter CredentialFilter, cursor *pagination.Cursor, limit int64, forward bool) ([]models.Credential, error) {
+func (r *credentialRepository) FindByOperationIDsWithCursor(ctx context.Context, opIDs []uuid.UUID, filter CredentialFilter, sort CredentialSort, cursor *pagination.Cursor, limit int64, forward bool) ([]models.Credential, error) {
 	if len(opIDs) == 0 {
 		return []models.Credential{}, nil
 	}
-
-	q := pagination.ApplyCursorFilter(buildCredentialFilterMulti(opIDs, filter), cursor, forward)
-
-	var creds []models.Credential
-	err := r.coll.Find(ctx, q).
-		Sort(pagination.SortFields(forward)...).
-		Limit(limit).
-		All(&creds)
-
-	if !forward && len(creds) > 0 {
-		for i, j := 0, len(creds)-1; i < j; i, j = i+1, j-1 {
-			creds[i], creds[j] = creds[j], creds[i]
-		}
-	}
-
-	return creds, err
+	return r.findWithCursor(ctx, buildCredentialFilterMulti(opIDs, filter), sort, cursor, limit, forward)
 }
 
 // CountByOperationIDs counts credentials matching the filter across multiple

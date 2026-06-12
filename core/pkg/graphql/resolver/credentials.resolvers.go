@@ -123,8 +123,8 @@ func (r *queryResolver) Credential(ctx context.Context, id string) (*models.Cred
 }
 
 // Credentials is the resolver for the credentials field.
-func (r *queryResolver) Credentials(ctx context.Context, operationID string, search *string, searchFields []model.CredentialSearchField, typeArg *models.CredentialType, tags []string, validOnly *bool, first *int, after *string, last *int, before *string) (*model.CredentialConnection, error) {
-	return r.CredentialResolver.Credentials(ctx, operationID, search, searchFields, typeArg, tags, validOnly, first, after, last, before)
+func (r *queryResolver) Credentials(ctx context.Context, operationID string, search *string, searchFields []model.CredentialSearchField, typeArg *models.CredentialType, tags []string, validOnly *bool, sortBy *model.CredentialSortField, sortDirection *model.SortDirection, first *int, after *string, last *int, before *string) (*model.CredentialConnection, error) {
+	return r.CredentialResolver.Credentials(ctx, operationID, search, searchFields, typeArg, tags, validOnly, sortBy, sortDirection, first, after, last, before)
 }
 
 // CredentialTags is the resolver for the credentialTags field.
@@ -133,8 +133,8 @@ func (r *queryResolver) CredentialTags(ctx context.Context, operationID string) 
 }
 
 // MyCredentials is the resolver for the myCredentials field.
-func (r *queryResolver) MyCredentials(ctx context.Context, operationIds []string, search *string, searchFields []model.CredentialSearchField, typeArg *models.CredentialType, tags []string, validOnly *bool, first *int, after *string, last *int, before *string) (*model.CredentialConnection, error) {
-	return r.CredentialResolver.MyCredentials(ctx, operationIds, search, searchFields, typeArg, tags, validOnly, first, after, last, before)
+func (r *queryResolver) MyCredentials(ctx context.Context, operationIds []string, search *string, searchFields []model.CredentialSearchField, typeArg *models.CredentialType, tags []string, validOnly *bool, sortBy *model.CredentialSortField, sortDirection *model.SortDirection, first *int, after *string, last *int, before *string) (*model.CredentialConnection, error) {
+	return r.CredentialResolver.MyCredentials(ctx, operationIds, search, searchFields, typeArg, tags, validOnly, sortBy, sortDirection, first, after, last, before)
 }
 
 // MyCredentialTags is the resolver for the myCredentialTags field.

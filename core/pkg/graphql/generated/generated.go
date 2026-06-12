@@ -326,7 +326,7 @@ type ComplexityRoot struct {
 	Query struct {
 		Credential                         func(childComplexity int, id string) int
 		CredentialTags                     func(childComplexity int, operationID string) int
-		Credentials                        func(childComplexity int, operationID string, search *string, searchFields []model.CredentialSearchField, typeArg *models.CredentialType, tags []string, validOnly *bool, first *int, after *string, last *int, before *string) int
+		Credentials                        func(childComplexity int, operationID string, search *string, searchFields []model.CredentialSearchField, typeArg *models.CredentialType, tags []string, validOnly *bool, sortBy *model.CredentialSortField, sortDirection *model.SortDirection, first *int, after *string, last *int, before *string) int
 		Hash                               func(childComplexity int, id string) int
 		HashTags                           func(childComplexity int, operationID string) int
 		Hashes                             func(childComplexity int, operationID string, search *string, statuses []models.HashStatus, tags []string, hasCredential *bool, first *int, after *string, last *int, before *string) int
@@ -335,7 +335,7 @@ type ComplexityRoot struct {
 		Me                                 func(childComplexity int) int
 		MyAPIKey                           func(childComplexity int) int
 		MyCredentialTags                   func(childComplexity int, operationIds []string) int
-		MyCredentials                      func(childComplexity int, operationIds []string, search *string, searchFields []model.CredentialSearchField, typeArg *models.CredentialType, tags []string, validOnly *bool, first *int, after *string, last *int, before *string) int
+		MyCredentials                      func(childComplexity int, operationIds []string, search *string, searchFields []model.CredentialSearchField, typeArg *models.CredentialType, tags []string, validOnly *bool, sortBy *model.CredentialSortField, sortDirection *model.SortDirection, first *int, after *string, last *int, before *string) int
 		MyHashTags                         func(childComplexity int, operationIds []string) int
 		MyHashes                           func(childComplexity int, operationIds []string, search *string, statuses []models.HashStatus, tags []string, hasCredential *bool, first *int, after *string, last *int, before *string) int
 		MyOperationRole                    func(childComplexity int, operationID string) int
@@ -807,9 +807,9 @@ type QueryResolver interface {
 	MyOperationRole(ctx context.Context, operationID string) (*models.OperationRole, error)
 	MyAPIKey(ctx context.Context) (*models.APIKey, error)
 	Credential(ctx context.Context, id string) (*models.Credential, error)
-	Credentials(ctx context.Context, operationID string, search *string, searchFields []model.CredentialSearchField, typeArg *models.CredentialType, tags []string, validOnly *bool, first *int, after *string, last *int, before *string) (*model.CredentialConnection, error)
+	Credentials(ctx context.Context, operationID string, search *string, searchFields []model.CredentialSearchField, typeArg *models.CredentialType, tags []string, validOnly *bool, sortBy *model.CredentialSortField, sortDirection *model.SortDirection, first *int, after *string, last *int, before *string) (*model.CredentialConnection, error)
 	CredentialTags(ctx context.Context, operationID string) ([]string, error)
-	MyCredentials(ctx context.Context, operationIds []string, search *string, searchFields []model.CredentialSearchField, typeArg *models.CredentialType, tags []string, validOnly *bool, first *int, after *string, last *int, before *string) (*model.CredentialConnection, error)
+	MyCredentials(ctx context.Context, operationIds []string, search *string, searchFields []model.CredentialSearchField, typeArg *models.CredentialType, tags []string, validOnly *bool, sortBy *model.CredentialSortField, sortDirection *model.SortDirection, first *int, after *string, last *int, before *string) (*model.CredentialConnection, error)
 	MyCredentialTags(ctx context.Context, operationIds []string) ([]string, error)
 	Hash(ctx context.Context, id string) (*models.Hash, error)
 	Hashes(ctx context.Context, operationID string, search *string, statuses []models.HashStatus, tags []string, hasCredential *bool, first *int, after *string, last *int, before *string) (*model.HashConnection, error)
@@ -2398,7 +2398,7 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 			return 0, false
 		}
 
-		return e.ComplexityRoot.Query.Credentials(childComplexity, args["operationId"].(string), args["search"].(*string), args["searchFields"].([]model.CredentialSearchField), args["type"].(*models.CredentialType), args["tags"].([]string), args["validOnly"].(*bool), args["first"].(*int), args["after"].(*string), args["last"].(*int), args["before"].(*string)), true
+		return e.ComplexityRoot.Query.Credentials(childComplexity, args["operationId"].(string), args["search"].(*string), args["searchFields"].([]model.CredentialSearchField), args["type"].(*models.CredentialType), args["tags"].([]string), args["validOnly"].(*bool), args["sortBy"].(*model.CredentialSortField), args["sortDirection"].(*model.SortDirection), args["first"].(*int), args["after"].(*string), args["last"].(*int), args["before"].(*string)), true
 	case "Query.hash":
 		if e.ComplexityRoot.Query.Hash == nil {
 			break
@@ -2488,7 +2488,7 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 			return 0, false
 		}
 
-		return e.ComplexityRoot.Query.MyCredentials(childComplexity, args["operationIds"].([]string), args["search"].(*string), args["searchFields"].([]model.CredentialSearchField), args["type"].(*models.CredentialType), args["tags"].([]string), args["validOnly"].(*bool), args["first"].(*int), args["after"].(*string), args["last"].(*int), args["before"].(*string)), true
+		return e.ComplexityRoot.Query.MyCredentials(childComplexity, args["operationIds"].([]string), args["search"].(*string), args["searchFields"].([]model.CredentialSearchField), args["type"].(*models.CredentialType), args["tags"].([]string), args["validOnly"].(*bool), args["sortBy"].(*model.CredentialSortField), args["sortDirection"].(*model.SortDirection), args["first"].(*int), args["after"].(*string), args["last"].(*int), args["before"].(*string)), true
 	case "Query.myHashTags":
 		if e.ComplexityRoot.Query.MyHashTags == nil {
 			break
@@ -4341,6 +4341,16 @@ enum CredentialSearchField {
   PROPERTIES
 }
 
+# Sortable columns for the ` + "`" + `credentials` + "`" + ` / ` + "`" + `myCredentials` + "`" + ` queries. Only the
+# columns the UI exposes as sortable are listed; the default (and the
+# historical order) is CREATED_AT descending. NAME and USERNAME sort
+# case-insensitively.
+enum CredentialSortField {
+  NAME
+  USERNAME
+  CREATED_AT
+}
+
 # --- Types ---
 
 type CredentialComment {
@@ -4483,6 +4493,10 @@ extend type Query {
     type: CredentialType
     tags: [String!]
     validOnly: Boolean = true
+    # Column + direction ordering the list. Cursors are sort-specific:
+    # changing the sort restarts pagination (see SortDirection).
+    sortBy: CredentialSortField = CREATED_AT
+    sortDirection: SortDirection = DESC
     first: Int = 20
     after: String
     last: Int
@@ -4519,6 +4533,10 @@ extend type Query {
     type: CredentialType
     tags: [String!]
     validOnly: Boolean = true
+    # Column + direction ordering the list. Cursors are sort-specific:
+    # changing the sort restarts pagination (see SortDirection).
+    sortBy: CredentialSortField = CREATED_AT
+    sortDirection: SortDirection = DESC
     first: Int = 20
     after: String
     last: Int
@@ -5087,6 +5105,16 @@ type PageInfo {
   hasPreviousPage: Boolean!  # True if more items exist before the first edge
   startCursor: String        # Cursor of the first edge (null if empty)
   endCursor: String          # Cursor of the last edge (null if empty)
+}
+
+# Direction for sortable list queries. Shared by every connection that
+# exposes a sortBy argument (each entity declares its own *SortField enum
+# naming its sortable columns). Cursors are minted per sort mode — when the
+# client changes sortBy/sortDirection it must restart pagination from the
+# first page; replaying a cursor from a different sort returns an error.
+enum SortDirection {
+  ASC
+  DESC
 }
 
 type UserEdge {
@@ -7295,26 +7323,36 @@ func (ec *executionContext) field_Query_credentials_args(ctx context.Context, ra
 		return nil, err
 	}
 	args["validOnly"] = arg5
-	arg6, err := graphql.ProcessArgField(ctx, rawArgs, "first", ec.unmarshalOInt2ᚖint)
+	arg6, err := graphql.ProcessArgField(ctx, rawArgs, "sortBy", ec.unmarshalOCredentialSortField2ᚖgithubᚗcomᚋvibeᚑc2ᚋvibeᚑc2ᚑcoreᚋcoreᚋpkgᚋgraphqlᚋmodelᚐCredentialSortField)
 	if err != nil {
 		return nil, err
 	}
-	args["first"] = arg6
-	arg7, err := graphql.ProcessArgField(ctx, rawArgs, "after", ec.unmarshalOString2ᚖstring)
+	args["sortBy"] = arg6
+	arg7, err := graphql.ProcessArgField(ctx, rawArgs, "sortDirection", ec.unmarshalOSortDirection2ᚖgithubᚗcomᚋvibeᚑc2ᚋvibeᚑc2ᚑcoreᚋcoreᚋpkgᚋgraphqlᚋmodelᚐSortDirection)
 	if err != nil {
 		return nil, err
 	}
-	args["after"] = arg7
-	arg8, err := graphql.ProcessArgField(ctx, rawArgs, "last", ec.unmarshalOInt2ᚖint)
+	args["sortDirection"] = arg7
+	arg8, err := graphql.ProcessArgField(ctx, rawArgs, "first", ec.unmarshalOInt2ᚖint)
 	if err != nil {
 		return nil, err
 	}
-	args["last"] = arg8
-	arg9, err := graphql.ProcessArgField(ctx, rawArgs, "before", ec.unmarshalOString2ᚖstring)
+	args["first"] = arg8
+	arg9, err := graphql.ProcessArgField(ctx, rawArgs, "after", ec.unmarshalOString2ᚖstring)
 	if err != nil {
 		return nil, err
 	}
-	args["before"] = arg9
+	args["after"] = arg9
+	arg10, err := graphql.ProcessArgField(ctx, rawArgs, "last", ec.unmarshalOInt2ᚖint)
+	if err != nil {
+		return nil, err
+	}
+	args["last"] = arg10
+	arg11, err := graphql.ProcessArgField(ctx, rawArgs, "before", ec.unmarshalOString2ᚖstring)
+	if err != nil {
+		return nil, err
+	}
+	args["before"] = arg11
 	return args, nil
 }
 
@@ -7482,26 +7520,36 @@ func (ec *executionContext) field_Query_myCredentials_args(ctx context.Context, 
 		return nil, err
 	}
 	args["validOnly"] = arg5
-	arg6, err := graphql.ProcessArgField(ctx, rawArgs, "first", ec.unmarshalOInt2ᚖint)
+	arg6, err := graphql.ProcessArgField(ctx, rawArgs, "sortBy", ec.unmarshalOCredentialSortField2ᚖgithubᚗcomᚋvibeᚑc2ᚋvibeᚑc2ᚑcoreᚋcoreᚋpkgᚋgraphqlᚋmodelᚐCredentialSortField)
 	if err != nil {
 		return nil, err
 	}
-	args["first"] = arg6
-	arg7, err := graphql.ProcessArgField(ctx, rawArgs, "after", ec.unmarshalOString2ᚖstring)
+	args["sortBy"] = arg6
+	arg7, err := graphql.ProcessArgField(ctx, rawArgs, "sortDirection", ec.unmarshalOSortDirection2ᚖgithubᚗcomᚋvibeᚑc2ᚋvibeᚑc2ᚑcoreᚋcoreᚋpkgᚋgraphqlᚋmodelᚐSortDirection)
 	if err != nil {
 		return nil, err
 	}
-	args["after"] = arg7
-	arg8, err := graphql.ProcessArgField(ctx, rawArgs, "last", ec.unmarshalOInt2ᚖint)
+	args["sortDirection"] = arg7
+	arg8, err := graphql.ProcessArgField(ctx, rawArgs, "first", ec.unmarshalOInt2ᚖint)
 	if err != nil {
 		return nil, err
 	}
-	args["last"] = arg8
-	arg9, err := graphql.ProcessArgField(ctx, rawArgs, "before", ec.unmarshalOString2ᚖstring)
+	args["first"] = arg8
+	arg9, err := graphql.ProcessArgField(ctx, rawArgs, "after", ec.unmarshalOString2ᚖstring)
 	if err != nil {
 		return nil, err
 	}
-	args["before"] = arg9
+	args["after"] = arg9
+	arg10, err := graphql.ProcessArgField(ctx, rawArgs, "last", ec.unmarshalOInt2ᚖint)
+	if err != nil {
+		return nil, err
+	}
+	args["last"] = arg10
+	arg11, err := graphql.ProcessArgField(ctx, rawArgs, "before", ec.unmarshalOString2ᚖstring)
+	if err != nil {
+		return nil, err
+	}
+	args["before"] = arg11
 	return args, nil
 }
 
@@ -18146,7 +18194,7 @@ func (ec *executionContext) _Query_credentials(ctx context.Context, field graphq
 		ec.fieldContext_Query_credentials,
 		func(ctx context.Context) (any, error) {
 			fc := graphql.GetFieldContext(ctx)
-			return ec.Resolvers.Query().Credentials(ctx, fc.Args["operationId"].(string), fc.Args["search"].(*string), fc.Args["searchFields"].([]model.CredentialSearchField), fc.Args["type"].(*models.CredentialType), fc.Args["tags"].([]string), fc.Args["validOnly"].(*bool), fc.Args["first"].(*int), fc.Args["after"].(*string), fc.Args["last"].(*int), fc.Args["before"].(*string))
+			return ec.Resolvers.Query().Credentials(ctx, fc.Args["operationId"].(string), fc.Args["search"].(*string), fc.Args["searchFields"].([]model.CredentialSearchField), fc.Args["type"].(*models.CredentialType), fc.Args["tags"].([]string), fc.Args["validOnly"].(*bool), fc.Args["sortBy"].(*model.CredentialSortField), fc.Args["sortDirection"].(*model.SortDirection), fc.Args["first"].(*int), fc.Args["after"].(*string), fc.Args["last"].(*int), fc.Args["before"].(*string))
 		},
 		func(ctx context.Context, next graphql.Resolver) graphql.Resolver {
 			directive0 := next
@@ -18272,7 +18320,7 @@ func (ec *executionContext) _Query_myCredentials(ctx context.Context, field grap
 		ec.fieldContext_Query_myCredentials,
 		func(ctx context.Context) (any, error) {
 			fc := graphql.GetFieldContext(ctx)
-			return ec.Resolvers.Query().MyCredentials(ctx, fc.Args["operationIds"].([]string), fc.Args["search"].(*string), fc.Args["searchFields"].([]model.CredentialSearchField), fc.Args["type"].(*models.CredentialType), fc.Args["tags"].([]string), fc.Args["validOnly"].(*bool), fc.Args["first"].(*int), fc.Args["after"].(*string), fc.Args["last"].(*int), fc.Args["before"].(*string))
+			return ec.Resolvers.Query().MyCredentials(ctx, fc.Args["operationIds"].([]string), fc.Args["search"].(*string), fc.Args["searchFields"].([]model.CredentialSearchField), fc.Args["type"].(*models.CredentialType), fc.Args["tags"].([]string), fc.Args["validOnly"].(*bool), fc.Args["sortBy"].(*model.CredentialSortField), fc.Args["sortDirection"].(*model.SortDirection), fc.Args["first"].(*int), fc.Args["after"].(*string), fc.Args["last"].(*int), fc.Args["before"].(*string))
 		},
 		nil,
 		ec.marshalNCredentialConnection2ᚖgithubᚗcomᚋvibeᚑc2ᚋvibeᚑc2ᚑcoreᚋcoreᚋpkgᚋgraphqlᚋmodelᚐCredentialConnection,
@@ -41581,6 +41629,22 @@ func (ec *executionContext) marshalOCredentialSearchField2ᚕgithubᚗcomᚋvibe
 	return ret
 }
 
+func (ec *executionContext) unmarshalOCredentialSortField2ᚖgithubᚗcomᚋvibeᚑc2ᚋvibeᚑc2ᚑcoreᚋcoreᚋpkgᚋgraphqlᚋmodelᚐCredentialSortField(ctx context.Context, v any) (*model.CredentialSortField, error) {
+	if v == nil {
+		return nil, nil
+	}
+	var res = new(model.CredentialSortField)
+	err := res.UnmarshalGQL(v)
+	return res, graphql.ErrorOnPath(ctx, err)
+}
+
+func (ec *executionContext) marshalOCredentialSortField2ᚖgithubᚗcomᚋvibeᚑc2ᚋvibeᚑc2ᚑcoreᚋcoreᚋpkgᚋgraphqlᚋmodelᚐCredentialSortField(ctx context.Context, sel ast.SelectionSet, v *model.CredentialSortField) graphql.Marshaler {
+	if v == nil {
+		return graphql.Null
+	}
+	return v
+}
+
 func (ec *executionContext) unmarshalOCredentialType2ᚖgithubᚗcomᚋvibeᚑc2ᚋvibeᚑc2ᚑcoreᚋcoreᚋpkgᚋmodelsᚐCredentialType(ctx context.Context, v any) (*models.CredentialType, error) {
 	if v == nil {
 		return nil, nil
@@ -41841,6 +41905,22 @@ func (ec *executionContext) marshalOSession2ᚖgithubᚗcomᚋvibeᚑc2ᚋvibe�
 		return graphql.Null
 	}
 	return ec._Session(ctx, sel, v)
+}
+
+func (ec *executionContext) unmarshalOSortDirection2ᚖgithubᚗcomᚋvibeᚑc2ᚋvibeᚑc2ᚑcoreᚋcoreᚋpkgᚋgraphqlᚋmodelᚐSortDirection(ctx context.Context, v any) (*model.SortDirection, error) {
+	if v == nil {
+		return nil, nil
+	}
+	var res = new(model.SortDirection)
+	err := res.UnmarshalGQL(v)
+	return res, graphql.ErrorOnPath(ctx, err)
+}
+
+func (ec *executionContext) marshalOSortDirection2ᚖgithubᚗcomᚋvibeᚑc2ᚋvibeᚑc2ᚑcoreᚋcoreᚋpkgᚋgraphqlᚋmodelᚐSortDirection(ctx context.Context, sel ast.SelectionSet, v *model.SortDirection) graphql.Marshaler {
+	if v == nil {
+		return graphql.Null
+	}
+	return v
 }
 
 func (ec *executionContext) unmarshalOString2ᚕstringᚄ(ctx context.Context, v any) ([]string, error) {

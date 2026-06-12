@@ -424,7 +424,7 @@ func (l *Logger) BackfillIfEmpty(ctx context.Context) error {
 // backfillCredentialsFor seeds credential.created events for one operation.
 // Returns the number of rows successfully inserted.
 func (l *Logger) backfillCredentialsFor(ctx context.Context, opID uuid.UUID) (int, error) {
-	creds, err := l.creds.FindByOperationIDWithCursor(ctx, opID, repository.CredentialFilter{}, nil, backfillCredPageSize, true)
+	creds, err := l.creds.FindByOperationIDWithCursor(ctx, opID, repository.CredentialFilter{}, repository.DefaultCredentialSort(), nil, backfillCredPageSize, true)
 	if err != nil {
 		return 0, fmt.Errorf("list credentials: %w", err)
 	}

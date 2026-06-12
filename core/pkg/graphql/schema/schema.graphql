@@ -91,6 +91,16 @@ type PageInfo {
   endCursor: String          # Cursor of the last edge (null if empty)
 }
 
+# Direction for sortable list queries. Shared by every connection that
+# exposes a sortBy argument (each entity declares its own *SortField enum
+# naming its sortable columns). Cursors are minted per sort mode — when the
+# client changes sortBy/sortDirection it must restart pagination from the
+# first page; replaying a cursor from a different sort returns an error.
+enum SortDirection {
+  ASC
+  DESC
+}
+
 type UserEdge {
   node: User!                # The actual user object
   cursor: String!            # Opaque cursor for this user's position

@@ -11,6 +11,8 @@ import type {
   UpdateCredentialInput,
   CredentialType,
   CredentialSearchField,
+  CredentialSortField,
+  SortDirection,
 } from "@/graphql/gql/graphql"
 import {
   CredentialDocument,
@@ -39,6 +41,11 @@ export type CredentialListParams = {
   tags?: string[] | null
   // validOnly: true hides invalid (default), null shows both, false shows only invalid.
   validOnly?: boolean | null
+  // Column sort; omitted = server default (CREATED_AT DESC). Cursors are
+  // sort-specific, but the params live in the query key, so changing the
+  // sort naturally starts a fresh query from page one.
+  sortBy?: CredentialSortField | null
+  sortDirection?: SortDirection | null
   first?: number
 }
 
@@ -52,6 +59,8 @@ export type MyCredentialListParams = {
   type?: CredentialType | null
   tags?: string[] | null
   validOnly?: boolean | null
+  sortBy?: CredentialSortField | null
+  sortDirection?: SortDirection | null
   first?: number
 }
 
@@ -107,6 +116,8 @@ export function useInfiniteCredentials(params: CredentialListParams) {
         type: params.type ?? null,
         tags: params.tags && params.tags.length > 0 ? params.tags : null,
         validOnly: params.validOnly ?? null,
+        sortBy: params.sortBy ?? null,
+        sortDirection: params.sortDirection ?? null,
         first: params.first ?? 20,
         after: pageParam,
       }),
@@ -174,6 +185,8 @@ export function useInfiniteMyCredentials(
         type: params.type ?? null,
         tags: params.tags && params.tags.length > 0 ? params.tags : null,
         validOnly: params.validOnly ?? null,
+        sortBy: params.sortBy ?? null,
+        sortDirection: params.sortDirection ?? null,
         first: params.first ?? 20,
         after: pageParam,
       }),

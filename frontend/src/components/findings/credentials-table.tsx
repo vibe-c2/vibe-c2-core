@@ -11,8 +11,9 @@ import {
   VirtualizedDataTable,
   dataTableRowClass,
 } from "@/components/ui/virtualized-data-table"
+import { SortableHeader } from "@/components/ui/sortable-header"
 import { FormattedDateTimeText } from "@/components/ui/formatted-date-time-text"
-import { useCredentialStore } from "@/stores/credentials"
+import { useCredentialStore, type CredentialSort } from "@/stores/credentials"
 import { credentialTypeLabel } from "@/components/findings/credential-type-utils"
 import { CredentialRowContextMenu } from "@/components/findings/credential-row-context-menu"
 import type { CredentialFieldsFragment } from "@/graphql/gql/graphql"
@@ -29,6 +30,10 @@ interface CredentialsTableProps {
   isFetchingNextPage: boolean
   hasNextPage: boolean
   fetchNextPage: () => void
+  // Active column sort + change handler. The parent owns the state (it also
+  // feeds the list query); the table only renders the sortable headers.
+  sort: CredentialSort
+  onSortChange: (sort: CredentialSort) => void
   // When true, the table renders an extra "Operation" column. Used by the
   // global Findings view; scoped views leave it off.
   showOperationColumn?: boolean
@@ -45,6 +50,8 @@ export function CredentialsTable({
   isFetchingNextPage,
   hasNextPage,
   fetchNextPage,
+  sort,
+  onSortChange,
   showOperationColumn = false,
 }: CredentialsTableProps) {
   const openDetails = useCredentialStore((s) => s.openDetailsPanel)
@@ -63,10 +70,20 @@ export function CredentialsTable({
       header={
         <>
           <div />
-          <div>Name</div>
+          <SortableHeader
+            label="Name"
+            field="NAME"
+            sort={sort}
+            onSortChange={onSortChange}
+          />
           {showOperationColumn && <div>Operation</div>}
           <div>Type</div>
-          <div>Username</div>
+          <SortableHeader
+            label="Username"
+            field="USERNAME"
+            sort={sort}
+            onSortChange={onSortChange}
+          />
           <div>Password</div>
           <div className="text-center" title="Keys">
             <KeyIcon className="mx-auto size-3.5" />
@@ -78,7 +95,13 @@ export function CredentialsTable({
           <div className="text-center" title="Backlinks (wiki references)">
             <LinkIcon className="mx-auto size-3.5" />
           </div>
-          <div>Created</div>
+          <SortableHeader
+            label="Created"
+            field="CREATED_AT"
+            sort={sort}
+            onSortChange={onSortChange}
+            initialDirection="DESC"
+          />
         </>
       }
       emptyState={

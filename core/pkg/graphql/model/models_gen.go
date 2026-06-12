@@ -541,6 +541,63 @@ func (e CredentialSearchField) MarshalJSON() ([]byte, error) {
 	return buf.Bytes(), nil
 }
 
+type CredentialSortField string
+
+const (
+	CredentialSortFieldName      CredentialSortField = "NAME"
+	CredentialSortFieldUsername  CredentialSortField = "USERNAME"
+	CredentialSortFieldCreatedAt CredentialSortField = "CREATED_AT"
+)
+
+var AllCredentialSortField = []CredentialSortField{
+	CredentialSortFieldName,
+	CredentialSortFieldUsername,
+	CredentialSortFieldCreatedAt,
+}
+
+func (e CredentialSortField) IsValid() bool {
+	switch e {
+	case CredentialSortFieldName, CredentialSortFieldUsername, CredentialSortFieldCreatedAt:
+		return true
+	}
+	return false
+}
+
+func (e CredentialSortField) String() string {
+	return string(e)
+}
+
+func (e *CredentialSortField) UnmarshalGQL(v any) error {
+	str, ok := v.(string)
+	if !ok {
+		return fmt.Errorf("enums must be strings")
+	}
+
+	*e = CredentialSortField(str)
+	if !e.IsValid() {
+		return fmt.Errorf("%s is not a valid CredentialSortField", str)
+	}
+	return nil
+}
+
+func (e CredentialSortField) MarshalGQL(w io.Writer) {
+	fmt.Fprint(w, strconv.Quote(e.String()))
+}
+
+func (e *CredentialSortField) UnmarshalJSON(b []byte) error {
+	s, err := strconv.Unquote(string(b))
+	if err != nil {
+		return err
+	}
+	return e.UnmarshalGQL(s)
+}
+
+func (e CredentialSortField) MarshalJSON() ([]byte, error) {
+	var buf bytes.Buffer
+	e.MarshalGQL(&buf)
+	return buf.Bytes(), nil
+}
+
 type EventAction string
 
 const (
@@ -648,6 +705,61 @@ func (e *PresenceAction) UnmarshalJSON(b []byte) error {
 }
 
 func (e PresenceAction) MarshalJSON() ([]byte, error) {
+	var buf bytes.Buffer
+	e.MarshalGQL(&buf)
+	return buf.Bytes(), nil
+}
+
+type SortDirection string
+
+const (
+	SortDirectionAsc  SortDirection = "ASC"
+	SortDirectionDesc SortDirection = "DESC"
+)
+
+var AllSortDirection = []SortDirection{
+	SortDirectionAsc,
+	SortDirectionDesc,
+}
+
+func (e SortDirection) IsValid() bool {
+	switch e {
+	case SortDirectionAsc, SortDirectionDesc:
+		return true
+	}
+	return false
+}
+
+func (e SortDirection) String() string {
+	return string(e)
+}
+
+func (e *SortDirection) UnmarshalGQL(v any) error {
+	str, ok := v.(string)
+	if !ok {
+		return fmt.Errorf("enums must be strings")
+	}
+
+	*e = SortDirection(str)
+	if !e.IsValid() {
+		return fmt.Errorf("%s is not a valid SortDirection", str)
+	}
+	return nil
+}
+
+func (e SortDirection) MarshalGQL(w io.Writer) {
+	fmt.Fprint(w, strconv.Quote(e.String()))
+}
+
+func (e *SortDirection) UnmarshalJSON(b []byte) error {
+	s, err := strconv.Unquote(string(b))
+	if err != nil {
+		return err
+	}
+	return e.UnmarshalGQL(s)
+}
+
+func (e SortDirection) MarshalJSON() ([]byte, error) {
 	var buf bytes.Buffer
 	e.MarshalGQL(&buf)
 	return buf.Bytes(), nil

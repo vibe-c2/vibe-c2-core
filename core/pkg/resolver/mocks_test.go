@@ -17,10 +17,10 @@ import (
 type mockCredRepo struct {
 	createFn                       func(ctx context.Context, c *models.Credential) error
 	findByIDFn                     func(ctx context.Context, id uuid.UUID) (models.Credential, error)
-	findByOperationIDWithCursorFn  func(ctx context.Context, opID uuid.UUID, filter repository.CredentialFilter, cursor *pagination.Cursor, limit int64, forward bool) ([]models.Credential, error)
+	findByOperationIDWithCursorFn  func(ctx context.Context, opID uuid.UUID, filter repository.CredentialFilter, sort repository.CredentialSort, cursor *pagination.Cursor, limit int64, forward bool) ([]models.Credential, error)
 	countByOperationIDFn           func(ctx context.Context, opID uuid.UUID, filter repository.CredentialFilter) (int64, error)
 	distinctTagsByOperationIDFn    func(ctx context.Context, opID uuid.UUID) ([]string, error)
-	findByOperationIDsWithCursorFn func(ctx context.Context, opIDs []uuid.UUID, filter repository.CredentialFilter, cursor *pagination.Cursor, limit int64, forward bool) ([]models.Credential, error)
+	findByOperationIDsWithCursorFn func(ctx context.Context, opIDs []uuid.UUID, filter repository.CredentialFilter, sort repository.CredentialSort, cursor *pagination.Cursor, limit int64, forward bool) ([]models.Credential, error)
 	countByOperationIDsFn          func(ctx context.Context, opIDs []uuid.UUID, filter repository.CredentialFilter) (int64, error)
 	distinctTagsByOperationIDsFn   func(ctx context.Context, opIDs []uuid.UUID) ([]string, error)
 	updateFn                       func(ctx context.Context, c *models.Credential, updates map[string]interface{}) error
@@ -37,8 +37,8 @@ func (m *mockCredRepo) Create(ctx context.Context, c *models.Credential) error {
 func (m *mockCredRepo) FindByID(ctx context.Context, id uuid.UUID) (models.Credential, error) {
 	return m.findByIDFn(ctx, id)
 }
-func (m *mockCredRepo) FindByOperationIDWithCursor(ctx context.Context, opID uuid.UUID, filter repository.CredentialFilter, cursor *pagination.Cursor, limit int64, forward bool) ([]models.Credential, error) {
-	return m.findByOperationIDWithCursorFn(ctx, opID, filter, cursor, limit, forward)
+func (m *mockCredRepo) FindByOperationIDWithCursor(ctx context.Context, opID uuid.UUID, filter repository.CredentialFilter, sort repository.CredentialSort, cursor *pagination.Cursor, limit int64, forward bool) ([]models.Credential, error) {
+	return m.findByOperationIDWithCursorFn(ctx, opID, filter, sort, cursor, limit, forward)
 }
 func (m *mockCredRepo) CountByOperationID(ctx context.Context, opID uuid.UUID, filter repository.CredentialFilter) (int64, error) {
 	return m.countByOperationIDFn(ctx, opID, filter)
@@ -46,8 +46,8 @@ func (m *mockCredRepo) CountByOperationID(ctx context.Context, opID uuid.UUID, f
 func (m *mockCredRepo) DistinctTagsByOperationID(ctx context.Context, opID uuid.UUID) ([]string, error) {
 	return m.distinctTagsByOperationIDFn(ctx, opID)
 }
-func (m *mockCredRepo) FindByOperationIDsWithCursor(ctx context.Context, opIDs []uuid.UUID, filter repository.CredentialFilter, cursor *pagination.Cursor, limit int64, forward bool) ([]models.Credential, error) {
-	return m.findByOperationIDsWithCursorFn(ctx, opIDs, filter, cursor, limit, forward)
+func (m *mockCredRepo) FindByOperationIDsWithCursor(ctx context.Context, opIDs []uuid.UUID, filter repository.CredentialFilter, sort repository.CredentialSort, cursor *pagination.Cursor, limit int64, forward bool) ([]models.Credential, error) {
+	return m.findByOperationIDsWithCursorFn(ctx, opIDs, filter, sort, cursor, limit, forward)
 }
 func (m *mockCredRepo) CountByOperationIDs(ctx context.Context, opIDs []uuid.UUID, filter repository.CredentialFilter) (int64, error) {
 	return m.countByOperationIDsFn(ctx, opIDs, filter)

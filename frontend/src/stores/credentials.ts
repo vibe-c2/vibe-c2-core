@@ -3,7 +3,9 @@ import { persist, createJSONStorage } from "zustand/middleware"
 import type {
   CredentialType,
   CredentialSearchField,
+  CredentialSortField,
 } from "@/graphql/gql/graphql"
+import type { DataTableSort } from "@/lib/data-table-sort"
 
 /**
  * UI-only state for the Findings → Credentials surface.
@@ -22,6 +24,11 @@ export interface CredentialFilters {
   validOnly: boolean | null
 }
 
+// The active column sort for the credentials table. Field values are the
+// GraphQL CredentialSortField enum, so the sort passes straight into the
+// list query variables.
+export type CredentialSort = DataTableSort<CredentialSortField>
+
 interface SelectedCredential {
   id: string
   name: string
@@ -29,6 +36,9 @@ interface SelectedCredential {
 
 interface CredentialStoreState {
   filters: CredentialFilters
+  // Kept outside `filters` on purpose: resetFilters clears what narrows the
+  // result set, while the sort merely reorders it and survives a reset.
+  sort: CredentialSort
   selected: SelectedCredential | null
 
   createDialogOpen: boolean
@@ -43,6 +53,7 @@ interface CredentialStoreState {
   setTags: (tags: string[]) => void
   toggleTag: (tag: string) => void
   setValidOnly: (validOnly: boolean | null) => void
+  setSort: (sort: CredentialSort) => void
   resetFilters: () => void
 
   openCreateDialog: () => void
@@ -66,10 +77,17 @@ const defaultFilters: CredentialFilters = {
   validOnly: true,
 }
 
+// Matches the server default (and the historical order): newest first.
+const defaultSort: CredentialSort = {
+  field: "CREATED_AT",
+  direction: "DESC",
+}
+
 export const useCredentialStore = create<CredentialStoreState>()(
   persist(
     (set, get) => ({
       filters: defaultFilters,
+      sort: defaultSort,
       selected: null,
 
       createDialogOpen: false,
@@ -95,6 +113,7 @@ export const useCredentialStore = create<CredentialStoreState>()(
       },
       setValidOnly: (validOnly) =>
         set((s) => ({ filters: { ...s.filters, validOnly } })),
+      setSort: (sort) => set({ sort }),
       resetFilters: () => set({ filters: defaultFilters }),
 
       openCreateDialog: () => set({ createDialogOpen: true }),

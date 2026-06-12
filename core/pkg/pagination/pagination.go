@@ -20,16 +20,28 @@ type PageInfo struct {
 }
 
 // Cursor represents a position in a paginated list.
-// It encodes the sort field (CreateAt) and a tiebreaker (_id) to handle
-// documents with identical timestamps.
+// It encodes the sort column's value plus a tiebreaker (_id) to handle
+// documents with identical sort values. Time-sorted lists carry the value in
+// CreateAt; string-sorted lists (e.g. credentials by name) carry it in Str.
+// Exactly one of the two is meaningful for any given cursor — which one is
+// determined by the SortKey of the query the cursor is used with.
 type Cursor struct {
 	CreateAt time.Time          `json:"c"`
+	Str      *string            `json:"s,omitempty"`
 	ID       primitive.ObjectID `json:"i"`
 }
 
-// EncodeCursor serializes a cursor to an opaque base64url string.
+// EncodeCursor serializes a time-keyed cursor to an opaque base64url string.
 func EncodeCursor(createAt time.Time, id primitive.ObjectID) string {
 	c := Cursor{CreateAt: createAt, ID: id}
+	data, _ := json.Marshal(c)
+	return base64.RawURLEncoding.EncodeToString(data)
+}
+
+// EncodeStringCursor serializes a string-keyed cursor (for lists sorted on a
+// string column) to an opaque base64url string.
+func EncodeStringCursor(value string, id primitive.ObjectID) string {
+	c := Cursor{Str: &value, ID: id}
 	data, _ := json.Marshal(c)
 	return base64.RawURLEncoding.EncodeToString(data)
 }
@@ -166,4 +178,96 @@ func SortFieldsOn(forward bool, field string) []string {
 		return []string{"-" + field, "-_id"}
 	}
 	return []string{field, "_id"}
+}
+
+// SortKey describes the column that orders a paginated list, including its
+// primary direction and value type. It generalizes the fixed
+// "createAt descending" assumption baked into the helpers above: forward
+// pagination (first/after) traverses the list in its primary direction,
+// backward pagination (last/before) traverses against it.
+type SortKey struct {
+	// Field is the Mongo field path holding the sort values.
+	Field string
+	// Ascending is the primary direction of the list as the client sees it.
+	Ascending bool
+	// String marks Field as string-typed. String-keyed lists encode cursors
+	// via EncodeStringCursor (Cursor.Str) instead of the timestamp slot.
+	String bool
+}
+
+// ValidateCursor rejects cursors whose encoded value type doesn't match the
+// key — e.g. a createAt cursor replayed against a name-sorted query. Clients
+// restart pagination whenever the sort changes, so a mismatch is always a
+// stale or hand-crafted cursor; comparing a zero time against names would
+// silently return garbage pages instead of an error.
+func (k SortKey) ValidateCursor(c *Cursor) error {
+	if c == nil {
+		return nil
+	}
+	if k.String && c.Str == nil {
+		return fmt.Errorf("cursor does not match the requested sort")
+	}
+	if !k.String && c.Str != nil {
+		return fmt.Errorf("cursor does not match the requested sort")
+	}
+	return nil
+}
+
+// effectiveAscending resolves the traversal direction for one page: forward
+// pages follow the list's primary direction, backward pages reverse it.
+func (k SortKey) effectiveAscending(forward bool) bool {
+	if forward {
+		return k.Ascending
+	}
+	return !k.Ascending
+}
+
+// value extracts the cursor's sort-column value in the key's type.
+func (k SortKey) value(c *Cursor) any {
+	if k.String && c.Str != nil {
+		return *c.Str
+	}
+	return c.CreateAt
+}
+
+// BuildCursorFilterKey is the SortKey-aware sibling of BuildCursorFilterOn.
+// Same keyset shape — strictly past the cursor value, or equal value with the
+// _id tiebreaker past the cursor's id — with the comparison operator chosen
+// from the key's direction instead of being hardcoded to descending.
+func BuildCursorFilterKey(cursor *Cursor, forward bool, key SortKey) bson.M {
+	if cursor == nil {
+		return bson.M{}
+	}
+
+	op := "$lt"
+	if key.effectiveAscending(forward) {
+		op = "$gt"
+	}
+
+	v := key.value(cursor)
+	return bson.M{"$or": bson.A{
+		bson.M{key.Field: bson.M{op: v}},
+		bson.M{
+			key.Field: v,
+			"_id":     bson.M{op: cursor.ID},
+		},
+	}}
+}
+
+// ApplyCursorFilterKey combines a base query with the SortKey-aware cursor
+// filter via $and — same composition rationale as ApplyCursorFilterOn.
+func ApplyCursorFilterKey(base bson.M, cursor *Cursor, forward bool, key SortKey) bson.M {
+	cursorFilter := BuildCursorFilterKey(cursor, forward, key)
+	if len(cursorFilter) == 0 {
+		return base
+	}
+	return bson.M{"$and": bson.A{base, cursorFilter}}
+}
+
+// SortFieldsKey is the SortKey-aware sibling of SortFieldsOn.
+func SortFieldsKey(forward bool, key SortKey) []string {
+	if key.effectiveAscending(forward) {
+		return []string{key.Field, "_id"}
+	}
+	return []string{"-" + key.Field, "-_id"}
 }

@@ -298,3 +298,66 @@ func TestCredentialSearchSurvivesCursorPagination(t *testing.T) {
 		t.Fatalf("cursor keyset $or missing: %v", cursorBranch)
 	}
 }
+
+// --- CredentialSort tests ---
+
+// TestCredentialSortSortKey verifies the repo→pagination mapping: name and
+// username are string-keyed columns, createAt keeps the time-keyed cursor.
+func TestCredentialSortSortKey(t *testing.T) {
+	cases := []struct {
+		sort       CredentialSort
+		wantField  string
+		wantString bool
+		wantAsc    bool
+	}{
+		{DefaultCredentialSort(), "createAt", false, false},
+		{CredentialSort{Field: CredentialSortFieldName, Ascending: true}, "name", true, true},
+		{CredentialSort{Field: CredentialSortFieldUsername, Ascending: false}, "username", true, false},
+	}
+	for _, tc := range cases {
+		key := tc.sort.SortKey()
+		if key.Field != tc.wantField || key.String != tc.wantString || key.Ascending != tc.wantAsc {
+			t.Fatalf("sort %+v: got key %+v", tc.sort, key)
+		}
+	}
+}
+
+// TestCredentialSortCursor verifies edge cursors carry the active sort
+// column's value: the string slot for name/username, the timestamp for
+// createAt — and that each round-trips through DecodeCursor.
+func TestCredentialSortCursor(t *testing.T) {
+	cred := &models.Credential{
+		Name:     "DC Admin",
+		Username: "administrator",
+	}
+	cred.CreateAt = time.Date(2026, 6, 1, 10, 0, 0, 0, time.UTC)
+
+	byName := CredentialSort{Field: CredentialSortFieldName, Ascending: true}
+	c, err := pagination.DecodeCursor(byName.Cursor(cred))
+	if err != nil {
+		t.Fatalf("decode name cursor: %v", err)
+	}
+	if c.Str == nil || *c.Str != "DC Admin" {
+		t.Fatalf("name cursor should carry the name, got %v", c.Str)
+	}
+
+	byUsername := CredentialSort{Field: CredentialSortFieldUsername}
+	c, err = pagination.DecodeCursor(byUsername.Cursor(cred))
+	if err != nil {
+		t.Fatalf("decode username cursor: %v", err)
+	}
+	if c.Str == nil || *c.Str != "administrator" {
+		t.Fatalf("username cursor should carry the username, got %v", c.Str)
+	}
+
+	c, err = pagination.DecodeCursor(DefaultCredentialSort().Cursor(cred))
+	if err != nil {
+		t.Fatalf("decode createAt cursor: %v", err)
+	}
+	if c.Str != nil {
+		t.Fatalf("createAt cursor should not carry a string key, got %q", *c.Str)
+	}
+	if !c.CreateAt.Equal(cred.CreateAt) {
+		t.Fatalf("createAt cursor should carry the timestamp, got %v", c.CreateAt)
+	}
+}

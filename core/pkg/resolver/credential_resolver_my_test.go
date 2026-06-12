@@ -8,6 +8,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/vibe-c2/vibe-c2-core/core/pkg/graphql/gqlctx"
+	"github.com/vibe-c2/vibe-c2-core/core/pkg/graphql/model"
 	"github.com/vibe-c2/vibe-c2-core/core/pkg/models"
 	"github.com/vibe-c2/vibe-c2-core/core/pkg/pagination"
 	"github.com/vibe-c2/vibe-c2-core/core/pkg/repository"
@@ -73,7 +74,7 @@ func TestMyCredentials_NilOpIDs_UsesMembershipSet(t *testing.T) {
 			capturedOpIDs = opIDs
 			return 0, nil
 		},
-		findByOperationIDsWithCursorFn: func(_ context.Context, opIDs []uuid.UUID, _ repository.CredentialFilter, _ *pagination.Cursor, _ int64, _ bool) ([]models.Credential, error) {
+		findByOperationIDsWithCursorFn: func(_ context.Context, opIDs []uuid.UUID, _ repository.CredentialFilter, _ repository.CredentialSort, _ *pagination.Cursor, _ int64, _ bool) ([]models.Credential, error) {
 			return nil, nil
 		},
 	}
@@ -92,7 +93,7 @@ func TestMyCredentials_NilOpIDs_UsesMembershipSet(t *testing.T) {
 	r := &credentialResolver{credRepo: credRepo, operationRepo: opRepo, userRepo: &mockUserRepo{}}
 	ctx := newCallerCtx(caller)
 
-	conn, err := r.MyCredentials(ctx, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil)
+	conn, err := r.MyCredentials(ctx, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -124,7 +125,7 @@ func TestMyCredentials_NilOpIDs_ZeroMembership_ShortCircuits(t *testing.T) {
 	r := &credentialResolver{credRepo: credRepo, operationRepo: opRepo, userRepo: &mockUserRepo{}}
 	ctx := newCallerCtx(caller)
 
-	conn, err := r.MyCredentials(ctx, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil)
+	conn, err := r.MyCredentials(ctx, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -144,7 +145,7 @@ func TestMyCredentials_EmptyOpIDs_ShortCircuits(t *testing.T) {
 	r := &credentialResolver{credRepo: credRepo, operationRepo: opRepo, userRepo: &mockUserRepo{}}
 	ctx := newCallerCtx(caller)
 
-	conn, err := r.MyCredentials(ctx, []string{}, nil, nil, nil, nil, nil, nil, nil, nil, nil)
+	conn, err := r.MyCredentials(ctx, []string{}, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -177,7 +178,7 @@ func TestMyCredentials_ExplicitOpIDs_NotMember_Forbidden(t *testing.T) {
 	r := &credentialResolver{credRepo: credRepo, operationRepo: opRepo, userRepo: &mockUserRepo{}}
 	ctx := newCallerCtx(caller)
 
-	_, err := r.MyCredentials(ctx, []string{memberID.String(), strangerID.String()}, nil, nil, nil, nil, nil, nil, nil, nil, nil)
+	_, err := r.MyCredentials(ctx, []string{memberID.String(), strangerID.String()}, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil)
 	if err == nil {
 		t.Fatal("expected forbidden error, got nil")
 	}
@@ -201,7 +202,7 @@ func TestMyCredentials_ExplicitOpIDs_OverCap_Rejected(t *testing.T) {
 		tooMany[i] = uuid.New().String()
 	}
 
-	_, err := r.MyCredentials(ctx, tooMany, nil, nil, nil, nil, nil, nil, nil, nil, nil)
+	_, err := r.MyCredentials(ctx, tooMany, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil)
 	if err == nil {
 		t.Fatal("expected over-cap error, got nil")
 	}
@@ -226,7 +227,7 @@ func TestMyCredentials_AppAdmin_NilOpIDs_ReturnsMembershipSet(t *testing.T) {
 			capturedOpIDs = opIDs
 			return 0, nil
 		},
-		findByOperationIDsWithCursorFn: func(_ context.Context, _ []uuid.UUID, _ repository.CredentialFilter, _ *pagination.Cursor, _ int64, _ bool) ([]models.Credential, error) {
+		findByOperationIDsWithCursorFn: func(_ context.Context, _ []uuid.UUID, _ repository.CredentialFilter, _ repository.CredentialSort, _ *pagination.Cursor, _ int64, _ bool) ([]models.Credential, error) {
 			return nil, nil
 		},
 	}
@@ -248,7 +249,7 @@ func TestMyCredentials_AppAdmin_NilOpIDs_ReturnsMembershipSet(t *testing.T) {
 	r := &credentialResolver{credRepo: credRepo, operationRepo: opRepo, userRepo: &mockUserRepo{}}
 	ctx := newCallerCtx(admin, "admin")
 
-	_, err := r.MyCredentials(ctx, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil)
+	_, err := r.MyCredentials(ctx, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -257,5 +258,59 @@ func TestMyCredentials_AppAdmin_NilOpIDs_ReturnsMembershipSet(t *testing.T) {
 	}
 	if len(capturedOpIDs) != 1 || capturedOpIDs[0] != adminOp {
 		t.Fatalf("opIDs sent to repo: got %v want [%s]", capturedOpIDs, adminOp)
+	}
+}
+
+// TestMyCredentials_SortByName_ThreadsSortAndMintsStringCursors verifies the
+// sort plumbing end-to-end at the resolver boundary: the GraphQL sortBy /
+// sortDirection arguments reach the repository as a CredentialSort, and the
+// minted edge cursors carry the name (string key) rather than the timestamp —
+// the cursor shape the repo's keyset filter expects back on the next page.
+func TestMyCredentials_SortByName_ThreadsSortAndMintsStringCursors(t *testing.T) {
+	caller := uuid.New()
+	op1 := uuid.New()
+
+	var capturedSort repository.CredentialSort
+
+	credRepo := &mockCredRepo{
+		countByOperationIDsFn: func(_ context.Context, _ []uuid.UUID, _ repository.CredentialFilter) (int64, error) {
+			return 1, nil
+		},
+		findByOperationIDsWithCursorFn: func(_ context.Context, _ []uuid.UUID, _ repository.CredentialFilter, sort repository.CredentialSort, _ *pagination.Cursor, _ int64, _ bool) ([]models.Credential, error) {
+			capturedSort = sort
+			return []models.Credential{
+				{CredentialID: uuid.New(), OperationID: op1, Name: "Zeta Portal"},
+			}, nil
+		},
+	}
+	opRepo := &mockOpRepo{
+		findByMemberIDFn: func(_ context.Context, _ uuid.UUID) ([]models.Operation, error) {
+			return []models.Operation{memberOp(op1, caller, models.OperationRoleViewer)}, nil
+		},
+	}
+
+	r := &credentialResolver{credRepo: credRepo, operationRepo: opRepo, userRepo: &mockUserRepo{}}
+	ctx := newCallerCtx(caller)
+
+	sortBy := model.CredentialSortFieldName
+	dir := model.SortDirectionAsc
+	conn, err := r.MyCredentials(ctx, nil, nil, nil, nil, nil, nil, &sortBy, &dir, nil, nil, nil, nil)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if capturedSort.Field != repository.CredentialSortFieldName || !capturedSort.Ascending {
+		t.Fatalf("repo received wrong sort: %+v", capturedSort)
+	}
+
+	if len(conn.Edges) != 1 {
+		t.Fatalf("expected 1 edge, got %d", len(conn.Edges))
+	}
+	cur, err := pagination.DecodeCursor(conn.Edges[0].Cursor)
+	if err != nil {
+		t.Fatalf("decode edge cursor: %v", err)
+	}
+	if cur.Str == nil || *cur.Str != "Zeta Portal" {
+		t.Fatalf("edge cursor should carry the name sort key, got %+v", cur)
 	}
 }

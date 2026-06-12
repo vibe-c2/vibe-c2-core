@@ -75,6 +75,8 @@ export const CredentialsQuery = graphql(`
     $type: CredentialType
     $tags: [String!]
     $validOnly: Boolean
+    $sortBy: CredentialSortField
+    $sortDirection: SortDirection
     $first: Int
     $after: String
   ) {
@@ -85,6 +87,8 @@ export const CredentialsQuery = graphql(`
       type: $type
       tags: $tags
       validOnly: $validOnly
+      sortBy: $sortBy
+      sortDirection: $sortDirection
       first: $first
       after: $after
     ) {
@@ -151,6 +155,8 @@ export const MyCredentialsQuery = graphql(`
     $type: CredentialType
     $tags: [String!]
     $validOnly: Boolean
+    $sortBy: CredentialSortField
+    $sortDirection: SortDirection
     $first: Int
     $after: String
   ) {
@@ -161,6 +167,8 @@ export const MyCredentialsQuery = graphql(`
       type: $type
       tags: $tags
       validOnly: $validOnly
+      sortBy: $sortBy
+      sortDirection: $sortDirection
       first: $first
       after: $after
     ) {

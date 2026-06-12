@@ -55,7 +55,7 @@ type ICredentialResolver interface {
 
 	// Queries
 	Credential(ctx context.Context, id string) (*models.Credential, error)
-	Credentials(ctx context.Context, operationID string, search *string, searchFields []model.CredentialSearchField, typeArg *models.CredentialType, tags []string, validOnly *bool, first *int, after *string, last *int, before *string) (*model.CredentialConnection, error)
+	Credentials(ctx context.Context, operationID string, search *string, searchFields []model.CredentialSearchField, typeArg *models.CredentialType, tags []string, validOnly *bool, sortBy *model.CredentialSortField, sortDirection *model.SortDirection, first *int, after *string, last *int, before *string) (*model.CredentialConnection, error)
 	CredentialTags(ctx context.Context, operationID string) ([]string, error)
 
 	// Cross-operation queries — power the "global" Findings page. See
@@ -63,7 +63,7 @@ type ICredentialResolver interface {
 	//   nil   ⇒ caller's full membership set
 	//   []    ⇒ explicit empty, returns empty result
 	//   [...] ⇒ resolver authorizes each id (viewer role minimum)
-	MyCredentials(ctx context.Context, operationIDs []string, search *string, searchFields []model.CredentialSearchField, typeArg *models.CredentialType, tags []string, validOnly *bool, first *int, after *string, last *int, before *string) (*model.CredentialConnection, error)
+	MyCredentials(ctx context.Context, operationIDs []string, search *string, searchFields []model.CredentialSearchField, typeArg *models.CredentialType, tags []string, validOnly *bool, sortBy *model.CredentialSortField, sortDirection *model.SortDirection, first *int, after *string, last *int, before *string) (*model.CredentialConnection, error)
 	MyCredentialTags(ctx context.Context, operationIDs []string) ([]string, error)
 
 	// Field resolvers for Credential type
@@ -543,7 +543,7 @@ func (r *credentialResolver) Credential(ctx context.Context, id string) (*models
 
 // Credentials returns a cursor-paginated list of credentials for an operation.
 // Requires at least viewer role in the operation.
-func (r *credentialResolver) Credentials(ctx context.Context, operationID string, search *string, searchFields []model.CredentialSearchField, typeArg *models.CredentialType, tags []string, validOnly *bool, first *int, after *string, last *int, before *string) (*model.CredentialConnection, error) {
+func (r *credentialResolver) Credentials(ctx context.Context, operationID string, search *string, searchFields []model.CredentialSearchField, typeArg *models.CredentialType, tags []string, validOnly *bool, sortBy *model.CredentialSortField, sortDirection *model.SortDirection, first *int, after *string, last *int, before *string) (*model.CredentialConnection, error) {
 	opUID, err := uuid.Parse(operationID)
 	if err != nil {
 		return nil, fmt.Errorf("invalid operation ID: %w", err)
@@ -556,6 +556,11 @@ func (r *credentialResolver) Credentials(ctx context.Context, operationID string
 	args, err := pagination.ParseArgs(first, after, last, before)
 	if err != nil {
 		return nil, fmt.Errorf("invalid pagination args: %w", err)
+	}
+
+	sortSpec, err := mapCredentialSort(sortBy, sortDirection)
+	if err != nil {
+		return nil, err
 	}
 
 	searchFieldsMapped, err := mapCredentialSearchFields(searchFields)
@@ -583,7 +588,7 @@ func (r *credentialResolver) Credentials(ctx context.Context, operationID string
 		return nil, fmt.Errorf("failed to count credentials: %w", err)
 	}
 
-	creds, err := r.credRepo.FindByOperationIDWithCursor(ctx, opUID, filter, args.Cursor, args.Limit+1, args.Forward)
+	creds, err := r.credRepo.FindByOperationIDWithCursor(ctx, opUID, filter, sortSpec, args.Cursor, args.Limit+1, args.Forward)
 	if err != nil {
 		return nil, fmt.Errorf("failed to list credentials: %w", err)
 	}
@@ -595,10 +600,11 @@ func (r *credentialResolver) Credentials(ctx context.Context, operationID string
 
 	edges := make([]*model.CredentialEdge, len(creds))
 	for i := range creds {
-		cursor := pagination.EncodeCursor(creds[i].CreateAt, creds[i].Id)
+		// Edge cursors are sort-specific: they carry the active sort
+		// column's value (see CredentialSort.Cursor).
 		edges[i] = &model.CredentialEdge{
 			Node:   &creds[i],
-			Cursor: cursor,
+			Cursor: sortSpec.Cursor(&creds[i]),
 		}
 	}
 
@@ -699,7 +705,7 @@ func (r *credentialResolver) resolveAccessibleOperationIDs(ctx context.Context, 
 // MyCredentials returns a cursor-paginated list of credentials across the
 // caller's accessible operations. See the GraphQL schema doc for the
 // operationIDs semantics. The pagination shape mirrors Credentials exactly.
-func (r *credentialResolver) MyCredentials(ctx context.Context, operationIDs []string, search *string, searchFields []model.CredentialSearchField, typeArg *models.CredentialType, tags []string, validOnly *bool, first *int, after *string, last *int, before *string) (*model.CredentialConnection, error) {
+func (r *credentialResolver) MyCredentials(ctx context.Context, operationIDs []string, search *string, searchFields []model.CredentialSearchField, typeArg *models.CredentialType, tags []string, validOnly *bool, sortBy *model.CredentialSortField, sortDirection *model.SortDirection, first *int, after *string, last *int, before *string) (*model.CredentialConnection, error) {
 	opUIDs, err, ok := r.resolveAccessibleOperationIDs(ctx, operationIDs)
 	if err != nil {
 		return nil, err
@@ -708,6 +714,11 @@ func (r *credentialResolver) MyCredentials(ctx context.Context, operationIDs []s
 	args, err := pagination.ParseArgs(first, after, last, before)
 	if err != nil {
 		return nil, fmt.Errorf("invalid pagination args: %w", err)
+	}
+
+	sortSpec, err := mapCredentialSort(sortBy, sortDirection)
+	if err != nil {
+		return nil, err
 	}
 
 	if !ok {
@@ -744,7 +755,7 @@ func (r *credentialResolver) MyCredentials(ctx context.Context, operationIDs []s
 		return nil, fmt.Errorf("failed to count credentials: %w", err)
 	}
 
-	creds, err := r.credRepo.FindByOperationIDsWithCursor(ctx, opUIDs, filter, args.Cursor, args.Limit+1, args.Forward)
+	creds, err := r.credRepo.FindByOperationIDsWithCursor(ctx, opUIDs, filter, sortSpec, args.Cursor, args.Limit+1, args.Forward)
 	if err != nil {
 		return nil, fmt.Errorf("failed to list credentials: %w", err)
 	}
@@ -756,10 +767,11 @@ func (r *credentialResolver) MyCredentials(ctx context.Context, operationIDs []s
 
 	edges := make([]*model.CredentialEdge, len(creds))
 	for i := range creds {
-		cursor := pagination.EncodeCursor(creds[i].CreateAt, creds[i].Id)
+		// Edge cursors are sort-specific: they carry the active sort
+		// column's value (see CredentialSort.Cursor).
 		edges[i] = &model.CredentialEdge{
 			Node:   &creds[i],
-			Cursor: cursor,
+			Cursor: sortSpec.Cursor(&creds[i]),
 		}
 	}
 
@@ -1000,6 +1012,40 @@ func normalizeCredentialProperties(in []*model.CredentialPropertyInput) ([]model
 // repository fall back to searching *all* fields, widening the scope the caller
 // asked to narrow. gqlgen validates the enum upstream, so this only fires if
 // the schema and this switch ever diverge.
+// mapCredentialSort translates the GraphQL sortBy/sortDirection arguments to
+// the repository's sort spec. Both arguments carry schema defaults
+// (CREATED_AT / DESC), so nil only appears when a client sends an explicit
+// null — which means the same thing: "use the default".
+func mapCredentialSort(sortBy *model.CredentialSortField, sortDirection *model.SortDirection) (repository.CredentialSort, error) {
+	sort := repository.DefaultCredentialSort()
+
+	if sortBy != nil {
+		switch *sortBy {
+		case model.CredentialSortFieldName:
+			sort.Field = repository.CredentialSortFieldName
+		case model.CredentialSortFieldUsername:
+			sort.Field = repository.CredentialSortFieldUsername
+		case model.CredentialSortFieldCreatedAt:
+			sort.Field = repository.CredentialSortFieldCreatedAt
+		default:
+			return repository.CredentialSort{}, fmt.Errorf("invalid credential sort field: %s", *sortBy)
+		}
+	}
+
+	if sortDirection != nil {
+		switch *sortDirection {
+		case model.SortDirectionAsc:
+			sort.Ascending = true
+		case model.SortDirectionDesc:
+			sort.Ascending = false
+		default:
+			return repository.CredentialSort{}, fmt.Errorf("invalid sort direction: %s", *sortDirection)
+		}
+	}
+
+	return sort, nil
+}
+
 func mapCredentialSearchFields(in []model.CredentialSearchField) ([]repository.CredentialSearchField, error) {
 	if len(in) == 0 {
 		return nil, nil
