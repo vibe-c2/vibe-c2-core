@@ -24,6 +24,12 @@ import {
   ICON_LOOKUP,
   type IconEntry,
 } from "@/components/wiki/icon-catalog";
+import {
+  ALL_SIMPLE_ICON_SLUGS,
+  CURATED_SIMPLE_SLUGS,
+  SIMPLE_ICON_CATALOG,
+  toSimpleIconName,
+} from "@/components/wiki/simple-icon-catalog";
 import { DocumentIcon } from "@/components/wiki/document-icon";
 import {
   loadFrequentIconNames,
@@ -231,6 +237,11 @@ interface IconGridProps {
 // hundreds of icons at once. Users can refine the search to narrow further.
 const EXTENDED_RESULTS_LIMIT = 64;
 
+// Same idea for the brand (Simple Icons) extended results. Kept a touch
+// smaller — brand logos are a secondary surface and a generic query shouldn't
+// flood the grid with them under the lucide results.
+const SIMPLE_EXTENDED_RESULTS_LIMIT = 48;
+
 // Keywords matched against the search query to surface the adaptive default.
 // "default"/"adaptive" are the discoverable terms; "folder"/"page"/"doc" are
 // the natural names users reach for since the icon morphs through all three.
@@ -299,13 +310,45 @@ function IconGrid({
     return { names, truncated: total > names.length };
   }, [q]);
 
+  // Curated brand (Simple Icons) groups. Browse → all; search → filter each
+  // group by slug or keyword, dropping emptied groups (same shape as the
+  // lucide filteredGroups above).
+  const simpleGroups = useMemo(() => {
+    if (!q) return SIMPLE_ICON_CATALOG;
+    return SIMPLE_ICON_CATALOG.map((group) => ({
+      ...group,
+      icons: group.icons.filter(
+        (i) =>
+          i.slug.includes(q) || i.keywords.some((k) => k.includes(q)),
+      ),
+    })).filter((g) => g.icons.length > 0);
+  }, [q]);
+
+  // Extended brand results: full Simple Icons set, search-only, capped,
+  // excluding curated slugs already shown. Matches on slug only (the slug is
+  // the brand's de-spaced name), mirroring the lucide name-only search.
+  const simpleExtended = useMemo(() => {
+    if (!q) return { slugs: [] as string[], truncated: false };
+    const slugs: string[] = [];
+    let total = 0;
+    for (const slug of ALL_SIMPLE_ICON_SLUGS) {
+      if (CURATED_SIMPLE_SLUGS.has(slug)) continue;
+      if (!slug.includes(q)) continue;
+      total++;
+      if (slugs.length < SIMPLE_EXTENDED_RESULTS_LIMIT) slugs.push(slug);
+    }
+    return { slugs, truncated: total > slugs.length };
+  }, [q]);
+
   const totalShown =
     (showFrequent ? frequentNames.length : 0) +
     (showAdaptive ? 1 : 0) +
     (showDefault ? 1 : 0) +
     (showDerivedDefault ? 1 : 0) +
     filteredGroups.reduce((n, g) => n + g.icons.length, 0) +
-    extendedResults.names.length;
+    extendedResults.names.length +
+    simpleGroups.reduce((n, g) => n + g.icons.length, 0) +
+    simpleExtended.slugs.length;
 
   return (
     <div className="flex flex-col gap-2">
@@ -418,6 +461,53 @@ function IconGrid({
                     onPick={onPick}
                   />
                 ))}
+              </GridSection>
+            )}
+            {/* Brand logos (Simple Icons). Stored prefixed (`si:<slug>`); each
+                tile renders through the same ExtendedIconButton → DocumentIcon
+                path, which detects the prefix and lazy-loads the SVG. */}
+            {simpleGroups.map((group) => (
+              <GridSection key={`si-${group.label}`} heading={group.label}>
+                {group.icons.map((entry) => {
+                  const name = toSimpleIconName(entry.slug);
+                  return (
+                    <ExtendedIconButton
+                      key={name}
+                      name={name}
+                      selected={name === selectedName}
+                      previewColor={previewColor}
+                      onPick={onPick}
+                    />
+                  );
+                })}
+              </GridSection>
+            ))}
+            {simpleExtended.slugs.length > 0 && (
+              <GridSection
+                heading={
+                  <>
+                    More brand icons
+                    {simpleExtended.truncated && (
+                      <span className="ml-1.5 normal-case text-muted-foreground/70">
+                        (top {SIMPLE_EXTENDED_RESULTS_LIMIT} — refine to see
+                        more)
+                      </span>
+                    )}
+                  </>
+                }
+              >
+                {simpleExtended.slugs.map((slug) => {
+                  const name = toSimpleIconName(slug);
+                  return (
+                    <ExtendedIconButton
+                      key={name}
+                      name={name}
+                      selected={name === selectedName}
+                      previewColor={previewColor}
+                      onPick={onPick}
+                    />
+                  );
+                })}
               </GridSection>
             )}
           </>

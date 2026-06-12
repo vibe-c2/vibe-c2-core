@@ -1,9 +1,15 @@
-import { Suspense } from "react"
+import { Suspense, type CSSProperties } from "react"
 import {
   ADAPTIVE_ICON_NAME,
+  type IconComponent,
   resolveAdaptiveIcon,
   resolveIcon,
 } from "@/components/wiki/icon-catalog"
+import {
+  isSimpleIconName,
+  resolveSimpleIcon,
+  simpleIconSlug,
+} from "@/components/wiki/simple-icon-catalog"
 import { cn } from "@/lib/utils"
 
 const DEFAULT_EMOJI = "\u{1F4C4}"
@@ -37,9 +43,10 @@ interface DocumentIconProps {
  * the full lucide set), an emoji glyph, or the default page-icon fallback.
  *
  * `icon` wins over `emoji` so a doc upgrading from emoji to lucide swaps
- * immediately even if the server hasn't cleared the other field. When the
- * `icon` name is not a known lucide name (typo / removed), we fall back to
- * emoji, so the slot never goes blank.
+ * immediately even if the server hasn't cleared the other field. An `icon`
+ * value prefixed `si:` is a Simple Icon (brand logo) — also lazy + Suspense;
+ * everything else is a lucide name. When the name resolves to neither (typo /
+ * removed icon), we fall back to emoji, so the slot never goes blank.
  *
  * For uncurated lucide icons, resolveIcon returns a React.lazy component;
  * the Suspense boundary below keeps the slot from blowing up the parent
@@ -56,12 +63,15 @@ export function DocumentIcon({
   isExpanded = false,
 }: DocumentIconProps) {
   /* eslint-disable react-hooks/static-components */
+  // color ? {color} : undefined keeps an empty string from becoming an empty
+  // CSS value; undefined lets the icon inherit currentColor. Shared by every
+  // icon branch below. Ignored on the emoji fallback (emojis carry their own).
+  const style: CSSProperties | undefined = color ? { color } : undefined
   // Adaptive default: render synchronously without going through the lazy
   // lucide registry. Caught here (before resolveIcon) so the reserved name
   // never leaks into ALL_LUCIDE_NAMES lookups.
   if (icon === ADAPTIVE_ICON_NAME) {
     const Icon = resolveAdaptiveIcon(hasChildren, isExpanded)
-    const style = color ? { color } : undefined
     return (
       <Icon
         className={cn("shrink-0", className)}
@@ -71,28 +81,31 @@ export function DocumentIcon({
       />
     )
   }
+  // Simple Icon (brand logo). Lazy like the uncurated lucide branch, so it
+  // renders through the same Suspense slot. Unknown slug → fall through to the
+  // lucide branch, then emoji.
+  if (isSimpleIconName(icon)) {
+    const SimpleIcon = resolveSimpleIcon(simpleIconSlug(icon))
+    if (SimpleIcon) {
+      return (
+        <LazyIconSlot
+          Icon={SimpleIcon}
+          size={size}
+          className={className}
+          style={style}
+        />
+      )
+    }
+  }
   const Lucide = resolveIcon(icon)
   if (Lucide) {
-    // color || undefined keeps empty string from becoming an empty CSS value;
-    // undefined lets the icon inherit currentColor like before.
-    const style = color ? { color } : undefined
     return (
-      <Suspense
-        fallback={
-          <span
-            aria-hidden
-            className={cn("inline-block shrink-0", className)}
-            style={{ width: size, height: size }}
-          />
-        }
-      >
-        <Lucide
-          className={cn("shrink-0", className)}
-          size={size}
-          style={style}
-          aria-hidden
-        />
-      </Suspense>
+      <LazyIconSlot
+        Icon={Lucide}
+        size={size}
+        className={className}
+        style={style}
+      />
     )
   }
   /* eslint-enable react-hooks/static-components */
@@ -103,5 +116,39 @@ export function DocumentIcon({
     >
       {emoji || DEFAULT_EMOJI}
     </span>
+  )
+}
+
+interface LazyIconSlotProps {
+  Icon: IconComponent
+  size: number
+  className?: string
+  style?: CSSProperties
+}
+
+/**
+ * Renders a lazy icon (uncurated lucide or a Simple Icon) inside a Suspense
+ * boundary, so a slow icon chunk can't blow up the parent render tree on first
+ * paint. The fallback is a same-size empty span so layout doesn't shift
+ * between the placeholder and the resolved icon.
+ */
+function LazyIconSlot({ Icon, size, className, style }: LazyIconSlotProps) {
+  return (
+    <Suspense
+      fallback={
+        <span
+          aria-hidden
+          className={cn("inline-block shrink-0", className)}
+          style={{ width: size, height: size }}
+        />
+      }
+    >
+      <Icon
+        className={cn("shrink-0", className)}
+        size={size}
+        style={style}
+        aria-hidden
+      />
+    </Suspense>
   )
 }
