@@ -323,9 +323,49 @@ describe("deriveTopology — identity layer (logins)", () => {
         { user: "alice", from: "10.9.9.9", count: 2 },
       ]),
     ])
-    expect(edgesOf(t.edges, "logged-into")).toHaveLength(1)
-    expect(edgesOf(t.edges, "logged-from")).toHaveLength(1)
+    const into = edgesOf(t.edges, "logged-into")
+    const from = edgesOf(t.edges, "logged-from")
+    expect(into).toHaveLength(1)
+    expect(from).toHaveLength(1)
     expect(byKind(t.nodes, "identity")).toHaveLength(1)
+    // The pairing arrays dedupe alongside the edges themselves.
+    expect(into[0].sourceIds).toHaveLength(1)
+    expect(from[0].targetIds).toEqual(["h1"])
+  })
+
+  it("preserves the per-footprint source↔destination pairing on login edges", () => {
+    // From jump, alice reached h2 and h3; from elsewhere (10.9.9.9) she only
+    // reached h3. The deduped graph alone can't tell which source led where —
+    // the pairing arrays must.
+    const t = deriveTopology([
+      host("jump", "jumpbox", [{ addresses: ["10.0.0.1/24"] }]),
+      host("h2", "beta", [{ addresses: ["10.0.0.2/24"] }], [], [
+        { user: "alice", from: "10.0.0.1" },
+      ]),
+      host("h3", "gamma", [{ addresses: ["10.0.0.3/24"] }], [], [
+        { user: "alice", from: "10.0.0.1" },
+        { user: "alice", from: "10.9.9.9" },
+      ]),
+    ])
+    const from = edgesOf(t.edges, "logged-from")
+    const fromJump = from.find((e) => e.source === "jump")
+    const fromGhost = from.find((e) => e.source !== "jump")
+    expect(fromJump?.targetIds).toEqual(["h2", "h3"])
+    expect(fromGhost?.targetIds).toEqual(["h3"])
+
+    const into = edgesOf(t.edges, "logged-into")
+    const intoH2 = into.find((e) => e.target === "h2")
+    const intoH3 = into.find((e) => e.target === "h3")
+    expect(intoH2?.sourceIds).toEqual(["jump"])
+    expect(intoH3?.sourceIds).toEqual(["jump", fromGhost?.source])
+  })
+
+  it("leaves sourceIds empty for a login with no from", () => {
+    const t = deriveTopology([
+      host("h1", "beta", [{ addresses: ["10.0.0.2/24"] }], [], [{ user: "alice" }]),
+    ])
+    expect(edgesOf(t.edges, "logged-into")[0].sourceIds).toEqual([])
+    expect(edgesOf(t.edges, "logged-from")).toHaveLength(0)
   })
 
   it("emits no identity nodes or edges when there are no logins", () => {

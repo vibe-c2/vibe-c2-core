@@ -6,17 +6,20 @@ import {
   applyEdgeEmphasis,
   applyNodeEmphasis,
   buildAdjacency,
+  edgeFocusSets,
   focusSets,
   searchSets,
 } from "@/components/findings/topology/emphasis"
 
-// State for the two emphasis sources — click-to-focus and search — and the
-// derived dim/ring styling over the simulation's nodes/edges.
+// State for the three emphasis sources — click-to-focus on a node, click-to-
+// focus on an edge, and search — and the derived dim/ring styling over the
+// simulation's nodes/edges.
 //
-// The sources are mutually exclusive by construction: focusing clears the
-// query, typing clears the focus. Only the raw inputs (focused id, query,
-// active match index) are state; everything visual is derived per render, so
-// a data refresh or lens switch can never leave stale emphasis behind.
+// The sources are mutually exclusive by construction: focusing (either kind)
+// clears the query and the other focus, typing clears both foci. Only the raw
+// inputs (focused ids, query, active match index) are state; everything visual
+// is derived per render, so a data refresh or lens switch can never leave
+// stale emphasis behind.
 
 export type TopologySearchState = {
   query: string
@@ -35,6 +38,7 @@ export function useTopologyEmphasis(
   edges: Edge[],
 ) {
   const [focusedId, setFocusedId] = useState<string | null>(null)
+  const [focusedEdgeId, setFocusedEdgeId] = useState<string | null>(null)
   const [query, setQuery] = useState("")
   const [activeMatch, setActiveMatch] = useState(0)
   // When focus was entered FROM search (Enter on a match), Esc should step
@@ -59,6 +63,10 @@ export function useTopologyEmphasis(
     () => new Set(topology.nodes.map((n) => n.id)),
     [topology],
   )
+  const edgeById = useMemo(
+    () => new Map(topology.edges.map((e) => [e.id, e])),
+    [topology],
+  )
 
   const emphasis = useMemo(() => {
     // A focused node can vanish on lens switch or refetch — treat as no focus
@@ -66,9 +74,22 @@ export function useTopologyEmphasis(
     if (focusedId && nodeIds.has(focusedId)) {
       return focusSets(focusedId, adjacency)
     }
+    // Same ghost rule for a focused edge (lens switch strips edge kinds, the
+    // collapses replace login edges with group edges).
+    const focusedEdge = focusedEdgeId ? edgeById.get(focusedEdgeId) : undefined
+    if (focusedEdge) return edgeFocusSets(focusedEdge, topology)
     if (matchIds.length > 0) return searchSets(matchIds, activeIndex)
     return null
-  }, [focusedId, nodeIds, adjacency, matchIds, activeIndex])
+  }, [
+    focusedId,
+    nodeIds,
+    adjacency,
+    focusedEdgeId,
+    edgeById,
+    topology,
+    matchIds,
+    activeIndex,
+  ])
 
   // `nodes` gets a new array identity on every simulation tick during drag,
   // so the node pass re-runs per tick while emphasis is active — see the
@@ -89,7 +110,17 @@ export function useTopologyEmphasis(
   const toggleFocus = useCallback((nodeId: string) => {
     searchReturnRef.current = null
     setQuery("")
+    setFocusedEdgeId(null)
     setFocusedId((prev) => (prev === nodeId ? null : nodeId))
+  }, [])
+
+  // Click on an edge: same toggle contract as a node, focusing the relation
+  // the edge represents (see edgeFocusSets for what lights up).
+  const toggleEdgeFocus = useCallback((edgeId: string) => {
+    searchReturnRef.current = null
+    setQuery("")
+    setFocusedId(null)
+    setFocusedEdgeId((prev) => (prev === edgeId ? null : edgeId))
   }, [])
 
   // Enter on a search match: focus it like a click, but remember where in the
@@ -98,6 +129,7 @@ export function useTopologyEmphasis(
     (nodeId: string) => {
       searchReturnRef.current = { query, activeMatch: activeIndex }
       setQuery("")
+      setFocusedEdgeId(null)
       setFocusedId(nodeId)
     },
     [query, activeIndex],
@@ -108,11 +140,13 @@ export function useTopologyEmphasis(
     setQuery(q)
     setActiveMatch(0)
     setFocusedId(null)
+    setFocusedEdgeId(null)
   }, [])
 
   const clearEmphasis = useCallback(() => {
     searchReturnRef.current = null
     setFocusedId(null)
+    setFocusedEdgeId(null)
     setQuery("")
   }, [])
 
@@ -165,6 +199,7 @@ export function useTopologyEmphasis(
     displayNodes,
     displayEdges,
     toggleFocus,
+    toggleEdgeFocus,
     focusFromSearch,
     handleEscape,
     clearEmphasis,

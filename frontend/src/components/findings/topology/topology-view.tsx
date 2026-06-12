@@ -12,6 +12,7 @@ import {
   ReactFlow,
   ReactFlowProvider,
   useReactFlow,
+  type Edge,
   type Node,
 } from "@xyflow/react"
 import "@xyflow/react/dist/style.css"
@@ -251,6 +252,7 @@ export function TopologyView({ operationId }: TopologyViewProps) {
     displayNodes,
     displayEdges,
     toggleFocus,
+    toggleEdgeFocus,
     focusFromSearch,
     handleEscape,
     clearEmphasis,
@@ -262,6 +264,12 @@ export function TopologyView({ operationId }: TopologyViewProps) {
   const onNodeClick = useCallback(
     (_e: React.MouseEvent, node: Node) => toggleFocus(node.id),
     [toggleFocus],
+  )
+  // Edges focus too: on the users lens a login edge lights the whole travel
+  // path it belongs to (source host → user → destination hosts).
+  const onEdgeClick = useCallback(
+    (_e: React.MouseEvent, edge: Edge) => toggleEdgeFocus(edge.id),
+    [toggleEdgeFocus],
   )
 
   if (isLoading) {
@@ -321,6 +329,7 @@ export function TopologyView({ operationId }: TopologyViewProps) {
             onNodeDrag={onNodeDrag}
             onNodeDragStop={onNodeDragStop}
             onNodeClick={onNodeClick}
+            onEdgeClick={onEdgeClick}
             onNodeContextMenu={onNodeContextMenu}
             onPaneClick={clearEmphasis}
             nodeTypes={nodeTypes}

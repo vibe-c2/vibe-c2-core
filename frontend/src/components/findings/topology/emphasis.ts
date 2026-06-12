@@ -1,5 +1,5 @@
 import type { Edge, Node } from "@xyflow/react"
-import type { Topology } from "@/lib/topology/derive"
+import type { TopoEdge, Topology } from "@/lib/topology/derive"
 import { isPillNodeType } from "@/components/findings/topology/layout"
 
 // Visual emphasis over the rendered graph: click-to-focus dims everything
@@ -25,6 +25,11 @@ export type EmphasisSets = {
   // Search rings every match so the eye can find them all; focus rings only
   // the clicked node — its neighbors are identified by staying lit.
   ringMatches: boolean
+  // When set, exactly these edge ids stay lit instead of the default
+  // "both endpoints lit" rule. Edge focus needs this: lighting every edge
+  // among its lit nodes would also fire unrelated wiring between them (e.g.
+  // a destination host the user ALSO logged in from).
+  litEdges: Set<string> | null
 }
 
 // Undirected adjacency over the visible edges, for 1-hop neighborhoods.
@@ -57,7 +62,7 @@ export function focusSets(
 ): EmphasisSets {
   const lit = new Set<string>([nodeId])
   for (const n of adjacency.get(nodeId) ?? []) lit.add(n)
-  return { lit, active: nodeId, ringMatches: false }
+  return { lit, active: nodeId, ringMatches: false, litEdges: null }
 }
 
 export function searchSets(
@@ -68,7 +73,49 @@ export function searchSets(
     lit: new Set(matchIds),
     active: matchIds[activeIndex] ?? null,
     ringMatches: true,
+    litEdges: null,
   }
+}
+
+// Clicking an edge focuses the relation it represents, not just its two
+// endpoints. On the users lens a login edge is one half of a travel path —
+// sourceHost → user → accessedHost — split across two graph edges, so:
+//   - host → user (logged-from): light the source host, the user, and every
+//     host this user logged into FROM that source, plus exactly the
+//     user → destination edges of those hops.
+//   - user → host (logged-into): the mirror — light the user, the host, and
+//     every source this user came FROM to reach it, plus those source → user
+//     edges.
+// The per-footprint pairing comes from the arrays derive.ts preserves on the
+// login edges (the deduped graph alone can't tell which source led to which
+// destination). Any other edge kind focuses as just its two endpoints.
+// Pairing ids that no longer resolve to a visible node (e.g. a phantom source
+// collapsed into a lone-sources list) light nothing — harmless by design.
+export function edgeFocusSets(edge: TopoEdge, topology: Topology): EmphasisSets {
+  const lit = new Set<string>([edge.source, edge.target])
+  const litEdges = new Set<string>([edge.id])
+
+  if (edge.kind === "logged-from") {
+    const user = edge.target
+    const destinations = new Set(edge.targetIds)
+    for (const id of edge.targetIds) lit.add(id)
+    for (const e of topology.edges) {
+      if (e.kind === "logged-into" && e.source === user && destinations.has(e.target)) {
+        litEdges.add(e.id)
+      }
+    }
+  } else if (edge.kind === "logged-into") {
+    const user = edge.source
+    const sources = new Set(edge.sourceIds)
+    for (const id of edge.sourceIds) lit.add(id)
+    for (const e of topology.edges) {
+      if (e.kind === "logged-from" && e.target === user && sources.has(e.source)) {
+        litEdges.add(e.id)
+      }
+    }
+  }
+
+  return { lit, active: null, ringMatches: false, litEdges }
 }
 
 // The ring is drawn on React Flow's node wrapper div, so its radius must
@@ -126,9 +173,12 @@ export function applyEdgeEmphasis(
   // An edge stays lit only when both of its endpoints are — in focus mode
   // that's exactly the focused node's spokes (plus edges among neighbors). The
   // `lit` flag is the cue FloatingEdge uses to fire a quiet edge up to its full
-  // color; everything else dims.
+  // color; everything else dims. Edge focus instead enumerates its lit edges
+  // explicitly (see edgeFocusSets).
   return edges.map((edge) => {
-    const lit = sets.lit.has(edge.source) && sets.lit.has(edge.target)
+    const lit = sets.litEdges
+      ? sets.litEdges.has(edge.id)
+      : sets.lit.has(edge.source) && sets.lit.has(edge.target)
     return { ...edge, data: { ...edge.data, dimmed: !lit, lit } }
   })
 }

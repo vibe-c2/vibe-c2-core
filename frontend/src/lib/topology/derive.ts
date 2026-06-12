@@ -139,6 +139,12 @@ export type TopoEdge =
       id: string
       source: string // identity id
       target: string // host id
+      // The source node ids (host or phantom-host) this account's sessions on
+      // THIS host originated from. The raw login records pair (from, user,
+      // host) per footprint, but the graph splits that triple across two
+      // deduped edges — these arrays preserve the pairing so edge focus can
+      // light the actual travel path, not the identity's whole neighborhood.
+      sourceIds: string[]
     }
   | {
       // Source host → identity: this account's session originated here. Chained
@@ -147,6 +153,9 @@ export type TopoEdge =
       id: string
       source: string // host id or phantom-host id
       target: string // identity id
+      // Host ids this account logged INTO from this source — the other half of
+      // the per-footprint pairing (see logged-into.sourceIds).
+      targetIds: string[]
     }
   | {
       // Produced only by collapsePhantomHosts: replaces the per-source
@@ -306,7 +315,10 @@ export function deriveTopology(hosts: HostFieldsFragment[]): Topology {
   const identities = new Map<string, { user: string; wellKnown: boolean }>()
   const phantomHosts = new Map<string, string>() // id -> label
   const identityEdges: TopoEdge[] = []
-  const edgeSeen = new Set<string>() // dedupe edge ids across repeated footprints
+  // Dedupe maps double as accumulators: a repeated footprint of the same pair
+  // extends the existing edge's pairing array instead of duplicating the edge.
+  const intoById = new Map<string, Extract<TopoEdge, { kind: "logged-into" }>>()
+  const fromById = new Map<string, Extract<TopoEdge, { kind: "logged-from" }>>()
 
   for (const h of hosts) {
     for (const l of h.logins ?? []) {
@@ -319,14 +331,17 @@ export function deriveTopology(hosts: HostFieldsFragment[]): Topology {
 
       // logged-into: identity -> this host.
       const intoId = `li:${iid}->${h.id}`
-      if (!edgeSeen.has(intoId)) {
-        edgeSeen.add(intoId)
-        identityEdges.push({
+      let into = intoById.get(intoId)
+      if (!into) {
+        into = {
           kind: "logged-into",
           id: intoId,
           source: iid,
           target: h.id,
-        })
+          sourceIds: [],
+        }
+        intoById.set(intoId, into)
+        identityEdges.push(into)
       }
 
       // logged-from: source host (or phantom) -> identity.
@@ -346,15 +361,21 @@ export function deriveTopology(hosts: HostFieldsFragment[]): Topology {
         sourceId = phid
       }
       const fromId = `lf:${sourceId}->${iid}`
-      if (!edgeSeen.has(fromId)) {
-        edgeSeen.add(fromId)
-        identityEdges.push({
+      let fromEdge = fromById.get(fromId)
+      if (!fromEdge) {
+        fromEdge = {
           kind: "logged-from",
           id: fromId,
           source: sourceId,
           target: iid,
-        })
+          targetIds: [],
+        }
+        fromById.set(fromId, fromEdge)
+        identityEdges.push(fromEdge)
       }
+      // Record the (source, user, host) triple on both halves of the pairing.
+      if (!into.sourceIds.includes(sourceId)) into.sourceIds.push(sourceId)
+      if (!fromEdge.targetIds.includes(h.id)) fromEdge.targetIds.push(h.id)
     }
   }
 
