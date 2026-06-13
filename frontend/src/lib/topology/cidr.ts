@@ -54,6 +54,20 @@ export function hostAddr(value: string): string | null {
   }
 }
 
+// Converts a dotted-quad IPv4 netmask ("255.255.255.0") to its prefix length
+// (24). Returns null for anything that isn't a contiguous IPv4 mask. ipconfig
+// prints the address and its mask on separate lines; this glues them back into
+// the CIDR form the rest of the app expects.
+export function maskToPrefix(mask: string): number | null {
+  try {
+    const addr = ipaddr.parse(mask.trim())
+    if (addr.kind() !== "ipv4") return null
+    return (addr as ipaddr.IPv4).prefixLengthFromSubnetMask()
+  } catch {
+    return null
+  }
+}
+
 // Zero every bit past `prefix`, byte by byte — the network mask. Bytes wholly
 // inside the prefix pass through; bytes wholly outside become 0; the straddling
 // byte is masked at the bit boundary.

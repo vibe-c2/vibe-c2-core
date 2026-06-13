@@ -33,7 +33,7 @@ describe("detectCommand", () => {
   })
 
   it("rejects unsupported commands with an error on the command line", () => {
-    const r = parseCommandOutput("ipconfig /all\nsomething")
+    const r = parseCommandOutput("netstat -an\nsomething")
     expect(r.command).toBeNull()
     expect(r.commandError).toContain("Unsupported command")
     expect(r.errorCount).toBe(1)
@@ -421,5 +421,451 @@ describe("parseCommandOutput — last", () => {
     ].join("\n")
     const r = parseCommandOutput(out)
     expect(r.logins.map((l) => l.from)).toEqual(["", "", ""])
+  })
+})
+
+describe("detectCommand — ipconfig", () => {
+  it("recognizes ipconfig variants, prompts, and the space-less /all", () => {
+    for (const cmd of [
+      "ipconfig /all",
+      "ipconfig",
+      "ipconfig/all",
+      "ipconfig.exe /all",
+      "C:\\Users\\admin>ipconfig /all",
+      "PS C:\\> ipconfig /all",
+    ]) {
+      expect(parseCommandOutput(cmd).command).toBe("ipconfig")
+    }
+  })
+
+  it("does not mistake other windows commands for ipconfig", () => {
+    expect(parseCommandOutput("ipconfigure").command).toBeNull()
+  })
+})
+
+describe("parseCommandOutput — ipconfig /all", () => {
+  const IPCONFIG = `ipconfig /all
+
+Windows IP Configuration
+
+   Host Name . . . . . . . . . . . . : DESKTOP-ABC123
+   Primary Dns Suffix  . . . . . . . : corp.example.com
+   Node Type . . . . . . . . . . . . : Hybrid
+   IP Routing Enabled. . . . . . . . : No
+
+Ethernet adapter Ethernet0:
+
+   Connection-specific DNS Suffix  . : corp.example.com
+   Description . . . . . . . . . . . : Intel(R) 82574L Gigabit Network Connection
+   Physical Address. . . . . . . . . : 00-0C-29-3E-4B-5A
+   DHCP Enabled. . . . . . . . . . . : Yes
+   Link-local IPv6 Address . . . . . : fe80::1c2a:3b4c:5d6e:7f80%4(Preferred)
+   IPv4 Address. . . . . . . . . . . : 10.10.20.15(Preferred)
+   Subnet Mask . . . . . . . . . . . : 255.255.255.0
+   Lease Obtained. . . . . . . . . . : Tuesday, June 10, 2025 8:01:23 AM
+   Default Gateway . . . . . . . . . : 10.10.20.1
+   DHCP Server . . . . . . . . . . . : 10.10.20.1
+   DNS Servers . . . . . . . . . . . : 10.10.20.5
+                                       10.10.20.6
+   NetBIOS over Tcpip. . . . . . . . : Enabled
+
+Tunnel adapter Teredo Tunneling Pseudo-Interface:
+
+   Media State . . . . . . . . . . . : Media disconnected
+   Connection-specific DNS Suffix  . :
+   Description . . . . . . . . . . . : Microsoft Teredo Tunneling Adapter
+   Physical Address. . . . . . . . . : 00-00-00-00-00-00-00-E0`
+
+  it("imports the adapter with a CIDR built from address + mask", () => {
+    const r = parseCommandOutput(IPCONFIG)
+    expect(r.command).toBe("ipconfig")
+    expect(r.errorCount).toBe(0)
+    expect(r.interfaces).toEqual([
+      {
+        name: "Ethernet0",
+        mac: "00:0c:29:3e:4b:5a",
+        addresses: ["10.10.20.15/24"],
+      },
+    ])
+  })
+
+  it("emits the default gateway as a route through the adapter", () => {
+    const r = parseCommandOutput(IPCONFIG)
+    expect(r.routes).toEqual([
+      { destination: "0.0.0.0/0", gateway: "10.10.20.1", interface: "Ethernet0" },
+    ])
+  })
+
+  it("extracts the host name from the global section", () => {
+    const r = parseCommandOutput(IPCONFIG)
+    expect(r.hostname).toBe("DESKTOP-ABC123")
+    // interface + route + hostname
+    expect(r.usedCount).toBe(3)
+  })
+
+  it("drops the tunnel adapter as skipped, never imported", () => {
+    const r = parseCommandOutput(IPCONFIG)
+    expect(r.skippedCount).toBe(1)
+    const header = r.lines.find((l) => l.raw.startsWith("Tunnel adapter"))!
+    expect(rolesOf(header)).toEqual(["skipped"])
+  })
+
+  it("highlights the address (not its (Preferred) suffix) as used", () => {
+    const r = parseCommandOutput(IPCONFIG)
+    const addr = r.lines.find((l) => l.raw.includes("10.10.20.15"))!
+    expect(textWithRole(addr, "used")).toBe("10.10.20.15")
+    // link-local IPv6 stays gray.
+    const ll = r.lines.find((l) => l.raw.includes("fe80::"))!
+    expect(rolesOf(ll)).toEqual(["skipped"])
+  })
+
+  it("every line's segments reassemble to the raw line", () => {
+    const r = parseCommandOutput(IPCONFIG)
+    for (const l of r.lines) expect(reassemble(l)).toBe(l.raw)
+  })
+
+  it("pairs multiple IPv4 address/mask pairs on one adapter", () => {
+    const r = parseCommandOutput(
+      `ipconfig /all
+Ethernet adapter Ethernet0:
+   IPv4 Address. . . . . . . . . . . : 10.0.0.5(Preferred)
+   Subnet Mask . . . . . . . . . . . : 255.255.255.0
+   IPv4 Address. . . . . . . . . . . : 10.0.1.5(Preferred)
+   Subnet Mask . . . . . . . . . . . : 255.255.0.0`,
+    )
+    expect(r.errorCount).toBe(0)
+    expect(r.interfaces[0].addresses).toEqual(["10.0.0.5/24", "10.0.1.5/16"])
+  })
+
+  it("takes the IPv4 gateway from a multi-line Default Gateway (IPv6 first)", () => {
+    const r = parseCommandOutput(
+      `ipconfig /all
+Ethernet adapter Ethernet0:
+   IPv4 Address. . . . . . . . . . . : 10.0.0.5(Preferred)
+   Subnet Mask . . . . . . . . . . . : 255.255.255.0
+   Default Gateway . . . . . . . . . : fe80::1%12
+                                       10.0.0.1`,
+    )
+    expect(r.errorCount).toBe(0)
+    // The link-local IPv6 gateway carries no pivot signal — skipped.
+    expect(r.routes).toEqual([
+      { destination: "0.0.0.0/0", gateway: "10.0.0.1", interface: "Ethernet0" },
+    ])
+  })
+
+  it("emits both default routes for a dual-stack gateway (routable IPv6 + IPv4)", () => {
+    // A dual-stack host genuinely has two default routes — both are pivot
+    // signal and both are kept.
+    const r = parseCommandOutput(
+      `ipconfig /all
+Ethernet adapter Ethernet0:
+   IPv4 Address. . . . . . . . . . . : 10.0.0.5(Preferred)
+   Subnet Mask . . . . . . . . . . . : 255.255.255.0
+   Default Gateway . . . . . . . . . : 2001:db8::1
+                                       10.0.0.1`,
+    )
+    expect(r.errorCount).toBe(0)
+    expect(r.routes).toEqual([
+      { destination: "::/0", gateway: "2001:db8::1", interface: "Ethernet0" },
+      { destination: "0.0.0.0/0", gateway: "10.0.0.1", interface: "Ethernet0" },
+    ])
+  })
+
+  it("flags the first of two consecutive IPv4 addresses (mask never arrived)", () => {
+    const r = parseCommandOutput(
+      `ipconfig /all
+Ethernet adapter Ethernet0:
+   IPv4 Address. . . . . . . . . . . : 10.0.0.5(Preferred)
+   IPv4 Address. . . . . . . . . . . : 10.0.1.5(Preferred)
+   Subnet Mask . . . . . . . . . . . : 255.255.255.0`,
+    )
+    expect(r.errorCount).toBe(1)
+    const bad = r.lines.find((l) => l.error)!
+    expect(bad.raw).toContain("10.0.0.5")
+    expect(bad.error).toContain("Subnet Mask")
+    // The properly paired second address still imports.
+    expect(r.interfaces[0]?.addresses).toEqual(["10.0.1.5/24"])
+  })
+
+  it("keeps a routable IPv6 gateway as a ::/0 route", () => {
+    const r = parseCommandOutput(
+      `ipconfig /all
+Ethernet adapter Ethernet0:
+   IPv6 Address. . . . . . . . . . . : 2001:db8::5(Preferred)
+   Default Gateway . . . . . . . . . : 2001:db8::1`,
+    )
+    expect(r.interfaces[0].addresses).toEqual(["2001:db8::5/128"])
+    expect(r.routes).toEqual([
+      { destination: "::/0", gateway: "2001:db8::1", interface: "Ethernet0" },
+    ])
+  })
+
+  it("skips temporary IPv6 addresses (privacy churn)", () => {
+    const r = parseCommandOutput(
+      `ipconfig /all
+Ethernet adapter Ethernet0:
+   IPv6 Address. . . . . . . . . . . : 2001:db8::5(Preferred)
+   Temporary IPv6 Address. . . . . . : 2001:db8::abcd(Preferred)`,
+    )
+    expect(r.interfaces[0].addresses).toEqual(["2001:db8::5/128"])
+  })
+
+  it("drops a media-disconnected ethernet adapter and demotes its lines", () => {
+    const r = parseCommandOutput(
+      `ipconfig /all
+Ethernet adapter Ethernet1:
+
+   Media State . . . . . . . . . . . : Media disconnected
+   Description . . . . . . . . . . . : Realtek PCIe GbE Family Controller
+   Physical Address. . . . . . . . . : 54-BF-64-0A-1B-2C`,
+    )
+    expect(r.errorCount).toBe(0)
+    expect(r.interfaces).toHaveLength(0)
+    expect(r.skippedCount).toBe(1)
+    const header = r.lines.find((l) => l.raw.startsWith("Ethernet adapter"))!
+    expect(rolesOf(header)).toEqual(["skipped"])
+  })
+
+  it("drops host-side virtual adapters by name (vEthernet) and description (VMware)", () => {
+    const r = parseCommandOutput(
+      `ipconfig /all
+Ethernet adapter vEthernet (Default Switch):
+
+   Physical Address. . . . . . . . . : 00-15-5D-01-02-03
+   IPv4 Address. . . . . . . . . . . : 172.30.96.1(Preferred)
+   Subnet Mask . . . . . . . . . . . : 255.255.240.0
+
+Ethernet adapter VMware Network Adapter VMnet8:
+
+   Description . . . . . . . . . . . : VMware Virtual Ethernet Adapter for VMnet8
+   Physical Address. . . . . . . . . : 00-50-56-C0-00-08
+   IPv4 Address. . . . . . . . . . . : 192.168.142.1(Preferred)
+   Subnet Mask . . . . . . . . . . . : 255.255.255.0
+
+Ethernet adapter Ethernet0:
+
+   Physical Address. . . . . . . . . : 00-0C-29-AA-BB-CC
+   IPv4 Address. . . . . . . . . . . : 10.0.5.20(Preferred)
+   Subnet Mask . . . . . . . . . . . : 255.255.255.0`,
+    )
+    expect(r.errorCount).toBe(0)
+    expect(r.interfaces.map((i) => i.name)).toEqual(["Ethernet0"])
+    expect(r.skippedCount).toBe(2)
+    // The VMware adapter's address never renders green (description arrives
+    // after the header — the exclusion flip must demote it).
+    const vmAddr = r.lines.find((l) => l.raw.includes("192.168.142.1"))!
+    expect(rolesOf(vmAddr)).toEqual(["skipped"])
+  })
+
+  it("skips an APIPA autoconfiguration address and drops the empty adapter", () => {
+    const r = parseCommandOutput(
+      `ipconfig /all
+Ethernet adapter Ethernet0:
+   Autoconfiguration IPv4 Address. . : 169.254.33.7(Preferred)
+   Subnet Mask . . . . . . . . . . . : 255.255.0.0`,
+    )
+    expect(r.errorCount).toBe(0)
+    expect(r.interfaces).toHaveLength(0)
+    expect(r.skippedCount).toBe(1)
+  })
+
+  it("flags an IPv4 address with no Subnet Mask line as an error", () => {
+    const r = parseCommandOutput(
+      `ipconfig /all
+Ethernet adapter Ethernet0:
+   IPv4 Address. . . . . . . . . . . : 10.0.0.5(Preferred)
+   Default Gateway . . . . . . . . . : 10.0.0.1`,
+    )
+    expect(r.errorCount).toBe(1)
+    const bad = r.lines.find((l) => l.error)!
+    expect(bad.error).toContain("Subnet Mask")
+    expect(r.interfaces).toHaveLength(0)
+  })
+
+  it("flags an invalid subnet mask as an error", () => {
+    const r = parseCommandOutput(
+      `ipconfig /all
+Ethernet adapter Ethernet0:
+   IPv4 Address. . . . . . . . . . . : 10.0.0.5(Preferred)
+   Subnet Mask . . . . . . . . . . . : 255.0.255.0`,
+    )
+    expect(r.errorCount).toBe(1)
+    expect(r.interfaces).toHaveLength(0)
+  })
+
+  it("parses the pre-Vista key style (IP Address, no /all extras)", () => {
+    const r = parseCommandOutput(
+      `ipconfig
+Ethernet adapter Local Area Connection:
+
+   IP Address. . . . . . . . . . . . : 192.168.1.50
+   Subnet Mask . . . . . . . . . . . : 255.255.255.0
+   Default Gateway . . . . . . . . . : 192.168.1.1`,
+    )
+    expect(r.errorCount).toBe(0)
+    expect(r.interfaces).toEqual([
+      { name: "Local Area Connection", mac: "", addresses: ["192.168.1.50/24"] },
+    ])
+    expect(r.routes).toHaveLength(1)
+  })
+
+  it("degrades an unsupported display language (German) to all-skipped, zero used, zero errors", () => {
+    const r = parseCommandOutput(
+      `ipconfig /all
+
+Windows-IP-Konfiguration
+
+   Hostname  . . . . . . . . . . . . : DESKTOP-DE
+   Primäres DNS-Suffix . . . . . . . : corp.example.de
+
+Ethernet-Adapter Ethernet0:
+
+   Physikalische Adresse . . . . . . : 00-0C-29-3E-4B-5A
+   IPv4-Adresse  . . . . . . . . . . : 10.10.20.15(Bevorzugt)
+   Subnetzmaske  . . . . . . . . . . : 255.255.255.0
+   Standardgateway . . . . . . . . . : 10.10.20.1`,
+    )
+    expect(r.command).toBe("ipconfig")
+    expect(r.errorCount).toBe(0)
+    expect(r.usedCount).toBe(0)
+    expect(r.interfaces).toHaveLength(0)
+    expect(r.routes).toHaveLength(0)
+  })
+})
+
+describe("parseCommandOutput — ipconfig /all (Russian ru-RU)", () => {
+  // The exact paste an operator gets from a Russian-language domain controller,
+  // pasted through the cmd.exe prompt (Cyrillic in the path).
+  const RU = `C:\\Users\\Администратор>ipconfig /all
+
+Настройка протокола IP для Windows
+
+   Имя компьютера  . . . . . . . . . : dc-net03
+   Основной DNS-суффикс  . . . . . . : ABC.QWE-RT.ER
+   Тип узла. . . . . . . . . . . . . : Гибридный
+   IP-маршрутизация включена . . . . : Нет
+   WINS-прокси включен . . . . . . . : Нет
+   Порядок просмотра суффиксов DNS . : ABC.QWE-RT.ER
+
+Адаптер Ethernet Net:
+
+   DNS-суффикс подключения . . . . . :
+   Описание. . . . . . . . . . . . . : Microsoft Network Adapter Multiplexor Driver
+   Физический адрес. . . . . . . . . : 6C-B3-11-28-88-31
+   DHCP включен. . . . . . . . . . . : Нет
+   Автонастройка включена. . . . . . : Да
+   Локальный IPv6-адрес канала . . . : fe80::9d53:6b10:fae5:8e24%8(Основной)
+   IPv4-адрес. . . . . . . . . . . . : 15.3.142.32(Основной)
+   Маска подсети . . . . . . . . . . : 255.255.255.0
+   Основной шлюз. . . . . . . . . : 15.3.142.254
+   IAID DHCPv6 . . . . . . . . . . . : 191673105
+   DUID клиента DHCPv6 . . . . . . . : 00-01-00-01-2B-1B-5B-98-6C-B3-11-28-88-31
+   DNS-серверы. . . . . . . . . . . : 15.3.113.2
+                                       15.3.108.1
+                                       15.3.108.2
+   NetBios через TCP/IP. . . . . . . . : Включен`
+
+  it("imports the interface (name, MAC, CIDR) from the Russian DC paste", () => {
+    const r = parseCommandOutput(RU)
+    expect(r.command).toBe("ipconfig")
+    expect(r.errorCount).toBe(0)
+    expect(r.interfaces).toEqual([
+      {
+        name: "Ethernet Net",
+        mac: "6c:b3:11:28:88:31",
+        addresses: ["15.3.142.32/24"],
+      },
+    ])
+  })
+
+  it("emits the default gateway as a route, not confusing it with the DNS servers", () => {
+    const r = parseCommandOutput(RU)
+    // Основной шлюз → route; DNS-серверы (also bare IPv4s) must NOT become routes.
+    expect(r.routes).toEqual([
+      { destination: "0.0.0.0/0", gateway: "15.3.142.254", interface: "Ethernet Net" },
+    ])
+  })
+
+  it("extracts the host name and counts interface + route + hostname", () => {
+    const r = parseCommandOutput(RU)
+    expect(r.hostname).toBe("dc-net03")
+    expect(r.usedCount).toBe(3)
+  })
+
+  it("skips the link-local IPv6 and the DHCPv6 DUID (not mistaken for a MAC)", () => {
+    const r = parseCommandOutput(RU)
+    const ll = r.lines.find((l) => l.raw.includes("fe80::"))!
+    expect(rolesOf(ll)).toEqual(["skipped"])
+    const duid = r.lines.find((l) => l.raw.includes("00-01-00-01"))!
+    expect(rolesOf(duid)).toEqual(["skipped"])
+  })
+
+  it("every line reassembles verbatim (Cyrillic preserved)", () => {
+    const r = parseCommandOutput(RU)
+    for (const l of r.lines) expect(reassemble(l)).toBe(l.raw)
+  })
+
+  it("excludes a Russian tunnel adapter (Туннельный адаптер)", () => {
+    const r = parseCommandOutput(
+      `ipconfig /all
+Туннельный адаптер isatap.{GUID}:
+
+   Состояние среды. . . . . . . . . : Среда передачи недоступна.
+   Физический адрес. . . . . . . . . : 00-00-00-00-00-00-00-E0`,
+    )
+    expect(r.errorCount).toBe(0)
+    expect(r.interfaces).toHaveLength(0)
+    expect(r.skippedCount).toBe(1)
+  })
+
+  it("drops a media-disconnected Russian adapter", () => {
+    const r = parseCommandOutput(
+      `ipconfig /all
+Адаптер Ethernet Ethernet1:
+
+   Состояние среды. . . . . . . . . : Среда передачи недоступна.
+   Физический адрес. . . . . . . . . : 54-BF-64-0A-1B-2C`,
+    )
+    expect(r.errorCount).toBe(0)
+    expect(r.interfaces).toHaveLength(0)
+  })
+
+  it("treats an empty Default Gateway as no route", () => {
+    const r = parseCommandOutput(
+      `ipconfig /all
+Ethernet adapter Ethernet0:
+   IPv4 Address. . . . . . . . . . . : 10.0.0.5(Preferred)
+   Subnet Mask . . . . . . . . . . . : 255.255.255.0
+   Default Gateway . . . . . . . . . :
+   DHCP Server . . . . . . . . . . . : 10.0.0.2`,
+    )
+    expect(r.errorCount).toBe(0)
+    expect(r.routes).toHaveLength(0)
+    expect(r.interfaces).toHaveLength(1)
+  })
+
+  it("ignores a 0.0.0.0 gateway (no default route configured)", () => {
+    const r = parseCommandOutput(
+      `ipconfig /all
+Ethernet adapter Ethernet0:
+   IPv4 Address. . . . . . . . . . . : 10.0.0.5(Preferred)
+   Subnet Mask . . . . . . . . . . . : 255.255.255.0
+   Default Gateway . . . . . . . . . : 0.0.0.0`,
+    )
+    expect(r.routes).toHaveLength(0)
+    expect(r.errorCount).toBe(0)
+  })
+
+  it("keeps the gateway of an address-less adapter (route survives the iface drop)", () => {
+    // Pathological but possible: no parsable address, yet a real gateway.
+    const r = parseCommandOutput(
+      `ipconfig /all
+Ethernet adapter Ethernet0:
+   Default Gateway . . . . . . . . . : 10.0.0.1`,
+    )
+    expect(r.interfaces).toHaveLength(0)
+    expect(r.routes).toEqual([
+      { destination: "0.0.0.0/0", gateway: "10.0.0.1", interface: "Ethernet0" },
+    ])
   })
 })

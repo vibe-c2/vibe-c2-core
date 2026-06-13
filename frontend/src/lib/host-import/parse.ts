@@ -1,4 +1,18 @@
-import { isValidCidr, isValidIp, hostAddr } from "@/lib/topology/cidr"
+import { isValidCidr, isValidIp } from "@/lib/topology/cidr"
+import { parseIpconfig } from "@/lib/host-import/ipconfig"
+import {
+  demoteToSkipped,
+  isNoiseAddress,
+  segmentLine,
+  skippedLine,
+  tokenize,
+  type ParsedInterface,
+  type ParsedLine,
+  type ParsedLogin,
+  type ParsedRoute,
+  type Span,
+  type SubParse,
+} from "@/lib/host-import/model"
 
 // Pure parser for the host form's "Magic" import step. The operator pastes the
 // raw output of a recon command (command on line 1, its output below); this
@@ -7,65 +21,31 @@ import { isValidCidr, isValidIp, hostAddr } from "@/lib/topology/cidr"
 // (skipped), and what's malformed (error, blocks the import). No React, never
 // throws — every address goes through the defensive cidr.ts helpers.
 //
-// Supported commands (MVP): `ip a` (interfaces), `ip ro` (routes), and `last`
-// (user footprints — the identity layer of the topology).
+// Supported commands: `ip a` (interfaces), `ip ro` (routes), `last` (user
+// footprints — the identity layer of the topology), and `ipconfig /all`
+// (Windows, in ipconfig.ts: interfaces + default-gateway routes + host name).
+//
+// The line/highlight model and shared helpers live in model.ts; this module
+// re-exports the public surface so consumers import from one place.
 
-export type CommandKind = "ip-addr" | "ip-route" | "last"
-export type SegRole = "used" | "skipped" | "error"
+export type {
+  ParsedInterface,
+  ParsedLine,
+  ParsedLogin,
+  ParsedRoute,
+  Segment,
+  SegRole,
+  SubParse,
+} from "@/lib/host-import/model"
 
-// One run of characters of a source line, tagged with how the parser treats it.
-// Concatenating every segment's text reconstructs the original line verbatim.
-export interface Segment {
-  text: string
-  role: SegRole
-}
-
-export interface ParsedLine {
-  raw: string
-  segments: Segment[]
-  error?: string
-}
-
-export interface ParsedInterface {
-  name: string
-  mac: string
-  addresses: string[]
-}
-
-export interface ParsedRoute {
-  destination: string
-  gateway: string
-  interface: string
-}
-
-// One user footprint, deduplicated to a distinct (user, from) pair. `from` is
-// the source host/IP the session originated from, "" for a local login.
-export interface ParsedLogin {
-  user: string
-  from: string
-  tty: string
-  lastSeen: string
-  count: number
-}
-
-// Shared shape produced by each command sub-parser; parseCommandOutput returns
-// it with the command metadata added (see ParseResult).
-interface SubParse {
-  lines: ParsedLine[]
-  interfaces: ParsedInterface[]
-  routes: ParsedRoute[]
-  logins: ParsedLogin[]
-  errorCount: number
-  usedCount: number
-  skippedCount: number
-}
+export type CommandKind = "ip-addr" | "ip-route" | "last" | "ipconfig"
 
 export interface ParseResult extends SubParse {
   command: CommandKind | null
   commandError: string | null
 }
 
-const SUPPORTED_HINT = "Supported commands: ip a, ip ro, last"
+const SUPPORTED_HINT = "Supported commands: ip a, ip ro, last, ipconfig /all"
 
 export function parseCommandOutput(text: string): ParseResult {
   const rawLines = text.replace(/\r/g, "").split("\n")
@@ -99,6 +79,7 @@ export function parseCommandOutput(text: string): ParseResult {
       interfaces: [],
       routes: [],
       logins: [],
+      hostname: "",
       errorCount: 1,
       usedCount: 0,
       skippedCount: 0,
@@ -117,7 +98,9 @@ export function parseCommandOutput(text: string): ParseResult {
       ? parseIpAddr(output)
       : command === "ip-route"
         ? parseIpRoute(output)
-        : parseLast(output)
+        : command === "ipconfig"
+          ? parseIpconfig(output)
+          : parseLast(output)
   lines.push(...parsed.lines)
 
   // `lines` (with the command line prepended) overrides parsed.lines.
@@ -132,6 +115,12 @@ export function parseCommandOutput(text: string): ParseResult {
 function detectCommand(line: string): CommandKind | null {
   const norm = line.trim().toLowerCase().replace(/\s+/g, " ").replace(/^sudo /, "")
   if (detectLastCommand(norm)) return "last"
+  // Windows: tolerate a pasted cmd/PowerShell prompt ("C:\Users\x>", "PS C:\>"),
+  // an explicit .exe suffix (script/log captures), and the space-less
+  // `ipconfig/all` cmd.exe accepts. Plain `ipconfig` (no /all) prints the same
+  // shape minus MAC/host name, so it parses too.
+  const win = norm.replace(/^(?:ps )?[a-z]:[^>]*> ?/, "")
+  if (/^ipconfig(?:\.exe)?(?: |\/|$)/.test(win)) return "ipconfig"
   const m = /^ip(?:\s+-\S+)*\s+(\S+)/.exec(norm)
   if (!m) return null
   const obj = m[1]
@@ -147,35 +136,7 @@ function detectLastCommand(norm: string): boolean {
   return /^lastb?(\s|$)/.test(norm)
 }
 
-// --- shared line model -------------------------------------------------------
-
-interface Span {
-  start: number
-  end: number
-  role: SegRole
-}
-
-// Stitches tagged spans together with the untagged gaps between them (skipped),
-// so the rendered segments reproduce the whole raw line in order.
-function segmentLine(raw: string, spans: Span[]): Segment[] {
-  const sorted = [...spans].sort((a, b) => a.start - b.start)
-  const segs: Segment[] = []
-  let cursor = 0
-  for (const s of sorted) {
-    if (s.start > cursor) {
-      segs.push({ text: raw.slice(cursor, s.start), role: "skipped" })
-    }
-    segs.push({ text: raw.slice(s.start, s.end), role: s.role })
-    cursor = s.end
-  }
-  if (cursor < raw.length) segs.push({ text: raw.slice(cursor), role: "skipped" })
-  if (segs.length === 0) segs.push({ text: raw, role: "skipped" })
-  return segs
-}
-
-function skippedLine(raw: string): ParsedLine {
-  return { raw, segments: [{ text: raw, role: "skipped" }] }
-}
+// --- shared helpers ------------------------------------------------------------
 
 function emptyResult(lines: ParsedLine[]): ParseResult {
   return {
@@ -185,6 +146,7 @@ function emptyResult(lines: ParsedLine[]): ParseResult {
     interfaces: [],
     routes: [],
     logins: [],
+    hostname: "",
     errorCount: 0,
     usedCount: 0,
     skippedCount: 0,
@@ -211,30 +173,6 @@ function isVirtualMac(mac: string): boolean {
   return mac.toLowerCase().startsWith(VIRTUAL_MAC_PREFIX)
 }
 
-// Loopback (127/8, ::1) and link-local (fe80::/10, 169.254/16) addresses are
-// recognized but never useful for topology — treated as skipped, not imported.
-function isNoiseAddress(cidrOrIp: string): boolean {
-  const host = hostAddr(cidrOrIp)
-  if (!host) return false
-  return (
-    host.startsWith("127.") ||
-    host === "::1" ||
-    host.toLowerCase().startsWith("fe80") ||
-    host.startsWith("169.254.")
-  )
-}
-
-// Tokens with their character offsets, for span-based highlighting.
-function tokenize(raw: string): { text: string; start: number; end: number }[] {
-  const out: { text: string; start: number; end: number }[] = []
-  const re = /\S+/g
-  let m: RegExpExecArray | null
-  while ((m = re.exec(raw)) !== null) {
-    out.push({ text: m[0], start: m.index, end: m.index + m[0].length })
-  }
-  return out
-}
-
 // --- ip a --------------------------------------------------------------------
 
 const HEADER_RE = /^(\s*)(\d+):\s+([^\s:@]+)(@\S+)?:/
@@ -259,16 +197,6 @@ function parseIpAddr(output: string[]): SubParse {
     tentative: ParsedLine[]
   } | null = null
 
-  // Demote optimistic "used" highlights back to skipped, so the rendered
-  // segments never show green on lines that won't be imported.
-  const demote = (toDemote: ParsedLine[]) => {
-    for (const line of toDemote) {
-      line.segments = line.segments.map((s) =>
-        s.role === "used" ? { ...s, role: "skipped" } : s,
-      )
-    }
-  }
-
   // Commit (or drop) the current interface. Anything excluded (loopback,
   // virtual) or without a usable address (down/address-less) is dropped but
   // counted as skipped, and its tentative lines are demoted.
@@ -277,7 +205,7 @@ function parseIpAddr(output: string[]): SubParse {
     if (!cur.excluded && cur.iface.addresses.length > 0) {
       interfaces.push(cur.iface)
     } else {
-      demote(cur.tentative)
+      demoteToSkipped(cur.tentative)
       skippedCount++
     }
     cur = null
@@ -316,7 +244,7 @@ function parseIpAddr(output: string[]): SubParse {
       // match the list is caught here. Demote the header pushed optimistically.
       if (cur && !cur.excluded && isVirtualMac(mac)) {
         cur.excluded = true
-        demote(cur.tentative)
+        demoteToSkipped(cur.tentative)
         cur.tentative = []
       }
       // link/loopback addresses are all-zero placeholders — never used.
@@ -379,6 +307,7 @@ function parseIpAddr(output: string[]): SubParse {
     interfaces,
     routes: [],
     logins: [],
+    hostname: "",
     errorCount,
     usedCount: interfaces.length,
     skippedCount,
@@ -487,6 +416,7 @@ function parseIpRoute(output: string[]): SubParse {
     interfaces: [],
     routes,
     logins: [],
+    hostname: "",
     errorCount,
     usedCount: routes.length,
     skippedCount,
@@ -597,6 +527,7 @@ function parseLast(output: string[]): SubParse {
     interfaces: [],
     routes: [],
     logins,
+    hostname: "",
     errorCount: 0,
     usedCount: logins.length,
     skippedCount,

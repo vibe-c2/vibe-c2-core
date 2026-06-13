@@ -16,11 +16,14 @@ import {
 } from "@/lib/host-import/parse"
 
 interface HostImportStepProps {
-  // A patch over the form values — exactly one category (interfaces, routes, OR
-  // logins) depending on the pasted command. The dialog merges it, replacing
-  // that list.
+  // A patch over the form values. Most commands fill exactly one category
+  // (interfaces, routes, OR logins); `ipconfig /all` fills several at once
+  // (interfaces + routes + hostname). The dialog merges it, replacing each
+  // included list — absent categories stay untouched.
   onApply: (
-    patch: Partial<Pick<HostFormValues, "interfaces" | "routes" | "logins">>,
+    patch: Partial<
+      Pick<HostFormValues, "interfaces" | "routes" | "logins" | "hostname">
+    >,
   ) => void
   onBack: () => void
 }
@@ -39,7 +42,16 @@ default via 10.0.5.1 dev eth0 proto dhcp metric 100
 — or —
 
 last
-alice    pts/0   10.0.5.12   Tue Jun 10 14:02   still logged in`
+alice    pts/0   10.0.5.12   Tue Jun 10 14:02   still logged in
+
+— or —
+
+ipconfig /all
+Ethernet adapter Ethernet0:
+   Physical Address. . . . . . . . . : 00-0C-29-3E-4B-5A
+   IPv4 Address. . . . . . . . . . . : 10.10.20.15(Preferred)
+   Subnet Mask . . . . . . . . . . . : 255.255.255.0
+   Default Gateway . . . . . . . . . : 10.10.20.1`
 
 const ROLE_CLASS: Record<SegRole, string> = {
   used: "text-emerald-600 dark:text-emerald-400",
@@ -60,23 +72,30 @@ export function HostImportStep({ onApply, onBack }: HostImportStepProps) {
 
   function handleParse() {
     if (!canParse) return
+    const interfaceDrafts = result.interfaces.map((i) => ({
+      _id: makeClientId(),
+      name: i.name,
+      mac: i.mac,
+      addresses: i.addresses.join("\n"),
+    }))
+    const routeDrafts = result.routes.map((r) => ({
+      _id: makeClientId(),
+      destination: r.destination,
+      gateway: r.gateway,
+      interface: r.interface,
+    }))
     if (result.command === "ip-addr") {
-      onApply({
-        interfaces: result.interfaces.map((i) => ({
-          _id: makeClientId(),
-          name: i.name,
-          mac: i.mac,
-          addresses: i.addresses.join("\n"),
-        })),
-      })
+      onApply({ interfaces: interfaceDrafts })
     } else if (result.command === "ip-route") {
+      onApply({ routes: routeDrafts })
+    } else if (result.command === "ipconfig") {
+      // ipconfig yields several categories at once. Only non-empty ones are
+      // applied, so a paste without gateways never wipes routes already on
+      // the form (each applied category REPLACES its list).
       onApply({
-        routes: result.routes.map((r) => ({
-          _id: makeClientId(),
-          destination: r.destination,
-          gateway: r.gateway,
-          interface: r.interface,
-        })),
+        ...(interfaceDrafts.length > 0 && { interfaces: interfaceDrafts }),
+        ...(routeDrafts.length > 0 && { routes: routeDrafts }),
+        ...(result.hostname && { hostname: result.hostname }),
       })
     } else {
       onApply({ logins: result.logins.map(loginToDraft) })
@@ -92,9 +111,13 @@ export function HostImportStep({ onApply, onBack }: HostImportStepProps) {
           <code className="rounded bg-muted px-1 py-0.5 text-xs">ip a</code> for
           interfaces,{" "}
           <code className="rounded bg-muted px-1 py-0.5 text-xs">ip ro</code> for
-          routes, and{" "}
+          routes,{" "}
           <code className="rounded bg-muted px-1 py-0.5 text-xs">last</code> for
-          user footprints.
+          user footprints, and{" "}
+          <code className="rounded bg-muted px-1 py-0.5 text-xs">
+            ipconfig /all
+          </code>{" "}
+          for Windows interfaces, gateways, and host name (English or Russian).
         </p>
 
         <Textarea
@@ -279,17 +302,43 @@ function Summary({ result }: { result: ParseResult }) {
       </span>
     )
   }
+  // ipconfig fills several categories at once — list each non-empty one.
+  if (result.command === "ipconfig") {
+    const parts: string[] = []
+    if (result.interfaces.length > 0) {
+      parts.push(plural(result.interfaces.length, "interface"))
+    }
+    if (result.routes.length > 0) parts.push(plural(result.routes.length, "route"))
+    if (result.hostname) parts.push("hostname")
+    if (parts.length === 0) {
+      return (
+        <span className="text-muted-foreground">
+          Nothing recognized — ipconfig output in an unsupported display
+          language (supported: English, Russian).
+        </span>
+      )
+    }
+    return (
+      <span className="text-muted-foreground">
+        Will set {parts.join(" · ")}
+        {result.skippedCount > 0 && ` · ${result.skippedCount} skipped`}
+      </span>
+    )
+  }
   const noun =
     result.command === "ip-route"
       ? "route"
       : result.command === "last"
         ? "login"
         : "interface"
-  const label = `${noun}${result.usedCount === 1 ? "" : "s"}`
   return (
     <span className="text-muted-foreground">
-      Will set {result.usedCount} {label}
+      Will set {plural(result.usedCount, noun)}
       {result.skippedCount > 0 && ` · ${result.skippedCount} skipped`}
     </span>
   )
+}
+
+function plural(count: number, noun: string): string {
+  return `${count} ${noun}${count === 1 ? "" : "s"}`
 }
