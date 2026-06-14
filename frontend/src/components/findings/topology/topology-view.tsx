@@ -43,6 +43,7 @@ import {
   type NodeMenuState,
 } from "@/components/findings/topology/node-context-menu"
 import { HiddenIdentitiesPanel } from "@/components/findings/topology/hidden-identities-panel"
+import { TopologyLegend } from "@/components/findings/topology/topology-legend"
 import { Button } from "@/components/ui/button"
 import { Skeleton } from "@/components/ui/skeleton"
 import {
@@ -154,6 +155,8 @@ export function TopologyView({ operationId }: TopologyViewProps) {
   // Layer 1 (built-in well-known group): a localStorage toggle in the store.
   const hideWellKnown = useHostStore((s) => s.hideWellKnownIdentities)
   const setHideWellKnown = useHostStore((s) => s.setHideWellKnownIdentities)
+  const legendOpen = useHostStore((s) => s.topologyLegendOpen)
+  const setLegendOpen = useHostStore((s) => s.setTopologyLegendOpen)
   const openEditDialog = useHostStore((s) => s.openEditDialog)
 
   // Layer 2 (per-operator custom list): server state, normalized server-side.
@@ -355,6 +358,11 @@ export function TopologyView({ operationId }: TopologyViewProps) {
             <Background gap={16} className="!bg-muted/20" />
             <Controls showInteractive={false} />
             <Legend stats={topology.stats} relation={relation} />
+            <TopologyLegend
+              relation={relation}
+              open={legendOpen}
+              onOpenChange={setLegendOpen}
+            />
             <div className="absolute right-3 top-3 z-10 flex flex-col items-end gap-2">
               <RelationPicker relation={relation} onChange={setRelation} />
               {relation === "identities" && (

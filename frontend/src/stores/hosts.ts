@@ -69,6 +69,10 @@ interface HostStoreState {
   // hidden usernames — is per-operator server state (User.hiddenIdentities via
   // useMe/useSetHiddenIdentities), not stored here.
   hideWellKnownIdentities: boolean
+  // Topology-only: whether the bottom-right legend/key panel is expanded. The
+  // key decodes node shapes and edge styles per lens; operators learn the
+  // vocabulary once, so it ships collapsed and the choice is remembered.
+  topologyLegendOpen: boolean
 
   formDialogOpen: boolean
   deleteDialogOpen: boolean
@@ -78,6 +82,7 @@ interface HostStoreState {
   setView: (view: HostView) => void
   setTopologyRelation: (relation: TopologyRelation) => void
   setHideWellKnownIdentities: (hide: boolean) => void
+  setTopologyLegendOpen: (open: boolean) => void
   resetFilters: () => void
 
   openCreateDialog: () => void
@@ -106,6 +111,7 @@ export const useHostStore = create<HostStoreState>()(
       view: "table",
       topologyRelation: "routes",
       hideWellKnownIdentities: true,
+      topologyLegendOpen: false,
 
       formDialogOpen: false,
       deleteDialogOpen: false,
@@ -116,6 +122,8 @@ export const useHostStore = create<HostStoreState>()(
       setTopologyRelation: (topologyRelation) => set({ topologyRelation }),
       setHideWellKnownIdentities: (hideWellKnownIdentities) =>
         set({ hideWellKnownIdentities }),
+      setTopologyLegendOpen: (topologyLegendOpen) =>
+        set({ topologyLegendOpen }),
       resetFilters: () => set({ filters: defaultFilters }),
 
       // Open actions are mutually exclusive: both dialogs render from the
@@ -156,6 +164,7 @@ export const useHostStore = create<HostStoreState>()(
         view: state.view,
         topologyRelation: state.topologyRelation,
         hideWellKnownIdentities: state.hideWellKnownIdentities,
+        topologyLegendOpen: state.topologyLegendOpen,
       }),
       // Old persisted state may still carry the retired `showSubnets` boolean;
       // anything but a valid relation falls back to the default ("routes").
@@ -165,6 +174,7 @@ export const useHostStore = create<HostStoreState>()(
               view?: HostView
               topologyRelation?: TopologyRelation
               hideWellKnownIdentities?: boolean
+              topologyLegendOpen?: boolean
             }
           | undefined
         return {
@@ -178,6 +188,10 @@ export const useHostStore = create<HostStoreState>()(
             typeof p?.hideWellKnownIdentities === "boolean"
               ? p.hideWellKnownIdentities
               : current.hideWellKnownIdentities,
+          topologyLegendOpen:
+            typeof p?.topologyLegendOpen === "boolean"
+              ? p.topologyLegendOpen
+              : current.topologyLegendOpen,
         }
       },
     },
