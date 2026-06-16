@@ -239,6 +239,25 @@ export function WikiEditor({
       // for the block whose content actually changed. See
       // wiki-code-block-highlight-plugin.ts.
       CodeBlock.extend({
+        addKeyboardShortcuts() {
+          return {
+            ...this.parent?.(),
+            // Ctrl/Cmd+A inside a code block selects only that block's text
+            // instead of the whole document. Falls through (returns false) to
+            // ProseMirror's default select-all whenever the caret isn't in a
+            // code block. The read-only equivalent lives in a native keydown
+            // listener below — this keymap entry never fires when the editor
+            // is not editable.
+            "Mod-a": () => {
+              const { $from } = this.editor.state.selection
+              if ($from.parent.type.name !== this.name) return false
+              return this.editor.commands.setTextSelection({
+                from: $from.start(),
+                to: $from.end(),
+              })
+            },
+          }
+        },
         addAttributes() {
           return {
             ...this.parent?.(),
@@ -411,6 +430,40 @@ export function WikiEditor({
     if (editor && editor.isEditable !== isEditor) {
       editor.setEditable(isEditor)
     }
+  }, [editor, isEditor])
+
+  // Read-only Ctrl/Cmd+A scoping. In edit mode the CodeBlock keymap above
+  // scopes select-all to the focused code block, but ProseMirror's keydown
+  // handling is edit-only — when the editor isn't editable a plain browser
+  // Ctrl+A selects the entire page. Re-scope it ourselves: when the current
+  // selection sits inside a rendered code block, select just that block's
+  // text. Listen on document (the contenteditable=false view DOM isn't
+  // focusable, so keydown lands on body and never bubbles to the view root)
+  // and gate on the selection anchor living inside this editor's code block.
+  useEffect(() => {
+    if (!editor || editor.isEditable) return
+    const root = editor.view.dom as HTMLElement
+
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== "a" || !(event.metaKey || event.ctrlKey)) return
+      if (event.shiftKey || event.altKey) return
+      const selection = window.getSelection()
+      const anchor = selection?.anchorNode
+      if (!anchor || !root.contains(anchor)) return
+      const anchorEl = anchor instanceof Element ? anchor : anchor.parentElement
+      const codeEl = anchorEl
+        ?.closest(".wiki-code-block__pre")
+        ?.querySelector("code")
+      if (!codeEl) return
+      event.preventDefault()
+      const range = document.createRange()
+      range.selectNodeContents(codeEl)
+      selection!.removeAllRanges()
+      selection!.addRange(range)
+    }
+
+    document.addEventListener("keydown", onKeyDown)
+    return () => document.removeEventListener("keydown", onKeyDown)
   }, [editor, isEditor])
 
   // Hide cursor when the tab is not visible, restore when it returns.
