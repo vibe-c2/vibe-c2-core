@@ -95,11 +95,12 @@ export function CreateWikiDocumentDialog({ operationId }: CreateWikiDocumentDial
       ...(inPublicTree ? [] : (pubData?.wikiDocumentTree ?? [])),
     ]
     const q = templateQuery.trim().toLowerCase()
-    // A template is any document flagged isTemplate; we additionally require a
-    // real body, since forking an empty doc yields an empty doc. The operation
-    // and Public trees have disjoint ids, so no dedupe is needed. Alphabetical.
+    // A template is any document flagged isTemplate — emptiness is the author's
+    // call, so an empty template is valid and forks into an empty doc. The
+    // operation and Public trees have disjoint ids, so no dedupe is needed.
+    // Alphabetical.
     return rows
-      .filter((r) => r.isTemplate && r.hasContent)
+      .filter((r) => r.isTemplate)
       .filter((r) => (q ? r.title.toLowerCase().includes(q) : true))
       .sort((a, b) => a.title.localeCompare(b.title))
   }, [opData?.wikiDocumentTree, pubData?.wikiDocumentTree, inPublicTree, templateQuery])
