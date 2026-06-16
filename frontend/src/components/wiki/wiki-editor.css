@@ -520,22 +520,6 @@
   overflow-y: hidden;
 }
 
-/* Fade hint that more code sits below the fold. Decorative only — clicks fall
-   through; the expand control lives in the hover/cursor toolbar, mirroring how
-   copy/wrap reveal. Pinned to the wrapper's bottom edge (the toolbar is
-   absolutely positioned, so the wrapper's height tracks the clipped body). */
-.tiptap .wiki-code-block[data-collapsed="true"]::after {
-  content: "";
-  position: absolute;
-  left: 1px;
-  right: 1px;
-  bottom: 1px;
-  height: 2.5rem;
-  border-radius: 0 0 var(--radius-md) var(--radius-md);
-  background: linear-gradient(to bottom, transparent, var(--wiki-code-bg));
-  pointer-events: none;
-}
-
 .tiptap .wiki-code-block__gutter {
   flex: 0 0 auto;
   min-width: 2.25rem;
