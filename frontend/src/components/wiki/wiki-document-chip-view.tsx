@@ -18,6 +18,7 @@ export interface WikiDocumentChipDoc {
   emoji?: string | null
   icon?: string | null
   color?: string | null
+  isTemplate?: boolean | null
   deletedAt?: string | null
 }
 
@@ -147,7 +148,12 @@ export const WikiDocumentChipView = forwardRef<
   const body: ReactNode = (
     <>
       <span className="wiki-document-chip__icon">
-        <DocumentIcon emoji={doc.emoji} icon={doc.icon} color={doc.color} />
+        <DocumentIcon
+          emoji={doc.emoji}
+          icon={doc.icon}
+          color={doc.color}
+          isTemplate={!!doc.isTemplate}
+        />
       </span>
       <span className="wiki-document-chip__name">{displayTitle}</span>
     </>

@@ -57,6 +57,7 @@ export const WikiDocumentLiteFields = graphql(`
     emoji
     icon
     color
+    isTemplate
     deletedAt
   }
 `)
