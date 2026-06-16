@@ -56,9 +56,10 @@ export function WikiChecklistItemView({
   const required = node.attrs.required !== false
   const prompt = (node.attrs.prompt as string) || ""
   const commandHint = (node.attrs.commandHint as string) || ""
-  // Show the hint when explicitly enabled, or for legacy items that already
-  // carry a hint string from before the toggle existed.
-  const hintEnabled = node.attrs.commandHintEnabled === true || commandHint !== ""
+  // Visibility is driven solely by the toggle flag, so showing/hiding a hint is
+  // a purely visual change: a hidden hint keeps its text in the node attrs and
+  // reappears unchanged when re-enabled.
+  const hintEnabled = node.attrs.commandHintEnabled === true
 
   // node.textContent covers the answer region. childCount > 1 (or any text)
   // also catches non-text answers like a reference chip or code block. Enough
@@ -74,12 +75,9 @@ export function WikiChecklistItemView({
   }
 
   const toggleHint = () => {
-    if (hintEnabled) {
-      // Disabling clears the text so a hidden hint never lingers in the data.
-      updateAttributes({ commandHintEnabled: false, commandHint: "" })
-    } else {
-      updateAttributes({ commandHintEnabled: true })
-    }
+    // Flip visibility only; never touch commandHint, so a typed command
+    // survives a hide/show round-trip instead of being discarded.
+    updateAttributes({ commandHintEnabled: !hintEnabled })
   }
 
   // The item is an isolating block, so backspace can't merge it away — the
