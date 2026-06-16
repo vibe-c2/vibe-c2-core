@@ -247,6 +247,18 @@ export function WikiEditor({
               parseHTML: (el) => el.classList.contains("is-wrapped"),
               renderHTML: (attrs) => (attrs.wrap ? { class: "is-wrapped" } : {}),
             },
+            // Stable, write-once identity for a code block. Used solely as the
+            // key for per-viewer collapse/expand state (see
+            // wiki-code-expansion.ts) so that a viewer's expansion survives
+            // y-prosemirror replacing node references on remote edits. Assigned
+            // lazily by the NodeView on first edit-mode mount; never changed
+            // after, so it syncs across collaborators with no conflict risk.
+            blockId: {
+              default: null,
+              parseHTML: (el) => el.getAttribute("data-block-id"),
+              renderHTML: (attrs) =>
+                attrs.blockId ? { "data-block-id": attrs.blockId } : {},
+            },
           }
         },
         addNodeView() {
@@ -269,6 +281,7 @@ export function WikiEditor({
               const renderInputsSame =
                 oldNode.attrs.language === newNode.attrs.language &&
                 oldNode.attrs.wrap === newNode.attrs.wrap &&
+                oldNode.attrs.blockId === newNode.attrs.blockId &&
                 oldNode.textContent === newNode.textContent
               if (!renderInputsSame) updateProps()
               return true

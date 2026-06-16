@@ -5,9 +5,17 @@ import {
   type ReactNodeViewProps,
 } from "@tiptap/react"
 import { useEffect, useLayoutEffect, useRef, useState } from "react"
-import { WrapTextIcon } from "lucide-react"
+import { ChevronsDownUpIcon, ChevronsUpDownIcon, WrapTextIcon } from "lucide-react"
 import { CODE_LANGUAGES } from "@/lib/wiki-lowlight"
 import { CodeCopyButton } from "@/components/wiki/wiki-code-copy-button"
+import { useWikiCodeExpansionStore } from "@/stores/wiki-code-expansion"
+
+// Code blocks taller than this many logical lines render collapsed by default
+// to a fixed-height scroll viewport (see wiki-editor.css), with a toolbar
+// toggle to expand to full height. Logical-line count is computed
+// synchronously from the text so the collapse decision is flash-free on first
+// paint (unlike the wrap-aware `marks`, which require DOM measurement).
+const COLLAPSE_LINES = 15
 
 // One row in the line-number gutter. `number` is the leading row of a logical
 // line; `wrap` is a continuation marker rendered where a number would be when
@@ -93,6 +101,47 @@ export function WikiCodeBlock({ node, updateAttributes, editor, getPos }: ReactN
   const [marks, setMarks] = useState<LineMark[]>([{ kind: "number", value: 1 }])
   const text = node.textContent
 
+  // Collapse state. A block is collapsible only when it exceeds the line
+  // threshold; collapsed-by-default until the viewer expands it. Expansion is
+  // keyed by the stable `blockId` attr and lives in a per-viewer store so it
+  // survives remote edits recreating this NodeView. Blocks authored before
+  // this feature (or seen in read-only mode where we never mutate the doc)
+  // have no id yet — those fall back to local component state, which is reset
+  // by a remote-edit re-render but is otherwise correct.
+  const lineCount = text.split("\n").length // "".split("\n") is [""] → 1
+  const collapsible = lineCount > COLLAPSE_LINES
+  // Resolved from the persisted attr; the assigning effect below dispatches an
+  // updateAttributes that refreshes this prop (blockId is part of the
+  // NodeView's update guard in wiki-editor.tsx), so no local mirror is needed.
+  const blockId: string | null = node.attrs.blockId
+  const assignedIdRef = useRef(false)
+  const [localExpanded, setLocalExpanded] = useState(false)
+  const toggleStored = useWikiCodeExpansionStore((s) => s.toggle)
+  const storedExpanded = useWikiCodeExpansionStore((s) =>
+    blockId ? s.expanded.has(blockId) : false,
+  )
+  const expanded = blockId ? storedExpanded : localExpanded
+  const collapsed = collapsible && !expanded
+
+  const toggleCollapsed = () => {
+    if (blockId) {
+      toggleStored(blockId)
+    } else {
+      setLocalExpanded((v) => !v)
+    }
+  }
+
+  // Lazily backfill a stable id on the first edit-mode mount of a block that
+  // lacks one. Write-once: guarded on both the persisted attr and the local
+  // ref so it never loops or re-assigns. Read-only viewers never run this
+  // (they must not mutate the shared document).
+  useEffect(() => {
+    if (!isEditable) return
+    if (node.attrs.blockId || assignedIdRef.current) return
+    assignedIdRef.current = true
+    updateAttributes({ blockId: crypto.randomUUID() })
+  }, [isEditable, node.attrs.blockId, updateAttributes])
+
   // Subscribe to editor state so the toolbar reactively appears whenever the
   // cursor enters the text range of THIS node and hides when it leaves.
   const cursorInside =
@@ -143,9 +192,27 @@ export function WikiCodeBlock({ node, updateAttributes, editor, getPos }: ReactN
       data-editable={isEditable ? "true" : "false"}
       data-cursor-inside={cursorInside ? "true" : "false"}
       data-wrap={wrap ? "true" : "false"}
+      data-collapsed={collapsed ? "true" : "false"}
     >
       <div className="wiki-code-block__toolbar" contentEditable={false}>
         <CodeCopyButton getText={() => node.textContent ?? ""} />
+        {collapsible && (
+          <button
+            type="button"
+            className="wiki-code-block__collapse"
+            onMouseDown={(e) => e.preventDefault()}
+            onClick={toggleCollapsed}
+            aria-label={collapsed ? `Show all ${lineCount} lines` : "Collapse code"}
+            aria-expanded={!collapsed}
+          >
+            {collapsed ? (
+              <ChevronsUpDownIcon size={13} />
+            ) : (
+              <ChevronsDownUpIcon size={13} />
+            )}
+            <span>{collapsed ? `Show all ${lineCount}` : "Collapse"}</span>
+          </button>
+        )}
         {isEditable && (
           <button
             type="button"

@@ -329,6 +329,10 @@
      of code but pays it back as scroll bumps when many tall blocks
      transition in and out of view per scroll frame. */
   contain: layout style;
+  /* Collapsed height for large blocks: ~15 lines of code + the <pre>'s 12px
+     top/bottom padding. Keep the line metrics in sync with `__pre code`
+     (line-height 1.55 × font-size 0.8125rem). */
+  --wiki-code-collapsed-max: calc(15 * 1.55 * 0.8125rem + 24px);
 }
 
 /* When any node with a top-floating toolbar is the first element on the page,
@@ -454,6 +458,30 @@
   background: var(--accent);
 }
 
+/* Collapse/expand toggle — a text pill (like the copy button) so the
+   "Show all (N)" / "Collapse" label is legible. Shown in both edit and read
+   mode whenever the block is collapsible. */
+.tiptap .wiki-code-block__collapse {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-family: var(--font-sans);
+  font-size: 11px;
+  line-height: 1;
+  color: var(--muted-foreground);
+  background: var(--wiki-code-chrome);
+  border: 1px solid var(--border);
+  border-radius: calc(var(--radius-md) - 2px);
+  padding: 3px 6px 3px 5px;
+  cursor: pointer;
+  transition: color 120ms ease-out, background 120ms ease-out;
+}
+
+.tiptap .wiki-code-block__collapse:hover {
+  color: var(--foreground);
+  background: var(--accent);
+}
+
 /* Two-column layout: gutter (line numbers + wrap markers) on the left, the
    scrollable <pre> on the right. Both share the wrapper's background — the
    gutter has no chrome and no separator, it just sits on the left edge with
@@ -464,6 +492,48 @@
 .tiptap .wiki-code-block__body {
   display: flex;
   align-items: stretch;
+}
+
+/* Collapsed large block: clip the body to ~15 lines and scroll within it.
+   The vertical scroll lives on the body (not the <pre>) so the gutter and the
+   code scroll together and line numbers stay aligned; the <pre> keeps its own
+   horizontal scroll. Editing works inside the viewport — the caret stays in
+   view via native overflow scrolling. */
+.tiptap .wiki-code-block[data-collapsed="true"] .wiki-code-block__body {
+  max-height: var(--wiki-code-collapsed-max);
+  overflow-y: auto;
+  /* The base rule uses `align-items: stretch`, which — once the body has a
+     max-height and becomes a scroll container — clamps the gutter and <pre>
+     to the VISIBLE height instead of their content height. That breaks the
+     shared scroll (one child clips/freezes while the other paints past its
+     box). `flex-start` lets each child take its full content height so the
+     body is the single element that clips and scrolls them together. */
+  align-items: flex-start;
+}
+
+/* The <pre> keeps `overflow-x: auto` for horizontal code scroll, but CSS
+   forces the cross-axis to `auto` too. With the children at full height
+   (above) there's nothing to scroll vertically inside the <pre>; pinning
+   `overflow-y: hidden` guarantees it never steals the vertical scroll from the
+   body (which would leave the gutter behind) or shows a spurious scrollbar. */
+.tiptap .wiki-code-block[data-collapsed="true"] .wiki-code-block__pre {
+  overflow-y: hidden;
+}
+
+/* Fade hint that more code sits below the fold. Decorative only — clicks fall
+   through; the expand control lives in the hover/cursor toolbar, mirroring how
+   copy/wrap reveal. Pinned to the wrapper's bottom edge (the toolbar is
+   absolutely positioned, so the wrapper's height tracks the clipped body). */
+.tiptap .wiki-code-block[data-collapsed="true"]::after {
+  content: "";
+  position: absolute;
+  left: 1px;
+  right: 1px;
+  bottom: 1px;
+  height: 2.5rem;
+  border-radius: 0 0 var(--radius-md) var(--radius-md);
+  background: linear-gradient(to bottom, transparent, var(--wiki-code-bg));
+  pointer-events: none;
 }
 
 .tiptap .wiki-code-block__gutter {
