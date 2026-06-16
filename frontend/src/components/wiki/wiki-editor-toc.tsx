@@ -1,4 +1,4 @@
-import { SquareIcon, XIcon } from "lucide-react"
+import { SquareCheckIcon, SquareIcon, XIcon } from "lucide-react"
 import { type Editor, useEditorState } from "@tiptap/react"
 import { Button } from "@/components/ui/button"
 import { useWikiStore } from "@/stores/wiki"
@@ -15,6 +15,29 @@ interface TocItem {
   level: number
   text: string
   pos: number
+  /** Checklist items only: whether the question counts as covered, so the
+   *  outline can mark answered ones. Always false for headings. */
+  answered: boolean
+}
+
+// Whether a checklist item counts as covered, mirroring the item view's
+// deriveStatus and the sidecar coverage projection: an explicit N/A counts as
+// covered, a flagged item never does, otherwise it's covered iff the answer
+// region holds content.
+function isChecklistItemAnswered(node: {
+  attrs: Record<string, unknown>
+  textContent: string
+  content: { childCount: number }
+  firstChild: { content: { childCount: number } } | null
+}): boolean {
+  const state = (node.attrs.state as string) || ""
+  if (state === "not_applicable") return true
+  if (state === "flagged") return false
+  return (
+    node.textContent.trim().length > 0 ||
+    node.content.childCount > 1 ||
+    (node.firstChild?.content.childCount ?? 0) > 0
+  )
 }
 
 // Indent class per heading level. Kept as a static lookup so Tailwind's JIT
@@ -51,6 +74,7 @@ export function WikiEditorToc({ editor }: WikiEditorTocProps) {
             level: headingLevel,
             text: node.textContent.trim() || "Untitled",
             pos,
+            answered: false,
           })
           return
         }
@@ -61,6 +85,7 @@ export function WikiEditorToc({ editor }: WikiEditorTocProps) {
             // The prompt lives in an attribute; textContent is the answer body.
             text: (node.attrs.prompt as string)?.trim() || "Untitled item",
             pos,
+            answered: isChecklistItemAnswered(node),
           })
           // Don't descend into the answer region — its prose isn't outline-worthy.
           return false
@@ -78,7 +103,8 @@ export function WikiEditorToc({ editor }: WikiEditorTocProps) {
           x.pos !== y.pos ||
           x.level !== y.level ||
           x.text !== y.text ||
-          x.kind !== y.kind
+          x.kind !== y.kind ||
+          x.answered !== y.answered
         ) {
           return false
         }
@@ -153,9 +179,12 @@ export function WikiEditorToc({ editor }: WikiEditorTocProps) {
                   )}
                   title={item.text}
                 >
-                  {item.kind === "checklist" && (
-                    <SquareIcon className="size-3 shrink-0 opacity-60" />
-                  )}
+                  {item.kind === "checklist" &&
+                    (item.answered ? (
+                      <SquareCheckIcon className="size-3 shrink-0 text-emerald-500" />
+                    ) : (
+                      <SquareIcon className="size-3 shrink-0 opacity-60" />
+                    ))}
                   <span className="truncate">{item.text}</span>
                 </button>
               </li>
