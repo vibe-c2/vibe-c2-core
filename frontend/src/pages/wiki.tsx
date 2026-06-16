@@ -42,6 +42,9 @@ import { WikiHashPickerDialog } from "@/components/wiki/wiki-hash-picker"
 import { HashDetailsDialog } from "@/components/findings/hash-details-dialog"
 import { DeleteHashDialog } from "@/components/findings/delete-hash-dialog"
 import { MarkHashCrackedDialog } from "@/components/findings/mark-hash-cracked-dialog"
+import { WikiHostPickerDialog } from "@/components/wiki/wiki-host-picker"
+import { HostFormDialog } from "@/components/findings/host-form-dialog"
+import { DeleteHostDialog } from "@/components/findings/delete-host-dialog"
 
 export function WikiPage() {
   const { effectiveOperationId, isPublicMode, hasRealScope } =
@@ -120,7 +123,10 @@ function WikiPageInner({
   const lastDoc = useRef<string | null>(null)
   const lastOp = useRef<string | null>(null)
   useEffect(() => {
-    if (!hasRealScope || !documentId) {
+    // Run whenever a doc is open — not gated on hasRealScope, because the
+    // global Public tree is reachable without a scope and a deep link to it
+    // should flip the mode to match.
+    if (!documentId) {
       pendingSyncDoc.current = null
       lastDoc.current = documentId
       lastOp.current = operationId
@@ -154,8 +160,10 @@ function WikiPageInner({
     if (!docOperationId) return // wait for the doc query to resolve
     pendingSyncDoc.current = null
     if (docOperationId === operationId) return
-    setWikiTreeMode(isPublicOperation(docOperationId) ? "public" : "operation")
-  }, [documentId, docOperationId, operationId, hasRealScope, setWikiTreeMode])
+    setWikiTreeMode(
+      isPublicOperation(docOperationId) ? "public" : "operation",
+    )
+  }, [documentId, docOperationId, operationId, setWikiTreeMode])
   // The adaptive default needs to know whether this doc has children to pick
   // between file/folder glyphs (mirrors wiki-editor-header.tsx:132). Gate the
   // children fetch behind that — uncurated/explicit icons don't need it. The
@@ -331,6 +339,17 @@ function WikiPageInner({
       <DeleteHashDialog />
       <MarkHashCrackedDialog />
       <WikiHashPickerDialog />
+      {/* Host reference chips: the picker inserts the /host node, and the host
+          form / delete dialogs (the app's host detail surface) back the chip
+          click. Store-driven, so dormant until a chip or slash command opens
+          them. The picker/delete are harmless under a synthetic sentinel (no
+          hosts to list), but HostFormDialog's create path would post that
+          sentinel as a real operationId — so it's mounted only for a real
+          operation. Host chips are only clickable there anyway (refs are
+          dropped on the Public tree). */}
+      <DeleteHostDialog />
+      <WikiHostPickerDialog />
+      {!isPublicMode && <HostFormDialog operationId={operationId} />}
     </div>
   )
 }

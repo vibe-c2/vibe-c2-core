@@ -49,6 +49,30 @@ type WikiDocument {
   icon: String!
   sortOrder: String!
   childCount: Int!
+  # True when the document's derived Markdown body has any non-whitespace
+  # content. Server-computed from `content` so callers can cheaply tell a real
+  # page from an empty container ("folder") without fetching the body — used by
+  # the create-from-template picker to hide contentless templates.
+  hasContent: Boolean!
+  # True when this document is flagged as a reusable template. Any document
+  # (in an operation or the Public tree) can be a template; the flag is toggled
+  # by anyone with edit access via setWikiDocumentTemplate. Template documents
+  # render a fixed template icon in the UI and appear in the create-from-template
+  # picker. Independent of content — a template may or may not hold checklist
+  # items or any other body.
+  isTemplate: Boolean!
+  # Template provenance + checklist coverage. sourceTemplateId is set on
+  # documents forked from a template via instantiateTemplate, null otherwise.
+  # A document "has a checklist" when it holds at least one checklist item, i.e.
+  # checklistTotal > 0. The three counts are projected by the Hocuspocus sidecar
+  # from the document's checklist items: checklistTotal = number of items,
+  # checklistRequired = subset whose `required` flag is set, checklistAnswered =
+  # number of items (required or not) that are answered or marked not-applicable.
+  # They drive the per-document coverage bar; all are 0 for docs with no items.
+  sourceTemplateId: ID
+  checklistTotal: Int!
+  checklistRequired: Int!
+  checklistAnswered: Int!
   # Other active documents in this operation that cite this one inline via
   # the /doc slash command. Trashed referrers are excluded; self-references
   # are excluded. Capped at 200 most recently updated — past that, refining
@@ -389,6 +413,40 @@ extend type Mutation {
   # Trashed descendants are skipped — they stay in trash. Returns the new root.
   duplicateWikiDocument(id: ID!, withChildren: Boolean = false): WikiDocument!
     @hasPermission(permission: "operation:member")
+
+  # Flags or unflags a document as a reusable template. The caller needs edit
+  # (operator) access to the document's operation — the same bar as any other
+  # metadata edit. On the Public tree every authenticated user is an implicit
+  # operator, so Public documents can be flagged by anyone (consistent with
+  # Public being a shared read-write space). Returns the updated document.
+  setWikiDocumentTemplate(id: ID!, isTemplate: Boolean!): WikiDocument!
+    @hasPermission(permission: "operation:member")
+
+  # Instantiates a template into an operation. `templateId` must be a document
+  # flagged as a template (isTemplate) that the caller can read; the new
+  # document is created in `targetOperationId`'s wiki tree (optionally under
+  # `parentDocumentId`) with its content byte-copied from the template and
+  # `sourceTemplateId` set to the source. The instance is an ordinary wiki
+  # document thereafter — it can have children, is searchable, is not itself a
+  # template, and edits never propagate back to the template. The caller needs
+  # at least operator role in the target operation and read access to the
+  # template's operation.
+  instantiateTemplate(
+    templateId: ID!
+    targetOperationId: ID!
+    parentDocumentId: ID
+    # Name for the new instance. Optional — falls back to the template's title
+    # when omitted or blank.
+    title: String
+    # Icon for the new instance. Each field is independent: a non-null value
+    # overrides the corresponding glyph the instance would otherwise inherit
+    # from the template, a null value inherits. The create dialog seeds the
+    # picker from the template and sends whatever the operator leaves there, so
+    # the forked document can carry its own icon distinct from the template's.
+    emoji: String
+    icon: String
+    color: String
+  ): WikiDocument! @hasPermission(permission: "operation:member")
 
   # Restores a soft-deleted document. When `cascade` is true, also restores
   # every currently-trashed descendant of the document (children, grand-

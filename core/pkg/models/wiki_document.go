@@ -79,4 +79,37 @@ type WikiDocument struct {
 	// blob is reclaimed only once no document in the operation references its id.
 	ImageReferences []uuid.UUID `bson:"image_references,omitempty" json:"-"`
 	FileReferences  []uuid.UUID `bson:"file_references,omitempty" json:"-"`
+	// IsTemplate marks this document as a reusable template. Any document in any
+	// operation (or the Public tree) can be flagged a template by anyone with
+	// edit access; the create-from-template picker then offers it as a fork
+	// source. The flag is independent of content — a template body may hold
+	// checklist items, prose, or anything else. Replaces the former synthetic
+	// "Templates tree": templates now live in-place wherever they're authored.
+	IsTemplate bool `bson:"is_template" json:"isTemplate"`
+	// SourceTemplateID records the template a document was forked from
+	// (instantiateTemplate byte-copies the template's content into a new
+	// operation wiki doc and stamps this field). Nil for templates themselves
+	// and for ordinary documents created from scratch. Provenance only — the two
+	// documents are independent CRDTs after instantiation, so a later template
+	// edit never propagates here.
+	SourceTemplateID *uuid.UUID `bson:"source_template_id,omitempty" json:"sourceTemplateId,omitempty"`
+	// ChecklistTotal, ChecklistRequired and ChecklistAnswered are coverage counts
+	// projected by the Hocuspocus sidecar from the document's wikiChecklistItem
+	// nodes: ChecklistTotal is the number of checklist items, ChecklistRequired
+	// the subset whose `required` attribute is truthy, and ChecklistAnswered the
+	// number of items (required or not) whose derived state is answered or
+	// not_applicable. All three are zero for documents that contain no checklist
+	// items, so a non-zero ChecklistTotal is the marker that "this document has a
+	// checklist". Never written by Go — the sidecar owns them, same as the
+	// reference arrays above.
+	ChecklistTotal    int `bson:"checklist_total" json:"checklistTotal"`
+	ChecklistRequired int `bson:"checklist_required" json:"checklistRequired"`
+	ChecklistAnswered int `bson:"checklist_answered" json:"checklistAnswered"`
+	// HostReferences lists the host IDs that this document cites inline via the
+	// /host slash command (wikiHostReference nodes). Same rewrite semantics as
+	// CredentialReferences — populated by the Hocuspocus sidecar on every
+	// persist and used to power the inverse "which wiki docs reference this
+	// host" lookup. Hosts are operation-private, so the sidecar drops these on
+	// Public-tree documents (same boundary as credentials/hashes).
+	HostReferences []uuid.UUID `bson:"host_references,omitempty" json:"-"`
 }

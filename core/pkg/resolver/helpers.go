@@ -38,3 +38,14 @@ func boolDeref(p *bool, fallback bool) bool {
 	}
 	return *p
 }
+
+// strDerefOr returns the pointed-to string or the fallback for nil. Unlike
+// strDeref it preserves an explicit empty string ("" overrides the fallback),
+// which matters for optional overrides where nil means "inherit" but "" means
+// "clear" — e.g. instantiateTemplate's per-glyph icon args.
+func strDerefOr(p *string, fallback string) string {
+	if p == nil {
+		return fallback
+	}
+	return *p
+}

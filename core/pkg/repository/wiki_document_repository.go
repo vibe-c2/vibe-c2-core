@@ -149,6 +149,11 @@ type IWikiDocumentRepository interface {
 	// array in opID. Used on hash hard-delete to clear dangling pointers.
 	// Sibling of PullCredentialReference.
 	PullHashReference(ctx context.Context, opID, hashID uuid.UUID) error
+	// PullHostReference removes hostID from every document's host_references
+	// array in opID. Used on host hard-delete to clear dangling pointers.
+	// Sibling of PullCredentialReference. (The inverse FindHostReferrers /
+	// Host.backlinks read path is not built yet — add it alongside that feature.)
+	PullHostReference(ctx context.Context, opID, hostID uuid.UUID) error
 	// FilterReferencedImageIDs returns the subset of imageIDs that are embedded
 	// in at least one document in opID. Spans BOTH active and trashed documents:
 	// a trashed doc is restorable, so its attachments must stay alive until the
@@ -206,6 +211,12 @@ func NewWikiDocumentRepository(db database.Database) IWikiDocumentRepository {
 		// Same shape as the credential backlinks index above — multikey on the
 		// hash_references array with deleted_at trailing.
 		{Key: []string{"operation_id", "hash_references", "deleted_at"}},
+		// Host references: same shape as the credential/hash backlinks indexes
+		// above — multikey on the host_references array. Today it backs
+		// PullHostReference's {operation_id, host_references} cleanup filter on
+		// host hard-delete; it also covers the future "documents referencing
+		// host X" backlinks query when that read path is added.
+		{Key: []string{"operation_id", "host_references", "deleted_at"}},
 		// Attachment liveness: "documents in this operation that embed image /
 		// file X". Multikey on the references array. Unlike the backlinks
 		// indexes above, deleted_at is intentionally NOT part of the key: the
@@ -943,6 +954,23 @@ func (r *wikiDocumentRepository) PullHashReference(ctx context.Context, opID, ha
 	)
 	if err != nil {
 		return fmt.Errorf("failed to pull hash reference: %w", err)
+	}
+	return nil
+}
+
+// PullHostReference removes hostID from host_references on every document in
+// opID. Called on host hard-delete so dangling UUIDs don't accumulate in the
+// inverse index. Sibling of PullCredentialReference.
+func (r *wikiDocumentRepository) PullHostReference(ctx context.Context, opID, hostID uuid.UUID) error {
+	_, err := r.coll.UpdateAll(ctx,
+		bson.M{
+			"operation_id":    opID,
+			"host_references": hostID,
+		},
+		bson.M{"$pull": bson.M{"host_references": hostID}},
+	)
+	if err != nil {
+		return fmt.Errorf("failed to pull host reference: %w", err)
 	}
 	return nil
 }

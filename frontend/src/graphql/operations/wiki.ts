@@ -36,6 +36,12 @@ export const WikiDocumentTreeFields = graphql(`
     color
     sortOrder
     childCount
+    hasContent
+    isTemplate
+    sourceTemplateId
+    checklistTotal
+    checklistRequired
+    checklistAnswered
     lastUpdatedAt
     updatedAt
   }
@@ -86,6 +92,11 @@ export const WikiDocumentFields = graphql(`
     color
     icon
     sortOrder
+    isTemplate
+    sourceTemplateId
+    checklistTotal
+    checklistRequired
+    checklistAnswered
     createdBy { id username }
     lastUpdatedBy { id username }
     lastUpdatedAt
@@ -415,6 +426,53 @@ export const DuplicateWikiDocumentMutation = graphql(`
     duplicateWikiDocument(id: $id, withChildren: $withChildren) {
       id operationId title emoji color icon sortOrder
       parentDocumentId
+      createdAt updatedAt
+    }
+  }
+`)
+
+// Flag/unflag a document as a reusable template. Returns the updated doc so
+// the cache picks up the new isTemplate value (and the fixed template icon).
+export const SetWikiDocumentTemplateMutation = graphql(`
+  mutation SetWikiDocumentTemplate($id: ID!, $isTemplate: Boolean!) {
+    setWikiDocumentTemplate(id: $id, isTemplate: $isTemplate) {
+      id operationId title emoji icon color sortOrder
+      parentDocumentId
+      isTemplate
+      updatedAt
+    }
+  }
+`)
+
+// Fork a template (any doc flagged isTemplate that the caller can read) into an
+// operation's wiki tree. Returns the new instance, placed under
+// `parentDocumentId` when given (else at the operation root).
+export const InstantiateTemplateMutation = graphql(`
+  mutation InstantiateTemplate(
+    $templateId: ID!
+    $targetOperationId: ID!
+    $parentDocumentId: ID
+    $title: String
+    $emoji: String
+    $icon: String
+    $color: String
+  ) {
+    instantiateTemplate(
+      templateId: $templateId
+      targetOperationId: $targetOperationId
+      parentDocumentId: $parentDocumentId
+      title: $title
+      emoji: $emoji
+      icon: $icon
+      color: $color
+    ) {
+      id operationId title emoji color icon sortOrder
+      parentDocumentId
+      isTemplate
+      sourceTemplateId
+      checklistTotal
+      checklistRequired
+      checklistAnswered
       createdAt updatedAt
     }
   }

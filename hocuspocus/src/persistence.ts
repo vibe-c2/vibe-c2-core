@@ -2,11 +2,14 @@ import { Database } from "@hocuspocus/extension-database";
 import { Binary, MongoClient, type Db } from "mongodb";
 import * as Y from "yjs";
 import {
+  collectChecklistCoverage,
   collectCredentialReferenceIds,
   collectDocReferenceIds,
   collectFileReferenceIds,
   collectHashReferenceIds,
+  collectHostReferenceIds,
   collectImageReferenceIds,
+  type ChecklistCoverage,
 } from "./references.js";
 
 /**
@@ -165,6 +168,7 @@ export function createDatabaseExtension(): Database {
       let referenceBinaries: Binary[] = [];
       let credentialReferenceBinaries: Binary[] = [];
       let hashReferenceBinaries: Binary[] = [];
+      let hostReferenceBinaries: Binary[] = [];
       // Attachment reference indexes. These power the image/file garbage
       // collector on the Go side: a blob is kept alive only while its id is
       // present in some document's image_references / file_references array.
@@ -173,6 +177,13 @@ export function createDatabaseExtension(): Database {
       // of which attachments a document uses.
       let imageReferenceBinaries: Binary[] = [];
       let fileReferenceBinaries: Binary[] = [];
+      // Checklist coverage counts (total items, required subset, answered). Zero
+      // for ordinary wiki docs — collectChecklistCoverage finds no checklist items.
+      let checklistCoverage: ChecklistCoverage = {
+        total: 0,
+        required: 0,
+        answered: 0,
+      };
       if (xmlFragment.length > 0) {
         markdown = extractTextFromFragment(xmlFragment);
         referenceBinaries = idsToBinaries(collectDocReferenceIds(xmlFragment));
@@ -182,12 +193,16 @@ export function createDatabaseExtension(): Database {
         hashReferenceBinaries = idsToBinaries(
           collectHashReferenceIds(xmlFragment),
         );
+        hostReferenceBinaries = idsToBinaries(
+          collectHostReferenceIds(xmlFragment),
+        );
         imageReferenceBinaries = idsToBinaries(
           collectImageReferenceIds(xmlFragment),
         );
         fileReferenceBinaries = idsToBinaries(
           collectFileReferenceIds(xmlFragment),
         );
+        checklistCoverage = collectChecklistCoverage(xmlFragment);
       } else {
         markdown = ydoc.getText("content").toString();
       }
@@ -211,6 +226,10 @@ export function createDatabaseExtension(): Database {
         // operation-private, so a /hash chip must never seed the inverse
         // index on a world-readable public document.
         hashReferenceBinaries = [];
+        // Same boundary for hosts — host identity (hostnames, interfaces,
+        // routes) is operation-private, so a /host chip must never seed the
+        // inverse index on a world-readable public document.
+        hostReferenceBinaries = [];
       }
 
       const now = new Date();
@@ -235,6 +254,10 @@ export function createDatabaseExtension(): Database {
         // credential array above. Powers the "Referenced in" section of the
         // hash details dialog.
         hash_references: hashReferenceBinaries,
+        // Parallel index for host backlinks — same rewrite semantics as the
+        // credential/hash arrays. Powers the inverse "which wiki docs reference
+        // this host" lookup.
+        host_references: hostReferenceBinaries,
         // Attachment liveness indexes for the Go garbage collector. Full
         // rewrite on every save: removing an image/file from the body drops
         // its id here, and once it's referenced by no document the sweeper
@@ -242,6 +265,15 @@ export function createDatabaseExtension(): Database {
         // attachment bytes are not operation-private the way credentials are.
         image_references: imageReferenceBinaries,
         file_references: fileReferenceBinaries,
+        // Checklist coverage projection. Rewritten on every save like the
+        // reference arrays: as items are answered the numerator climbs, and a
+        // doc with no checklist items persists 0/0/0. Powers the per-document
+        // coverage bar (which renders whenever checklist_total > 0) and the
+        // operation rollup. Not gated by the public-operation boundary — counts
+        // are not operation-private.
+        checklist_total: checklistCoverage.total,
+        checklist_required: checklistCoverage.required,
+        checklist_answered: checklistCoverage.answered,
       };
 
       if (ctx?.userId) {

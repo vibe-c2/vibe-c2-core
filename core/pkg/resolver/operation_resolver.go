@@ -146,7 +146,8 @@ func (r *operationResolver) CreateOperation(ctx context.Context, input model.Cre
 	// Reserve the "Public" name (case-insensitive) for the synthetic Public
 	// operation. The Mongo unique-name index can't catch this collision
 	// because the synthetic op is never stored — guard at the resolver.
-	if strings.EqualFold(strings.TrimSpace(input.Name), models.PublicOperationName) {
+	trimmedName := strings.TrimSpace(input.Name)
+	if strings.EqualFold(trimmedName, models.PublicOperationName) {
 		return nil, fmt.Errorf("the name %q is reserved", models.PublicOperationName)
 	}
 

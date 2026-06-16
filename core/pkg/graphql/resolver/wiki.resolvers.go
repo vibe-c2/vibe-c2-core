@@ -38,6 +38,16 @@ func (r *mutationResolver) DuplicateWikiDocument(ctx context.Context, id string,
 	return r.WikiDocumentResolver.DuplicateWikiDocument(ctx, id, withChildren)
 }
 
+// SetWikiDocumentTemplate is the resolver for the setWikiDocumentTemplate field.
+func (r *mutationResolver) SetWikiDocumentTemplate(ctx context.Context, id string, isTemplate bool) (*models.WikiDocument, error) {
+	return r.WikiDocumentResolver.SetWikiDocumentTemplate(ctx, id, isTemplate)
+}
+
+// InstantiateTemplate is the resolver for the instantiateTemplate field.
+func (r *mutationResolver) InstantiateTemplate(ctx context.Context, templateID string, targetOperationID string, parentDocumentID *string, title *string, emoji *string, icon *string, color *string) (*models.WikiDocument, error) {
+	return r.WikiDocumentResolver.InstantiateTemplate(ctx, templateID, targetOperationID, parentDocumentID, title, emoji, icon, color)
+}
+
 // RestoreWikiDocument is the resolver for the restoreWikiDocument field.
 func (r *mutationResolver) RestoreWikiDocument(ctx context.Context, id string, cascade *bool) (*models.WikiDocument, error) {
 	return r.WikiDocumentResolver.RestoreWikiDocument(ctx, id, cascade)
@@ -191,6 +201,16 @@ func (r *wikiDocumentResolver) ChildDocuments(ctx context.Context, obj *models.W
 // ChildCount is the resolver for the childCount field.
 func (r *wikiDocumentResolver) ChildCount(ctx context.Context, obj *models.WikiDocument) (int, error) {
 	return r.WikiDocumentResolver.WikiDocumentChildCount(ctx, obj)
+}
+
+// HasContent is the resolver for the hasContent field.
+func (r *wikiDocumentResolver) HasContent(ctx context.Context, obj *models.WikiDocument) (bool, error) {
+	return r.WikiDocumentResolver.WikiDocumentHasContent(ctx, obj)
+}
+
+// SourceTemplateID is the resolver for the sourceTemplateId field.
+func (r *wikiDocumentResolver) SourceTemplateID(ctx context.Context, obj *models.WikiDocument) (*string, error) {
+	return r.WikiDocumentResolver.WikiDocumentSourceTemplateID(ctx, obj)
 }
 
 // Backlinks is the resolver for the backlinks field.

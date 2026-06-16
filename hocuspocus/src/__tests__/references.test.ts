@@ -12,6 +12,7 @@ import {
   collectDocReferenceIds,
   collectFileReferenceIds,
   collectHashReferenceIds,
+  collectHostReferenceIds,
   collectImageReferenceIds,
 } from "../references.js";
 
@@ -40,6 +41,12 @@ function credChip(credentialId: string): Y.XmlElement {
 function hashChip(hashId: string): Y.XmlElement {
   const el = new Y.XmlElement("wikiHashReference");
   el.setAttribute("hashId", hashId);
+  return el;
+}
+
+function hostChip(hostId: string): Y.XmlElement {
+  const el = new Y.XmlElement("wikiHostReference");
+  el.setAttribute("hostId", hostId);
   return el;
 }
 
@@ -327,6 +334,93 @@ test("hash walker stays disjoint from credential and doc walkers", () => {
 test("hash walker returns an empty set for an empty document", () => {
   const frag = withDoc(() => {});
   const ids = collectHashReferenceIds(frag);
+  assert.equal(ids.size, 0);
+});
+
+// --- Host reference walker — sibling of the credential/hash walkers. ---
+
+test("host walker collects a single inline host reference", () => {
+  const frag = withDoc((f) => {
+    f.insert(0, [block("paragraph", hostChip(ID_A))]);
+  });
+  const ids = collectHostReferenceIds(frag);
+  assert.deepEqual([...ids], [ID_A]);
+});
+
+test("host walker dedupes repeated host references", () => {
+  const frag = withDoc((f) => {
+    f.insert(0, [
+      block("paragraph", hostChip(ID_A), hostChip(ID_A)),
+      block("paragraph", hostChip(ID_A)),
+    ]);
+  });
+  const ids = collectHostReferenceIds(frag);
+  assert.equal(ids.size, 1);
+  assert.ok(ids.has(ID_A));
+});
+
+test("host walker collects references nested deep inside blocks", () => {
+  const frag = withDoc((f) => {
+    f.insert(0, [
+      block(
+        "bulletList",
+        block(
+          "listItem",
+          block("paragraph", hostChip(ID_A)),
+          block("paragraph", hostChip(ID_B)),
+        ),
+      ),
+      block("blockquote", block("paragraph", hostChip(ID_C))),
+    ]);
+  });
+  const ids = collectHostReferenceIds(frag);
+  assert.equal(ids.size, 3);
+});
+
+test("host walker ignores malformed hostId", () => {
+  const frag = withDoc((f) => {
+    f.insert(0, [
+      block("paragraph", hostChip("not-a-uuid"), hostChip(""), hostChip(ID_A)),
+    ]);
+  });
+  const ids = collectHostReferenceIds(frag);
+  assert.deepEqual([...ids], [ID_A]);
+});
+
+test("host walker normalises ids to lowercase", () => {
+  const frag = withDoc((f) => {
+    f.insert(0, [
+      block("paragraph", hostChip(ID_A.toUpperCase()), hostChip(ID_A)),
+    ]);
+  });
+  const ids = collectHostReferenceIds(frag);
+  assert.equal(ids.size, 1);
+  assert.ok(ids.has(ID_A));
+});
+
+test("host walker stays disjoint from the other reference walkers", () => {
+  // Symmetry guard: the host index must ignore doc/credential/hash chips so
+  // the four inverse indexes never cross-contaminate.
+  const frag = withDoc((f) => {
+    f.insert(0, [
+      block(
+        "paragraph",
+        chip(ID_A),
+        credChip(ID_B),
+        hashChip(ID_C),
+        hostChip(ID_A),
+      ),
+    ]);
+  });
+  assert.deepEqual([...collectHostReferenceIds(frag)], [ID_A]);
+  assert.deepEqual([...collectHashReferenceIds(frag)], [ID_C]);
+  assert.deepEqual([...collectCredentialReferenceIds(frag)], [ID_B]);
+  assert.deepEqual([...collectDocReferenceIds(frag)], [ID_A]);
+});
+
+test("host walker returns an empty set for an empty document", () => {
+  const frag = withDoc(() => {});
+  const ids = collectHostReferenceIds(frag);
   assert.equal(ids.size, 0);
 });
 

@@ -10,6 +10,7 @@ import {
 } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
 import { HostIcon } from "@/components/findings/host-icon"
+import { hostAddresses } from "@/components/findings/host-address-utils"
 import {
   VirtualizedDataTable,
   dataTableRowClass,
@@ -169,13 +170,6 @@ export function HostsTable({
       }}
     />
   )
-}
-
-// All addresses across every interface, deduplicated (a CIDR can legitimately
-// repeat across interfaces — e.g. re-imported data — and duplicate badge keys
-// would crash the row).
-function hostAddresses(h: HostFieldsFragment): string[] {
-  return [...new Set(h.interfaces.flatMap((i) => i.addresses))]
 }
 
 // Right-click menu for a hosts row. Local to the table — only four flat

@@ -12,9 +12,11 @@ import (
 	"github.com/vibe-c2/vibe-c2-core/core/pkg/eventbus"
 	"github.com/vibe-c2/vibe-c2-core/core/pkg/graphql/gqlctx"
 	"github.com/vibe-c2/vibe-c2-core/core/pkg/graphql/model"
+	"github.com/vibe-c2/vibe-c2-core/core/pkg/logger"
 	"github.com/vibe-c2/vibe-c2-core/core/pkg/models"
 	"github.com/vibe-c2/vibe-c2-core/core/pkg/pagination"
 	"github.com/vibe-c2/vibe-c2-core/core/pkg/repository"
+	"go.uber.org/zap"
 )
 
 // IHostResolver defines the business logic methods for the Host entity. These
@@ -42,14 +44,20 @@ type hostResolver struct {
 	hostRepo      repository.IHostRepository
 	operationRepo repository.IOperationRepository
 	userRepo      repository.IUserRepository
-	eventBus      eventbus.IEventBus
+	// wikiDocRes strips a deleted host's id from the wiki host_references
+	// inverse index on hard-delete. Optional — nil is acceptable for tests and
+	// any pre-wiki wiring. Mirrors credentialResolver.wikiDocRes.
+	wikiDocRes IWikiDocumentResolver
+	eventBus   eventbus.IEventBus
 }
 
 // NewHostResolver creates a new host resolver with the given dependencies.
+// wikiDocRes is optional; pass nil if the wiki side is not wired (tests).
 func NewHostResolver(
 	hostRepo repository.IHostRepository,
 	operationRepo repository.IOperationRepository,
 	userRepo repository.IUserRepository,
+	wikiDocRes IWikiDocumentResolver,
 	bus eventbus.IEventBus,
 ) IHostResolver {
 	if bus == nil {
@@ -59,6 +67,7 @@ func NewHostResolver(
 		hostRepo:      hostRepo,
 		operationRepo: operationRepo,
 		userRepo:      userRepo,
+		wikiDocRes:    wikiDocRes,
 		eventBus:      bus,
 	}
 }
@@ -240,6 +249,19 @@ func (r *hostResolver) DeleteHost(ctx context.Context, id string) (bool, error) 
 
 	if err := r.hostRepo.Delete(ctx, &host); err != nil {
 		return false, fmt.Errorf("failed to delete host: %w", err)
+	}
+
+	// Strip this host id from host_references on every wiki doc in the
+	// operation so the inverse index doesn't carry dangling UUIDs. Best-effort,
+	// same rationale as the credential/hash delete paths — the chip render
+	// handles "host not found" gracefully.
+	if r.wikiDocRes != nil {
+		if err := r.wikiDocRes.CleanupHostReferences(ctx, host.OperationID, host.HostID); err != nil {
+			logger.From(ctx).Warn("cleanup of host backlinks failed",
+				zap.String("host_id", host.HostID.String()),
+				zap.Error(err),
+			)
+		}
 	}
 
 	auth := gqlctx.AuthFromContext(ctx)

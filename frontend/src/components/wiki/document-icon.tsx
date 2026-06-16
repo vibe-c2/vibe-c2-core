@@ -1,4 +1,5 @@
 import { Suspense, type CSSProperties } from "react"
+import { LayoutTemplateIcon } from "lucide-react"
 import {
   ADAPTIVE_ICON_NAME,
   type IconComponent,
@@ -36,6 +37,13 @@ interface DocumentIconProps {
    */
   hasChildren?: boolean
   isExpanded?: boolean
+  /**
+   * When true the document is a reusable template: a fixed template glyph is
+   * rendered in place of the stored emoji/icon (the icon is locked while a doc
+   * is a template, so it can't drift). Wins over every other branch. `color`
+   * still applies so a template can be tinted.
+   */
+  isTemplate?: boolean
 }
 
 /**
@@ -61,12 +69,26 @@ export function DocumentIcon({
   size = 18,
   hasChildren = false,
   isExpanded = false,
+  isTemplate = false,
 }: DocumentIconProps) {
   /* eslint-disable react-hooks/static-components */
   // color ? {color} : undefined keeps an empty string from becoming an empty
   // CSS value; undefined lets the icon inherit currentColor. Shared by every
   // icon branch below. Ignored on the emoji fallback (emojis carry their own).
   const style: CSSProperties | undefined = color ? { color } : undefined
+  // Template docs render a fixed glyph regardless of their stored emoji/icon —
+  // the marker must be unambiguous and consistent across the tree, header, and
+  // picker. Checked first so it overrides every other branch.
+  if (isTemplate) {
+    return (
+      <LayoutTemplateIcon
+        className={cn("shrink-0", className)}
+        size={size}
+        style={style}
+        aria-hidden
+      />
+    )
+  }
   // Adaptive default: render synchronously without going through the lazy
   // lucide registry. Caught here (before resolveIcon) so the reserved name
   // never leaks into ALL_LUCIDE_NAMES lookups.

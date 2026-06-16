@@ -66,6 +66,11 @@ const HASH_REFERENCE_SELECTOR: NodeAttrSelector = {
   attrName: "hashId",
 };
 
+const HOST_REFERENCE_SELECTOR: NodeAttrSelector = {
+  nodeName: "wikiHostReference",
+  attrName: "hostId",
+};
+
 // The wikiFile atom carries the attachment's UUID directly in its `fileId`
 // attribute (see wiki-schema.ts), so file references collect exactly like the
 // doc/credential/hash chips above.
@@ -122,6 +127,18 @@ export function collectHashReferenceIds(
 
 /**
  * Walk a Y.js TipTap document and return the deduplicated, lowercase set of
+ * `hostId` attributes from every `wikiHostReference` atom node. Drives the host
+ * backlinks index — the inverse mapping that lets a host surface "this host is
+ * referenced in these wiki docs". Sibling of collectCredentialReferenceIds.
+ */
+export function collectHostReferenceIds(
+  node: Y.XmlFragment | Y.XmlElement,
+): Set<string> {
+  return collectNodeAttrIds(node, HOST_REFERENCE_SELECTOR);
+}
+
+/**
+ * Walk a Y.js TipTap document and return the deduplicated, lowercase set of
  * `fileId` attributes from every `wikiFile` atom node. Drives the wiki file
  * attachment garbage collector: the Go sweeper keeps a file's blob alive only
  * while its id appears in some document's file_references array.
@@ -166,4 +183,123 @@ function walkImage(
     }
     walkImage(child, out);
   }
+}
+
+// ---------------------------------------------------------------------------
+// Checklist coverage
+// ---------------------------------------------------------------------------
+
+// The block node a checklist item renders as (see the frontend
+// wiki-checklist-item-node extension). Each item carries a `required` boolean
+// attribute and an optional `state` attribute, plus a content region holding
+// the answer. Coverage is derived here — there is no separate answers store.
+const CHECKLIST_ITEM_NODE = "wikiChecklistItem";
+
+// Leaf/atom nodes that count as a real answer even when they contain no text —
+// e.g. an answer that is a single reference chip with no prose. Any of these
+// inside an item's content region marks the item answered.
+const ANSWER_BEARING_LEAF_NODES = new Set<string>([
+  "wikiHostReference",
+  "wikiCredentialReference",
+  "wikiHashReference",
+  "wikiFile",
+  IMAGE_NODE_NAME,
+]);
+
+export interface ChecklistCoverage {
+  /** Total number of checklist items, required or not. A non-zero `total` is
+   * the marker that "this document has a checklist" and drives whether the
+   * per-document coverage bar renders at all. */
+  total: number;
+  /** Number of items whose `required` attribute is truthy. Surfaced as a
+   * secondary "N required" hint; not the coverage-bar denominator. */
+  required: number;
+  /**
+   * Number of items (required or not) whose derived state is answered or
+   * not_applicable. Flagged-but-unanswered and unanswered items are excluded —
+   * this is the numerator of the per-document coverage bar, over `total`.
+   */
+  answered: number;
+}
+
+type ItemState = "unanswered" | "answered" | "not_applicable" | "flagged";
+
+/**
+ * Walk a Y.js TipTap document and tally checklist coverage from every
+ * `wikiChecklistItem` block node. Pure function — no I/O. Returns all-zero for
+ * documents with no checklist items, so it is a cheap no-op on ordinary wiki
+ * pages. Drives WikiDocument.checklistTotal / .checklistRequired / .checklistAnswered.
+ *
+ * Counting rule: every item contributes to `total`; it additionally contributes
+ * to `required` when its `required` attribute is truthy, and to `answered` when
+ * its derived state is `answered` or `not_applicable` (regardless of required).
+ * `flagged` and `unanswered` never count toward `answered`.
+ */
+export function collectChecklistCoverage(
+  node: Y.XmlFragment | Y.XmlElement,
+): ChecklistCoverage {
+  const cov: ChecklistCoverage = { total: 0, required: 0, answered: 0 };
+  walkChecklist(node, cov);
+  return cov;
+}
+
+function walkChecklist(
+  node: Y.XmlFragment | Y.XmlElement,
+  cov: ChecklistCoverage,
+): void {
+  for (const child of node.toArray()) {
+    if (!(child instanceof Y.XmlElement)) continue;
+    if (child.nodeName === CHECKLIST_ITEM_NODE) {
+      // Items don't nest — do not recurse into the answer region looking for
+      // more items (an answer may itself contain blocks, never checklist items).
+      cov.total += 1;
+      if (isTruthyAttr(child.getAttribute("required"))) cov.required += 1;
+      const state = deriveItemState(child);
+      if (state === "answered" || state === "not_applicable") {
+        cov.answered += 1;
+      }
+      continue;
+    }
+    walkChecklist(child, cov);
+  }
+}
+
+/**
+ * Derive an item's coverage state. An explicit `state` attribute the operator
+ * toggled (`not_applicable` / `flagged`) wins; otherwise the state is inferred
+ * from the answer region — `answered` when it holds content, else `unanswered`.
+ */
+function deriveItemState(item: Y.XmlElement): ItemState {
+  const explicit = item.getAttribute("state");
+  if (explicit === "not_applicable") return "not_applicable";
+  if (explicit === "flagged") return "flagged";
+  return itemHasAnswer(item) ? "answered" : "unanswered";
+}
+
+/**
+ * True when a checklist item's content region holds a real answer: any
+ * non-whitespace text, or any answer-bearing leaf node (a reference chip,
+ * attachment, or image). An item containing only an empty paragraph reads as
+ * unanswered.
+ */
+function itemHasAnswer(node: Y.XmlElement): boolean {
+  for (const child of node.toArray()) {
+    if (child instanceof Y.XmlText) {
+      if (child.toString().trim().length > 0) return true;
+      continue;
+    }
+    if (!(child instanceof Y.XmlElement)) continue;
+    if (ANSWER_BEARING_LEAF_NODES.has(child.nodeName)) return true;
+    if (itemHasAnswer(child)) return true;
+  }
+  return false;
+}
+
+/**
+ * Normalise a Y.js attribute to a boolean. TipTap may persist a boolean
+ * attribute as a real boolean or, after an HTML round-trip, as the string
+ * "true" — accept either.
+ */
+function isTruthyAttr(value: unknown): boolean {
+  return value === true || value === "true";
 }

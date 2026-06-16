@@ -75,8 +75,10 @@ func (r *subscriptionResolver) buildOperationFilter(ctx context.Context, auth gq
 		return nil, fmt.Errorf("failed to fetch operations: %w", err)
 	}
 
-	// +1 for the Public operation, which has no Mongo row and is never returned
-	// by FindByMemberID but is implicit-operator for every authenticated user.
+	// +1 for the synthetic Public tree, which has no Mongo row and is never
+	// returned by FindByMemberID but is readable by every authenticated user
+	// (implicit operator). It must deliver wiki document-changed events for
+	// live collab.
 	opSet := make(map[string]struct{}, len(ops)+1)
 	for _, op := range ops {
 		opSet[op.OperationID.String()] = struct{}{}
@@ -141,9 +143,10 @@ func (r *subscriptionResolver) buildOperationsFilter(ctx context.Context, auth g
 		if err != nil {
 			return nil, fmt.Errorf("failed to fetch operations: %w", err)
 		}
-		// +1 for the Public operation, which has no Mongo row and is never
-		// returned by FindByMemberID but is implicit-operator for every
-		// authenticated user.
+		// +1 for the synthetic Public tree, which has no Mongo row and is never
+		// returned by FindByMemberID but is readable by every authenticated user
+		// (implicit operator). It must deliver wiki document-changed events for
+		// live collab.
 		opSet := make(map[string]struct{}, len(ops)+1)
 		for _, op := range ops {
 			opSet[op.OperationID.String()] = struct{}{}

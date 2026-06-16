@@ -15,13 +15,13 @@ export interface EffectiveWikiOperation {
  * Resolves which operation the wiki tree should target. Combines the user's
  * scoped operation (if any) with their tree-mode preference:
  *
- *  - No scope                       → Public (forced).
- *  - Scoped + mode=operation        → scoped op.
- *  - Scoped + mode=public           → Public.
+ *  - No scope                → Public (forced).
+ *  - Scoped + mode=operation → scoped op.
+ *  - Scoped + mode=public    → Public.
  *
- * Backend authorization on PUBLIC_OPERATION_ID grants any authenticated user
- * implicit operator access, so `useMyOperationRole(effectiveOperationId)` works
- * uniformly for either branch.
+ * Backend authorization grants any authenticated user implicit operator access
+ * on PUBLIC_OPERATION_ID, so `useMyOperationRole(effectiveOperationId)` works
+ * uniformly for every branch.
  */
 export function useEffectiveWikiOperation(): EffectiveWikiOperation {
   const scopedId = useScopedOperationStore((s) => s.scopedOperation?.id ?? null)
@@ -29,6 +29,7 @@ export function useEffectiveWikiOperation(): EffectiveWikiOperation {
 
   const hasRealScope = scopedId !== null
   const isPublicMode = !hasRealScope || mode === "public"
+
   const effectiveOperationId = isPublicMode ? PUBLIC_OPERATION_ID : scopedId!
 
   return { effectiveOperationId, isPublicMode, hasRealScope }

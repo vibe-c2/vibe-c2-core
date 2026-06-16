@@ -242,6 +242,7 @@ type ComplexityRoot struct {
 		DeleteWikiDocumentBackup      func(childComplexity int, id string) int
 		DuplicateWikiDocument         func(childComplexity int, id string, withChildren *bool) int
 		EmptyWikiDocumentTrash        func(childComplexity int, operationID string) int
+		InstantiateTemplate           func(childComplexity int, templateID string, targetOperationID string, parentDocumentID *string, title *string, emoji *string, icon *string, color *string) int
 		MarkHashCracked               func(childComplexity int, id string, input model.MarkHashCrackedInput) int
 		PermanentlyDeleteWikiDocument func(childComplexity int, id string) int
 		PurgeTask                     func(childComplexity int, id string) int
@@ -258,6 +259,7 @@ type ComplexityRoot struct {
 		SetTaskAssignees              func(childComplexity int, taskID string, assigneeIds []string) int
 		SetTaskCredentialReferences   func(childComplexity int, taskID string, credentialIds []string) int
 		SetTaskWikiReferences         func(childComplexity int, taskID string, wikiIds []string) int
+		SetWikiDocumentTemplate       func(childComplexity int, id string, isTemplate bool) int
 		TrackWikiDocumentVisit        func(childComplexity int, documentID string) int
 		UpdateCredential              func(childComplexity int, id string, input model.UpdateCredentialInput) int
 		UpdateCredentialComment       func(childComplexity int, credentialID string, commentID string, text string) int
@@ -544,29 +546,35 @@ type ComplexityRoot struct {
 	}
 
 	WikiDocument struct {
-		Ancestors        func(childComplexity int) int
-		Backlinks        func(childComplexity int) int
-		ChildCount       func(childComplexity int) int
-		ChildDocuments   func(childComplexity int) int
-		Color            func(childComplexity int) int
-		Content          func(childComplexity int) int
-		CreatedAt        func(childComplexity int) int
-		CreatedBy        func(childComplexity int) int
-		DeletedAt        func(childComplexity int) int
-		DeletedBy        func(childComplexity int) int
-		Emoji            func(childComplexity int) int
-		ID               func(childComplexity int) int
-		Icon             func(childComplexity int) int
-		LastBackupAt     func(childComplexity int) int
-		LastUpdatedAt    func(childComplexity int) int
-		LastUpdatedBy    func(childComplexity int) int
-		OperationID      func(childComplexity int) int
-		ParentDocument   func(childComplexity int) int
-		ParentDocumentID func(childComplexity int) int
-		SortOrder        func(childComplexity int) int
-		TaskBacklinks    func(childComplexity int) int
-		Title            func(childComplexity int) int
-		UpdatedAt        func(childComplexity int) int
+		Ancestors         func(childComplexity int) int
+		Backlinks         func(childComplexity int) int
+		ChecklistAnswered func(childComplexity int) int
+		ChecklistRequired func(childComplexity int) int
+		ChecklistTotal    func(childComplexity int) int
+		ChildCount        func(childComplexity int) int
+		ChildDocuments    func(childComplexity int) int
+		Color             func(childComplexity int) int
+		Content           func(childComplexity int) int
+		CreatedAt         func(childComplexity int) int
+		CreatedBy         func(childComplexity int) int
+		DeletedAt         func(childComplexity int) int
+		DeletedBy         func(childComplexity int) int
+		Emoji             func(childComplexity int) int
+		HasContent        func(childComplexity int) int
+		ID                func(childComplexity int) int
+		Icon              func(childComplexity int) int
+		IsTemplate        func(childComplexity int) int
+		LastBackupAt      func(childComplexity int) int
+		LastUpdatedAt     func(childComplexity int) int
+		LastUpdatedBy     func(childComplexity int) int
+		OperationID       func(childComplexity int) int
+		ParentDocument    func(childComplexity int) int
+		ParentDocumentID  func(childComplexity int) int
+		SortOrder         func(childComplexity int) int
+		SourceTemplateID  func(childComplexity int) int
+		TaskBacklinks     func(childComplexity int) int
+		Title             func(childComplexity int) int
+		UpdatedAt         func(childComplexity int) int
 	}
 
 	WikiDocumentAncestor struct {
@@ -779,6 +787,8 @@ type MutationResolver interface {
 	ReorderWikiDocumentSiblings(ctx context.Context, input model.ReorderWikiDocumentSiblingsInput) ([]*models.WikiDocument, error)
 	DeleteWikiDocument(ctx context.Context, id string) (bool, error)
 	DuplicateWikiDocument(ctx context.Context, id string, withChildren *bool) (*models.WikiDocument, error)
+	SetWikiDocumentTemplate(ctx context.Context, id string, isTemplate bool) (*models.WikiDocument, error)
+	InstantiateTemplate(ctx context.Context, templateID string, targetOperationID string, parentDocumentID *string, title *string, emoji *string, icon *string, color *string) (*models.WikiDocument, error)
 	RestoreWikiDocument(ctx context.Context, id string, cascade *bool) (*models.WikiDocument, error)
 	PermanentlyDeleteWikiDocument(ctx context.Context, id string) (bool, error)
 	EmptyWikiDocumentTrash(ctx context.Context, operationID string) (bool, error)
@@ -918,6 +928,10 @@ type WikiDocumentResolver interface {
 	ChildDocuments(ctx context.Context, obj *models.WikiDocument) ([]*models.WikiDocument, error)
 
 	ChildCount(ctx context.Context, obj *models.WikiDocument) (int, error)
+	HasContent(ctx context.Context, obj *models.WikiDocument) (bool, error)
+
+	SourceTemplateID(ctx context.Context, obj *models.WikiDocument) (*string, error)
+
 	Backlinks(ctx context.Context, obj *models.WikiDocument) ([]*models.WikiDocument, error)
 	Ancestors(ctx context.Context, obj *models.WikiDocument) ([]*model.WikiDocumentAncestor, error)
 	CreatedBy(ctx context.Context, obj *models.WikiDocument) (*models.User, error)
@@ -1897,6 +1911,17 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.Mutation.EmptyWikiDocumentTrash(childComplexity, args["operationId"].(string)), true
+	case "Mutation.instantiateTemplate":
+		if e.ComplexityRoot.Mutation.InstantiateTemplate == nil {
+			break
+		}
+
+		args, err := ec.field_Mutation_instantiateTemplate_args(ctx, rawArgs)
+		if err != nil {
+			return 0, false
+		}
+
+		return e.ComplexityRoot.Mutation.InstantiateTemplate(childComplexity, args["templateId"].(string), args["targetOperationId"].(string), args["parentDocumentId"].(*string), args["title"].(*string), args["emoji"].(*string), args["icon"].(*string), args["color"].(*string)), true
 	case "Mutation.markHashCracked":
 		if e.ComplexityRoot.Mutation.MarkHashCracked == nil {
 			break
@@ -2063,6 +2088,17 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.Mutation.SetTaskWikiReferences(childComplexity, args["taskId"].(string), args["wikiIds"].([]string)), true
+	case "Mutation.setWikiDocumentTemplate":
+		if e.ComplexityRoot.Mutation.SetWikiDocumentTemplate == nil {
+			break
+		}
+
+		args, err := ec.field_Mutation_setWikiDocumentTemplate_args(ctx, rawArgs)
+		if err != nil {
+			return 0, false
+		}
+
+		return e.ComplexityRoot.Mutation.SetWikiDocumentTemplate(childComplexity, args["id"].(string), args["isTemplate"].(bool)), true
 	case "Mutation.trackWikiDocumentVisit":
 		if e.ComplexityRoot.Mutation.TrackWikiDocumentVisit == nil {
 			break
@@ -3627,6 +3663,24 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.WikiDocument.Backlinks(childComplexity), true
+	case "WikiDocument.checklistAnswered":
+		if e.ComplexityRoot.WikiDocument.ChecklistAnswered == nil {
+			break
+		}
+
+		return e.ComplexityRoot.WikiDocument.ChecklistAnswered(childComplexity), true
+	case "WikiDocument.checklistRequired":
+		if e.ComplexityRoot.WikiDocument.ChecklistRequired == nil {
+			break
+		}
+
+		return e.ComplexityRoot.WikiDocument.ChecklistRequired(childComplexity), true
+	case "WikiDocument.checklistTotal":
+		if e.ComplexityRoot.WikiDocument.ChecklistTotal == nil {
+			break
+		}
+
+		return e.ComplexityRoot.WikiDocument.ChecklistTotal(childComplexity), true
 	case "WikiDocument.childCount":
 		if e.ComplexityRoot.WikiDocument.ChildCount == nil {
 			break
@@ -3681,6 +3735,12 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.WikiDocument.Emoji(childComplexity), true
+	case "WikiDocument.hasContent":
+		if e.ComplexityRoot.WikiDocument.HasContent == nil {
+			break
+		}
+
+		return e.ComplexityRoot.WikiDocument.HasContent(childComplexity), true
 	case "WikiDocument.id":
 		if e.ComplexityRoot.WikiDocument.ID == nil {
 			break
@@ -3693,6 +3753,12 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.WikiDocument.Icon(childComplexity), true
+	case "WikiDocument.isTemplate":
+		if e.ComplexityRoot.WikiDocument.IsTemplate == nil {
+			break
+		}
+
+		return e.ComplexityRoot.WikiDocument.IsTemplate(childComplexity), true
 	case "WikiDocument.lastBackupAt":
 		if e.ComplexityRoot.WikiDocument.LastBackupAt == nil {
 			break
@@ -3735,6 +3801,12 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.WikiDocument.SortOrder(childComplexity), true
+	case "WikiDocument.sourceTemplateId":
+		if e.ComplexityRoot.WikiDocument.SourceTemplateID == nil {
+			break
+		}
+
+		return e.ComplexityRoot.WikiDocument.SourceTemplateID(childComplexity), true
 	case "WikiDocument.taskBacklinks":
 		if e.ComplexityRoot.WikiDocument.TaskBacklinks == nil {
 			break
@@ -6141,6 +6213,30 @@ type WikiDocument {
   icon: String!
   sortOrder: String!
   childCount: Int!
+  # True when the document's derived Markdown body has any non-whitespace
+  # content. Server-computed from ` + "`" + `content` + "`" + ` so callers can cheaply tell a real
+  # page from an empty container ("folder") without fetching the body — used by
+  # the create-from-template picker to hide contentless templates.
+  hasContent: Boolean!
+  # True when this document is flagged as a reusable template. Any document
+  # (in an operation or the Public tree) can be a template; the flag is toggled
+  # by anyone with edit access via setWikiDocumentTemplate. Template documents
+  # render a fixed template icon in the UI and appear in the create-from-template
+  # picker. Independent of content — a template may or may not hold checklist
+  # items or any other body.
+  isTemplate: Boolean!
+  # Template provenance + checklist coverage. sourceTemplateId is set on
+  # documents forked from a template via instantiateTemplate, null otherwise.
+  # A document "has a checklist" when it holds at least one checklist item, i.e.
+  # checklistTotal > 0. The three counts are projected by the Hocuspocus sidecar
+  # from the document's checklist items: checklistTotal = number of items,
+  # checklistRequired = subset whose ` + "`" + `required` + "`" + ` flag is set, checklistAnswered =
+  # number of items (required or not) that are answered or marked not-applicable.
+  # They drive the per-document coverage bar; all are 0 for docs with no items.
+  sourceTemplateId: ID
+  checklistTotal: Int!
+  checklistRequired: Int!
+  checklistAnswered: Int!
   # Other active documents in this operation that cite this one inline via
   # the /doc slash command. Trashed referrers are excluded; self-references
   # are excluded. Capped at 200 most recently updated — past that, refining
@@ -6481,6 +6577,40 @@ extend type Mutation {
   # Trashed descendants are skipped — they stay in trash. Returns the new root.
   duplicateWikiDocument(id: ID!, withChildren: Boolean = false): WikiDocument!
     @hasPermission(permission: "operation:member")
+
+  # Flags or unflags a document as a reusable template. The caller needs edit
+  # (operator) access to the document's operation — the same bar as any other
+  # metadata edit. On the Public tree every authenticated user is an implicit
+  # operator, so Public documents can be flagged by anyone (consistent with
+  # Public being a shared read-write space). Returns the updated document.
+  setWikiDocumentTemplate(id: ID!, isTemplate: Boolean!): WikiDocument!
+    @hasPermission(permission: "operation:member")
+
+  # Instantiates a template into an operation. ` + "`" + `templateId` + "`" + ` must be a document
+  # flagged as a template (isTemplate) that the caller can read; the new
+  # document is created in ` + "`" + `targetOperationId` + "`" + `'s wiki tree (optionally under
+  # ` + "`" + `parentDocumentId` + "`" + `) with its content byte-copied from the template and
+  # ` + "`" + `sourceTemplateId` + "`" + ` set to the source. The instance is an ordinary wiki
+  # document thereafter — it can have children, is searchable, is not itself a
+  # template, and edits never propagate back to the template. The caller needs
+  # at least operator role in the target operation and read access to the
+  # template's operation.
+  instantiateTemplate(
+    templateId: ID!
+    targetOperationId: ID!
+    parentDocumentId: ID
+    # Name for the new instance. Optional — falls back to the template's title
+    # when omitted or blank.
+    title: String
+    # Icon for the new instance. Each field is independent: a non-null value
+    # overrides the corresponding glyph the instance would otherwise inherit
+    # from the template, a null value inherits. The create dialog seeds the
+    # picker from the template and sends whatever the operator leaves there, so
+    # the forked document can carry its own icon distinct from the template's.
+    emoji: String
+    icon: String
+    color: String
+  ): WikiDocument! @hasPermission(permission: "operation:member")
 
   # Restores a soft-deleted document. When ` + "`" + `cascade` + "`" + ` is true, also restores
   # every currently-trashed descendant of the document (children, grand-
@@ -6913,6 +7043,47 @@ func (ec *executionContext) field_Mutation_emptyWikiDocumentTrash_args(ctx conte
 	return args, nil
 }
 
+func (ec *executionContext) field_Mutation_instantiateTemplate_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
+	var err error
+	args := map[string]any{}
+	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "templateId", ec.unmarshalNID2string)
+	if err != nil {
+		return nil, err
+	}
+	args["templateId"] = arg0
+	arg1, err := graphql.ProcessArgField(ctx, rawArgs, "targetOperationId", ec.unmarshalNID2string)
+	if err != nil {
+		return nil, err
+	}
+	args["targetOperationId"] = arg1
+	arg2, err := graphql.ProcessArgField(ctx, rawArgs, "parentDocumentId", ec.unmarshalOID2ᚖstring)
+	if err != nil {
+		return nil, err
+	}
+	args["parentDocumentId"] = arg2
+	arg3, err := graphql.ProcessArgField(ctx, rawArgs, "title", ec.unmarshalOString2ᚖstring)
+	if err != nil {
+		return nil, err
+	}
+	args["title"] = arg3
+	arg4, err := graphql.ProcessArgField(ctx, rawArgs, "emoji", ec.unmarshalOString2ᚖstring)
+	if err != nil {
+		return nil, err
+	}
+	args["emoji"] = arg4
+	arg5, err := graphql.ProcessArgField(ctx, rawArgs, "icon", ec.unmarshalOString2ᚖstring)
+	if err != nil {
+		return nil, err
+	}
+	args["icon"] = arg5
+	arg6, err := graphql.ProcessArgField(ctx, rawArgs, "color", ec.unmarshalOString2ᚖstring)
+	if err != nil {
+		return nil, err
+	}
+	args["color"] = arg6
+	return args, nil
+}
+
 func (ec *executionContext) field_Mutation_markHashCracked_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
 	var err error
 	args := map[string]any{}
@@ -7099,6 +7270,22 @@ func (ec *executionContext) field_Mutation_setTaskWikiReferences_args(ctx contex
 		return nil, err
 	}
 	args["wikiIds"] = arg1
+	return args, nil
+}
+
+func (ec *executionContext) field_Mutation_setWikiDocumentTemplate_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
+	var err error
+	args := map[string]any{}
+	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "id", ec.unmarshalNID2string)
+	if err != nil {
+		return nil, err
+	}
+	args["id"] = arg0
+	arg1, err := graphql.ProcessArgField(ctx, rawArgs, "isTemplate", ec.unmarshalNBoolean2bool)
+	if err != nil {
+		return nil, err
+	}
+	args["isTemplate"] = arg1
 	return args, nil
 }
 
@@ -9479,6 +9666,18 @@ func (ec *executionContext) fieldContext_Credential_backlinks(_ context.Context,
 				return ec.fieldContext_WikiDocument_sortOrder(ctx, field)
 			case "childCount":
 				return ec.fieldContext_WikiDocument_childCount(ctx, field)
+			case "hasContent":
+				return ec.fieldContext_WikiDocument_hasContent(ctx, field)
+			case "isTemplate":
+				return ec.fieldContext_WikiDocument_isTemplate(ctx, field)
+			case "sourceTemplateId":
+				return ec.fieldContext_WikiDocument_sourceTemplateId(ctx, field)
+			case "checklistTotal":
+				return ec.fieldContext_WikiDocument_checklistTotal(ctx, field)
+			case "checklistRequired":
+				return ec.fieldContext_WikiDocument_checklistRequired(ctx, field)
+			case "checklistAnswered":
+				return ec.fieldContext_WikiDocument_checklistAnswered(ctx, field)
 			case "backlinks":
 				return ec.fieldContext_WikiDocument_backlinks(ctx, field)
 			case "ancestors":
@@ -10777,6 +10976,18 @@ func (ec *executionContext) fieldContext_Hash_backlinks(_ context.Context, field
 				return ec.fieldContext_WikiDocument_sortOrder(ctx, field)
 			case "childCount":
 				return ec.fieldContext_WikiDocument_childCount(ctx, field)
+			case "hasContent":
+				return ec.fieldContext_WikiDocument_hasContent(ctx, field)
+			case "isTemplate":
+				return ec.fieldContext_WikiDocument_isTemplate(ctx, field)
+			case "sourceTemplateId":
+				return ec.fieldContext_WikiDocument_sourceTemplateId(ctx, field)
+			case "checklistTotal":
+				return ec.fieldContext_WikiDocument_checklistTotal(ctx, field)
+			case "checklistRequired":
+				return ec.fieldContext_WikiDocument_checklistRequired(ctx, field)
+			case "checklistAnswered":
+				return ec.fieldContext_WikiDocument_checklistAnswered(ctx, field)
 			case "backlinks":
 				return ec.fieldContext_WikiDocument_backlinks(ctx, field)
 			case "ancestors":
@@ -15816,6 +16027,18 @@ func (ec *executionContext) fieldContext_Mutation_createWikiDocument(ctx context
 				return ec.fieldContext_WikiDocument_sortOrder(ctx, field)
 			case "childCount":
 				return ec.fieldContext_WikiDocument_childCount(ctx, field)
+			case "hasContent":
+				return ec.fieldContext_WikiDocument_hasContent(ctx, field)
+			case "isTemplate":
+				return ec.fieldContext_WikiDocument_isTemplate(ctx, field)
+			case "sourceTemplateId":
+				return ec.fieldContext_WikiDocument_sourceTemplateId(ctx, field)
+			case "checklistTotal":
+				return ec.fieldContext_WikiDocument_checklistTotal(ctx, field)
+			case "checklistRequired":
+				return ec.fieldContext_WikiDocument_checklistRequired(ctx, field)
+			case "checklistAnswered":
+				return ec.fieldContext_WikiDocument_checklistAnswered(ctx, field)
 			case "backlinks":
 				return ec.fieldContext_WikiDocument_backlinks(ctx, field)
 			case "ancestors":
@@ -15923,6 +16146,18 @@ func (ec *executionContext) fieldContext_Mutation_updateWikiDocument(ctx context
 				return ec.fieldContext_WikiDocument_sortOrder(ctx, field)
 			case "childCount":
 				return ec.fieldContext_WikiDocument_childCount(ctx, field)
+			case "hasContent":
+				return ec.fieldContext_WikiDocument_hasContent(ctx, field)
+			case "isTemplate":
+				return ec.fieldContext_WikiDocument_isTemplate(ctx, field)
+			case "sourceTemplateId":
+				return ec.fieldContext_WikiDocument_sourceTemplateId(ctx, field)
+			case "checklistTotal":
+				return ec.fieldContext_WikiDocument_checklistTotal(ctx, field)
+			case "checklistRequired":
+				return ec.fieldContext_WikiDocument_checklistRequired(ctx, field)
+			case "checklistAnswered":
+				return ec.fieldContext_WikiDocument_checklistAnswered(ctx, field)
 			case "backlinks":
 				return ec.fieldContext_WikiDocument_backlinks(ctx, field)
 			case "ancestors":
@@ -16030,6 +16265,18 @@ func (ec *executionContext) fieldContext_Mutation_reorderWikiDocumentSiblings(ct
 				return ec.fieldContext_WikiDocument_sortOrder(ctx, field)
 			case "childCount":
 				return ec.fieldContext_WikiDocument_childCount(ctx, field)
+			case "hasContent":
+				return ec.fieldContext_WikiDocument_hasContent(ctx, field)
+			case "isTemplate":
+				return ec.fieldContext_WikiDocument_isTemplate(ctx, field)
+			case "sourceTemplateId":
+				return ec.fieldContext_WikiDocument_sourceTemplateId(ctx, field)
+			case "checklistTotal":
+				return ec.fieldContext_WikiDocument_checklistTotal(ctx, field)
+			case "checklistRequired":
+				return ec.fieldContext_WikiDocument_checklistRequired(ctx, field)
+			case "checklistAnswered":
+				return ec.fieldContext_WikiDocument_checklistAnswered(ctx, field)
 			case "backlinks":
 				return ec.fieldContext_WikiDocument_backlinks(ctx, field)
 			case "ancestors":
@@ -16196,6 +16443,18 @@ func (ec *executionContext) fieldContext_Mutation_duplicateWikiDocument(ctx cont
 				return ec.fieldContext_WikiDocument_sortOrder(ctx, field)
 			case "childCount":
 				return ec.fieldContext_WikiDocument_childCount(ctx, field)
+			case "hasContent":
+				return ec.fieldContext_WikiDocument_hasContent(ctx, field)
+			case "isTemplate":
+				return ec.fieldContext_WikiDocument_isTemplate(ctx, field)
+			case "sourceTemplateId":
+				return ec.fieldContext_WikiDocument_sourceTemplateId(ctx, field)
+			case "checklistTotal":
+				return ec.fieldContext_WikiDocument_checklistTotal(ctx, field)
+			case "checklistRequired":
+				return ec.fieldContext_WikiDocument_checklistRequired(ctx, field)
+			case "checklistAnswered":
+				return ec.fieldContext_WikiDocument_checklistAnswered(ctx, field)
 			case "backlinks":
 				return ec.fieldContext_WikiDocument_backlinks(ctx, field)
 			case "ancestors":
@@ -16230,6 +16489,244 @@ func (ec *executionContext) fieldContext_Mutation_duplicateWikiDocument(ctx cont
 	}()
 	ctx = graphql.WithFieldContext(ctx, fc)
 	if fc.Args, err = ec.field_Mutation_duplicateWikiDocument_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
+		ec.Error(ctx, err)
+		return fc, err
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Mutation_setWikiDocumentTemplate(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Mutation_setWikiDocumentTemplate,
+		func(ctx context.Context) (any, error) {
+			fc := graphql.GetFieldContext(ctx)
+			return ec.Resolvers.Mutation().SetWikiDocumentTemplate(ctx, fc.Args["id"].(string), fc.Args["isTemplate"].(bool))
+		},
+		func(ctx context.Context, next graphql.Resolver) graphql.Resolver {
+			directive0 := next
+
+			directive1 := func(ctx context.Context) (any, error) {
+				permission, err := ec.unmarshalNString2string(ctx, "operation:member")
+				if err != nil {
+					var zeroVal *models.WikiDocument
+					return zeroVal, err
+				}
+				if ec.Directives.HasPermission == nil {
+					var zeroVal *models.WikiDocument
+					return zeroVal, errors.New("directive hasPermission is not implemented")
+				}
+				return ec.Directives.HasPermission(ctx, nil, directive0, permission)
+			}
+
+			next = directive1
+			return next
+		},
+		ec.marshalNWikiDocument2ᚖgithubᚗcomᚋvibeᚑc2ᚋvibeᚑc2ᚑcoreᚋcoreᚋpkgᚋmodelsᚐWikiDocument,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_Mutation_setWikiDocumentTemplate(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Mutation",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "id":
+				return ec.fieldContext_WikiDocument_id(ctx, field)
+			case "operationId":
+				return ec.fieldContext_WikiDocument_operationId(ctx, field)
+			case "parentDocument":
+				return ec.fieldContext_WikiDocument_parentDocument(ctx, field)
+			case "parentDocumentId":
+				return ec.fieldContext_WikiDocument_parentDocumentId(ctx, field)
+			case "childDocuments":
+				return ec.fieldContext_WikiDocument_childDocuments(ctx, field)
+			case "title":
+				return ec.fieldContext_WikiDocument_title(ctx, field)
+			case "content":
+				return ec.fieldContext_WikiDocument_content(ctx, field)
+			case "emoji":
+				return ec.fieldContext_WikiDocument_emoji(ctx, field)
+			case "color":
+				return ec.fieldContext_WikiDocument_color(ctx, field)
+			case "icon":
+				return ec.fieldContext_WikiDocument_icon(ctx, field)
+			case "sortOrder":
+				return ec.fieldContext_WikiDocument_sortOrder(ctx, field)
+			case "childCount":
+				return ec.fieldContext_WikiDocument_childCount(ctx, field)
+			case "hasContent":
+				return ec.fieldContext_WikiDocument_hasContent(ctx, field)
+			case "isTemplate":
+				return ec.fieldContext_WikiDocument_isTemplate(ctx, field)
+			case "sourceTemplateId":
+				return ec.fieldContext_WikiDocument_sourceTemplateId(ctx, field)
+			case "checklistTotal":
+				return ec.fieldContext_WikiDocument_checklistTotal(ctx, field)
+			case "checklistRequired":
+				return ec.fieldContext_WikiDocument_checklistRequired(ctx, field)
+			case "checklistAnswered":
+				return ec.fieldContext_WikiDocument_checklistAnswered(ctx, field)
+			case "backlinks":
+				return ec.fieldContext_WikiDocument_backlinks(ctx, field)
+			case "ancestors":
+				return ec.fieldContext_WikiDocument_ancestors(ctx, field)
+			case "createdBy":
+				return ec.fieldContext_WikiDocument_createdBy(ctx, field)
+			case "lastUpdatedBy":
+				return ec.fieldContext_WikiDocument_lastUpdatedBy(ctx, field)
+			case "lastUpdatedAt":
+				return ec.fieldContext_WikiDocument_lastUpdatedAt(ctx, field)
+			case "lastBackupAt":
+				return ec.fieldContext_WikiDocument_lastBackupAt(ctx, field)
+			case "deletedAt":
+				return ec.fieldContext_WikiDocument_deletedAt(ctx, field)
+			case "deletedBy":
+				return ec.fieldContext_WikiDocument_deletedBy(ctx, field)
+			case "createdAt":
+				return ec.fieldContext_WikiDocument_createdAt(ctx, field)
+			case "updatedAt":
+				return ec.fieldContext_WikiDocument_updatedAt(ctx, field)
+			case "taskBacklinks":
+				return ec.fieldContext_WikiDocument_taskBacklinks(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type WikiDocument", field.Name)
+		},
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			err = ec.Recover(ctx, r)
+			ec.Error(ctx, err)
+		}
+	}()
+	ctx = graphql.WithFieldContext(ctx, fc)
+	if fc.Args, err = ec.field_Mutation_setWikiDocumentTemplate_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
+		ec.Error(ctx, err)
+		return fc, err
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Mutation_instantiateTemplate(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Mutation_instantiateTemplate,
+		func(ctx context.Context) (any, error) {
+			fc := graphql.GetFieldContext(ctx)
+			return ec.Resolvers.Mutation().InstantiateTemplate(ctx, fc.Args["templateId"].(string), fc.Args["targetOperationId"].(string), fc.Args["parentDocumentId"].(*string), fc.Args["title"].(*string), fc.Args["emoji"].(*string), fc.Args["icon"].(*string), fc.Args["color"].(*string))
+		},
+		func(ctx context.Context, next graphql.Resolver) graphql.Resolver {
+			directive0 := next
+
+			directive1 := func(ctx context.Context) (any, error) {
+				permission, err := ec.unmarshalNString2string(ctx, "operation:member")
+				if err != nil {
+					var zeroVal *models.WikiDocument
+					return zeroVal, err
+				}
+				if ec.Directives.HasPermission == nil {
+					var zeroVal *models.WikiDocument
+					return zeroVal, errors.New("directive hasPermission is not implemented")
+				}
+				return ec.Directives.HasPermission(ctx, nil, directive0, permission)
+			}
+
+			next = directive1
+			return next
+		},
+		ec.marshalNWikiDocument2ᚖgithubᚗcomᚋvibeᚑc2ᚋvibeᚑc2ᚑcoreᚋcoreᚋpkgᚋmodelsᚐWikiDocument,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_Mutation_instantiateTemplate(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Mutation",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "id":
+				return ec.fieldContext_WikiDocument_id(ctx, field)
+			case "operationId":
+				return ec.fieldContext_WikiDocument_operationId(ctx, field)
+			case "parentDocument":
+				return ec.fieldContext_WikiDocument_parentDocument(ctx, field)
+			case "parentDocumentId":
+				return ec.fieldContext_WikiDocument_parentDocumentId(ctx, field)
+			case "childDocuments":
+				return ec.fieldContext_WikiDocument_childDocuments(ctx, field)
+			case "title":
+				return ec.fieldContext_WikiDocument_title(ctx, field)
+			case "content":
+				return ec.fieldContext_WikiDocument_content(ctx, field)
+			case "emoji":
+				return ec.fieldContext_WikiDocument_emoji(ctx, field)
+			case "color":
+				return ec.fieldContext_WikiDocument_color(ctx, field)
+			case "icon":
+				return ec.fieldContext_WikiDocument_icon(ctx, field)
+			case "sortOrder":
+				return ec.fieldContext_WikiDocument_sortOrder(ctx, field)
+			case "childCount":
+				return ec.fieldContext_WikiDocument_childCount(ctx, field)
+			case "hasContent":
+				return ec.fieldContext_WikiDocument_hasContent(ctx, field)
+			case "isTemplate":
+				return ec.fieldContext_WikiDocument_isTemplate(ctx, field)
+			case "sourceTemplateId":
+				return ec.fieldContext_WikiDocument_sourceTemplateId(ctx, field)
+			case "checklistTotal":
+				return ec.fieldContext_WikiDocument_checklistTotal(ctx, field)
+			case "checklistRequired":
+				return ec.fieldContext_WikiDocument_checklistRequired(ctx, field)
+			case "checklistAnswered":
+				return ec.fieldContext_WikiDocument_checklistAnswered(ctx, field)
+			case "backlinks":
+				return ec.fieldContext_WikiDocument_backlinks(ctx, field)
+			case "ancestors":
+				return ec.fieldContext_WikiDocument_ancestors(ctx, field)
+			case "createdBy":
+				return ec.fieldContext_WikiDocument_createdBy(ctx, field)
+			case "lastUpdatedBy":
+				return ec.fieldContext_WikiDocument_lastUpdatedBy(ctx, field)
+			case "lastUpdatedAt":
+				return ec.fieldContext_WikiDocument_lastUpdatedAt(ctx, field)
+			case "lastBackupAt":
+				return ec.fieldContext_WikiDocument_lastBackupAt(ctx, field)
+			case "deletedAt":
+				return ec.fieldContext_WikiDocument_deletedAt(ctx, field)
+			case "deletedBy":
+				return ec.fieldContext_WikiDocument_deletedBy(ctx, field)
+			case "createdAt":
+				return ec.fieldContext_WikiDocument_createdAt(ctx, field)
+			case "updatedAt":
+				return ec.fieldContext_WikiDocument_updatedAt(ctx, field)
+			case "taskBacklinks":
+				return ec.fieldContext_WikiDocument_taskBacklinks(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type WikiDocument", field.Name)
+		},
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			err = ec.Recover(ctx, r)
+			ec.Error(ctx, err)
+		}
+	}()
+	ctx = graphql.WithFieldContext(ctx, fc)
+	if fc.Args, err = ec.field_Mutation_instantiateTemplate_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
 		ec.Error(ctx, err)
 		return fc, err
 	}
@@ -16303,6 +16800,18 @@ func (ec *executionContext) fieldContext_Mutation_restoreWikiDocument(ctx contex
 				return ec.fieldContext_WikiDocument_sortOrder(ctx, field)
 			case "childCount":
 				return ec.fieldContext_WikiDocument_childCount(ctx, field)
+			case "hasContent":
+				return ec.fieldContext_WikiDocument_hasContent(ctx, field)
+			case "isTemplate":
+				return ec.fieldContext_WikiDocument_isTemplate(ctx, field)
+			case "sourceTemplateId":
+				return ec.fieldContext_WikiDocument_sourceTemplateId(ctx, field)
+			case "checklistTotal":
+				return ec.fieldContext_WikiDocument_checklistTotal(ctx, field)
+			case "checklistRequired":
+				return ec.fieldContext_WikiDocument_checklistRequired(ctx, field)
+			case "checklistAnswered":
+				return ec.fieldContext_WikiDocument_checklistAnswered(ctx, field)
 			case "backlinks":
 				return ec.fieldContext_WikiDocument_backlinks(ctx, field)
 			case "ancestors":
@@ -16607,6 +17116,18 @@ func (ec *executionContext) fieldContext_Mutation_restoreWikiDocumentBackup(ctx 
 				return ec.fieldContext_WikiDocument_sortOrder(ctx, field)
 			case "childCount":
 				return ec.fieldContext_WikiDocument_childCount(ctx, field)
+			case "hasContent":
+				return ec.fieldContext_WikiDocument_hasContent(ctx, field)
+			case "isTemplate":
+				return ec.fieldContext_WikiDocument_isTemplate(ctx, field)
+			case "sourceTemplateId":
+				return ec.fieldContext_WikiDocument_sourceTemplateId(ctx, field)
+			case "checklistTotal":
+				return ec.fieldContext_WikiDocument_checklistTotal(ctx, field)
+			case "checklistRequired":
+				return ec.fieldContext_WikiDocument_checklistRequired(ctx, field)
+			case "checklistAnswered":
+				return ec.fieldContext_WikiDocument_checklistAnswered(ctx, field)
 			case "backlinks":
 				return ec.fieldContext_WikiDocument_backlinks(ctx, field)
 			case "ancestors":
@@ -18841,6 +19362,18 @@ func (ec *executionContext) fieldContext_Query_wikiDocumentsReferencingHash(ctx 
 				return ec.fieldContext_WikiDocument_sortOrder(ctx, field)
 			case "childCount":
 				return ec.fieldContext_WikiDocument_childCount(ctx, field)
+			case "hasContent":
+				return ec.fieldContext_WikiDocument_hasContent(ctx, field)
+			case "isTemplate":
+				return ec.fieldContext_WikiDocument_isTemplate(ctx, field)
+			case "sourceTemplateId":
+				return ec.fieldContext_WikiDocument_sourceTemplateId(ctx, field)
+			case "checklistTotal":
+				return ec.fieldContext_WikiDocument_checklistTotal(ctx, field)
+			case "checklistRequired":
+				return ec.fieldContext_WikiDocument_checklistRequired(ctx, field)
+			case "checklistAnswered":
+				return ec.fieldContext_WikiDocument_checklistAnswered(ctx, field)
 			case "backlinks":
 				return ec.fieldContext_WikiDocument_backlinks(ctx, field)
 			case "ancestors":
@@ -19906,6 +20439,18 @@ func (ec *executionContext) fieldContext_Query_wikiDocument(ctx context.Context,
 				return ec.fieldContext_WikiDocument_sortOrder(ctx, field)
 			case "childCount":
 				return ec.fieldContext_WikiDocument_childCount(ctx, field)
+			case "hasContent":
+				return ec.fieldContext_WikiDocument_hasContent(ctx, field)
+			case "isTemplate":
+				return ec.fieldContext_WikiDocument_isTemplate(ctx, field)
+			case "sourceTemplateId":
+				return ec.fieldContext_WikiDocument_sourceTemplateId(ctx, field)
+			case "checklistTotal":
+				return ec.fieldContext_WikiDocument_checklistTotal(ctx, field)
+			case "checklistRequired":
+				return ec.fieldContext_WikiDocument_checklistRequired(ctx, field)
+			case "checklistAnswered":
+				return ec.fieldContext_WikiDocument_checklistAnswered(ctx, field)
 			case "backlinks":
 				return ec.fieldContext_WikiDocument_backlinks(ctx, field)
 			case "ancestors":
@@ -20080,6 +20625,18 @@ func (ec *executionContext) fieldContext_Query_wikiDocumentTree(ctx context.Cont
 				return ec.fieldContext_WikiDocument_sortOrder(ctx, field)
 			case "childCount":
 				return ec.fieldContext_WikiDocument_childCount(ctx, field)
+			case "hasContent":
+				return ec.fieldContext_WikiDocument_hasContent(ctx, field)
+			case "isTemplate":
+				return ec.fieldContext_WikiDocument_isTemplate(ctx, field)
+			case "sourceTemplateId":
+				return ec.fieldContext_WikiDocument_sourceTemplateId(ctx, field)
+			case "checklistTotal":
+				return ec.fieldContext_WikiDocument_checklistTotal(ctx, field)
+			case "checklistRequired":
+				return ec.fieldContext_WikiDocument_checklistRequired(ctx, field)
+			case "checklistAnswered":
+				return ec.fieldContext_WikiDocument_checklistAnswered(ctx, field)
 			case "backlinks":
 				return ec.fieldContext_WikiDocument_backlinks(ctx, field)
 			case "ancestors":
@@ -20187,6 +20744,18 @@ func (ec *executionContext) fieldContext_Query_wikiDocumentChildren(ctx context.
 				return ec.fieldContext_WikiDocument_sortOrder(ctx, field)
 			case "childCount":
 				return ec.fieldContext_WikiDocument_childCount(ctx, field)
+			case "hasContent":
+				return ec.fieldContext_WikiDocument_hasContent(ctx, field)
+			case "isTemplate":
+				return ec.fieldContext_WikiDocument_isTemplate(ctx, field)
+			case "sourceTemplateId":
+				return ec.fieldContext_WikiDocument_sourceTemplateId(ctx, field)
+			case "checklistTotal":
+				return ec.fieldContext_WikiDocument_checklistTotal(ctx, field)
+			case "checklistRequired":
+				return ec.fieldContext_WikiDocument_checklistRequired(ctx, field)
+			case "checklistAnswered":
+				return ec.fieldContext_WikiDocument_checklistAnswered(ctx, field)
 			case "backlinks":
 				return ec.fieldContext_WikiDocument_backlinks(ctx, field)
 			case "ancestors":
@@ -20294,6 +20863,18 @@ func (ec *executionContext) fieldContext_Query_wikiDocumentTreeRevealPath(ctx co
 				return ec.fieldContext_WikiDocument_sortOrder(ctx, field)
 			case "childCount":
 				return ec.fieldContext_WikiDocument_childCount(ctx, field)
+			case "hasContent":
+				return ec.fieldContext_WikiDocument_hasContent(ctx, field)
+			case "isTemplate":
+				return ec.fieldContext_WikiDocument_isTemplate(ctx, field)
+			case "sourceTemplateId":
+				return ec.fieldContext_WikiDocument_sourceTemplateId(ctx, field)
+			case "checklistTotal":
+				return ec.fieldContext_WikiDocument_checklistTotal(ctx, field)
+			case "checklistRequired":
+				return ec.fieldContext_WikiDocument_checklistRequired(ctx, field)
+			case "checklistAnswered":
+				return ec.fieldContext_WikiDocument_checklistAnswered(ctx, field)
 			case "backlinks":
 				return ec.fieldContext_WikiDocument_backlinks(ctx, field)
 			case "ancestors":
@@ -20594,6 +21175,18 @@ func (ec *executionContext) fieldContext_Query_wikiDocumentTrashedDescendants(ct
 				return ec.fieldContext_WikiDocument_sortOrder(ctx, field)
 			case "childCount":
 				return ec.fieldContext_WikiDocument_childCount(ctx, field)
+			case "hasContent":
+				return ec.fieldContext_WikiDocument_hasContent(ctx, field)
+			case "isTemplate":
+				return ec.fieldContext_WikiDocument_isTemplate(ctx, field)
+			case "sourceTemplateId":
+				return ec.fieldContext_WikiDocument_sourceTemplateId(ctx, field)
+			case "checklistTotal":
+				return ec.fieldContext_WikiDocument_checklistTotal(ctx, field)
+			case "checklistRequired":
+				return ec.fieldContext_WikiDocument_checklistRequired(ctx, field)
+			case "checklistAnswered":
+				return ec.fieldContext_WikiDocument_checklistAnswered(ctx, field)
 			case "backlinks":
 				return ec.fieldContext_WikiDocument_backlinks(ctx, field)
 			case "ancestors":
@@ -20701,6 +21294,18 @@ func (ec *executionContext) fieldContext_Query_wikiDocumentBacklinks(ctx context
 				return ec.fieldContext_WikiDocument_sortOrder(ctx, field)
 			case "childCount":
 				return ec.fieldContext_WikiDocument_childCount(ctx, field)
+			case "hasContent":
+				return ec.fieldContext_WikiDocument_hasContent(ctx, field)
+			case "isTemplate":
+				return ec.fieldContext_WikiDocument_isTemplate(ctx, field)
+			case "sourceTemplateId":
+				return ec.fieldContext_WikiDocument_sourceTemplateId(ctx, field)
+			case "checklistTotal":
+				return ec.fieldContext_WikiDocument_checklistTotal(ctx, field)
+			case "checklistRequired":
+				return ec.fieldContext_WikiDocument_checklistRequired(ctx, field)
+			case "checklistAnswered":
+				return ec.fieldContext_WikiDocument_checklistAnswered(ctx, field)
 			case "backlinks":
 				return ec.fieldContext_WikiDocument_backlinks(ctx, field)
 			case "ancestors":
@@ -20808,6 +21413,18 @@ func (ec *executionContext) fieldContext_Query_wikiDocumentsReferencingCredentia
 				return ec.fieldContext_WikiDocument_sortOrder(ctx, field)
 			case "childCount":
 				return ec.fieldContext_WikiDocument_childCount(ctx, field)
+			case "hasContent":
+				return ec.fieldContext_WikiDocument_hasContent(ctx, field)
+			case "isTemplate":
+				return ec.fieldContext_WikiDocument_isTemplate(ctx, field)
+			case "sourceTemplateId":
+				return ec.fieldContext_WikiDocument_sourceTemplateId(ctx, field)
+			case "checklistTotal":
+				return ec.fieldContext_WikiDocument_checklistTotal(ctx, field)
+			case "checklistRequired":
+				return ec.fieldContext_WikiDocument_checklistRequired(ctx, field)
+			case "checklistAnswered":
+				return ec.fieldContext_WikiDocument_checklistAnswered(ctx, field)
 			case "backlinks":
 				return ec.fieldContext_WikiDocument_backlinks(ctx, field)
 			case "ancestors":
@@ -23487,6 +24104,18 @@ func (ec *executionContext) fieldContext_Task_wikiReferences(_ context.Context, 
 				return ec.fieldContext_WikiDocument_sortOrder(ctx, field)
 			case "childCount":
 				return ec.fieldContext_WikiDocument_childCount(ctx, field)
+			case "hasContent":
+				return ec.fieldContext_WikiDocument_hasContent(ctx, field)
+			case "isTemplate":
+				return ec.fieldContext_WikiDocument_isTemplate(ctx, field)
+			case "sourceTemplateId":
+				return ec.fieldContext_WikiDocument_sourceTemplateId(ctx, field)
+			case "checklistTotal":
+				return ec.fieldContext_WikiDocument_checklistTotal(ctx, field)
+			case "checklistRequired":
+				return ec.fieldContext_WikiDocument_checklistRequired(ctx, field)
+			case "checklistAnswered":
+				return ec.fieldContext_WikiDocument_checklistAnswered(ctx, field)
 			case "backlinks":
 				return ec.fieldContext_WikiDocument_backlinks(ctx, field)
 			case "ancestors":
@@ -25571,6 +26200,18 @@ func (ec *executionContext) fieldContext_WikiDocument_parentDocument(_ context.C
 				return ec.fieldContext_WikiDocument_sortOrder(ctx, field)
 			case "childCount":
 				return ec.fieldContext_WikiDocument_childCount(ctx, field)
+			case "hasContent":
+				return ec.fieldContext_WikiDocument_hasContent(ctx, field)
+			case "isTemplate":
+				return ec.fieldContext_WikiDocument_isTemplate(ctx, field)
+			case "sourceTemplateId":
+				return ec.fieldContext_WikiDocument_sourceTemplateId(ctx, field)
+			case "checklistTotal":
+				return ec.fieldContext_WikiDocument_checklistTotal(ctx, field)
+			case "checklistRequired":
+				return ec.fieldContext_WikiDocument_checklistRequired(ctx, field)
+			case "checklistAnswered":
+				return ec.fieldContext_WikiDocument_checklistAnswered(ctx, field)
 			case "backlinks":
 				return ec.fieldContext_WikiDocument_backlinks(ctx, field)
 			case "ancestors":
@@ -25677,6 +26318,18 @@ func (ec *executionContext) fieldContext_WikiDocument_childDocuments(_ context.C
 				return ec.fieldContext_WikiDocument_sortOrder(ctx, field)
 			case "childCount":
 				return ec.fieldContext_WikiDocument_childCount(ctx, field)
+			case "hasContent":
+				return ec.fieldContext_WikiDocument_hasContent(ctx, field)
+			case "isTemplate":
+				return ec.fieldContext_WikiDocument_isTemplate(ctx, field)
+			case "sourceTemplateId":
+				return ec.fieldContext_WikiDocument_sourceTemplateId(ctx, field)
+			case "checklistTotal":
+				return ec.fieldContext_WikiDocument_checklistTotal(ctx, field)
+			case "checklistRequired":
+				return ec.fieldContext_WikiDocument_checklistRequired(ctx, field)
+			case "checklistAnswered":
+				return ec.fieldContext_WikiDocument_checklistAnswered(ctx, field)
 			case "backlinks":
 				return ec.fieldContext_WikiDocument_backlinks(ctx, field)
 			case "ancestors":
@@ -25909,6 +26562,180 @@ func (ec *executionContext) fieldContext_WikiDocument_childCount(_ context.Conte
 	return fc, nil
 }
 
+func (ec *executionContext) _WikiDocument_hasContent(ctx context.Context, field graphql.CollectedField, obj *models.WikiDocument) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_WikiDocument_hasContent,
+		func(ctx context.Context) (any, error) {
+			return ec.Resolvers.WikiDocument().HasContent(ctx, obj)
+		},
+		nil,
+		ec.marshalNBoolean2bool,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_WikiDocument_hasContent(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "WikiDocument",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Boolean does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _WikiDocument_isTemplate(ctx context.Context, field graphql.CollectedField, obj *models.WikiDocument) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_WikiDocument_isTemplate,
+		func(ctx context.Context) (any, error) {
+			return obj.IsTemplate, nil
+		},
+		nil,
+		ec.marshalNBoolean2bool,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_WikiDocument_isTemplate(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "WikiDocument",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Boolean does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _WikiDocument_sourceTemplateId(ctx context.Context, field graphql.CollectedField, obj *models.WikiDocument) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_WikiDocument_sourceTemplateId,
+		func(ctx context.Context) (any, error) {
+			return ec.Resolvers.WikiDocument().SourceTemplateID(ctx, obj)
+		},
+		nil,
+		ec.marshalOID2ᚖstring,
+		true,
+		false,
+	)
+}
+
+func (ec *executionContext) fieldContext_WikiDocument_sourceTemplateId(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "WikiDocument",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type ID does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _WikiDocument_checklistTotal(ctx context.Context, field graphql.CollectedField, obj *models.WikiDocument) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_WikiDocument_checklistTotal,
+		func(ctx context.Context) (any, error) {
+			return obj.ChecklistTotal, nil
+		},
+		nil,
+		ec.marshalNInt2int,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_WikiDocument_checklistTotal(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "WikiDocument",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Int does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _WikiDocument_checklistRequired(ctx context.Context, field graphql.CollectedField, obj *models.WikiDocument) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_WikiDocument_checklistRequired,
+		func(ctx context.Context) (any, error) {
+			return obj.ChecklistRequired, nil
+		},
+		nil,
+		ec.marshalNInt2int,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_WikiDocument_checklistRequired(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "WikiDocument",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Int does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _WikiDocument_checklistAnswered(ctx context.Context, field graphql.CollectedField, obj *models.WikiDocument) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_WikiDocument_checklistAnswered,
+		func(ctx context.Context) (any, error) {
+			return obj.ChecklistAnswered, nil
+		},
+		nil,
+		ec.marshalNInt2int,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_WikiDocument_checklistAnswered(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "WikiDocument",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Int does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
 func (ec *executionContext) _WikiDocument_backlinks(ctx context.Context, field graphql.CollectedField, obj *models.WikiDocument) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
@@ -25957,6 +26784,18 @@ func (ec *executionContext) fieldContext_WikiDocument_backlinks(_ context.Contex
 				return ec.fieldContext_WikiDocument_sortOrder(ctx, field)
 			case "childCount":
 				return ec.fieldContext_WikiDocument_childCount(ctx, field)
+			case "hasContent":
+				return ec.fieldContext_WikiDocument_hasContent(ctx, field)
+			case "isTemplate":
+				return ec.fieldContext_WikiDocument_isTemplate(ctx, field)
+			case "sourceTemplateId":
+				return ec.fieldContext_WikiDocument_sourceTemplateId(ctx, field)
+			case "checklistTotal":
+				return ec.fieldContext_WikiDocument_checklistTotal(ctx, field)
+			case "checklistRequired":
+				return ec.fieldContext_WikiDocument_checklistRequired(ctx, field)
+			case "checklistAnswered":
+				return ec.fieldContext_WikiDocument_checklistAnswered(ctx, field)
 			case "backlinks":
 				return ec.fieldContext_WikiDocument_backlinks(ctx, field)
 			case "ancestors":
@@ -27167,6 +28006,18 @@ func (ec *executionContext) fieldContext_WikiDocumentEdge_node(_ context.Context
 				return ec.fieldContext_WikiDocument_sortOrder(ctx, field)
 			case "childCount":
 				return ec.fieldContext_WikiDocument_childCount(ctx, field)
+			case "hasContent":
+				return ec.fieldContext_WikiDocument_hasContent(ctx, field)
+			case "isTemplate":
+				return ec.fieldContext_WikiDocument_isTemplate(ctx, field)
+			case "sourceTemplateId":
+				return ec.fieldContext_WikiDocument_sourceTemplateId(ctx, field)
+			case "checklistTotal":
+				return ec.fieldContext_WikiDocument_checklistTotal(ctx, field)
+			case "checklistRequired":
+				return ec.fieldContext_WikiDocument_checklistRequired(ctx, field)
+			case "checklistAnswered":
+				return ec.fieldContext_WikiDocument_checklistAnswered(ctx, field)
 			case "backlinks":
 				return ec.fieldContext_WikiDocument_backlinks(ctx, field)
 			case "ancestors":
@@ -27505,6 +28356,18 @@ func (ec *executionContext) fieldContext_WikiDocumentEvent_document(_ context.Co
 				return ec.fieldContext_WikiDocument_sortOrder(ctx, field)
 			case "childCount":
 				return ec.fieldContext_WikiDocument_childCount(ctx, field)
+			case "hasContent":
+				return ec.fieldContext_WikiDocument_hasContent(ctx, field)
+			case "isTemplate":
+				return ec.fieldContext_WikiDocument_isTemplate(ctx, field)
+			case "sourceTemplateId":
+				return ec.fieldContext_WikiDocument_sourceTemplateId(ctx, field)
+			case "checklistTotal":
+				return ec.fieldContext_WikiDocument_checklistTotal(ctx, field)
+			case "checklistRequired":
+				return ec.fieldContext_WikiDocument_checklistRequired(ctx, field)
+			case "checklistAnswered":
+				return ec.fieldContext_WikiDocument_checklistAnswered(ctx, field)
 			case "backlinks":
 				return ec.fieldContext_WikiDocument_backlinks(ctx, field)
 			case "ancestors":
@@ -27822,6 +28685,18 @@ func (ec *executionContext) fieldContext_WikiDocumentVisit_document(_ context.Co
 				return ec.fieldContext_WikiDocument_sortOrder(ctx, field)
 			case "childCount":
 				return ec.fieldContext_WikiDocument_childCount(ctx, field)
+			case "hasContent":
+				return ec.fieldContext_WikiDocument_hasContent(ctx, field)
+			case "isTemplate":
+				return ec.fieldContext_WikiDocument_isTemplate(ctx, field)
+			case "sourceTemplateId":
+				return ec.fieldContext_WikiDocument_sourceTemplateId(ctx, field)
+			case "checklistTotal":
+				return ec.fieldContext_WikiDocument_checklistTotal(ctx, field)
+			case "checklistRequired":
+				return ec.fieldContext_WikiDocument_checklistRequired(ctx, field)
+			case "checklistAnswered":
+				return ec.fieldContext_WikiDocument_checklistAnswered(ctx, field)
 			case "backlinks":
 				return ec.fieldContext_WikiDocument_backlinks(ctx, field)
 			case "ancestors":
@@ -28194,6 +29069,18 @@ func (ec *executionContext) fieldContext_WikiSearchHit_document(_ context.Contex
 				return ec.fieldContext_WikiDocument_sortOrder(ctx, field)
 			case "childCount":
 				return ec.fieldContext_WikiDocument_childCount(ctx, field)
+			case "hasContent":
+				return ec.fieldContext_WikiDocument_hasContent(ctx, field)
+			case "isTemplate":
+				return ec.fieldContext_WikiDocument_isTemplate(ctx, field)
+			case "sourceTemplateId":
+				return ec.fieldContext_WikiDocument_sourceTemplateId(ctx, field)
+			case "checklistTotal":
+				return ec.fieldContext_WikiDocument_checklistTotal(ctx, field)
+			case "checklistRequired":
+				return ec.fieldContext_WikiDocument_checklistRequired(ctx, field)
+			case "checklistAnswered":
+				return ec.fieldContext_WikiDocument_checklistAnswered(ctx, field)
 			case "backlinks":
 				return ec.fieldContext_WikiDocument_backlinks(ctx, field)
 			case "ancestors":
@@ -33890,6 +34777,20 @@ func (ec *executionContext) _Mutation(ctx context.Context, sel ast.SelectionSet)
 			if out.Values[i] == graphql.Null {
 				out.Invalids++
 			}
+		case "setWikiDocumentTemplate":
+			out.Values[i] = ec.OperationContext.RootResolverMiddleware(innerCtx, func(ctx context.Context) (res graphql.Marshaler) {
+				return ec._Mutation_setWikiDocumentTemplate(ctx, field)
+			})
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "instantiateTemplate":
+			out.Values[i] = ec.OperationContext.RootResolverMiddleware(innerCtx, func(ctx context.Context) (res graphql.Marshaler) {
+				return ec._Mutation_instantiateTemplate(ctx, field)
+			})
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
 		case "restoreWikiDocument":
 			out.Values[i] = ec.OperationContext.RootResolverMiddleware(innerCtx, func(ctx context.Context) (res graphql.Marshaler) {
 				return ec._Mutation_restoreWikiDocument(ctx, field)
@@ -38003,6 +38904,95 @@ func (ec *executionContext) _WikiDocument(ctx context.Context, sel ast.Selection
 			}
 
 			out.Concurrently(i, func(ctx context.Context) graphql.Marshaler { return innerFunc(ctx, out) })
+		case "hasContent":
+			field := field
+
+			innerFunc := func(ctx context.Context, fs *graphql.FieldSet) (res graphql.Marshaler) {
+				defer func() {
+					if r := recover(); r != nil {
+						ec.Error(ctx, ec.Recover(ctx, r))
+					}
+				}()
+				res = ec._WikiDocument_hasContent(ctx, field, obj)
+				if res == graphql.Null {
+					atomic.AddUint32(&fs.Invalids, 1)
+				}
+				return res
+			}
+
+			if field.Deferrable != nil {
+				dfs, ok := deferred[field.Deferrable.Label]
+				di := 0
+				if ok {
+					dfs.AddField(field)
+					di = len(dfs.Values) - 1
+				} else {
+					dfs = graphql.NewFieldSet([]graphql.CollectedField{field})
+					deferred[field.Deferrable.Label] = dfs
+				}
+				dfs.Concurrently(di, func(ctx context.Context) graphql.Marshaler {
+					return innerFunc(ctx, dfs)
+				})
+
+				// don't run the out.Concurrently() call below
+				out.Values[i] = graphql.Null
+				continue
+			}
+
+			out.Concurrently(i, func(ctx context.Context) graphql.Marshaler { return innerFunc(ctx, out) })
+		case "isTemplate":
+			out.Values[i] = ec._WikiDocument_isTemplate(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				atomic.AddUint32(&out.Invalids, 1)
+			}
+		case "sourceTemplateId":
+			field := field
+
+			innerFunc := func(ctx context.Context, _ *graphql.FieldSet) (res graphql.Marshaler) {
+				defer func() {
+					if r := recover(); r != nil {
+						ec.Error(ctx, ec.Recover(ctx, r))
+					}
+				}()
+				res = ec._WikiDocument_sourceTemplateId(ctx, field, obj)
+				return res
+			}
+
+			if field.Deferrable != nil {
+				dfs, ok := deferred[field.Deferrable.Label]
+				di := 0
+				if ok {
+					dfs.AddField(field)
+					di = len(dfs.Values) - 1
+				} else {
+					dfs = graphql.NewFieldSet([]graphql.CollectedField{field})
+					deferred[field.Deferrable.Label] = dfs
+				}
+				dfs.Concurrently(di, func(ctx context.Context) graphql.Marshaler {
+					return innerFunc(ctx, dfs)
+				})
+
+				// don't run the out.Concurrently() call below
+				out.Values[i] = graphql.Null
+				continue
+			}
+
+			out.Concurrently(i, func(ctx context.Context) graphql.Marshaler { return innerFunc(ctx, out) })
+		case "checklistTotal":
+			out.Values[i] = ec._WikiDocument_checklistTotal(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				atomic.AddUint32(&out.Invalids, 1)
+			}
+		case "checklistRequired":
+			out.Values[i] = ec._WikiDocument_checklistRequired(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				atomic.AddUint32(&out.Invalids, 1)
+			}
+		case "checklistAnswered":
+			out.Values[i] = ec._WikiDocument_checklistAnswered(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				atomic.AddUint32(&out.Invalids, 1)
+			}
 		case "backlinks":
 			field := field
 

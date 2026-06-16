@@ -62,6 +62,8 @@ export interface TreeNode {
   sortOrder: string
   parentId: string | null
   childCount: number
+  /** True when this document is flagged as a reusable template. */
+  isTemplate: boolean
   // Children are lazy — empty until the branch is expanded and its
   // useWikiDocumentChildren query returns. `childCount` drives the expand
   // caret independently so leaves can be distinguished without a fetch.
@@ -611,9 +613,7 @@ export function WikiTreeSidebar({
           </div>
         ) : roots.length === 0 ? (
           <p className="px-2 py-4 text-center text-xs text-muted-foreground">
-            {isPublicMode
-              ? "No public documents yet"
-              : "No documents yet"}
+            {isPublicMode ? "No public documents yet" : "No documents yet"}
           </p>
         ) : (
           <DndContext

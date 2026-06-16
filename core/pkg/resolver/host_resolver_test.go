@@ -49,9 +49,10 @@ func (m *mockHostRepo) DeleteByOperationID(ctx context.Context, operationID uuid
 var _ repository.IHostRepository = (*mockHostRepo)(nil)
 
 // newHostResolver wires the resolver under test with the given host/op repos.
-// userRepo and eventBus are stubbed (nil bus → NopEventBus).
+// userRepo is stubbed; wikiDocRes and eventBus are nil (nil bus → NopEventBus,
+// nil wikiDocRes → host-reference cleanup is skipped).
 func newHostResolver(hostRepo repository.IHostRepository, opRepo repository.IOperationRepository) IHostResolver {
-	return NewHostResolver(hostRepo, opRepo, &mockUserRepo{}, nil)
+	return NewHostResolver(hostRepo, opRepo, &mockUserRepo{}, nil, nil)
 }
 
 func strptr(s string) *string { return &s }
@@ -263,6 +264,57 @@ func TestDeleteHost_ViewerForbidden(t *testing.T) {
 	_, err := r.DeleteHost(newCallerCtx(caller), hostID.String())
 	if err == nil {
 		t.Fatal("expected forbidden error for viewer deleting a host")
+	}
+}
+
+// spyWikiDocRes records CleanupHostReferences calls. Embeds the interface so it
+// satisfies IWikiDocumentResolver without stubbing every method — only the one
+// the host delete path invokes is overridden.
+type spyWikiDocRes struct {
+	IWikiDocumentResolver
+	cleanupOp   uuid.UUID
+	cleanupHost uuid.UUID
+	cleanupHits int
+}
+
+func (s *spyWikiDocRes) CleanupHostReferences(_ context.Context, opID, hostID uuid.UUID) error {
+	s.cleanupOp = opID
+	s.cleanupHost = hostID
+	s.cleanupHits++
+	return nil
+}
+
+func TestDeleteHost_StripsHostReferences(t *testing.T) {
+	caller := uuid.New()
+	opID := uuid.New()
+	hostID := uuid.New()
+	hostRepo := &mockHostRepo{
+		findByIDFn: func(_ context.Context, _ uuid.UUID) (models.Host, error) {
+			return models.Host{HostID: hostID, OperationID: opID}, nil
+		},
+		deleteFn: func(_ context.Context, _ *models.Host) error { return nil },
+	}
+	opRepo := &mockOpRepo{
+		findByIDFn: func(_ context.Context, id uuid.UUID) (models.Operation, error) {
+			return memberOp(id, caller, models.OperationRoleOperator), nil
+		},
+	}
+	spy := &spyWikiDocRes{}
+	r := NewHostResolver(hostRepo, opRepo, &mockUserRepo{}, spy, nil)
+
+	ok, err := r.DeleteHost(newCallerCtx(caller), hostID.String())
+	if err != nil {
+		t.Fatalf("DeleteHost: %v", err)
+	}
+	if !ok {
+		t.Fatal("expected DeleteHost to report success")
+	}
+	if spy.cleanupHits != 1 {
+		t.Fatalf("expected one CleanupHostReferences call, got %d", spy.cleanupHits)
+	}
+	if spy.cleanupOp != opID || spy.cleanupHost != hostID {
+		t.Fatalf("cleanup called with (%s, %s), want (%s, %s)",
+			spy.cleanupOp, spy.cleanupHost, opID, hostID)
 	}
 }
 

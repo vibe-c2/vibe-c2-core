@@ -73,6 +73,17 @@ export const HostsQuery = graphql(`
   }
 `)
 
+// Single-host detail query. Backs the inline /host wiki reference chip, which
+// persists only a hostId and resolves the host live (so renames / topology
+// edits flow through without rewriting the document). Sibling of HashQuery.
+export const HostQuery = graphql(`
+  query Host($id: ID!) {
+    host(id: $id) {
+      ...HostFields
+    }
+  }
+`)
+
 export const CreateHostMutation = graphql(`
   mutation CreateHost($operationId: ID!, $input: CreateHostInput!) {
     createHost(operationId: $operationId, input: $input) {

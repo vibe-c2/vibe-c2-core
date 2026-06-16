@@ -4,6 +4,7 @@ import {
   ExternalLinkIcon,
   FilePlusIcon,
   FolderInputIcon,
+  LayoutTemplateIcon,
   PencilIcon,
   SearchIcon,
   SmileIcon,
@@ -19,6 +20,7 @@ import { openWikiSearch } from "@/components/wiki/wiki-command-palette"
 import {
   useDuplicateWikiDocument,
   useReorderWikiDocumentSiblings,
+  useSetWikiDocumentTemplate,
   useWikiDocumentChildren,
 } from "@/graphql/hooks/wiki"
 import type { TreeNode } from "@/components/wiki/wiki-tree-sidebar"
@@ -60,6 +62,7 @@ export function WikiTreeRowMenuItems({
   const openExportDialog = useWikiStore((s) => s.openExportDialog)
   const reorderSiblings = useReorderWikiDocumentSiblings()
   const duplicateDocument = useDuplicateWikiDocument()
+  const setTemplate = useSetWikiDocumentTemplate()
 
   const hasChildren = node.childCount > 0
   // Cached children for this node, if its branch was ever expanded. Used by
@@ -87,7 +90,8 @@ export function WikiTreeRowMenuItems({
           Rename
         </Item>
       )}
-      {isEditor && (
+      {/* Template documents render a fixed glyph, so the icon is locked. */}
+      {isEditor && !node.isTemplate && (
         <Item onClick={onStartIconPicker}>
           <SmileIcon className="mr-2 size-4" />
           Change icon
@@ -119,6 +123,17 @@ export function WikiTreeRowMenuItems({
         <Item onClick={() => openMoveDialog({ id: node.id, title: node.title })}>
           <FolderInputIcon className="mr-2 size-4" />
           Move to
+        </Item>
+      )}
+      {isEditor && (
+        <Item
+          onClick={() =>
+            setTemplate.mutate({ id: node.id, isTemplate: !node.isTemplate })
+          }
+          disabled={setTemplate.isPending}
+        >
+          <LayoutTemplateIcon className="mr-2 size-4" />
+          {node.isTemplate ? "Remove as template" : "Mark as template"}
         </Item>
       )}
       {isEditor && hasChildren && loadedChildren.length > 0 && (

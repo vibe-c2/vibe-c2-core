@@ -26,6 +26,7 @@ import { WikiImageNode } from "@/components/wiki/wiki-image-node"
 import { WikiFileExtension } from "@/components/wiki/wiki-file-node"
 import { WikiCredentialReferenceExtension } from "@/components/wiki/wiki-credential-reference-node"
 import { WikiHashReferenceExtension } from "@/components/wiki/wiki-hash-reference-node"
+import { WikiHostReferenceExtension } from "@/components/wiki/wiki-host-reference-node"
 import { WikiDocumentReferenceExtension } from "@/components/wiki/wiki-document-reference-node"
 import { WikiEditorBubbleMenu } from "@/components/wiki/wiki-editor-bubble-menu"
 import { WikiEditorTableMenu } from "@/components/wiki/wiki-editor-table-menu"
@@ -34,6 +35,7 @@ import { WikiLinkPopover, startLinkInsert } from "@/components/wiki/wiki-link-po
 import { WikiInlineCodePopover } from "@/components/wiki/wiki-inline-code-popover"
 import { WikiSlashCommand } from "@/components/wiki/wiki-slash-command/extension"
 import { WikiNoticeExtension } from "@/components/wiki/wiki-notice-node"
+import { WikiChecklistItemExtension } from "@/components/wiki/wiki-checklist-item-node"
 import { WikiHighlightMark } from "@/components/wiki/wiki-highlight-mark"
 import { WikiEscapeEdgeBlock } from "@/components/wiki/wiki-escape-edge-block"
 import {
@@ -373,8 +375,10 @@ export function WikiEditor({
       WikiFileExtension,
       WikiCredentialReferenceExtension,
       WikiHashReferenceExtension,
+      WikiHostReferenceExtension,
       WikiDocumentReferenceExtension,
       WikiNoticeExtension,
+      WikiChecklistItemExtension,
       WikiHighlightMark,
       WikiSlashCommand.configure({
         context: { documentId, operationId },

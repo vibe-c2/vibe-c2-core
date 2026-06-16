@@ -1,4 +1,4 @@
-import { XIcon } from "lucide-react"
+import { SquareIcon, XIcon } from "lucide-react"
 import { type Editor, useEditorState } from "@tiptap/react"
 import { Button } from "@/components/ui/button"
 import { useWikiStore } from "@/stores/wiki"
@@ -9,6 +9,9 @@ interface WikiEditorTocProps {
 }
 
 interface TocItem {
+  /** "heading" entries carry their real heading level; "checklist" entries are
+   *  indented one level under the most recent heading. */
+  kind: "heading" | "checklist"
   level: number
   text: string
   pos: number
@@ -37,13 +40,30 @@ export function WikiEditorToc({ editor }: WikiEditorTocProps) {
     selector: ({ editor: e }): TocItem[] => {
       const out: TocItem[] = []
       if (!e) return out
+      // Track the most recent heading level so checklist items nest one level
+      // beneath the section they fall under.
+      let headingLevel = 0
       e.state.doc.descendants((node, pos) => {
         if (node.type.name === "heading") {
+          headingLevel = Number(node.attrs.level ?? 1)
           out.push({
-            level: Number(node.attrs.level ?? 1),
+            kind: "heading",
+            level: headingLevel,
             text: node.textContent.trim() || "Untitled",
             pos,
           })
+          return
+        }
+        if (node.type.name === "wikiChecklistItem") {
+          out.push({
+            kind: "checklist",
+            level: Math.min(headingLevel + 1, 6),
+            // The prompt lives in an attribute; textContent is the answer body.
+            text: (node.attrs.prompt as string)?.trim() || "Untitled item",
+            pos,
+          })
+          // Don't descend into the answer region — its prose isn't outline-worthy.
+          return false
         }
       })
       return out
@@ -54,7 +74,12 @@ export function WikiEditorToc({ editor }: WikiEditorTocProps) {
       for (let i = 0; i < a.length; i++) {
         const x = a[i]
         const y = b[i]
-        if (x.pos !== y.pos || x.level !== y.level || x.text !== y.text) {
+        if (
+          x.pos !== y.pos ||
+          x.level !== y.level ||
+          x.text !== y.text ||
+          x.kind !== y.kind
+        ) {
           return false
         }
       }
@@ -106,7 +131,7 @@ export function WikiEditorToc({ editor }: WikiEditorTocProps) {
       <div className="min-h-0 flex-1 overflow-y-auto p-1">
         {items.length === 0 ? (
           <p className="px-2 py-3 text-xs text-muted-foreground">
-            No headings yet.
+            Nothing to outline yet.
           </p>
         ) : (
           <ul className="space-y-0.5">
@@ -116,14 +141,22 @@ export function WikiEditorToc({ editor }: WikiEditorTocProps) {
                   type="button"
                   onClick={() => handleClick(item.pos)}
                   className={cn(
-                    "block w-full truncate rounded px-2 py-1 text-left text-xs hover:bg-accent hover:text-accent-foreground",
+                    "flex w-full items-center gap-1.5 rounded px-2 py-1 text-left text-xs hover:bg-accent hover:text-accent-foreground",
                     INDENT_BY_LEVEL[item.level] ?? "pl-2",
-                    item.level === 1 && "font-medium text-foreground",
-                    item.level >= 3 && "text-muted-foreground",
+                    item.kind === "heading" &&
+                      item.level === 1 &&
+                      "font-medium text-foreground",
+                    item.kind === "heading" &&
+                      item.level >= 3 &&
+                      "text-muted-foreground",
+                    item.kind === "checklist" && "text-muted-foreground",
                   )}
                   title={item.text}
                 >
-                  {item.text}
+                  {item.kind === "checklist" && (
+                    <SquareIcon className="size-3 shrink-0 opacity-60" />
+                  )}
+                  <span className="truncate">{item.text}</span>
                 </button>
               </li>
             ))}

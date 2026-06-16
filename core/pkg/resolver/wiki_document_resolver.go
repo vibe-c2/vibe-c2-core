@@ -38,6 +38,8 @@ type IWikiDocumentResolver interface {
 	ReorderWikiDocumentSiblings(ctx context.Context, input model.ReorderWikiDocumentSiblingsInput) ([]*models.WikiDocument, error)
 	DeleteWikiDocument(ctx context.Context, id string) (bool, error)
 	DuplicateWikiDocument(ctx context.Context, id string, withChildren *bool) (*models.WikiDocument, error)
+	SetWikiDocumentTemplate(ctx context.Context, id string, isTemplate bool) (*models.WikiDocument, error)
+	InstantiateTemplate(ctx context.Context, templateID string, targetOperationID string, parentDocumentID *string, title *string, emoji *string, icon *string, color *string) (*models.WikiDocument, error)
 	RestoreWikiDocument(ctx context.Context, id string, cascade *bool) (*models.WikiDocument, error)
 	PermanentlyDeleteWikiDocument(ctx context.Context, id string) (bool, error)
 	EmptyWikiDocumentTrash(ctx context.Context, operationID string) (bool, error)
@@ -84,6 +86,11 @@ type IWikiDocumentResolver interface {
 	// across the operation's wiki documents. Sibling of
 	// CleanupCredentialReferences.
 	CleanupHashReferences(ctx context.Context, operationID, hashID uuid.UUID) error
+	// CleanupHostReferences strips a deleted host's id from host_references
+	// across the operation's wiki documents. Called from the host delete path
+	// so dangling UUIDs don't accumulate in the inverse index. Sibling of
+	// CleanupCredentialReferences.
+	CleanupHostReferences(ctx context.Context, operationID, hostID uuid.UUID) error
 	// CleanupCredentialReferences strips a deleted credential's id from
 	// credential_references across the operation's wiki documents. Called
 	// from the credential delete path so dangling UUIDs don't accumulate
@@ -104,6 +111,8 @@ type IWikiDocumentResolver interface {
 	WikiDocumentOperationID(ctx context.Context, obj *models.WikiDocument) (string, error)
 	WikiDocumentParentDocument(ctx context.Context, obj *models.WikiDocument) (*models.WikiDocument, error)
 	WikiDocumentParentDocumentID(ctx context.Context, obj *models.WikiDocument) (*string, error)
+	WikiDocumentHasContent(ctx context.Context, obj *models.WikiDocument) (bool, error)
+	WikiDocumentSourceTemplateID(ctx context.Context, obj *models.WikiDocument) (*string, error)
 	WikiDocumentChildDocuments(ctx context.Context, obj *models.WikiDocument) ([]*models.WikiDocument, error)
 	WikiDocumentChildCount(ctx context.Context, obj *models.WikiDocument) (int, error)
 	WikiDocumentBacklinksField(ctx context.Context, obj *models.WikiDocument) ([]*models.WikiDocument, error)
@@ -940,6 +949,208 @@ func (r *wikiDocumentResolver) DuplicateWikiDocument(ctx context.Context, id str
 		return nil, fmt.Errorf("failed to reload duplicate: %w", err)
 	}
 	return &reloaded, nil
+}
+
+// InstantiateTemplate forks a template (any document flagged IsTemplate that
+// the caller can read) into an operation's wiki tree. The new document's
+// content is byte-copied from the template — Go never decodes the Y.js state,
+// it just copies the bytes, which the Hocuspocus fetch() hook loads as a valid
+// standalone document (see docs/checklists-feature-spec.md §16). The instance
+// is an ordinary, non-template wiki document thereafter: independent CRDT, own
+// children, searchable, and a later template edit never propagates to it.
+func (r *wikiDocumentResolver) InstantiateTemplate(ctx context.Context, templateID string, targetOperationID string, parentDocumentID *string, title *string, emoji *string, icon *string, color *string) (*models.WikiDocument, error) {
+	auth := gqlctx.AuthFromContext(ctx)
+
+	templateUID, err := uuid.Parse(templateID)
+	if err != nil {
+		return nil, fmt.Errorf("invalid template ID: %w", err)
+	}
+
+	targetOpUID, err := uuid.Parse(targetOperationID)
+	if err != nil {
+		return nil, fmt.Errorf("invalid target operation ID: %w", err)
+	}
+
+	// Authorize the write target — the caller needs edit access where the
+	// instance lands.
+	if err := r.authorizeForOperation(ctx, targetOpUID, models.OperationRoleOperator); err != nil {
+		return nil, err
+	}
+
+	// The source must be a live document flagged as a template.
+	template, err := r.docRepo.FindByID(ctx, templateUID)
+	if err != nil {
+		return nil, fmt.Errorf("template not found: %w", err)
+	}
+	if !template.IsTemplate {
+		return nil, fmt.Errorf("document %s is not a template", templateID)
+	}
+	if template.DeletedAt != nil {
+		return nil, fmt.Errorf("cannot instantiate a trashed template")
+	}
+
+	// Authorize *reading* the template: a caller may only fork templates they
+	// can see (viewer role in the template's operation). Public templates are
+	// readable by everyone (implicit operator ≥ viewer); operation-local
+	// templates require viewer+ membership. App admins pass unconditionally.
+	if err := r.authorizeForOperation(ctx, template.OperationID, models.OperationRoleViewer); err != nil {
+		return nil, fmt.Errorf("not authorized to read template: %w", err)
+	}
+
+	// Validate the optional parent exactly as CreateWikiDocument does: it must
+	// be a live document in the target operation, and within the depth cap.
+	var (
+		parentDocID *uuid.UUID
+		pathIDs     []uuid.UUID
+	)
+	if parentDocumentID != nil {
+		pid, err := uuid.Parse(*parentDocumentID)
+		if err != nil {
+			return nil, fmt.Errorf("invalid parent document ID: %w", err)
+		}
+		parentDocID = &pid
+
+		parent, err := r.docRepo.FindByID(ctx, pid)
+		if err != nil {
+			return nil, fmt.Errorf("parent document not found: %w", err)
+		}
+		if parent.OperationID != targetOpUID {
+			return nil, fmt.Errorf("parent document belongs to a different operation")
+		}
+		if parent.DeletedAt != nil {
+			return nil, fmt.Errorf("cannot create child under a deleted document")
+		}
+
+		depth, err := r.docRepo.NestingDepth(ctx, pid)
+		if err != nil {
+			return nil, fmt.Errorf("failed to check nesting depth: %w", err)
+		}
+		if depth >= maxNestingDepth {
+			return nil, fmt.Errorf("maximum nesting depth of %d levels exceeded", maxNestingDepth)
+		}
+
+		pathIDs = repository.ComposePathIDs(parent.PathIDs, parent.DocumentID)
+	} else {
+		pathIDs = []uuid.UUID{}
+	}
+
+	callerUID, err := uuid.Parse(auth.UserID)
+	if err != nil {
+		return nil, fmt.Errorf("invalid caller ID: %w", err)
+	}
+
+	// Instance name: the operator-supplied title when given, else the template's.
+	instanceTitle := template.Title
+	if title != nil {
+		if trimmed := strings.TrimSpace(*title); trimmed != "" {
+			instanceTitle = trimmed
+		}
+	}
+	if len(instanceTitle) > maxTitleLength {
+		return nil, fmt.Errorf("title exceeds maximum length of %d characters", maxTitleLength)
+	}
+
+	// Icon: inherit each glyph from the template unless the operator overrode it
+	// in the create dialog. A non-nil arg wins (including an explicit "" to clear
+	// that glyph), nil inherits — so the forked instance can carry its own icon.
+	instanceEmoji := strDerefOr(emoji, template.Emoji)
+	instanceIcon := strDerefOr(icon, template.Icon)
+	instanceColor := strDerefOr(color, template.Color)
+
+	now := time.Now().UTC()
+	instance := &models.WikiDocument{
+		DocumentID:       uuid.New(),
+		OperationID:      targetOpUID,
+		ParentDocumentID: parentDocID,
+		PathIDs:          pathIDs,
+		Title:            instanceTitle,
+		TitleLower:       strings.ToLower(instanceTitle),
+		// Copy both content projections. Content (Markdown) makes the instance
+		// searchable before anyone opens it; ContentState (Y.js bytes) is the
+		// editable CRDT seed. append(nil, …) so neither aliases the template.
+		Content:      template.Content,
+		ContentState: append([]byte(nil), template.ContentState...),
+		Emoji:        instanceEmoji,
+		Color:        instanceColor,
+		Icon:         instanceIcon,
+		// Provenance + a pre-open-correct coverage bar. The instance is a
+		// byte-for-byte copy of the template body, so its checklist items — and
+		// thus these counts — are identical. Copying them (rather than waiting
+		// for the sidecar's first reprojection) means the coverage bar renders
+		// correctly the moment the instance opens, with no 0/0 flash. Total is
+		// what gates whether the bar shows at all, so it must be copied too.
+		SourceTemplateID:  &templateUID,
+		ChecklistTotal:    template.ChecklistTotal,
+		ChecklistRequired: template.ChecklistRequired,
+		ChecklistAnswered: template.ChecklistAnswered,
+		CreatedByID:       callerUID,
+		LastUpdatedByID:   &callerUID,
+		LastUpdatedAt:     &now,
+	}
+
+	if err := r.docRepo.Create(ctx, instance); err != nil {
+		return nil, fmt.Errorf("failed to create template instance: %w", err)
+	}
+
+	r.eventBus.Publish(eventbus.NewWikiDocumentCreatedEvent(
+		eventbus.UserActor(auth.UserID), r.wikiDocPayload(instance),
+	))
+
+	return instance, nil
+}
+
+// SetWikiDocumentTemplate flags or unflags a document as a reusable template.
+// The caller needs operator (edit) access to the document's operation — the
+// same bar as any metadata edit. The is_template flag is the sole marker that a
+// document is forkable via InstantiateTemplate; toggling it off simply removes
+// the document from the create-from-template picker and never touches its body.
+func (r *wikiDocumentResolver) SetWikiDocumentTemplate(ctx context.Context, id string, isTemplate bool) (*models.WikiDocument, error) {
+	auth := gqlctx.AuthFromContext(ctx)
+
+	uid, err := uuid.Parse(id)
+	if err != nil {
+		return nil, fmt.Errorf("invalid document ID: %w", err)
+	}
+
+	doc, err := r.docRepo.FindByID(ctx, uid)
+	if err != nil {
+		return nil, fmt.Errorf("document not found: %w", err)
+	}
+	if doc.DeletedAt != nil {
+		return nil, fmt.Errorf("cannot change the template flag on a trashed document")
+	}
+
+	if err := r.authorizeForOperation(ctx, doc.OperationID, models.OperationRoleOperator); err != nil {
+		return nil, err
+	}
+
+	// No-op when the flag already matches — skip the write and the event so a
+	// redundant toggle doesn't churn last_updated_* or fan out an invalidation.
+	if doc.IsTemplate == isTemplate {
+		return &doc, nil
+	}
+
+	callerUID, err := uuid.Parse(auth.UserID)
+	if err != nil {
+		return nil, fmt.Errorf("invalid caller ID: %w", err)
+	}
+
+	updates := map[string]interface{}{"is_template": isTemplate}
+	stampLastUpdated(updates, callerUID)
+	if err := r.docRepo.Update(ctx, &doc, updates); err != nil {
+		return nil, fmt.Errorf("failed to update template flag: %w", err)
+	}
+
+	updated, err := r.docRepo.FindByID(ctx, uid)
+	if err != nil {
+		return nil, fmt.Errorf("failed to fetch updated document: %w", err)
+	}
+
+	r.eventBus.Publish(eventbus.NewWikiDocumentUpdatedEvent(
+		eventbus.UserActor(auth.UserID), r.wikiDocPayload(&updated),
+	))
+
+	return &updated, nil
 }
 
 func (r *wikiDocumentResolver) RestoreWikiDocument(ctx context.Context, id string, cascade *bool) (*models.WikiDocument, error) {
@@ -1901,6 +2112,13 @@ func (r *wikiDocumentResolver) CleanupHashReferences(ctx context.Context, operat
 	return r.docRepo.PullHashReference(ctx, operationID, hashID)
 }
 
+// CleanupHostReferences pulls hostID from host_references across every document
+// in operationID. Best-effort — a failed cleanup leaves dangling pointers but
+// never blocks the host delete itself. Sibling of CleanupCredentialReferences.
+func (r *wikiDocumentResolver) CleanupHostReferences(ctx context.Context, operationID, hostID uuid.UUID) error {
+	return r.docRepo.PullHostReference(ctx, operationID, hostID)
+}
+
 // fetchHashBacklinks is the shared body of the standalone query and the
 // Hash.backlinks field resolver. Capped at maxBacklinks. Sibling of
 // fetchCredentialBacklinks.
@@ -2103,6 +2321,26 @@ func (r *wikiDocumentResolver) WikiDocumentParentDocumentID(ctx context.Context,
 		return nil, nil
 	}
 	s := obj.ParentDocumentID.String()
+	return &s, nil
+}
+
+// WikiDocumentHasContent reports whether the document's derived Markdown body
+// holds any non-whitespace text. Computed from the already-loaded Content field
+// (no extra I/O) so the create-from-template picker can hide empty "folder"
+// documents without fetching every body.
+func (r *wikiDocumentResolver) WikiDocumentHasContent(ctx context.Context, obj *models.WikiDocument) (bool, error) {
+	return strings.TrimSpace(obj.Content) != "", nil
+}
+
+// WikiDocumentSourceTemplateID exposes the template-provenance pointer as a
+// scalar — non-nil only on instances forked from a template via
+// InstantiateTemplate. Mirrors WikiDocumentParentDocumentID's nil-safe
+// *uuid.UUID → *string conversion.
+func (r *wikiDocumentResolver) WikiDocumentSourceTemplateID(ctx context.Context, obj *models.WikiDocument) (*string, error) {
+	if obj.SourceTemplateID == nil {
+		return nil, nil
+	}
+	s := obj.SourceTemplateID.String()
 	return &s, nil
 }
 

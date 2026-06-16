@@ -260,6 +260,7 @@ function WikiTreeNodeImpl({
                       color={node.color}
                       hasChildren
                       isExpanded={isExpanded}
+                      isTemplate={node.isTemplate}
                     />
                   </span>
                   <ChevronRightIcon
@@ -274,6 +275,7 @@ function WikiTreeNodeImpl({
                   emoji={node.emoji}
                   icon={node.icon}
                   color={node.color}
+                  isTemplate={node.isTemplate}
                 />
               )}
             </span>

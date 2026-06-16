@@ -1147,3 +1147,224 @@
   color: var(--primary-foreground);
   background: var(--primary);
 }
+
+/* -------------------------------------------------------------------------
+   Checklist item node (wikiChecklistItem) + coverage bar
+   ------------------------------------------------------------------------- */
+
+.tiptap .wiki-checklist-item {
+  position: relative;
+  margin: 0.55em 0;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: color-mix(in oklch, var(--muted) 35%, transparent);
+}
+
+.tiptap .wiki-checklist-item[data-status="answered"] {
+  border-left: 3px solid var(--primary);
+}
+.tiptap .wiki-checklist-item[data-status="not_applicable"] {
+  opacity: 0.72;
+}
+.tiptap .wiki-checklist-item[data-status="flagged"] {
+  border-left: 3px solid oklch(70% 0.17 50);
+}
+
+.tiptap .wiki-checklist-item__head {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+}
+
+.tiptap .wiki-checklist-item__meta {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.tiptap .wiki-checklist-item__prompt {
+  margin: 0;
+  font-weight: 600;
+  /* Wrap long prompts (including unbroken strings) instead of overflowing
+     behind the controls. */
+  overflow-wrap: anywhere;
+}
+.tiptap .wiki-checklist-item__muted {
+  color: var(--muted-foreground);
+  font-weight: 400;
+}
+
+.tiptap .wiki-checklist-item__prompt-input,
+.tiptap .wiki-checklist-item__hint-edit input {
+  width: 100%;
+  border: 1px solid transparent;
+  border-radius: var(--radius-md);
+  padding: 2px 6px;
+  background: transparent;
+  color: var(--foreground);
+  font: inherit;
+}
+.tiptap .wiki-checklist-item__prompt-input {
+  font-weight: 600;
+  /* Textarea behaves like a growing single field: no manual resize handle,
+     hidden scrollbar (JS sizes it), and long prompts wrap rather than scroll. */
+  resize: none;
+  overflow: hidden;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+.tiptap .wiki-checklist-item__prompt-input:focus,
+.tiptap .wiki-checklist-item__hint-edit input:focus {
+  outline: none;
+  border-color: var(--border);
+  background: var(--popover);
+}
+
+.tiptap .wiki-checklist-item__controls {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+}
+.tiptap .wiki-checklist-item__required {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 0.75em;
+  color: var(--muted-foreground);
+  white-space: nowrap;
+}
+.tiptap .wiki-checklist-item__state-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 3px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: transparent;
+  color: var(--muted-foreground);
+  cursor: pointer;
+}
+/* The icon must not be the pointer target: ProseMirror's native mousedown
+   handler runs before React's, and its stopEvent only ignores events whose
+   target is the BUTTON itself (not an inner <svg>). Without this, clicking the
+   glyph lets ProseMirror process the mousedown and the button's click is lost. */
+.tiptap .wiki-checklist-item__state-btn svg {
+  pointer-events: none;
+}
+.tiptap .wiki-checklist-item__state-btn[data-active="true"] {
+  background: var(--accent);
+  color: var(--foreground);
+  border-color: var(--primary);
+}
+/* Destructive delete control: neutral until hovered, then reads red so the
+   intent is unmistakable before the confirm dialog. */
+.tiptap .wiki-checklist-item__state-btn--danger:hover {
+  background: color-mix(in oklch, var(--destructive) 12%, transparent);
+  border-color: color-mix(in oklch, var(--destructive) 45%, transparent);
+  color: var(--destructive);
+}
+
+.tiptap .wiki-checklist-item__hint {
+  display: flex;
+  /* Top-align so the $ prompt and copy button sit on the first line when the
+     command spans multiple lines. */
+  align-items: flex-start;
+  gap: 8px;
+  margin: 6px 0 0;
+  padding: 5px 10px;
+  border-radius: var(--radius-md);
+  background: var(--wiki-code-bg, var(--muted));
+  color: var(--wiki-code-fg, var(--foreground));
+  font-family: var(--font-mono);
+  font-size: 0.82em;
+  line-height: 1.5;
+  white-space: pre;
+  overflow-x: auto;
+}
+.tiptap .wiki-checklist-item__hint-copy {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  border: none;
+  background: transparent;
+  color: var(--muted-foreground);
+  cursor: pointer;
+  padding: 0;
+}
+.tiptap .wiki-checklist-item__hint-copy:hover {
+  color: var(--foreground);
+}
+/* Same reason as __state-btn svg: keep the glyph from being the pointer target
+   so ProseMirror's pre-React mousedown handler doesn't eat the click. */
+.tiptap .wiki-checklist-item__hint-copy svg {
+  pointer-events: none;
+}
+.tiptap .wiki-checklist-item__hint-prompt {
+  color: var(--muted-foreground);
+  user-select: none;
+  flex-shrink: 0;
+}
+.tiptap .wiki-checklist-item__hint-input {
+  flex: 1 1 auto;
+  min-width: 0;
+  border: none;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  line-height: inherit;
+  outline: none;
+  padding: 0;
+  /* Multiline command editor: auto-sized in JS (autoGrow), so disable the
+     manual resize grip and hide the scrollbar it would otherwise show. */
+  resize: none;
+  overflow: hidden;
+  white-space: pre;
+  word-break: break-word;
+}
+.tiptap pre.wiki-checklist-item__hint {
+  overflow-x: auto;
+}
+.tiptap .wiki-checklist-item__hint code {
+  font: inherit;
+  background: none;
+  padding: 0;
+}
+
+.tiptap .wiki-checklist-item__answer {
+  margin-top: 8px;
+}
+
+/* Coverage bar — used in document headers and (compact) tree rows. */
+.wiki-checklist-coverage {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+.wiki-checklist-coverage__track {
+  position: relative;
+  width: 120px;
+  height: 6px;
+  border-radius: 999px;
+  background: var(--muted);
+  overflow: hidden;
+}
+.wiki-checklist-coverage--compact .wiki-checklist-coverage__track {
+  width: 44px;
+  height: 4px;
+}
+.wiki-checklist-coverage__fill {
+  height: 100%;
+  border-radius: inherit;
+  background: var(--primary);
+  transition: width 150ms ease;
+}
+.wiki-checklist-coverage[data-complete="true"] .wiki-checklist-coverage__fill {
+  background: oklch(62% 0.17 150);
+}
+.wiki-checklist-coverage__label {
+  font-size: 0.75em;
+  color: var(--muted-foreground);
+  font-variant-numeric: tabular-nums;
+}

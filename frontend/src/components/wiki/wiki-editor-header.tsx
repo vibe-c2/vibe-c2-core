@@ -130,14 +130,29 @@ export function WikiEditorHeader({
       {/* Document icon — emoji or lucide. hasChildren keeps the adaptive
           default in sync with the tree row (page glyph for leaves, folder
           glyph once children exist). isExpanded stays true here: the user
-          is viewing the doc, so its content is "open" by definition. */}
-      <DocumentIconPicker
-        value={{ emoji: doc.emoji, icon: doc.icon, color: doc.color }}
-        onSelect={handleIconSelect}
-        disabled={!isEditor}
-        hasChildren={directChildren.length > 0}
-        isExpanded
-      />
+          is viewing the doc, so its content is "open" by definition.
+          Template documents render a fixed, locked glyph instead of the
+          picker — the icon can't drift while a doc is a template. */}
+      {doc.isTemplate ? (
+        <Tooltip>
+          <TooltipTrigger
+            render={
+              <span className="flex size-7 shrink-0 items-center justify-center" />
+            }
+          >
+            <DocumentIcon isTemplate color={doc.color} size={18} />
+          </TooltipTrigger>
+          <TooltipContent>Template — icon is fixed</TooltipContent>
+        </Tooltip>
+      ) : (
+        <DocumentIconPicker
+          value={{ emoji: doc.emoji, icon: doc.icon, color: doc.color }}
+          onSelect={handleIconSelect}
+          disabled={!isEditor}
+          hasChildren={directChildren.length > 0}
+          isExpanded
+        />
+      )}
 
       {/* Breadcrumb: first ancestor */}
       {firstAncestor && (

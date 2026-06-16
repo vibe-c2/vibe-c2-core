@@ -12,10 +12,12 @@ import {
   KeyIcon,
   LinkIcon,
   ListIcon,
+  ListChecksIcon,
   ListOrderedIcon,
   ListTodoIcon,
   PaperclipIcon,
   QuoteIcon,
+  ServerIcon,
   SquareCodeIcon,
   StarIcon,
   TableIcon,
@@ -26,6 +28,7 @@ import { pickAndUploadWikiFile } from "@/components/wiki/wiki-file-upload"
 import { startLinkInsert } from "@/components/wiki/wiki-link-popover"
 import { openCredentialPicker } from "@/components/wiki/wiki-credential-picker"
 import { openHashPicker } from "@/components/wiki/wiki-hash-picker"
+import { openHostPicker } from "@/components/wiki/wiki-host-picker"
 import { openDocumentPicker } from "@/components/wiki/wiki-document-picker"
 import type { NoticeVariant } from "@/components/wiki/wiki-notice-node"
 
@@ -100,6 +103,28 @@ const NOTICE_ITEMS: SlashItem[] = NOTICE_SPECS.map((spec) => ({
     editor.chain().focus().deleteRange(range).setNotice(spec.variant).run()
   },
 }))
+
+// Checklist item — a question whose answer is the freeform region below the
+// prompt. The operator fills it with whatever fits (prose, /code console
+// output, a /credential or /hash chip, …) using the normal slash menu.
+const CHECKLIST_ITEMS: SlashItem[] = [
+  {
+    title: "Checklist item",
+    description: "A question with a freeform answer",
+    keywords: [
+      "checklist",
+      "recon",
+      "question",
+      "item",
+      "task",
+      "answer",
+    ],
+    icon: ListChecksIcon,
+    command: ({ editor, range }) => {
+      editor.chain().focus().deleteRange(range).insertChecklistItem().run()
+    },
+  },
+]
 
 export const SLASH_ITEMS: SlashItem[] = [
   {
@@ -304,6 +329,34 @@ export const SLASH_ITEMS: SlashItem[] = [
       })
     },
   },
+  {
+    title: "Host reference",
+    description: "Reference a host from this operation",
+    keywords: [
+      "findings:host",
+      "host",
+      "hosts",
+      "machine",
+      "server",
+      "box",
+      "ip",
+      "asset",
+      "node",
+      "system",
+    ],
+    icon: ServerIcon,
+    command: ({ editor, range, context }) => {
+      // Drop the slash trigger first so the chip lands where the user typed.
+      editor.chain().focus().deleteRange(range).run()
+      const pos = editor.state.selection.from
+      openHostPicker({
+        editor,
+        operationId: context.operationId,
+        insertPos: pos,
+      })
+    },
+  },
+  ...CHECKLIST_ITEMS,
 ]
 
 // Memoize filtered results so repeated calls with the same query return the

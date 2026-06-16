@@ -384,6 +384,9 @@ func (r *fakeDocRepo) CountHashReferrersBatch(context.Context, uuid.UUID, []uuid
 func (r *fakeDocRepo) PullHashReference(context.Context, uuid.UUID, uuid.UUID) error {
 	return nil
 }
+func (r *fakeDocRepo) PullHostReference(context.Context, uuid.UUID, uuid.UUID) error {
+	return nil
+}
 
 func (r *fakeDocRepo) FilterReferencedImageIDs(context.Context, uuid.UUID, []uuid.UUID) (map[uuid.UUID]struct{}, error) {
 	return map[uuid.UUID]struct{}{}, nil

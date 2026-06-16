@@ -78,9 +78,10 @@ func (a *App) NewRouter() *gin.Engine {
 	hashRes := resolver.NewHashResolver(
 		a.repos.Hash, a.repos.Credential, a.repos.Operation, a.repos.User, credRes, wikiDocRes, a.eventBus,
 	)
-	// hostRes is a self-contained Findings entity — no cross-domain joins.
+	// hostRes depends on wikiDocRes only to strip the inverse host_references
+	// index on host hard-delete (mirrors the credential/hash cleanup paths).
 	hostRes := resolver.NewHostResolver(
-		a.repos.Host, a.repos.Operation, a.repos.User, a.eventBus,
+		a.repos.Host, a.repos.Operation, a.repos.User, wikiDocRes, a.eventBus,
 	)
 	taskRes := resolver.NewTaskResolver(
 		a.repos.Task, a.repos.Operation, a.repos.User, a.repos.WikiDocument, a.repos.Credential, a.eventBus,

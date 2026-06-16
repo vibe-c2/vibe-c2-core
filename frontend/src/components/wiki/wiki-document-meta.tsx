@@ -2,6 +2,7 @@ import { useEffect, useState } from "react"
 import { FormattedDateTimeText } from "@/components/ui/formatted-date-time-text"
 import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip"
 import { useAuthStore } from "@/stores/auth"
+import { WikiChecklistCoverageBar } from "@/components/wiki/wiki-checklist-coverage-bar"
 import type { WikiDocumentFieldsFragment } from "@/graphql/gql/graphql"
 
 interface WikiDocumentMetaProps {
@@ -54,6 +55,12 @@ export function WikiDocumentMeta({ document }: WikiDocumentMetaProps) {
           currentUserId={currentUserId}
         />
       )}
+      {/* Renders only when the doc contains checklist items (total > 0). */}
+      <WikiChecklistCoverageBar
+        total={document.checklistTotal}
+        required={document.checklistRequired}
+        answered={document.checklistAnswered}
+      />
     </div>
   )
 }

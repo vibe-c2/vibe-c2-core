@@ -147,6 +147,10 @@ models:
         resolver: true
       parentDocumentId:
         resolver: true
+      hasContent:
+        resolver: true
+      sourceTemplateId:
+        resolver: true
       childDocuments:
         resolver: true
       childCount:

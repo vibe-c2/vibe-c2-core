@@ -28,6 +28,8 @@ import {
   ReorderWikiDocumentSiblingsDocument,
   DeleteWikiDocumentDocument,
   DuplicateWikiDocumentDocument,
+  SetWikiDocumentTemplateDocument,
+  InstantiateTemplateDocument,
   RestoreWikiDocumentDocument,
   PermanentlyDeleteWikiDocumentDocument,
   EmptyWikiDocumentTrashDocument,
@@ -540,6 +542,42 @@ export function useDuplicateWikiDocument() {
   return useMutation({
     mutationFn: (vars: { id: string; withChildren: boolean }) =>
       graphqlClient(DuplicateWikiDocumentDocument, vars),
+  })
+}
+
+// Fork a template into an operation. Like create/duplicate, the
+// server publishes one wikiDocumentChanged create event for the new instance,
+// so the parent bucket invalidates via the subscription — no onSuccess here.
+export function useInstantiateTemplate() {
+  return useMutation({
+    mutationFn: (vars: {
+      templateId: string
+      targetOperationId: string
+      parentDocumentId?: string | null
+      title?: string | null
+      emoji?: string | null
+      icon?: string | null
+      color?: string | null
+    }) =>
+      graphqlClient(InstantiateTemplateDocument, {
+        templateId: vars.templateId,
+        targetOperationId: vars.targetOperationId,
+        parentDocumentId: vars.parentDocumentId ?? null,
+        title: vars.title ?? null,
+        emoji: vars.emoji ?? null,
+        icon: vars.icon ?? null,
+        color: vars.color ?? null,
+      }),
+  })
+}
+
+// Flag/unflag a document as a reusable template. The server publishes one
+// wikiDocumentChanged update event, so the tree row + open doc refresh via the
+// subscription — no onSuccess invalidation here.
+export function useSetWikiDocumentTemplate() {
+  return useMutation({
+    mutationFn: (vars: { id: string; isTemplate: boolean }) =>
+      graphqlClient(SetWikiDocumentTemplateDocument, vars),
   })
 }
 

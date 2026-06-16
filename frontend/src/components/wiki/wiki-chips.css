@@ -300,6 +300,102 @@
   animation: wiki-credential-chip-pulse 1.2s ease-in-out infinite;
 }
 
+/* --- Host chip ----------------------------------------------------------- */
+/*
+ * Mirrors the hash chip layout but uses a slate "infrastructure" accent so the
+ * reference flavors stay distinguishable at a glance — host = a machine/asset,
+ * neutral and structural, distinct from the amber "secret material" of a hash.
+ * No status sub-state: a host is just present or deleted, so there is no
+ * cracked/valid equivalent. The icon is the host's own glyph (emoji / lucide /
+ * OS-derived), so the accent does not tint it.
+ */
+
+.wiki-host-chip {
+  --chip-accent: oklch(0.56 0.06 230);
+  --chip-fg: oklch(0.4 0.05 232);
+}
+
+.dark .wiki-host-chip {
+  --chip-accent: oklch(0.78 0.06 232);
+  --chip-fg: oklch(0.86 0.04 235);
+}
+
+.wiki-host-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  vertical-align: baseline;
+  flex-wrap: wrap;
+  max-width: 100%;
+  font-family: inherit;
+  font-size: 0.875em;
+  font-weight: 500;
+  line-height: 1.2;
+  padding: 0.32em 0.7em;
+  margin: 0 0.15em;
+  border-radius: 6px;
+  color: var(--chip-fg);
+  background: color-mix(in oklch, var(--chip-accent) 14%, transparent);
+  border: 1px solid color-mix(in oklch, var(--chip-accent) 36%, transparent);
+  cursor: pointer;
+  appearance: none;
+  text-align: inherit;
+  transition: background-color 120ms ease-out,
+    border-color 120ms ease-out, color 120ms ease-out,
+    box-shadow 120ms ease-out;
+}
+
+.wiki-host-chip__icon {
+  flex-shrink: 0;
+}
+
+.wiki-host-chip:hover {
+  background: color-mix(in oklch, var(--chip-accent) 22%, transparent);
+  border-color: color-mix(in oklch, var(--chip-accent) 52%, transparent);
+}
+
+.wiki-host-chip:focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: 1px;
+}
+
+.wiki-host-chip.is-selected,
+.tiptap .ProseMirror-selectednode .wiki-host-chip,
+.tiptap .ProseMirror-selectednode.wiki-host-chip-wrapper .wiki-host-chip {
+  background: color-mix(in oklch, var(--chip-accent) 26%, transparent);
+  box-shadow: 0 0 0 2px var(--ring);
+}
+
+.wiki-host-chip--missing {
+  color: var(--destructive);
+  background: color-mix(in oklch, var(--destructive) 12%, transparent);
+  border-color: color-mix(in oklch, var(--destructive) 32%, transparent);
+  cursor: default;
+}
+
+.wiki-host-chip--loading {
+  cursor: progress;
+  opacity: 0.75;
+}
+
+.wiki-host-chip__name {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 28ch;
+  font-family: var(--font-mono);
+  font-size: 0.9em;
+}
+
+.wiki-host-chip__skel {
+  display: inline-block;
+  width: 7ch;
+  height: 0.9em;
+  border-radius: 4px;
+  background: color-mix(in oklch, currentColor 22%, transparent);
+  animation: wiki-credential-chip-pulse 1.2s ease-in-out infinite;
+}
+
 /* --- Document chip ------------------------------------------------------- */
 /*
  * Mirrors the credential chip layout but uses a sky/blue accent so the two

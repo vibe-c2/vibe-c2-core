@@ -15,6 +15,7 @@ import type {
 } from "@/graphql/gql/graphql"
 import {
   HostsDocument,
+  HostDocument,
   CreateHostDocument,
   UpdateHostDocument,
   DeleteHostDocument,
@@ -31,11 +32,10 @@ export type HostListParams = {
   first?: number
 }
 
-// Query key factory. Hosts read only through the infinite list — the edit
-// dialog seeds from the clicked row's cached node, so there is no per-host
-// detail cache to key. Mutations and the live subscription therefore just
-// invalidate `all` (which covers both the paginated list and the topology
-// snapshot) and let them refetch.
+// Query key factory. The table/topology read through the infinite list, but
+// the inline /host wiki chip resolves a single host by id (it persists only the
+// id), so there is also a per-host detail key. Mutations and the live
+// subscription invalidate `all`, which covers the list, topology, and details.
 export const hostKeys = {
   all: ["hosts"] as const,
   lists: () => [...hostKeys.all, "list"] as const,
@@ -45,6 +45,9 @@ export const hostKeys = {
   // gets its own key independent of the list's search/pagination params.
   topology: (operationId: string) =>
     [...hostKeys.all, "topology", operationId] as const,
+  // Per-host detail, keyed by id — backs the inline /host wiki reference chip.
+  details: () => [...hostKeys.all, "detail"] as const,
+  detail: (id: string) => [...hostKeys.details(), id] as const,
 }
 
 // The topology cross-references every host against every other (a route's
@@ -58,6 +61,18 @@ const TOPOLOGY_PAGE = 100
 export const MAX_TOPOLOGY_HOSTS = 1000
 
 // --- Queries ---
+
+// Single-host fetch for the inline /host wiki reference chip. Mirrors useHash:
+// the chip persists only a hostId and resolves the host live so renames and
+// topology edits flow through without rewriting the document. `enabled` lets
+// the NodeView gate the request on viewport visibility.
+export function useHost(id: string, options?: { enabled?: boolean }) {
+  return useQuery({
+    queryKey: hostKeys.detail(id),
+    queryFn: () => graphqlClient(HostDocument, { id }),
+    enabled: !!id && (options?.enabled ?? true),
+  })
+}
 
 export function useInfiniteHosts(params: HostListParams) {
   return useInfiniteQuery({
