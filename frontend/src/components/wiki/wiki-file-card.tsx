@@ -3,8 +3,10 @@ import {
   type ReactNodeViewProps,
 } from "@tiptap/react"
 import {
+  ChevronDownIcon,
   DownloadIcon,
   ExternalLinkIcon,
+  EyeIcon,
   FileArchiveIcon,
   FileAudioIcon,
   FileIcon,
@@ -13,7 +15,7 @@ import {
   FileVideoIcon,
   Trash2Icon,
 } from "lucide-react"
-import type { MouseEvent as ReactMouseEvent, ReactElement } from "react"
+import { useState, type MouseEvent as ReactMouseEvent, type ReactElement } from "react"
 
 /** Content types the browser can render inline without executing scripts.
  *  Must stay in sync with previewAllowedContentTypes in wiki_file_controller.go. */
@@ -42,18 +44,32 @@ interface FileNodeAttrs {
   contentType: string
 }
 
-// Uses <button>s (not <a>s) because anchor clicks inside a ProseMirror node
-// view double-fire under React StrictMode. Mousedown is swallowed so PM
-// can't start a selection cycle against these buttons — same pattern as
-// WikiImageNode.
+/** Lucide glyph size for the hover-action buttons. */
+const ACTION_ICON_SIZE = 14
+/** Lucide glyph size for the file-type icon in the card's leading slot. */
+const FILE_ICON_SIZE = 20
+
+// Renders a wiki file attachment: icon + filename + size, with hover actions
+// (preview / download / delete). PDFs additionally get an expandable inline
+// preview panel. Action buttons use the FileActionButton helper below — see
+// its comment for why they're <button>s, not <a>s.
 export function WikiFileCard({ node, editor, getPos }: ReactNodeViewProps): ReactElement {
   const attrs = node.attrs as unknown as FileNodeAttrs
   const isEditable = editor.isEditable
   const url = attrs.url ?? ""
   const filename = attrs.filename || "file"
+  const contentType = canonicalize(attrs.contentType)
   const canPreview =
-    PREVIEW_ALLOWED_CONTENT_TYPES.has(attrs.contentType) &&
-    !DANGEROUS_CONTENT_TYPES.has(attrs.contentType)
+    PREVIEW_ALLOWED_CONTENT_TYPES.has(contentType) &&
+    !DANGEROUS_CONTENT_TYPES.has(contentType)
+  // PDFs render inline in an expandable panel; other previewable types
+  // (text, markdown) still open in a new tab.
+  const canPreviewInline = contentType === "application/pdf" && url !== ""
+  const previewUrl = url ? `${url}?preview=1` : ""
+
+  // Whether the inline PDF panel is open. The <iframe> is only mounted while
+  // expanded, so collapsed cards never fetch the file bytes.
+  const [expanded, setExpanded] = useState(false)
 
   function handleDelete() {
     const pos = typeof getPos === "function" ? getPos() : undefined
@@ -71,13 +87,23 @@ export function WikiFileCard({ node, editor, getPos }: ReactNodeViewProps): Reac
   }
 
   function handlePreview() {
-    if (!url) return
-    window.open(`${url}?preview=1`, "_blank", "noopener,noreferrer")
+    if (!previewUrl) return
+    window.open(previewUrl, "_blank", "noopener,noreferrer")
   }
 
-  // Primary "open it" action for the filename row: preview in a new tab
-  // when the content type renders safely inline, otherwise download.
+  function toggleInlinePreview() {
+    if (!canPreviewInline) return
+    setExpanded((prev) => !prev)
+  }
+
+  // Primary "open it" action for the filename row: expand the inline PDF
+  // panel for PDFs, preview in a new tab for other safe types, otherwise
+  // download.
   function handleFilenameClick() {
+    if (canPreviewInline) {
+      toggleInlinePreview()
+      return
+    }
     if (canPreview && url) {
       handlePreview()
       return
@@ -89,7 +115,7 @@ export function WikiFileCard({ node, editor, getPos }: ReactNodeViewProps): Reac
     <NodeViewWrapper className="wiki-file-wrapper" as="figure">
       <div className="wiki-file-card" contentEditable={false}>
         <div className="wiki-file-icon" aria-hidden="true">
-          {renderIcon(attrs.contentType, filename)}
+          {renderIcon(contentType, filename)}
         </div>
         <div className="wiki-file-meta">
           <button
@@ -104,45 +130,95 @@ export function WikiFileCard({ node, editor, getPos }: ReactNodeViewProps): Reac
           <span className="wiki-file-size">{formatBytes(attrs.size)}</span>
         </div>
         <div className="wiki-file-actions">
-          {canPreview && url ? (
-            <button
-              type="button"
-              className="wiki-file-action-button"
-              aria-label="Preview file"
+          {canPreviewInline ? (
+            <FileActionButton
+              icon={expanded ? <ChevronDownIcon size={ACTION_ICON_SIZE} /> : <EyeIcon size={ACTION_ICON_SIZE} />}
+              label={expanded ? "Hide preview" : "Preview file"}
+              title={expanded ? "Hide preview" : "Preview"}
+              expanded={expanded}
+              onClick={toggleInlinePreview}
+            />
+          ) : null}
+          {canPreview && !canPreviewInline && url ? (
+            <FileActionButton
+              icon={<ExternalLinkIcon size={ACTION_ICON_SIZE} />}
+              label="Preview file"
               title="Preview in new tab"
-              onMouseDown={swallow}
               onClick={handlePreview}
-            >
-              <ExternalLinkIcon size={14} />
-            </button>
+            />
           ) : null}
           {url ? (
-            <button
-              type="button"
-              className="wiki-file-action-button"
-              aria-label="Download file"
+            <FileActionButton
+              icon={<DownloadIcon size={ACTION_ICON_SIZE} />}
+              label="Download file"
               title="Download"
-              onMouseDown={swallow}
               onClick={handleDownload}
-            >
-              <DownloadIcon size={14} />
-            </button>
+            />
           ) : null}
           {isEditable ? (
-            <button
-              type="button"
-              className="wiki-file-action-button wiki-file-action-button--danger"
-              aria-label="Remove file attachment"
+            <FileActionButton
+              icon={<Trash2Icon size={ACTION_ICON_SIZE} />}
+              label="Remove file attachment"
               title="Delete"
-              onMouseDown={swallow}
+              danger
               onClick={handleDelete}
-            >
-              <Trash2Icon size={14} />
-            </button>
+            />
           ) : null}
         </div>
       </div>
+      {canPreviewInline && expanded ? (
+        <div className="wiki-file-preview" contentEditable={false}>
+          <iframe
+            className="wiki-file-preview-frame"
+            src={previewUrl}
+            title={`Preview of ${filename}`}
+          />
+        </div>
+      ) : null}
     </NodeViewWrapper>
+  )
+}
+
+interface FileActionButtonProps {
+  icon: ReactElement
+  /** Accessible name; also the screen-reader label. */
+  label: string
+  /** Hover tooltip. */
+  title: string
+  onClick: () => void
+  /** Renders the destructive (red-hover) variant. */
+  danger?: boolean
+  /** When set, exposes aria-expanded for the inline-preview toggle. */
+  expanded?: boolean
+}
+
+// Shared hover-action button for the card. <button> (not <a>) because anchor
+// clicks inside a ProseMirror node view double-fire under React StrictMode;
+// mousedown is swallowed so PM can't start a selection cycle against it.
+function FileActionButton({
+  icon,
+  label,
+  title,
+  onClick,
+  danger,
+  expanded,
+}: FileActionButtonProps): ReactElement {
+  return (
+    <button
+      type="button"
+      className={
+        danger
+          ? "wiki-file-action-button wiki-file-action-button--danger"
+          : "wiki-file-action-button"
+      }
+      aria-label={label}
+      aria-expanded={expanded}
+      title={title}
+      onMouseDown={swallow}
+      onClick={onClick}
+    >
+      {icon}
+    </button>
   )
 }
 
@@ -151,8 +227,16 @@ function swallow(e: ReactMouseEvent): void {
   e.stopPropagation()
 }
 
+// Strip any parameters (e.g. "; charset=utf-8") and lowercase so the MIME
+// comparison matches the backend's canonicalContentType in
+// wiki_file_controller.go.
+function canonicalize(contentType: string): string {
+  const ct = (contentType ?? "").split(";")[0]
+  return ct.trim().toLowerCase()
+}
+
 function renderIcon(contentType: string, filename: string): ReactElement {
-  const size = 20
+  const size = FILE_ICON_SIZE
   const type = (contentType ?? "").toLowerCase()
 
   if (type.startsWith("audio/")) return <FileAudioIcon size={size} />
