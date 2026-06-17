@@ -969,9 +969,9 @@
   background: rgb(185, 28, 28);
 }
 
-/* Inline PDF preview panel — expands below the file card when the user
-   toggles preview. Mounted only while open (see WikiFileCard), so collapsed
-   cards never load the iframe. */
+/* Inline preview panel — expands below the file card when the user toggles
+   preview. Mounted only while open (see WikiFileCard), so collapsed cards never
+   load the iframe. Used for both PDF (iframe src) and HTML (sandboxed srcdoc). */
 .tiptap .wiki-file-preview {
   margin-top: 8px;
   border: 1px solid var(--color-border);
@@ -986,6 +986,33 @@
   height: min(75vh, 720px);
   border: 0;
   background: #fff;
+}
+
+/* Native fullscreen: the panel fills the screen, so drop its inline framing and
+   let the frame take the whole viewport. */
+.tiptap .wiki-file-preview:fullscreen {
+  margin-top: 0;
+  border: 0;
+  border-radius: 0;
+  background: #fff;
+}
+
+.tiptap .wiki-file-preview:fullscreen .wiki-file-preview-frame {
+  height: 100vh;
+  height: 100dvh;
+}
+
+/* Transient loading / error message shown in the panel while the HTML body is
+   being fetched (or if the fetch fails). */
+.tiptap .wiki-file-preview-status {
+  margin: 0;
+  padding: 16px;
+  font-size: 0.85rem;
+  color: var(--color-text-muted, rgba(0, 0, 0, 0.6));
+}
+
+.tiptap .wiki-file-preview-status--error {
+  color: var(--color-danger, #c0392b);
 }
 
 /* Wiki credential reference — inline atom chip rendered inside prose.

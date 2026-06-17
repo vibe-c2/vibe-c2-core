@@ -9,13 +9,22 @@ import {
   EyeIcon,
   FileArchiveIcon,
   FileAudioIcon,
+  FileCodeIcon,
   FileIcon,
   FileSpreadsheetIcon,
   FileTextIcon,
   FileVideoIcon,
+  Maximize2Icon,
   Trash2Icon,
 } from "lucide-react"
-import { useState, type MouseEvent as ReactMouseEvent, type ReactElement } from "react"
+import {
+  useEffect,
+  useRef,
+  useState,
+  type MouseEvent as ReactMouseEvent,
+  type ReactElement,
+  type Ref,
+} from "react"
 
 /** Content types the browser can render inline without executing scripts.
  *  Must stay in sync with previewAllowedContentTypes in wiki_file_controller.go. */
@@ -36,6 +45,23 @@ const DANGEROUS_CONTENT_TYPES = new Set<string>([
   "text/javascript",
 ])
 
+/** HTML types we can preview by fetching the bytes and rendering them in a
+ *  fully sandboxed <iframe srcdoc>. These stay in DANGEROUS_CONTENT_TYPES — the
+ *  backend never serves them inline. We read the body via fetch() (which ignores
+ *  Content-Disposition) and the iframe sandbox (no allow-scripts / no
+ *  allow-same-origin) neutralizes any embedded script. Inline CSS and data-URI
+ *  assets still render, so self-contained single-file HTML looks right. */
+const INLINE_HTML_CONTENT_TYPES = new Set<string>([
+  "text/html",
+  "application/xhtml+xml",
+])
+
+/** Largest attachment we pull fully into memory to render in a srcdoc iframe.
+ *  Self-contained reports (inlined CSS + data-URI assets) get large quickly, so
+ *  this sits well above the typical single-file HTML report; only genuinely huge
+ *  files fall back to download so a giant srcdoc can't freeze the tab. */
+const MAX_INLINE_HTML_BYTES = 25 * 1024 * 1024
+
 interface FileNodeAttrs {
   fileId: string | null
   url: string | null
@@ -50,8 +76,9 @@ const ACTION_ICON_SIZE = 14
 const FILE_ICON_SIZE = 20
 
 // Renders a wiki file attachment: icon + filename + size, with hover actions
-// (preview / download / delete). PDFs additionally get an expandable inline
-// preview panel. Action buttons use the FileActionButton helper below — see
+// (preview / download / delete). PDFs and self-contained HTML additionally get
+// an expandable inline preview panel (PDF via inline iframe src, HTML via a
+// sandboxed srcdoc). Action buttons use the FileActionButton helper below — see
 // its comment for why they're <button>s, not <a>s.
 export function WikiFileCard({ node, editor, getPos }: ReactNodeViewProps): ReactElement {
   const attrs = node.attrs as unknown as FileNodeAttrs
@@ -62,14 +89,23 @@ export function WikiFileCard({ node, editor, getPos }: ReactNodeViewProps): Reac
   const canPreview =
     PREVIEW_ALLOWED_CONTENT_TYPES.has(contentType) &&
     !DANGEROUS_CONTENT_TYPES.has(contentType)
-  // PDFs render inline in an expandable panel; other previewable types
-  // (text, markdown) still open in a new tab.
-  const canPreviewInline = contentType === "application/pdf" && url !== ""
+  // Two inline-preview mechanisms share the expandable panel:
+  //   - PDF: <iframe src=...?preview=1> served inline by the backend.
+  //   - HTML: <iframe srcdoc> built from fetched bytes, fully sandboxed.
+  // Other previewable types (text, markdown) still open in a new tab.
+  const isPdf = contentType === "application/pdf"
+  const isHtml =
+    INLINE_HTML_CONTENT_TYPES.has(contentType) && attrs.size <= MAX_INLINE_HTML_BYTES
+  const canPreviewInline = (isPdf || isHtml) && url !== ""
   const previewUrl = url ? `${url}?preview=1` : ""
 
-  // Whether the inline PDF panel is open. The <iframe> is only mounted while
+  // Whether the inline preview panel is open. The frame is only mounted while
   // expanded, so collapsed cards never fetch the file bytes.
   const [expanded, setExpanded] = useState(false)
+  // The preview panel — target of the native Fullscreen request.
+  const previewRef = useRef<HTMLDivElement>(null)
+  // HTML is fetched into a srcdoc only while its panel is open.
+  const htmlPreview = useHtmlPreview(url, expanded && isHtml)
 
   function handleDelete() {
     const pos = typeof getPos === "function" ? getPos() : undefined
@@ -96,8 +132,21 @@ export function WikiFileCard({ node, editor, getPos }: ReactNodeViewProps): Reac
     setExpanded((prev) => !prev)
   }
 
-  // Primary "open it" action for the filename row: expand the inline PDF
-  // panel for PDFs, preview in a new tab for other safe types, otherwise
+  // Maximize the open preview via the native Fullscreen API. Called from a
+  // button that only renders while the panel is expanded, so the request fires
+  // inside the user gesture browsers require. Toggles back out if already on.
+  function toggleFullscreen() {
+    if (document.fullscreenElement) {
+      void document.exitFullscreen()
+      return
+    }
+    void previewRef.current?.requestFullscreen().catch(() => {
+      /* user denied or unsupported — leave the inline panel as-is */
+    })
+  }
+
+  // Primary "open it" action for the filename row: expand the inline panel
+  // for PDF/HTML, preview in a new tab for other safe types, otherwise
   // download.
   function handleFilenameClick() {
     if (canPreviewInline) {
@@ -139,6 +188,14 @@ export function WikiFileCard({ node, editor, getPos }: ReactNodeViewProps): Reac
               onClick={toggleInlinePreview}
             />
           ) : null}
+          {canPreviewInline && expanded ? (
+            <FileActionButton
+              icon={<Maximize2Icon size={ACTION_ICON_SIZE} />}
+              label="View preview fullscreen"
+              title="Fullscreen"
+              onClick={toggleFullscreen}
+            />
+          ) : null}
           {canPreview && !canPreviewInline && url ? (
             <FileActionButton
               icon={<ExternalLinkIcon size={ACTION_ICON_SIZE} />}
@@ -167,15 +224,104 @@ export function WikiFileCard({ node, editor, getPos }: ReactNodeViewProps): Reac
         </div>
       </div>
       {canPreviewInline && expanded ? (
-        <div className="wiki-file-preview" contentEditable={false}>
-          <iframe
-            className="wiki-file-preview-frame"
-            src={previewUrl}
-            title={`Preview of ${filename}`}
-          />
-        </div>
+        <FilePreviewPanel
+          containerRef={previewRef}
+          isPdf={isPdf}
+          previewUrl={previewUrl}
+          filename={filename}
+          html={htmlPreview}
+        />
       ) : null}
     </NodeViewWrapper>
+  )
+}
+
+interface HtmlPreviewState {
+  /** Fetched HTML body; null until the first successful load. */
+  content: string | null
+  /** User-facing failure message; null while pending or on success. */
+  error: string | null
+}
+
+// Fetches an HTML attachment's bytes for inline srcdoc rendering. No-ops until
+// `active` (panel open AND the file is previewable HTML), then fetches once and
+// caches the result for the card's lifetime. Cookie auth rides the same-origin
+// request automatically (same as the PDF/download paths); the attachment
+// Content-Disposition doesn't affect a fetch() body read.
+function useHtmlPreview(url: string, active: boolean): HtmlPreviewState {
+  const [content, setContent] = useState<string | null>(null)
+  const [error, setError] = useState<string | null>(null)
+
+  useEffect(() => {
+    if (!active || !url) return
+    if (content !== null || error !== null) return
+
+    let cancelled = false
+    fetch(url, { credentials: "same-origin", headers: { Accept: "text/html" } })
+      .then((res) => {
+        if (!res.ok) throw new Error(`Couldn't load preview (HTTP ${res.status}).`)
+        return res.text()
+      })
+      .then((text) => {
+        if (!cancelled) setContent(text)
+      })
+      .catch((err: unknown) => {
+        if (!cancelled) {
+          setError(err instanceof Error ? err.message : "Couldn't load preview.")
+        }
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [active, url, content, error])
+
+  return { content, error }
+}
+
+interface FilePreviewPanelProps {
+  /** Container ref — the element handed to the native Fullscreen request. */
+  containerRef: Ref<HTMLDivElement>
+  isPdf: boolean
+  /** Inline-disposition URL for the PDF iframe (unused for HTML). */
+  previewUrl: string
+  filename: string
+  html: HtmlPreviewState
+}
+
+// The expandable preview panel. PDFs render via an inline iframe src; HTML
+// renders the fetched bytes into a fully locked sandbox (no allow-scripts, no
+// allow-same-origin) so embedded scripts are inert while inline CSS and
+// data-URI assets still display.
+function FilePreviewPanel({
+  containerRef,
+  isPdf,
+  previewUrl,
+  filename,
+  html,
+}: FilePreviewPanelProps): ReactElement {
+  return (
+    <div className="wiki-file-preview" contentEditable={false} ref={containerRef}>
+      {isPdf ? (
+        <iframe
+          className="wiki-file-preview-frame"
+          src={previewUrl}
+          title={`Preview of ${filename}`}
+        />
+      ) : html.error !== null ? (
+        <p className="wiki-file-preview-status wiki-file-preview-status--error">
+          {html.error}
+        </p>
+      ) : html.content === null ? (
+        <p className="wiki-file-preview-status">Loading preview…</p>
+      ) : (
+        <iframe
+          className="wiki-file-preview-frame"
+          sandbox=""
+          srcDoc={html.content}
+          title={`Preview of ${filename}`}
+        />
+      )}
+    </div>
   )
 }
 
@@ -241,6 +387,14 @@ function renderIcon(contentType: string, filename: string): ReactElement {
 
   if (type.startsWith("audio/")) return <FileAudioIcon size={size} />
   if (type.startsWith("video/")) return <FileVideoIcon size={size} />
+  if (
+    type === "text/html" ||
+    type === "application/xhtml+xml" ||
+    type === "application/xml" ||
+    type === "text/xml"
+  ) {
+    return <FileCodeIcon size={size} />
+  }
   if (
     type.startsWith("text/") ||
     type === "application/json" ||
