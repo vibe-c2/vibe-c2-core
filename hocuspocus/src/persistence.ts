@@ -232,16 +232,66 @@ export function createDatabaseExtension(): Database {
         hostReferenceBinaries = [];
       }
 
+      // Distinguish a real human edit from a no-op write triggered purely by
+      // *opening* the document. Opening an old doc can mutate the Y.js state
+      // with zero user input — legacy textarea→rich-text migration, lazy
+      // code-block id backfill, or ProseMirror schema normalization of content
+      // authored before the current extension set. Each produces a Y.js update,
+      // which fires this store() exactly like a keystroke would. Without a
+      // guard we stamp the opener as the last editor and bump updateAt,
+      // corrupting the edit history of documents nobody actually touched.
+      //
+      // The fix lives here rather than in the editor because it is the single
+      // chokepoint every such branch funnels through — guarding it neutralizes
+      // both today's branches and any future schema change that re-normalizes
+      // old content on load.
+      //
+      // We compare the *meaningful* persisted projection (plain-text content +
+      // every reference/attachment index + checklist coverage) against what is
+      // already stored. The raw content_state bytes are deliberately NOT part
+      // of this comparison: normalization rewrites the binary while leaving the
+      // visible document identical, which is precisely the case we must treat
+      // as "unchanged". content_state is still re-persisted below regardless,
+      // so a one-time normalization settles permanently after the first open.
+      const existing = await collection.findOne(
+        { document_id: uuidToBinary(docId) },
+        {
+          projection: {
+            content: 1,
+            references: 1,
+            credential_references: 1,
+            hash_references: 1,
+            host_references: 1,
+            image_references: 1,
+            file_references: 1,
+            checklist_total: 1,
+            checklist_required: 1,
+            checklist_answered: 1,
+          },
+        },
+      );
+
+      const meaningfulChanged =
+        !existing ||
+        existing.content !== markdown ||
+        !binarySetEqual(existing.references, referenceBinaries) ||
+        !binarySetEqual(
+          existing.credential_references,
+          credentialReferenceBinaries,
+        ) ||
+        !binarySetEqual(existing.hash_references, hashReferenceBinaries) ||
+        !binarySetEqual(existing.host_references, hostReferenceBinaries) ||
+        !binarySetEqual(existing.image_references, imageReferenceBinaries) ||
+        !binarySetEqual(existing.file_references, fileReferenceBinaries) ||
+        existing.checklist_total !== checklistCoverage.total ||
+        existing.checklist_required !== checklistCoverage.required ||
+        existing.checklist_answered !== checklistCoverage.answered;
+
       const now = new Date();
       const updates: Record<string, unknown> = {
         content_state: Buffer.from(state),
         content: markdown,
         content_state_at: now,
-        // The Go backend's qmgo DefaultField auto-manages `updateAt` on
-        // qmgo writes, but this path uses the raw mongo driver, so qmgo's
-        // hook never fires. Set it explicitly so GraphQL `updatedAt`
-        // reflects content edits, not just metadata ones.
-        updateAt: now,
         // Rewrite the full references array on every save. Removing the
         // last /doc chip leaves an empty array (not absent), so the
         // backlinks resolver immediately stops returning this doc.
@@ -276,14 +326,28 @@ export function createDatabaseExtension(): Database {
         checklist_answered: checklistCoverage.answered,
       };
 
-      if (ctx?.userId) {
-        try {
-          updates.last_updated_by_id = uuidToBinary(ctx.userId);
-          updates.last_updated_at = now;
-        } catch (err) {
-          // Malformed userId — persist the save without attribution rather
-          // than dropping the content edit.
-          console.warn(`Skipping attribution for ${docId}:`, err);
+      // Authorship + updateAt are stamped ONLY for real edits. An open-time
+      // normalization re-persists content_state and the derived indexes (above)
+      // but must not re-attribute the document or move its updatedAt — that is
+      // the whole point of the guard.
+      if (meaningfulChanged) {
+        // The Go backend's qmgo DefaultField auto-manages `updateAt` on qmgo
+        // writes, but this path uses the raw mongo driver, so qmgo's hook never
+        // fires. Set it explicitly so GraphQL `updatedAt` reflects content
+        // edits, not just metadata ones.
+        updates.updateAt = now;
+
+        // context is populated by onAuthenticate (auth.ts). userId is the
+        // typist that ended the debounce window — attribute the save to them.
+        if (ctx?.userId) {
+          try {
+            updates.last_updated_by_id = uuidToBinary(ctx.userId);
+            updates.last_updated_at = now;
+          } catch (err) {
+            // Malformed userId — persist the save without attribution rather
+            // than dropping the content edit.
+            console.warn(`Skipping attribution for ${docId}:`, err);
+          }
         }
       }
 
@@ -292,9 +356,13 @@ export function createDatabaseExtension(): Database {
         { $set: updates }
       );
 
-      // Send webhook to Go backend
-      const operationId = ctx?.operationId || "";
-      await sendWebhook("onChange", docId, operationId, ctx?.userId);
+      // Notify the Go backend only for real edits. A no-op open-time persist
+      // must not publish WikiDocumentUpdatedEvent — subscribers would see a
+      // phantom "document changed" for a doc nobody edited.
+      if (meaningfulChanged) {
+        const operationId = ctx?.operationId || "";
+        await sendWebhook("onChange", docId, operationId, ctx?.userId);
+      }
     },
   });
 }
@@ -333,6 +401,33 @@ function idsToBinaries(ids: Iterable<string>): Binary[] {
     }
   }
   return out;
+}
+
+/**
+ * Compare a stored reference array (as read back from Mongo) against the
+ * freshly-derived Binary set, ignoring order. Reference indexes are built from
+ * Y.js walker Sets, so element order is not stable between saves — comparison
+ * must be set-based to avoid flagging an identical document as changed.
+ *
+ * `stored` is typed loosely because it comes straight off a Mongo document
+ * (unknown projection value); anything that isn't an array of Binary is treated
+ * as empty, so a missing field compares equal to an empty derived set.
+ */
+export function binarySetEqual(stored: unknown, next: Binary[]): boolean {
+  const storedArr = Array.isArray(stored) ? stored : [];
+  if (storedArr.length !== next.length) return false;
+  if (next.length === 0) return true;
+
+  const toHex = (b: unknown): string | null =>
+    b instanceof Binary ? Buffer.from(b.buffer).toString("hex") : null;
+
+  const a = storedArr
+    .map(toHex)
+    .filter((x): x is string => x !== null)
+    .sort();
+  const b = next.map((x) => Buffer.from(x.buffer).toString("hex")).sort();
+  if (a.length !== b.length) return false;
+  return a.every((value, i) => value === b[i]);
 }
 
 export { debounceMs };
