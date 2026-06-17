@@ -27,30 +27,39 @@ type WikiDocument struct {
 	// is one index probe instead of an O(depth) BFS over parent_document_id.
 	// Maintained by Create (caller pre-populates) and by
 	// RebuildPathIDsCascade after any reparent. Never exposed via GraphQL.
-	PathIDs            []uuid.UUID `bson:"path_ids" json:"-"`
-	Title              string     `bson:"title" json:"title"`
+	PathIDs []uuid.UUID `bson:"path_ids" json:"-"`
+	Title   string      `bson:"title" json:"title"`
 	// TitleLower is an ASCII-lowercased mirror of Title, indexed for anchored
 	// prefix search without the `$options:"i"` caveat (case-insensitive regex
 	// only uses an index for anchored, non-i patterns). Populated on Create
 	// and on every title update — never exposed via GraphQL.
-	TitleLower         string     `bson:"title_lower" json:"-"`
-	Content            string     `bson:"content" json:"content"`                        // Markdown — derived by Hocuspocus from Y.js state
-	ContentState       []byte     `bson:"content_state,omitempty" json:"-"`              // Y.js binary state — written by Hocuspocus
-	ContentStateAt     *time.Time `bson:"content_state_at,omitempty" json:"-"`           // when Hocuspocus last persisted
-	Emoji              string     `bson:"emoji" json:"emoji"`
-	Color              string     `bson:"color" json:"color"`                            // hex color for UI
-	Icon               string     `bson:"icon" json:"icon"`                              // icon identifier
-	SortOrder          string     `bson:"sort_order" json:"sortOrder"`                   // fractional index string
-	CreatedByID        uuid.UUID  `bson:"created_by_id" json:"createdById"`
+	TitleLower     string     `bson:"title_lower" json:"-"`
+	Content        string     `bson:"content" json:"content"`              // Markdown — derived by Hocuspocus from Y.js state
+	ContentState   []byte     `bson:"content_state,omitempty" json:"-"`    // Y.js binary state — written by Hocuspocus
+	ContentStateAt *time.Time `bson:"content_state_at,omitempty" json:"-"` // when Hocuspocus last persisted
+	// ContentStateSchemaVersion is the editor schema version of the client that
+	// last persisted ContentState. The sidecar stamps it (monotonic, never
+	// lowered) on every meaningful content edit; legacy rows have it absent → 0.
+	// The collab-ticket endpoint refuses to connect a client whose reported
+	// schema version is below this, because such a client's ProseMirror schema
+	// can't represent every node in the stored content and would silently prune
+	// the unknown nodes (e.g. checklist items) on bind, destroying content. Never
+	// written by Go — the sidecar owns it, same as the reference/coverage fields.
+	ContentStateSchemaVersion int       `bson:"content_state_schema_version,omitempty" json:"-"`
+	Emoji                     string    `bson:"emoji" json:"emoji"`
+	Color                     string    `bson:"color" json:"color"`          // hex color for UI
+	Icon                      string    `bson:"icon" json:"icon"`            // icon identifier
+	SortOrder                 string    `bson:"sort_order" json:"sortOrder"` // fractional index string
+	CreatedByID               uuid.UUID `bson:"created_by_id" json:"createdById"`
 	// LastUpdatedByID + LastUpdatedAt attribute the most recent persistence of
 	// the document — metadata edits through the GraphQL resolver and content
 	// edits via the Hocuspocus sidecar. Nullable: legacy rows (pre-feature)
 	// show the creator as the effective author until their next edit.
-	LastUpdatedByID    *uuid.UUID `bson:"last_updated_by_id,omitempty" json:"lastUpdatedById,omitempty"`
-	LastUpdatedAt      *time.Time `bson:"last_updated_at,omitempty" json:"lastUpdatedAt,omitempty"`
-	LastBackupAt       *time.Time `bson:"last_backup_at,omitempty" json:"lastBackupAt,omitempty"`
-	DeletedAt          *time.Time `bson:"deleted_at,omitempty" json:"deletedAt,omitempty"`
-	DeletedByID        *uuid.UUID `bson:"deleted_by_id,omitempty" json:"deletedById,omitempty"`
+	LastUpdatedByID *uuid.UUID `bson:"last_updated_by_id,omitempty" json:"lastUpdatedById,omitempty"`
+	LastUpdatedAt   *time.Time `bson:"last_updated_at,omitempty" json:"lastUpdatedAt,omitempty"`
+	LastBackupAt    *time.Time `bson:"last_backup_at,omitempty" json:"lastBackupAt,omitempty"`
+	DeletedAt       *time.Time `bson:"deleted_at,omitempty" json:"deletedAt,omitempty"`
+	DeletedByID     *uuid.UUID `bson:"deleted_by_id,omitempty" json:"deletedById,omitempty"`
 	// References lists the document IDs that this document cites inline via the
 	// /doc slash command (wikiDocumentReference nodes). Rewritten in full by
 	// the Hocuspocus sidecar on every content persist — the editor JSON is the

@@ -9,6 +9,11 @@ export interface CollabTicketClaims {
   operationId: string;
   documentId: string;
   readOnly?: boolean;
+  // Editor schema version of the connecting client (Go embeds the value the
+  // client reported when requesting the ticket). Used by persistence.store()
+  // to stamp the document and to guard against a stale tab overwriting content
+  // with a schema-pruned version. Absent on legacy tickets → treated as 0.
+  schemaVersion?: number;
 }
 
 /**
@@ -39,6 +44,8 @@ export function onAuthenticate({
       context.operationId = decoded.operationId;
       context.documentId = decoded.documentId;
       context.readOnly = decoded.readOnly === true;
+      context.schemaVersion =
+        typeof decoded.schemaVersion === "number" ? decoded.schemaVersion : 0;
 
       // Server-authoritative write enforcement: viewers get live updates
       // but Hocuspocus rejects any Y.js updates they try to send.

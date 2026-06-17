@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react"
 import { Doc as YDoc } from "yjs"
 import { HocuspocusProvider } from "@hocuspocus/provider"
-import { fetchCollabTicket } from "@/lib/collab-ticket"
+import { fetchCollabTicket, SchemaOutdatedError } from "@/lib/collab-ticket"
 
 /** Build absolute WebSocket URL from the current page origin. */
 function getWsUrl(): string {
@@ -17,6 +17,11 @@ interface UseHocuspocusReturn {
   connectionStatus: ConnectionStatus
   isSynced: boolean
   isReady: boolean
+  // True when the backend refused to connect because this client's editor
+  // schema is older than the document's stored content (see SchemaOutdatedError).
+  // The consumer should block editing and prompt the user to reload — no
+  // WebSocket is opened in this state, so no content can be pruned.
+  schemaOutdated: boolean
 }
 
 /**
@@ -32,6 +37,7 @@ export function useHocuspocus(documentId: string): UseHocuspocusReturn {
   const [connectionStatus, setConnectionStatus] = useState<ConnectionStatus>("connecting")
   const [isSynced, setIsSynced] = useState(false)
   const [isReady, setIsReady] = useState(false)
+  const [schemaOutdated, setSchemaOutdated] = useState(false)
 
   // Tracks whether the provider has ever reached "connected" during this
   // document's session. Lets us distinguish "initial connect in progress"
@@ -48,6 +54,7 @@ export function useHocuspocus(documentId: string): UseHocuspocusReturn {
     setConnectionStatus("connecting")
     setIsSynced(false)
     setIsReady(false)
+    setSchemaOutdated(false)
   }
 
   // Provider + Y.Doc lifecycle: when documentId changes, tear down the
@@ -60,19 +67,13 @@ export function useHocuspocus(documentId: string): UseHocuspocusReturn {
   // in render state so consumers can rebind. Refs would break that rebind.
   useEffect(() => {
     hasConnectedRef.current = false
+    let cancelled = false
 
     const doc = new YDoc()
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setYdoc(doc)
 
-    const hpProvider = new HocuspocusProvider({
-      url: `${getWsUrl()}/api/v1/ws/wiki/`,
-      name: `wiki/${documentId}`,
-      document: doc,
-      preserveTrailingSlash: true,
-      token: () => fetchCollabTicket(documentId),
-    })
-    setProvider(hpProvider)
+    let hpProvider: HocuspocusProvider | null = null
 
     function onStatus({ status }: { status: string }) {
       if (status === "connected") {
@@ -90,14 +91,68 @@ export function useHocuspocus(documentId: string): UseHocuspocusReturn {
       }
     }
 
-    hpProvider.on("status", onStatus)
-    hpProvider.on("synced", onSynced)
+    // Provider's token callback. The eagerly-fetched first ticket is reused on
+    // the initial connect to avoid a duplicate request; reconnects re-fetch.
+    // A SchemaOutdatedError on a reconnect (a deploy bumped the schema mid-
+    // session) flips schemaOutdated so the editor surfaces the reload prompt.
+    function makeTokenCallback(prefetched: string | null) {
+      let used = false
+      return async () => {
+        if (prefetched && !used) {
+          used = true
+          return prefetched
+        }
+        try {
+          return await fetchCollabTicket(documentId)
+        } catch (err) {
+          if (!cancelled && err instanceof SchemaOutdatedError) {
+            setSchemaOutdated(true)
+          }
+          throw err
+        }
+      }
+    }
+
+    function buildProvider(firstTicket: string | null) {
+      if (cancelled) return
+      hpProvider = new HocuspocusProvider({
+        url: `${getWsUrl()}/api/v1/ws/wiki/`,
+        name: `wiki/${documentId}`,
+        document: doc,
+        preserveTrailingSlash: true,
+        token: makeTokenCallback(firstTicket),
+      })
+      setProvider(hpProvider)
+      hpProvider.on("status", onStatus)
+      hpProvider.on("synced", onSynced)
+    }
+
+    // Eager pre-flight: fetch a ticket before opening the WebSocket so an
+    // outdated client short-circuits to the reload prompt and never connects
+    // (a connected stale editor could prune unknown nodes). Transient/other
+    // failures still build the provider so its own retry/auth loop can recover.
+    fetchCollabTicket(documentId)
+      .then((ticket) => {
+        if (cancelled) return
+        buildProvider(ticket)
+      })
+      .catch((err) => {
+        if (cancelled) return
+        if (err instanceof SchemaOutdatedError) {
+          setSchemaOutdated(true)
+          return
+        }
+        buildProvider(null)
+      })
 
     return () => {
+      cancelled = true
       setProvider(null)
-      hpProvider.off("status", onStatus)
-      hpProvider.off("synced", onSynced)
-      hpProvider.destroy()
+      if (hpProvider) {
+        hpProvider.off("status", onStatus)
+        hpProvider.off("synced", onSynced)
+        hpProvider.destroy()
+      }
       doc.destroy()
     }
   }, [documentId])
@@ -108,5 +163,6 @@ export function useHocuspocus(documentId: string): UseHocuspocusReturn {
     connectionStatus,
     isSynced,
     isReady,
+    schemaOutdated,
   }
 }

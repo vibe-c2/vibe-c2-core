@@ -210,8 +210,9 @@ export function createDatabaseExtension(): Database {
       // context is populated by onAuthenticate (auth.ts). userId is the
       // typist that ended the debounce window — attribute the save to them.
       const ctx = context as
-        | { userId?: string; operationId?: string }
+        | { userId?: string; operationId?: string; schemaVersion?: number }
         | undefined;
+      const clientSchemaVersion = ctx?.schemaVersion ?? 0;
 
       // Security boundary: public wiki documents cannot hold credential
       // references. Credentials are operation-private; a /credential chip
@@ -267,11 +268,15 @@ export function createDatabaseExtension(): Database {
             checklist_total: 1,
             checklist_required: 1,
             checklist_answered: 1,
+            content_state_schema_version: 1,
           },
         },
       );
 
-      const meaningfulChanged = isMeaningfulChange(existing, {
+      // The meaningful projection of this save — every field whose change
+      // counts as a real edit. Built once and reused by the stale-client guard
+      // and the meaningful-change check below (and mirrored into `updates`).
+      const derived: DerivedProjection = {
         content: markdown,
         references: referenceBinaries,
         credential_references: credentialReferenceBinaries,
@@ -282,7 +287,36 @@ export function createDatabaseExtension(): Database {
         checklist_total: checklistCoverage.total,
         checklist_required: checklistCoverage.required,
         checklist_answered: checklistCoverage.answered,
-      });
+      };
+
+      // Destructive-write guard for a tab that connected *before* a deploy. The
+      // collab-ticket endpoint blocks new connections from clients older than a
+      // doc's schema, but an already-open WebSocket never re-authenticates, so a
+      // stale tab can still emit a schema-pruned update. If this connection's
+      // client schema is older than the schema that authored the stored content
+      // AND the derived projection shrinks (content/refs/checklist coverage drop
+      // below what's stored), discard the write entirely — keep the good bytes.
+      // A same-or-newer client (version >= stored) is never guarded, so genuine
+      // deletions persist. NOTE: this protects the database; the in-memory room
+      // already reflects the prune for currently-connected peers until the room
+      // is evicted and re-hydrated from Mongo on next open.
+      const storedSchemaVersion =
+        typeof existing?.content_state_schema_version === "number"
+          ? existing.content_state_schema_version
+          : 0;
+      if (
+        clientSchemaVersion < storedSchemaVersion &&
+        projectionShrinks(existing, derived)
+      ) {
+        console.warn(
+          `Wiki ${docId}: discarded destructive content_state write from stale client ` +
+            `(clientSchema=${clientSchemaVersion} < storedSchema=${storedSchemaVersion}). ` +
+            `Content preserved; the client must reload.`,
+        );
+        return;
+      }
+
+      const meaningfulChanged = isMeaningfulChange(existing, derived);
 
       const now = new Date();
       const updates: Record<string, unknown> = {
@@ -333,6 +367,15 @@ export function createDatabaseExtension(): Database {
         // fires. Set it explicitly so GraphQL `updatedAt` reflects content
         // edits, not just metadata ones.
         updates.updateAt = now;
+
+        // Stamp the doc with the editor schema version that authored this
+        // content, so the collab-ticket gate can reject clients too old to
+        // render it. Monotonic: take the max so a stale-but-non-destructive
+        // edit (which slipped past the guard above) can never lower the gate.
+        updates.content_state_schema_version = Math.max(
+          clientSchemaVersion,
+          storedSchemaVersion,
+        );
 
         // context is populated by onAuthenticate (auth.ts). userId is the
         // typist that ended the debounce window — attribute the save to them.
@@ -463,6 +506,37 @@ export function isMeaningfulChange(
     (existing.checklist_total ?? 0) !== derived.checklist_total ||
     (existing.checklist_required ?? 0) !== derived.checklist_required ||
     (existing.checklist_answered ?? 0) !== derived.checklist_answered
+  );
+}
+
+/**
+ * True when the derived projection has *lost* content relative to what is
+ * stored — any tracked dimension shrinks: plain-text length, a reference index,
+ * or a checklist coverage count. Used only by the stale-client write guard, so
+ * it is deliberately conservative: a shrink on any axis is enough to suspect a
+ * schema-prune (e.g. checklist items silently dropped by an old editor). Growth
+ * or an equal projection is never flagged. `existing` null (brand-new doc) can
+ * never shrink.
+ */
+export function projectionShrinks(
+  existing: Record<string, unknown> | null | undefined,
+  derived: DerivedProjection,
+): boolean {
+  if (!existing) return false;
+  const storedLen = (v: unknown): number => (Array.isArray(v) ? v.length : 0);
+  return (
+    ((existing.content as string) ?? "").length > derived.content.length ||
+    storedLen(existing.references) > derived.references.length ||
+    storedLen(existing.credential_references) >
+      derived.credential_references.length ||
+    storedLen(existing.hash_references) > derived.hash_references.length ||
+    storedLen(existing.host_references) > derived.host_references.length ||
+    storedLen(existing.image_references) > derived.image_references.length ||
+    storedLen(existing.file_references) > derived.file_references.length ||
+    ((existing.checklist_total as number) ?? 0) > derived.checklist_total ||
+    ((existing.checklist_required as number) ?? 0) >
+      derived.checklist_required ||
+    ((existing.checklist_answered as number) ?? 0) > derived.checklist_answered
   );
 }
 

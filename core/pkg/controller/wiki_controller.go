@@ -40,6 +40,11 @@ func NewWikiController(
 
 type collabTicketRequest struct {
 	DocumentID string `json:"documentId" binding:"required"`
+	// SchemaVersion is the editor schema version compiled into the requesting
+	// client. Absent (legacy/old clients that predate this field) decodes to 0.
+	// Compared against the document's ContentStateSchemaVersion to block clients
+	// too old to safely render — and thus edit — the stored content.
+	SchemaVersion int `json:"schemaVersion"`
 }
 
 type collabTicketResponse struct {
@@ -110,18 +115,41 @@ func (wc *WikiController) CollabTicket(c *gin.Context) {
 	// implicit-operator are both handled inside AuthorizeOperationRole).
 	canWrite := authorization.AuthorizeOperationRole(ctx, &op, models.OperationRoleOperator) == nil
 
+	// Schema-version gate (writers only). A client whose editor schema is older
+	// than the schema that authored the stored content cannot represent every
+	// node in it; on bind, y-prosemirror prunes the unknown nodes from the
+	// shared Y.js doc, and the sidecar then persists the stripped state —
+	// silently destroying content (e.g. checklist items). Refuse to issue a
+	// ticket so the WebSocket never opens; the client renders a "reload" prompt.
+	//
+	// Read-only viewers are exempt: their connection is flagged readOnly and the
+	// sidecar rejects any Y.js update they emit, so a stale viewer can never
+	// persist a prune. Legacy docs (ContentStateSchemaVersion == 0) never block.
+	if canWrite && req.SchemaVersion < doc.ContentStateSchemaVersion {
+		c.JSON(http.StatusConflict, gin.H{
+			"error":    "client schema outdated",
+			"code":     "schema_outdated",
+			"required": doc.ContentStateSchemaVersion,
+		})
+		return
+	}
+
 	// Sign a short-lived collab ticket. The readOnly claim is read by
 	// Hocuspocus onAuthenticate to set connection.readOnly, so even a
-	// tampered client cannot produce Y.js updates when not authorized.
+	// tampered client cannot produce Y.js updates when not authorized. The
+	// schemaVersion claim carries the client's reported version to the sidecar,
+	// which uses it to stamp the doc and as a last-resort destructive-write
+	// guard for tabs connected before a deploy.
 	now := time.Now().UTC()
 	claims := jwt.MapClaims{
-		"userId":      c.GetString("userID"),
-		"username":    c.GetString("username"),
-		"operationId": doc.OperationID.String(),
-		"documentId":  doc.DocumentID.String(),
-		"readOnly":    !canWrite,
-		"iat":         now.Unix(),
-		"exp":         now.Add(30 * time.Second).Unix(),
+		"userId":        c.GetString("userID"),
+		"username":      c.GetString("username"),
+		"operationId":   doc.OperationID.String(),
+		"documentId":    doc.DocumentID.String(),
+		"readOnly":      !canWrite,
+		"schemaVersion": req.SchemaVersion,
+		"iat":           now.Unix(),
+		"exp":           now.Add(30 * time.Second).Unix(),
 	}
 
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)

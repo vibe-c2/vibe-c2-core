@@ -19,6 +19,7 @@ import { getCursorColor, renderCursor } from "@/lib/cursor-colors"
 import { lowlight } from "@/lib/wiki-lowlight"
 import { Skeleton } from "@/components/ui/skeleton"
 import { ConnectionBanner } from "@/components/wiki/connection-banner"
+import { WikiSchemaOutdatedNotice } from "@/components/wiki/wiki-schema-outdated-notice"
 import { WikiCodeBlock } from "@/components/wiki/wiki-code-block"
 import { createIncrementalLowlightPlugin } from "@/components/wiki/wiki-code-block-highlight-plugin"
 import { WikiHorizontalRuleNode } from "@/components/wiki/wiki-horizontal-rule-node"
@@ -75,7 +76,8 @@ export function WikiEditor({
   footer,
   onReady,
 }: WikiEditorProps) {
-  const { ydoc, provider, connectionStatus, isSynced, isReady } = useHocuspocus(documentId)
+  const { ydoc, provider, connectionStatus, isSynced, isReady, schemaOutdated } =
+    useHocuspocus(documentId)
   const user = useAuthStore((s) => s.user)
   const pendingFocusDocId = useWikiStore((s) => s.pendingFocusDocId)
   const setPendingFocusDocId = useWikiStore((s) => s.setPendingFocusDocId)
@@ -522,6 +524,14 @@ export function WikiEditor({
     if (!isReady || !editor || !onReady) return
     onReady()
   }, [isReady, editor, onReady])
+
+  // The backend blocked this client as too old to safely edit the document.
+  // No WebSocket was opened (so nothing can be pruned); show a reload prompt
+  // in place of the editor. Placed after all hooks above to keep hook order
+  // stable across renders.
+  if (schemaOutdated) {
+    return <WikiSchemaOutdatedNotice />
+  }
 
   return (
     // The relative wrapper anchors the floating TOC overlay so it pins to

@@ -314,7 +314,7 @@ export async function apiGet<T>(path: string): Promise<T> {
   const res = await apiFetch(path)
   if (!res.ok) {
     const body = await res.json().catch(() => ({}))
-    throw new ApiError(res.status, body.error ?? "Request failed")
+    throw new ApiError(res.status, body.error ?? "Request failed", body.code)
   }
   return res.json()
 }
@@ -326,17 +326,22 @@ export async function apiPost<T>(path: string, body?: unknown): Promise<T> {
   })
   if (!res.ok) {
     const data = await res.json().catch(() => ({}))
-    throw new ApiError(res.status, data.error ?? "Request failed")
+    throw new ApiError(res.status, data.error ?? "Request failed", data.code)
   }
   return res.json()
 }
 
 export class ApiError extends Error {
   status: number
+  // Machine-readable error code from the response body's `code` field, when the
+  // backend provides one (e.g. "schema_outdated" on the collab-ticket gate).
+  // Lets callers branch on the failure kind without string-matching messages.
+  code?: string
 
-  constructor(status: number, message: string) {
+  constructor(status: number, message: string, code?: string) {
     super(message)
     this.name = "ApiError"
     this.status = status
+    this.code = code
   }
 }
