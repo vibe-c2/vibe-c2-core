@@ -271,21 +271,18 @@ export function createDatabaseExtension(): Database {
         },
       );
 
-      const meaningfulChanged =
-        !existing ||
-        existing.content !== markdown ||
-        !binarySetEqual(existing.references, referenceBinaries) ||
-        !binarySetEqual(
-          existing.credential_references,
-          credentialReferenceBinaries,
-        ) ||
-        !binarySetEqual(existing.hash_references, hashReferenceBinaries) ||
-        !binarySetEqual(existing.host_references, hostReferenceBinaries) ||
-        !binarySetEqual(existing.image_references, imageReferenceBinaries) ||
-        !binarySetEqual(existing.file_references, fileReferenceBinaries) ||
-        existing.checklist_total !== checklistCoverage.total ||
-        existing.checklist_required !== checklistCoverage.required ||
-        existing.checklist_answered !== checklistCoverage.answered;
+      const meaningfulChanged = isMeaningfulChange(existing, {
+        content: markdown,
+        references: referenceBinaries,
+        credential_references: credentialReferenceBinaries,
+        hash_references: hashReferenceBinaries,
+        host_references: hostReferenceBinaries,
+        image_references: imageReferenceBinaries,
+        file_references: fileReferenceBinaries,
+        checklist_total: checklistCoverage.total,
+        checklist_required: checklistCoverage.required,
+        checklist_answered: checklistCoverage.answered,
+      });
 
       const now = new Date();
       const updates: Record<string, unknown> = {
@@ -413,6 +410,62 @@ function idsToBinaries(ids: Iterable<string>): Binary[] {
  * (unknown projection value); anything that isn't an array of Binary is treated
  * as empty, so a missing field compares equal to an empty derived set.
  */
+/**
+ * The freshly-derived persisted projection of a document — the plain-text
+ * content, every reference/attachment index, and the checklist coverage counts.
+ * This is the subset of the Mongo row that reflects a *meaningful* edit; the
+ * raw content_state bytes are deliberately excluded (open-time normalization
+ * rewrites them while leaving the visible document identical).
+ */
+export interface DerivedProjection {
+  content: string;
+  references: Binary[];
+  credential_references: Binary[];
+  hash_references: Binary[];
+  host_references: Binary[];
+  image_references: Binary[];
+  file_references: Binary[];
+  checklist_total: number;
+  checklist_required: number;
+  checklist_answered: number;
+}
+
+/**
+ * Decide whether a store() represents a real human edit versus a no-op write
+ * triggered purely by *opening* a stale document (legacy migration, lazy id
+ * backfill, ProseMirror schema normalization). Only a real edit may re-attribute
+ * the document and bump updateAt.
+ *
+ * `existing` is the projection read back from Mongo (or null for a brand-new
+ * doc, which is always a change). Absent scalar fields are coalesced to the
+ * default store() persists — "" for content, 0 for the checklist counts — so a
+ * document created before a field existed compares equal to a freshly-derived
+ * default instead of reading `undefined !== 0` → true and falsely re-flagging
+ * every stale doc on its first open. binarySetEqual already folds a missing
+ * reference array into the empty set.
+ */
+export function isMeaningfulChange(
+  existing: Record<string, unknown> | null | undefined,
+  derived: DerivedProjection,
+): boolean {
+  if (!existing) return true;
+  return (
+    (existing.content ?? "") !== derived.content ||
+    !binarySetEqual(existing.references, derived.references) ||
+    !binarySetEqual(
+      existing.credential_references,
+      derived.credential_references,
+    ) ||
+    !binarySetEqual(existing.hash_references, derived.hash_references) ||
+    !binarySetEqual(existing.host_references, derived.host_references) ||
+    !binarySetEqual(existing.image_references, derived.image_references) ||
+    !binarySetEqual(existing.file_references, derived.file_references) ||
+    (existing.checklist_total ?? 0) !== derived.checklist_total ||
+    (existing.checklist_required ?? 0) !== derived.checklist_required ||
+    (existing.checklist_answered ?? 0) !== derived.checklist_answered
+  );
+}
+
 export function binarySetEqual(stored: unknown, next: Binary[]): boolean {
   const storedArr = Array.isArray(stored) ? stored : [];
   if (storedArr.length !== next.length) return false;
