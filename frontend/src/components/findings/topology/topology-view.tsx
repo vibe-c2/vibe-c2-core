@@ -3,7 +3,6 @@ import {
   useDeferredValue,
   useEffect,
   useMemo,
-  useRef,
   useState,
 } from "react"
 import {
@@ -14,6 +13,7 @@ import {
   useReactFlow,
   type Edge,
   type Node,
+  type Rect,
 } from "@xyflow/react"
 import "@xyflow/react/dist/style.css"
 import {
@@ -260,7 +260,7 @@ export function TopologyView({ operationId }: TopologyViewProps) {
     handleEscape,
     clearEmphasis,
     search,
-    focusedId,
+    fitIds,
   } = useTopologyEmphasis(visibleTopology, nodes, edges)
 
   // Click = focus (toggle on re-click). Editing lives in the right-click menu.
@@ -339,6 +339,10 @@ export function TopologyView({ operationId }: TopologyViewProps) {
             edgeTypes={edgeTypes}
             fitView
             minZoom={0.1}
+            // Ceiling for both manual zoom and the focus fit-to-scope below:
+            // framing a lone node would otherwise compute an enormous zoom, so
+            // fitBounds clamps to this and frames it at a sane size instead.
+            maxZoom={2}
             proOptions={{ hideAttribution: true }}
             nodesConnectable={false}
             edgesFocusable={false}
@@ -382,10 +386,7 @@ export function TopologyView({ operationId }: TopologyViewProps) {
               onSelect={focusFromSearch}
               onEscape={handleEscape}
             />
-            <FollowFocusedNode
-              focusedId={focusedId}
-              simNodeById={simNodeById}
-            />
+            <FitToHighlight fitIds={fitIds} simNodeById={simNodeById} />
           </ReactFlow>
         </ReactFlowProvider>
         {nodeMenu && (
@@ -401,40 +402,63 @@ export function TopologyView({ operationId }: TopologyViewProps) {
   )
 }
 
-// Focus survives a lens switch and a data refresh (it's just a node id), but
-// the layout rebuilds and the node lands somewhere new — possibly off-screen.
-// Whenever the graph is rebuilt (simNodeById gets a new identity) while a node
-// is focused, glide the viewport to its freshly settled position. The focused
-// id is read through a ref on purpose: clicking a node that's already on
-// screen must NOT recenter, only rebuilds do.
-function FollowFocusedNode({
-  focusedId,
+// Breathing room left around the fitted scope, as a fraction of the viewport.
+const FIT_PADDING = 0.25
+// Glide duration for the fit-to-scope camera move.
+const FIT_DURATION_MS = 500
+
+// Frame the focused scope. Whenever the highlighted focus set changes (a new
+// node/edge focus) — or the layout rebuilds under an existing focus, e.g. a
+// lens switch or data refresh lands the nodes somewhere new — pan AND zoom so
+// the bounding box of every highlighted node fits the viewport. `fitIds` is
+// the lens-agnostic highlight set, so this single path frames node+neighbors
+// for a node focus and the whole lit relation for an edge focus. The computed
+// zoom is clamped to the flow's maxZoom (see the ReactFlow prop). A null/empty
+// target leaves the viewport where the operator put it — deselect never yanks
+// the camera.
+function FitToHighlight({
+  fitIds,
   simNodeById,
 }: {
-  focusedId: string | null
+  fitIds: string[] | null
   simNodeById: Map<string, SimNode>
 }) {
-  const { setCenter, getZoom } = useReactFlow()
-  const focusedRef = useRef(focusedId)
-  // Declared before the recenter effect so it runs first when both fire in
-  // one commit (effects run in declaration order).
-  useEffect(() => {
-    focusedRef.current = focusedId
-  }, [focusedId])
+  const { fitBounds } = useReactFlow()
 
   useEffect(() => {
-    const id = focusedRef.current
-    if (!id) return
-    // Focused node absent from this lens (e.g. an identity on the routes
-    // lens): emphasis already treats it as no focus — don't recenter either.
-    const sim = simNodeById.get(id)
-    if (!sim || sim.x === undefined || sim.y === undefined) return
-    // sim x/y are node centers, which is exactly what setCenter wants. Keep
-    // the operator's zoom — without it setCenter snaps to maxZoom.
-    setCenter(sim.x, sim.y, { zoom: getZoom(), duration: 500 })
-  }, [simNodeById, setCenter, getZoom])
+    if (!fitIds || fitIds.length === 0) return
+    const bounds = highlightBounds(fitIds, simNodeById)
+    if (!bounds) return
+    fitBounds(bounds, { duration: FIT_DURATION_MS, padding: FIT_PADDING })
+  }, [fitIds, simNodeById, fitBounds])
 
   return null
+}
+
+// Union of the on-screen rectangles of the given nodes, in flow coordinates.
+// Sim x/y are node centers; React Flow bounds want top-left + size. Nodes the
+// current lens doesn't render are absent from simNodeById and skipped; returns
+// null if none of the ids resolve to a settled position.
+function highlightBounds(
+  ids: string[],
+  simNodeById: Map<string, SimNode>,
+): Rect | null {
+  let minX = Infinity
+  let minY = Infinity
+  let maxX = -Infinity
+  let maxY = -Infinity
+  for (const id of ids) {
+    const s = simNodeById.get(id)
+    if (!s || s.x === undefined || s.y === undefined) continue
+    const left = s.x - s.width / 2
+    const top = s.y - s.height / 2
+    minX = Math.min(minX, left)
+    minY = Math.min(minY, top)
+    maxX = Math.max(maxX, left + s.width)
+    maxY = Math.max(maxY, top + s.height)
+  }
+  if (minX === Infinity) return null
+  return { x: minX, y: minY, width: maxX - minX, height: maxY - minY }
 }
 
 function Centered({ children }: { children: React.ReactNode }) {

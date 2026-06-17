@@ -91,6 +91,21 @@ export function useTopologyEmphasis(
     activeIndex,
   ])
 
+  // The bounding-box target for "fit the highlighted scope to the viewport".
+  // Only the two *focus* sources drive the camera fit; when one is active the
+  // `emphasis` above already IS its focus set (focus wins over search there),
+  // so we just reuse its `lit`. Search is deliberately excluded — it keeps its
+  // own per-match fly-to so stepping through matches moves the camera one match
+  // at a time. `null` = nothing to fit (no focus, or the focus target vanished
+  // on a lens switch/refetch, which the same guards below treat as no focus).
+  const focusActive =
+    (focusedId !== null && nodeIds.has(focusedId)) ||
+    (focusedEdgeId !== null && edgeById.has(focusedEdgeId))
+  const fitIds = useMemo<string[] | null>(
+    () => (focusActive && emphasis ? [...emphasis.lit] : null),
+    [focusActive, emphasis],
+  )
+
   // `nodes` gets a new array identity on every simulation tick during drag,
   // so the node pass re-runs per tick while emphasis is active — see the
   // memo table in emphasis.ts for why that stays cheap. Edges come from the
@@ -204,6 +219,6 @@ export function useTopologyEmphasis(
     handleEscape,
     clearEmphasis,
     search,
-    focusedId,
+    fitIds,
   }
 }
