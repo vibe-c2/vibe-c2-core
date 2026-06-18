@@ -37,8 +37,7 @@ export function AggregateViewDialog({ view, onClose }: AggregateViewDialogProps)
         <DialogHeader>
           <DialogTitle>{title}</DialogTitle>
           <DialogDescription>
-            {values.length} {values.length === 1 ? "entry" : "entries"} — click
-            any value to copy it.
+            {values.length} {values.length === 1 ? "entry" : "entries"}
           </DialogDescription>
         </DialogHeader>
         <div className="max-h-80 overflow-y-auto rounded-md border">
@@ -46,21 +45,21 @@ export function AggregateViewDialog({ view, onClose }: AggregateViewDialogProps)
             ? data.entries.map((e) => (
                 <div
                   key={`${e.iface}|${e.cidr}`}
-                  className="flex items-center gap-2 border-b px-3 py-2 last:border-b-0"
+                  className="flex items-center gap-2 border-b px-3 py-1.5 last:border-b-0"
                 >
                   <span
-                    className="w-20 shrink-0 truncate font-mono text-[11px] text-muted-foreground"
+                    className="w-16 shrink-0 truncate font-mono text-xs text-muted-foreground"
                     title={e.iface}
                   >
                     {e.iface}
                   </span>
-                  <CopyValue value={e.cidr} label="CIDR" className="flex-1" />
-                  <CopyValue value={e.ip} label="IP" className="flex-1" />
+                  <ValueRow value={e.cidr} label="CIDR" className="flex-1" />
+                  <ValueRow value={e.ip} label="IP" className="flex-1" />
                 </div>
               ))
             : values.map((value) => (
-                <div key={value} className="border-b px-3 py-2 last:border-b-0">
-                  <CopyValue
+                <div key={value} className="border-b px-3 py-1.5 last:border-b-0">
+                  <ValueRow
                     value={value}
                     label={data.kind === "lone-sources" ? "source" : "account"}
                   />
@@ -81,9 +80,10 @@ export function AggregateViewDialog({ view, onClose }: AggregateViewDialogProps)
   )
 }
 
-// One copyable value: the whole row is the click target so it stays easy to hit
-// on a touchpad, with the icon as the affordance.
-function CopyValue({
+// One value as plain text with a dedicated copy button on the right. The text
+// itself is selectable (not a click target) so an operator can also drag-select
+// part of it; the button is the explicit copy affordance.
+function ValueRow({
   value,
   label,
   className,
@@ -93,18 +93,21 @@ function CopyValue({
   className?: string
 }) {
   return (
-    <button
-      type="button"
-      onClick={() => copyToClipboard(value, label)}
-      title={`Copy ${label}`}
-      className={cn(
-        "group flex items-center gap-1.5 rounded px-1 py-0.5 text-left hover:bg-muted",
-        className,
-      )}
-    >
-      <span className="truncate font-mono text-xs">{value}</span>
-      <CopyIcon className="size-3 shrink-0 text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100" />
-    </button>
+    <div className={cn("flex items-center gap-1.5", className)}>
+      <span className="flex-1 truncate font-mono text-sm" title={value}>
+        {value}
+      </span>
+      <Button
+        variant="ghost"
+        size="icon-sm"
+        onClick={() => copyToClipboard(value, label)}
+        title={`Copy ${label}`}
+        className="shrink-0 text-muted-foreground"
+      >
+        <CopyIcon />
+        <span className="sr-only">Copy {label}</span>
+      </Button>
+    </div>
   )
 }
 
