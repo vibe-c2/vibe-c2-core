@@ -2,6 +2,23 @@ import type { TreeNode } from "@/components/wiki/wiki-tree-sidebar"
 import type { WikiDocumentTreeFieldsFragment } from "@/graphql/gql/graphql"
 
 /**
+ * Fixed pixel height of a single tree row. Node rows are `h-7` and skeleton
+ * placeholders are `py-1` + `h-5` — both resolve to 28px. The virtualizer runs
+ * in fixed-size mode and trusts this exactly (no per-row measurement), so any
+ * change to the row's height must be mirrored here.
+ */
+export const WIKI_TREE_ROW_HEIGHT = 28
+
+/**
+ * Left padding (px) for a row at the given depth: a 4px base gutter plus 16px
+ * per ancestor level. Shared by the row and its skeleton placeholder so the two
+ * line up, and matched by the tree-connector-line geometry in wiki-tree-node.
+ */
+export function wikiRowIndent(depth: number): number {
+  return depth * 16 + 4
+}
+
+/**
  * Walk a flat list of tree-row fragments and return every id under `rootId`
  * (inclusive of `rootId` itself when not null) whose row has children. Used
  * by "Expand all" / "Expand subtree" — the lazy tree has no knowledge of

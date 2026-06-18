@@ -220,12 +220,16 @@ export function useEnsureWikiTree(operationId: string) {
 // the single source of truth for invalidation — without that, branches would
 // background-refetch on every window focus and add traffic the sidebar
 // doesn't actually need.
-export function useWikiDocumentChildren(
+// Shared query definition for a parent's direct children. Factored out so the
+// per-branch hook below and the flattening controller (useQueries in
+// use-flattened-wiki-tree.ts) request the exact same key + queryFn + staleTime
+// — one source of truth for "how to fetch a branch".
+export function wikiChildrenQueryOptions(
   operationId: string,
   parentDocumentId: string | null,
   options?: { enabled?: boolean },
 ) {
-  return useQuery({
+  return {
     queryKey: wikiKeys.children(operationId, parentDocumentId),
     queryFn: () =>
       graphqlClient(WikiDocumentChildrenDocument, {
@@ -234,7 +238,15 @@ export function useWikiDocumentChildren(
       }),
     enabled: !!operationId && (options?.enabled ?? true),
     staleTime: Infinity,
-  })
+  }
+}
+
+export function useWikiDocumentChildren(
+  operationId: string,
+  parentDocumentId: string | null,
+  options?: { enabled?: boolean },
+) {
+  return useQuery(wikiChildrenQueryOptions(operationId, parentDocumentId, options))
 }
 
 // Returns every row needed to expand the sidebar down to documentId, then

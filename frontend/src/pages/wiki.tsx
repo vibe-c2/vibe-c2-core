@@ -230,6 +230,15 @@ function WikiPageInner({
   const setSidebarWidth = useWikiStore((s) => s.setSidebarWidth)
   const expandMany = useWikiStore((s) => s.expandMany)
 
+  // Mirror the route param into the store from this single place. Tree rows
+  // then read selection as a boolean selector (selectedDocumentId === node.id)
+  // instead of each calling useParams — which re-rendered every visible row on
+  // every navigation and stalled the editor mount behind a full-tree render.
+  const setSelectedDocumentId = useWikiStore((s) => s.setSelectedDocumentId)
+  useEffect(() => {
+    setSelectedDocumentId(documentId ?? null)
+  }, [documentId, setSelectedDocumentId])
+
   // Auto-expand the tree to reveal the open document. The reveal-path hook
   // already returns the precomputed ancestor chain — expand it once per
   // navigation. The user can manually collapse afterwards without us

@@ -58,6 +58,15 @@ interface WikiStoreState {
   expandMany: (ids: readonly string[]) => void
   collapseMany: (ids: readonly string[]) => void
 
+  // Currently-selected document (mirrors the :documentId route param). Kept in
+  // the store — rather than read via useParams in each row — so a tree row can
+  // subscribe to a *boolean* (selectedDocumentId === node.id). On navigation
+  // only the two rows whose selection flips re-render; reading useParams in
+  // every row re-rendered the whole (potentially 300+ row) tree on each open,
+  // stalling the editor mount behind it. Synced once at the page level.
+  selectedDocumentId: string | null
+  setSelectedDocumentId: (id: string | null) => void
+
   // Create dialog
   createDialogOpen: boolean
   createParentId: string | null
@@ -184,6 +193,14 @@ export const useWikiStore = create<WikiStoreState>((set, get) => ({
     for (const id of ids) next.delete(id)
     saveExpandedNodes(next)
     set({ expandedNodes: next })
+  },
+
+  // Selected document — transient, mirrors the route param. Guard the set so
+  // navigating to the same doc doesn't churn the store (and its boolean
+  // subscribers) needlessly.
+  selectedDocumentId: null,
+  setSelectedDocumentId: (id) => {
+    if (get().selectedDocumentId !== id) set({ selectedDocumentId: id })
   },
 
   // Create dialog

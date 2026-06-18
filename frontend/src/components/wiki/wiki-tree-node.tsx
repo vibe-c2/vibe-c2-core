@@ -1,5 +1,5 @@
-import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react"
-import { Link, useParams } from "react-router"
+import { memo, useCallback, useEffect, useRef, useState } from "react"
+import { Link } from "react-router"
 import { useDraggable, useDroppable } from "@dnd-kit/core"
 import {
   ChevronRightIcon,
@@ -10,7 +10,6 @@ import {
   PlusIcon,
   SearchIcon,
 } from "lucide-react"
-import { Collapsible, CollapsibleTrigger, CollapsibleContent } from "@/components/ui/collapsible"
 import {
   ContextMenu,
   ContextMenuContent,
@@ -29,13 +28,9 @@ import { WikiTreeRowMenuItems } from "@/components/wiki/wiki-tree-row-menu-items
 import { openWikiSearch } from "@/components/wiki/wiki-command-palette"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
-import { Skeleton } from "@/components/ui/skeleton"
 import { useWikiStore } from "@/stores/wiki"
 import { useWikiDragStore } from "@/stores/wiki-drag"
-import {
-  useUpdateWikiDocument,
-  useWikiDocumentChildren,
-} from "@/graphql/hooks/wiki"
+import { useUpdateWikiDocument } from "@/graphql/hooks/wiki"
 import { useWikiSubtreeExpansion } from "@/components/wiki/use-wiki-subtree-expansion"
 import {
   DocumentIconPicker,
@@ -43,33 +38,34 @@ import {
 } from "@/components/wiki/document-icon-picker"
 import { DocumentIcon } from "@/components/wiki/document-icon"
 import { cn } from "@/lib/utils"
-import { rowToTreeNode, sortByOrder } from "@/components/wiki/wiki-tree-helpers"
+import { wikiRowIndent } from "@/components/wiki/wiki-tree-helpers"
 import type { TreeNode } from "@/components/wiki/wiki-tree-sidebar"
 
-interface WikiTreeNodeProps {
+interface WikiTreeRowProps {
   node: TreeNode
+  /** Depth in the tree, supplied by the flattening controller (no recursion). */
   depth: number
   isEditor: boolean
   operationId: string
 }
 
-/** Is the row entirely inside the container's visible viewport? */
-function isFullyVisibleIn(row: Element, container: Element): boolean {
-  const rowRect = row.getBoundingClientRect()
-  const containerRect = container.getBoundingClientRect()
-  return (
-    rowRect.top >= containerRect.top && rowRect.bottom <= containerRect.bottom
-  )
-}
-
-function WikiTreeNodeImpl({
+// A single, flat tree row. The tree is virtualized: the sidebar flattens the
+// visible tree into a windowed list (use-flattened-wiki-tree.ts) and renders
+// only the rows in view, so this component renders exactly one row and never
+// its children. Expansion is just whether a row's subtree appears in the flat
+// list; the chevron toggles `expandedNodes` and the controller re-flattens.
+function WikiTreeRowImpl({
   node,
   depth,
   isEditor,
   operationId,
-}: WikiTreeNodeProps) {
-  const { documentId: selectedDocumentId } = useParams<{ documentId: string }>()
-  const isSelected = selectedDocumentId === node.id
+}: WikiTreeRowProps) {
+  // Subscribe to a *boolean* for selection (not the route param) so this row
+  // only re-renders when its own selected state flips. Reading useParams here
+  // re-rendered every visible row on each navigation — memo can't stop a
+  // hook-driven re-render — which stalled the editor mount behind a full-tree
+  // render on large expanded trees. The page syncs the param into the store.
+  const isSelected = useWikiStore((s) => s.selectedDocumentId === node.id)
 
   // Subscribe to a *boolean* (not the Set itself) so this row only
   // re-renders when its own expansion flips. Reading `s.expandedNodes`
@@ -85,21 +81,9 @@ function WikiTreeNodeImpl({
   const updateDocument = useUpdateWikiDocument()
 
   // childCount carries the "are there children?" signal directly from the
-  // server — we don't have to load the children to know whether the caret
-  // should show. children.length is the *loaded* count (used for sort
-  // operations on the already-fetched subtree).
+  // server, so the caret shows without loading the branch. Children themselves
+  // are fetched centrally by the flattening controller, not here.
   const hasChildren = node.childCount > 0
-
-  // Lazy children fetch: only fires when expanded. Once loaded, cached
-  // forever (staleTime: Infinity) — SSE invalidates per-parent on mutations.
-  const { data: childrenData, isLoading: isLoadingChildren } =
-    useWikiDocumentChildren(operationId, node.id, {
-      enabled: hasChildren && isExpanded,
-    })
-  const childRows = useMemo(
-    () => sortByOrder(childrenData?.wikiDocumentChildren ?? []),
-    [childrenData?.wikiDocumentChildren],
-  )
 
   // DnD: each node is both draggable and a drop target. The activator is the
   // leading icon/chevron slot — NOT the whole row — so the title <Link> stays
@@ -113,23 +97,6 @@ function WikiTreeNodeImpl({
     setActivatorNodeRef,
   } = useDraggable({ id: node.id })
   const { setNodeRef: setDropRef } = useDroppable({ id: node.id })
-
-  // When the row becomes the selected document — usually because the user
-  // navigated from search or pasted a deep link — bring it into view. The
-  // page-level effect already expanded the ancestors by the time this fires.
-  // Center the row in the tree's scroll container instead of `block:
-  // "nearest"`: nearest scrolls minimally, so on large expanded trees the
-  // row lands pinned at the very bottom edge. Skip entirely when the row is
-  // already fully visible — clicking a visible row must not yank the tree.
-  const rowRef = useRef<HTMLDivElement | null>(null)
-  useEffect(() => {
-    if (!isSelected) return
-    const row = rowRef.current
-    if (!row) return
-    const container = row.closest("[data-wiki-tree-scroll]")
-    if (container && isFullyVisibleIn(row, container)) return
-    row.scrollIntoView({ block: "center", behavior: "smooth" })
-  }, [isSelected])
 
   // Per-row drag subscriptions: each selector returns a primitive (boolean
   // or string|null), so zustand's default Object.is equality means a row
@@ -176,7 +143,7 @@ function WikiTreeNodeImpl({
     setIconPickerOpen(true)
   }, [])
 
-  const indent = depth * 16 + 4
+  const indent = wikiRowIndent(depth)
 
   // Tree connector lines: vertical guide for each ancestor depth + short
   // horizontal stub joining the immediate parent's guide to this row's icon.
@@ -199,14 +166,14 @@ function WikiTreeNodeImpl({
       : undefined
 
   return (
-    <Collapsible
-      open={isExpanded}
-      onOpenChange={() => toggleNode(node.id)}
-      className={cn(isDragging && "opacity-50")}
-    >
-      {/* Drop-before divider */}
+    <div className={cn("relative", isDragging && "opacity-50")}>
+      {/* Drop-before divider — absolute overlay at the row's top edge so it
+          doesn't add height (the virtualizer assumes a fixed 28px row). */}
       {isDropBefore && (
-        <div style={{ paddingLeft: indent }} className="px-1">
+        <div
+          style={{ paddingLeft: indent }}
+          className="pointer-events-none absolute inset-x-0 top-0 z-10 px-1"
+        >
           <div className="h-0.5 rounded-full bg-primary" />
         </div>
       )}
@@ -219,7 +186,6 @@ function WikiTreeNodeImpl({
         <ContextMenuTrigger className="contents">
           <div
             ref={(el) => {
-              rowRef.current = el
               setDropRef(el)
               if (isEditor) setDragRef(el)
             }}
@@ -245,13 +211,19 @@ function WikiTreeNodeImpl({
               )}
             >
               {hasChildren ? (
-                <CollapsibleTrigger
-                  render={
-                    <button
-                      className="flex size-5 shrink-0 items-center justify-center rounded hover:bg-muted-foreground/10"
-                      aria-label={isExpanded ? "Collapse" : "Expand"}
-                    />
-                  }
+                <button
+                  type="button"
+                  className="flex size-5 shrink-0 items-center justify-center rounded hover:bg-muted-foreground/10"
+                  aria-label={isExpanded ? "Collapse" : "Expand"}
+                  aria-expanded={isExpanded}
+                  // Toggle expansion directly — the flattening controller adds
+                  // or drops this row's subtree from the virtualized list. The
+                  // PointerSensor's 5px activation means a stationary click
+                  // never starts a drag, so this onClick always fires.
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    toggleNode(node.id)
+                  }}
                 >
                   <span className="flex size-5 items-center justify-center text-sm group-hover:hidden">
                     <DocumentIcon
@@ -269,7 +241,7 @@ function WikiTreeNodeImpl({
                       isExpanded && "rotate-90",
                     )}
                   />
-                </CollapsibleTrigger>
+                </button>
               ) : (
                 <DocumentIcon
                   emoji={node.emoji}
@@ -347,43 +319,24 @@ function WikiTreeNodeImpl({
         </ContextMenuContent>
       </ContextMenu>
 
-      {/* Drop-after divider */}
+      {/* Drop-after divider — absolute overlay at the row's bottom edge. */}
       {isDropAfter && (
-        <div style={{ paddingLeft: indent }} className="px-1">
+        <div
+          style={{ paddingLeft: indent }}
+          className="pointer-events-none absolute inset-x-0 bottom-0 z-10 px-1"
+        >
           <div className="h-0.5 rounded-full bg-primary" />
         </div>
       )}
-
-      {/* Children — lazy: only mounted when expanded; the hook above gates
-          the fetch on the same condition so collapsed branches cost nothing. */}
-      {hasChildren && (
-        <CollapsibleContent>
-          {isLoadingChildren ? (
-            <div style={{ paddingLeft: (depth + 1) * 16 + 4 }} className="py-1">
-              <Skeleton className="h-5 rounded" />
-            </div>
-          ) : (
-            childRows.map((row) => (
-              <WikiTreeNode
-                key={row.id}
-                node={rowToTreeNode(row)}
-                depth={depth + 1}
-                isEditor={isEditor}
-                operationId={operationId}
-              />
-            ))
-          )}
-        </CollapsibleContent>
-      )}
-    </Collapsible>
+    </div>
   )
 }
 
 // Memoized so an unrelated parent re-render (sidebar resize, hover tick on
-// a sibling row) skips this row's render entirely. Drag highlights and
-// expansion are read via store subscriptions, so memo's shallow prop
-// compare is sufficient.
-export const WikiTreeNode = memo(WikiTreeNodeImpl)
+// a sibling row, virtualizer scroll) skips this row's render entirely. Drag
+// highlights, selection, and expansion are read via store subscriptions, so
+// memo's shallow prop compare is sufficient.
+export const WikiTreeRow = memo(WikiTreeRowImpl)
 
 interface WikiTreeRowQuickActionsProps {
   node: TreeNode

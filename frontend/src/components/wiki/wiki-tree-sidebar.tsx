@@ -1,5 +1,6 @@
-import { useMemo, useTransition } from "react"
+import { useCallback, useMemo, useRef, useTransition } from "react"
 import { useQueryClient } from "@tanstack/react-query"
+import { useVirtualizer } from "@tanstack/react-virtual"
 import { toast } from "sonner"
 import {
   ArrowDownAZIcon,
@@ -38,7 +39,9 @@ import {
   useReorderWikiDocumentSiblings,
   wikiKeys,
 } from "@/graphql/hooks/wiki"
-import { WikiTreeNode } from "@/components/wiki/wiki-tree-node"
+import { WikiTreeRow } from "@/components/wiki/wiki-tree-node"
+import { useFlattenedWikiTree } from "@/components/wiki/use-flattened-wiki-tree"
+import { useRevealSelectedRow } from "@/components/wiki/use-reveal-selected-row"
 import { DocumentIcon } from "@/components/wiki/document-icon"
 import { WikiHistoryDropdown } from "@/components/wiki/wiki-history-dropdown"
 import { WikiTreeModeToggle } from "@/components/wiki/wiki-tree-mode-toggle"
@@ -46,6 +49,8 @@ import { useScopedOperation } from "@/hooks/use-scoped-operation"
 import {
   rowToTreeNode,
   sortByOrder,
+  wikiRowIndent,
+  WIKI_TREE_ROW_HEIGHT,
 } from "@/components/wiki/wiki-tree-helpers"
 import { useWikiSubtreeExpansion } from "@/components/wiki/use-wiki-subtree-expansion"
 import type {
@@ -184,7 +189,9 @@ export function WikiTreeSidebar({
   const { data: trashCountData } = useWikiDocumentTrashCount(operationId)
   const trashCount = trashCountData?.wikiDocumentTrashCount ?? 0
 
-  // Roots only — each WikiTreeNode fetches its own children on expand.
+  // Roots — children are fetched centrally by useFlattenedWikiTree below. This
+  // roots query is shared (same cache key) and still used here for DnD lookups,
+  // root sort, and the header's roots.length checks.
   const { data: rootsData, isLoading: rootsLoading } = useWikiDocumentChildren(
     operationId,
     null,
@@ -193,6 +200,46 @@ export function WikiTreeSidebar({
     () => sortByOrder(rootsData?.wikiDocumentChildren ?? []).map(rowToTreeNode),
     [rootsData?.wikiDocumentChildren],
   )
+
+  // Flattened, windowable view of the *visible* tree. The controller lifts the
+  // per-branch children fetching out of the (previously recursive) row, so the
+  // tree can be virtualized: only the rows in the viewport are mounted instead
+  // of all 200–300+ expanded nodes. This is the structural fix for the slowdown
+  // — hundreds of mounted rows (each with dnd, menus, a Suspense icon) made
+  // every render pass and every editor mount expensive.
+  const { rows: flatRows } = useFlattenedWikiTree(operationId)
+
+  // Virtualizer over the flattened rows. Scroll element is the tree body div
+  // below (data-wiki-tree-scroll). Rows are a fixed WIKI_TREE_ROW_HEIGHT, so
+  // estimateSize is exact and we deliberately skip dynamic measureElement: the
+  // measure-then-correct pass was what flashed blank gaps on fast scroll.
+  // Drop-before/after dividers are absolute overlays in the row (they don't
+  // change height), so the fixed size holds during drags too. overscan renders
+  // a buffer of rows beyond the viewport so momentum scroll has something to
+  // show before React paints the next batch.
+  const scrollRef = useRef<HTMLDivElement | null>(null)
+  const virtualizer = useVirtualizer({
+    count: flatRows.length,
+    getScrollElement: () => scrollRef.current,
+    estimateSize: () => WIKI_TREE_ROW_HEIGHT,
+    overscan: 25,
+    getItemKey: (index) => flatRows[index]?.key ?? index,
+  })
+
+  // The tree body is both the virtualizer scroll element and the dnd "root"
+  // drop target — merge both refs into one callback.
+  const { setNodeRef: setRootDropRef } = useDroppable({ id: "root" })
+  const setScrollAndRootRef = useCallback(
+    (el: HTMLDivElement | null) => {
+      scrollRef.current = el
+      setRootDropRef(el)
+    },
+    [setRootDropRef],
+  )
+
+  // Center the selected document's row, robust to the progressive load on a
+  // hard reload (see hook for the settle/retry logic).
+  useRevealSelectedRow(virtualizer, flatRows)
 
   // DnD math (descendant exclusion, sibling reorder) reads the per-parent
   // cache directly — branches that aren't expanded simply aren't in the
@@ -217,9 +264,6 @@ export function WikiTreeSidebar({
         : new Set<string>(),
     [activeId, queryClient, operationId],
   )
-
-  // Root drop zone so items can be dropped to top level.
-  const { setNodeRef: setRootDropRef } = useDroppable({ id: "root" })
 
   // Find the active document for the drag overlay. Walk the roots first, then
   // every loaded children entry — DnD can only drag visible (= rendered) rows
@@ -598,10 +642,11 @@ export function WikiTreeSidebar({
         </Tooltip>
       </div>
 
-      {/* Tree body. data-wiki-tree-scroll marks this as the scroll container
-          for the selected-row auto-centering in wiki-tree-node.tsx. */}
+      {/* Tree body — virtualized. data-wiki-tree-scroll marks this as the
+          scroll container; it's also the virtualizer scroll element and the
+          dnd "root" drop target (merged ref). */}
       <div
-        ref={setRootDropRef}
+        ref={setScrollAndRootRef}
         data-wiki-tree-scroll
         className="flex-1 overflow-y-auto px-1 py-1"
       >
@@ -611,7 +656,7 @@ export function WikiTreeSidebar({
               <Skeleton key={i} className="h-7 rounded" />
             ))}
           </div>
-        ) : roots.length === 0 ? (
+        ) : flatRows.length === 0 ? (
           <p className="px-2 py-4 text-center text-xs text-muted-foreground">
             {isPublicMode ? "No public documents yet" : "No documents yet"}
           </p>
@@ -624,15 +669,49 @@ export function WikiTreeSidebar({
             onDragEnd={handleDragEnd}
             onDragCancel={handleDragCancel}
           >
-            {roots.map((node) => (
-              <WikiTreeNode
-                key={node.id}
-                node={node}
-                depth={0}
-                isEditor={isEditor}
-                operationId={operationId}
-              />
-            ))}
+            {/* Spacer sized to the full virtual list; each visible row is
+                absolutely positioned via the virtualizer's translateY. */}
+            <div
+              style={{
+                height: virtualizer.getTotalSize(),
+                position: "relative",
+                width: "100%",
+              }}
+            >
+              {virtualizer.getVirtualItems().map((vi) => {
+                const row = flatRows[vi.index]
+                return (
+                  <div
+                    key={vi.key}
+                    data-index={vi.index}
+                    style={{
+                      position: "absolute",
+                      top: 0,
+                      left: 0,
+                      width: "100%",
+                      height: WIKI_TREE_ROW_HEIGHT,
+                      transform: `translateY(${vi.start}px)`,
+                    }}
+                  >
+                    {row.kind === "node" ? (
+                      <WikiTreeRow
+                        node={row.node}
+                        depth={row.depth}
+                        isEditor={isEditor}
+                        operationId={operationId}
+                      />
+                    ) : (
+                      <div
+                        style={{ paddingLeft: wikiRowIndent(row.depth) }}
+                        className="py-1"
+                      >
+                        <Skeleton className="h-5 rounded" />
+                      </div>
+                    )}
+                  </div>
+                )
+              })}
+            </div>
             <DragOverlay dropAnimation={null}>
               {activeDoc && (
                 <div className="flex items-center gap-1.5 rounded-md bg-popover px-2 py-1 text-sm shadow-md">
