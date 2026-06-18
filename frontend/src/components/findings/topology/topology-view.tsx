@@ -42,6 +42,11 @@ import {
   NodeContextMenu,
   type NodeMenuState,
 } from "@/components/findings/topology/node-context-menu"
+import {
+  AggregateViewDialog,
+  type AggregateViewState,
+} from "@/components/findings/topology/aggregate-view-dialog"
+import { copyToClipboard } from "@/lib/copy-to-clipboard"
 import { HiddenIdentitiesPanel } from "@/components/findings/topology/hidden-identities-panel"
 import { TopologyLegend } from "@/components/findings/topology/topology-legend"
 import { Button } from "@/components/ui/button"
@@ -65,6 +70,13 @@ import {
   PhantomSubnetNode,
   SubnetNode,
   type HostNodeData,
+  type IdentityNodeData,
+  type LeafSubnetsNodeData,
+  type LocalIdentitiesNodeData,
+  type LoneSourcesNodeData,
+  type PhantomGatewayNodeData,
+  type PhantomHostNodeData,
+  type PhantomSubnetNodeData,
 } from "@/components/findings/topology/topology-nodes"
 
 // Defined here (not in topology-nodes.tsx) so that file can stay a pure
@@ -85,6 +97,66 @@ const nodeTypes = {
 
 const edgeTypes = {
   floating: FloatingEdge,
+}
+
+// Map a right-clicked React Flow node to its context-menu state, or null for
+// node kinds that have no menu. Switching on node.type (the nodeTypes keys
+// above) keeps every kind accounted for in one place; node.data is the matching
+// *NodeData shape for that type.
+function buildNodeMenu(
+  node: Node,
+  at: { x: number; y: number },
+): NodeMenuState | null {
+  switch (node.type) {
+    case "host":
+      return { ...at, kind: "host", host: (node.data as HostNodeData).host }
+    case "identity":
+      return { ...at, kind: "identity", user: (node.data as IdentityNodeData).user }
+    case "phantomGateway":
+      return {
+        ...at,
+        kind: "copy",
+        copyLabel: "IP",
+        value: (node.data as PhantomGatewayNodeData).ip,
+      }
+    case "phantomSubnet":
+      return {
+        ...at,
+        kind: "copy",
+        copyLabel: "CIDR",
+        value: (node.data as PhantomSubnetNodeData).cidr,
+      }
+    case "phantomHost":
+      return {
+        ...at,
+        kind: "copy",
+        copyLabel: "source",
+        value: (node.data as PhantomHostNodeData).label,
+      }
+    case "leafSubnets":
+      return {
+        ...at,
+        kind: "aggregate",
+        title: "Local subnets",
+        data: { kind: "leaf-subnets", entries: (node.data as LeafSubnetsNodeData).entries },
+      }
+    case "loneSources":
+      return {
+        ...at,
+        kind: "aggregate",
+        title: "Unknown sources",
+        data: { kind: "lone-sources", labels: (node.data as LoneSourcesNodeData).labels },
+      }
+    case "localIdentities":
+      return {
+        ...at,
+        kind: "aggregate",
+        title: "Local accounts",
+        data: { kind: "local-identities", users: (node.data as LocalIdentitiesNodeData).users },
+      }
+    default:
+      return null
+  }
 }
 
 interface TopologyViewProps {
@@ -197,19 +269,26 @@ export function TopologyView({ operationId }: TopologyViewProps) {
   // node-context-menu). Host "Edit" opens the same dialog as a table row, so
   // topology and table share one editing path.
   const [nodeMenu, setNodeMenu] = useState<NodeMenuState | null>(null)
+  // Ghost (phantom) and aggregate nodes are otherwise read-only dead-ends: the
+  // info they carry (an IP, a collapsed list of accounts) can't be selected or
+  // copied. Give them the same right-click affordance host/identity nodes have —
+  // a "Copy" for the single value a ghost holds, a "View" dialog for an
+  // aggregate's collapsed members.
   const onNodeContextMenu = useCallback(
     (event: React.MouseEvent, node: Node) => {
-      if (node.type !== "identity" && node.type !== "host") return
-      event.preventDefault()
       const at = { x: event.clientX, y: event.clientY }
-      setNodeMenu(
-        node.type === "host"
-          ? { ...at, kind: "host", host: (node.data as HostNodeData).host }
-          : { ...at, kind: "identity", user: (node.data as { user: string }).user },
-      )
+      const menu = buildNodeMenu(node, at)
+      if (!menu) return
+      event.preventDefault()
+      setNodeMenu(menu)
     },
     [],
   )
+
+  // Read-only dialog for an aggregate node's collapsed members, opened from the
+  // menu's "View". Local state (not the host store) — it's ephemeral and owns no
+  // server state. See aggregate-view-dialog.
+  const [aggView, setAggView] = useState<AggregateViewState | null>(null)
 
   const topology = useMemo(
     () => deriveTopology(data?.hosts ?? []),
@@ -394,8 +473,13 @@ export function TopologyView({ operationId }: TopologyViewProps) {
             menu={nodeMenu}
             onHide={hideIdentity}
             onEdit={openEditDialog}
+            onCopy={copyToClipboard}
+            onView={(m) => setAggView({ title: m.title, data: m.data })}
             onClose={() => setNodeMenu(null)}
           />
+        )}
+        {aggView && (
+          <AggregateViewDialog view={aggView} onClose={() => setAggView(null)} />
         )}
       </div>
     </div>

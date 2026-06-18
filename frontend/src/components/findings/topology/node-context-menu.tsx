@@ -1,6 +1,7 @@
 import { useEffect, useRef } from "react"
-import { EyeOffIcon, PencilIcon } from "lucide-react"
+import { CopyIcon, EyeOffIcon, ListIcon, PencilIcon } from "lucide-react"
 import type { HostFieldsFragment } from "@/graphql/gql/graphql"
+import type { LeafSubnetEntry } from "@/lib/topology/derive"
 
 // A single, graph-level context menu shared by every host card and identity
 // node — opened by React Flow's onNodeContextMenu in topology-view and
@@ -9,15 +10,30 @@ import type { HostFieldsFragment } from "@/graphql/gql/graphql"
 // users lens. Self-dismisses on outside pointer-down, Esc, scroll, or window
 // blur.
 
+// The aggregated list a "View" action hands to the dialog. The lens collapses
+// single-member subnets / lone ghost sources / single-host accounts into one
+// node each, so this is the only place their members can be read off.
+export type AggregateMenuData =
+  | { kind: "leaf-subnets"; entries: LeafSubnetEntry[] }
+  | { kind: "lone-sources"; labels: string[] }
+  | { kind: "local-identities"; users: string[] }
+
 export type NodeMenuState = { x: number; y: number } & (
   | { kind: "identity"; user: string }
   | { kind: "host"; host: HostFieldsFragment }
+  // A single ghost node (phantom gateway/subnet/host): one value worth copying.
+  // `copyLabel` names it for both the menu item and the toast.
+  | { kind: "copy"; copyLabel: string; value: string }
+  // An aggregate node: open the read-only view dialog to copy its members.
+  | { kind: "aggregate"; title: string; data: AggregateMenuData }
 )
 
 interface NodeContextMenuProps {
   menu: NodeMenuState
   onHide: (user: string) => void
   onEdit: (host: HostFieldsFragment) => void
+  onCopy: (value: string, label: string) => void
+  onView: (menu: Extract<NodeMenuState, { kind: "aggregate" }>) => void
   onClose: () => void
 }
 
@@ -25,6 +41,8 @@ export function NodeContextMenu({
   menu,
   onHide,
   onEdit,
+  onCopy,
+  onView,
   onClose,
 }: NodeContextMenuProps) {
   const ref = useRef<HTMLDivElement>(null)
@@ -57,7 +75,7 @@ export function NodeContextMenu({
       className="fixed z-50 min-w-44 overflow-hidden rounded-md border bg-popover p-1 text-sm shadow-md"
       style={{ left: menu.x, top: menu.y }}
     >
-      {menu.kind === "host" ? (
+      {menu.kind === "host" && (
         <MenuItem
           Icon={PencilIcon}
           onClick={() => onEdit(menu.host)}
@@ -65,13 +83,28 @@ export function NodeContextMenu({
         >
           Edit
         </MenuItem>
-      ) : (
+      )}
+      {menu.kind === "identity" && (
         <MenuItem
           Icon={EyeOffIcon}
           onClick={() => onHide(menu.user)}
           onClose={onClose}
         >
           Hide <span className="font-mono">{menu.user}</span>
+        </MenuItem>
+      )}
+      {menu.kind === "copy" && (
+        <MenuItem
+          Icon={CopyIcon}
+          onClick={() => onCopy(menu.value, menu.copyLabel)}
+          onClose={onClose}
+        >
+          Copy {menu.copyLabel}
+        </MenuItem>
+      )}
+      {menu.kind === "aggregate" && (
+        <MenuItem Icon={ListIcon} onClick={() => onView(menu)} onClose={onClose}>
+          View {menu.title.toLowerCase()}
         </MenuItem>
       )}
     </div>
