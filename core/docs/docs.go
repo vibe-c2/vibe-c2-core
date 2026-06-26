@@ -15,6 +15,46 @@ const docTemplate = `{
     "host": "{{.Host}}",
     "basePath": "{{.BasePath}}",
     "paths": {
+        "/channel/sync": {
+            "post": {
+                "description": "Accepts an inbound.minion_message from a channel module and returns an outbound.minion_message. Payloads are opaque encrypted blobs; core currently returns a no-op outbound payload.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Channels"
+                ],
+                "summary": "Channel sync (data plane)",
+                "parameters": [
+                    {
+                        "description": "Inbound minion message",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/requests.InboundMinionMessage"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/responses.OutboundMinionMessage"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/responses.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
         "/enroll": {
             "post": {
                 "description": "Create the initial admin account. Only works when no users exist (cold startup).",
@@ -43,7 +83,7 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/responses.AuthResponse"
+                            "$ref": "#/definitions/responses.SessionResponse"
                         }
                     },
                     "400": {
@@ -80,12 +120,7 @@ const docTemplate = `{
                 "responses": {}
             },
             "post": {
-                "security": [
-                    {
-                        "BearerAuth": []
-                    }
-                ],
-                "description": "Execute GraphQL queries and mutations. See the GraphQL schema for available operations. Use the Altair playground (GET /graphql) to explore the API interactively.",
+                "description": "Execute GraphQL queries and mutations. Authentication via httpOnly cookies; state-changing operations require an X-CSRF-Token header matching the csrf_token cookie.",
                 "consumes": [
                     "application/json"
                 ],
@@ -101,7 +136,7 @@ const docTemplate = `{
         },
         "/login": {
             "post": {
-                "description": "Authenticate with username and password to receive a token pair.",
+                "description": "Authenticate with username and password. Tokens are set as httpOnly cookies; CSRF token in a non-httpOnly cookie.",
                 "consumes": [
                     "application/json"
                 ],
@@ -127,7 +162,7 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/responses.AuthResponse"
+                            "$ref": "#/definitions/responses.SessionResponse"
                         }
                     },
                     "400": {
@@ -147,12 +182,7 @@ const docTemplate = `{
         },
         "/login/me": {
             "get": {
-                "security": [
-                    {
-                        "BearerAuth": []
-                    }
-                ],
-                "description": "Return the authenticated user's info with a fresh token pair.",
+                "description": "Return the authenticated user's info.",
                 "produces": [
                     "application/json"
                 ],
@@ -164,7 +194,7 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/responses.AuthResponse"
+                            "$ref": "#/definitions/responses.SessionResponse"
                         }
                     },
                     "500": {
@@ -178,10 +208,7 @@ const docTemplate = `{
         },
         "/login/refresh": {
             "post": {
-                "description": "Rotate the refresh token and receive a new token pair.",
-                "consumes": [
-                    "application/json"
-                ],
+                "description": "Rotate the refresh token. Reads tokens from httpOnly cookies. Requires X-CSRF-Token header matching the csrf_token cookie.",
                 "produces": [
                     "application/json"
                 ],
@@ -189,28 +216,11 @@ const docTemplate = `{
                     "Auth"
                 ],
                 "summary": "Refresh tokens",
-                "parameters": [
-                    {
-                        "description": "Refresh token payload",
-                        "name": "body",
-                        "in": "body",
-                        "required": true,
-                        "schema": {
-                            "$ref": "#/definitions/requests.RefreshRequest"
-                        }
-                    }
-                ],
                 "responses": {
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/responses.AuthResponse"
-                        }
-                    },
-                    "400": {
-                        "description": "Bad Request",
-                        "schema": {
-                            "$ref": "#/definitions/responses.ErrorResponse"
+                            "$ref": "#/definitions/responses.SessionResponse"
                         }
                     },
                     "401": {
@@ -230,12 +240,7 @@ const docTemplate = `{
         },
         "/logout": {
             "post": {
-                "security": [
-                    {
-                        "BearerAuth": []
-                    }
-                ],
-                "description": "Invalidate all refresh tokens for the current user.",
+                "description": "Terminate the current session and clear auth cookies. Requires X-CSRF-Token header.",
                 "produces": [
                     "application/json"
                 ],
@@ -284,9 +289,427 @@ const docTemplate = `{
                     }
                 }
             }
+        },
+        "/wiki/collab-ticket": {
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Issue a short-lived JWT for Hocuspocus WebSocket authentication",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Wiki"
+                ],
+                "summary": "Get collaboration ticket",
+                "parameters": [
+                    {
+                        "description": "Document to collaborate on",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/controller.collabTicketRequest"
+                        }
+                    }
+                ],
+                "responses": {}
+            }
+        },
+        "/wiki/export": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Streams a zip archive of markdown documents plus referenced attachments. The format matches the import flow so the result can be re-imported via POST /api/v1/wiki/import/outline. Pass ` + "`" + `rootId` + "`" + ` to limit the export to one document + descendants; omit it to export the whole operation's wiki.",
+                "produces": [
+                    "application/zip"
+                ],
+                "tags": [
+                    "Wiki"
+                ],
+                "summary": "Export a wiki tree or subtree as an Outline-flavored markdown zip",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Target operation ID (UUID)",
+                        "name": "operationId",
+                        "in": "query",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Subtree root document ID (UUID). Omit for tree-wide export.",
+                        "name": "rootId",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "file"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/responses.ErrorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/responses.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/responses.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/wiki/files": {
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Upload a non-image file to be attached to a wiki document. The original filename is preserved for downloads; bytes are stored as-is.",
+                "consumes": [
+                    "multipart/form-data"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Wiki"
+                ],
+                "summary": "Upload a wiki file attachment",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Owning document ID (UUID)",
+                        "name": "documentId",
+                        "in": "formData",
+                        "required": true
+                    },
+                    {
+                        "type": "file",
+                        "description": "File bytes (max 50MB by default)",
+                        "name": "file",
+                        "in": "formData",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "201": {
+                        "description": "Created",
+                        "schema": {
+                            "$ref": "#/definitions/controller.WikiFileUploadResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/responses.ErrorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/responses.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/responses.ErrorResponse"
+                        }
+                    },
+                    "413": {
+                        "description": "Request Entity Too Large",
+                        "schema": {
+                            "$ref": "#/definitions/responses.ErrorResponse"
+                        }
+                    },
+                    "415": {
+                        "description": "Unsupported Media Type",
+                        "schema": {
+                            "$ref": "#/definitions/responses.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/wiki/files/{id}": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Streams the file bytes. Caller must be a member of the file's operation. Pass ?preview=1 for inline rendering of safe formats (PDF, text).",
+                "produces": [
+                    "application/octet-stream"
+                ],
+                "tags": [
+                    "Wiki"
+                ],
+                "summary": "Fetch a wiki file attachment",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "File ID (UUID)",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "boolean",
+                        "description": "If true, serve inline for safe MIME types",
+                        "name": "preview",
+                        "in": "query"
+                    }
+                ],
+                "responses": {}
+            }
+        },
+        "/wiki/images": {
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Upload an image to be embedded in a wiki document. Images are validated, sanitized (SVG) or re-encoded (raster, strips EXIF), and optionally downscaled.",
+                "consumes": [
+                    "multipart/form-data"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Wiki"
+                ],
+                "summary": "Upload a wiki image",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Owning document ID (UUID)",
+                        "name": "documentId",
+                        "in": "formData",
+                        "required": true
+                    },
+                    {
+                        "type": "file",
+                        "description": "Image bytes (png/jpeg/webp/gif/avif/svg, max 10MB)",
+                        "name": "file",
+                        "in": "formData",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "201": {
+                        "description": "Created",
+                        "schema": {
+                            "$ref": "#/definitions/controller.WikiImageUploadResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/responses.ErrorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/responses.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/responses.ErrorResponse"
+                        }
+                    },
+                    "413": {
+                        "description": "Request Entity Too Large",
+                        "schema": {
+                            "$ref": "#/definitions/responses.ErrorResponse"
+                        }
+                    },
+                    "415": {
+                        "description": "Unsupported Media Type",
+                        "schema": {
+                            "$ref": "#/definitions/responses.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/wiki/images/{id}": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Streams the image bytes for an uploaded wiki image. Caller must be a member of the image's operation.",
+                "produces": [
+                    "image/*"
+                ],
+                "tags": [
+                    "Wiki"
+                ],
+                "summary": "Fetch a wiki image",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Image ID (UUID)",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {}
+            }
+        },
+        "/wiki/import/outline": {
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Imports an Outline (getoutline.com) markdown-format export zip into the target operation. All imported documents land under import/\u003cISO timestamp\u003e/\u003ccollection\u003e/. Requires operator+ role.",
+                "consumes": [
+                    "multipart/form-data"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Wiki"
+                ],
+                "summary": "Import an Outline workspace export",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Target operation ID (UUID)",
+                        "name": "operationId",
+                        "in": "query",
+                        "required": true
+                    },
+                    {
+                        "type": "file",
+                        "description": "Outline markdown export zip",
+                        "name": "file",
+                        "in": "formData",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/wikiimport.Report"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/responses.ErrorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/responses.ErrorResponse"
+                        }
+                    },
+                    "413": {
+                        "description": "Request Entity Too Large",
+                        "schema": {
+                            "$ref": "#/definitions/responses.ErrorResponse"
+                        }
+                    },
+                    "502": {
+                        "description": "Bad Gateway",
+                        "schema": {
+                            "$ref": "#/definitions/responses.ErrorResponse"
+                        }
+                    }
+                }
+            }
         }
     },
     "definitions": {
+        "controller.WikiFileUploadResponse": {
+            "type": "object",
+            "properties": {
+                "contentType": {
+                    "type": "string"
+                },
+                "filename": {
+                    "type": "string"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "size": {
+                    "type": "integer"
+                },
+                "url": {
+                    "type": "string"
+                }
+            }
+        },
+        "controller.WikiImageUploadResponse": {
+            "type": "object",
+            "properties": {
+                "height": {
+                    "type": "integer"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "url": {
+                    "type": "string"
+                },
+                "width": {
+                    "type": "integer"
+                }
+            }
+        },
+        "controller.collabTicketRequest": {
+            "type": "object",
+            "required": [
+                "documentId"
+            ],
+            "properties": {
+                "documentId": {
+                    "type": "string"
+                },
+                "schemaVersion": {
+                    "description": "SchemaVersion is the editor schema version compiled into the requesting\nclient. Absent (legacy/old clients that predate this field) decodes to 0.\nCompared against the document's ContentStateSchemaVersion to block clients\ntoo old to safely render — and thus edit — the stored content.",
+                    "type": "integer"
+                }
+            }
+        },
         "requests.EnrollRequest": {
             "type": "object",
             "required": [
@@ -298,6 +721,70 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "username": {
+                    "type": "string"
+                }
+            }
+        },
+        "requests.InboundMessageMeta": {
+            "type": "object",
+            "properties": {
+                "receive_count": {
+                    "type": "integer"
+                },
+                "trace_id": {
+                    "type": "string"
+                }
+            }
+        },
+        "requests.InboundMessageSource": {
+            "type": "object",
+            "properties": {
+                "module": {
+                    "type": "string"
+                },
+                "module_instance": {
+                    "type": "string"
+                },
+                "tenant": {
+                    "type": "string"
+                },
+                "transport": {
+                    "type": "string"
+                }
+            }
+        },
+        "requests.InboundMinionMessage": {
+            "type": "object",
+            "required": [
+                "encrypted_data",
+                "id",
+                "message_id",
+                "timestamp",
+                "type"
+            ],
+            "properties": {
+                "encrypted_data": {
+                    "type": "string"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "message_id": {
+                    "type": "string"
+                },
+                "meta": {
+                    "$ref": "#/definitions/requests.InboundMessageMeta"
+                },
+                "source": {
+                    "$ref": "#/definitions/requests.InboundMessageSource"
+                },
+                "timestamp": {
+                    "type": "string"
+                },
+                "type": {
+                    "type": "string"
+                },
+                "version": {
                     "type": "string"
                 }
             }
@@ -317,35 +804,59 @@ const docTemplate = `{
                 }
             }
         },
-        "requests.RefreshRequest": {
+        "responses.ErrorResponse": {
             "type": "object",
-            "required": [
-                "refresh_token",
-                "user_id"
-            ],
             "properties": {
-                "refresh_token": {
-                    "type": "string"
-                },
-                "user_id": {
+                "error": {
                     "type": "string"
                 }
             }
         },
-        "responses.AuthResponse": {
+        "responses.OutboundMessageMeta": {
             "type": "object",
             "properties": {
-                "auth_token": {
+                "status": {
                     "type": "string"
                 },
+                "trace_id": {
+                    "type": "string"
+                }
+            }
+        },
+        "responses.OutboundMinionMessage": {
+            "type": "object",
+            "properties": {
+                "encrypted_data": {
+                    "type": "string"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "message_id": {
+                    "type": "string"
+                },
+                "meta": {
+                    "$ref": "#/definitions/responses.OutboundMessageMeta"
+                },
+                "timestamp": {
+                    "type": "string"
+                },
+                "type": {
+                    "type": "string"
+                },
+                "version": {
+                    "type": "string"
+                }
+            }
+        },
+        "responses.SessionResponse": {
+            "type": "object",
+            "properties": {
                 "permissions": {
                     "type": "array",
                     "items": {
                         "type": "string"
                     }
-                },
-                "refresh_token": {
-                    "type": "string"
                 },
                 "roles": {
                     "type": "array",
@@ -353,15 +864,10 @@ const docTemplate = `{
                         "type": "string"
                     }
                 },
-                "username": {
+                "user_id": {
                     "type": "string"
-                }
-            }
-        },
-        "responses.ErrorResponse": {
-            "type": "object",
-            "properties": {
-                "error": {
+                },
+                "username": {
                     "type": "string"
                 }
             }
@@ -378,6 +884,67 @@ const docTemplate = `{
             "type": "object",
             "properties": {
                 "message": {
+                    "type": "string"
+                }
+            }
+        },
+        "wikiimport.Report": {
+            "type": "object",
+            "properties": {
+                "createdDocs": {
+                    "type": "integer"
+                },
+                "credentialsCreated": {
+                    "type": "integer"
+                },
+                "credentialsReused": {
+                    "type": "integer"
+                },
+                "credentialsSkipped": {
+                    "type": "integer"
+                },
+                "credentialsTombstoned": {
+                    "type": "integer"
+                },
+                "filesIngested": {
+                    "type": "integer"
+                },
+                "imagesIngested": {
+                    "type": "integer"
+                },
+                "importParentId": {
+                    "type": "string"
+                },
+                "skipped": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/wikiimport.SkipRecord"
+                    }
+                },
+                "skippedDocs": {
+                    "type": "integer"
+                },
+                "timestampParentId": {
+                    "type": "string"
+                },
+                "totalDocs": {
+                    "type": "integer"
+                },
+                "warnings": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/wikiimport.SkipRecord"
+                    }
+                }
+            }
+        },
+        "wikiimport.SkipRecord": {
+            "type": "object",
+            "properties": {
+                "path": {
+                    "type": "string"
+                },
+                "reason": {
                     "type": "string"
                 }
             }

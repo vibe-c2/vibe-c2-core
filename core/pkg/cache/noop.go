@@ -25,6 +25,13 @@ func (n *noopCache) Set(ctx context.Context, key string, value interface{}, expi
 	return nil
 }
 
+// SetNX always reports the key as newly set. With caching disabled there is no
+// dedup state, so callers fail open and process every message rather than
+// silently dropping it as a duplicate.
+func (n *noopCache) SetNX(ctx context.Context, key string, value interface{}, expiration time.Duration) (bool, error) {
+	return true, nil
+}
+
 func (n *noopCache) SetWithTags(ctx context.Context, key string, value interface{}, tags []string, expiration time.Duration) error {
 	return nil
 }

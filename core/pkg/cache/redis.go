@@ -75,6 +75,10 @@ func (r *redisCache) Set(ctx context.Context, key string, value interface{}, exp
 	return r.client.Set(ctx, key, value, expiration).Err()
 }
 
+func (r *redisCache) SetNX(ctx context.Context, key string, value interface{}, expiration time.Duration) (bool, error) {
+	return r.client.SetNX(ctx, key, value, expiration).Result()
+}
+
 func (r *redisCache) SetWithTags(ctx context.Context, key string, value interface{}, tags []string, expiration time.Duration) error {
 	if err := r.client.Set(ctx, key, value, expiration).Err(); err != nil {
 		return err
