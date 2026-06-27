@@ -82,6 +82,9 @@ func (f *fakeRepo) FindStaleRegistered(context.Context, time.Time, int64) ([]mod
 }
 func (f *fakeRepo) MarkDead(context.Context, []string, time.Time) error { return nil }
 func (f *fakeRepo) ListActive(context.Context) ([]models.Module, error) { return nil, nil }
+func (f *fakeRepo) List(context.Context, []string) ([]models.Module, error) {
+	return nil, nil
+}
 
 func newGate(repo *fakeRepo, c *memCache) *Gate {
 	return New(repo, c, time.Minute, zap.NewNop())

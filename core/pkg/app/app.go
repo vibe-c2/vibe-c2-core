@@ -79,10 +79,11 @@ type App struct {
 	// Module-lifecycle control plane (AMQP). A reachable broker is required at
 	// startup, so mqClient and rpcServer are always set on a running app; only
 	// reaper may be nil (when MODULE_REAPER_ENABLED=false).
-	mqClient   *messaging.Client
-	rpcServer  *messaging.RPCServer
-	reaper     *lifecycle.Reaper
-	moduleGate *modulegate.Gate // registration gate for the data-plane sync endpoint
+	mqClient      *messaging.Client
+	rpcServer     *messaging.RPCServer
+	reaper        *lifecycle.Reaper
+	moduleGate    *modulegate.Gate   // registration gate for the data-plane sync endpoint
+	moduleService *lifecycle.Service // deregister path shared by RPC + the GraphQL removeModule mutation
 
 	// Future integration points:
 	// sseManager       sse.ISSEManager
@@ -223,7 +224,7 @@ func NewApp() (*App, error) {
 	// Module-lifecycle control plane over AMQP. A reachable broker is a hard
 	// dependency — initLifecycle returns an error and core refuses to boot if
 	// the broker cannot be reached.
-	mqClient, rpcServer, reaper, err := initLifecycle(repos.ModuleRegistry, moduleGate, bus, e, l)
+	mqClient, rpcServer, moduleService, reaper, err := initLifecycle(repos.ModuleRegistry, moduleGate, bus, e, l)
 	if err != nil {
 		return nil, fmt.Errorf("failed to initialize module-lifecycle control plane: %w", err)
 	}
@@ -309,6 +310,7 @@ func NewApp() (*App, error) {
 		rpcServer:       rpcServer,
 		reaper:          reaper,
 		moduleGate:      moduleGate,
+		moduleService:   moduleService,
 	}
 
 	return app, nil
@@ -325,7 +327,7 @@ func initLifecycle(
 	bus lifecycle.ModuleEventPublisher,
 	e *environment.EnvironmentSettings,
 	l *zap.Logger,
-) (*messaging.Client, *messaging.RPCServer, *lifecycle.Reaper, error) {
+) (*messaging.Client, *messaging.RPCServer, *lifecycle.Service, *lifecycle.Reaper, error) {
 	client, err := messaging.NewClient(messaging.Config{
 		Host:     e.RabbitMQHost,
 		Port:     e.RabbitMQPort,
@@ -334,14 +336,14 @@ func initLifecycle(
 		VHost:    e.RabbitMQVHost,
 	}, l)
 	if err != nil {
-		return nil, nil, nil, fmt.Errorf("connect to RabbitMQ: %w", err)
+		return nil, nil, nil, nil, fmt.Errorf("connect to RabbitMQ: %w", err)
 	}
 
 	// Audit-event publisher on vibe.events. Now required alongside the broker:
 	// a failure here means the events exchange could not be declared.
 	emitter, err := messaging.NewEventPublisher(client.Conn(), l)
 	if err != nil {
-		return nil, nil, nil, fmt.Errorf("create lifecycle event publisher: %w", err)
+		return nil, nil, nil, nil, fmt.Errorf("create lifecycle event publisher: %w", err)
 	}
 
 	graceWindow := e.ModuleHeartbeatInterval * time.Duration(e.ModuleHeartbeatGraceMisses)
@@ -363,7 +365,7 @@ func initLifecycle(
 		l.Warn("Module liveness reaper disabled (MODULE_REAPER_ENABLED=false); dead instances will not be reaped")
 	}
 
-	return client, rpcServer, reaper, nil
+	return client, rpcServer, svc, reaper, nil
 }
 
 // startSweepers launches the wiki attachment garbage collectors, but only when

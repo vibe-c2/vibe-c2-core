@@ -1,0 +1,76 @@
+# =============================================================================
+# Modules — module-instance registry (app-admin management)
+# =============================================================================
+#
+# A Module is one row in the durable registry: a channel or minion-factory
+# instance that registered over the AMQP control plane. This surface is the
+# app-admin Modules page — list every instance with its lifecycle state, and
+# remove (deregister) one.
+#
+# "Remove" is a SOFT deregister: it flips status to "deregistered" and busts the
+# data-plane registration gate. It is NOT durable eviction — a module that is
+# still alive re-registers on its next reconnect and reappears as "registered".
+# The all-states list makes that flip visible. Hard eviction (blocking
+# re-registration) is a follow-up.
+#
+# Status is a plain String, not an enum, to bind directly to the stored value
+# without marshalling gymnastics. Known values: "registered", "deregistered",
+# "dead".
+
+type Module {
+  # Self-assigned, globally-unique instance id (e.g. "http-1"). The identity
+  # used by heartbeat/deregister and the data-plane registration gate.
+  instance: ID!
+  # Module kind: "channel" | "minion-factory".
+  type: String!
+  version: String!
+  # Lifecycle state: "registered" | "deregistered" | "dead".
+  status: String!
+  # Self-reported health on the most recent heartbeat:
+  # "healthy" | "degraded" | "draining". Empty until the first heartbeat.
+  lastStatus: String!
+  registeredAt: String!
+  # RFC3339 of the most recent heartbeat, or null if it has never beaten.
+  lastHeartbeatAt: String
+  # Populated once the instance is deregistered; null while registered/dead.
+  deregisteredAt: String
+  deregisterReason: String!
+  # Populated once the reaper declares the instance dead; null otherwise.
+  declaredDeadAt: String
+}
+
+# Streamed on the moduleChanged subscription. REGISTERED maps to CREATED;
+# DEREGISTERED and DEAD map to UPDATED (the row survives, only its status
+# changes). `module` carries the full post-transition row.
+type ModuleEvent {
+  action: EventAction!
+  instance: ID!
+  module: Module
+}
+
+# --- Queries ---
+
+extend type Query {
+  # Every module instance, newest registration first. Pass `status` to filter
+  # to a subset of lifecycle states (e.g. ["registered"]); omit for all states.
+  modules(status: [String!]): [Module!]!
+    @hasPermission(permission: "module:read")
+}
+
+# --- Mutations ---
+
+extend type Mutation {
+  # Soft-remove (deregister) a module instance. Returns the updated row. Errors
+  # if the instance is not currently registered.
+  removeModule(instance: ID!): Module!
+    @hasPermission(permission: "module:delete")
+}
+
+# --- Subscriptions ---
+
+extend type Subscription {
+  # Stream module lifecycle changes (registered / deregistered / dead) for the
+  # admin Modules page. Not operation-scoped — admin-only via module:read.
+  moduleChanged: ModuleEvent!
+    @hasPermission(permission: "module:read")
+}

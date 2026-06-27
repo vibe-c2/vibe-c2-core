@@ -36,6 +36,12 @@ type IModuleRegistryRepository interface {
 	MarkDead(ctx context.Context, instances []string, at time.Time) error
 	FindByInstance(ctx context.Context, instance string) (models.Module, error)
 	ListActive(ctx context.Context) ([]models.Module, error)
+	// List returns module rows filtered to the given lifecycle statuses, newest
+	// registration first. A nil/empty statuses slice returns every row (all
+	// states) — the admin Modules page shows registered, deregistered, and dead
+	// together. Distinct from ListActive, which is the registered-only hot path
+	// used by the active-set lookups.
+	List(ctx context.Context, statuses []string) ([]models.Module, error)
 }
 
 type moduleRegistryRepository struct {
@@ -120,6 +126,15 @@ func takeoverUpdate(reg *models.Module) bson.M {
 			"last_metrics":      "",
 		},
 	}
+}
+
+// listFilter scopes a registry listing to the given statuses. Empty/nil returns
+// every row (no status constraint).
+func listFilter(statuses []string) bson.M {
+	if len(statuses) == 0 {
+		return bson.M{}
+	}
+	return bson.M{"status": bson.M{"$in": statuses}}
 }
 
 // staleRegisteredFilter matches registered rows whose effective last-seen time
@@ -222,5 +237,11 @@ func (r *moduleRegistryRepository) FindByInstance(ctx context.Context, instance 
 func (r *moduleRegistryRepository) ListActive(ctx context.Context) ([]models.Module, error) {
 	var out []models.Module
 	err := r.coll.Find(ctx, bson.M{"status": models.ModuleStatusRegistered}).All(&out)
+	return out, err
+}
+
+func (r *moduleRegistryRepository) List(ctx context.Context, statuses []string) ([]models.Module, error) {
+	var out []models.Module
+	err := r.coll.Find(ctx, listFilter(statuses)).Sort("-registered_at").All(&out)
 	return out, err
 }

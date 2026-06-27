@@ -227,7 +227,9 @@ func (s *Service) HandleHeartbeat(ctx context.Context, req messaging.Envelope) (
 	return heartbeatReply{Instance: p.Instance, Ack: true, ConfigChanged: false}, nil
 }
 
-// HandleDeregister implements the module.deregister operation.
+// HandleDeregister implements the module.deregister operation (module-initiated
+// over RPC). The shared deregister transition lives in Deregister so the
+// GraphQL admin "remove" path behaves identically.
 func (s *Service) HandleDeregister(ctx context.Context, req messaging.Envelope) (any, error) {
 	var p deregisterRequest
 	if err := json.Unmarshal(req.Payload, &p); err != nil {
@@ -237,16 +239,10 @@ func (s *Service) HandleDeregister(ctx context.Context, req messaging.Envelope) 
 		return nil, validationErr("instance is required")
 	}
 
-	// Look up first so the audit event can carry the module_type.
-	existing, err := s.repo.FindByInstance(ctx, p.Instance)
-	moduleType := ""
-	if err == nil {
-		moduleType = existing.Type
-	}
-
-	found, err := s.repo.MarkDeregistered(ctx, p.Instance, p.Reason, s.now())
+	// The module deregistered itself → attribute the event to the instance.
+	found, err := s.Deregister(ctx, p.Instance, p.Reason, eventbus.ServiceActor(p.Instance))
 	if err != nil {
-		return nil, fmt.Errorf("mark deregistered: %w", err)
+		return nil, err
 	}
 	if !found {
 		return nil, &messaging.RPCError{
@@ -255,19 +251,46 @@ func (s *Service) HandleDeregister(ctx context.Context, req messaging.Envelope) 
 		}
 	}
 
-	if s.invalidator != nil {
-		s.invalidator.Invalidate(ctx, p.Instance)
+	return deregisterReply{Instance: p.Instance, Deregistered: true}, nil
+}
+
+// Deregister transitions a registered instance to deregistered and fans the
+// change out to every observer: it busts the data-plane registration-gate
+// cache, emits the AMQP audit event, and publishes a module.deregistered event
+// on the in-process bus. Shared by the module.deregister RPC handler
+// (module-initiated) and the GraphQL removeModule mutation (admin-initiated);
+// the actor distinguishes the two on the event stream. Returns false (with a
+// nil error) when the instance has no active registration — callers map that to
+// their own not-found signal (RPC unknown_instance / GraphQL error).
+func (s *Service) Deregister(ctx context.Context, instance, reason string, actor eventbus.Actor) (bool, error) {
+	// Look up first so the audit event can carry the module_type.
+	existing, err := s.repo.FindByInstance(ctx, instance)
+	moduleType := ""
+	if err == nil {
+		moduleType = existing.Type
 	}
-	s.emit(ctx, moduleType, p.Instance, EventDeregistered)
+
+	found, err := s.repo.MarkDeregistered(ctx, instance, reason, s.now())
+	if err != nil {
+		return false, fmt.Errorf("mark deregistered: %w", err)
+	}
+	if !found {
+		return false, nil
+	}
+
+	if s.invalidator != nil {
+		s.invalidator.Invalidate(ctx, instance)
+	}
+	s.emit(ctx, moduleType, instance, EventDeregistered)
 	s.publishBus(eventbus.NewModuleDeregisteredEvent(
-		eventbus.ServiceActor(p.Instance),
-		eventbus.ModuleEventPayload{Instance: p.Instance, Type: moduleType, Status: models.ModuleStatusDeregistered},
+		actor,
+		eventbus.ModuleEventPayload{Instance: instance, Type: moduleType, Status: models.ModuleStatusDeregistered},
 	))
 	s.logger.Info("module deregistered",
-		zap.String("instance", p.Instance),
-		zap.String("reason", p.Reason))
+		zap.String("instance", instance),
+		zap.String("reason", reason))
 
-	return deregisterReply{Instance: p.Instance, Deregistered: true}, nil
+	return found, nil
 }
 
 // publishBus fans a module lifecycle change out to the in-process event bus for

@@ -65,6 +65,7 @@ func NewHandler(
 	tasks resolver.ITaskResolver,
 	timeline resolver.ITimelineResolver,
 	apiKeys resolver.IAPIKeyResolver,
+	modules resolver.IModuleResolver,
 	bus eventbus.IEventBus,
 	userRepo repository.IUserRepository,
 	operationRepo repository.IOperationRepository,
@@ -74,6 +75,7 @@ func NewHandler(
 	hashRepo repository.IHashRepository,
 	hostRepo repository.IHostRepository,
 	taskRepo repository.ITaskRepository,
+	moduleRepo repository.IModuleRegistryRepository,
 	presenceTracker *wiki.PresenceTracker,
 	allowedOrigins []string,
 ) gin.HandlerFunc {
@@ -92,6 +94,7 @@ func NewHandler(
 		TaskResolver:               tasks,
 		TimelineResolver:           timeline,
 		APIKeyResolver:             apiKeys,
+		ModuleResolver:             modules,
 		EventBus:                   bus,
 		UserRepo:                   userRepo,
 		OperationRepo:              operationRepo,
@@ -101,6 +104,7 @@ func NewHandler(
 		HashRepo:                   hashRepo,
 		HostRepo:                   hostRepo,
 		TaskRepo:                   taskRepo,
+		ModuleRepo:                 moduleRepo,
 		PresenceTracker:            presenceTracker,
 	}
 

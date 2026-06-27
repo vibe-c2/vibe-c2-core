@@ -91,6 +91,10 @@ func (a *App) NewRouter() *gin.Engine {
 		a.repos.OperationEvent, a.repos.Operation, a.repos.User, a.eventBus,
 	)
 	apiKeyRes := resolver.NewAPIKeyResolver(a.repos.APIKey)
+	// moduleRes is the app-admin Modules surface. removeModule routes through the
+	// lifecycle service so the GraphQL deregister and the RPC deregister share one
+	// transition (registry update + gate bust + audit + bus event).
+	moduleRes := resolver.NewModuleResolver(a.repos.ModuleRegistry, a.moduleService)
 
 	// Wiki controller (REST endpoints)
 	wikiCtrl := controller.NewWikiController(a.repos.WikiDocument, a.repos.Operation, a.env.HocuspocusTicketSecret, a.logger)
@@ -228,9 +232,9 @@ func (a *App) NewRouter() *gin.Engine {
 		//                       inside gqlgen; one socket multiplexes every
 		//                       active subscription on the page.
 		gqlHandler := gql.NewHandler(
-			userRes, opRes, sessRes, wikiDocRes, wikiVisitRes, credRes, hashRes, hostRes, taskRes, timelineRes, apiKeyRes,
+			userRes, opRes, sessRes, wikiDocRes, wikiVisitRes, credRes, hashRes, hostRes, taskRes, timelineRes, apiKeyRes, moduleRes,
 			a.eventBus,
-			a.repos.User, a.repos.Operation, a.repos.Session, a.repos.WikiDocument, a.repos.Credential, a.repos.Hash, a.repos.Host, a.repos.Task,
+			a.repos.User, a.repos.Operation, a.repos.Session, a.repos.WikiDocument, a.repos.Credential, a.repos.Hash, a.repos.Host, a.repos.Task, a.repos.ModuleRegistry,
 			a.presenceTracker,
 			a.env.CORSAllowedOrigins,
 		)

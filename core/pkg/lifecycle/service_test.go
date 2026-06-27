@@ -112,6 +112,23 @@ func (f *fakeRepo) ListActive(_ context.Context) ([]models.Module, error) {
 	return out, nil
 }
 
+func (f *fakeRepo) List(_ context.Context, statuses []string) ([]models.Module, error) {
+	want := make(map[string]struct{}, len(statuses))
+	for _, s := range statuses {
+		want[s] = struct{}{}
+	}
+	var out []models.Module
+	for _, row := range f.rows {
+		if len(want) > 0 {
+			if _, ok := want[row.Status]; !ok {
+				continue
+			}
+		}
+		out = append(out, *row)
+	}
+	return out, nil
+}
+
 // fakeEmitter records published events.
 type fakeEmitter struct {
 	events []emitted
@@ -393,6 +410,45 @@ func TestHandleDeregister_PublishesBusEvent(t *testing.T) {
 	_, _ = svc.HandleDeregister(context.Background(), envFor(t, OpDeregister, deregisterRequest{Instance: "ghost"}))
 	if len(pub.events) != 0 {
 		t.Errorf("published on unknown instance = %+v, want none", pub.events)
+	}
+}
+
+func TestDeregister_UsesProvidedActorAndBustsGate(t *testing.T) {
+	repo := newFakeRepo()
+	inv := &fakeInvalidator{}
+	pub := &fakePublisher{}
+	svc := NewService(repo, &fakeEmitter{}, inv, pub, Config{}, zap.NewNop())
+	repo.rows["http-1"] = &models.Module{
+		Type: "channel", Instance: "http-1", Status: models.ModuleStatusRegistered,
+	}
+
+	// The GraphQL removeModule path passes a user actor.
+	found, err := svc.Deregister(context.Background(), "http-1", "removed by admin",
+		eventbus.UserActor("admin-uid"))
+	if err != nil || !found {
+		t.Fatalf("Deregister found=%v err=%v, want true/nil", found, err)
+	}
+	if repo.rows["http-1"].Status != models.ModuleStatusDeregistered {
+		t.Error("status not set to deregistered")
+	}
+	if len(inv.instances) != 1 || inv.instances[0] != "http-1" {
+		t.Errorf("gate invalidated = %v, want [http-1]", inv.instances)
+	}
+	if len(pub.events) != 1 {
+		t.Fatalf("published %d bus events, want 1", len(pub.events))
+	}
+	if pub.events[0].Actor.Type != eventbus.ActorUser || pub.events[0].Actor.ID != "admin-uid" {
+		t.Errorf("event actor = %+v, want user/admin-uid", pub.events[0].Actor)
+	}
+
+	// Unknown instance → not found, no error, nothing fanned out.
+	inv.instances, pub.events = nil, nil
+	found, err = svc.Deregister(context.Background(), "ghost", "x", eventbus.SystemActor())
+	if err != nil || found {
+		t.Errorf("Deregister(ghost) found=%v err=%v, want false/nil", found, err)
+	}
+	if len(inv.instances) != 0 || len(pub.events) != 0 {
+		t.Errorf("unknown instance fanned out: inv=%v pub=%v", inv.instances, pub.events)
 	}
 }
 

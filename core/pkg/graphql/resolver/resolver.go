@@ -43,6 +43,7 @@ type Resolver struct {
 	TaskResolver               resolver.ITaskResolver
 	TimelineResolver           resolver.ITimelineResolver
 	APIKeyResolver             resolver.IAPIKeyResolver
+	ModuleResolver             resolver.IModuleResolver
 
 	// Subscription dependencies — event bus for real-time events,
 	// repos for fetching full entities to include in event payloads.
@@ -55,5 +56,6 @@ type Resolver struct {
 	HashRepo         repository.IHashRepository
 	HostRepo         repository.IHostRepository
 	TaskRepo         repository.ITaskRepository
+	ModuleRepo       repository.IModuleRegistryRepository
 	PresenceTracker  *wiki.PresenceTracker
 }

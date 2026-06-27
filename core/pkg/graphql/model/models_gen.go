@@ -190,6 +190,12 @@ type MarkHashCrackedInput struct {
 	NewCredential *CreateCredentialInput `json:"newCredential,omitempty"`
 }
 
+type ModuleEvent struct {
+	Action   EventAction    `json:"action"`
+	Instance string         `json:"instance"`
+	Module   *models.Module `json:"module,omitempty"`
+}
+
 type Mutation struct {
 }
 

@@ -427,6 +427,31 @@ func toHostEvent(event eventbus.Event) *model.HostEvent {
 	return evt
 }
 
+// moduleTopics is the list of module lifecycle event bus topics for the admin
+// moduleChanged subscription.
+var moduleTopics = []eventbus.Topic{
+	eventbus.TopicModuleRegistered,
+	eventbus.TopicModuleDeregistered,
+	eventbus.TopicModuleDead,
+}
+
+// toModuleEvent converts an event bus Event to a GraphQL ModuleEvent. A module
+// row is never hard-deleted: registered (incl. revival) maps to CREATED, while
+// deregistered and dead are status updates on a surviving row → UPDATED. The
+// subscription resolver refetches the full row for every event, so action is
+// purely advisory for the client.
+func toModuleEvent(event eventbus.Event) *model.ModuleEvent {
+	action := model.EventActionUpdated
+	if event.Topic == eventbus.TopicModuleRegistered {
+		action = model.EventActionCreated
+	}
+	evt := &model.ModuleEvent{Action: action}
+	if p, ok := event.Payload.(eventbus.ModuleEventPayload); ok {
+		evt.Instance = p.Instance
+	}
+	return evt
+}
+
 // wikiDocumentTopics is the list of wiki document event bus topics for subscriptions.
 var wikiDocumentTopics = []eventbus.Topic{
 	eventbus.TopicWikiDocumentCreated,

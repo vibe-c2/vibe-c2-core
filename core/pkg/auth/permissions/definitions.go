@@ -20,4 +20,8 @@ const (
 	SessionReadOwnPermission   string = "session:read:own"   // user: read own sessions
 	SessionRevokePermission    string = "session:revoke"      // admin: revoke any session
 	SessionRevokeOwnPermission string = "session:revoke:own"  // user: revoke own sessions
+
+	// Module — app-admin management of the module-instance registry.
+	ModuleReadPermission   string = "module:read"   // admin: list module instances
+	ModuleDeletePermission string = "module:delete" // admin: remove (deregister) a module instance
 )

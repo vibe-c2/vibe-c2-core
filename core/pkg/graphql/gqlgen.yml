@@ -394,6 +394,25 @@ models:
       updatedAt:
         resolver: true         # field.DefaultField.UpdateAt -> string
 
+  # --- Modules ---
+
+  # Map the GraphQL "Module" type to our existing registry model. Most fields
+  # autobind (instance, type, version, status, lastStatus, deregisterReason);
+  # only the timestamps need resolvers (time.Time -> RFC3339, *time.Time ->
+  # nullable RFC3339). ModuleEvent is generated (no model mapping).
+  Module:
+    model:
+      - github.com/vibe-c2/vibe-c2-core/core/pkg/models.Module
+    fields:
+      registeredAt:
+        resolver: true         # time.Time -> String
+      lastHeartbeatAt:
+        resolver: true         # *time.Time -> *String (nullable)
+      deregisteredAt:
+        resolver: true         # *time.Time -> *String (nullable)
+      declaredDeadAt:
+        resolver: true         # *time.Time -> *String (nullable)
+
   # --- Timeline ---
 
   # TimelineGranularity is mapped to the repository's TimelineGranularity

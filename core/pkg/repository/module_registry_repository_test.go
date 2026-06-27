@@ -96,6 +96,30 @@ func TestTakeoverUpdate_RevivesByUnsettingEndState(t *testing.T) {
 	}
 }
 
+func TestListFilter_EmptyMatchesAll(t *testing.T) {
+	if f := listFilter(nil); len(f) != 0 {
+		t.Errorf("nil statuses → %v, want empty filter (all rows)", f)
+	}
+	if f := listFilter([]string{}); len(f) != 0 {
+		t.Errorf("empty statuses → %v, want empty filter (all rows)", f)
+	}
+}
+
+func TestListFilter_ScopesToStatuses(t *testing.T) {
+	f := listFilter([]string{models.ModuleStatusRegistered, models.ModuleStatusDead})
+	cond, ok := f["status"].(bson.M)
+	if !ok {
+		t.Fatalf("status condition = %T, want bson.M", f["status"])
+	}
+	in, ok := cond["$in"].([]string)
+	if !ok || len(in) != 2 {
+		t.Fatalf("$in = %v, want 2-element string slice", cond["$in"])
+	}
+	if in[0] != models.ModuleStatusRegistered || in[1] != models.ModuleStatusDead {
+		t.Errorf("$in = %v, want [registered dead]", in)
+	}
+}
+
 func TestStaleRegisteredFilter_UsesIfNullFallback(t *testing.T) {
 	cutoff := time.Unix(5000, 0).UTC()
 	f := staleRegisteredFilter(cutoff)
