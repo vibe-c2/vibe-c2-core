@@ -18,6 +18,7 @@ const reaperBatchSize = 200
 type Reaper struct {
 	repo        repository.IModuleRegistryRepository
 	emitter     EventEmitter
+	invalidator RegistrationInvalidator
 	logger      *zap.Logger
 	interval    time.Duration
 	graceWindow time.Duration
@@ -29,9 +30,11 @@ type Reaper struct {
 
 // NewReaper builds the reaper. graceWindow is HeartbeatInterval * GraceMisses —
 // the maximum silence tolerated before an instance is declared dead.
+// invalidator may be nil (gate cache busting is then skipped).
 func NewReaper(
 	repo repository.IModuleRegistryRepository,
 	emitter EventEmitter,
+	invalidator RegistrationInvalidator,
 	interval time.Duration,
 	graceWindow time.Duration,
 	logger *zap.Logger,
@@ -40,6 +43,7 @@ func NewReaper(
 	return &Reaper{
 		repo:        repo,
 		emitter:     emitter,
+		invalidator: invalidator,
 		logger:      logger.With(zap.String("component", "lifecycle-reaper")),
 		interval:    interval,
 		graceWindow: graceWindow,
@@ -101,6 +105,9 @@ func (r *Reaper) RunTick(ctx context.Context) {
 	}
 
 	for _, reg := range stale {
+		if r.invalidator != nil {
+			r.invalidator.Invalidate(ctx, reg.Instance)
+		}
 		r.emit(ctx, reg.Type, reg.Instance)
 		r.logger.Warn("module declared dead (missed heartbeats)",
 			zap.String("module_type", reg.Type),

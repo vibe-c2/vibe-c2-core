@@ -33,7 +33,8 @@ func TestReaper_MarksStaleDeadAndEmits(t *testing.T) {
 	}
 
 	emitter := &fakeEmitter{}
-	reaper := NewReaper(repo, emitter, time.Minute, grace, zap.NewNop())
+	inv := &fakeInvalidator{}
+	reaper := NewReaper(repo, emitter, inv, time.Minute, grace, zap.NewNop())
 	reaper.now = fixedClock(now)
 
 	reaper.RunTick(context.Background())
@@ -51,6 +52,12 @@ func TestReaper_MarksStaleDeadAndEmits(t *testing.T) {
 	if len(emitter.events) != 1 || emitter.events[0].routingKey != "channel.stale-1.declared_dead" {
 		t.Errorf("events = %+v, want one channel.stale-1.declared_dead", emitter.events)
 	}
+
+	// Reaped instances must be evicted from the registration gate cache; the
+	// survivor must not be.
+	if len(inv.instances) != 1 || inv.instances[0] != "stale-1" {
+		t.Errorf("invalidated = %v, want [stale-1]", inv.instances)
+	}
 }
 
 func TestReaper_NeverHeartbeatedUsesRegisteredAt(t *testing.T) {
@@ -64,7 +71,7 @@ func TestReaper_NeverHeartbeatedUsesRegisteredAt(t *testing.T) {
 		RegisteredAt: now.Add(-5 * time.Minute),
 	}
 
-	reaper := NewReaper(repo, &fakeEmitter{}, time.Minute, grace, zap.NewNop())
+	reaper := NewReaper(repo, &fakeEmitter{}, nil, time.Minute, grace, zap.NewNop())
 	reaper.now = fixedClock(now)
 	reaper.RunTick(context.Background())
 
@@ -82,7 +89,7 @@ func TestReaper_NoStaleIsNoop(t *testing.T) {
 		RegisteredAt: now.Add(-time.Hour), LastHeartbeatAt: &hb,
 	}
 	emitter := &fakeEmitter{}
-	reaper := NewReaper(repo, emitter, time.Minute, 90*time.Second, zap.NewNop())
+	reaper := NewReaper(repo, emitter, nil, time.Minute, 90*time.Second, zap.NewNop())
 	reaper.now = fixedClock(now)
 
 	reaper.RunTick(context.Background())

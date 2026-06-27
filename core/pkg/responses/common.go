@@ -16,6 +16,10 @@ var (
 	ErrUnauthorized       = ErrorResponse{Error: "unauthorized"}
 	ErrForbidden          = ErrorResponse{Error: "forbidden"}
 	ErrInternalError      = ErrorResponse{Error: "internal server error"}
+
+	// Channel data-plane (registration gate).
+	ErrChannelNotRegistered = ErrorResponse{Error: "channel not registered"}
+	ErrRegistryUnavailable  = ErrorResponse{Error: "registry unavailable"}
 )
 
 func NewErrorResponse(format string, args ...interface{}) ErrorResponse {

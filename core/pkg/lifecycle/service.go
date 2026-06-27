@@ -41,6 +41,13 @@ type EventEmitter interface {
 	Publish(ctx context.Context, routingKey string, env messaging.Envelope) error
 }
 
+// RegistrationInvalidator drops a cached "registered" marker for an instance so
+// the data-plane registration gate stops accepting it immediately on
+// deregister/death. Satisfied by *modulegate.Gate; nil-safe (skipped) in tests.
+type RegistrationInvalidator interface {
+	Invalidate(ctx context.Context, instance string)
+}
+
 // Config carries the bootstrap values handed back to a module on register and
 // the liveness parameters used by the reaper.
 type Config struct {
@@ -53,16 +60,18 @@ type Config struct {
 
 // Service handles the three lifecycle RPC operations.
 type Service struct {
-	repo    repository.IModuleRegistryRepository
-	emitter EventEmitter
-	logger  *zap.Logger
-	cfg     Config
-	now     func() time.Time
+	repo        repository.IModuleRegistryRepository
+	emitter     EventEmitter
+	invalidator RegistrationInvalidator
+	logger      *zap.Logger
+	cfg         Config
+	now         func() time.Time
 }
 
 // NewService builds the lifecycle service. emitter may be nil (events are then
 // skipped) so core can run with the broker present but events unused in tests.
-func NewService(repo repository.IModuleRegistryRepository, emitter EventEmitter, cfg Config, logger *zap.Logger) *Service {
+// invalidator may be nil (gate cache busting is then skipped).
+func NewService(repo repository.IModuleRegistryRepository, emitter EventEmitter, invalidator RegistrationInvalidator, cfg Config, logger *zap.Logger) *Service {
 	if cfg.HeartbeatInterval <= 0 {
 		cfg.HeartbeatInterval = 30 * time.Second
 	}
@@ -70,11 +79,12 @@ func NewService(repo repository.IModuleRegistryRepository, emitter EventEmitter,
 		cfg.HeartbeatGraceMisses = 3
 	}
 	return &Service{
-		repo:    repo,
-		emitter: emitter,
-		logger:  logger.With(zap.String("component", "lifecycle")),
-		cfg:     cfg,
-		now:     func() time.Time { return time.Now().UTC() },
+		repo:        repo,
+		emitter:     emitter,
+		invalidator: invalidator,
+		logger:      logger.With(zap.String("component", "lifecycle")),
+		cfg:         cfg,
+		now:         func() time.Time { return time.Now().UTC() },
 	}
 }
 
@@ -228,6 +238,9 @@ func (s *Service) HandleDeregister(ctx context.Context, req messaging.Envelope) 
 		}
 	}
 
+	if s.invalidator != nil {
+		s.invalidator.Invalidate(ctx, p.Instance)
+	}
 	s.emit(ctx, moduleType, p.Instance, EventDeregistered)
 	s.logger.Info("module deregistered",
 		zap.String("instance", p.Instance),

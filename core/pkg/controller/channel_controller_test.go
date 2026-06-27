@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -42,6 +43,19 @@ func (f *fakeCache) InvalidateCache(ctx context.Context, e string, id string) er
 func (f *fakeCache) Close() error                                                   { return nil }
 func (f *fakeCache) IsEnabled() bool                                                { return true }
 
+// fakeGate is a stub RegistrationGate. registeredGate() admits everything; the
+// rejection/error variants are constructed inline per test.
+type fakeGate struct {
+	registered bool
+	err        error
+}
+
+func (g fakeGate) IsRegistered(_ context.Context, _ string) (bool, error) {
+	return g.registered, g.err
+}
+
+func registeredGate() fakeGate { return fakeGate{registered: true} }
+
 func newSyncRequest(body string) (*httptest.ResponseRecorder, *gin.Context) {
 	w := httptest.NewRecorder()
 	c, _ := gin.CreateTestContext(w)
@@ -55,6 +69,7 @@ const validInbound = `{
   "type": "inbound.minion_message",
   "version": "1.0",
   "timestamp": "2026-03-09T21:05:12.481Z",
+  "source": {"module": "http", "module_instance": "http-1"},
   "id": "s-2b77df",
   "encrypted_data": "QkM4V1R=",
   "meta": {"trace_id": "tr-6fd92d8b"}
@@ -62,7 +77,7 @@ const validInbound = `{
 
 func TestChannelSync_Valid(t *testing.T) {
 	gin.SetMode(gin.TestMode)
-	ctrl := NewChannelController(newFakeCache(), zap.NewNop())
+	ctrl := NewChannelController(newFakeCache(), registeredGate(), zap.NewNop())
 
 	w, c := newSyncRequest(validInbound)
 	ctrl.Sync(c)
@@ -108,16 +123,17 @@ func TestChannelSync_ValidationErrors(t *testing.T) {
 		name string
 		body string
 	}{
-		{"missing id", `{"message_id":"m1","type":"inbound.minion_message","timestamp":"2026-03-09T21:05:12.481Z","encrypted_data":"x"}`},
-		{"missing encrypted_data", `{"message_id":"m1","type":"inbound.minion_message","timestamp":"2026-03-09T21:05:12.481Z","id":"s-1"}`},
-		{"wrong type", `{"message_id":"m1","type":"outbound.minion_message","timestamp":"2026-03-09T21:05:12.481Z","id":"s-1","encrypted_data":"x"}`},
-		{"bad timestamp", `{"message_id":"m1","type":"inbound.minion_message","timestamp":"not-a-time","id":"s-1","encrypted_data":"x"}`},
+		{"missing id", `{"message_id":"m1","type":"inbound.minion_message","timestamp":"2026-03-09T21:05:12.481Z","source":{"module_instance":"http-1"},"encrypted_data":"x"}`},
+		{"missing encrypted_data", `{"message_id":"m1","type":"inbound.minion_message","timestamp":"2026-03-09T21:05:12.481Z","source":{"module_instance":"http-1"},"id":"s-1"}`},
+		{"missing source.module_instance", `{"message_id":"m1","type":"inbound.minion_message","timestamp":"2026-03-09T21:05:12.481Z","id":"s-1","encrypted_data":"x"}`},
+		{"wrong type", `{"message_id":"m1","type":"outbound.minion_message","timestamp":"2026-03-09T21:05:12.481Z","source":{"module_instance":"http-1"},"id":"s-1","encrypted_data":"x"}`},
+		{"bad timestamp", `{"message_id":"m1","type":"inbound.minion_message","timestamp":"not-a-time","source":{"module_instance":"http-1"},"id":"s-1","encrypted_data":"x"}`},
 		{"malformed json", `{`},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			ctrl := NewChannelController(newFakeCache(), zap.NewNop())
+			ctrl := NewChannelController(newFakeCache(), registeredGate(), zap.NewNop())
 			w, c := newSyncRequest(tt.body)
 			ctrl.Sync(c)
 			if w.Code != http.StatusBadRequest {
@@ -127,10 +143,34 @@ func TestChannelSync_ValidationErrors(t *testing.T) {
 	}
 }
 
+func TestChannelSync_UnregisteredInstanceRejected(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	ctrl := NewChannelController(newFakeCache(), fakeGate{registered: false}, zap.NewNop())
+
+	w, c := newSyncRequest(validInbound)
+	ctrl.Sync(c)
+
+	if w.Code != http.StatusForbidden {
+		t.Fatalf("expected 403 for unregistered instance, got %d (%s)", w.Code, w.Body.String())
+	}
+}
+
+func TestChannelSync_RegistryErrorFailsClosed(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	ctrl := NewChannelController(newFakeCache(), fakeGate{err: errors.New("mongo down")}, zap.NewNop())
+
+	w, c := newSyncRequest(validInbound)
+	ctrl.Sync(c)
+
+	if w.Code != http.StatusServiceUnavailable {
+		t.Fatalf("expected 503 on registry error, got %d (%s)", w.Code, w.Body.String())
+	}
+}
+
 func TestChannelSync_DuplicateMessageIDReturnsNoOp(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	// Shared cache across both calls so the second SetNX reports a duplicate.
-	ctrl := NewChannelController(newFakeCache(), zap.NewNop())
+	ctrl := NewChannelController(newFakeCache(), registeredGate(), zap.NewNop())
 
 	w1, c1 := newSyncRequest(validInbound)
 	ctrl.Sync(c1)

@@ -42,7 +42,7 @@ func (a *App) NewRouter() *gin.Engine {
 	authCtrl := controller.NewAuthController(a.repos.User, a.repos.Session, a.authProvider, a.tokenStore, a.eventBus, a.logger, ctrlCfg)
 	enrollCtrl := controller.NewEnrollController(a.repos.User, a.repos.Session, a.authProvider, a.tokenStore, a.eventBus, a.logger, ctrlCfg)
 	statusCtrl := controller.NewStatusController(a.repos.User, a.logger)
-	channelCtrl := controller.NewChannelController(a.cache, a.logger)
+	channelCtrl := controller.NewChannelController(a.cache, a.moduleGate, a.logger)
 
 	// Resolvers (GraphQL business logic, same pattern as controllers)
 	userRes := resolver.NewUserResolver(a.repos.User, a.eventBus)
@@ -151,8 +151,10 @@ func (a *App) NewRouter() *gin.Engine {
 
 	// Channel data-plane (machine-to-machine). Mounted at the literal contract
 	// path POST /api/channel/sync — external channel modules hardcode it — and
-	// kept outside the /api/v1 AuthN/CSRF chain. Network-trusted for now; module
-	// authentication lands with the module-registration milestone.
+	// kept outside the /api/v1 AuthN/CSRF chain. The handler gates each message
+	// on module registration (source.module_instance must be a registered
+	// instance); this is a registration check, not authentication — cryptographic
+	// channel auth (shared secret / mTLS) is still a follow-up.
 	channel := r.Group("/api/channel")
 	channel.POST("/sync", channelCtrl.Sync)
 

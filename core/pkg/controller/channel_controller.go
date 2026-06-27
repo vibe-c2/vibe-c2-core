@@ -1,6 +1,7 @@
 package controller
 
 import (
+	"context"
 	"net/http"
 	"time"
 
@@ -16,18 +17,27 @@ import (
 // shared cache.
 const dedupKeyPrefix = "channel:sync:msg:"
 
+// RegistrationGate reports whether a module instance is currently registered.
+// Satisfied by *modulegate.Gate; the data-plane endpoint rejects sync messages
+// from instances that have not registered over the AMQP control plane.
+type RegistrationGate interface {
+	IsRegistered(ctx context.Context, instance string) (bool, error)
+}
+
 type IChannelController interface {
 	Sync(c *gin.Context)
 }
 
 type channelController struct {
 	cache cache.Cache
+	gate  RegistrationGate
 	log   *zap.Logger
 }
 
-func NewChannelController(c cache.Cache, log *zap.Logger) IChannelController {
+func NewChannelController(c cache.Cache, gate RegistrationGate, log *zap.Logger) IChannelController {
 	return &channelController{
 		cache: c,
+		gate:  gate,
 		log:   log,
 	}
 }
@@ -50,6 +60,8 @@ func NewChannelController(c cache.Cache, log *zap.Logger) IChannelController {
 //	@Param			request	body		protocol.InboundMinionMessage	true	"Inbound minion message"
 //	@Success		200		{object}	protocol.OutboundMinionMessage
 //	@Failure		400		{object}	responses.ErrorResponse
+//	@Failure		403		{object}	responses.ErrorResponse	"instance is not a registered module"
+//	@Failure		503		{object}	responses.ErrorResponse	"module registry unavailable"
 //	@Router			/channel/sync [post]
 func (ctrl *channelController) Sync(c *gin.Context) {
 	ctx := c.Request.Context()
@@ -62,16 +74,38 @@ func (ctrl *channelController) Sync(c *gin.Context) {
 	}
 
 	// Core-side validation per the data-plane contract: require type, message_id,
-	// id, encrypted_data, and a parseable RFC3339 timestamp. (Source is a
-	// channel-side concern and not required here — see protocol.ValidateInbound
-	// for the stricter channel-side profile.)
+	// id, encrypted_data, source.module_instance, and a parseable RFC3339
+	// timestamp. The instance identifies the sending channel for the registration
+	// gate below.
 	if req.Type != protocol.TypeInboundMinionMessage ||
-		req.MessageID == "" || req.ID == "" || req.EncryptedData == "" {
+		req.MessageID == "" || req.ID == "" || req.EncryptedData == "" ||
+		req.Source.ModuleInstance == "" {
 		c.JSON(http.StatusBadRequest, responses.ErrInvalidInput)
 		return
 	}
 	if _, err := time.Parse(time.RFC3339, req.Timestamp); err != nil {
 		c.JSON(http.StatusBadRequest, responses.ErrInvalidInput)
+		return
+	}
+
+	// Registration gate: reject data-plane traffic from channels that have not
+	// registered over the AMQP control plane. Checked before the dedup guard so
+	// an unregistered sender never consumes a dedup slot or does work. This is a
+	// registration check, not authentication — the instance id is self-asserted;
+	// cryptographic channel auth is a separate follow-up. A registry read failure
+	// fails closed (503) rather than admitting unverified senders.
+	instance := req.Source.ModuleInstance
+	registered, err := ctrl.gate.IsRegistered(ctx, instance)
+	if err != nil {
+		log.Warn("channel sync: registration check failed, rejecting",
+			zap.String("instance", instance), zap.Error(err))
+		c.JSON(http.StatusServiceUnavailable, responses.ErrRegistryUnavailable)
+		return
+	}
+	if !registered {
+		log.Info("channel sync: rejected unregistered instance",
+			zap.String("instance", instance))
+		c.JSON(http.StatusForbidden, responses.ErrChannelNotRegistered)
 		return
 	}
 

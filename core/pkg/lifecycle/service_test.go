@@ -133,12 +133,21 @@ func (e *fakeEmitter) Publish(_ context.Context, routingKey string, env messagin
 func newTestService() (*Service, *fakeRepo, *fakeEmitter) {
 	repo := newFakeRepo()
 	emitter := &fakeEmitter{}
-	svc := NewService(repo, emitter, Config{
+	svc := NewService(repo, emitter, nil, Config{
 		HeartbeatInterval:    30 * time.Second,
 		HeartbeatGraceMisses: 3,
 		ExpectedContracts:    []models.ContractRef{{Name: "transposition.profile", Version: "1.0"}},
 	}, zap.NewNop())
 	return svc, repo, emitter
+}
+
+// fakeInvalidator records gate cache-busting calls.
+type fakeInvalidator struct {
+	instances []string
+}
+
+func (f *fakeInvalidator) Invalidate(_ context.Context, instance string) {
+	f.instances = append(f.instances, instance)
 }
 
 func envFor(t *testing.T, opType string, payload any) messaging.Envelope {
@@ -289,6 +298,31 @@ func TestHandleDeregister_UnknownInstance(t *testing.T) {
 	svc, _, _ := newTestService()
 	_, err := svc.HandleDeregister(context.Background(), envFor(t, OpDeregister, deregisterRequest{Instance: "ghost"}))
 	assertRPCCode(t, err, messaging.CodeUnknownInstance)
+}
+
+func TestHandleDeregister_InvalidatesGate(t *testing.T) {
+	repo := newFakeRepo()
+	inv := &fakeInvalidator{}
+	svc := NewService(repo, &fakeEmitter{}, inv, Config{}, zap.NewNop())
+	repo.rows["http-1"] = &models.Module{
+		Type: "channel", Instance: "http-1", Status: models.ModuleStatusRegistered,
+	}
+
+	if _, err := svc.HandleDeregister(context.Background(), envFor(t, OpDeregister, deregisterRequest{
+		Instance: "http-1", Reason: "shutdown",
+	})); err != nil {
+		t.Fatalf("deregister error: %v", err)
+	}
+	if len(inv.instances) != 1 || inv.instances[0] != "http-1" {
+		t.Errorf("invalidated = %v, want [http-1]", inv.instances)
+	}
+
+	// An unknown instance must not bust the cache.
+	inv.instances = nil
+	_, _ = svc.HandleDeregister(context.Background(), envFor(t, OpDeregister, deregisterRequest{Instance: "ghost"}))
+	if len(inv.instances) != 0 {
+		t.Errorf("invalidated on unknown instance = %v, want none", inv.instances)
+	}
 }
 
 func TestHandleRegister_PersistErrorIsInternal(t *testing.T) {
