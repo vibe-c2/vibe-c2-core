@@ -9,7 +9,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"strconv"
 	"strings"
 	"time"
 
@@ -63,7 +62,6 @@ type ModuleEventPublisher interface {
 type Config struct {
 	HeartbeatInterval    time.Duration
 	HeartbeatGraceMisses int
-	ExpectedContracts    []models.ContractRef
 	Policy               map[string]any
 	FeatureFlags         map[string]any
 }
@@ -104,12 +102,11 @@ func NewService(repo repository.IModuleRegistryRepository, emitter EventEmitter,
 // --- request/reply payload shapes (contract module-lifecycle.md) ---
 
 type registerRequest struct {
-	ModuleType         string               `json:"module_type"`
-	Instance           string               `json:"instance"`
-	Version            string               `json:"version"`
-	RPCQueue           string               `json:"rpc_queue"`
-	Description        string               `json:"description"`
-	SupportedContracts []models.ContractRef `json:"supported_contracts"`
+	ModuleType  string `json:"module_type"`
+	Instance    string `json:"instance"`
+	Version     string `json:"version"`
+	RPCQueue    string `json:"rpc_queue"`
+	Description string `json:"description"`
 }
 
 type registerReply struct {
@@ -121,9 +118,8 @@ type registerReply struct {
 }
 
 type registerConfig struct {
-	ExpectedContracts []models.ContractRef `json:"expected_contracts"`
-	Policy            map[string]any       `json:"policy"`
-	FeatureFlags      map[string]any       `json:"feature_flags"`
+	Policy       map[string]any `json:"policy"`
+	FeatureFlags map[string]any `json:"feature_flags"`
 }
 
 type heartbeatRequest struct {
@@ -157,24 +153,14 @@ func (s *Service) HandleRegister(ctx context.Context, req messaging.Envelope) (a
 	if p.ModuleType == "" || p.Instance == "" || p.RPCQueue == "" {
 		return nil, validationErr("module_type, instance and rpc_queue are required")
 	}
-	// Reject any declared contract whose major version core cannot serve.
-	for _, c := range p.SupportedContracts {
-		if !contractServeable(c) {
-			return nil, &messaging.RPCError{
-				Code:    messaging.CodeUnsupportedVersion,
-				Message: fmt.Sprintf("contract %s version %s not serveable", c.Name, c.Version),
-			}
-		}
-	}
 
 	reg := &models.Module{
-		Type:               p.ModuleType,
-		Instance:           p.Instance,
-		Version:            p.Version,
-		RPCQueue:           p.RPCQueue,
-		Description:        p.Description,
-		SupportedContracts: p.SupportedContracts,
-		RegisteredAt:       s.now(),
+		Type:         p.ModuleType,
+		Instance:     p.Instance,
+		Version:      p.Version,
+		RPCQueue:     p.RPCQueue,
+		Description:  p.Description,
+		RegisteredAt: s.now(),
 	}
 	if err := s.repo.Upsert(ctx, reg); err != nil {
 		return nil, fmt.Errorf("persist registration: %w", err)
@@ -196,9 +182,8 @@ func (s *Service) HandleRegister(ctx context.Context, req messaging.Envelope) (a
 		HeartbeatIntervalSeconds: int(s.cfg.HeartbeatInterval.Seconds()),
 		HeartbeatGraceMisses:     s.cfg.HeartbeatGraceMisses,
 		Config: registerConfig{
-			ExpectedContracts: s.cfg.ExpectedContracts,
-			Policy:            orEmptyMap(s.cfg.Policy),
-			FeatureFlags:      orEmptyMap(s.cfg.FeatureFlags),
+			Policy:       orEmptyMap(s.cfg.Policy),
+			FeatureFlags: orEmptyMap(s.cfg.FeatureFlags),
 		},
 	}, nil
 }
@@ -336,24 +321,6 @@ func EventRoutingKey(moduleType, instance, event string) string {
 
 func validationErr(msg string) *messaging.RPCError {
 	return &messaging.RPCError{Code: messaging.CodeValidationFailed, Message: msg}
-}
-
-// contractServeable reports whether core can serve the declared contract's major
-// version. Core currently serves major 1 of every contract; the version string
-// is "MAJOR.MINOR".
-func contractServeable(c models.ContractRef) bool {
-	if c.Version == "" {
-		return false
-	}
-	majorStr, _, found := strings.Cut(c.Version, ".")
-	if !found {
-		majorStr = c.Version
-	}
-	major, err := strconv.Atoi(majorStr)
-	if err != nil {
-		return false
-	}
-	return major == messaging.SupportedMajor
 }
 
 func orEmptyMap(m map[string]any) map[string]any {

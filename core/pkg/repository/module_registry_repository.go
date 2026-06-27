@@ -109,13 +109,12 @@ func markDeadUpdate(at time.Time) bson.M {
 func takeoverUpdate(reg *models.Module) bson.M {
 	return bson.M{
 		"$set": bson.M{
-			"module_type":         reg.Type,
-			"version":             reg.Version,
-			"rpc_queue":           reg.RPCQueue,
-			"description":         reg.Description,
-			"supported_contracts": reg.SupportedContracts,
-			"status":              models.ModuleStatusRegistered,
-			"registered_at":       reg.RegisteredAt,
+			"module_type":   reg.Type,
+			"version":       reg.Version,
+			"rpc_queue":     reg.RPCQueue,
+			"description":   reg.Description,
+			"status":        models.ModuleStatusRegistered,
+			"registered_at": reg.RegisteredAt,
 		},
 		"$unset": bson.M{
 			"deregistered_at":   "",

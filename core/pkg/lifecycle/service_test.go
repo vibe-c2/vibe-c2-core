@@ -154,7 +154,6 @@ func newTestService() (*Service, *fakeRepo, *fakeEmitter) {
 	svc := NewService(repo, emitter, nil, nil, Config{
 		HeartbeatInterval:    30 * time.Second,
 		HeartbeatGraceMisses: 3,
-		ExpectedContracts:    []models.ContractRef{{Name: "transposition.profile", Version: "1.0"}},
 	}, zap.NewNop())
 	return svc, repo, emitter
 }
@@ -194,9 +193,6 @@ func TestHandleRegister_NewInstance(t *testing.T) {
 		Instance:   "http-1",
 		Version:    "1.2.0",
 		RPCQueue:   "vibe.channel.rpc.http-1",
-		SupportedContracts: []models.ContractRef{
-			{Name: "transposition.profile", Version: "1.0"},
-		},
 	}))
 	if err != nil {
 		t.Fatalf("HandleRegister error: %v", err)
@@ -208,9 +204,6 @@ func TestHandleRegister_NewInstance(t *testing.T) {
 	}
 	if reply.HeartbeatIntervalSeconds != 30 || reply.HeartbeatGraceMisses != 3 {
 		t.Errorf("bootstrap config = %d/%d, want 30/3", reply.HeartbeatIntervalSeconds, reply.HeartbeatGraceMisses)
-	}
-	if len(reply.Config.ExpectedContracts) != 1 {
-		t.Errorf("expected_contracts = %v", reply.Config.ExpectedContracts)
 	}
 	if reply.Config.Policy == nil || reply.Config.FeatureFlags == nil {
 		t.Error("policy/feature_flags must serialize as objects, not null")
@@ -252,15 +245,6 @@ func TestHandleRegister_ValidationFailed(t *testing.T) {
 		ModuleType: "channel", // missing instance + rpc_queue
 	}))
 	assertRPCCode(t, err, messaging.CodeValidationFailed)
-}
-
-func TestHandleRegister_UnsupportedVersion(t *testing.T) {
-	svc, _, _ := newTestService()
-	_, err := svc.HandleRegister(context.Background(), envFor(t, OpRegister, registerRequest{
-		ModuleType: "channel", Instance: "http-1", RPCQueue: "q",
-		SupportedContracts: []models.ContractRef{{Name: "transposition.profile", Version: "2.0"}},
-	}))
-	assertRPCCode(t, err, messaging.CodeUnsupportedVersion)
 }
 
 func TestHandleHeartbeat_OK(t *testing.T) {

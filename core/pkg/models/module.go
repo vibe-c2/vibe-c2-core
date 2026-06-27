@@ -13,12 +13,6 @@ const (
 	ModuleStatusDeregistered = "deregistered"
 )
 
-// ContractRef names a contract and the version a module declares it supports.
-type ContractRef struct {
-	Name    string `bson:"name" json:"name"`
-	Version string `bson:"version" json:"version"`
-}
-
 // Module is one row per module instance in the durable registry —
 // the system-of-record for "which module instances exist and their lifecycle
 // state". Upserted on module.register (idempotent takeover). Instance is
@@ -34,7 +28,6 @@ type Module struct {
 	Version            string         `bson:"version" json:"version"`
 	RPCQueue           string         `bson:"rpc_queue" json:"rpc_queue"` // core→module callback queue
 	Description        string         `bson:"description,omitempty" json:"description,omitempty"` // self-reported, human-facing
-	SupportedContracts []ContractRef  `bson:"supported_contracts,omitempty" json:"supported_contracts,omitempty"`
 
 	Status          string         `bson:"status" json:"status"`
 	RegisteredAt    time.Time      `bson:"registered_at" json:"registered_at"`
