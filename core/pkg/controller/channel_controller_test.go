@@ -11,7 +11,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/vibe-c2/vibe-c2-core/core/pkg/cache"
-	"github.com/vibe-c2/vibe-c2-core/core/pkg/responses"
+	"github.com/vibe-c2/vibe-c2-golang-protocol/protocol"
 	"go.uber.org/zap"
 )
 
@@ -71,15 +71,15 @@ func TestChannelSync_Valid(t *testing.T) {
 		t.Fatalf("expected 200, got %d (%s)", w.Code, w.Body.String())
 	}
 
-	var out responses.OutboundMinionMessage
+	var out protocol.OutboundMinionMessage
 	if err := json.Unmarshal(w.Body.Bytes(), &out); err != nil {
 		t.Fatalf("unmarshal response: %v", err)
 	}
-	if out.Type != responses.TypeOutboundMinionMessage {
-		t.Errorf("type = %q, want %q", out.Type, responses.TypeOutboundMinionMessage)
+	if out.Type != protocol.TypeOutboundMinionMessage {
+		t.Errorf("type = %q, want %q", out.Type, protocol.TypeOutboundMinionMessage)
 	}
-	if out.Version != responses.ChannelContractVersion {
-		t.Errorf("version = %q, want %q", out.Version, responses.ChannelContractVersion)
+	if out.Version != protocol.VersionV1 {
+		t.Errorf("version = %q, want %q", out.Version, protocol.VersionV1)
 	}
 	if out.ID != "s-2b77df" {
 		t.Errorf("id = %q, want echoed s-2b77df", out.ID)
@@ -87,11 +87,11 @@ func TestChannelSync_Valid(t *testing.T) {
 	if out.EncryptedData != "" {
 		t.Errorf("encrypted_data = %q, want empty no-op", out.EncryptedData)
 	}
-	if out.Meta.Status != "ok" {
-		t.Errorf("meta.status = %q, want ok", out.Meta.Status)
+	if out.Meta["status"] != "ok" {
+		t.Errorf("meta.status = %v, want ok", out.Meta["status"])
 	}
-	if out.Meta.TraceID != "tr-6fd92d8b" {
-		t.Errorf("meta.trace_id = %q, want propagated", out.Meta.TraceID)
+	if out.Meta["trace_id"] != "tr-6fd92d8b" {
+		t.Errorf("meta.trace_id = %v, want propagated", out.Meta["trace_id"])
 	}
 	if out.MessageID == "" {
 		t.Error("message_id should be set")
@@ -144,11 +144,11 @@ func TestChannelSync_DuplicateMessageIDReturnsNoOp(t *testing.T) {
 		t.Fatalf("duplicate call: expected 200 no-op, got %d (%s)", w2.Code, w2.Body.String())
 	}
 
-	var out responses.OutboundMinionMessage
+	var out protocol.OutboundMinionMessage
 	if err := json.Unmarshal(w2.Body.Bytes(), &out); err != nil {
 		t.Fatalf("unmarshal duplicate response: %v", err)
 	}
-	if out.ID != "s-2b77df" || out.Meta.Status != "ok" {
+	if out.ID != "s-2b77df" || out.Meta["status"] != "ok" {
 		t.Errorf("duplicate response not a valid no-op outbound: %+v", out)
 	}
 }

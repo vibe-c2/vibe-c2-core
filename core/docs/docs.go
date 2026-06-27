@@ -35,7 +35,7 @@ const docTemplate = `{
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/requests.InboundMinionMessage"
+                            "$ref": "#/definitions/protocol.InboundMinionMessage"
                         }
                     }
                 ],
@@ -43,7 +43,7 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/responses.OutboundMinionMessage"
+                            "$ref": "#/definitions/protocol.OutboundMinionMessage"
                         }
                     },
                     "400": {
@@ -710,33 +710,66 @@ const docTemplate = `{
                 }
             }
         },
-        "requests.EnrollRequest": {
+        "protocol.InboundMinionMessage": {
             "type": "object",
-            "required": [
-                "password",
-                "username"
-            ],
             "properties": {
-                "password": {
+                "encrypted_data": {
                     "type": "string"
                 },
-                "username": {
+                "id": {
+                    "type": "string"
+                },
+                "message_id": {
+                    "type": "string"
+                },
+                "meta": {
+                    "$ref": "#/definitions/protocol.MessageMeta"
+                },
+                "source": {
+                    "$ref": "#/definitions/protocol.SourceInfo"
+                },
+                "timestamp": {
+                    "type": "string"
+                },
+                "type": {
+                    "type": "string"
+                },
+                "version": {
                     "type": "string"
                 }
             }
         },
-        "requests.InboundMessageMeta": {
+        "protocol.MessageMeta": {
+            "type": "object",
+            "additionalProperties": {}
+        },
+        "protocol.OutboundMinionMessage": {
             "type": "object",
             "properties": {
-                "receive_count": {
-                    "type": "integer"
+                "encrypted_data": {
+                    "type": "string"
                 },
-                "trace_id": {
+                "id": {
+                    "type": "string"
+                },
+                "message_id": {
+                    "type": "string"
+                },
+                "meta": {
+                    "$ref": "#/definitions/protocol.MessageMeta"
+                },
+                "timestamp": {
+                    "type": "string"
+                },
+                "type": {
+                    "type": "string"
+                },
+                "version": {
                     "type": "string"
                 }
             }
         },
-        "requests.InboundMessageSource": {
+        "protocol.SourceInfo": {
             "type": "object",
             "properties": {
                 "module": {
@@ -753,38 +786,17 @@ const docTemplate = `{
                 }
             }
         },
-        "requests.InboundMinionMessage": {
+        "requests.EnrollRequest": {
             "type": "object",
             "required": [
-                "encrypted_data",
-                "id",
-                "message_id",
-                "timestamp",
-                "type"
+                "password",
+                "username"
             ],
             "properties": {
-                "encrypted_data": {
+                "password": {
                     "type": "string"
                 },
-                "id": {
-                    "type": "string"
-                },
-                "message_id": {
-                    "type": "string"
-                },
-                "meta": {
-                    "$ref": "#/definitions/requests.InboundMessageMeta"
-                },
-                "source": {
-                    "$ref": "#/definitions/requests.InboundMessageSource"
-                },
-                "timestamp": {
-                    "type": "string"
-                },
-                "type": {
-                    "type": "string"
-                },
-                "version": {
+                "username": {
                     "type": "string"
                 }
             }
@@ -808,43 +820,6 @@ const docTemplate = `{
             "type": "object",
             "properties": {
                 "error": {
-                    "type": "string"
-                }
-            }
-        },
-        "responses.OutboundMessageMeta": {
-            "type": "object",
-            "properties": {
-                "status": {
-                    "type": "string"
-                },
-                "trace_id": {
-                    "type": "string"
-                }
-            }
-        },
-        "responses.OutboundMinionMessage": {
-            "type": "object",
-            "properties": {
-                "encrypted_data": {
-                    "type": "string"
-                },
-                "id": {
-                    "type": "string"
-                },
-                "message_id": {
-                    "type": "string"
-                },
-                "meta": {
-                    "$ref": "#/definitions/responses.OutboundMessageMeta"
-                },
-                "timestamp": {
-                    "type": "string"
-                },
-                "type": {
-                    "type": "string"
-                },
-                "version": {
                     "type": "string"
                 }
             }

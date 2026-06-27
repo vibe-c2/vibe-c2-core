@@ -39,7 +39,7 @@ seaweedfs-reset: ## Reset only SeaweedFS volumes (clears bucket state; keeps Mon
 
 swag: ## swag: Generates or updates the Swagger/OpenAPI documentation files.
 	@echo "Generating API documentation"
-	cd core && go run github.com/swaggo/swag/cmd/swag@latest init
+	cd core && go run github.com/swaggo/swag/cmd/swag@latest init --parseDependency --parseInternal
 
 frontend: ## Start frontend dev server
 	$(MAKE) -C frontend frontend

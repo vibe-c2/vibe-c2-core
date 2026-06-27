@@ -11,12 +11,15 @@ require (
 	github.com/gorilla/websocket v1.5.0
 	github.com/minio/minio-go/v7 v7.0.100
 	github.com/mssola/useragent v1.0.0
+	github.com/oklog/ulid/v2 v2.1.1
 	github.com/qiniu/qmgo v1.1.10
 	github.com/spf13/viper v1.21.0
 	github.com/swaggo/files v1.0.1
 	github.com/swaggo/gin-swagger v1.6.1
 	github.com/swaggo/swag v1.16.6
 	github.com/vektah/gqlparser/v2 v2.5.32
+	github.com/vibe-c2/vibe-c2-golang-protocol v0.2.1
+	github.com/wagslane/go-rabbitmq v0.15.0
 	go.mongodb.org/mongo-driver v1.17.1
 	go.mongodb.org/mongo-driver/v2 v2.5.0
 	go.uber.org/zap v1.27.1
@@ -42,6 +45,7 @@ require (
 	github.com/minio/crc64nvme v1.1.1 // indirect
 	github.com/minio/md5-simd v1.1.2 // indirect
 	github.com/philhofer/fwd v1.2.0 // indirect
+	github.com/rabbitmq/amqp091-go v1.10.0 // indirect
 	github.com/rs/xid v1.6.0 // indirect
 	github.com/sosodev/duration v1.4.0 // indirect
 	github.com/tinylib/msgp v1.6.1 // indirect

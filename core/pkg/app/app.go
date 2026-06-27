@@ -16,7 +16,9 @@ import (
 	"github.com/vibe-c2/vibe-c2-core/core/pkg/environment"
 	"github.com/vibe-c2/vibe-c2-core/core/pkg/eventbus"
 	"github.com/vibe-c2/vibe-c2-core/core/pkg/events"
+	"github.com/vibe-c2/vibe-c2-core/core/pkg/lifecycle"
 	"github.com/vibe-c2/vibe-c2-core/core/pkg/logger"
+	"github.com/vibe-c2/vibe-c2-core/core/pkg/messaging"
 	"github.com/vibe-c2/vibe-c2-core/core/pkg/repository"
 	"github.com/vibe-c2/vibe-c2-core/core/pkg/wiki"
 
@@ -48,6 +50,7 @@ type Repositories struct {
 	Task               repository.ITaskRepository
 	OperationEvent     repository.IOperationEventRepository
 	APIKey             repository.IAPIKeyRepository
+	ModuleRegistry     repository.IModuleRegistryRepository
 }
 
 type App struct {
@@ -72,8 +75,14 @@ type App struct {
 	fileSweeper     *wiki.FileSweeper
 	sweepersEnabled bool // master switch from WIKI_SWEEPER_ENABLED
 
+	// Module-lifecycle control plane (AMQP). All three may be nil when the
+	// broker is disabled or unreachable — core then runs without the RPC
+	// surface and modules cannot register until the broker is back.
+	mqClient  *messaging.Client
+	rpcServer *messaging.RPCServer
+	reaper    *lifecycle.Reaper
+
 	// Future integration points:
-	// rabbitmq         rabbitmq.IRabbitMQ
 	// sseManager       sse.ISSEManager
 	// matrixNotifier   matrix.IMatrixNotifier
 	// confEngine       confengine.IConfigurationEngine
@@ -111,6 +120,7 @@ func NewApp() (*App, error) {
 		Task:               repository.NewTaskRepository(db),
 		OperationEvent:     repository.NewOperationEventRepository(db),
 		APIKey:             repository.NewAPIKeyRepository(db),
+		ModuleRegistry:     repository.NewModuleRegistryRepository(db),
 	}
 
 	// Initialize cache (noop fallback is acceptable for caching)
@@ -203,11 +213,11 @@ func NewApp() (*App, error) {
 		e.WikiFileSweeperInterval, e.WikiFileSweeperGrace, e.WikiSweeperDryRun,
 	)
 
+	// Module-lifecycle control plane over AMQP. The broker being unavailable is
+	// non-fatal (mirrors the cache): we log and run without the RPC surface.
+	mqClient, rpcServer, reaper := initLifecycle(repos.ModuleRegistry, e, l)
+
 	// --- Future integration patterns ---
-	//
-	// RabbitMQ:
-	//   rmq, err := rabbitmq.NewRabbitMQClient()
-	//   if err != nil { l.Warn("Failed to initialize RabbitMQ", zap.Error(err)) }
 	//
 	// SSE (subscribes to event bus):
 	//   sseManager := sse.NewSSEManager()
@@ -218,12 +228,6 @@ func NewApp() (*App, error) {
 	//
 	// Configuration engine:
 	//   confEngine := confengine.NewConfigurationEngine(repos..., bus)
-	//
-	// Setup manager (requires RabbitMQ):
-	//   sm := setupmanager.NewSetupManager(repos..., rmq, bus, l)
-	//
-	// Condition checker (requires setup manager):
-	//   cc := setupmanager.NewConditionChecker(repos..., sm, bus, l)
 	// ------------------------------------
 
 	// Persist domain events into operation_events so the Timeline page can
@@ -290,9 +294,71 @@ func NewApp() (*App, error) {
 		fileStore:       fileStore,
 		fileSweeper:     fileSweeper,
 		sweepersEnabled: e.WikiSweeperEnabled,
+		mqClient:        mqClient,
+		rpcServer:       rpcServer,
+		reaper:          reaper,
 	}
 
 	return app, nil
+}
+
+// initLifecycle stands up the AMQP control plane: the broker connection, the
+// vibe.core.rpc server with the three lifecycle handlers registered, and the
+// liveness reaper. The broker being disabled (APP_RABBITMQ_ENABLED=false) or
+// unreachable is non-fatal — it returns nils and core runs without the RPC
+// surface, so existing dev/test flows work without a broker. Returned
+// components are nil-safe at start/stop.
+func initLifecycle(
+	registry repository.IModuleRegistryRepository,
+	e *environment.EnvironmentSettings,
+	l *zap.Logger,
+) (*messaging.Client, *messaging.RPCServer, *lifecycle.Reaper) {
+	if !e.RabbitMQEnabled {
+		l.Warn("RabbitMQ disabled (APP_RABBITMQ_ENABLED=false); module registration is unavailable")
+		return nil, nil, nil
+	}
+
+	client, err := messaging.NewClient(messaging.Config{
+		Host:     e.RabbitMQHost,
+		Port:     e.RabbitMQPort,
+		User:     e.RabbitMQUser,
+		Password: e.RabbitMQPassword,
+		VHost:    e.RabbitMQVHost,
+	}, l)
+	if err != nil {
+		l.Warn("Failed to connect to RabbitMQ, continuing without module registration", zap.Error(err))
+		return nil, nil, nil
+	}
+
+	// Audit-event publisher on vibe.events. A failure here is non-fatal: the
+	// RPC surface still works, registration just won't emit events.
+	var emitter lifecycle.EventEmitter
+	if pub, err := messaging.NewEventPublisher(client.Conn(), l); err != nil {
+		l.Warn("Failed to create event publisher; lifecycle events disabled", zap.Error(err))
+	} else {
+		emitter = pub
+	}
+
+	graceWindow := e.ModuleHeartbeatInterval * time.Duration(e.ModuleHeartbeatGraceMisses)
+
+	svc := lifecycle.NewService(registry, emitter, lifecycle.Config{
+		HeartbeatInterval:    e.ModuleHeartbeatInterval,
+		HeartbeatGraceMisses: e.ModuleHeartbeatGraceMisses,
+	}, l)
+
+	rpcServer := messaging.NewRPCServer(client.Conn(), l)
+	rpcServer.RegisterHandler(lifecycle.OpRegister, svc.HandleRegister)
+	rpcServer.RegisterHandler(lifecycle.OpHeartbeat, svc.HandleHeartbeat)
+	rpcServer.RegisterHandler(lifecycle.OpDeregister, svc.HandleDeregister)
+
+	var reaper *lifecycle.Reaper
+	if e.ModuleReaperEnabled {
+		reaper = lifecycle.NewReaper(registry, emitter, e.ModuleReaperInterval, graceWindow, l)
+	} else {
+		l.Warn("Module liveness reaper disabled (MODULE_REAPER_ENABLED=false); dead instances will not be reaped")
+	}
+
+	return client, rpcServer, reaper
 }
 
 // startSweepers launches the wiki attachment garbage collectors, but only when
@@ -311,6 +377,43 @@ func (a *App) startSweepers() {
 	a.fileSweeper.Start()
 }
 
+// startLifecycle starts the AMQP RPC server and liveness reaper when the broker
+// is available. Nil components (broker disabled/unreachable) are skipped. An RPC
+// server start failure is logged, not fatal — core keeps serving HTTP.
+func (a *App) startLifecycle() {
+	if a.rpcServer != nil {
+		// Best-effort instance label for the envelope `source.instance` field;
+		// the hostname distinguishes core pods in the audit/event stream.
+		if host, err := os.Hostname(); err == nil {
+			messaging.SetInstance(host)
+		}
+		if err := a.rpcServer.Start(); err != nil {
+			a.logger.Warn("Failed to start module-lifecycle RPC server", zap.Error(err))
+		}
+	}
+	if a.reaper != nil {
+		a.reaper.Start()
+	}
+}
+
+// stopLifecycle tears down the reaper, RPC server, and broker connection. All
+// nil-safe.
+func (a *App) stopLifecycle() {
+	if a.reaper != nil {
+		a.reaper.Stop()
+	}
+	if a.rpcServer != nil {
+		a.rpcServer.Stop()
+	}
+	if a.mqClient != nil {
+		if err := a.mqClient.Close(); err != nil {
+			a.logger.Error("Error closing RabbitMQ connection", zap.Error(err))
+		} else {
+			a.logger.Info("RabbitMQ connection closed successfully")
+		}
+	}
+}
+
 func (a *App) StartServer() {
 	router := a.NewRouter()
 
@@ -322,6 +425,7 @@ func (a *App) StartServer() {
 	a.eventBus.Start()
 	a.backupScheduler.Start()
 	a.startSweepers()
+	a.startLifecycle()
 
 	a.logger.Info("Starting server...", zap.String("address", srv.Addr))
 	if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
@@ -340,6 +444,7 @@ func (a *App) StartServerWithGracefulShutdown() {
 	a.eventBus.Start()
 	a.backupScheduler.Start()
 	a.startSweepers()
+	a.startLifecycle()
 
 	idleConnsClosed := make(chan struct{})
 
@@ -353,6 +458,7 @@ func (a *App) StartServerWithGracefulShutdown() {
 		a.backupScheduler.Stop()
 		a.imageSweeper.Stop()
 		a.fileSweeper.Stop()
+		a.stopLifecycle()
 
 		ctxTimeout, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
@@ -386,9 +492,6 @@ func (a *App) StartServerWithGracefulShutdown() {
 		} else {
 			a.logger.Info("Token store connection closed successfully")
 		}
-
-		// Future: close other services
-		// a.rabbitmq.Close()
 
 		a.logger.Info("Server successfully exited")
 		close(idleConnsClosed)

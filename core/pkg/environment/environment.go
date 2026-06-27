@@ -26,6 +26,14 @@ type EnvironmentSettings struct {
 	RabbitMQPort     string
 	RabbitMQUser     string
 	RabbitMQPassword string
+	RabbitMQVHost    string
+	RabbitMQEnabled  bool // when false, the AMQP RPC server + reaper do not start
+
+	// Module lifecycle (control-plane registration + liveness)
+	ModuleHeartbeatInterval    time.Duration // expected heartbeat cadence handed to modules
+	ModuleHeartbeatGraceMisses int           // missed beats before an instance is declared dead
+	ModuleReaperInterval       time.Duration // how often the liveness reaper runs
+	ModuleReaperEnabled        bool          // master switch for the reaper goroutine
 
 	// SeaweedFS S3
 	SeaweedFSS3AccessKey string
@@ -55,11 +63,11 @@ type EnvironmentSettings struct {
 	WikiImageSweeperGrace    time.Duration // minimum age before an unreferenced image is deleted
 
 	// Wiki file attachments (non-image uploads stored in SeaweedFS S3)
-	WikiFileBucket              string
-	WikiFileMaxSize             int64         // bytes
-	WikiFileDeniedContentTypes  []string      // blocked MIME types (exact match), empty = allow all
-	WikiFileSweeperInterval     time.Duration // how often the GC pass runs
-	WikiFileSweeperGrace        time.Duration // minimum age before an unreferenced file is deleted
+	WikiFileBucket             string
+	WikiFileMaxSize            int64         // bytes
+	WikiFileDeniedContentTypes []string      // blocked MIME types (exact match), empty = allow all
+	WikiFileSweeperInterval    time.Duration // how often the GC pass runs
+	WikiFileSweeperGrace       time.Duration // minimum age before an unreferenced file is deleted
 
 	// Wiki attachment garbage collector (shared by the image + file sweepers)
 	WikiSweeperEnabled bool // master switch: when false, neither sweeper starts
@@ -92,6 +100,12 @@ func init() {
 	viper.SetDefault("APP_DEBUG", false)
 	viper.SetDefault("APP_RABBITMQ_HOST", "localhost")
 	viper.SetDefault("APP_RABBITMQ_PORT", "5672")
+	viper.SetDefault("APP_RABBITMQ_VHOST", "/")
+	viper.SetDefault("APP_RABBITMQ_ENABLED", true)
+	viper.SetDefault("MODULE_HEARTBEAT_INTERVAL", "30s")
+	viper.SetDefault("MODULE_HEARTBEAT_GRACE_MISSES", 3)
+	viper.SetDefault("MODULE_REAPER_INTERVAL", "15s")
+	viper.SetDefault("MODULE_REAPER_ENABLED", true)
 	viper.SetDefault("SEAWEEDFS_S3_ENDPOINT", "http://localhost:8333")
 	viper.SetDefault("REDIS_HOST", "localhost")
 	viper.SetDefault("REDIS_PORT", "6379")
@@ -137,6 +151,14 @@ func init() {
 		RabbitMQPort:     viper.GetString("APP_RABBITMQ_PORT"),
 		RabbitMQUser:     viper.GetString("RABBITMQ_DEFAULT_USER"),
 		RabbitMQPassword: viper.GetString("RABBITMQ_DEFAULT_PASS"),
+		RabbitMQVHost:    viper.GetString("APP_RABBITMQ_VHOST"),
+		RabbitMQEnabled:  viper.GetBool("APP_RABBITMQ_ENABLED"),
+
+		// Module lifecycle
+		ModuleHeartbeatInterval:    parseDurationOrFatal("MODULE_HEARTBEAT_INTERVAL", viper.GetString("MODULE_HEARTBEAT_INTERVAL")),
+		ModuleHeartbeatGraceMisses: viper.GetInt("MODULE_HEARTBEAT_GRACE_MISSES"),
+		ModuleReaperInterval:       parseDurationOrFatal("MODULE_REAPER_INTERVAL", viper.GetString("MODULE_REAPER_INTERVAL")),
+		ModuleReaperEnabled:        viper.GetBool("MODULE_REAPER_ENABLED"),
 
 		// SeaweedFS S3
 		SeaweedFSS3AccessKey: viper.GetString("SEAWEEDFS_S3_ACCESS_KEY"),

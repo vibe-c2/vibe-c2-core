@@ -38,24 +38,46 @@ definitions:
     required:
     - documentId
     type: object
-  requests.EnrollRequest:
+  protocol.InboundMinionMessage:
     properties:
-      password:
+      encrypted_data:
         type: string
-      username:
+      id:
         type: string
-    required:
-    - password
-    - username
+      message_id:
+        type: string
+      meta:
+        $ref: '#/definitions/protocol.MessageMeta'
+      source:
+        $ref: '#/definitions/protocol.SourceInfo'
+      timestamp:
+        type: string
+      type:
+        type: string
+      version:
+        type: string
     type: object
-  requests.InboundMessageMeta:
+  protocol.MessageMeta:
+    additionalProperties: {}
+    type: object
+  protocol.OutboundMinionMessage:
     properties:
-      receive_count:
-        type: integer
-      trace_id:
+      encrypted_data:
+        type: string
+      id:
+        type: string
+      message_id:
+        type: string
+      meta:
+        $ref: '#/definitions/protocol.MessageMeta'
+      timestamp:
+        type: string
+      type:
+        type: string
+      version:
         type: string
     type: object
-  requests.InboundMessageSource:
+  protocol.SourceInfo:
     properties:
       module:
         type: string
@@ -66,30 +88,15 @@ definitions:
       transport:
         type: string
     type: object
-  requests.InboundMinionMessage:
+  requests.EnrollRequest:
     properties:
-      encrypted_data:
+      password:
         type: string
-      id:
-        type: string
-      message_id:
-        type: string
-      meta:
-        $ref: '#/definitions/requests.InboundMessageMeta'
-      source:
-        $ref: '#/definitions/requests.InboundMessageSource'
-      timestamp:
-        type: string
-      type:
-        type: string
-      version:
+      username:
         type: string
     required:
-    - encrypted_data
-    - id
-    - message_id
-    - timestamp
-    - type
+    - password
+    - username
     type: object
   requests.LoginRequest:
     properties:
@@ -104,30 +111,6 @@ definitions:
   responses.ErrorResponse:
     properties:
       error:
-        type: string
-    type: object
-  responses.OutboundMessageMeta:
-    properties:
-      status:
-        type: string
-      trace_id:
-        type: string
-    type: object
-  responses.OutboundMinionMessage:
-    properties:
-      encrypted_data:
-        type: string
-      id:
-        type: string
-      message_id:
-        type: string
-      meta:
-        $ref: '#/definitions/responses.OutboundMessageMeta'
-      timestamp:
-        type: string
-      type:
-        type: string
-      version:
         type: string
     type: object
   responses.SessionResponse:
@@ -214,14 +197,14 @@ paths:
         name: request
         required: true
         schema:
-          $ref: '#/definitions/requests.InboundMinionMessage'
+          $ref: '#/definitions/protocol.InboundMinionMessage'
       produces:
       - application/json
       responses:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/responses.OutboundMinionMessage'
+            $ref: '#/definitions/protocol.OutboundMinionMessage'
         "400":
           description: Bad Request
           schema:
