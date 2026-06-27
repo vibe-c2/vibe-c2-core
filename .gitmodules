@@ -1,3 +1,6 @@
 [submodule "docs/vibe-c2-docs"]
 	path = docs/vibe-c2-docs
 	url = https://github.com/vibe-c2/vibe-c2-docs
+[submodule "vibe-c2-golang-protocol"]
+	path = vibe-c2-golang-protocol
+	url = https://github.com/vibe-c2/vibe-c2-golang-protocol
