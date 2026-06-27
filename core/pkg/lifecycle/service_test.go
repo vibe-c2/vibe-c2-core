@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/qiniu/qmgo"
+	"github.com/vibe-c2/vibe-c2-core/core/pkg/eventbus"
 	"github.com/vibe-c2/vibe-c2-core/core/pkg/messaging"
 	"github.com/vibe-c2/vibe-c2-core/core/pkg/models"
 	"go.uber.org/zap"
@@ -133,7 +134,7 @@ func (e *fakeEmitter) Publish(_ context.Context, routingKey string, env messagin
 func newTestService() (*Service, *fakeRepo, *fakeEmitter) {
 	repo := newFakeRepo()
 	emitter := &fakeEmitter{}
-	svc := NewService(repo, emitter, nil, Config{
+	svc := NewService(repo, emitter, nil, nil, Config{
 		HeartbeatInterval:    30 * time.Second,
 		HeartbeatGraceMisses: 3,
 		ExpectedContracts:    []models.ContractRef{{Name: "transposition.profile", Version: "1.0"}},
@@ -148,6 +149,15 @@ type fakeInvalidator struct {
 
 func (f *fakeInvalidator) Invalidate(_ context.Context, instance string) {
 	f.instances = append(f.instances, instance)
+}
+
+// fakePublisher records events fanned out to the in-process event bus.
+type fakePublisher struct {
+	events []eventbus.Event
+}
+
+func (p *fakePublisher) Publish(ev eventbus.Event) {
+	p.events = append(p.events, ev)
 }
 
 func envFor(t *testing.T, opType string, payload any) messaging.Envelope {
@@ -303,7 +313,7 @@ func TestHandleDeregister_UnknownInstance(t *testing.T) {
 func TestHandleDeregister_InvalidatesGate(t *testing.T) {
 	repo := newFakeRepo()
 	inv := &fakeInvalidator{}
-	svc := NewService(repo, &fakeEmitter{}, inv, Config{}, zap.NewNop())
+	svc := NewService(repo, &fakeEmitter{}, inv, nil, Config{}, zap.NewNop())
 	repo.rows["http-1"] = &models.Module{
 		Type: "channel", Instance: "http-1", Status: models.ModuleStatusRegistered,
 	}
@@ -322,6 +332,67 @@ func TestHandleDeregister_InvalidatesGate(t *testing.T) {
 	_, _ = svc.HandleDeregister(context.Background(), envFor(t, OpDeregister, deregisterRequest{Instance: "ghost"}))
 	if len(inv.instances) != 0 {
 		t.Errorf("invalidated on unknown instance = %v, want none", inv.instances)
+	}
+}
+
+func TestHandleRegister_PublishesBusEvent(t *testing.T) {
+	repo := newFakeRepo()
+	pub := &fakePublisher{}
+	svc := NewService(repo, &fakeEmitter{}, nil, pub, Config{}, zap.NewNop())
+
+	if _, err := svc.HandleRegister(context.Background(), envFor(t, OpRegister, registerRequest{
+		ModuleType: "channel", Instance: "http-1", RPCQueue: "q",
+	})); err != nil {
+		t.Fatalf("register error: %v", err)
+	}
+
+	if len(pub.events) != 1 {
+		t.Fatalf("published %d bus events, want 1", len(pub.events))
+	}
+	ev := pub.events[0]
+	if ev.Topic != eventbus.TopicModuleRegistered {
+		t.Errorf("topic = %q, want %q", ev.Topic, eventbus.TopicModuleRegistered)
+	}
+	p, ok := ev.Payload.(eventbus.ModuleEventPayload)
+	if !ok {
+		t.Fatalf("payload type = %T, want ModuleEventPayload", ev.Payload)
+	}
+	if p.Instance != "http-1" || p.Type != "channel" || p.Status != models.ModuleStatusRegistered {
+		t.Errorf("payload = %+v", p)
+	}
+}
+
+func TestHandleDeregister_PublishesBusEvent(t *testing.T) {
+	repo := newFakeRepo()
+	pub := &fakePublisher{}
+	svc := NewService(repo, &fakeEmitter{}, nil, pub, Config{}, zap.NewNop())
+	repo.rows["http-1"] = &models.Module{
+		Type: "channel", Instance: "http-1", Status: models.ModuleStatusRegistered,
+	}
+
+	if _, err := svc.HandleDeregister(context.Background(), envFor(t, OpDeregister, deregisterRequest{
+		Instance: "http-1", Reason: "shutdown",
+	})); err != nil {
+		t.Fatalf("deregister error: %v", err)
+	}
+
+	if len(pub.events) != 1 {
+		t.Fatalf("published %d bus events, want 1", len(pub.events))
+	}
+	ev := pub.events[0]
+	if ev.Topic != eventbus.TopicModuleDeregistered {
+		t.Errorf("topic = %q, want %q", ev.Topic, eventbus.TopicModuleDeregistered)
+	}
+	p, _ := ev.Payload.(eventbus.ModuleEventPayload)
+	if p.Instance != "http-1" || p.Status != models.ModuleStatusDeregistered {
+		t.Errorf("payload = %+v", p)
+	}
+
+	// An unknown instance must not publish.
+	pub.events = nil
+	_, _ = svc.HandleDeregister(context.Background(), envFor(t, OpDeregister, deregisterRequest{Instance: "ghost"}))
+	if len(pub.events) != 0 {
+		t.Errorf("published on unknown instance = %+v, want none", pub.events)
 	}
 }
 

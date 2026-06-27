@@ -223,7 +223,7 @@ func NewApp() (*App, error) {
 	// Module-lifecycle control plane over AMQP. A reachable broker is a hard
 	// dependency — initLifecycle returns an error and core refuses to boot if
 	// the broker cannot be reached.
-	mqClient, rpcServer, reaper, err := initLifecycle(repos.ModuleRegistry, moduleGate, e, l)
+	mqClient, rpcServer, reaper, err := initLifecycle(repos.ModuleRegistry, moduleGate, bus, e, l)
 	if err != nil {
 		return nil, fmt.Errorf("failed to initialize module-lifecycle control plane: %w", err)
 	}
@@ -322,6 +322,7 @@ func NewApp() (*App, error) {
 func initLifecycle(
 	registry repository.IModuleRegistryRepository,
 	gate lifecycle.RegistrationInvalidator,
+	bus lifecycle.ModuleEventPublisher,
 	e *environment.EnvironmentSettings,
 	l *zap.Logger,
 ) (*messaging.Client, *messaging.RPCServer, *lifecycle.Reaper, error) {
@@ -345,7 +346,7 @@ func initLifecycle(
 
 	graceWindow := e.ModuleHeartbeatInterval * time.Duration(e.ModuleHeartbeatGraceMisses)
 
-	svc := lifecycle.NewService(registry, emitter, gate, lifecycle.Config{
+	svc := lifecycle.NewService(registry, emitter, gate, bus, lifecycle.Config{
 		HeartbeatInterval:    e.ModuleHeartbeatInterval,
 		HeartbeatGraceMisses: e.ModuleHeartbeatGraceMisses,
 	}, l)
@@ -357,7 +358,7 @@ func initLifecycle(
 
 	var reaper *lifecycle.Reaper
 	if e.ModuleReaperEnabled {
-		reaper = lifecycle.NewReaper(registry, emitter, gate, e.ModuleReaperInterval, graceWindow, l)
+		reaper = lifecycle.NewReaper(registry, emitter, gate, bus, e.ModuleReaperInterval, graceWindow, l)
 	} else {
 		l.Warn("Module liveness reaper disabled (MODULE_REAPER_ENABLED=false); dead instances will not be reaped")
 	}

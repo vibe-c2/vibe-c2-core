@@ -4,7 +4,9 @@ import (
 	"context"
 	"time"
 
+	"github.com/vibe-c2/vibe-c2-core/core/pkg/eventbus"
 	"github.com/vibe-c2/vibe-c2-core/core/pkg/messaging"
+	"github.com/vibe-c2/vibe-c2-core/core/pkg/models"
 	"github.com/vibe-c2/vibe-c2-core/core/pkg/repository"
 	"go.uber.org/zap"
 )
@@ -19,6 +21,7 @@ type Reaper struct {
 	repo        repository.IModuleRegistryRepository
 	emitter     EventEmitter
 	invalidator RegistrationInvalidator
+	publisher   ModuleEventPublisher
 	logger      *zap.Logger
 	interval    time.Duration
 	graceWindow time.Duration
@@ -30,11 +33,13 @@ type Reaper struct {
 
 // NewReaper builds the reaper. graceWindow is HeartbeatInterval * GraceMisses —
 // the maximum silence tolerated before an instance is declared dead.
-// invalidator may be nil (gate cache busting is then skipped).
+// invalidator may be nil (gate cache busting is then skipped); publisher may be
+// nil (in-process bus fan-out is then skipped).
 func NewReaper(
 	repo repository.IModuleRegistryRepository,
 	emitter EventEmitter,
 	invalidator RegistrationInvalidator,
+	publisher ModuleEventPublisher,
 	interval time.Duration,
 	graceWindow time.Duration,
 	logger *zap.Logger,
@@ -44,6 +49,7 @@ func NewReaper(
 		repo:        repo,
 		emitter:     emitter,
 		invalidator: invalidator,
+		publisher:   publisher,
 		logger:      logger.With(zap.String("component", "lifecycle-reaper")),
 		interval:    interval,
 		graceWindow: graceWindow,
@@ -109,10 +115,23 @@ func (r *Reaper) RunTick(ctx context.Context) {
 			r.invalidator.Invalidate(ctx, reg.Instance)
 		}
 		r.emit(ctx, reg.Type, reg.Instance)
+		r.publishBus(eventbus.NewModuleDeadEvent(
+			eventbus.SystemActor(),
+			eventbus.ModuleEventPayload{Instance: reg.Instance, Type: reg.Type, Status: models.ModuleStatusDead},
+		))
 		r.logger.Warn("module declared dead (missed heartbeats)",
 			zap.String("module_type", reg.Type),
 			zap.String("instance", reg.Instance))
 	}
+}
+
+// publishBus fans a declared-dead transition out to the in-process event bus
+// for live SPA subscribers. Non-blocking and nil-safe.
+func (r *Reaper) publishBus(ev eventbus.Event) {
+	if r.publisher == nil {
+		return
+	}
+	r.publisher.Publish(ev)
 }
 
 func (r *Reaper) emit(ctx context.Context, moduleType, instance string) {

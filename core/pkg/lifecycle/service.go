@@ -13,6 +13,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/vibe-c2/vibe-c2-core/core/pkg/eventbus"
 	"github.com/vibe-c2/vibe-c2-core/core/pkg/messaging"
 	"github.com/vibe-c2/vibe-c2-core/core/pkg/models"
 	"github.com/vibe-c2/vibe-c2-core/core/pkg/repository"
@@ -48,6 +49,15 @@ type RegistrationInvalidator interface {
 	Invalidate(ctx context.Context, instance string)
 }
 
+// ModuleEventPublisher publishes module lifecycle changes onto the in-process
+// event bus so GraphQL subscribers (the Modules admin page) update in real
+// time. Distinct from the AMQP EventEmitter audit stream: this is the in-core
+// fan-out to live SPA clients. Satisfied by eventbus.IEventBus; nil-safe
+// (skipped) in tests.
+type ModuleEventPublisher interface {
+	Publish(event eventbus.Event)
+}
+
 // Config carries the bootstrap values handed back to a module on register and
 // the liveness parameters used by the reaper.
 type Config struct {
@@ -63,15 +73,17 @@ type Service struct {
 	repo        repository.IModuleRegistryRepository
 	emitter     EventEmitter
 	invalidator RegistrationInvalidator
+	publisher   ModuleEventPublisher
 	logger      *zap.Logger
 	cfg         Config
 	now         func() time.Time
 }
 
-// NewService builds the lifecycle service. emitter may be nil (events are then
-// skipped) so core can run with the broker present but events unused in tests.
-// invalidator may be nil (gate cache busting is then skipped).
-func NewService(repo repository.IModuleRegistryRepository, emitter EventEmitter, invalidator RegistrationInvalidator, cfg Config, logger *zap.Logger) *Service {
+// NewService builds the lifecycle service. emitter may be nil (AMQP audit
+// events are then skipped) so core can run with the broker present but events
+// unused in tests. invalidator may be nil (gate cache busting is then skipped).
+// publisher may be nil (in-process bus fan-out is then skipped).
+func NewService(repo repository.IModuleRegistryRepository, emitter EventEmitter, invalidator RegistrationInvalidator, publisher ModuleEventPublisher, cfg Config, logger *zap.Logger) *Service {
 	if cfg.HeartbeatInterval <= 0 {
 		cfg.HeartbeatInterval = 30 * time.Second
 	}
@@ -82,6 +94,7 @@ func NewService(repo repository.IModuleRegistryRepository, emitter EventEmitter,
 		repo:        repo,
 		emitter:     emitter,
 		invalidator: invalidator,
+		publisher:   publisher,
 		logger:      logger.With(zap.String("component", "lifecycle")),
 		cfg:         cfg,
 		now:         func() time.Time { return time.Now().UTC() },
@@ -168,6 +181,10 @@ func (s *Service) HandleRegister(ctx context.Context, req messaging.Envelope) (a
 	}
 
 	s.emit(ctx, p.ModuleType, p.Instance, EventRegistered)
+	s.publishBus(eventbus.NewModuleRegisteredEvent(
+		eventbus.ServiceActor(p.Instance),
+		eventbus.ModuleEventPayload{Instance: p.Instance, Type: p.ModuleType, Status: models.ModuleStatusRegistered},
+	))
 	s.logger.Info("module registered",
 		zap.String("module_type", p.ModuleType),
 		zap.String("instance", p.Instance),
@@ -242,11 +259,25 @@ func (s *Service) HandleDeregister(ctx context.Context, req messaging.Envelope) 
 		s.invalidator.Invalidate(ctx, p.Instance)
 	}
 	s.emit(ctx, moduleType, p.Instance, EventDeregistered)
+	s.publishBus(eventbus.NewModuleDeregisteredEvent(
+		eventbus.ServiceActor(p.Instance),
+		eventbus.ModuleEventPayload{Instance: p.Instance, Type: moduleType, Status: models.ModuleStatusDeregistered},
+	))
 	s.logger.Info("module deregistered",
 		zap.String("instance", p.Instance),
 		zap.String("reason", p.Reason))
 
 	return deregisterReply{Instance: p.Instance, Deregistered: true}, nil
+}
+
+// publishBus fans a module lifecycle change out to the in-process event bus for
+// live SPA subscribers. Non-blocking and nil-safe; skipped when no publisher is
+// wired (tests, or a build without subscriptions).
+func (s *Service) publishBus(ev eventbus.Event) {
+	if s.publisher == nil {
+		return
+	}
+	s.publisher.Publish(ev)
 }
 
 // emit publishes a lifecycle audit event. Failures are logged, never fatal —

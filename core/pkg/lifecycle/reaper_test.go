@@ -5,6 +5,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/vibe-c2/vibe-c2-core/core/pkg/eventbus"
 	"github.com/vibe-c2/vibe-c2-core/core/pkg/models"
 	"go.uber.org/zap"
 )
@@ -34,7 +35,8 @@ func TestReaper_MarksStaleDeadAndEmits(t *testing.T) {
 
 	emitter := &fakeEmitter{}
 	inv := &fakeInvalidator{}
-	reaper := NewReaper(repo, emitter, inv, time.Minute, grace, zap.NewNop())
+	pub := &fakePublisher{}
+	reaper := NewReaper(repo, emitter, inv, pub, time.Minute, grace, zap.NewNop())
 	reaper.now = fixedClock(now)
 
 	reaper.RunTick(context.Background())
@@ -58,6 +60,19 @@ func TestReaper_MarksStaleDeadAndEmits(t *testing.T) {
 	if len(inv.instances) != 1 || inv.instances[0] != "stale-1" {
 		t.Errorf("invalidated = %v, want [stale-1]", inv.instances)
 	}
+
+	// And a dead event must be fanned out to the in-process bus (one per
+	// reaped instance) so the Modules admin page updates live.
+	if len(pub.events) != 1 {
+		t.Fatalf("published %d bus events, want 1", len(pub.events))
+	}
+	if pub.events[0].Topic != eventbus.TopicModuleDead {
+		t.Errorf("topic = %q, want %q", pub.events[0].Topic, eventbus.TopicModuleDead)
+	}
+	if p, ok := pub.events[0].Payload.(eventbus.ModuleEventPayload); !ok ||
+		p.Instance != "stale-1" || p.Status != models.ModuleStatusDead {
+		t.Errorf("payload = %+v", pub.events[0].Payload)
+	}
 }
 
 func TestReaper_NeverHeartbeatedUsesRegisteredAt(t *testing.T) {
@@ -71,7 +86,7 @@ func TestReaper_NeverHeartbeatedUsesRegisteredAt(t *testing.T) {
 		RegisteredAt: now.Add(-5 * time.Minute),
 	}
 
-	reaper := NewReaper(repo, &fakeEmitter{}, nil, time.Minute, grace, zap.NewNop())
+	reaper := NewReaper(repo, &fakeEmitter{}, nil, nil, time.Minute, grace, zap.NewNop())
 	reaper.now = fixedClock(now)
 	reaper.RunTick(context.Background())
 
@@ -89,7 +104,7 @@ func TestReaper_NoStaleIsNoop(t *testing.T) {
 		RegisteredAt: now.Add(-time.Hour), LastHeartbeatAt: &hb,
 	}
 	emitter := &fakeEmitter{}
-	reaper := NewReaper(repo, emitter, nil, time.Minute, 90*time.Second, zap.NewNop())
+	reaper := NewReaper(repo, emitter, nil, nil, time.Minute, 90*time.Second, zap.NewNop())
 	reaper.now = fixedClock(now)
 
 	reaper.RunTick(context.Background())

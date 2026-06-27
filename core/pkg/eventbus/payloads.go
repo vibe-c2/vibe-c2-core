@@ -340,6 +340,30 @@ func NewTaskHardDeletedEvent(actor Actor, p TaskEventPayload) Event {
 	return NewEvent(TopicTaskHardDeleted, actor, p)
 }
 
+// --- Module lifecycle event payloads ---
+
+// ModuleEventPayload is the payload for every module lifecycle topic. Carries
+// primitives only (no models import); subscribers refetch the full row via the
+// module registry repository. Status reflects the row state *after* the
+// transition that triggered the event.
+type ModuleEventPayload struct {
+	Instance string
+	Type     string // module_type: "channel" | "minion-factory"
+	Status   string // "registered" | "deregistered" | "dead"
+}
+
+func NewModuleRegisteredEvent(actor Actor, p ModuleEventPayload) Event {
+	return NewEvent(TopicModuleRegistered, actor, p)
+}
+
+func NewModuleDeregisteredEvent(actor Actor, p ModuleEventPayload) Event {
+	return NewEvent(TopicModuleDeregistered, actor, p)
+}
+
+func NewModuleDeadEvent(actor Actor, p ModuleEventPayload) Event {
+	return NewEvent(TopicModuleDead, actor, p)
+}
+
 // --- Timeline event payload ---
 
 // OperationEventLoggedPayload is the payload for TopicOperationEventLogged.

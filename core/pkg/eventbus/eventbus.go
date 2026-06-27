@@ -88,6 +88,15 @@ const (
 	TopicHostUpdated Topic = "host.updated"
 	TopicHostDeleted Topic = "host.deleted"
 
+	// Module lifecycle events — emitted by the lifecycle Service + reaper
+	// (control plane) and the ModuleResolver (admin remove). Power the
+	// real-time Modules admin page; subscribers refetch the changed row via
+	// the module registry repository. "registered" covers both first
+	// registration and revival of a previously dead/deregistered instance.
+	TopicModuleRegistered   Topic = "module.registered"
+	TopicModuleDeregistered Topic = "module.deregistered"
+	TopicModuleDead         Topic = "module.dead"
+
 	// Timeline events — emitted by pkg/events.Logger after a row has been
 	// persisted to the operation_events collection. Carries only the
 	// (event_id, operation_id) primitives so the eventbus package stays
