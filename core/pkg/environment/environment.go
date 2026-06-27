@@ -21,13 +21,14 @@ type EnvironmentSettings struct {
 	MongoURI      string
 	MongoDatabase string
 
-	// RabbitMQ
+	// RabbitMQ — a reachable broker is a hard startup dependency: the AMQP
+	// control plane (module registration + the data-plane registration gate)
+	// cannot function without it, so core refuses to boot if it is missing.
 	RabbitMQHost     string
 	RabbitMQPort     string
 	RabbitMQUser     string
 	RabbitMQPassword string
 	RabbitMQVHost    string
-	RabbitMQEnabled  bool // when false, the AMQP RPC server + reaper do not start
 
 	// Module lifecycle (control-plane registration + liveness)
 	ModuleHeartbeatInterval    time.Duration // expected heartbeat cadence handed to modules
@@ -101,7 +102,6 @@ func init() {
 	viper.SetDefault("APP_RABBITMQ_HOST", "localhost")
 	viper.SetDefault("APP_RABBITMQ_PORT", "5672")
 	viper.SetDefault("APP_RABBITMQ_VHOST", "/")
-	viper.SetDefault("APP_RABBITMQ_ENABLED", true)
 	viper.SetDefault("MODULE_HEARTBEAT_INTERVAL", "30s")
 	viper.SetDefault("MODULE_HEARTBEAT_GRACE_MISSES", 3)
 	viper.SetDefault("MODULE_REAPER_INTERVAL", "15s")
@@ -152,7 +152,6 @@ func init() {
 		RabbitMQUser:     viper.GetString("RABBITMQ_DEFAULT_USER"),
 		RabbitMQPassword: viper.GetString("RABBITMQ_DEFAULT_PASS"),
 		RabbitMQVHost:    viper.GetString("APP_RABBITMQ_VHOST"),
-		RabbitMQEnabled:  viper.GetBool("APP_RABBITMQ_ENABLED"),
 
 		// Module lifecycle
 		ModuleHeartbeatInterval:    parseDurationOrFatal("MODULE_HEARTBEAT_INTERVAL", viper.GetString("MODULE_HEARTBEAT_INTERVAL")),
@@ -213,9 +212,11 @@ func init() {
 
 	// Validate required configuration — fail fast on missing critical values.
 	required := map[string]string{
-		"JWT_SECRET_KEY": env.JWTSecretKey,
-		"MONGO_URI":      env.MongoURI,
-		"MONGO_DATABASE": env.MongoDatabase,
+		"JWT_SECRET_KEY":        env.JWTSecretKey,
+		"MONGO_URI":             env.MongoURI,
+		"MONGO_DATABASE":        env.MongoDatabase,
+		"RABBITMQ_DEFAULT_USER": env.RabbitMQUser,
+		"RABBITMQ_DEFAULT_PASS": env.RabbitMQPassword,
 	}
 	for name, value := range required {
 		if value == "" {
