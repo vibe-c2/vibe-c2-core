@@ -5,6 +5,7 @@ export const ModuleFields = graphql(`
     instance
     type
     version
+    description
     status
     lastStatus
     registeredAt

@@ -216,6 +216,7 @@ type ComplexityRoot struct {
 		DeclaredDeadAt   func(childComplexity int) int
 		DeregisterReason func(childComplexity int) int
 		DeregisteredAt   func(childComplexity int) int
+		Description      func(childComplexity int) int
 		Instance         func(childComplexity int) int
 		LastHeartbeatAt  func(childComplexity int) int
 		LastStatus       func(childComplexity int) int
@@ -1642,6 +1643,12 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.Module.DeregisteredAt(childComplexity), true
+	case "Module.description":
+		if e.ComplexityRoot.Module.Description == nil {
+			break
+		}
+
+		return e.ComplexityRoot.Module.Description(childComplexity), true
 	case "Module.instance":
 		if e.ComplexityRoot.Module.Instance == nil {
 			break
@@ -5266,6 +5273,9 @@ type Module {
   # Module kind: "channel" | "minion-factory".
   type: String!
   version: String!
+  # Free-text, self-reported description the module supplies at registration.
+  # Empty if the module declared none.
+  description: String!
   # Lifecycle state: "registered" | "deregistered" | "dead".
   status: String!
   # Self-reported health on the most recent heartbeat:
@@ -12685,6 +12695,35 @@ func (ec *executionContext) fieldContext_Module_version(_ context.Context, field
 	return fc, nil
 }
 
+func (ec *executionContext) _Module_description(ctx context.Context, field graphql.CollectedField, obj *models.Module) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Module_description,
+		func(ctx context.Context) (any, error) {
+			return obj.Description, nil
+		},
+		nil,
+		ec.marshalNString2string,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_Module_description(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Module",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
 func (ec *executionContext) _Module_status(ctx context.Context, field graphql.CollectedField, obj *models.Module) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
@@ -12976,6 +13015,8 @@ func (ec *executionContext) fieldContext_ModuleEvent_module(_ context.Context, f
 				return ec.fieldContext_Module_type(ctx, field)
 			case "version":
 				return ec.fieldContext_Module_version(ctx, field)
+			case "description":
+				return ec.fieldContext_Module_description(ctx, field)
 			case "status":
 				return ec.fieldContext_Module_status(ctx, field)
 			case "lastStatus":
@@ -15249,6 +15290,8 @@ func (ec *executionContext) fieldContext_Mutation_removeModule(ctx context.Conte
 				return ec.fieldContext_Module_type(ctx, field)
 			case "version":
 				return ec.fieldContext_Module_version(ctx, field)
+			case "description":
+				return ec.fieldContext_Module_description(ctx, field)
 			case "status":
 				return ec.fieldContext_Module_status(ctx, field)
 			case "lastStatus":
@@ -20339,6 +20382,8 @@ func (ec *executionContext) fieldContext_Query_modules(ctx context.Context, fiel
 				return ec.fieldContext_Module_type(ctx, field)
 			case "version":
 				return ec.fieldContext_Module_version(ctx, field)
+			case "description":
+				return ec.fieldContext_Module_description(ctx, field)
 			case "status":
 				return ec.fieldContext_Module_status(ctx, field)
 			case "lastStatus":
@@ -35280,6 +35325,11 @@ func (ec *executionContext) _Module(ctx context.Context, sel ast.SelectionSet, o
 			}
 		case "version":
 			out.Values[i] = ec._Module_version(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				atomic.AddUint32(&out.Invalids, 1)
+			}
+		case "description":
+			out.Values[i] = ec._Module_description(ctx, field, obj)
 			if out.Values[i] == graphql.Null {
 				atomic.AddUint32(&out.Invalids, 1)
 			}

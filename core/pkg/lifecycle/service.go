@@ -108,7 +108,7 @@ type registerRequest struct {
 	Instance           string               `json:"instance"`
 	Version            string               `json:"version"`
 	RPCQueue           string               `json:"rpc_queue"`
-	Capabilities       map[string]any       `json:"capabilities"`
+	Description        string               `json:"description"`
 	SupportedContracts []models.ContractRef `json:"supported_contracts"`
 }
 
@@ -172,7 +172,7 @@ func (s *Service) HandleRegister(ctx context.Context, req messaging.Envelope) (a
 		Instance:           p.Instance,
 		Version:            p.Version,
 		RPCQueue:           p.RPCQueue,
-		Capabilities:       p.Capabilities,
+		Description:        p.Description,
 		SupportedContracts: p.SupportedContracts,
 		RegisteredAt:       s.now(),
 	}

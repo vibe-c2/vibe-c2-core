@@ -94,7 +94,14 @@ export function ModulesTable({ modules, isLoading }: ModulesTableProps) {
         const isRegistered = m.status === "registered"
         return (
           <div className={dataTableRowClass(gridCols)}>
-            <div className="font-medium truncate">{m.instance}</div>
+            <div className="min-w-0">
+              <div className="font-medium truncate">{m.instance}</div>
+              {m.description && (
+                <div className="text-xs text-muted-foreground truncate">
+                  {m.description}
+                </div>
+              )}
+            </div>
             <div>
               <Badge variant="secondary">{m.type}</Badge>
             </div>

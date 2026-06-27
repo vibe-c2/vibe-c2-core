@@ -32,7 +32,8 @@ export function ModulesPage() {
       (m) =>
         m.instance.toLowerCase().includes(q) ||
         m.type.toLowerCase().includes(q) ||
-        m.version.toLowerCase().includes(q),
+        m.version.toLowerCase().includes(q) ||
+        m.description.toLowerCase().includes(q),
     )
   }, [data, search])
 

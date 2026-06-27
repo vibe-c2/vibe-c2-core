@@ -33,7 +33,7 @@ type Module struct {
 	Instance           string         `bson:"instance" json:"instance"`       // self-assigned, unique-indexed
 	Version            string         `bson:"version" json:"version"`
 	RPCQueue           string         `bson:"rpc_queue" json:"rpc_queue"` // core→module callback queue
-	Capabilities       map[string]any `bson:"capabilities,omitempty" json:"capabilities,omitempty"`
+	Description        string         `bson:"description,omitempty" json:"description,omitempty"` // self-reported, human-facing
 	SupportedContracts []ContractRef  `bson:"supported_contracts,omitempty" json:"supported_contracts,omitempty"`
 
 	Status          string         `bson:"status" json:"status"`

@@ -112,7 +112,7 @@ func takeoverUpdate(reg *models.Module) bson.M {
 			"module_type":         reg.Type,
 			"version":             reg.Version,
 			"rpc_queue":           reg.RPCQueue,
-			"capabilities":        reg.Capabilities,
+			"description":         reg.Description,
 			"supported_contracts": reg.SupportedContracts,
 			"status":              models.ModuleStatusRegistered,
 			"registered_at":       reg.RegisteredAt,
