@@ -1,4 +1,5 @@
 import {
+  BlocksIcon,
   BookOpenIcon,
   FileCode2Icon,
   KanbanSquareIcon,
@@ -78,6 +79,12 @@ export const navigationAdminItems: NavigationItem[] = [
     url: "/users",
     permission: Permissions.USER_READ,
     icon: UsersIcon,
+  },
+  {
+    title: "Modules",
+    url: "/modules",
+    permission: Permissions.MODULE_READ,
+    icon: BlocksIcon,
   },
   {
     title: "API Docs",

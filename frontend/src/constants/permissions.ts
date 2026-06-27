@@ -23,6 +23,10 @@ export const Permissions = {
   SESSION_READ_OWN: 'session:read:own',
   SESSION_REVOKE: 'session:revoke',
   SESSION_REVOKE_OWN: 'session:revoke:own',
+
+  // Module
+  MODULE_READ: 'module:read',
+  MODULE_DELETE: 'module:delete',
 } as const;
 
 /**
