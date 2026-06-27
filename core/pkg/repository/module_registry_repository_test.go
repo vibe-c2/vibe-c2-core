@@ -73,6 +73,7 @@ func TestMarkDeadUpdate_Shape(t *testing.T) {
 func TestTakeoverUpdate_RevivesByUnsettingEndState(t *testing.T) {
 	reg := &models.Module{
 		Type:         "channel",
+		Name:         "http",
 		Instance:     "http-1",
 		Version:      "1.2.0",
 		RPCQueue:     "vibe.channel.rpc.http-1",
@@ -86,6 +87,9 @@ func TestTakeoverUpdate_RevivesByUnsettingEndState(t *testing.T) {
 	}
 	if set["rpc_queue"] != "vibe.channel.rpc.http-1" {
 		t.Errorf("rpc_queue = %v", set["rpc_queue"])
+	}
+	if set["module_name"] != "http" {
+		t.Errorf("module_name = %v, want http", set["module_name"])
 	}
 
 	unset := u["$unset"].(bson.M)

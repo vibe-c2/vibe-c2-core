@@ -190,6 +190,7 @@ func TestHandleRegister_NewInstance(t *testing.T) {
 
 	out, err := svc.HandleRegister(context.Background(), envFor(t, OpRegister, registerRequest{
 		ModuleType: "channel",
+		ModuleName: "http",
 		Instance:   "http-1",
 		Version:    "1.2.0",
 		RPCQueue:   "vibe.channel.rpc.http-1",
@@ -201,6 +202,9 @@ func TestHandleRegister_NewInstance(t *testing.T) {
 	reply := out.(registerReply)
 	if !reply.Registered || reply.Instance != "http-1" {
 		t.Errorf("reply = %+v", reply)
+	}
+	if row := repo.rows["http-1"]; row == nil || row.Name != "http" {
+		t.Errorf("module_name not persisted: %+v", row)
 	}
 	if reply.HeartbeatIntervalSeconds != 30 || reply.HeartbeatGraceMisses != 3 {
 		t.Errorf("bootstrap config = %d/%d, want 30/3", reply.HeartbeatIntervalSeconds, reply.HeartbeatGraceMisses)
@@ -225,7 +229,7 @@ func TestHandleRegister_IdempotentTakeoverRevivesDead(t *testing.T) {
 	}
 
 	_, err := svc.HandleRegister(context.Background(), envFor(t, OpRegister, registerRequest{
-		ModuleType: "channel", Instance: "http-1", RPCQueue: "q",
+		ModuleType: "channel", ModuleName: "http", Instance: "http-1", RPCQueue: "q",
 	}))
 	if err != nil {
 		t.Fatalf("takeover register error: %v", err)
@@ -342,7 +346,7 @@ func TestHandleRegister_PublishesBusEvent(t *testing.T) {
 	svc := NewService(repo, &fakeEmitter{}, nil, pub, Config{}, zap.NewNop())
 
 	if _, err := svc.HandleRegister(context.Background(), envFor(t, OpRegister, registerRequest{
-		ModuleType: "channel", Instance: "http-1", RPCQueue: "q",
+		ModuleType: "channel", ModuleName: "http", Instance: "http-1", RPCQueue: "q",
 	})); err != nil {
 		t.Fatalf("register error: %v", err)
 	}
@@ -440,7 +444,7 @@ func TestHandleRegister_PersistErrorIsInternal(t *testing.T) {
 	svc, repo, _ := newTestService()
 	repo.upsertErr = errors.New("mongo down")
 	_, err := svc.HandleRegister(context.Background(), envFor(t, OpRegister, registerRequest{
-		ModuleType: "channel", Instance: "http-1", RPCQueue: "q",
+		ModuleType: "channel", ModuleName: "http", Instance: "http-1", RPCQueue: "q",
 	}))
 	// Not an RPCError → server maps to internal_error.
 	var rpcErr *messaging.RPCError

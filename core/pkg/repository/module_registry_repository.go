@@ -110,6 +110,7 @@ func takeoverUpdate(reg *models.Module) bson.M {
 	return bson.M{
 		"$set": bson.M{
 			"module_type":   reg.Type,
+			"module_name":   reg.Name,
 			"version":       reg.Version,
 			"rpc_queue":     reg.RPCQueue,
 			"description":   reg.Description,

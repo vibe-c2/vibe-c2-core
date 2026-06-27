@@ -103,6 +103,7 @@ func NewService(repo repository.IModuleRegistryRepository, emitter EventEmitter,
 
 type registerRequest struct {
 	ModuleType  string `json:"module_type"`
+	ModuleName  string `json:"module_name"`
 	Instance    string `json:"instance"`
 	Version     string `json:"version"`
 	RPCQueue    string `json:"rpc_queue"`
@@ -150,12 +151,13 @@ func (s *Service) HandleRegister(ctx context.Context, req messaging.Envelope) (a
 	if err := json.Unmarshal(req.Payload, &p); err != nil {
 		return nil, validationErr("malformed register payload")
 	}
-	if p.ModuleType == "" || p.Instance == "" || p.RPCQueue == "" {
-		return nil, validationErr("module_type, instance and rpc_queue are required")
+	if p.ModuleType == "" || p.ModuleName == "" || p.Instance == "" || p.RPCQueue == "" {
+		return nil, validationErr("module_type, module_name, instance and rpc_queue are required")
 	}
 
 	reg := &models.Module{
 		Type:         p.ModuleType,
+		Name:         p.ModuleName,
 		Instance:     p.Instance,
 		Version:      p.Version,
 		RPCQueue:     p.RPCQueue,
@@ -173,6 +175,7 @@ func (s *Service) HandleRegister(ctx context.Context, req messaging.Envelope) (a
 	))
 	s.logger.Info("module registered",
 		zap.String("module_type", p.ModuleType),
+		zap.String("module_name", p.ModuleName),
 		zap.String("instance", p.Instance),
 		zap.String("version", p.Version))
 

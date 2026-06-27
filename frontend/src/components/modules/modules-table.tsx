@@ -22,8 +22,8 @@ interface ModulesTableProps {
   isLoading: boolean
 }
 
-const GRID_COLS = "grid-cols-[1.5fr_1fr_90px_130px_1fr_1fr_1fr_48px]"
-const GRID_COLS_NO_ACTIONS = "grid-cols-[1.5fr_1fr_90px_130px_1fr_1fr_1fr]"
+const GRID_COLS = "grid-cols-[1.5fr_1fr_1fr_90px_130px_1fr_1fr_1fr_48px]"
+const GRID_COLS_NO_ACTIONS = "grid-cols-[1.5fr_1fr_1fr_90px_130px_1fr_1fr_1fr]"
 
 // Status indicator follows the same dot-and-text idiom as the Users table's
 // active/inactive cell. Registered is healthy/green, deregistered is a neutral
@@ -74,6 +74,7 @@ export function ModulesTable({ modules, isLoading }: ModulesTableProps) {
         <>
           <div>Instance</div>
           <div>Type</div>
+          <div>Module</div>
           <div>Version</div>
           <div>Status</div>
           <div>Health</div>
@@ -105,6 +106,7 @@ export function ModulesTable({ modules, isLoading }: ModulesTableProps) {
             <div>
               <Badge variant="secondary">{m.type}</Badge>
             </div>
+            <div className="text-sm truncate">{m.name || "—"}</div>
             <div className="text-sm text-muted-foreground">
               {m.version || "—"}
             </div>

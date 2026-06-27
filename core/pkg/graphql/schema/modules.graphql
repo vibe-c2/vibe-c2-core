@@ -18,11 +18,17 @@
 # "dead".
 
 type Module {
-  # Self-assigned, globally-unique instance id (e.g. "http-1"). The identity
-  # used by heartbeat/deregister and the data-plane registration gate.
+  # Self-assigned, globally-unique instance id (e.g. "http-channel-1"). The
+  # identity used by heartbeat/deregister and the data-plane registration gate.
+  # Unique per deployed instance — an operator may run several instances of the
+  # same module, each with its own id.
   instance: ID!
   # Module kind: "channel" | "minion-factory".
   type: String!
+  # The module's hardcoded identity — its project/kind name (e.g. "http",
+  # "telegram"), baked into the implementation and shared by every instance of
+  # that module. Distinct from `instance`, which is per-deployment.
+  name: String!
   version: String!
   # Free-text, self-reported description the module supplies at registration.
   # Empty if the module declared none.

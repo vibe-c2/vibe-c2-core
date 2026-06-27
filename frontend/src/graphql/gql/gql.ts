@@ -61,7 +61,7 @@ type Documents = {
     "\n  mutation UpdateHost($id: ID!, $input: UpdateHostInput!) {\n    updateHost(id: $id, input: $input) {\n      ...HostFields\n    }\n  }\n": typeof types.UpdateHostDocument,
     "\n  mutation DeleteHost($id: ID!) {\n    deleteHost(id: $id)\n  }\n": typeof types.DeleteHostDocument,
     "\n  subscription HostChanged($operationId: ID!) {\n    hostChanged(operationId: $operationId) {\n      action\n      hostId\n    }\n  }\n": typeof types.HostChangedDocument,
-    "\n  fragment ModuleFields on Module {\n    instance\n    type\n    version\n    description\n    status\n    lastStatus\n    registeredAt\n    lastHeartbeatAt\n    deregisteredAt\n    deregisterReason\n    declaredDeadAt\n  }\n": typeof types.ModuleFieldsFragmentDoc,
+    "\n  fragment ModuleFields on Module {\n    instance\n    type\n    name\n    version\n    description\n    status\n    lastStatus\n    registeredAt\n    lastHeartbeatAt\n    deregisteredAt\n    deregisterReason\n    declaredDeadAt\n  }\n": typeof types.ModuleFieldsFragmentDoc,
     "\n  query Modules($status: [String!]) {\n    modules(status: $status) {\n      ...ModuleFields\n    }\n  }\n": typeof types.ModulesDocument,
     "\n  mutation RemoveModule($instance: ID!) {\n    removeModule(instance: $instance) {\n      ...ModuleFields\n    }\n  }\n": typeof types.RemoveModuleDocument,
     "\n  subscription ModuleChanged {\n    moduleChanged {\n      action\n      instance\n      module {\n        ...ModuleFields\n      }\n    }\n  }\n": typeof types.ModuleChangedDocument,
@@ -212,7 +212,7 @@ const documents: Documents = {
     "\n  mutation UpdateHost($id: ID!, $input: UpdateHostInput!) {\n    updateHost(id: $id, input: $input) {\n      ...HostFields\n    }\n  }\n": types.UpdateHostDocument,
     "\n  mutation DeleteHost($id: ID!) {\n    deleteHost(id: $id)\n  }\n": types.DeleteHostDocument,
     "\n  subscription HostChanged($operationId: ID!) {\n    hostChanged(operationId: $operationId) {\n      action\n      hostId\n    }\n  }\n": types.HostChangedDocument,
-    "\n  fragment ModuleFields on Module {\n    instance\n    type\n    version\n    description\n    status\n    lastStatus\n    registeredAt\n    lastHeartbeatAt\n    deregisteredAt\n    deregisterReason\n    declaredDeadAt\n  }\n": types.ModuleFieldsFragmentDoc,
+    "\n  fragment ModuleFields on Module {\n    instance\n    type\n    name\n    version\n    description\n    status\n    lastStatus\n    registeredAt\n    lastHeartbeatAt\n    deregisteredAt\n    deregisterReason\n    declaredDeadAt\n  }\n": types.ModuleFieldsFragmentDoc,
     "\n  query Modules($status: [String!]) {\n    modules(status: $status) {\n      ...ModuleFields\n    }\n  }\n": types.ModulesDocument,
     "\n  mutation RemoveModule($instance: ID!) {\n    removeModule(instance: $instance) {\n      ...ModuleFields\n    }\n  }\n": types.RemoveModuleDocument,
     "\n  subscription ModuleChanged {\n    moduleChanged {\n      action\n      instance\n      module {\n        ...ModuleFields\n      }\n    }\n  }\n": types.ModuleChangedDocument,
@@ -521,7 +521,7 @@ export function graphql(source: "\n  subscription HostChanged($operationId: ID!)
 /**
  * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
  */
-export function graphql(source: "\n  fragment ModuleFields on Module {\n    instance\n    type\n    version\n    description\n    status\n    lastStatus\n    registeredAt\n    lastHeartbeatAt\n    deregisteredAt\n    deregisterReason\n    declaredDeadAt\n  }\n"): (typeof documents)["\n  fragment ModuleFields on Module {\n    instance\n    type\n    version\n    description\n    status\n    lastStatus\n    registeredAt\n    lastHeartbeatAt\n    deregisteredAt\n    deregisterReason\n    declaredDeadAt\n  }\n"];
+export function graphql(source: "\n  fragment ModuleFields on Module {\n    instance\n    type\n    name\n    version\n    description\n    status\n    lastStatus\n    registeredAt\n    lastHeartbeatAt\n    deregisteredAt\n    deregisterReason\n    declaredDeadAt\n  }\n"): (typeof documents)["\n  fragment ModuleFields on Module {\n    instance\n    type\n    name\n    version\n    description\n    status\n    lastStatus\n    registeredAt\n    lastHeartbeatAt\n    deregisteredAt\n    deregisterReason\n    declaredDeadAt\n  }\n"];
 /**
  * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
  */

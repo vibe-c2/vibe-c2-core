@@ -4,6 +4,7 @@ export const ModuleFields = graphql(`
   fragment ModuleFields on Module {
     instance
     type
+    name
     version
     description
     status

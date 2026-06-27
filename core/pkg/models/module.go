@@ -18,16 +18,23 @@ const (
 // state". Upserted on module.register (idempotent takeover). Instance is
 // globally unique because heartbeat/deregister address an instance by id alone.
 //
+// Name vs Instance: Name is the module's hardcoded identity — its project/kind
+// (e.g. "http", "telegram") baked into the implementation and shared by every
+// running copy of that module. Instance is the unique id of one concrete
+// deployment ("http-channel-1", "http-channel-2"). An operator may run many
+// instances of the same Name; each carries its own unique Instance.
+//
 // Transposition *profiles* are NOT stored here — they remain channel-owned YAML
 // on disk (ADR-0002). This collection holds only registration + liveness data.
 type Module struct {
 	field.DefaultField `bson:",inline"`
 
-	Type               string         `bson:"module_type" json:"module_type"` // channel | minion-factory
-	Instance           string         `bson:"instance" json:"instance"`       // self-assigned, unique-indexed
-	Version            string         `bson:"version" json:"version"`
-	RPCQueue           string         `bson:"rpc_queue" json:"rpc_queue"` // core→module callback queue
-	Description        string         `bson:"description,omitempty" json:"description,omitempty"` // self-reported, human-facing
+	Type        string `bson:"module_type" json:"module_type"` // channel | minion-factory
+	Name        string `bson:"module_name" json:"module_name"` // hardcoded module identity (http, telegram, ...); shared across all instances of that module
+	Instance    string `bson:"instance" json:"instance"`       // self-assigned, unique per deployed instance
+	Version     string `bson:"version" json:"version"`
+	RPCQueue    string `bson:"rpc_queue" json:"rpc_queue"`                         // core→module callback queue
+	Description string `bson:"description,omitempty" json:"description,omitempty"` // self-reported, human-facing
 
 	Status          string         `bson:"status" json:"status"`
 	RegisteredAt    time.Time      `bson:"registered_at" json:"registered_at"`

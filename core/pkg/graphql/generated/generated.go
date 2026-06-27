@@ -220,6 +220,7 @@ type ComplexityRoot struct {
 		Instance         func(childComplexity int) int
 		LastHeartbeatAt  func(childComplexity int) int
 		LastStatus       func(childComplexity int) int
+		Name             func(childComplexity int) int
 		RegisteredAt     func(childComplexity int) int
 		Status           func(childComplexity int) int
 		Type             func(childComplexity int) int
@@ -1667,6 +1668,12 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.Module.LastStatus(childComplexity), true
+	case "Module.name":
+		if e.ComplexityRoot.Module.Name == nil {
+			break
+		}
+
+		return e.ComplexityRoot.Module.Name(childComplexity), true
 	case "Module.registeredAt":
 		if e.ComplexityRoot.Module.RegisteredAt == nil {
 			break
@@ -5267,11 +5274,17 @@ extend type Subscription {
 # "dead".
 
 type Module {
-  # Self-assigned, globally-unique instance id (e.g. "http-1"). The identity
-  # used by heartbeat/deregister and the data-plane registration gate.
+  # Self-assigned, globally-unique instance id (e.g. "http-channel-1"). The
+  # identity used by heartbeat/deregister and the data-plane registration gate.
+  # Unique per deployed instance — an operator may run several instances of the
+  # same module, each with its own id.
   instance: ID!
   # Module kind: "channel" | "minion-factory".
   type: String!
+  # The module's hardcoded identity — its project/kind name (e.g. "http",
+  # "telegram"), baked into the implementation and shared by every instance of
+  # that module. Distinct from ` + "`" + `instance` + "`" + `, which is per-deployment.
+  name: String!
   version: String!
   # Free-text, self-reported description the module supplies at registration.
   # Empty if the module declared none.
@@ -12666,6 +12679,35 @@ func (ec *executionContext) fieldContext_Module_type(_ context.Context, field gr
 	return fc, nil
 }
 
+func (ec *executionContext) _Module_name(ctx context.Context, field graphql.CollectedField, obj *models.Module) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Module_name,
+		func(ctx context.Context) (any, error) {
+			return obj.Name, nil
+		},
+		nil,
+		ec.marshalNString2string,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_Module_name(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Module",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
 func (ec *executionContext) _Module_version(ctx context.Context, field graphql.CollectedField, obj *models.Module) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
@@ -13013,6 +13055,8 @@ func (ec *executionContext) fieldContext_ModuleEvent_module(_ context.Context, f
 				return ec.fieldContext_Module_instance(ctx, field)
 			case "type":
 				return ec.fieldContext_Module_type(ctx, field)
+			case "name":
+				return ec.fieldContext_Module_name(ctx, field)
 			case "version":
 				return ec.fieldContext_Module_version(ctx, field)
 			case "description":
@@ -15288,6 +15332,8 @@ func (ec *executionContext) fieldContext_Mutation_removeModule(ctx context.Conte
 				return ec.fieldContext_Module_instance(ctx, field)
 			case "type":
 				return ec.fieldContext_Module_type(ctx, field)
+			case "name":
+				return ec.fieldContext_Module_name(ctx, field)
 			case "version":
 				return ec.fieldContext_Module_version(ctx, field)
 			case "description":
@@ -20380,6 +20426,8 @@ func (ec *executionContext) fieldContext_Query_modules(ctx context.Context, fiel
 				return ec.fieldContext_Module_instance(ctx, field)
 			case "type":
 				return ec.fieldContext_Module_type(ctx, field)
+			case "name":
+				return ec.fieldContext_Module_name(ctx, field)
 			case "version":
 				return ec.fieldContext_Module_version(ctx, field)
 			case "description":
@@ -35320,6 +35368,11 @@ func (ec *executionContext) _Module(ctx context.Context, sel ast.SelectionSet, o
 			}
 		case "type":
 			out.Values[i] = ec._Module_type(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				atomic.AddUint32(&out.Invalids, 1)
+			}
+		case "name":
+			out.Values[i] = ec._Module_name(ctx, field, obj)
 			if out.Values[i] == graphql.Null {
 				atomic.AddUint32(&out.Invalids, 1)
 			}
