@@ -147,6 +147,30 @@ function WikiPrintPageInner({
     }
   }, [])
 
+  // Force the light theme on the print surface, regardless of the user's
+  // current app theme. Many wiki node views carry `.dark`-scoped color
+  // tokens (code blocks, notice/callout blocks, credential/hash/host/document
+  // chips, highlight marks). The print stylesheet only remaps the base shadcn
+  // variables, so a dark-mode user would otherwise get dark-surfaced blocks
+  // and dark-tuned foregrounds baked into the PDF — heavy on ink and, where
+  // a dark-theme light foreground lands on a near-white fill, low contrast.
+  // Dropping the `.dark` class makes every `.dark`-scoped rule fall back to
+  // its light branch in one move, covering current and future components.
+  // next-themes only writes this class on an explicit theme change, so
+  // removing it here holds for the lifetime of this chromeless route; we
+  // restore the prior state on unmount for hygiene.
+  useEffect(() => {
+    const root = document.documentElement
+    const hadDark = root.classList.contains("dark")
+    root.classList.remove("dark")
+    const previousColorScheme = root.style.colorScheme
+    root.style.colorScheme = "light"
+    return () => {
+      if (hadDark) root.classList.add("dark")
+      root.style.colorScheme = previousColorScheme
+    }
+  }, [])
+
   // Update document title so the browser's "Save as PDF" dialog and the
   // resulting filename default to something descriptive instead of the
   // app's default tab title.
@@ -183,8 +207,9 @@ function WikiPrintPageInner({
     return <Navigate to="/operations" replace />
   }
 
-  // The wrapper class scopes the print stylesheet. Width is clamped so the
-  // on-screen preview before printing reads the same as the printed page.
+  // The wrapper class scopes the print stylesheet. The on-screen preview is
+  // full-width; the printed/PDF output width is controlled by the @page
+  // margins in wiki-print.css (@media print), independent of this preview.
   return (
     <div className="wiki-print-shell">
       <article className="wiki-print-article">

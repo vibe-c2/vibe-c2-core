@@ -7,26 +7,29 @@
  * "Save as PDF" output.
  *
  * Strategy:
+ *   - The light theme is forced for this whole route in wiki-print.tsx (it
+ *     drops the `.dark` class), so both the preview and the PDF render the
+ *     app's light palette — no theme overrides are needed here.
  *   - The on-screen wrapper (.wiki-print-shell) gives the document a clean
- *     center-column layout that already approximates a printed page.
- *   - @media print drops residual UI (scrollbars, the editor's connection
- *     banner, anything that slipped through isEditor={false}), forces
- *     light-theme colors so a dark-mode user gets a printable result, and
- *     adds page-break hints so code blocks / tables / images don't get
- *     guillotined mid-element.
+ *     full-width layout; @media print handles only print-specific concerns:
+ *     page geometry, preserving fills (print-color-adjust), dropping residual
+ *     editor chrome, and page-break hints so code blocks / tables / images
+ *     don't get guillotined mid-element.
  */
 
 .wiki-print-shell {
   background: var(--background);
   min-height: 100vh;
   width: 100%;
-  display: flex;
-  justify-content: center;
 }
 
 .wiki-print-article {
   width: 100%;
-  max-width: 800px;
+  /* No on-screen width clamp: the preview tab uses the full browser width.
+   * The printed/PDF output is governed separately by the @page margins in
+   * the @media print block below, so widening the preview here does not
+   * change the exported page. */
+  max-width: none;
   padding: 32px 40px 64px;
   box-sizing: border-box;
 }
@@ -79,46 +82,30 @@
     margin: 16mm;
   }
 
+  /* Paper is always white, independent of the (already light) document
+   * palette — guards against any inherited surface bleeding to the edges. */
   html,
   body {
     background: white !important;
-    color: black !important;
   }
 
-  /* Force light theme on the print surface so a dark-mode user gets a
-   * printable result without manually toggling themes. CSS variables set
-   * here cascade into every descendant that consumes them via var(). */
-  .wiki-print-shell {
-    background: white !important;
-    color: black !important;
-    --background: #ffffff;
-    --foreground: #111111;
-    --card: #ffffff;
-    --card-foreground: #111111;
-    --popover: #ffffff;
-    --popover-foreground: #111111;
-    --primary: #262626;
-    --primary-accent: #4a4a4a;
-    --primary-foreground: #fafafa;
-    --secondary: #f5f5f5;
-    --secondary-foreground: #262626;
-    --muted: #f5f5f5;
-    --muted-foreground: #555555;
-    --accent: #f5f5f5;
-    --accent-foreground: #262626;
-    --destructive: #c0392b;
-    --border: #d4d4d4;
-    --input: #d4d4d4;
-    --ring: #a3a3a3;
+  /* Preserve background colors and borders in the PDF. Browsers drop all
+   * background fills (and box-shadows) when printing unless an element opts
+   * in with print-color-adjust: exact. Without this, backgrounded blocks —
+   * file-attachment cards, their icon chips, code blocks, notice blocks —
+   * lose their fill and render as bare text. The light theme is already
+   * forced in wiki-print.tsx, so what prints is the light palette. Scope it
+   * to the print surface so we only force-print the document's own colors. */
+  .wiki-print-shell,
+  .wiki-print-shell * {
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
   }
 
+  /* The on-screen wrapper pads the document for the preview; the @page
+   * margins own the whitespace on paper, so drop the padding here. */
   .wiki-print-article {
-    max-width: none;
     padding: 0;
-  }
-
-  .wiki-print-header {
-    border-bottom-color: #d4d4d4;
   }
 
   /* Hide anything that's clearly editor chrome: floating bubble menus,
@@ -142,8 +129,8 @@
   pre,
   .wiki-code-block,
   table,
-  .wiki-image,
-  .wiki-file,
+  .wiki-image-wrapper,
+  .wiki-file-wrapper,
   blockquote,
   .wiki-notice {
     page-break-inside: avoid;
