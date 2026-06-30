@@ -23,8 +23,10 @@ import {
   useState,
   type MouseEvent as ReactMouseEvent,
   type ReactElement,
-  type Ref,
+  type RefObject,
 } from "react"
+
+import { PreviewResizeHandle } from "./wiki-file-preview-resize"
 
 /** Content types the browser can render inline without executing scripts.
  *  Must stay in sync with previewAllowedContentTypes in wiki_file_controller.go. */
@@ -102,6 +104,10 @@ export function WikiFileCard({ node, editor, getPos }: ReactNodeViewProps): Reac
   // Whether the inline preview panel is open. The frame is only mounted while
   // expanded, so collapsed cards never fetch the file bytes.
   const [expanded, setExpanded] = useState(false)
+  // User-dragged preview height in px, or null to fall back to the CSS default
+  // (min(75vh, 720px)). Held on the card — not the panel — so a resize survives
+  // collapsing and re-expanding the same attachment.
+  const [previewHeight, setPreviewHeight] = useState<number | null>(null)
   // The preview panel — target of the native Fullscreen request.
   const previewRef = useRef<HTMLDivElement>(null)
   // HTML is fetched into a srcdoc only while its panel is open.
@@ -230,6 +236,8 @@ export function WikiFileCard({ node, editor, getPos }: ReactNodeViewProps): Reac
           previewUrl={previewUrl}
           filename={filename}
           html={htmlPreview}
+          height={previewHeight}
+          onHeightChange={setPreviewHeight}
         />
       ) : null}
     </NodeViewWrapper>
@@ -279,30 +287,45 @@ function useHtmlPreview(url: string, active: boolean): HtmlPreviewState {
 }
 
 interface FilePreviewPanelProps {
-  /** Container ref — the element handed to the native Fullscreen request. */
-  containerRef: Ref<HTMLDivElement>
+  /** Container ref — the element handed to the native Fullscreen request and
+   *  the target the resize drag mutates in place. */
+  containerRef: RefObject<HTMLDivElement | null>
   isPdf: boolean
   /** Inline-disposition URL for the PDF iframe (unused for HTML). */
   previewUrl: string
   filename: string
   html: HtmlPreviewState
+  /** User-dragged height in px, or null for the CSS default. */
+  height: number | null
+  /** Commits a new dragged height once the drag ends. */
+  onHeightChange: (height: number) => void
 }
 
 // The expandable preview panel. PDFs render via an inline iframe src; HTML
 // renders the fetched bytes into a fully locked sandbox (no allow-scripts, no
 // allow-same-origin) so embedded scripts are inert while inline CSS and
-// data-URI assets still display.
+// data-URI assets still display. A drag handle along the bottom edge lets the
+// reader grow or shrink the frame; the chosen height is held on the card.
 function FilePreviewPanel({
   containerRef,
   isPdf,
   previewUrl,
   filename,
   html,
+  height,
+  onHeightChange,
 }: FilePreviewPanelProps): ReactElement {
+  // Shared by whichever of the two iframes renders — the resize handle measures
+  // this to seed the drag. Absent while HTML is still loading or errored, which
+  // is exactly when we also hide the handle.
+  const frameRef = useRef<HTMLIFrameElement>(null)
+  const hasFrame = isPdf || html.content !== null
+
   return (
     <div className="wiki-file-preview" contentEditable={false} ref={containerRef}>
       {isPdf ? (
         <iframe
+          ref={frameRef}
           className="wiki-file-preview-frame"
           src={previewUrl}
           title={`Preview of ${filename}`}
@@ -315,12 +338,21 @@ function FilePreviewPanel({
         <p className="wiki-file-preview-status">Loading preview…</p>
       ) : (
         <iframe
+          ref={frameRef}
           className="wiki-file-preview-frame"
           sandbox=""
           srcDoc={html.content}
           title={`Preview of ${filename}`}
         />
       )}
+      {hasFrame ? (
+        <PreviewResizeHandle
+          containerRef={containerRef}
+          frameRef={frameRef}
+          height={height}
+          onCommit={onHeightChange}
+        />
+      ) : null}
     </div>
   )
 }

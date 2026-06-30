@@ -983,9 +983,53 @@
 .tiptap .wiki-file-preview-frame {
   display: block;
   width: 100%;
-  height: min(75vh, 720px);
+  /* Default height, overridable per-card by the drag handle which sets
+     --wiki-preview-height on the panel. */
+  height: var(--wiki-preview-height, min(75vh, 720px));
   border: 0;
   background: #fff;
+}
+
+/* Drag handle along the bottom edge — lets the reader grow or shrink the frame.
+   Hidden in fullscreen, where the frame already fills the viewport. */
+.tiptap .wiki-file-preview-resize {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 11px;
+  cursor: ns-resize;
+  background: var(--color-muted, rgba(0, 0, 0, 0.03));
+  border-top: 1px solid var(--color-border);
+  touch-action: none;
+  transition: background 120ms ease;
+}
+
+.tiptap .wiki-file-preview-resize:hover {
+  background: var(--color-accent, rgba(0, 0, 0, 0.06));
+}
+
+.tiptap .wiki-file-preview-resize-grip {
+  width: 34px;
+  height: 3px;
+  border-radius: 999px;
+  background: var(--color-border);
+  transition: background 120ms ease;
+}
+
+.tiptap .wiki-file-preview-resize:hover .wiki-file-preview-resize-grip {
+  background: var(--color-primary, var(--color-text-muted, rgba(0, 0, 0, 0.45)));
+}
+
+/* While a drag is in flight (class is on <body>): keep the resize cursor
+   everywhere and stop the iframe from swallowing mousemove so the drag tracks
+   smoothly even as the pointer passes over the frame. */
+body.wiki-preview-resizing {
+  cursor: ns-resize;
+  user-select: none;
+}
+
+body.wiki-preview-resizing .wiki-file-preview-frame {
+  pointer-events: none;
 }
 
 /* Native fullscreen: the panel fills the screen, so drop its inline framing and
@@ -1000,6 +1044,10 @@
 .tiptap .wiki-file-preview:fullscreen .wiki-file-preview-frame {
   height: 100vh;
   height: 100dvh;
+}
+
+.tiptap .wiki-file-preview:fullscreen .wiki-file-preview-resize {
+  display: none;
 }
 
 /* Transient loading / error message shown in the panel while the HTML body is
