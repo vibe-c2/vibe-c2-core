@@ -71,6 +71,11 @@ type IWikiDocumentRepository interface {
 	CountByOperationID(ctx context.Context, opID uuid.UUID, filter WikiDocumentFilter) (int64, error)
 	FindChildDocuments(ctx context.Context, parentID uuid.UUID) ([]models.WikiDocument, error)
 	FindAllByOperationID(ctx context.Context, opID uuid.UUID) ([]models.WikiDocument, error)
+	// FindTemplatesByOperationID returns the active documents flagged
+	// is_template in opID, sorted by title. Backs the create-from-template
+	// picker via the {operation_id, is_template} partial index — cost scales
+	// with the number of templates, not the total document count.
+	FindTemplatesByOperationID(ctx context.Context, opID uuid.UUID) ([]models.WikiDocument, error)
 	CountChildDocuments(ctx context.Context, parentID uuid.UUID) (int64, error)
 	// FindChildDocumentsWithCounts returns active children of `parentID` (or
 	// root documents in opID when parentID is nil), sorted by sort_order with
@@ -229,6 +234,18 @@ func NewWikiDocumentRepository(db database.Database) IWikiDocumentRepository {
 		// materialized ancestor chain — one index probe replaces the previous
 		// O(depth) FindDescendants BFS in SearchByOperationID.
 		{Key: []string{"operation_id", "path_ids"}},
+		// Create-from-template picker (FindTemplatesByOperationID). Partial index
+		// on flagged, active templates only, keyed to the {operation_id,
+		// is_template, deleted_at} query with title_lower trailing so the sorted
+		// read is a pure index scan. Templates are rare, so the partial filter
+		// keeps this index tiny regardless of total document count.
+		{
+			Key: []string{"operation_id", "title_lower"},
+			IndexOptions: new(options.IndexOptions).SetPartialFilterExpression(bson.M{
+				"is_template": true,
+				"deleted_at":  nil,
+			}),
+		},
 	})
 
 	setupWikiSearchIndexes(coll)
@@ -465,6 +482,16 @@ func (r *wikiDocumentRepository) FindAllByOperationID(ctx context.Context, opID 
 		"operation_id": opID,
 		"deleted_at":   nil,
 	}).Sort("sort_order", "-createAt").All(&docs)
+	return docs, err
+}
+
+func (r *wikiDocumentRepository) FindTemplatesByOperationID(ctx context.Context, opID uuid.UUID) ([]models.WikiDocument, error) {
+	var docs []models.WikiDocument
+	err := r.coll.Find(ctx, bson.M{
+		"operation_id": opID,
+		"is_template":  true,
+		"deleted_at":   nil,
+	}).Sort("title_lower").All(&docs)
 	return docs, err
 }
 

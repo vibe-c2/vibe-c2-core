@@ -53,6 +53,7 @@ type IWikiDocumentResolver interface {
 	WikiDocument(ctx context.Context, id string) (*models.WikiDocument, error)
 	WikiDocuments(ctx context.Context, operationID string, parentDocumentID *string, search *string, sort *model.WikiDocumentSort, first *int, after *string, last *int, before *string) (*model.WikiDocumentConnection, error)
 	WikiDocumentTree(ctx context.Context, operationID string) ([]*models.WikiDocument, error)
+	WikiTemplates(ctx context.Context, operationID string) ([]*models.WikiDocument, error)
 	WikiDocumentChildren(ctx context.Context, operationID string, parentDocumentID *string) ([]*models.WikiDocument, error)
 	WikiDocumentTreeRevealPath(ctx context.Context, documentID string) ([]*models.WikiDocument, error)
 	WikiDocumentTrash(ctx context.Context, operationID string, first *int, after *string, last *int, before *string) (*model.WikiDocumentConnection, error)
@@ -1759,6 +1760,37 @@ func (r *wikiDocumentResolver) WikiDocumentTree(ctx context.Context, operationID
 		ptrs[i] = &docs[i]
 	}
 
+	return ptrs, nil
+}
+
+// WikiTemplates returns the active documents flagged isTemplate in the
+// operation, sorted by title. Backs the create-from-template picker: instead
+// of fetching the whole document tree and filtering client-side, this returns
+// just the templates via the {operation_id, is_template} partial index, so the
+// cost scales with template count rather than total document count.
+//
+// childCount is not needed by the picker (templates render as flat rows), so
+// unlike WikiDocumentTree this does not seed the child-count loader — the
+// field resolver falls back to its own lookup for any consumer that reads it.
+func (r *wikiDocumentResolver) WikiTemplates(ctx context.Context, operationID string) ([]*models.WikiDocument, error) {
+	opUID, err := uuid.Parse(operationID)
+	if err != nil {
+		return nil, fmt.Errorf("invalid operation ID: %w", err)
+	}
+
+	if err := r.authorizeForOperation(ctx, opUID, models.OperationRoleViewer); err != nil {
+		return nil, err
+	}
+
+	docs, err := r.docRepo.FindTemplatesByOperationID(ctx, opUID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to fetch templates: %w", err)
+	}
+
+	ptrs := make([]*models.WikiDocument, len(docs))
+	for i := range docs {
+		ptrs[i] = &docs[i]
+	}
 	return ptrs, nil
 }
 

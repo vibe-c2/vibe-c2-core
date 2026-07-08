@@ -168,6 +168,18 @@ export const WikiDocumentTreeQuery = graphql(`
   }
 `)
 
+// Templates in an operation — just the isTemplate-flagged rows, sorted by
+// title server-side. Backs the create-from-template picker so it no longer
+// pulls the whole tree and filters in memory; cost scales with template
+// count, not total document count.
+export const WikiTemplatesQuery = graphql(`
+  query WikiTemplates($operationId: ID!) {
+    wikiTemplates(operationId: $operationId) {
+      ...WikiDocumentTreeFields
+    }
+  }
+`)
+
 // Direct children of a parent (roots when parentDocumentId is null) — the
 // core query for the lazy sidebar. One request per expanded branch.
 export const WikiDocumentChildrenQuery = graphql(`

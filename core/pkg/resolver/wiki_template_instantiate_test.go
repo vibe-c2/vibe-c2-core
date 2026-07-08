@@ -21,6 +21,9 @@ type stubDocRepo struct {
 	repository.IWikiDocumentRepository
 	byID    map[uuid.UUID]models.WikiDocument
 	created *models.WikiDocument
+	// templates is the row set returned by FindTemplatesByOperationID, keyed by
+	// nothing — the stub filters on OperationID to mirror the real query scope.
+	templates []models.WikiDocument
 	// updated captures the last Update call's field map (nil if Update was
 	// never called), so tests can assert the no-op short-circuit.
 	updated map[string]interface{}
@@ -50,6 +53,18 @@ func (s *stubDocRepo) Update(_ context.Context, doc *models.WikiDocument, update
 	}
 	s.byID[doc.DocumentID] = cur
 	return nil
+}
+
+// FindTemplatesByOperationID returns the stub's prepared template rows for the
+// given operation, mirroring the repo contract (already filtered + sorted).
+func (s *stubDocRepo) FindTemplatesByOperationID(_ context.Context, opID uuid.UUID) ([]models.WikiDocument, error) {
+	var out []models.WikiDocument
+	for _, d := range s.templates {
+		if d.OperationID == opID {
+			out = append(out, d)
+		}
+	}
+	return out, nil
 }
 
 // adminCtx authorizes the caller as an app-level admin so authorizeForOperation
@@ -242,6 +257,38 @@ func TestInstantiateTemplate_RejectsTrashedTemplate(t *testing.T) {
 	_, err := r.InstantiateTemplate(adminCtx(uuid.New()), templateID.String(), uuid.New().String(), nil, nil, nil, nil, nil)
 	if err == nil || !strings.Contains(err.Error(), "trashed template") {
 		t.Fatalf("want trashed-template error, got %v", err)
+	}
+}
+
+func TestWikiTemplates_ReturnsOperationTemplates(t *testing.T) {
+	targetOp := uuid.New()
+	otherOp := uuid.New()
+	a := models.WikiDocument{DocumentID: uuid.New(), OperationID: targetOp, IsTemplate: true, Title: "Alpha"}
+	b := models.WikiDocument{DocumentID: uuid.New(), OperationID: targetOp, IsTemplate: true, Title: "Beta"}
+	elsewhere := models.WikiDocument{DocumentID: uuid.New(), OperationID: otherOp, IsTemplate: true, Title: "Gamma"}
+	repo := &stubDocRepo{templates: []models.WikiDocument{a, b, elsewhere}}
+	r := newInstantiateResolver(repo)
+
+	got, err := r.WikiTemplates(adminCtx(uuid.New()), targetOp.String())
+	if err != nil {
+		t.Fatalf("WikiTemplates err = %v", err)
+	}
+	if len(got) != 2 {
+		t.Fatalf("got %d templates, want 2 (scoped to the operation)", len(got))
+	}
+	for _, d := range got {
+		if d.OperationID != targetOp {
+			t.Errorf("template %q from operation %v leaked into scope %v", d.Title, d.OperationID, targetOp)
+		}
+	}
+}
+
+func TestWikiTemplates_RejectsInvalidOperationID(t *testing.T) {
+	repo := &stubDocRepo{}
+	r := newInstantiateResolver(repo)
+
+	if _, err := r.WikiTemplates(adminCtx(uuid.New()), "not-a-uuid"); err == nil {
+		t.Fatal("want error for malformed operation ID, got nil")
 	}
 }
 

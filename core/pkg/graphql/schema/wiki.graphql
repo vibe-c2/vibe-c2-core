@@ -284,6 +284,15 @@ extend type Query {
   wikiDocumentTree(operationId: ID!): [WikiDocument!]!
     @hasPermission(permission: "operation:member")
 
+  # Documents flagged isTemplate in the operation, active only, sorted by
+  # title. Backs the create-from-template picker: templates are a handful of
+  # rows scattered anywhere in the tree, so this returns just them instead of
+  # forcing the client to pull the whole wikiDocumentTree and filter in memory.
+  # Backed by the {operation_id, is_template} partial index, so cost scales
+  # with template count, not total document count.
+  wikiTemplates(operationId: ID!): [WikiDocument!]!
+    @hasPermission(permission: "operation:member")
+
   # Direct children of `parentDocumentId` (or root-level documents when
   # `parentDocumentId` is null), sorted by sortOrder. Trashed documents are
   # excluded. Drives the lazy tree sidebar — the client fetches roots on

@@ -16,7 +16,7 @@ import { useWikiStore } from "@/stores/wiki"
 import {
   useCreateWikiDocument,
   useInstantiateTemplate,
-  useWikiDocumentTree,
+  useWikiTemplates,
 } from "@/graphql/hooks/wiki"
 import {
   DocumentIconPicker,
@@ -74,16 +74,17 @@ export function CreateWikiDocumentDialog({ operationId }: CreateWikiDocumentDial
   const [titleDirty, setTitleDirty] = useState(false)
 
   // Templates live in-place across two reachable trees: the scoped operation
-  // and the global Public tree. Fetch both while the From-template tab is open
-  // and merge. Skip the Public fetch when the target already IS Public (the two
-  // queries would be identical). Each fetch is a cache hit if the tree was
-  // already browsed in the sidebar.
+  // and the global Public tree. Fetch each operation's templates directly
+  // (server-filtered, server-sorted) while the From-template tab is open and
+  // merge. Skip the Public fetch when the target already IS Public (the two
+  // queries would be identical). Unlike the old full-tree fetch this returns
+  // only the flagged rows, so cost scales with template count, not tree size.
   const enabled = createDialogOpen && mode === "template"
-  const { data: opData, isLoading: opLoading } = useWikiDocumentTree(
+  const { data: opData, isLoading: opLoading } = useWikiTemplates(
     operationId,
     { enabled },
   )
-  const { data: pubData, isLoading: pubLoading } = useWikiDocumentTree(
+  const { data: pubData, isLoading: pubLoading } = useWikiTemplates(
     PUBLIC_OPERATION_ID,
     { enabled: enabled && !inPublicTree },
   )
@@ -91,19 +92,18 @@ export function CreateWikiDocumentDialog({ operationId }: CreateWikiDocumentDial
 
   const templates = useMemo(() => {
     const rows = [
-      ...(opData?.wikiDocumentTree ?? []),
-      ...(inPublicTree ? [] : (pubData?.wikiDocumentTree ?? [])),
+      ...(opData?.wikiTemplates ?? []),
+      ...(inPublicTree ? [] : (pubData?.wikiTemplates ?? [])),
     ]
     const q = templateQuery.trim().toLowerCase()
-    // A template is any document flagged isTemplate — emptiness is the author's
-    // call, so an empty template is valid and forks into an empty doc. The
-    // operation and Public trees have disjoint ids, so no dedupe is needed.
-    // Alphabetical.
+    // Rows arrive already server-filtered to isTemplate and sorted by title;
+    // the operation and Public sets have disjoint ids, so no dedupe is needed.
+    // Re-sort after the merge so the two sources interleave alphabetically, and
+    // apply the local search filter over the combined set.
     return rows
-      .filter((r) => r.isTemplate)
       .filter((r) => (q ? r.title.toLowerCase().includes(q) : true))
       .sort((a, b) => a.title.localeCompare(b.title))
-  }, [opData?.wikiDocumentTree, pubData?.wikiDocumentTree, inPublicTree, templateQuery])
+  }, [opData?.wikiTemplates, pubData?.wikiTemplates, inPublicTree, templateQuery])
 
   function reset() {
     setError(null)

@@ -9,6 +9,7 @@ import type {
 } from "@/graphql/gql/graphql"
 import {
   WikiDocumentTreeDocument,
+  WikiTemplatesDocument,
   WikiDocumentChildrenDocument,
   WikiDocumentTreeRevealPathDocument,
   WikiDocumentTrashCountDocument,
@@ -51,6 +52,10 @@ export const wikiKeys = {
   // it only when opened. The sidebar uses the per-parent `children` key below.
   trees: () => [...wikiKeys.all, "tree"] as const,
   tree: (operationId: string) => [...wikiKeys.trees(), operationId] as const,
+  // Create-from-template picker feed — the isTemplate-flagged rows for an
+  // operation. Separate from `tree` so the dialog fetches only templates
+  // instead of the whole tree.
+  templates: (operationId: string) => [...wikiKeys.all, "templates", operationId] as const,
   // Per-parent direct-children entry. Used by the lazy sidebar (one entry per
   // expanded branch) and the document-footer Sub-pages list. Root-level rows
   // live under the sentinel "__root__" so a single shape covers both cases.
@@ -105,6 +110,23 @@ export function useWikiDocumentTree(
   return useQuery({
     queryKey: wikiKeys.tree(operationId),
     queryFn: () => graphqlClient(WikiDocumentTreeDocument, { operationId }),
+    enabled: !!operationId && (options?.enabled ?? true),
+  })
+}
+
+// Templates in an operation — only the isTemplate-flagged rows, sorted by
+// title server-side. Backs the create-from-template picker. Cheaper than
+// useWikiDocumentTree: the server filters via the {operation_id, is_template}
+// partial index, so the wire payload and query cost scale with template count
+// rather than total document count. `enabled` gates the fetch on dialog
+// visibility.
+export function useWikiTemplates(
+  operationId: string,
+  options?: { enabled?: boolean },
+) {
+  return useQuery({
+    queryKey: wikiKeys.templates(operationId),
+    queryFn: () => graphqlClient(WikiTemplatesDocument, { operationId }),
     enabled: !!operationId && (options?.enabled ?? true),
   })
 }
@@ -759,6 +781,12 @@ export function useWikiDocumentChangedSubscription(operationId: string) {
       // it. Always refresh on document CRUD; invalidating an unmounted query
       // is a no-op.
       queryClient.invalidateQueries({ queryKey: wikiKeys.tree(operationId) })
+
+      // Templates picker feed. Flagging/unflagging a template (UPDATED),
+      // deleting a template (DELETED), or forking one (CREATED) all change the
+      // set. A rename also reorders it, so refresh on any CRUD — no-op when the
+      // create dialog isn't mounted.
+      queryClient.invalidateQueries({ queryKey: wikiKeys.templates(operationId) })
 
       // Recent-documents modal feed. CREATED/DELETED both shift the list;
       // UPDATED (rename, content edit via Hocuspocus) reorders the

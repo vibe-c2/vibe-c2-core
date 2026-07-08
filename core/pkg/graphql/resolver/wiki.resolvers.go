@@ -98,6 +98,11 @@ func (r *queryResolver) WikiDocumentTree(ctx context.Context, operationID string
 	return r.WikiDocumentResolver.WikiDocumentTree(ctx, operationID)
 }
 
+// WikiTemplates is the resolver for the wikiTemplates field.
+func (r *queryResolver) WikiTemplates(ctx context.Context, operationID string) ([]*models.WikiDocument, error) {
+	return r.WikiDocumentResolver.WikiTemplates(ctx, operationID)
+}
+
 // WikiDocumentChildren is the resolver for the wikiDocumentChildren field.
 func (r *queryResolver) WikiDocumentChildren(ctx context.Context, operationID string, parentDocumentID *string) ([]*models.WikiDocument, error) {
 	return r.WikiDocumentResolver.WikiDocumentChildren(ctx, operationID, parentDocumentID)

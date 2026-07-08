@@ -284,6 +284,16 @@ func (r *fakeDocRepo) FindAllByOperationID(_ context.Context, opID uuid.UUID) ([
 	return out, nil
 }
 
+func (r *fakeDocRepo) FindTemplatesByOperationID(_ context.Context, opID uuid.UUID) ([]models.WikiDocument, error) {
+	var out []models.WikiDocument
+	for _, d := range r.docs {
+		if d.OperationID == opID && d.IsTemplate && d.DeletedAt == nil {
+			out = append(out, *d)
+		}
+	}
+	return out, nil
+}
+
 func (r *fakeDocRepo) NestingDepth(_ context.Context, parentID uuid.UUID) (int, error) {
 	depth := 0
 	id := parentID

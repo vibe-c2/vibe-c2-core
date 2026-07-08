@@ -33,6 +33,16 @@ func (f *fakeDocRepo) FindAllByOperationID(_ context.Context, _ uuid.UUID) ([]mo
 	return out, nil
 }
 
+func (f *fakeDocRepo) FindTemplatesByOperationID(_ context.Context, _ uuid.UUID) ([]models.WikiDocument, error) {
+	var out []models.WikiDocument
+	for _, d := range f.docs {
+		if d.IsTemplate && d.DeletedAt == nil {
+			out = append(out, d)
+		}
+	}
+	return out, nil
+}
+
 func (f *fakeDocRepo) FindByID(_ context.Context, id uuid.UUID) (models.WikiDocument, error) {
 	for _, d := range f.docs {
 		if d.DocumentID == id {
