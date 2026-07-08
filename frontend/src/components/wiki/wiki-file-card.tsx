@@ -110,6 +110,10 @@ export function WikiFileCard({ node, editor, getPos }: ReactNodeViewProps): Reac
   const [previewHeight, setPreviewHeight] = useState<number | null>(null)
   // The preview panel — target of the native Fullscreen request.
   const previewRef = useRef<HTMLDivElement>(null)
+  // Set when Fullscreen is triggered from a collapsed card: the panel must
+  // mount before we can request fullscreen on it, so we defer the request to
+  // the effect below that fires once the panel is expanded.
+  const pendingFullscreenRef = useRef(false)
   // HTML is fetched into a srcdoc only while its panel is open.
   const htmlPreview = useHtmlPreview(url, expanded && isHtml)
 
@@ -138,18 +142,35 @@ export function WikiFileCard({ node, editor, getPos }: ReactNodeViewProps): Reac
     setExpanded((prev) => !prev)
   }
 
-  // Maximize the open preview via the native Fullscreen API. Called from a
-  // button that only renders while the panel is expanded, so the request fires
-  // inside the user gesture browsers require. Toggles back out if already on.
+  // Maximize the preview via the native Fullscreen API. Toggles back out if
+  // already on. When the card is collapsed we first open the panel and defer
+  // the actual request to the effect below — the fullscreen target can't be
+  // mounted until the panel renders, and the user activation survives the
+  // extra render tick.
   function toggleFullscreen() {
     if (document.fullscreenElement) {
       void document.exitFullscreen()
+      return
+    }
+    if (!expanded) {
+      pendingFullscreenRef.current = true
+      setExpanded(true)
       return
     }
     void previewRef.current?.requestFullscreen().catch(() => {
       /* user denied or unsupported — leave the inline panel as-is */
     })
   }
+
+  // Fire a deferred fullscreen request once the panel has mounted (see
+  // toggleFullscreen). Runs only when the collapsed-card path armed it.
+  useEffect(() => {
+    if (!expanded || !pendingFullscreenRef.current) return
+    pendingFullscreenRef.current = false
+    void previewRef.current?.requestFullscreen().catch(() => {
+      /* user denied or unsupported — leave the inline panel open */
+    })
+  }, [expanded])
 
   // Primary "open it" action for the filename row: expand the inline panel
   // for PDF/HTML, preview in a new tab for other safe types, otherwise
@@ -194,7 +215,7 @@ export function WikiFileCard({ node, editor, getPos }: ReactNodeViewProps): Reac
               onClick={toggleInlinePreview}
             />
           ) : null}
-          {canPreviewInline && expanded ? (
+          {canPreviewInline ? (
             <FileActionButton
               icon={<Maximize2Icon size={ACTION_ICON_SIZE} />}
               label="View preview fullscreen"
