@@ -12,6 +12,7 @@ import {
   WikiTemplatesDocument,
   WikiDocumentChildrenDocument,
   WikiDocumentTreeRevealPathDocument,
+  WikiDocumentDescendantIdsDocument,
   WikiDocumentTrashCountDocument,
   WikiDocumentDocument,
   WikiDocumentLiteDocument,
@@ -68,6 +69,10 @@ export const wikiKeys = {
   // target; on success we shred the result into per-parent `children` entries
   // so the lazy renders below are cache hits.
   revealPath: (documentId: string) => [...wikiKeys.all, "revealPath", documentId] as const,
+  // Descendant-id set for the move dialog's exclusion list. Keyed on the moved
+  // document so opening the dialog for a different doc is a distinct entry.
+  descendantIds: (documentId: string) =>
+    [...wikiKeys.all, "descendantIds", documentId] as const,
   details: () => [...wikiKeys.all, "detail"] as const,
   detail: (id: string) => [...wikiKeys.details(), id] as const,
   lists: () => [...wikiKeys.all, "list"] as const,
@@ -128,6 +133,25 @@ export function useWikiTemplates(
     queryKey: wikiKeys.templates(operationId),
     queryFn: () => graphqlClient(WikiTemplatesDocument, { operationId }),
     enabled: !!operationId && (options?.enabled ?? true),
+  })
+}
+
+// Descendant IDs of a document — the move dialog's exclusion set (a doc can't
+// be moved under its own subtree). Server-derived from the materialized
+// path_ids chain, so cost scales with the moved subtree, not the whole
+// operation. `enabled` gates the fetch on dialog visibility. Replaces the old
+// approach of fetching the full wikiDocumentTree just to walk parent links.
+export function useWikiDocumentDescendantIds(
+  documentId: string | null,
+  options?: { enabled?: boolean },
+) {
+  return useQuery({
+    queryKey: wikiKeys.descendantIds(documentId ?? ""),
+    queryFn: () =>
+      graphqlClient(WikiDocumentDescendantIdsDocument, {
+        documentId: documentId as string,
+      }),
+    enabled: !!documentId && (options?.enabled ?? true),
   })
 }
 
@@ -787,6 +811,15 @@ export function useWikiDocumentChangedSubscription(operationId: string) {
       // set. A rename also reorders it, so refresh on any CRUD — no-op when the
       // create dialog isn't mounted.
       queryClient.invalidateQueries({ queryKey: wikiKeys.templates(operationId) })
+
+      // Move dialog's exclusion set. A reparent (UPDATED) changes the
+      // descendant set of both parents' ancestor chains; create/delete shift
+      // it too. We can't cheaply map an event to the affected ancestors, so
+      // sweep the whole descendantIds family — a no-op while the move dialog
+      // (the only consumer) is closed, which is nearly always.
+      queryClient.invalidateQueries({
+        queryKey: [...wikiKeys.all, "descendantIds"],
+      })
 
       // Recent-documents modal feed. CREATED/DELETED both shift the list;
       // UPDATED (rename, content edit via Hocuspocus) reorders the

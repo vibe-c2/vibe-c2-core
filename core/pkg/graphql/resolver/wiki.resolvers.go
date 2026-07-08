@@ -113,6 +113,11 @@ func (r *queryResolver) WikiDocumentTreeRevealPath(ctx context.Context, document
 	return r.WikiDocumentResolver.WikiDocumentTreeRevealPath(ctx, documentID)
 }
 
+// WikiDocumentDescendantIds is the resolver for the wikiDocumentDescendantIds field.
+func (r *queryResolver) WikiDocumentDescendantIds(ctx context.Context, documentID string) ([]string, error) {
+	return r.WikiDocumentResolver.WikiDocumentDescendantIDs(ctx, documentID)
+}
+
 // WikiDocumentTrashCount is the resolver for the wikiDocumentTrashCount field.
 func (r *queryResolver) WikiDocumentTrashCount(ctx context.Context, operationID string) (int, error) {
 	return r.WikiDocumentResolver.WikiDocumentTrashCount(ctx, operationID)

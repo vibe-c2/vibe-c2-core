@@ -313,6 +313,17 @@ extend type Query {
   wikiDocumentTreeRevealPath(documentId: ID!): [WikiDocument!]!
     @hasPermission(permission: "operation:member")
 
+  # IDs of every active descendant of `documentId` (excluding the document
+  # itself), derived from the materialized path_ids chain via the
+  # {operation_id, path_ids} index. Backs the move dialog's exclusion set — a
+  # document can't be moved under its own subtree — so the picker can hide
+  # invalid targets without pulling the whole wikiDocumentTree just to walk
+  # parent links client-side. Cost scales with subtree size. Returns an empty
+  # list for a missing or trashed document; denies with an error if the caller
+  # lacks access to the operation.
+  wikiDocumentDescendantIds(documentId: ID!): [ID!]!
+    @hasPermission(permission: "operation:member")
+
   # Total count of soft-deleted documents in the operation. Cheap badge query
   # for the sidebar; avoids fetching the full trash list just to read its
   # totalCount.

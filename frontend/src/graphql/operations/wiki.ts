@@ -203,6 +203,16 @@ export const WikiDocumentTreeRevealPathQuery = graphql(`
   }
 `)
 
+// IDs of every active descendant of documentId (excluding it). Backs the move
+// dialog's exclusion set — a doc can't be moved under its own subtree — so the
+// picker hides invalid targets without pulling the whole tree to walk parent
+// links client-side. Cost scales with the moved subtree, not the operation.
+export const WikiDocumentDescendantIdsQuery = graphql(`
+  query WikiDocumentDescendantIds($documentId: ID!) {
+    wikiDocumentDescendantIds(documentId: $documentId)
+  }
+`)
+
 // Cheap badge query for the trash icon. Replaces the old practice of
 // firing the full paginated trash list just to read its totalCount.
 export const WikiDocumentTrashCountQuery = graphql(`

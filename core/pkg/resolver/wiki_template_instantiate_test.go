@@ -2,12 +2,12 @@ package resolver
 
 import (
 	"context"
-	"fmt"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/qiniu/qmgo"
 	"github.com/vibe-c2/vibe-c2-core/core/pkg/eventbus"
 	"github.com/vibe-c2/vibe-c2-core/core/pkg/graphql/gqlctx"
 	"github.com/vibe-c2/vibe-c2-core/core/pkg/models"
@@ -32,7 +32,9 @@ type stubDocRepo struct {
 func (s *stubDocRepo) FindByID(_ context.Context, id uuid.UUID) (models.WikiDocument, error) {
 	doc, ok := s.byID[id]
 	if !ok {
-		return models.WikiDocument{}, fmt.Errorf("document not found")
+		// Mirror the real repository, whose qmgo .One() returns this sentinel
+		// on a miss — resolvers distinguish it from infra errors via errors.Is.
+		return models.WikiDocument{}, qmgo.ErrNoSuchDocuments
 	}
 	return doc, nil
 }
@@ -62,6 +64,25 @@ func (s *stubDocRepo) FindTemplatesByOperationID(_ context.Context, opID uuid.UU
 	for _, d := range s.templates {
 		if d.OperationID == opID {
 			out = append(out, d)
+		}
+	}
+	return out, nil
+}
+
+// FindDescendantIDs returns the IDs of docs whose materialized path_ids chain
+// contains docID, scoped to opID and excluding trashed rows — the stub mirror
+// of the real {operation_id, path_ids} index probe.
+func (s *stubDocRepo) FindDescendantIDs(_ context.Context, opID, docID uuid.UUID) ([]uuid.UUID, error) {
+	var out []uuid.UUID
+	for _, d := range s.byID {
+		if d.OperationID != opID || d.DeletedAt != nil {
+			continue
+		}
+		for _, p := range d.PathIDs {
+			if p == docID {
+				out = append(out, d.DocumentID)
+				break
+			}
 		}
 	}
 	return out, nil
@@ -341,5 +362,82 @@ func TestSetWikiDocumentTemplate_RejectsTrashed(t *testing.T) {
 	}
 	if repo.updated != nil {
 		t.Error("no write should happen for a trashed document")
+	}
+}
+
+func TestWikiDocumentDescendantIDs_ExcludesSubtree(t *testing.T) {
+	op := uuid.New()
+	rootID := uuid.New()
+	childID := uuid.New()
+	grandchildID := uuid.New()
+	outsideID := uuid.New()
+	docs := map[uuid.UUID]models.WikiDocument{
+		rootID:       {DocumentID: rootID, OperationID: op},
+		childID:      {DocumentID: childID, OperationID: op, PathIDs: []uuid.UUID{rootID}},
+		grandchildID: {DocumentID: grandchildID, OperationID: op, PathIDs: []uuid.UUID{rootID, childID}},
+		outsideID:    {DocumentID: outsideID, OperationID: op},
+	}
+	repo := &stubDocRepo{byID: docs}
+	r := newInstantiateResolver(repo)
+
+	got, err := r.WikiDocumentDescendantIDs(adminCtx(uuid.New()), rootID.String())
+	if err != nil {
+		t.Fatalf("WikiDocumentDescendantIDs err = %v", err)
+	}
+	// Descendants of rootID only — the target itself and the unrelated doc must
+	// not appear (the caller adds the target's own id to the exclusion set).
+	want := map[string]bool{childID.String(): true, grandchildID.String(): true}
+	if len(got) != len(want) {
+		t.Fatalf("got %d descendant IDs, want %d", len(got), len(want))
+	}
+	for _, id := range got {
+		if !want[id] {
+			t.Errorf("unexpected descendant ID %s (root/outside must not appear)", id)
+		}
+	}
+}
+
+func TestWikiDocumentDescendantIDs_MissingDocumentReturnsEmpty(t *testing.T) {
+	repo := &stubDocRepo{byID: map[uuid.UUID]models.WikiDocument{}}
+	r := newInstantiateResolver(repo)
+
+	got, err := r.WikiDocumentDescendantIDs(adminCtx(uuid.New()), uuid.New().String())
+	if err != nil {
+		t.Fatalf("want nil error for missing document, got %v", err)
+	}
+	if len(got) != 0 {
+		t.Fatalf("want empty descendant set for missing document, got %d", len(got))
+	}
+}
+
+func TestWikiDocumentDescendantIDs_TrashedTargetReturnsEmpty(t *testing.T) {
+	op := uuid.New()
+	rootID := uuid.New()
+	childID := uuid.New()
+	ts := time.Now().UTC()
+	docs := map[uuid.UUID]models.WikiDocument{
+		// Target is trashed; its (still-active) child must not be reported —
+		// the resolver short-circuits before probing descendants.
+		rootID:  {DocumentID: rootID, OperationID: op, DeletedAt: &ts},
+		childID: {DocumentID: childID, OperationID: op, PathIDs: []uuid.UUID{rootID}},
+	}
+	repo := &stubDocRepo{byID: docs}
+	r := newInstantiateResolver(repo)
+
+	got, err := r.WikiDocumentDescendantIDs(adminCtx(uuid.New()), rootID.String())
+	if err != nil {
+		t.Fatalf("want nil error for trashed target, got %v", err)
+	}
+	if len(got) != 0 {
+		t.Fatalf("want empty descendant set for trashed target, got %d", len(got))
+	}
+}
+
+func TestWikiDocumentDescendantIDs_RejectsInvalidID(t *testing.T) {
+	repo := &stubDocRepo{}
+	r := newInstantiateResolver(repo)
+
+	if _, err := r.WikiDocumentDescendantIDs(adminCtx(uuid.New()), "not-a-uuid"); err == nil {
+		t.Fatal("want error for malformed document ID, got nil")
 	}
 }

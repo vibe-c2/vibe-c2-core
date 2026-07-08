@@ -2,11 +2,13 @@ package resolver
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/qiniu/qmgo"
 	"github.com/vibe-c2/vibe-c2-core/core/pkg/authorization"
 	"github.com/vibe-c2/vibe-c2-core/core/pkg/eventbus"
 	"github.com/vibe-c2/vibe-c2-core/core/pkg/graphql/gqlctx"
@@ -56,6 +58,7 @@ type IWikiDocumentResolver interface {
 	WikiTemplates(ctx context.Context, operationID string) ([]*models.WikiDocument, error)
 	WikiDocumentChildren(ctx context.Context, operationID string, parentDocumentID *string) ([]*models.WikiDocument, error)
 	WikiDocumentTreeRevealPath(ctx context.Context, documentID string) ([]*models.WikiDocument, error)
+	WikiDocumentDescendantIDs(ctx context.Context, documentID string) ([]string, error)
 	WikiDocumentTrash(ctx context.Context, operationID string, first *int, after *string, last *int, before *string) (*model.WikiDocumentConnection, error)
 	WikiDocumentTrashCount(ctx context.Context, operationID string) (int, error)
 	WikiDocumentTrashedDescendants(ctx context.Context, documentID string) ([]*models.WikiDocument, error)
@@ -1886,6 +1889,52 @@ func (r *wikiDocumentResolver) WikiDocumentTreeRevealPath(ctx context.Context, d
 		ptrs[i] = &docs[i]
 	}
 	return ptrs, nil
+}
+
+// WikiDocumentDescendantIDs returns the IDs of every active descendant of the
+// given document (excluding the document itself). Backs the move dialog's
+// exclusion set — a document can't be moved under its own subtree — so the
+// picker can hide invalid targets without pulling the whole wikiDocumentTree
+// just to walk parent links in the client. Derived from the materialized
+// path_ids chain via the {operation_id, path_ids} index, so cost scales with
+// the subtree size. A missing or trashed document yields an empty set (mirrors
+// WikiDocumentTreeRevealPath): the caller adds the target's own id to the
+// exclusion set, and the reorder mutation still rejects an illegal move
+// server-side.
+func (r *wikiDocumentResolver) WikiDocumentDescendantIDs(ctx context.Context, documentID string) ([]string, error) {
+	docUID, err := uuid.Parse(documentID)
+	if err != nil {
+		return nil, fmt.Errorf("invalid document ID: %w", err)
+	}
+
+	target, err := r.docRepo.FindByID(ctx, docUID)
+	if errors.Is(err, qmgo.ErrNoSuchDocuments) {
+		// Genuinely absent doc → empty exclusion set (the picker just won't
+		// hide anything; the reorder mutation still rejects an illegal move).
+		// Real infra errors fall through below so they surface instead of
+		// masquerading as "no descendants".
+		return []string{}, nil
+	}
+	if err != nil {
+		return nil, fmt.Errorf("failed to fetch document: %w", err)
+	}
+	if target.DeletedAt != nil {
+		return []string{}, nil
+	}
+	if err := r.authorizeForOperation(ctx, target.OperationID, models.OperationRoleViewer); err != nil {
+		return nil, err
+	}
+
+	ids, err := r.docRepo.FindDescendantIDs(ctx, target.OperationID, docUID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to fetch descendant IDs: %w", err)
+	}
+
+	out := make([]string, len(ids))
+	for i, id := range ids {
+		out[i] = id.String()
+	}
+	return out, nil
 }
 
 // WikiDocumentTrashCount returns the number of soft-deleted documents in the

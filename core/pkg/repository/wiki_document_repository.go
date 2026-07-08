@@ -93,6 +93,11 @@ type IWikiDocumentRepository interface {
 	// aggregation. Counts cover every returned row.
 	FindDocumentsForRevealPath(ctx context.Context, opID uuid.UUID, parentIDs []uuid.UUID) ([]models.WikiDocument, map[uuid.UUID]int, error)
 	FindDescendants(ctx context.Context, docID uuid.UUID) ([]models.WikiDocument, error)
+	// FindDescendantIDs returns just the document IDs of every active
+	// descendant of docID (excluding docID itself), via the materialized
+	// path_ids chain. Projection-only + subtree-scoped, so it replaces a
+	// whole-tree fetch when a caller only needs the exclusion set.
+	FindDescendantIDs(ctx context.Context, opID, docID uuid.UUID) ([]uuid.UUID, error)
 	// RebuildPathIDsCascade recomputes path_ids for rootID and every descendant
 	// by walking parent_document_id chains breadth-first. Idempotent. Must be
 	// called after any reparent (move, restore-to-new-home) so the multikey
@@ -644,6 +649,32 @@ func (r *wikiDocumentRepository) findDescendantsBFS(ctx context.Context, docID u
 	}
 
 	return allDescendants, nil
+}
+
+// FindDescendantIDs returns the document IDs of every active descendant of
+// docID (children, grandchildren, …), excluding docID itself. It probes the
+// materialized path_ids chain — every descendant carries docID in its path_ids
+// — via the {operation_id, path_ids} multikey index, and projects only the id
+// so the wire payload is a flat list of UUIDs rather than full documents.
+// Cost scales with the subtree size, not the whole operation. Backs the move
+// dialog's "can't move a document under its own subtree" exclusion set.
+func (r *wikiDocumentRepository) FindDescendantIDs(ctx context.Context, opID, docID uuid.UUID) ([]uuid.UUID, error) {
+	var rows []struct {
+		DocumentID uuid.UUID `bson:"document_id"`
+	}
+	err := r.coll.Find(ctx, bson.M{
+		"operation_id": opID,
+		"path_ids":     docID,
+		"deleted_at":   nil,
+	}).Select(bson.M{"document_id": 1}).All(&rows)
+	if err != nil {
+		return nil, err
+	}
+	ids := make([]uuid.UUID, len(rows))
+	for i, row := range rows {
+		ids[i] = row.DocumentID
+	}
+	return ids, nil
 }
 
 // maxAncestorDepth caps the walk defensively. Real chains are shallow; this

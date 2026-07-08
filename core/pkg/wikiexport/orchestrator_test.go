@@ -43,6 +43,22 @@ func (f *fakeDocRepo) FindTemplatesByOperationID(_ context.Context, _ uuid.UUID)
 	return out, nil
 }
 
+func (f *fakeDocRepo) FindDescendantIDs(_ context.Context, _, docID uuid.UUID) ([]uuid.UUID, error) {
+	var out []uuid.UUID
+	for _, d := range f.docs {
+		if d.DeletedAt != nil {
+			continue
+		}
+		for _, p := range d.PathIDs {
+			if p == docID {
+				out = append(out, d.DocumentID)
+				break
+			}
+		}
+	}
+	return out, nil
+}
+
 func (f *fakeDocRepo) FindByID(_ context.Context, id uuid.UUID) (models.WikiDocument, error) {
 	for _, d := range f.docs {
 		if d.DocumentID == id {
