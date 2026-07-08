@@ -85,9 +85,8 @@ export function OperationSwitcher() {
   // Scroll highlighted item into view via Virtuoso — keyboard navigation only.
   useEffect(() => {
     if (highlightedIndex >= 0 && scrollOnHighlight.current) {
-      virtuosoRef.current?.scrollToIndex({
+      virtuosoRef.current?.scrollIntoView({
         index: highlightedIndex,
-        align: "nearest",
         behavior: "auto",
       });
     }
