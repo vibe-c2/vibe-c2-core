@@ -31,6 +31,11 @@ export function OperationSwitcher() {
   const [debouncedSearch, setDebouncedSearch] = useState("");
   const [highlightedIndex, setHighlightedIndex] = useState(-1);
   const virtuosoRef = useRef<VirtuosoHandle>(null);
+  // Tracks what moved the highlight. Only keyboard navigation should
+  // programmatically scroll; mouse hover must not (the item is already under
+  // the cursor, and scrolling would yank the viewport out from under it,
+  // producing a self-scrolling loop as new items slide under the pointer).
+  const scrollOnHighlight = useRef(false);
 
   // Callback ref — focuses the search input when the popover mounts it.
   const inputCallbackRef = useCallback((node: HTMLInputElement | null) => {
@@ -77,14 +82,16 @@ export function OperationSwitcher() {
     setHighlightedIndex(-1);
   }
 
-  // Scroll highlighted item into view via Virtuoso.
+  // Scroll highlighted item into view via Virtuoso — keyboard navigation only.
   useEffect(() => {
-    if (highlightedIndex >= 0) {
+    if (highlightedIndex >= 0 && scrollOnHighlight.current) {
       virtuosoRef.current?.scrollToIndex({
         index: highlightedIndex,
+        align: "nearest",
         behavior: "auto",
       });
     }
+    scrollOnHighlight.current = false;
   }, [highlightedIndex]);
 
   function selectOperation(op: (typeof operations)[number]) {
@@ -95,11 +102,13 @@ export function OperationSwitcher() {
   function handleKeyDown(e: React.KeyboardEvent<HTMLInputElement>) {
     if (e.key === "ArrowDown") {
       e.preventDefault();
+      scrollOnHighlight.current = true;
       setHighlightedIndex((prev) =>
         prev < operations.length - 1 ? prev + 1 : 0,
       );
     } else if (e.key === "ArrowUp") {
       e.preventDefault();
+      scrollOnHighlight.current = true;
       setHighlightedIndex((prev) =>
         prev > 0 ? prev - 1 : operations.length - 1,
       );
@@ -230,7 +239,10 @@ export function OperationSwitcher() {
                       ? "bg-accent text-accent-foreground"
                       : "hover:bg-accent/50",
                   )}
-                  onMouseEnter={() => setHighlightedIndex(index)}
+                  onMouseEnter={() => {
+                    scrollOnHighlight.current = false;
+                    setHighlightedIndex(index);
+                  }}
                   onMouseDown={(e) => {
                     e.preventDefault();
                     selectOperation(op);
