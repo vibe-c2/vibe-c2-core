@@ -30,6 +30,19 @@ const SIDEBAR_WIDTH_MOBILE = "18rem"
 const SIDEBAR_WIDTH_ICON = "3rem"
 const SIDEBAR_KEYBOARD_SHORTCUT = "b"
 
+function isEditableTarget(target: EventTarget | null): boolean {
+  if (!(target instanceof HTMLElement)) {
+    return false
+  }
+  const tag = target.tagName
+  return (
+    target.isContentEditable ||
+    tag === "INPUT" ||
+    tag === "TEXTAREA" ||
+    tag === "SELECT"
+  )
+}
+
 type SidebarContextProps = {
   state: "expanded" | "collapsed"
   open: boolean
@@ -96,6 +109,11 @@ function SidebarProvider({
         event.key === SIDEBAR_KEYBOARD_SHORTCUT &&
         (event.metaKey || event.ctrlKey)
       ) {
+        // Don't hijack Ctrl/Cmd+B while typing in an editable field —
+        // it's the bold shortcut in the wiki editor and other inputs.
+        if (isEditableTarget(event.target)) {
+          return
+        }
         event.preventDefault()
         toggleSidebar()
       }
