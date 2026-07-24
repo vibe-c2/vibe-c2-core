@@ -59,6 +59,7 @@ import type { SimNode } from "@/components/findings/topology/layout"
 import { useTopologySimulation } from "@/components/findings/topology/use-simulation"
 import { useTopologyEmphasis } from "@/components/findings/topology/use-emphasis"
 import { TopologySearch } from "@/components/findings/topology/topology-search"
+import { TopologyExportButton } from "@/components/findings/topology/topology-export-button"
 import {
   HostNode,
   IdentityNode,
@@ -290,6 +291,11 @@ export function TopologyView({ operationId }: TopologyViewProps) {
   // server state. See aggregate-view-dialog.
   const [aggView, setAggView] = useState<AggregateViewState | null>(null)
 
+  // Virtualization is on in normal use (only on-screen nodes mount), but the
+  // image export toggles it off around a capture so the whole graph is in the
+  // DOM to rasterize. See use-topology-export.
+  const [virtualize, setVirtualize] = useState(true)
+
   const topology = useMemo(
     () => deriveTopology(data?.hosts ?? []),
     [data?.hosts],
@@ -428,7 +434,8 @@ export function TopologyView({ operationId }: TopologyViewProps) {
             // Virtualize: only mount nodes/edges intersecting the viewport.
             // The users lens can carry hundreds of identity edges; rendering the
             // off-screen ones (and, before, animating them) was dead weight.
-            onlyRenderVisibleElements
+            // Toggled off transiently during image export (see setVirtualize).
+            onlyRenderVisibleElements={virtualize}
             // An accidental double-click while focusing/dragging shouldn't
             // lurch the viewport.
             zoomOnDoubleClick={false}
@@ -447,7 +454,13 @@ export function TopologyView({ operationId }: TopologyViewProps) {
               onOpenChange={setLegendOpen}
             />
             <div className="absolute right-3 top-3 z-10 flex flex-col items-end gap-2">
-              <RelationPicker relation={relation} onChange={setRelation} />
+              <div className="flex items-center gap-2">
+                <TopologyExportButton
+                  relation={relation}
+                  setVirtualize={setVirtualize}
+                />
+                <RelationPicker relation={relation} onChange={setRelation} />
+              </div>
               {relation === "identities" && (
                 <HiddenIdentitiesPanel
                   hideWellKnown={hideWellKnown}

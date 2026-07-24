@@ -6,6 +6,18 @@
 
 export type ExportFormat = "json" | "csv"
 
+// The `<a download>` click dance, shared by every client-side download. Takes a
+// ready-to-use href (blob: or data: URL) so both blob and data-URL callers
+// reuse one code path.
+export function triggerDownload(href: string, filename: string): void {
+  const a = document.createElement("a")
+  a.href = href
+  a.download = filename
+  document.body.appendChild(a)
+  a.click()
+  a.remove()
+}
+
 export function downloadBlob(
   content: string,
   filename: string,
@@ -13,12 +25,7 @@ export function downloadBlob(
 ): void {
   const blob = new Blob([content], { type: `${mime};charset=utf-8` })
   const url = URL.createObjectURL(blob)
-  const a = document.createElement("a")
-  a.href = url
-  a.download = filename
-  document.body.appendChild(a)
-  a.click()
-  document.body.removeChild(a)
+  triggerDownload(url, filename)
   setTimeout(() => URL.revokeObjectURL(url), 1000)
 }
 
@@ -48,11 +55,11 @@ function encodeCell(value: string | null | undefined): string {
 // Date-stamped, slugified download name: `<prefix>-<slug>-<YYYY-MM-DD>.<ext>`.
 // `label` is reduced to filename-safe characters; an empty slug falls back to
 // "export". The entity modules supply their own `prefix` ("credentials",
-// "hashes").
+// "hashes"); `ext` is any file extension ("json", "csv", "png", "svg").
 export function buildExportFilename(
   prefix: string,
   label: string,
-  ext: ExportFormat,
+  ext: string,
 ): string {
   const date = new Date().toISOString().slice(0, 10)
   const safe = label.replace(/[^a-zA-Z0-9._-]+/g, "-").replace(/^-+|-+$/g, "")

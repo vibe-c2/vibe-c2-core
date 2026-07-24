@@ -54,6 +54,7 @@
     "graphql": "^16.13.2",
     "graphql-ws": "^6.0.8",
     "highlight.js": "^11.11.1",
+    "html-to-image": "^1.11.13",
     "ipaddr.js": "^2.4.0",
     "lowlight": "^3.3.0",
     "lucide-react": "^1.6.0",
