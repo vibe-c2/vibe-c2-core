@@ -3,9 +3,9 @@ import { Button } from "@/components/ui/button"
 import {
   DropdownMenu,
   DropdownMenuContent,
+  DropdownMenuGroup,
   DropdownMenuItem,
   DropdownMenuLabel,
-  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 import type { TopologyRelation } from "@/stores/hosts"
@@ -49,16 +49,19 @@ export function TopologyExportButton({
         }
       />
       <DropdownMenuContent align="end" className="w-44">
-        <DropdownMenuLabel>Export map as</DropdownMenuLabel>
-        <DropdownMenuSeparator />
-        <DropdownMenuItem onClick={() => exportImage("png")}>
-          <ImageIcon className="size-4" />
-          PNG image
-        </DropdownMenuItem>
-        <DropdownMenuItem onClick={() => exportImage("svg")}>
-          <ShapesIcon className="size-4" />
-          SVG vector
-        </DropdownMenuItem>
+        {/* GroupLabel (DropdownMenuLabel) must sit inside a Group, or Base UI
+            throws "MenuGroupRootContext is missing". */}
+        <DropdownMenuGroup>
+          <DropdownMenuLabel>Export map as</DropdownMenuLabel>
+          <DropdownMenuItem onClick={() => exportImage("png")}>
+            <ImageIcon className="size-4" />
+            PNG image
+          </DropdownMenuItem>
+          <DropdownMenuItem onClick={() => exportImage("svg")}>
+            <ShapesIcon className="size-4" />
+            SVG vector
+          </DropdownMenuItem>
+        </DropdownMenuGroup>
       </DropdownMenuContent>
     </DropdownMenu>
   )
