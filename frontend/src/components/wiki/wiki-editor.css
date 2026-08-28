@@ -329,10 +329,15 @@
      of code but pays it back as scroll bumps when many tall blocks
      transition in and out of view per scroll frame. */
   contain: layout style;
-  /* Collapsed height for large blocks: ~15 lines of code + the <pre>'s 12px
-     top/bottom padding. Keep the line metrics in sync with `__pre code`
-     (line-height 1.55 × font-size 0.8125rem). */
-  --wiki-code-collapsed-max: calc(15 * 1.55 * 0.8125rem + 24px);
+  /* Collapsed preview height: `--wiki-code-preview-lines` lines of code (set
+     inline from PREVIEW_LINES in wiki-code-block.tsx, so the two cannot drift
+     apart) + the <pre>'s 12px top/bottom padding. Deliberately independent of
+     the collapse *threshold* — see PREVIEW_LINES for why. Keep the line
+     metrics in sync with `__pre code` (line-height 1.55 × font-size
+     0.8125rem). */
+  --wiki-code-collapsed-max: calc(
+    var(--wiki-code-preview-lines, 16) * 1.55 * 0.8125rem + 24px
+  );
 }
 
 /* When any node with a top-floating toolbar is the first element on the page,
@@ -372,6 +377,16 @@
    focusing it pulls the ProseMirror cursor out of the node. */
 .tiptap .wiki-code-block[data-cursor-inside="true"] > .wiki-code-block__toolbar,
 .tiptap .wiki-code-block[data-editable="true"] > .wiki-code-block__toolbar:focus-within {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+/* A collapsed block hides content, so the control that reveals it has to be
+   reachable without first committing to a click. In edit mode the toolbar is
+   otherwise caret-gated — and placing the caret *is* the expand (see the
+   auto-expand effect in wiki-code-block.tsx), which would leave "Show all N"
+   permanently unreachable. Applies in both modes. */
+.tiptap .wiki-code-block[data-collapsed="true"]:hover > .wiki-code-block__toolbar {
   opacity: 1;
   pointer-events: auto;
 }
@@ -494,14 +509,29 @@
   align-items: stretch;
 }
 
-/* Collapsed large block: clip the body to ~15 lines and scroll within it.
-   The vertical scroll lives on the body (not the <pre>) so the gutter and the
-   code scroll together and line numbers stay aligned; the <pre> keeps its own
-   horizontal scroll. Editing works inside the viewport — the caret stays in
-   view via native overflow scrolling. */
+/* Collapsed large block: clip the body to the preview height. At rest it is
+   deliberately NOT a live scroll container — that is the whole point.
+   A nested vertical scroller sitting under the pointer steals wheel gestures
+   from the page: the browser latches each new wheel burst onto whatever
+   scroller the cursor happens to be over, and with the default
+   `overscroll-behavior` the page does not move again until the block's entire
+   remaining height has been consumed. On a document that is mostly code that
+   turns ordinary reading into a fight. So a resting block is inert, the page
+   scrolls straight past it, and the fade + "Show all N" pill are the
+   affordance for what is hidden. It becomes a real scroll viewport only once
+   engaged — see the :focus-within rule below.
+
+   `overflow: hidden` rather than `clip`: `scrollbar-gutter: stable` only
+   reserves space on a scroll container, and `hidden` is one while `clip` is
+   not. That reservation is what stops the code jumping sideways when
+   engaging swaps a real scrollbar in. Both axes are pinned because leaving
+   `overflow-x` at `visible` would compute it back to `auto` and hand the
+   body a horizontal scroller of its own, on top of the <pre>'s. */
 .tiptap .wiki-code-block[data-collapsed="true"] .wiki-code-block__body {
   max-height: var(--wiki-code-collapsed-max);
-  overflow-y: auto;
+  overflow: hidden;
+  scrollbar-gutter: stable;
+  scrollbar-width: thin;
   /* The base rule uses `align-items: stretch`, which — once the body has a
      max-height and becomes a scroll container — clamps the gutter and <pre>
      to the VISIBLE height instead of their content height. That breaks the
@@ -509,6 +539,49 @@
      box). `flex-start` lets each child take its full content height so the
      body is the single element that clips and scrolls them together. */
   align-items: flex-start;
+}
+
+/* Engaged: the viewer clicked or tabbed into the block (read mode focuses the
+   body itself — it carries tabindex there), or the caret is inside it. The
+   wheel is now meant for the code, so hand it a real scroll container. The
+   vertical scroll lives on the body, not the <pre>, so the gutter and the
+   code scroll together and line numbers stay aligned; the <pre> keeps its own
+   horizontal scroll. `contain` stops the gesture at either end rather than
+   punting it back to the document — engagement was deliberate, so leaving the
+   block should be too. */
+.tiptap
+  .wiki-code-block[data-collapsed="true"]
+  .wiki-code-block__body:focus-within {
+  overflow-y: auto;
+  overscroll-behavior-y: contain;
+}
+
+/* Keyboard focus lands on the body in read mode; say so. Mouse clicks focus
+   it too but :focus-visible keeps the ring off that path. */
+.tiptap .wiki-code-block__body:focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: -2px;
+  border-radius: calc(var(--radius-md) - 1px);
+}
+
+/* "There is more below" for a block at rest. Dropped once engaged, where the
+   scrollbar says the same thing without dimming the last visible lines.
+   `:has()` scopes the test to focus inside the body specifically — focus on a
+   toolbar control (the language <select>) must not count as engagement. */
+.tiptap
+  .wiki-code-block[data-collapsed="true"]:not(
+    :has(.wiki-code-block__body:focus-within)
+  )::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 2.5rem;
+  border-radius: 0 0 var(--radius-md) var(--radius-md);
+  background: linear-gradient(to bottom, transparent, var(--wiki-code-bg));
+  pointer-events: none;
+  z-index: 1;
 }
 
 /* The <pre> keeps `overflow-x: auto` for horizontal code scroll, but CSS

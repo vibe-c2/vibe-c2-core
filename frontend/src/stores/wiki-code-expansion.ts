@@ -3,8 +3,8 @@ import { create } from "zustand"
 // Per-viewer, ephemeral "which large code blocks are expanded" state.
 //
 // Large code blocks (> COLLAPSE_LINES) render collapsed to a fixed-height
-// scroll viewport by default; this store records the ones the *current viewer*
-// chose to expand. It is deliberately:
+// preview by default; this store records the ones the *current viewer* chose
+// to expand. It is deliberately:
 //   - Local, never synced to Yjs — expanding a block on my screen must not
 //     expand it on a collaborator's. (Storing it in the document would make
 //     collaborators fight over the flag.)
@@ -16,19 +16,27 @@ import { create } from "zustand"
 interface WikiCodeExpansionState {
   /** Set of blockIds the viewer has explicitly expanded. */
   expanded: ReadonlySet<string>
-  toggle: (blockId: string) => void
+  /**
+   * Absolute set rather than a toggle: expansion is driven both by the
+   * collapse button and by the caret entering a block, and the latter fires
+   * from an effect — an idempotent setter keeps that safe to call on every
+   * entry. Returning the identical state when nothing changes means such a
+   * call subscribes no re-render.
+   */
+  setExpanded: (blockId: string, expanded: boolean) => void
 }
 
 export const useWikiCodeExpansionStore = create<WikiCodeExpansionState>((set) => ({
   expanded: new Set<string>(),
 
-  toggle: (blockId) =>
+  setExpanded: (blockId, expanded) =>
     set((state) => {
+      if (state.expanded.has(blockId) === expanded) return state
       const next = new Set(state.expanded)
-      if (next.has(blockId)) {
-        next.delete(blockId)
-      } else {
+      if (expanded) {
         next.add(blockId)
+      } else {
+        next.delete(blockId)
       }
       return { expanded: next }
     }),

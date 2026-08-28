@@ -123,6 +123,18 @@
     display: none !important;
   }
 
+  /* Collapsed code blocks print in full. The preview height and its fade are
+   * a screen reading affordance, not a content boundary — printing only the
+   * first N lines of a long block would silently drop the rest of the page. */
+  .wiki-code-block[data-collapsed="true"] .wiki-code-block__body {
+    max-height: none !important;
+    overflow: visible !important;
+  }
+
+  .wiki-code-block[data-collapsed="true"]::after {
+    display: none !important;
+  }
+
   /* Page-break hints. The defaults split mid-block too aggressively — the
    * rules below keep code blocks, tables, images, and figures together
    * when possible, and prevent orphaned headings at the bottom of a page. */
