@@ -1,7 +1,7 @@
 import { useMemo, useState } from "react";
 import { useTheme } from "next-themes";
 import data from "@emoji-mart/data";
-import Picker from "@emoji-mart/react";
+import { EmojiPicker } from "@/components/wiki/emoji-picker";
 import {
   BanIcon,
   FolderIcon,
@@ -183,11 +183,9 @@ export function DocumentIconPicker({
             </TabsTrigger>
           </TabsList>
           <TabsContent value="emoji" className="flex justify-center">
-            <Picker
+            <EmojiPicker
               data={data}
-              onEmojiSelect={(e: { native: string }) =>
-                handleEmojiPick(e.native)
-              }
+              onEmojiSelect={(e) => handleEmojiPick(e.native)}
               theme={resolvedTheme === "dark" ? "dark" : "light"}
               previewPosition="none"
               skinTonePosition="none"

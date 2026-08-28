@@ -6,10 +6,7 @@ FROM node:${NODE_VERSION}-alpine AS builder
 WORKDIR /app
 
 COPY package.json package-lock.json ./
-# --legacy-peer-deps: several deps (e.g. @emoji-mart/react) declare React peer
-# ranges that exclude React 19, even though they work fine at runtime. The
-# committed lockfile was resolved with this flag set; npm ci must match.
-RUN npm ci --legacy-peer-deps
+RUN npm ci
 
 COPY . .
 
