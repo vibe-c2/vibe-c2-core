@@ -131,6 +131,7 @@ export function WikiCodeBlock({ node, updateAttributes, editor, getPos }: ReactN
   const wrap: boolean = node.attrs.wrap ?? false
   const isEditable = editor.isEditable
   const preRef = useRef<HTMLPreElement>(null)
+  const bodyRef = useRef<HTMLDivElement>(null)
   const text = node.textContent
 
   // Collapse state. A block is collapsible only when it exceeds the line
@@ -193,23 +194,23 @@ export function WikiCodeBlock({ node, updateAttributes, editor, getPos }: ReactN
       },
     }) ?? false
 
-  // Entering a collapsed block with the caret expands it. Editing through a
-  // fixed-height porthole is miserable on its own, but the load-bearing
-  // reason is that a collapsed block is inert (not a scroll container) until
-  // engaged — so the caret must never be able to land in the clipped region,
-  // where ProseMirror's scrollIntoView would have nothing to scroll and would
-  // walk up to the document scroller instead, chasing a caret that is not
-  // visible. Expanding on entry keeps the caret and the clip apart entirely.
+  // The caret leaving rewinds the preview, mirroring what onBlur does for the
+  // read-mode path below: a block is engaged only while you are in it, and a
+  // disengaged one should show its start rather than whatever interior window
+  // it was left on. Edge-triggered, so it fires once on exit and not on every
+  // transaction while the caret is elsewhere.
   //
-  // Fires only on the false→true edge, so hitting Collapse while the caret is
-  // still inside isn't immediately undone. Read-only viewers have no caret
-  // (`cursorInside` is pinned false there), so this never runs for them.
+  // The caret does NOT need the block expanded to sit in it. ProseMirror's
+  // scrollRectIntoView never consults `overflow` — it assigns `scrollTop` on
+  // each ancestor in turn, which works on a clipped container just as well as
+  // a scrollable one. So the caret stays visible inside a collapsed block
+  // with no help from us.
   const wasCursorInsideRef = useRef(false)
   useEffect(() => {
-    const entered = cursorInside && !wasCursorInsideRef.current
+    const left = !cursorInside && wasCursorInsideRef.current
     wasCursorInsideRef.current = cursorInside
-    if (entered && collapsible) setExpanded(true)
-  }, [cursorInside, collapsible, setExpanded])
+    if (left && bodyRef.current) bodyRef.current.scrollTop = 0
+  }, [cursorInside])
 
   // Without soft wrap, one logical line is one visual row, so the gutter is
   // fully determined by `lineCount` — derive it in render rather than
@@ -319,16 +320,21 @@ export function WikiCodeBlock({ node, updateAttributes, editor, getPos }: ReactN
           </span>
         )}
       </div>
-      {/* Read mode has no caret, so focus is what marks a collapsed block as
-          "engaged" and turns its inert preview back into a scroll viewport
-          (see wiki-editor.css). Making it focusable is also the standing a11y
-          fix for a scroll region keyboard users otherwise cannot reach — once
-          focused, the arrow and page keys scroll it natively.
+      {/* A collapsed block becomes scrollable while you are inside it. In edit
+          mode "inside" is the caret, carried by data-cursor-inside on the
+          wrapper. Read mode has no caret, and DOM focus is no substitute in
+          edit mode either — ProseMirror keeps focus on the editor root, so
+          nothing inside a NodeView is ever the active element. Hence the two
+          separate triggers in wiki-editor.css.
+          Making this focusable in read mode is also the standing a11y fix for
+          a scroll region keyboard users otherwise cannot reach — once focused,
+          the arrow and page keys scroll it natively.
           `group` rather than the usual `region` because a code-heavy document
           holds dozens of these, and each one as a landmark would swamp
           landmark navigation; `group` still carries the accessible name. */}
       <div
         className="wiki-code-block__body"
+        ref={bodyRef}
         {...(!isEditable && collapsed
           ? {
               tabIndex: 0,

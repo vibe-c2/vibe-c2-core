@@ -541,14 +541,23 @@
   align-items: flex-start;
 }
 
-/* Engaged: the viewer clicked or tabbed into the block (read mode focuses the
-   body itself — it carries tabindex there), or the caret is inside it. The
-   wheel is now meant for the code, so hand it a real scroll container. The
-   vertical scroll lives on the body, not the <pre>, so the gutter and the
+/* Engaged — the wheel is now meant for the code, so hand it a real scroll
+   container. Two triggers, because "inside" means different things per mode:
+
+     - edit: the caret is in this block. DOM focus is useless here —
+       ProseMirror keeps focus on the editor root, so no descendant of the
+       body is ever the active element and :focus-within never matches.
+     - read: there is no caret, so focus on the body (which carries tabindex
+       in that mode) is what marks it.
+
+   The vertical scroll lives on the body, not the <pre>, so the gutter and the
    code scroll together and line numbers stay aligned; the <pre> keeps its own
    horizontal scroll. `contain` stops the gesture at either end rather than
    punting it back to the document — engagement was deliberate, so leaving the
    block should be too. */
+.tiptap
+  .wiki-code-block[data-collapsed="true"][data-cursor-inside="true"]
+  .wiki-code-block__body,
 .tiptap
   .wiki-code-block[data-collapsed="true"]
   .wiki-code-block__body:focus-within {
@@ -565,11 +574,13 @@
 }
 
 /* "There is more below" for a block at rest. Dropped once engaged, where the
-   scrollbar says the same thing without dimming the last visible lines.
-   `:has()` scopes the test to focus inside the body specifically — focus on a
+   scrollbar says the same thing without dimming the last visible lines — so
+   this has to negate BOTH engagement triggers, or the fade would sit over the
+   code the whole time the caret is in the block.
+   `:has()` scopes the focus test to the body specifically — focus on a
    toolbar control (the language <select>) must not count as engagement. */
 .tiptap
-  .wiki-code-block[data-collapsed="true"]:not(
+  .wiki-code-block[data-collapsed="true"]:not([data-cursor-inside="true"]):not(
     :has(.wiki-code-block__body:focus-within)
   )::after {
   content: "";
