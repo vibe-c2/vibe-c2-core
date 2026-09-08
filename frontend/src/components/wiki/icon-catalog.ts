@@ -395,14 +395,21 @@ export type IconComponent = ComponentType<{
   style?: CSSProperties
 }>
 
-// lucide-react@1.6.0 ships a broken `dynamicIconImports.js` that references
-// `.ts` source files. The compiled icon modules are still at
-// `./icons/<kebab>.js`, so we enumerate them via Vite's import.meta.glob and
-// build our own working dynamic-import map. Each glob match becomes its own
-// chunk, fetched only when the icon first renders.
-const ICON_GLOB = import.meta.glob<{ default: IconComponent }>(
+// lucide-react ships a broken `dynamicIconImports` entry that references `.ts`
+// source files. The compiled icon modules are still one-file-per-icon under
+// `./icons/<kebab>`, so we enumerate them via Vite's import.meta.glob and build
+// our own working dynamic-import map. Each glob match becomes its own chunk,
+// fetched only when the icon first renders.
+//
+// Both extensions are globbed on purpose: lucide emitted `.js` up to 1.6 and
+// `.mjs` from 1.7 onward. Matching only one silently empties the extended icon
+// library on the next dependency bump — which is exactly what happened when
+// 1.6.0 moved to 1.35.0. `*.mjs` does not match the sibling `.mjs.map`
+// sourcemaps, so no filtering is needed. ALL_LUCIDE_NAMES has a guard test.
+const ICON_GLOB = import.meta.glob<{ default: IconComponent }>([
+  "/node_modules/lucide-react/dist/esm/icons/*.mjs",
   "/node_modules/lucide-react/dist/esm/icons/*.js",
-)
+])
 
 function kebabToPascal(s: string): string {
   return s
@@ -412,9 +419,9 @@ function kebabToPascal(s: string): string {
 }
 
 function pathToKebab(path: string): string {
-  // /node_modules/lucide-react/dist/esm/icons/a-arrow-down.js → a-arrow-down
+  // /node_modules/lucide-react/dist/esm/icons/a-arrow-down.mjs → a-arrow-down
   const base = path.slice(path.lastIndexOf("/") + 1)
-  return base.replace(/\.js$/, "")
+  return base.replace(/\.m?js$/, "")
 }
 
 /** Maps every available lucide icon's PascalCase name to its glob-resolved import path. */
