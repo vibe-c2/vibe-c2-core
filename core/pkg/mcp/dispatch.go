@@ -129,6 +129,13 @@ func invoke[A any](
 		}
 	}()
 
+	// Order matters: the throttle runs first so a runaway agent is stopped
+	// before it can do any work, and a read-only key hammering write tools is
+	// still counted rather than being refused for free.
+	if limitErr := s.checkRateLimit(ctx, kind); limitErr != nil {
+		return toolResult{}, limitErr
+	}
+
 	if kind == writeTool {
 		if gateErr := requireWrites(ctx); gateErr != nil {
 			return toolResult{}, gateErr
@@ -227,7 +234,7 @@ func (s *Server) publishActivity(action *models.AgentAction, agent *gqlctx.Agent
 // able to query for separately when reviewing what an agent tried to reach.
 func isRefusal(err error) bool {
 	msg := err.Error()
-	for _, marker := range []string{"forbidden", "read-only", "not scoped", "not a member"} {
+	for _, marker := range []string{"forbidden", "read-only", "not scoped", "not a member", "rate limit"} {
 		if strings.Contains(msg, marker) {
 			return true
 		}

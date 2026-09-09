@@ -14,6 +14,7 @@ import (
 type Server struct {
 	server *mcp.Server
 	deps   Deps
+	limits rateLimits
 }
 
 // New builds the MCP server and registers the tool surface.
@@ -25,7 +26,8 @@ func New(deps Deps) *Server {
 		}, &mcp.ServerOptions{
 			Instructions: serverInstructions,
 		}),
-		deps: deps,
+		deps:   deps,
+		limits: rateLimits{calls: deps.CallsPerMinute, writes: deps.WritesPerMinute},
 	}
 
 	registerOperationTools(s)

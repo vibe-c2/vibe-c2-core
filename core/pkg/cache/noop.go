@@ -32,6 +32,14 @@ func (n *noopCache) SetNX(ctx context.Context, key string, value interface{}, ex
 	return true, nil
 }
 
+// IncrWithTTL always reports 1. With caching disabled there is no shared
+// counter to enforce a limit against, so callers fail OPEN — refusing every
+// request because the rate limiter cannot see a count would turn a missing
+// Redis into a total outage.
+func (n *noopCache) IncrWithTTL(ctx context.Context, key string, expiration time.Duration) (int64, error) {
+	return 1, nil
+}
+
 func (n *noopCache) SetWithTags(ctx context.Context, key string, value interface{}, tags []string, expiration time.Duration) error {
 	return nil
 }

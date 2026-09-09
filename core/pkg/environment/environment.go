@@ -52,6 +52,8 @@ type EnvironmentSettings struct {
 
 	// Hocuspocus (collab editing sidecar)
 	HocuspocusURL           string
+	MCPCallsPerMinute       int
+	MCPWritesPerMinute      int
 	HocuspocusTicketSecret  string
 	HocuspocusWebhookSecret string
 	WikiAutoBackupInterval  string
@@ -113,6 +115,12 @@ func init() {
 	// Port 1235 = Hocuspocus internal HTTP API (disconnect endpoint).
 	// Port 1234 is the WebSocket server and does not route HTTP paths.
 	viper.SetDefault("HOCUSPOCUS_URL", "http://hocuspocus:1235")
+
+	// Per-agent-key ceilings for the MCP endpoint, per minute. Negative
+	// disables a limit; see core/pkg/mcp/ratelimit.go for why the defaults sit
+	// where they do.
+	viper.SetDefault("MCP_CALLS_PER_MINUTE", 120)
+	viper.SetDefault("MCP_WRITES_PER_MINUTE", 30)
 	viper.SetDefault("HOCUSPOCUS_WEBHOOK_SECRET", "")
 	viper.SetDefault("WIKI_AUTO_BACKUP_INTERVAL", "30m")
 	viper.SetDefault("WIKI_IMAGE_BUCKET", "wiki-images")
@@ -175,6 +183,8 @@ func init() {
 
 		// Hocuspocus
 		HocuspocusURL:           viper.GetString("HOCUSPOCUS_URL"),
+		MCPCallsPerMinute:       viper.GetInt("MCP_CALLS_PER_MINUTE"),
+		MCPWritesPerMinute:      viper.GetInt("MCP_WRITES_PER_MINUTE"),
 		HocuspocusTicketSecret:  viper.GetString("HOCUSPOCUS_TICKET_SECRET"),
 		HocuspocusWebhookSecret: viper.GetString("HOCUSPOCUS_WEBHOOK_SECRET"),
 		WikiAutoBackupInterval:  viper.GetString("WIKI_AUTO_BACKUP_INTERVAL"),

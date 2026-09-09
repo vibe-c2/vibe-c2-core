@@ -79,6 +79,27 @@ func (r *redisCache) SetNX(ctx context.Context, key string, value interface{}, e
 	return r.client.SetNX(ctx, key, value, expiration).Result()
 }
 
+// incrWithTTLScript increments a counter and sets its TTL only on the first
+// increment.
+//
+// Lua rather than INCR-then-EXPIRE for two reasons. Expiring unconditionally
+// would push the deadline forward on every call, so a continuously busy
+// counter would never reset and the limit would become permanent. Doing it in
+// two round trips instead leaves a window where a crash between them leaves a
+// counter with no TTL at all — which, for a rate limiter, means locking a key
+// out forever.
+var incrWithTTLScript = redis.NewScript(`
+local n = redis.call('INCR', KEYS[1])
+if n == 1 then
+  redis.call('PEXPIRE', KEYS[1], ARGV[1])
+end
+return n
+`)
+
+func (r *redisCache) IncrWithTTL(ctx context.Context, key string, expiration time.Duration) (int64, error) {
+	return incrWithTTLScript.Run(ctx, r.client, []string{key}, expiration.Milliseconds()).Int64()
+}
+
 func (r *redisCache) SetWithTags(ctx context.Context, key string, value interface{}, tags []string, expiration time.Duration) error {
 	if err := r.client.Set(ctx, key, value, expiration).Err(); err != nil {
 		return err

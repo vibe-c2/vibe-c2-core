@@ -219,6 +219,8 @@ func (a *App) NewRouter() *gin.Engine {
 			Hocuspocus:         a.hpClient,
 			Bus:                a.eventBus,
 			Logger:             a.logger,
+			CallsPerMinute:     a.env.MCPCallsPerMinute,
+			WritesPerMinute:    a.env.MCPWritesPerMinute,
 		})
 		v1.POST("/mcp", mcpServer.Handler())
 

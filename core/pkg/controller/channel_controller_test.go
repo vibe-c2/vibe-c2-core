@@ -35,6 +35,11 @@ func (f *fakeCache) SetNX(ctx context.Context, key string, value interface{}, tt
 	f.seen[key] = struct{}{}
 	return true, nil
 }
+
+// IncrWithTTL is unused by this package; present to satisfy cache.Cache.
+func (f *fakeCache) IncrWithTTL(_ context.Context, _ string, _ time.Duration) (int64, error) {
+	return 0, nil
+}
 func (f *fakeCache) SetWithTags(ctx context.Context, key string, value interface{}, tags []string, ttl time.Duration) error {
 	return nil
 }

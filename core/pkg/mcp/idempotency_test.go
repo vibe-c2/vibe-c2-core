@@ -12,10 +12,13 @@ import (
 // memCache is a minimal in-memory cache.Cache for exercising the replay path
 // without Redis.
 type memCache struct {
-	data map[string]string
+	data     map[string]string
+	counters map[string]int64
 }
 
-func newMemCache() *memCache { return &memCache{data: map[string]string{}} }
+func newMemCache() *memCache {
+	return &memCache{data: map[string]string{}, counters: map[string]int64{}}
+}
 
 func (m *memCache) Get(_ context.Context, key string) (string, error) { return m.data[key], nil }
 
@@ -30,6 +33,12 @@ func (m *memCache) SetNX(_ context.Context, key string, value any, _ time.Durati
 	}
 	m.data[key] = value.(string)
 	return true, nil
+}
+
+func (m *memCache) IncrWithTTL(_ context.Context, key string, _ time.Duration) (int64, error) {
+	n := m.counters[key] + 1
+	m.counters[key] = n
+	return n, nil
 }
 
 func (m *memCache) SetWithTags(context.Context, string, any, []string, time.Duration) error {

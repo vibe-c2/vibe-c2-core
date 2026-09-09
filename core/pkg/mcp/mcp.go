@@ -76,4 +76,9 @@ type Deps struct {
 	Hocuspocus *wiki.HocuspocusClient
 	Bus        eventbus.IEventBus
 	Logger     *zap.Logger
+
+	// Per-agent-key ceilings, per minute. Zero uses the defaults in
+	// ratelimit.go; negative disables that limit entirely.
+	CallsPerMinute  int
+	WritesPerMinute int
 }
