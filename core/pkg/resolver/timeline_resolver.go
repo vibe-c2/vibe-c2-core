@@ -39,6 +39,8 @@ type ITimelineResolver interface {
 	SubjectID(ctx context.Context, obj *models.OperationEvent) (string, error)
 	SubjectKind(ctx context.Context, obj *models.OperationEvent) (string, error)
 	Actor(ctx context.Context, obj *models.OperationEvent) (*models.User, error)
+	ActorKind(ctx context.Context, obj *models.OperationEvent) (string, error)
+	ActorLabel(ctx context.Context, obj *models.OperationEvent) (string, error)
 	OccurredAt(ctx context.Context, obj *models.OperationEvent) (string, error)
 	Metadata(ctx context.Context, obj *models.OperationEvent) (string, error)
 
@@ -480,6 +482,48 @@ func (r *timelineResolver) Actor(ctx context.Context, obj *models.OperationEvent
 		return nil, nil
 	}
 	return &user, nil
+}
+
+// ActorKind lets the client distinguish an action the operator performed
+// themselves from one their agent performed for them — both of which resolve
+// to the same User through Actor.
+func (r *timelineResolver) ActorKind(_ context.Context, obj *models.OperationEvent) (string, error) {
+	if obj.ActorType == "" {
+		return string(models.EventActorSystem), nil
+	}
+	return string(obj.ActorType), nil
+}
+
+// ActorLabel renders the actor for display: a username for a person,
+// "Claude (via alice)" for an agent, the service name for a service.
+//
+// Built server-side rather than in the client because the agent name and the
+// owner live in different places — the row and the user repo — and every
+// surface that shows a timeline would otherwise have to reassemble it.
+func (r *timelineResolver) ActorLabel(ctx context.Context, obj *models.OperationEvent) (string, error) {
+	owner := ""
+	if obj.ActorID != nil {
+		if user, err := r.userRepo.FindByID(ctx, *obj.ActorID); err == nil {
+			owner = user.Username
+		}
+	}
+
+	switch obj.ActorType {
+	case models.EventActorAgent:
+		if obj.ActorName == "" {
+			return owner, nil
+		}
+		if owner == "" {
+			return obj.ActorName, nil
+		}
+		return obj.ActorName + " (via " + owner + ")", nil
+	case models.EventActorService:
+		return obj.ActorName, nil
+	case models.EventActorSystem:
+		return "", nil
+	default:
+		return owner, nil
+	}
 }
 
 func (r *timelineResolver) OccurredAt(_ context.Context, obj *models.OperationEvent) (string, error) {

@@ -225,6 +225,11 @@ func extractOperationID(event eventbus.Event) string {
 		return p.OperationID
 	case eventbus.OperationEventLoggedPayload:
 		return p.OperationID
+	case eventbus.AgentActionPayload:
+		// Empty for calls that are not operation-scoped (list_operations, or a
+		// refusal that never resolved one). Those correctly match no
+		// operation stream.
+		return p.OperationID
 	}
 	return ""
 }

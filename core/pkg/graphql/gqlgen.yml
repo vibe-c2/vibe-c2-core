@@ -460,6 +460,10 @@ models:
         resolver: true         # SubjectKind (typed) -> string
       actor:
         resolver: true         # ActorID (*uuid.UUID) -> User (fetched from DB)
+      actorKind:
+        resolver: true         # EventActorType -> String
+      actorLabel:
+        resolver: true         # username / agent name -> display string
       occurredAt:
         resolver: true         # time.Time -> RFC3339 string
       metadata:

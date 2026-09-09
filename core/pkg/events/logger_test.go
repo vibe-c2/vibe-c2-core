@@ -40,11 +40,14 @@ func TestDeterministicEventID_DifferentTopicsDiffer(t *testing.T) {
 func TestTranslateActor(t *testing.T) {
 	uid := uuid.New()
 
+	ownerID := uuid.New()
+
 	cases := []struct {
 		name      string
 		in        eventbus.Actor
 		wantType  models.EventActorType
 		wantHasID bool
+		wantName  string
 	}{
 		{
 			name:      "user with valid id",
@@ -59,10 +62,30 @@ func TestTranslateActor(t *testing.T) {
 			wantHasID: false,
 		},
 		{
+			// The service name used to be dropped, leaving every service row
+			// anonymous on the timeline. It is carried now.
 			name:      "service",
 			in:        eventbus.ServiceActor("setupmanager"),
 			wantType:  models.EventActorService,
 			wantHasID: false,
+			wantName:  "setupmanager",
+		},
+		{
+			// An agent is attributed to its OWNER, so filtering the timeline
+			// by an operator still surfaces what their agent did for them.
+			// The agent's own name rides alongside to say which one.
+			name:      "agent",
+			in:        eventbus.AgentActor(uuid.New().String(), "Claude", ownerID.String()),
+			wantType:  models.EventActorAgent,
+			wantHasID: true,
+			wantName:  "Claude",
+		},
+		{
+			name:      "agent with malformed owner id",
+			in:        eventbus.AgentActor(uuid.New().String(), "Claude", "not-a-uuid"),
+			wantType:  models.EventActorAgent,
+			wantHasID: false,
+			wantName:  "Claude",
 		},
 		{
 			name:      "system",
@@ -73,12 +96,15 @@ func TestTranslateActor(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			gotType, gotID := translateActor(tc.in)
+			gotType, gotID, gotName := translateActor(tc.in)
 			if gotType != tc.wantType {
 				t.Fatalf("type: got %v want %v", gotType, tc.wantType)
 			}
 			if (gotID != nil) != tc.wantHasID {
 				t.Fatalf("hasID: got %v want %v", gotID != nil, tc.wantHasID)
+			}
+			if gotName != tc.wantName {
+				t.Fatalf("name: got %q want %q", gotName, tc.wantName)
 			}
 		})
 	}
@@ -120,6 +146,7 @@ func TestToTaskRow_StageChangedToDoneCarriesTransition(t *testing.T) {
 		}),
 		models.EventActorUser,
 		nil,
+		"",
 	)
 	if err != nil {
 		t.Fatalf("toTaskRow: unexpected error %v", err)
@@ -161,6 +188,7 @@ func TestToTaskRow_StageChangedAwayFromDoneIsDropped(t *testing.T) {
 			}),
 			models.EventActorUser,
 			nil,
+			"",
 		)
 		if err != nil {
 			t.Fatalf("toTaskRow(%s): unexpected error %v", newStage, err)
@@ -185,6 +213,7 @@ func TestToTaskRow_RejectsWrongPayload(t *testing.T) {
 			}),
 		models.EventActorUser,
 		nil,
+		"",
 	)
 	if err == nil {
 		t.Fatalf("expected error on wrong payload type")

@@ -44,7 +44,17 @@ type TimelineEvent {
   subjectId: ID!
   subjectName: String!
   # Null for system / service actors, or when the actor account was deleted.
+  #
+  # For an AI agent this resolves to the OWNER of the agent key, so filtering
+  # the timeline by an operator still surfaces the work their agent did on
+  # their behalf. Use actorKind and actorLabel to tell the two apart.
   actor: User
+  # "user", "agent", "service" or "system". Lets the client render a delegated
+  # action differently from one the operator performed themselves.
+  actorKind: String!
+  # Display name for the actor: the username for a person, "Claude (via alice)"
+  # for an agent, the service name for a service. Empty when unattributable.
+  actorLabel: String!
   occurredAt: String!
   # JSON-encoded payload of topic-specific fields. Empty string when no
   # metadata was captured. A typed scalar can replace this later if it

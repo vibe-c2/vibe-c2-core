@@ -1,0 +1,45 @@
+# =============================================================================
+# Agent Activity — the live half of "you can see what your agent is doing"
+# =============================================================================
+#
+# Every MCP tool call an agent makes is published here, reads included. The SPA
+# renders it as a small activity rail, so an operator watching a page can see
+# "Claude is reading hosts…" as it happens rather than discovering the result
+# afterwards.
+#
+# Reads are published deliberately. Only writes reach the timeline — flooding a
+# shared, human-scale narrative with every lookup would destroy it — but the
+# live rail is exactly where a read belongs: it is what makes the agent feel
+# present instead of occasionally surprising.
+#
+# The durable record is the agent_actions collection, which covers every call
+# whether or not anyone was watching. This stream is best-effort, like every
+# other subscription: the bus drops events under load rather than blocking.
+
+type AgentActivityEvent {
+  operationId: ID!
+  agentKeyId: ID!
+  # The agent's own name, e.g. "Claude — Nightfall".
+  agentName: String!
+  # Display form including the owner, e.g. "Claude — Nightfall (via alice)".
+  agentLabel: String!
+  # The user the agent is acting for.
+  ownerUserId: ID!
+  # MCP tool name, e.g. "find_hosts".
+  tool: String!
+  # True when the call changed something. Writes also appear on the timeline;
+  # reads live only here and in the audit collection.
+  write: Boolean!
+  # "ok", "error", or "refused" — refused meaning a scope, role or write-gate
+  # decision rather than a failure.
+  outcome: String!
+  # One human-readable line, e.g. "searched hosts (24 shown of 112)".
+  summary: String!
+}
+
+extend type Subscription {
+  # Live agent activity for one operation. Viewer+ in the operation, the same
+  # gate as every other operation-scoped stream.
+  agentActivity(operationId: ID!): AgentActivityEvent!
+    @hasPermission(permission: "operation:member")
+}

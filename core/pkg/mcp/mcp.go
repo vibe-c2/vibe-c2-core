@@ -65,6 +65,9 @@ type Deps struct {
 	OperationRepo    repository.IOperationRepository
 	WikiDocumentRepo repository.IWikiDocumentRepository
 	AgentActionRepo  repository.IAgentActionRepository
+	// OperationEventRepo is the timeline. Agent WRITES land here alongside
+	// human activity; reads do not — they go only to agent_actions.
+	OperationEventRepo repository.IOperationEventRepository
 
 	Cache      cache.Cache
 	Hocuspocus *wiki.HocuspocusClient

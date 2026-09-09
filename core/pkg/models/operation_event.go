@@ -22,6 +22,11 @@ const (
 	// entity — so event_id and subject_id are equal. Description lives in
 	// metadata["description"].
 	SubjectKindCustomEvent SubjectKind = "custom_event"
+	// SubjectKindHost exists because agent writes put hosts on the timeline.
+	// Human host changes are not persisted there today — see the topic list in
+	// events.Logger — so this kind currently appears only on agent-authored
+	// rows.
+	SubjectKindHost SubjectKind = "host"
 )
 
 // EventActorType identifies who originated an event. Mirrors
@@ -33,6 +38,11 @@ const (
 	EventActorUser    EventActorType = "user"
 	EventActorSystem  EventActorType = "system"
 	EventActorService EventActorType = "service"
+	// EventActorAgent is a delegated AI agent key. ActorID carries the OWNER's
+	// UUID so existing actor filters and avatars keep working unchanged, and
+	// ActorName carries the agent's own name so the row can render
+	// "Claude — Nightfall (via alice)" rather than an anonymous service actor.
+	EventActorAgent EventActorType = "agent"
 )
 
 // OperationEvent is one persisted row in the operation timeline log.
@@ -60,6 +70,10 @@ type OperationEvent struct {
 	SubjectName string         `bson:"subject_name" json:"subject_name"`
 	ActorType   EventActorType `bson:"actor_type"   json:"actor_type"`
 	ActorID     *uuid.UUID     `bson:"actor_id,omitempty" json:"actor_id,omitempty"`
-	Metadata    map[string]any `bson:"metadata,omitempty" json:"metadata,omitempty"`
-	OccurredAt  time.Time      `bson:"occurred_at"  json:"occurred_at"`
+	// ActorName names a non-human actor. Captured at write time so the row
+	// still reads correctly after the agent key is renamed or deleted. Empty
+	// for human actors, whose name comes from the user row.
+	ActorName  string         `bson:"actor_name,omitempty" json:"actor_name,omitempty"`
+	Metadata   map[string]any `bson:"metadata,omitempty" json:"metadata,omitempty"`
+	OccurredAt time.Time      `bson:"occurred_at"  json:"occurred_at"`
 }

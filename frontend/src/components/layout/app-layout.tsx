@@ -8,6 +8,7 @@ import { TooltipProvider } from "@/components/ui/tooltip"
 import { useAppStore } from "@/stores/app"
 import { useTaskDeepLink } from "@/hooks/use-task-deep-link"
 import { useFocusBeacon } from "@/hooks/use-focus-beacon"
+import { AgentActivityRail } from "@/components/layout/agent-activity-rail"
 import { EditTaskDialog } from "@/components/tasks/edit-task-dialog"
 import { DeleteTaskDialog } from "@/components/tasks/delete-task-dialog"
 import { StatusRequiredDialog } from "@/components/tasks/status-required-dialog"
@@ -53,6 +54,14 @@ export function AppLayout() {
         <AppSidebar />
         <SidebarInset className="min-w-0">
           <Outlet />
+          {/* Floated over the page rather than placed in it: every surface
+              should show what the agent is doing, and no page owns the
+              concern. Renders nothing when no agent is active. */}
+          <div className="pointer-events-none fixed bottom-4 right-4 z-40 flex justify-end">
+            <div className="pointer-events-auto">
+              <AgentActivityRail />
+            </div>
+          </div>
         </SidebarInset>
         <EditTaskDialog />
         <DeleteTaskDialog />

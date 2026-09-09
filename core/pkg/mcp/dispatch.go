@@ -30,6 +30,12 @@ const (
 // handler having to remember to report it.
 type toolResult struct {
 	Payload any
+	// SubjectID and SubjectKind identify what a write acted on, so the
+	// timeline row points at the same entity a human's action would and
+	// repeated edits to one thing collapse into one row.
+	SubjectID   uuid.UUID
+	SubjectKind models.SubjectKind
+	SubjectName string
 	// OperationID is the operation acted on, if any. Left nil by tools that
 	// are not operation-scoped.
 	OperationID *uuid.UUID
@@ -52,16 +58,34 @@ func register[A any](s *Server, tool *mcp.Tool, kind toolKind, fn handlerFunc[A]
 	mcp.AddTool(s.server, tool, func(ctx context.Context, req *mcp.CallToolRequest, args A) (*mcp.CallToolResult, any, error) {
 		started := time.Now()
 
+		// Replay a completed write rather than repeating it. Checked before
+		// the handler runs, so a retry costs nothing and changes nothing.
+		idemKey := ""
+		if keyed, ok := any(args).(idempotent); ok {
+			idemKey = keyed.idempotencyKey()
+		}
+		agentKeyID := ""
+		if agent := gqlctx.AuthFromContext(ctx).Agent; agent != nil {
+			agentKeyID = agent.AgentKeyID
+		}
+		if cached, hit := s.replay(ctx, agentKeyID, tool.Name, idemKey); hit {
+			return &mcp.CallToolResult{
+				Content: []mcp.Content{&mcp.TextContent{Text: cached}},
+			}, nil, nil
+		}
+
 		result, err := invoke(ctx, s, tool.Name, kind, args, fn)
 
-		s.record(ctx, auditEntry{
+		entry := auditEntry{
 			tool:     tool.Name,
 			kind:     kind,
 			args:     args,
 			result:   result,
 			err:      err,
 			duration: time.Since(started),
-		})
+		}
+		s.record(ctx, entry)
+		s.recordOnTimeline(ctx, entry)
 
 		if err != nil {
 			// Tool errors are returned to the model as content, not as
@@ -80,6 +104,8 @@ func register[A any](s *Server, tool *mcp.Tool, kind toolKind, fn handlerFunc[A]
 				Content: []mcp.Content{&mcp.TextContent{Text: "failed to encode result: " + encErr.Error()}},
 			}, nil, nil
 		}
+
+		s.remember(ctx, agentKeyID, tool.Name, idemKey, string(encoded))
 
 		return &mcp.CallToolResult{
 			Content: []mcp.Content{&mcp.TextContent{Text: string(encoded)}},

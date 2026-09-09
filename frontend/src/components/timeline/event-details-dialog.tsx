@@ -2,6 +2,7 @@ import { useState } from "react"
 import { Link } from "react-router"
 import { Pencil, Trash2 } from "lucide-react"
 import { Button } from "@/components/ui/button"
+import { TimelineActor } from "@/components/timeline/timeline-actor"
 import {
   Dialog,
   DialogContent,
@@ -112,7 +113,13 @@ export function EventDetailsDialog({
 
         <dl className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1.5 text-xs">
           <dt className="text-muted-foreground">Actor</dt>
-          <dd>{event.actor?.username ?? "System"}</dd>
+          <dd>
+            <TimelineActor
+              actorKind={event.actorKind}
+              actorLabel={event.actorLabel}
+              username={event.actor?.username}
+            />
+          </dd>
 
           <dt className="text-muted-foreground">Topic</dt>
           <dd className="font-mono">{event.topic}</dd>

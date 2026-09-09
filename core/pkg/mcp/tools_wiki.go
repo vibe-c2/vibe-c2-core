@@ -27,6 +27,7 @@ type getWikiDocumentArgs struct {
 }
 
 type createWikiDocumentArgs struct {
+	IdempotencyKey
 	OperationID string `json:"operation_id,omitempty" jsonschema:"Operation to create the page in. Defaults to whatever the operator currently has open."`
 	Title       string `json:"title"                  jsonschema:"Page title."`
 	Content     string `json:"content,omitempty"      jsonschema:"Page body as Markdown."`
@@ -34,6 +35,7 @@ type createWikiDocumentArgs struct {
 }
 
 type updateWikiDocumentArgs struct {
+	IdempotencyKey
 	DocumentID string `json:"document_id"       jsonschema:"The page to rewrite."`
 	Content    string `json:"content"           jsonschema:"The new body as Markdown. This REPLACES the page, so read it first and send the whole thing back."`
 	Title      string `json:"title,omitempty"   jsonschema:"Optionally rename the page at the same time."`
@@ -188,6 +190,9 @@ func handleCreateWikiDocument(ctx context.Context, s *Server, args createWikiDoc
 	return toolResult{
 		Payload:     toWikiDocView(doc),
 		OperationID: &opID,
+		SubjectID:   doc.DocumentID,
+		SubjectKind: models.SubjectKindWikiDocument,
+		SubjectName: doc.Title,
 		Summary:     fmt.Sprintf("created wiki page %s", doc.Title),
 	}, nil
 }
@@ -233,6 +238,9 @@ func handleUpdateWikiDocument(ctx context.Context, s *Server, args updateWikiDoc
 	return toolResult{
 		Payload:     toWikiDocView(doc),
 		OperationID: &doc.OperationID,
+		SubjectID:   doc.DocumentID,
+		SubjectKind: models.SubjectKindWikiDocument,
+		SubjectName: doc.Title,
 		Summary:     fmt.Sprintf("rewrote wiki page %s", doc.Title),
 	}, nil
 }

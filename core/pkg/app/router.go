@@ -203,21 +203,22 @@ func (a *App) NewRouter() *gin.Engine {
 		// Its own handler additionally refuses human and API-key callers, so
 		// the two principals never cross in either direction.
 		mcpServer := mcp.New(mcp.Deps{
-			Operations:       opRes,
-			Hosts:            hostRes,
-			Credentials:      credRes,
-			Hashes:           hashRes,
-			Tasks:            taskRes,
-			WikiDocs:         wikiDocRes,
-			Timeline:         timelineRes,
-			OperationRepo:    a.repos.Operation,
-			WikiDocumentRepo: a.repos.WikiDocument,
-			AgentActionRepo:  a.repos.AgentAction,
-			Cache:            a.cache,
-			Hocuspocus:       a.hpClient,
-			Presence:         a.presenceTracker,
-			Bus:              a.eventBus,
-			Logger:           a.logger,
+			Operations:         opRes,
+			Hosts:              hostRes,
+			Credentials:        credRes,
+			Hashes:             hashRes,
+			Tasks:              taskRes,
+			WikiDocs:           wikiDocRes,
+			Timeline:           timelineRes,
+			OperationRepo:      a.repos.Operation,
+			WikiDocumentRepo:   a.repos.WikiDocument,
+			AgentActionRepo:    a.repos.AgentAction,
+			OperationEventRepo: a.repos.OperationEvent,
+			Cache:              a.cache,
+			Hocuspocus:         a.hpClient,
+			Presence:           a.presenceTracker,
+			Bus:                a.eventBus,
+			Logger:             a.logger,
 		})
 		v1.POST("/mcp", mcpServer.Handler())
 

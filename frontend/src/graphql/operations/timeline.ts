@@ -14,6 +14,11 @@ export const TimelineEventFields = graphql(`
       id
       username
     }
+    # For an agent's action, actor resolves to the OWNER of the agent key —
+    # so filtering by an operator still finds what their agent did for them.
+    # actorKind and actorLabel are what distinguish the two.
+    actorKind
+    actorLabel
   }
 `)
 

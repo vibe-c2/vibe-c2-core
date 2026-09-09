@@ -49,6 +49,18 @@ func (m *mockOperationEventRepo) DeleteCustomEvent(ctx context.Context, id uuid.
 	return m.deleteCustomEventFn(ctx, id)
 }
 
+// Agent coalescing is exercised in package mcp, which is what drives it;
+// these tests only need the mock to satisfy the interface.
+func (m *mockOperationEventRepo) FindRecentAgentEvent(context.Context, repository.AgentEventKey, time.Time) (models.OperationEvent, error) {
+	return models.OperationEvent{}, errNotFoundStub
+}
+
+func (m *mockOperationEventRepo) CoalesceAgentEvent(context.Context, uuid.UUID, time.Time, int) error {
+	return nil
+}
+
+var errNotFoundStub = errors.New("not found")
+
 var _ repository.IOperationEventRepository = (*mockOperationEventRepo)(nil)
 
 // newTimelineResolverForTest wires the resolver with a NopEventBus so

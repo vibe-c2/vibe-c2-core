@@ -19,6 +19,7 @@ type getTimelineArgs struct {
 }
 
 type createTimelineEventArgs struct {
+	IdempotencyKey
 	OperationID string `json:"operation_id,omitempty" jsonschema:"Operation to annotate. Defaults to whatever the operator currently has open."`
 	Name        string `json:"name"                   jsonschema:"Short label for what happened."`
 	Description string `json:"description,omitempty"  jsonschema:"Longer detail."`
@@ -115,6 +116,11 @@ func handleCreateTimelineEvent(ctx context.Context, s *Server, args createTimeli
 	return toolResult{
 		Payload:     toTimelineEventView(event, ""),
 		OperationID: &opID,
+		// A marker is its own subject, the same way a human-authored custom
+		// event is.
+		SubjectID:   event.EventID,
+		SubjectKind: models.SubjectKindCustomEvent,
+		SubjectName: args.Name,
 		Summary:     fmt.Sprintf("added timeline marker %q", args.Name),
 	}, nil
 }

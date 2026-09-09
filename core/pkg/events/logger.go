@@ -114,7 +114,7 @@ func (l *Logger) Handle(ctx context.Context, e eventbus.Event) {
 // subject's current name to snapshot. Returns (nil, nil) for topics that
 // are intentionally not persisted (forward-compat for new bus topics).
 func (l *Logger) toRow(ctx context.Context, e eventbus.Event) (*models.OperationEvent, error) {
-	actorType, actorID := translateActor(e.Actor)
+	actorType, actorID, actorName := translateActor(e.Actor)
 
 	switch e.Topic {
 	case eventbus.TopicCredentialCreated:
@@ -143,20 +143,21 @@ func (l *Logger) toRow(ctx context.Context, e eventbus.Event) (*models.Operation
 			SubjectName: name,
 			ActorType:   actorType,
 			ActorID:     actorID,
+			ActorName:   actorName,
 			OccurredAt:  occurredAt(e),
 		}, nil
 
 	case eventbus.TopicTaskStageChanged:
-		return l.toTaskRow(e, actorType, actorID)
+		return l.toTaskRow(e, actorType, actorID, actorName)
 
 	case eventbus.TopicHashCreated:
-		return l.toHashRow(ctx, e, actorType, actorID)
+		return l.toHashRow(ctx, e, actorType, actorID, actorName)
 
 	case eventbus.TopicHashBulkImported:
-		return l.toHashBulkRow(e, actorType, actorID)
+		return l.toHashBulkRow(e, actorType, actorID, actorName)
 
 	case eventbus.TopicHashCracked:
-		return l.toHashCrackedRow(ctx, e, actorType, actorID)
+		return l.toHashCrackedRow(ctx, e, actorType, actorID, actorName)
 	}
 
 	return nil, nil
@@ -165,7 +166,7 @@ func (l *Logger) toRow(ctx context.Context, e eventbus.Event) (*models.Operation
 // toHashRow translates a hash.created event into a single timeline row.
 // SubjectName is the truncated hash value (see hashDisplayName) — enough to
 // keep the timeline card scannable without rendering the full hash string.
-func (l *Logger) toHashRow(ctx context.Context, e eventbus.Event, actorType models.EventActorType, actorID *uuid.UUID) (*models.OperationEvent, error) {
+func (l *Logger) toHashRow(ctx context.Context, e eventbus.Event, actorType models.EventActorType, actorID *uuid.UUID, actorName string) (*models.OperationEvent, error) {
 	p, ok := e.Payload.(eventbus.HashEventPayload)
 	if !ok {
 		return nil, fmt.Errorf("unexpected payload type %T for %s", e.Payload, e.Topic)
@@ -193,6 +194,7 @@ func (l *Logger) toHashRow(ctx context.Context, e eventbus.Event, actorType mode
 		SubjectName: name,
 		ActorType:   actorType,
 		ActorID:     actorID,
+		ActorName:   actorName,
 		OccurredAt:  occurredAt(e),
 	}, nil
 }
@@ -201,7 +203,7 @@ func (l *Logger) toHashRow(ctx context.Context, e eventbus.Event, actorType mode
 // is its own subject (EventID = SubjectID, like CustomEvent) because there is
 // no single hash to point at. Count goes into metadata for the frontend's
 // summary renderer.
-func (l *Logger) toHashBulkRow(e eventbus.Event, actorType models.EventActorType, actorID *uuid.UUID) (*models.OperationEvent, error) {
+func (l *Logger) toHashBulkRow(e eventbus.Event, actorType models.EventActorType, actorID *uuid.UUID, actorName string) (*models.OperationEvent, error) {
 	p, ok := e.Payload.(eventbus.HashBulkImportPayload)
 	if !ok {
 		return nil, fmt.Errorf("unexpected payload type %T for %s", e.Payload, e.Topic)
@@ -220,6 +222,7 @@ func (l *Logger) toHashBulkRow(e eventbus.Event, actorType models.EventActorType
 		SubjectName: fmt.Sprintf("%d hashes", p.Count),
 		ActorType:   actorType,
 		ActorID:     actorID,
+		ActorName:   actorName,
 		Metadata:    map[string]any{"count": p.Count},
 		OccurredAt:  occurredAt(e),
 	}, nil
@@ -228,7 +231,7 @@ func (l *Logger) toHashBulkRow(e eventbus.Event, actorType models.EventActorType
 // toHashCrackedRow records a hash → credential link. The row's subject is the
 // hash; the linked credential id rides in metadata so the timeline card can
 // render two chips (hash, credential) without a follow-up lookup.
-func (l *Logger) toHashCrackedRow(ctx context.Context, e eventbus.Event, actorType models.EventActorType, actorID *uuid.UUID) (*models.OperationEvent, error) {
+func (l *Logger) toHashCrackedRow(ctx context.Context, e eventbus.Event, actorType models.EventActorType, actorID *uuid.UUID, actorName string) (*models.OperationEvent, error) {
 	p, ok := e.Payload.(eventbus.HashCrackedPayload)
 	if !ok {
 		return nil, fmt.Errorf("unexpected payload type %T for %s", e.Payload, e.Topic)
@@ -256,6 +259,7 @@ func (l *Logger) toHashCrackedRow(ctx context.Context, e eventbus.Event, actorTy
 		SubjectName: name,
 		ActorType:   actorType,
 		ActorID:     actorID,
+		ActorName:   actorName,
 		Metadata: map[string]any{
 			"credential_id": p.CredentialID,
 		},
@@ -286,7 +290,7 @@ func hashDisplayName(h models.Hash) string {
 //
 // Metadata carries old_stage and new_stage so the frontend's summary
 // function can render "Closed from X" without a follow-up lookup.
-func (l *Logger) toTaskRow(e eventbus.Event, actorType models.EventActorType, actorID *uuid.UUID) (*models.OperationEvent, error) {
+func (l *Logger) toTaskRow(e eventbus.Event, actorType models.EventActorType, actorID *uuid.UUID, actorName string) (*models.OperationEvent, error) {
 	p, ok := e.Payload.(eventbus.TaskEventPayload)
 	if !ok {
 		return nil, fmt.Errorf("unexpected payload type %T for %s", e.Payload, e.Topic)
@@ -319,6 +323,7 @@ func (l *Logger) toTaskRow(e eventbus.Event, actorType models.EventActorType, ac
 		SubjectName: p.Name,
 		ActorType:   actorType,
 		ActorID:     actorID,
+		ActorName:   actorName,
 		Metadata:    meta,
 		OccurredAt:  occurredAt(e),
 	}, nil
@@ -326,17 +331,27 @@ func (l *Logger) toTaskRow(e eventbus.Event, actorType models.EventActorType, ac
 
 // translateActor converts the eventbus actor into the model's persisted form.
 // System / service actors carry no user UUID, so ActorID is nil for them.
-func translateActor(a eventbus.Actor) (models.EventActorType, *uuid.UUID) {
+func translateActor(a eventbus.Actor) (models.EventActorType, *uuid.UUID, string) {
 	switch a.Type {
 	case eventbus.ActorUser:
 		if id, err := uuid.Parse(a.ID); err == nil {
-			return models.EventActorUser, &id
+			return models.EventActorUser, &id, ""
 		}
-		return models.EventActorUser, nil
+		return models.EventActorUser, nil, ""
+	case eventbus.ActorAgent:
+		// Attribute to the OWNER, not the key: a timeline filtered by actor
+		// should still find the work an operator's agent did on their behalf.
+		// The agent's own name rides alongside so the row can say which one.
+		if id, err := uuid.Parse(a.OnBehalfOf); err == nil {
+			return models.EventActorAgent, &id, a.Name
+		}
+		return models.EventActorAgent, nil, a.Name
 	case eventbus.ActorService:
-		return models.EventActorService, nil
+		// Previously the service name was dropped here, leaving every service
+		// row anonymous. Carry it now that the model has somewhere to put it.
+		return models.EventActorService, nil, a.ID
 	default:
-		return models.EventActorSystem, nil
+		return models.EventActorSystem, nil, ""
 	}
 }
 

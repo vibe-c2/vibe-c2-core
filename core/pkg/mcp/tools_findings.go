@@ -24,6 +24,7 @@ type getHostArgs struct {
 }
 
 type createHostArgs struct {
+	IdempotencyKey
 	OperationID string `json:"operation_id,omitempty" jsonschema:"Operation to create the host in. Defaults to whatever the operator currently has open."`
 	Hostname    string `json:"hostname"               jsonschema:"The host's name."`
 	OS          string `json:"os,omitempty"           jsonschema:"Free-text OS fingerprint, e.g. 'Windows Server 2019'."`
@@ -116,6 +117,9 @@ func handleCreateHost(ctx context.Context, s *Server, args createHostArgs) (tool
 	return toolResult{
 		Payload:     toHostView(host),
 		OperationID: &opID,
+		SubjectID:   host.HostID,
+		SubjectKind: models.SubjectKindHost,
+		SubjectName: host.Hostname,
 		Summary:     fmt.Sprintf("created host %s", host.Hostname),
 	}, nil
 }
@@ -132,6 +136,7 @@ type findCredentialsArgs struct {
 }
 
 type addCredentialCommentArgs struct {
+	IdempotencyKey
 	CredentialID string `json:"credential_id" jsonschema:"The credential's id, from find_credentials."`
 	Text         string `json:"text"          jsonschema:"The comment to add."`
 }
@@ -203,6 +208,9 @@ func handleAddCredentialComment(ctx context.Context, s *Server, args addCredenti
 	return toolResult{
 		Payload:     toCredentialView(updated),
 		OperationID: &cred.OperationID,
+		SubjectID:   cred.CredentialID,
+		SubjectKind: models.SubjectKindCredential,
+		SubjectName: cred.Name,
 		Summary:     fmt.Sprintf("commented on credential %s", cred.Name),
 	}, nil
 }

@@ -17,6 +17,18 @@ type APIKeyWithSecret struct {
 	Token  string         `json:"token"`
 }
 
+type AgentActivityEvent struct {
+	OperationID string `json:"operationId"`
+	AgentKeyID  string `json:"agentKeyId"`
+	AgentName   string `json:"agentName"`
+	AgentLabel  string `json:"agentLabel"`
+	OwnerUserID string `json:"ownerUserId"`
+	Tool        string `json:"tool"`
+	Write       bool   `json:"write"`
+	Outcome     string `json:"outcome"`
+	Summary     string `json:"summary"`
+}
+
 type AgentKeyWithSecret struct {
 	AgentKey *models.AgentKey `json:"agentKey"`
 	Token    string           `json:"token"`

@@ -22,6 +22,7 @@ type getTaskArgs struct {
 }
 
 type createTaskArgs struct {
+	IdempotencyKey
 	OperationID string `json:"operation_id,omitempty" jsonschema:"Operation to create the task in. Defaults to whatever the operator currently has open."`
 	Name        string `json:"name"                   jsonschema:"Short title for the task."`
 	Description string `json:"description,omitempty"  jsonschema:"What needs doing, and why."`
@@ -30,6 +31,7 @@ type createTaskArgs struct {
 }
 
 type changeTaskStageArgs struct {
+	IdempotencyKey
 	TaskID  string `json:"task_id"           jsonschema:"The task to move."`
 	Stage   string `json:"stage"             jsonschema:"Target stage: BACKLOG, TODO, IN_PROCESS or DONE."`
 	Status  string `json:"status,omitempty"  jsonschema:"Required when moving to DONE: SUCCESS or FAIL."`
@@ -151,6 +153,9 @@ func handleCreateTask(ctx context.Context, s *Server, args createTaskArgs) (tool
 	return toolResult{
 		Payload:     toTaskView(task),
 		OperationID: &opID,
+		SubjectID:   task.TaskID,
+		SubjectKind: models.SubjectKindTask,
+		SubjectName: task.Name,
 		Summary:     fmt.Sprintf("created task %s", task.Name),
 	}, nil
 }
@@ -186,6 +191,9 @@ func handleChangeTaskStage(ctx context.Context, s *Server, args changeTaskStageA
 	return toolResult{
 		Payload:     toTaskView(updated),
 		OperationID: &task.OperationID,
+		SubjectID:   task.TaskID,
+		SubjectKind: models.SubjectKindTask,
+		SubjectName: task.Name,
 		Summary:     fmt.Sprintf("moved task %s to %s", task.Name, stage),
 	}, nil
 }

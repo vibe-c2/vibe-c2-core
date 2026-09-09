@@ -120,6 +120,16 @@ func (r *timelineEventResolver) Actor(ctx context.Context, obj *models.Operation
 	return r.TimelineResolver.Actor(ctx, obj)
 }
 
+// ActorKind is the resolver for the actorKind field.
+func (r *timelineEventResolver) ActorKind(ctx context.Context, obj *models.OperationEvent) (string, error) {
+	return r.TimelineResolver.ActorKind(ctx, obj)
+}
+
+// ActorLabel is the resolver for the actorLabel field.
+func (r *timelineEventResolver) ActorLabel(ctx context.Context, obj *models.OperationEvent) (string, error) {
+	return r.TimelineResolver.ActorLabel(ctx, obj)
+}
+
 // OccurredAt is the resolver for the occurredAt field.
 func (r *timelineEventResolver) OccurredAt(ctx context.Context, obj *models.OperationEvent) (string, error) {
 	return r.TimelineResolver.OccurredAt(ctx, obj)
