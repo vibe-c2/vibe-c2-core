@@ -378,3 +378,29 @@ type OperationEventLoggedPayload struct {
 func NewOperationEventLoggedEvent(actor Actor, p OperationEventLoggedPayload) Event {
 	return NewEvent(TopicOperationEventLogged, actor, p)
 }
+
+// --- Agent activity payload ---
+
+// AgentActionPayload describes one MCP tool call for the live activity rail.
+//
+// Unlike most payloads this carries display strings rather than only ids: the
+// rail renders straight from the event, and refetching a row per call would
+// put a database read on the hot path of an agent that may run dozens of
+// tools a minute. OperationID is empty for calls that are not
+// operation-scoped, which the subscription filter treats as "not for any
+// operation stream".
+type AgentActionPayload struct {
+	AgentKeyID  string
+	AgentName   string
+	AgentLabel  string // "Claude — Nightfall (via alice)"
+	OwnerUserID string
+	OperationID string
+	Tool        string
+	Write       bool
+	Outcome     string
+	Summary     string
+}
+
+func NewAgentActionEvent(actor Actor, p AgentActionPayload) Event {
+	return NewEvent(TopicAgentAction, actor, p)
+}

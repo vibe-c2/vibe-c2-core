@@ -29,13 +29,13 @@ type subscription struct {
 
 type eventBus struct {
 	logger     *zap.Logger
-	ch         chan Event           // publisher → dispatcher
-	subs       []*subscription     // flat list of all subscriptions
-	nextID     atomic.Uint64       // subscription ID counter
-	mu         sync.RWMutex        // protects subs, started, stopped
-	wg         sync.WaitGroup      // tracks drain goroutines
-	started    bool                // true after Start() runs
-	stopped    bool                // true after Stop() runs
+	ch         chan Event      // publisher → dispatcher
+	subs       []*subscription // flat list of all subscriptions
+	nextID     atomic.Uint64   // subscription ID counter
+	mu         sync.RWMutex    // protects subs, started, stopped
+	wg         sync.WaitGroup  // tracks drain goroutines
+	started    bool            // true after Start() runs
+	stopped    bool            // true after Stop() runs
 	startOnce  sync.Once
 	stopOnce   sync.Once
 	dispatched chan struct{} // closed when dispatcher goroutine exits

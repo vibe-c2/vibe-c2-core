@@ -1,0 +1,223 @@
+package mcp
+
+import (
+	"context"
+	"encoding/json"
+	"fmt"
+	"strings"
+	"time"
+
+	"github.com/google/uuid"
+	"github.com/modelcontextprotocol/go-sdk/mcp"
+	"github.com/vibe-c2/vibe-c2-core/core/pkg/eventbus"
+	"github.com/vibe-c2/vibe-c2-core/core/pkg/graphql/gqlctx"
+	"github.com/vibe-c2/vibe-c2-core/core/pkg/models"
+	"go.uber.org/zap"
+)
+
+// toolKind separates the tools that change something from the ones that only
+// look. It drives the write gate, the audit row, and whether the call earns a
+// place on the operator's timeline.
+type toolKind int
+
+const (
+	readTool toolKind = iota
+	writeTool
+)
+
+// toolResult is what a tool handler returns: the payload to encode, plus the
+// operation it touched so the dispatcher can attribute the call without every
+// handler having to remember to report it.
+type toolResult struct {
+	Payload any
+	// OperationID is the operation acted on, if any. Left nil by tools that
+	// are not operation-scoped.
+	OperationID *uuid.UUID
+	// Summary is one human-readable line for the activity rail and the
+	// timeline: "read 24 hosts", "appended to Recon Notes".
+	Summary string
+}
+
+// handlerFunc is the shape every tool in this package implements. Args are
+// already decoded and schema-validated by the SDK.
+type handlerFunc[A any] func(ctx context.Context, s *Server, args A) (toolResult, error)
+
+// register wires one tool onto the MCP server, wrapped in the dispatcher.
+//
+// Everything that must happen for EVERY tool lives here rather than in the
+// handlers: the write gate, the audit row, the live publish, panic recovery,
+// and error shaping. A handler that forgets one of these cannot exist, because
+// no handler is reachable except through this wrapper.
+func register[A any](s *Server, tool *mcp.Tool, kind toolKind, fn handlerFunc[A]) {
+	mcp.AddTool(s.server, tool, func(ctx context.Context, req *mcp.CallToolRequest, args A) (*mcp.CallToolResult, any, error) {
+		started := time.Now()
+
+		result, err := invoke(ctx, s, tool.Name, kind, args, fn)
+
+		s.record(ctx, auditEntry{
+			tool:     tool.Name,
+			kind:     kind,
+			args:     args,
+			result:   result,
+			err:      err,
+			duration: time.Since(started),
+		})
+
+		if err != nil {
+			// Tool errors are returned to the model as content, not as
+			// protocol errors: the agent is supposed to read them and adjust.
+			// A protocol error would abort the turn instead.
+			return &mcp.CallToolResult{
+				IsError: true,
+				Content: []mcp.Content{&mcp.TextContent{Text: err.Error()}},
+			}, nil, nil
+		}
+
+		encoded, encErr := json.MarshalIndent(result.Payload, "", "  ")
+		if encErr != nil {
+			return &mcp.CallToolResult{
+				IsError: true,
+				Content: []mcp.Content{&mcp.TextContent{Text: "failed to encode result: " + encErr.Error()}},
+			}, nil, nil
+		}
+
+		return &mcp.CallToolResult{
+			Content: []mcp.Content{&mcp.TextContent{Text: string(encoded)}},
+		}, nil, nil
+	})
+}
+
+// invoke runs the gate and the handler, converting a panic into an error so a
+// bug in one tool cannot take down the process an operator is depending on.
+//
+// A free function rather than a method because Go methods cannot take type
+// parameters.
+func invoke[A any](
+	ctx context.Context, s *Server, name string, kind toolKind, args A, fn handlerFunc[A],
+) (result toolResult, err error) {
+	defer func() {
+		if r := recover(); r != nil {
+			s.deps.Logger.Error("mcp: tool panicked",
+				zap.String("tool", name), zap.Any("panic", r))
+			err = fmt.Errorf("internal error in %s", name)
+		}
+	}()
+
+	if kind == writeTool {
+		if gateErr := requireWrites(ctx); gateErr != nil {
+			return toolResult{}, gateErr
+		}
+	}
+
+	return fn(ctx, s, args)
+}
+
+type auditEntry struct {
+	tool     string
+	kind     toolKind
+	args     any
+	result   toolResult
+	err      error
+	duration time.Duration
+}
+
+// record writes the audit row and publishes the live event.
+//
+// Best-effort on purpose: an audit write that fails must not fail the tool the
+// operator's agent is running. The failure is logged loudly instead — a gap in
+// the trace is worth noticing, but not worth breaking the session over.
+func (s *Server) record(ctx context.Context, e auditEntry) {
+	auth := gqlctx.AuthFromContext(ctx)
+	agent := auth.Agent
+	if agent == nil {
+		return
+	}
+
+	outcome := models.AgentActionOK
+	errText := ""
+	if e.err != nil {
+		outcome = models.AgentActionError
+		errText = e.err.Error()
+		if isRefusal(e.err) {
+			outcome = models.AgentActionRefused
+		}
+	}
+
+	action := &models.AgentAction{
+		ActionID:    uuid.New(),
+		AgentName:   agent.Name,
+		OperationID: e.result.OperationID,
+		Tool:        e.tool,
+		Write:       e.kind == writeTool,
+		Arguments:   encodeArgs(e.args),
+		Outcome:     outcome,
+		Error:       errText,
+		DurationMs:  e.duration.Milliseconds(),
+		OccurredAt:  time.Now().UTC(),
+	}
+	if keyID, parseErr := uuid.Parse(agent.AgentKeyID); parseErr == nil {
+		action.AgentKeyID = keyID
+	}
+	if ownerID, parseErr := uuid.Parse(auth.UserID); parseErr == nil {
+		action.OwnerUserID = ownerID
+	}
+
+	if err := s.deps.AgentActionRepo.Insert(ctx, action); err != nil {
+		s.deps.Logger.Error("mcp: failed to record agent action",
+			zap.String("tool", e.tool), zap.Error(err))
+	}
+
+	s.publishActivity(action, agent, auth.Username, e.result.Summary)
+}
+
+// publishActivity pushes the call to the SPA's activity rail. Reads are
+// published too — "Claude is reading hosts…" is most of what makes the agent
+// feel present rather than occasionally surprising.
+func (s *Server) publishActivity(action *models.AgentAction, agent *gqlctx.AgentInfo, ownerUsername, summary string) {
+	if s.deps.Bus == nil {
+		return
+	}
+	payload := eventbus.AgentActionPayload{
+		AgentKeyID:  agent.AgentKeyID,
+		AgentName:   agent.Name,
+		AgentLabel:  agent.Label(ownerUsername),
+		OwnerUserID: action.OwnerUserID.String(),
+		Tool:        action.Tool,
+		Write:       action.Write,
+		Outcome:     string(action.Outcome),
+		Summary:     summary,
+	}
+	if action.OperationID != nil {
+		payload.OperationID = action.OperationID.String()
+	}
+	s.deps.Bus.Publish(eventbus.NewAgentActionEvent(
+		eventbus.AgentActor(agent.AgentKeyID, agent.Name, action.OwnerUserID.String()),
+		payload,
+	))
+}
+
+// isRefusal distinguishes "you may not" from "something broke". Both are
+// errors to the agent, but only the first is a policy decision worth being
+// able to query for separately when reviewing what an agent tried to reach.
+func isRefusal(err error) bool {
+	msg := err.Error()
+	for _, marker := range []string{"forbidden", "read-only", "not scoped", "not a member"} {
+		if strings.Contains(msg, marker) {
+			return true
+		}
+	}
+	return false
+}
+
+// encodeArgs renders the tool input for the audit row, bounded so one call
+// cannot write an unbounded document.
+func encodeArgs(args any) string {
+	encoded, err := json.Marshal(args)
+	if err != nil {
+		return ""
+	}
+	if len(encoded) > models.MaxAuditArgumentBytes {
+		return string(encoded[:models.MaxAuditArgumentBytes]) + "…(truncated)"
+	}
+	return string(encoded)
+}

@@ -53,15 +53,15 @@ const (
 	// rows ("moved to In Process", "marked Success") instead of a generic
 	// "task updated" line. GraphQL subscribers listen to the whole set via
 	// taskChanged and refetch on any of them.
-	TopicTaskCreated            Topic = "task.created"
-	TopicTaskUpdated            Topic = "task.updated"
-	TopicTaskStageChanged       Topic = "task.stage_changed"
-	TopicTaskStatusSet          Topic = "task.status_set"
-	TopicTaskAssigneesChanged   Topic = "task.assignees_changed"
-	TopicTaskReferencesChanged  Topic = "task.references_changed"
-	TopicTaskSoftDeleted        Topic = "task.soft_deleted"
-	TopicTaskRestored           Topic = "task.restored"
-	TopicTaskHardDeleted        Topic = "task.hard_deleted"
+	TopicTaskCreated           Topic = "task.created"
+	TopicTaskUpdated           Topic = "task.updated"
+	TopicTaskStageChanged      Topic = "task.stage_changed"
+	TopicTaskStatusSet         Topic = "task.status_set"
+	TopicTaskAssigneesChanged  Topic = "task.assignees_changed"
+	TopicTaskReferencesChanged Topic = "task.references_changed"
+	TopicTaskSoftDeleted       Topic = "task.soft_deleted"
+	TopicTaskRestored          Topic = "task.restored"
+	TopicTaskHardDeleted       Topic = "task.hard_deleted"
 
 	// Credential events — emitted by CredentialResolver.
 	TopicCredentialCreated        Topic = "credential.created"
@@ -103,6 +103,12 @@ const (
 	// decoupled from the models package; subscribers refetch the row via
 	// the operation_event repository.
 	TopicOperationEventLogged Topic = "operation_event.logged"
+
+	// Agent activity — emitted by pkg/mcp for every tool call a delegated
+	// agent makes, reads included. This is the live half of "the operator can
+	// see what the agent is doing": the durable half is the agent_actions
+	// collection, and writes additionally land on the timeline.
+	TopicAgentAction Topic = "agent.action"
 )
 
 // ActorType identifies who originated an event.
@@ -112,12 +118,21 @@ const (
 	ActorUser    ActorType = "user"    // action triggered by an authenticated user
 	ActorSystem  ActorType = "system"  // action triggered by the system (e.g., scheduled task)
 	ActorService ActorType = "service" // action triggered by another microservice
+	ActorAgent   ActorType = "agent"   // action triggered by a delegated AI agent key
 )
 
 // Actor represents the originator of an event.
 type Actor struct {
-	ID   string    // user UUID, service name, or empty for system
+	ID   string    // user UUID, service name, agent key UUID, or empty for system
 	Type ActorType // who originated this event
+
+	// Name is a display label for actors whose ID is not a user. Empty for
+	// ActorUser, where the username is resolved from the user row instead.
+	Name string
+	// OnBehalfOf is the owning user's UUID for delegated actors. Set only for
+	// ActorAgent: an agent always acts for a specific person, and losing that
+	// link would make "who let this happen?" unanswerable.
+	OnBehalfOf string
 }
 
 // UserActor creates an Actor for an authenticated user action.
@@ -133,6 +148,13 @@ func SystemActor() Actor {
 // ServiceActor creates an Actor for events from another microservice.
 func ServiceActor(name string) Actor {
 	return Actor{ID: name, Type: ActorService}
+}
+
+// AgentActor identifies a delegated AI agent key acting for a user. Carrying
+// both the key and the owner is what lets the timeline render
+// "Claude — Nightfall (via alice)" rather than an anonymous service actor.
+func AgentActor(agentKeyID, name, ownerUserID string) Actor {
+	return Actor{ID: agentKeyID, Type: ActorAgent, Name: name, OnBehalfOf: ownerUserID}
 }
 
 // Event represents a domain event emitted by the application.

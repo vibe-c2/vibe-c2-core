@@ -1,0 +1,120 @@
+package mcp
+
+import (
+	"context"
+	"fmt"
+	"time"
+
+	"github.com/modelcontextprotocol/go-sdk/mcp"
+	"github.com/vibe-c2/vibe-c2-core/core/pkg/graphql/model"
+	"github.com/vibe-c2/vibe-c2-core/core/pkg/models"
+	"github.com/vibe-c2/vibe-c2-core/core/pkg/repository"
+)
+
+type getTimelineArgs struct {
+	OperationID string `json:"operation_id,omitempty" jsonschema:"Operation whose history to read. Defaults to whatever the operator currently has open."`
+	Date        string `json:"date,omitempty"         jsonschema:"Any timestamp inside the day to read, RFC3339. Defaults to today."`
+	Timezone    string `json:"timezone,omitempty"     jsonschema:"IANA timezone the day boundaries are computed in, e.g. 'Europe/Berlin'. Defaults to UTC."`
+	Limit       int    `json:"limit,omitempty"        jsonschema:"Maximum events to return (default 25, maximum 50)."`
+}
+
+type createTimelineEventArgs struct {
+	OperationID string `json:"operation_id,omitempty" jsonschema:"Operation to annotate. Defaults to whatever the operator currently has open."`
+	Name        string `json:"name"                   jsonschema:"Short label for what happened."`
+	Description string `json:"description,omitempty"  jsonschema:"Longer detail."`
+	OccurredAt  string `json:"occurred_at,omitempty"  jsonschema:"When it happened, RFC3339. Defaults to now."`
+}
+
+func registerTimelineTools(s *Server) {
+	register(s, &mcp.Tool{
+		Name: "get_timeline",
+		Description: "Read the operation's activity history for a given day — what was found, " +
+			"changed and closed, and by whom.",
+	}, readTool, handleGetTimeline)
+
+	register(s, &mcp.Tool{
+		Name: "create_timeline_event",
+		Description: "Add a marker to the operation timeline. Use it to record something " +
+			"noteworthy that no other record captures.",
+	}, writeTool, handleCreateTimelineEvent)
+}
+
+func handleGetTimeline(ctx context.Context, s *Server, args getTimelineArgs) (toolResult, error) {
+	opID, err := s.resolveOperation(ctx, args.OperationID)
+	if err != nil {
+		return toolResult{}, err
+	}
+	if _, err := s.authorizeOperation(ctx, opID, models.OperationRoleViewer); err != nil {
+		return toolResult{}, err
+	}
+
+	date := args.Date
+	if date == "" {
+		date = time.Now().UTC().Format(time.RFC3339)
+	}
+	timezone := args.Timezone
+	if timezone == "" {
+		timezone = "UTC"
+	}
+
+	limit := clampPageSize(args.Limit)
+	granularity := repository.GranularityDay
+	conn, err := s.deps.Timeline.TimelineEventsByDay(ctx, opID.String(), date, timezone,
+		&granularity, nil, nil, &limit, nil)
+	if err != nil {
+		return toolResult{}, fmt.Errorf("failed to read timeline: %w", err)
+	}
+
+	views := make([]timelineEventView, 0, len(conn.Edges))
+	for _, edge := range conn.Edges {
+		actor := ""
+		// Actor resolution is best-effort: a deleted account or a service
+		// actor leaves the row intact but nameless, and that is not worth
+		// failing the whole read over.
+		if user, err := s.deps.Timeline.Actor(ctx, edge.Node); err == nil && user != nil {
+			actor = user.Username
+		}
+		views = append(views, toTimelineEventView(edge.Node, actor))
+	}
+
+	result, err := newPage(views, endCursor(conn.PageInfo))
+	if err != nil {
+		return toolResult{}, err
+	}
+	return toolResult{
+		Payload:     result,
+		OperationID: &opID,
+		Summary:     fmt.Sprintf("read %d timeline events", len(views)),
+	}, nil
+}
+
+func handleCreateTimelineEvent(ctx context.Context, s *Server, args createTimelineEventArgs) (toolResult, error) {
+	opID, err := s.resolveOperation(ctx, args.OperationID)
+	if err != nil {
+		return toolResult{}, err
+	}
+	if _, err := s.authorizeOperation(ctx, opID, models.OperationRoleOperator); err != nil {
+		return toolResult{}, err
+	}
+
+	occurredAt := args.OccurredAt
+	if occurredAt == "" {
+		occurredAt = time.Now().UTC().Format(time.RFC3339)
+	}
+
+	event, err := s.deps.Timeline.CreateCustomTimelineEvent(ctx, opID.String(),
+		model.CreateCustomTimelineEventInput{
+			Name:        args.Name,
+			Description: optionalString(args.Description),
+			OccurredAt:  occurredAt,
+		})
+	if err != nil {
+		return toolResult{}, fmt.Errorf("failed to create timeline event: %w", err)
+	}
+
+	return toolResult{
+		Payload:     toTimelineEventView(event, ""),
+		OperationID: &opID,
+		Summary:     fmt.Sprintf("added timeline marker %q", args.Name),
+	}, nil
+}

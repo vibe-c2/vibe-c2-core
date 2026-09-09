@@ -9,6 +9,7 @@ import (
 	"github.com/vibe-c2/vibe-c2-core/core/pkg/auth/permissions"
 	"github.com/vibe-c2/vibe-c2-core/core/pkg/controller"
 	gql "github.com/vibe-c2/vibe-c2-core/core/pkg/graphql"
+	"github.com/vibe-c2/vibe-c2-core/core/pkg/mcp"
 	"github.com/vibe-c2/vibe-c2-core/core/pkg/middleware"
 	"github.com/vibe-c2/vibe-c2-core/core/pkg/resolver"
 	"github.com/vibe-c2/vibe-c2-core/core/pkg/responses"
@@ -196,8 +197,29 @@ func (a *App) NewRouter() *gin.Engine {
 		v1.Use(middleware.AuthN(a.authProvider, a.repos.APIKey, a.repos.AgentKey, a.repos.User, a.cache))
 		v1.Use(middleware.CSRF(a.authCfg.csrfEnabled))
 
-		// --- Agent-reachable routes go here, above RequireHuman ---
-		// (the MCP endpoint mounts in this gap)
+		// --- Agent-reachable routes: above RequireHuman ---
+		//
+		// The MCP endpoint is the ONLY thing a delegated agent key can reach.
+		// Its own handler additionally refuses human and API-key callers, so
+		// the two principals never cross in either direction.
+		mcpServer := mcp.New(mcp.Deps{
+			Operations:       opRes,
+			Hosts:            hostRes,
+			Credentials:      credRes,
+			Hashes:           hashRes,
+			Tasks:            taskRes,
+			WikiDocs:         wikiDocRes,
+			Timeline:         timelineRes,
+			OperationRepo:    a.repos.Operation,
+			WikiDocumentRepo: a.repos.WikiDocument,
+			AgentActionRepo:  a.repos.AgentAction,
+			Cache:            a.cache,
+			Hocuspocus:       a.hpClient,
+			Presence:         a.presenceTracker,
+			Bus:              a.eventBus,
+			Logger:           a.logger,
+		})
+		v1.POST("/mcp", mcpServer.Handler())
 
 		// Everything below is closed to agent keys. gin.RouterGroup.Use only
 		// affects routes registered after it, so this single line — rather
