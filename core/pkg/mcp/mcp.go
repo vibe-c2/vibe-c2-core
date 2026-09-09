@@ -69,9 +69,11 @@ type Deps struct {
 	// human activity; reads do not — they go only to agent_actions.
 	OperationEventRepo repository.IOperationEventRepository
 
-	Cache      cache.Cache
+	Cache cache.Cache
+	// Hocuspocus is the write path for wiki bodies, not just a converter —
+	// edits are applied as Y.js transactions on the live document so they
+	// merge with whatever the operator is doing rather than overwriting it.
 	Hocuspocus *wiki.HocuspocusClient
-	Presence   *wiki.PresenceTracker
 	Bus        eventbus.IEventBus
 	Logger     *zap.Logger
 }

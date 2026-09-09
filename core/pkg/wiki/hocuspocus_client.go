@@ -190,3 +190,91 @@ func (c *HocuspocusClient) YjsToMarkdown(ctx context.Context, contentState []byt
 	}
 	return string(bytesOut), nil
 }
+
+// ApplyMode selects how ApplyMarkdown combines an edit with what is already
+// in the document.
+type ApplyMode string
+
+const (
+	// ApplyReplace swaps the whole body. Correct when the caller has just read
+	// the document and is sending back a complete revision.
+	ApplyReplace ApplyMode = "replace"
+	// ApplyAppend adds to the end and never touches existing content, so it
+	// cannot race somebody typing above it.
+	ApplyAppend ApplyMode = "append"
+)
+
+type applyMarkdownRequest struct {
+	DocumentID string    `json:"documentId"`
+	Markdown   string    `json:"markdown"`
+	Mode       ApplyMode `json:"mode"`
+}
+
+// ApplyMarkdownResult reports what the sidecar did. Watchers is how many
+// people had the document open, which is the difference between an edit
+// somebody watched appear and one that happened quietly.
+type ApplyMarkdownResult struct {
+	Nodes    int `json:"nodes"`
+	Watchers int `json:"watchers"`
+}
+
+// ApplyMarkdown edits a wiki document as a Y.js transaction on the live
+// document, rather than by overwriting content_state.
+//
+// This is what lets an agent write to a page while the operator has it open.
+// Overwriting content_state cannot work in that situation — a connected editor
+// holds the authoritative Y.Doc and stores it back on the next debounce, so
+// the write is either erased seconds later or lands mid-keystroke. Going
+// through the sidecar makes the edit an ordinary Y.js transaction instead: it
+// merges rather than overwrites, broadcasts to everyone connected, and
+// persists through the same debounced store as a human edit.
+//
+// The sidecar loads the document when nobody has it open, so this is the write
+// path in both cases and there is only one behaviour to reason about.
+func (c *HocuspocusClient) ApplyMarkdown(ctx context.Context, documentID, markdown string, mode ApplyMode) (ApplyMarkdownResult, error) {
+	var result ApplyMarkdownResult
+
+	if c.internalSecret == "" {
+		return result, fmt.Errorf("apply-markdown: no internal secret configured")
+	}
+	if mode != ApplyReplace && mode != ApplyAppend {
+		return result, fmt.Errorf("apply-markdown: unknown mode %q", mode)
+	}
+
+	body, err := json.Marshal(applyMarkdownRequest{
+		DocumentID: documentID,
+		Markdown:   markdown,
+		Mode:       mode,
+	})
+	if err != nil {
+		return result, fmt.Errorf("marshal apply payload: %w", err)
+	}
+
+	mac := hmac.New(sha256.New, []byte(c.internalSecret))
+	mac.Write(body)
+	signature := "sha256=" + hex.EncodeToString(mac.Sum(nil))
+
+	url := c.baseURL + "/internal/apply-markdown"
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewReader(body))
+	if err != nil {
+		return result, fmt.Errorf("build apply-markdown request: %w", err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("X-Internal-Signature-256", signature)
+
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return result, fmt.Errorf("call hocuspocus apply-markdown: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		errBody, _ := io.ReadAll(io.LimitReader(resp.Body, 4096))
+		return result, fmt.Errorf("apply-markdown returned %d: %s", resp.StatusCode, string(errBody))
+	}
+
+	if err := json.NewDecoder(io.LimitReader(resp.Body, 4096)).Decode(&result); err != nil {
+		return result, fmt.Errorf("read apply-markdown response: %w", err)
+	}
+	return result, nil
+}

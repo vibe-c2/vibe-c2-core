@@ -4,6 +4,7 @@ import { onAuthenticate } from "./auth.js";
 import { createDatabaseExtension, debounceMs } from "./persistence.js";
 import { setupDisconnectApi } from "./disconnect.js";
 import { setupInternalApi } from "./internal-api.js";
+import { setupApplyApi } from "./apply-markdown.js";
 
 const port = parseInt(process.env.PORT || "1234", 10);
 const maxActiveRooms = parseInt(process.env.MAX_ACTIVE_ROOMS || "100", 10);
@@ -114,6 +115,10 @@ const server = new Hocuspocus({
 // after express.json() (the disconnect API) keep parsed-body access.
 const app = express();
 setupInternalApi(app);
+// Mounted alongside setupInternalApi (before express.json()) because it also
+// verifies an HMAC over the exact bytes Go signed. Takes the server so it can
+// edit live documents rather than only convert markdown.
+setupApplyApi(app, server);
 app.use(express.json());
 setupDisconnectApi(app, server);
 

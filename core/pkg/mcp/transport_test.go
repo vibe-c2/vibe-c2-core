@@ -190,7 +190,7 @@ func TestServer_ToolSurface(t *testing.T) {
 		"find_hashes",
 		"find_tasks", "get_task", "create_task", "change_task_stage",
 		"search_wiki", "list_wiki_tree", "get_wiki_document",
-		"create_wiki_document", "update_wiki_document",
+		"create_wiki_document", "append_wiki_section", "update_wiki_document",
 		"get_timeline", "create_timeline_event",
 		"get_user_focus",
 	}

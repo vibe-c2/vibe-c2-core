@@ -217,7 +217,6 @@ func (a *App) NewRouter() *gin.Engine {
 			OperationEventRepo: a.repos.OperationEvent,
 			Cache:              a.cache,
 			Hocuspocus:         a.hpClient,
-			Presence:           a.presenceTracker,
 			Bus:                a.eventBus,
 			Logger:             a.logger,
 		})
