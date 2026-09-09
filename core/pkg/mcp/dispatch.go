@@ -97,7 +97,7 @@ func register[A any](s *Server, tool *mcp.Tool, kind toolKind, fn handlerFunc[A]
 			}, nil, nil
 		}
 
-		encoded, encErr := json.MarshalIndent(result.Payload, "", "  ")
+		encoded, encErr := encodeResult(result.Payload)
 		if encErr != nil {
 			return &mcp.CallToolResult{
 				IsError: true,

@@ -88,7 +88,7 @@ func TestFit_RespectsTheByteBudget(t *testing.T) {
 		t.Fatalf("fit: %v", err)
 	}
 
-	encoded, err := marshalPage(got)
+	encoded, err := encodeResult(got)
 	if err != nil {
 		t.Fatalf("encode: %v", err)
 	}
@@ -115,5 +115,35 @@ func TestTruncateBody(t *testing.T) {
 	}
 	if len(body) > maxWikiBodyBytes+128 {
 		t.Fatalf("truncated body is %d bytes, over the %d limit", len(body), maxWikiBodyBytes)
+	}
+}
+
+// Regression: the budget must be measured with the encoder that actually
+// serializes the response.
+//
+// It was not, once. fit measured compact JSON while the dispatcher sent
+// indented, so a page trimmed to "just under 60KB" went out at roughly 80KB —
+// caught only by running a real 948-page wiki through it. Asserting the two
+// agree keeps a future encoding change from silently reopening the gap.
+func TestFit_MeasuresWhatTheDispatcherSends(t *testing.T) {
+	items := make([]string, 400)
+	for i := range items {
+		items[i] = strings.Repeat("z", 400)
+	}
+
+	got, err := fit(page[string]{Items: items})
+	if err != nil {
+		t.Fatalf("fit: %v", err)
+	}
+
+	// Exactly what dispatch.go writes to the wire.
+	onTheWire, err := encodeResult(got)
+	if err != nil {
+		t.Fatalf("encode: %v", err)
+	}
+	if len(onTheWire) > MaxResponseBytes {
+		t.Fatalf("the response the dispatcher would send is %d bytes, over the %d budget "+
+			"fit trimmed to — the two encoders have drifted apart",
+			len(onTheWire), MaxResponseBytes)
 	}
 }

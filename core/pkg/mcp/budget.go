@@ -45,6 +45,19 @@ type page[T any] struct {
 	Notes      []string `json:"notes,omitempty"`
 }
 
+// encodeResult is the single encoder for every tool response.
+//
+// It has to be the same one fit measures with. It previously was not — fit
+// measured compact JSON while the dispatcher sent indented — so a fitted page
+// went out about a third larger than the budget it had just been trimmed to.
+// Sharing one function is what stops that drifting apart again.
+//
+// Compact rather than indented: whitespace is pure token cost to a model, and
+// nothing reads these by eye.
+func encodeResult(v any) ([]byte, error) {
+	return json.Marshal(v)
+}
+
 // fit trims a page until its encoded form is within MaxResponseBytes, and says
 // what it dropped. Halving rather than trimming one at a time keeps this
 // O(log n) encodes on a pathological row rather than O(n).
@@ -52,7 +65,7 @@ func fit[T any](p page[T]) (page[T], error) {
 	original := len(p.Items)
 
 	for {
-		encoded, err := json.Marshal(p)
+		encoded, err := encodeResult(p)
 		if err != nil {
 			return p, fmt.Errorf("failed to encode result: %w", err)
 		}
@@ -74,10 +87,4 @@ func fit[T any](p page[T]) (page[T], error) {
 // newPage builds and fits a page in one step.
 func newPage[T any](items []T, nextCursor string, notes ...string) (page[T], error) {
 	return fit(page[T]{Items: items, NextCursor: nextCursor, Notes: notes})
-}
-
-// marshalPage encodes a page the same way fit measures it. Exists so tests can
-// assert the actual on-the-wire size rather than approximating it.
-func marshalPage[T any](p page[T]) ([]byte, error) {
-	return json.Marshal(p)
 }
