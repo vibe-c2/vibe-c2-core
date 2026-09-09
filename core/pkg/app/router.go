@@ -93,6 +93,7 @@ func (a *App) NewRouter() *gin.Engine {
 	)
 	apiKeyRes := resolver.NewAPIKeyResolver(a.repos.APIKey)
 	agentKeyRes := resolver.NewAgentKeyResolver(a.repos.AgentKey, a.repos.Operation)
+	focusRes := resolver.NewFocusResolver(a.cache)
 	// moduleRes is the app-admin Modules surface. removeModule routes through the
 	// lifecycle service so the GraphQL deregister and the RPC deregister share one
 	// transition (registry update + gate bust + audit + bus event).
@@ -267,7 +268,7 @@ func (a *App) NewRouter() *gin.Engine {
 		//                       inside gqlgen; one socket multiplexes every
 		//                       active subscription on the page.
 		gqlHandler := gql.NewHandler(
-			userRes, opRes, sessRes, wikiDocRes, wikiVisitRes, credRes, hashRes, hostRes, taskRes, timelineRes, apiKeyRes, agentKeyRes, moduleRes,
+			userRes, opRes, sessRes, wikiDocRes, wikiVisitRes, credRes, hashRes, hostRes, taskRes, timelineRes, apiKeyRes, agentKeyRes, focusRes, moduleRes,
 			a.eventBus,
 			a.repos.User, a.repos.Operation, a.repos.Session, a.repos.WikiDocument, a.repos.Credential, a.repos.Hash, a.repos.Host, a.repos.Task, a.repos.ModuleRegistry,
 			a.presenceTracker,
