@@ -137,21 +137,44 @@ export function collapsePhantomHosts(t: Topology): Topology {
   }
   if (collapsed.size === 0) return t
 
+  // Destination hosts reached from each collapsed source, read off the
+  // logged-from edges before they are dropped. Unioned per group below so the
+  // group edge inherits the travel-path pairing the merged edges carried.
+  const destinationsBySource = new Map<string, string[]>()
+  for (const e of t.edges) {
+    if (e.kind !== "logged-from" || !collapsed.has(e.source)) continue
+    destinationsBySource.set(e.source, e.targetIds)
+  }
+
   const nodes: TopoNode[] = t.nodes.filter((n) => !collapsed.has(n.id))
   const edges: TopoEdge[] = t.edges.filter(
     (e) => !(e.kind === "logged-from" && collapsed.has(e.source)),
   )
 
   for (const [identityId, ids] of collapsible) {
-    const labels = ids.map((id) => phantomLabel.get(id) ?? "")
-    labels.sort((a, b) => a.localeCompare(b, undefined, { numeric: true }))
+    // Sorted by label (the visible row order), carrying each source's phantom
+    // id along so a row stays addressable after the merge.
+    const sources = ids.map((id) => ({ id, label: phantomLabel.get(id) ?? "" }))
+    sources.sort((a, b) =>
+      a.label.localeCompare(b.label, undefined, { numeric: true }),
+    )
+    // Deduped union, in source order, of everywhere this identity landed from
+    // any of the merged origins.
+    const targetIds: string[] = []
+    for (const sourceId of ids) {
+      for (const hostId of destinationsBySource.get(sourceId) ?? []) {
+        if (!targetIds.includes(hostId)) targetIds.push(hostId)
+      }
+    }
     const id = loneSourcesNodeId(identityId)
-    nodes.push({ kind: "lone-sources", id, identityId, labels })
+    nodes.push({ kind: "lone-sources", id, identityId, sources })
     edges.push({
       kind: "logged-from-group",
       id: `lfg:${identityId}`,
       source: id,
       target: identityId,
+      sourceIds: sources.map((sourceEntry) => sourceEntry.id),
+      targetIds,
     })
   }
 

@@ -233,14 +233,19 @@ describe("collapsePhantomHosts", () => {
     expect(byKind(t.nodes, "phantom-host")).toHaveLength(0)
     const lone = byKind(t.nodes, "lone-sources")
     expect(lone).toHaveLength(1)
-    expect(lone[0].labels).toHaveLength(5)
-    expect(lone[0].labels).toContain("10.9.0.3")
+    expect(lone[0].sources).toHaveLength(5)
+    expect(lone[0].sources.map((s) => s.label)).toContain("10.9.0.3")
     // One group edge replaces the five logged-from edges; it feeds the identity.
     expect(edgesOf(t.edges, "logged-from")).toHaveLength(0)
     const grouped = edgesOf(t.edges, "logged-from-group")
     expect(grouped).toHaveLength(1)
     expect(grouped[0].source).toBe(lone[0].id)
     expect(grouped[0].target).toBe(lone[0].identityId)
+    // The group edge carries the pairing of the edges it replaced: every
+    // absorbed source id, and the host they all led to. Edge focus walks these
+    // to cross the collapse in either direction.
+    expect(grouped[0].sourceIds).toEqual(lone[0].sources.map((s) => s.id))
+    expect(grouped[0].targetIds).toEqual(["h1"])
   })
 
   it("leaves a single lone source as a normal phantom host", () => {
@@ -298,7 +303,7 @@ describe("collapsePhantomHosts", () => {
     )
     const lone = byKind(t.nodes, "lone-sources")
     expect(lone).toHaveLength(2)
-    expect(lone.every((n) => n.labels.length === 2)).toBe(true)
+    expect(lone.every((n) => n.sources.length === 2)).toBe(true)
   })
 
   it("returns the topology unchanged when nothing collapses", () => {

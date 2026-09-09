@@ -30,6 +30,12 @@ export type EmphasisSets = {
   // among its lit nodes would also fire unrelated wiring between them (e.g.
   // a destination host the user ALSO logged in from).
   litEdges: Set<string> | null
+  // Sub-node emphasis: aggregate node id -> the member ids inside it that
+  // belong to the focused relation. A collapsed blob is one node, so node-level
+  // lighting can only say "some of this matters". This says which rows — the
+  // list node floats them to the top and dims the rest. Absent (or an absent
+  // entry) means every row is equally in scope, which is the same as none.
+  litRows: Map<string, Set<string>> | null
 }
 
 // Undirected adjacency over the visible edges, for 1-hop neighborhoods.
@@ -62,7 +68,7 @@ export function focusSets(
 ): EmphasisSets {
   const lit = new Set<string>([nodeId])
   for (const n of adjacency.get(nodeId) ?? []) lit.add(n)
-  return { lit, active: nodeId, ringMatches: false, litEdges: null }
+  return { lit, active: nodeId, ringMatches: false, litEdges: null, litRows: null }
 }
 
 export function searchSets(
@@ -74,6 +80,7 @@ export function searchSets(
     active: matchIds[activeIndex] ?? null,
     ringMatches: true,
     litEdges: null,
+    litRows: null,
   }
 }
 
@@ -89,13 +96,23 @@ export function searchSets(
 // The per-footprint pairing comes from the arrays derive.ts preserves on the
 // login edges (the deduped graph alone can't tell which source led to which
 // destination). Any other edge kind focuses as just its two endpoints.
-// Pairing ids that no longer resolve to a visible node (e.g. a phantom source
-// collapsed into a lone-sources list) light nothing — harmless by design.
+//
+// Collapsed sources are part of the path, not an exception to it. When an
+// identity's lone ghost origins merge into one lone-sources blob, their
+// individual nodes and logged-from edges are gone, so a destination edge's
+// sourceIds name nodes that no longer exist. The blob's group edge carries the
+// absorbed ids, which is what re-links the two halves: a destination edge lights
+// the blob and its group edge when any absorbed source is one of its own, and
+// says which rows matched so the blob can single them out. The group edge
+// focused directly is the mirror, lighting every destination reached through it.
 export function edgeFocusSets(edge: TopoEdge, topology: Topology): EmphasisSets {
   const lit = new Set<string>([edge.source, edge.target])
   const litEdges = new Set<string>([edge.id])
+  const litRows = new Map<string, Set<string>>()
 
-  if (edge.kind === "logged-from") {
+  if (edge.kind === "logged-from" || edge.kind === "logged-from-group") {
+    // Source -> user. Light every host this account reached from here, and the
+    // user -> host edge of each of those hops.
     const user = edge.target
     const destinations = new Set(edge.targetIds)
     for (const id of edge.targetIds) lit.add(id)
@@ -104,18 +121,40 @@ export function edgeFocusSets(edge: TopoEdge, topology: Topology): EmphasisSets 
         litEdges.add(e.id)
       }
     }
+    // No row emphasis on a directly-focused blob: the whole node is the subject,
+    // so singling out rows inside it would be noise.
   } else if (edge.kind === "logged-into") {
+    // User -> destination. Light every origin this account came from to reach
+    // it, whether that origin is still its own node or has been collapsed.
     const user = edge.source
     const sources = new Set(edge.sourceIds)
     for (const id of edge.sourceIds) lit.add(id)
     for (const e of topology.edges) {
       if (e.kind === "logged-from" && e.target === user && sources.has(e.source)) {
         litEdges.add(e.id)
+      } else if (e.kind === "logged-from-group" && e.target === user) {
+        const matched = e.sourceIds.filter((id) => sources.has(id))
+        if (matched.length === 0) continue
+        litEdges.add(e.id)
+        // e.source is the blob node — dimmed without this, since it is not
+        // itself one of the pairing ids.
+        lit.add(e.source)
+        // Rows are only worth calling out when they are a strict subset. If
+        // every origin in the blob led here, the blob as a whole is the answer.
+        if (matched.length < e.sourceIds.length) {
+          litRows.set(e.source, new Set(matched))
+        }
       }
     }
   }
 
-  return { lit, active: null, ringMatches: false, litEdges }
+  return {
+    lit,
+    active: null,
+    ringMatches: false,
+    litEdges,
+    litRows: litRows.size > 0 ? litRows : null,
+  }
 }
 
 // The ring is drawn on React Flow's node wrapper div, so its radius must
@@ -123,7 +162,7 @@ export function edgeFocusSets(edge: TopoEdge, topology: Topology): EmphasisSets 
 const ringRadius = (nodeType: string | undefined) =>
   isPillNodeType(nodeType) ? "rounded-full" : "rounded-md"
 
-// Dim/ring styling for one node.
+// Dim/ring styling for one node, plus the row emphasis an aggregate node needs.
 function decorateNode(node: Node, sets: EmphasisSets): Node {
   const isLit = sets.lit.has(node.id)
   const isActive = node.id === sets.active
@@ -132,12 +171,18 @@ function decorateNode(node: Node, sets: EmphasisSets): Node {
     : sets.ringMatches && isLit
       ? `${ringRadius(node.type)} ring-2 ring-primary/40`
       : ""
+  const rows = sets.litRows?.get(node.id)
   return {
     ...node,
     className: [node.className, "transition-opacity duration-150", ring]
       .filter(Boolean)
       .join(" "),
     style: { ...node.style, opacity: isLit ? 1 : DIM_OPACITY },
+    // Only spread `data` when there is row emphasis to add. Handing every node
+    // a fresh data object would defeat the node components' memoization and
+    // re-render the whole graph on each simulation tick — the same trap the
+    // memo table below exists to avoid.
+    ...(rows ? { data: { ...node.data, highlightIds: rows } } : null),
   }
 }
 

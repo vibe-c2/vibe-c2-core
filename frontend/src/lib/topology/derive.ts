@@ -64,6 +64,14 @@ export function isWellKnownAccount(user: string): boolean {
 // labels used to show survives the merge.
 export type LeafSubnetEntry = { cidr: string; iface: string; ip: string }
 
+// One collapsed ghost origin inside a lone-sources node. The id is the
+// phantom-host node id the collapse absorbed — kept (rather than the label
+// alone) so edge focus can tell WHICH rows of the merged blob belong to the
+// relation being focused. Without it a collapsed source is unaddressable and
+// the travel path silently dead-ends at the blob. `label` is the raw `from`
+// value of the login record, so it may be an address or a hostname.
+export type LoneSource = { id: string; label: string }
+
 export type TopoNode =
   | { kind: "host"; id: string; host: HostFieldsFragment }
   | { kind: "subnet"; id: string; cidr: string; hostIds: string[] }
@@ -82,7 +90,7 @@ export type TopoNode =
   // Produced only by collapsePhantomHosts (aggregate.ts): an identity's lone
   // ghost sources (each tied only to that one identity) folded into one list
   // node — the users-lens analog of leaf-subnets.
-  | { kind: "lone-sources"; id: string; identityId: string; labels: string[] }
+  | { kind: "lone-sources"; id: string; identityId: string; sources: LoneSource[] }
   // Produced only by collapseLocalIdentities (aggregate.ts): a host's
   // single-host accounts (each seen only on this one host, relating it to
   // nothing) folded into one list node — the bipartite dual of leaf-subnets on
@@ -165,6 +173,14 @@ export type TopoEdge =
       id: string
       source: string // lone-sources node id
       target: string // identity id
+      // The phantom-host ids this group absorbed, and the union of the host ids
+      // this account logged INTO from them. Carries the per-footprint pairing
+      // of the replaced logged-from edges across the collapse, so edge focus
+      // can still walk sourceHost -> user -> accessedHost through the blob —
+      // in both directions. Without these the pairing arrays on the surviving
+      // logged-into edges reference deleted nodes and light nothing.
+      sourceIds: string[]
+      targetIds: string[]
     }
   | {
       // Produced only by collapseLocalIdentities: replaces the logged-into (and

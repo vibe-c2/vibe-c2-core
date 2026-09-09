@@ -146,7 +146,10 @@ function buildNodeMenu(
         ...at,
         kind: "aggregate",
         title: "Unknown sources",
-        data: { kind: "lone-sources", labels: (node.data as LoneSourcesNodeData).labels },
+        data: {
+          kind: "lone-sources",
+          labels: (node.data as LoneSourcesNodeData).sources.map((s) => s.label),
+        },
       }
     case "localIdentities":
       return {

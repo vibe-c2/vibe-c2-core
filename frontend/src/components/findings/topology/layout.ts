@@ -191,7 +191,7 @@ function sizeOf(n: TopoNode): { width: number; height: number } {
     case "leaf-subnets":
       return leafSubnetsSize(n.entries)
     case "lone-sources":
-      return framedListSize(n.labels)
+      return framedListSize(n.sources.map((s) => s.label))
     case "local-identities":
       return framedListSize(n.users)
     case "identity":
@@ -223,7 +223,7 @@ function nodeData(n: TopoNode): Node["data"] {
     case "leaf-subnets":
       return { entries: n.entries }
     case "lone-sources":
-      return { labels: n.labels }
+      return { sources: n.sources }
     case "local-identities":
       return { users: n.users }
     case "identity":

@@ -8,8 +8,9 @@ import {
 } from "lucide-react"
 import type { HostFieldsFragment } from "@/graphql/gql/graphql"
 import { HostIcon } from "@/components/findings/host-icon"
-import type { LeafSubnetEntry } from "@/lib/topology/derive"
+import type { LeafSubnetEntry, LoneSource } from "@/lib/topology/derive"
 import { LEAF_SUBNET_MAX_ROWS } from "@/components/findings/topology/layout"
+import { cn } from "@/lib/utils"
 
 // Custom React Flow nodes for the derived topology. Edges are "floating"
 // (see floating-edge.tsx) and compute their own attachment points from node
@@ -24,7 +25,13 @@ export type PhantomSubnetNodeData = { cidr: string }
 export type LeafSubnetsNodeData = { entries: LeafSubnetEntry[] }
 export type IdentityNodeData = { user: string; wellKnown: boolean }
 export type PhantomHostNodeData = { label: string }
-export type LoneSourcesNodeData = { labels: string[] }
+export type LoneSourcesNodeData = {
+  sources: LoneSource[]
+  // Set by edge focus (see emphasis.ts) to the subset of sources belonging to
+  // the focused relation. Absent means no relation is focused, or all of them
+  // are in it — both render as a plain, evenly-weighted list.
+  highlightIds?: ReadonlySet<string>
+}
 export type LocalIdentitiesNodeData = { users: string[] }
 
 function Anchors() {
@@ -216,28 +223,65 @@ export function PhantomHostNode({ data }: NodeProps<Node<PhantomHostNodeData>>) 
 // grey and dashed to match the single phantom-host pills it replaces. Width is
 // pinned by the layout; height is natural so rows are never clipped.
 export function LoneSourcesNode({ data }: NodeProps<Node<LoneSourcesNodeData>>) {
-  const { labels } = data
-  const shown = labels.slice(0, LEAF_SUBNET_MAX_ROWS)
-  const hidden = labels.length - shown.length
+  const { sources, highlightIds } = data
+  const highlighting = !!highlightIds && highlightIds.size > 0
+  // Matched origins float to the top. The list is capped at LEAF_SUBNET_MAX_ROWS
+  // with the remainder folded into a "+k more" row, so without this the very
+  // rows the user asked about are the ones most likely to be hidden — a blob is
+  // only collapsed because it has many entries. A stable partition (relative
+  // order preserved on both sides) keeps the rest of the list where it was.
+  const ordered = highlighting
+    ? [
+        ...sources.filter((s) => highlightIds.has(s.id)),
+        ...sources.filter((s) => !highlightIds.has(s.id)),
+      ]
+    : sources
+  const shown = ordered.slice(0, LEAF_SUBNET_MAX_ROWS)
+  const hidden = ordered.length - shown.length
 
   return (
     <div
       className="flex w-full flex-col gap-0.5 rounded-md border border-dashed border-muted-foreground/40 bg-muted px-3 py-2 text-muted-foreground"
-      title={labels.join("\n")}
+      title={sources.map((s) => s.label).join("\n")}
     >
       <Anchors />
       <div className="flex items-center gap-1.5">
         <MonitorIcon className="size-3.5 shrink-0" />
         <span className="text-[11px] font-medium">
-          {labels.length} unknown sources
+          {highlighting
+            ? `${highlightIds.size} of ${sources.length} unknown sources`
+            : `${sources.length} unknown sources`}
         </span>
       </div>
-      {shown.map((label) => (
-        <span key={label} className="truncate font-mono text-[11px]">
-          {label}
+      {shown.map((source) => {
+        const isMatch = highlighting && highlightIds.has(source.id)
+        return (
+          <span
+            key={source.id}
+            className={cn(
+              "truncate font-mono text-[11px]",
+              // Contrast carries the emphasis rather than opacity: the node
+              // wrapper already owns opacity for graph-level dimming, and
+              // stacking a second opacity on these rows would make a lit blob
+              // read as a dimmed one.
+              isMatch && "font-semibold text-foreground",
+              highlighting && !isMatch && "text-muted-foreground/50",
+            )}
+          >
+            {source.label}
+          </span>
+        )
+      })}
+      {hidden > 0 && (
+        <span
+          className={cn(
+            "text-[11px]",
+            highlighting && "text-muted-foreground/50",
+          )}
+        >
+          +{hidden} more
         </span>
-      ))}
-      {hidden > 0 && <span className="text-[11px]">+{hidden} more</span>}
+      )}
     </div>
   )
 }
