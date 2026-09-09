@@ -165,7 +165,7 @@ func TestAuthN_APIKey_Success(t *testing.T) {
 	userRepo.put(models.User{UserID: uid, Username: "alice", Roles: []string{"user"}, Active: true})
 
 	r := gin.New()
-	r.Use(AuthN(stubJWTProvider{}, apiRepo, userRepo, nil))
+	r.Use(AuthN(stubJWTProvider{}, apiRepo, newFakeAgentKeyRepo(), userRepo, nil))
 	r.GET("/x", func(c *gin.Context) {
 		c.JSON(http.StatusOK, gin.H{
 			"uid":    c.GetString("userID"),
@@ -204,7 +204,7 @@ func TestAuthN_APIKey_Disabled(t *testing.T) {
 	userRepo.put(models.User{UserID: uid, Active: true, Roles: []string{"user"}})
 
 	r := gin.New()
-	r.Use(AuthN(stubJWTProvider{}, apiRepo, userRepo, nil))
+	r.Use(AuthN(stubJWTProvider{}, apiRepo, newFakeAgentKeyRepo(), userRepo, nil))
 	r.GET("/x", func(c *gin.Context) { c.Status(http.StatusOK) })
 
 	req := httptest.NewRequest(http.MethodGet, "/x", nil)
@@ -230,7 +230,7 @@ func TestAuthN_APIKey_InactiveUser(t *testing.T) {
 	userRepo.put(models.User{UserID: uid, Active: false, Roles: []string{"user"}})
 
 	r := gin.New()
-	r.Use(AuthN(stubJWTProvider{}, apiRepo, userRepo, nil))
+	r.Use(AuthN(stubJWTProvider{}, apiRepo, newFakeAgentKeyRepo(), userRepo, nil))
 	r.GET("/x", func(c *gin.Context) { c.Status(http.StatusOK) })
 
 	req := httptest.NewRequest(http.MethodGet, "/x", nil)
@@ -257,7 +257,7 @@ func TestAuthN_APIKey_WrongSecret(t *testing.T) {
 	userRepo.put(models.User{UserID: uid, Active: true, Roles: []string{"user"}})
 
 	r := gin.New()
-	r.Use(AuthN(stubJWTProvider{}, apiRepo, userRepo, nil))
+	r.Use(AuthN(stubJWTProvider{}, apiRepo, newFakeAgentKeyRepo(), userRepo, nil))
 	r.GET("/x", func(c *gin.Context) { c.Status(http.StatusOK) })
 
 	req := httptest.NewRequest(http.MethodGet, "/x", nil)
@@ -278,7 +278,7 @@ func TestAuthN_APIKey_UnknownKeyID(t *testing.T) {
 	userRepo := newFakeUserRepo()
 
 	r := gin.New()
-	r.Use(AuthN(stubJWTProvider{}, apiRepo, userRepo, nil))
+	r.Use(AuthN(stubJWTProvider{}, apiRepo, newFakeAgentKeyRepo(), userRepo, nil))
 	r.GET("/x", func(c *gin.Context) { c.Status(http.StatusOK) })
 
 	req := httptest.NewRequest(http.MethodGet, "/x", nil)
@@ -298,7 +298,7 @@ func TestAuthN_APIKey_NoFallbackToJWT(t *testing.T) {
 	userRepo := newFakeUserRepo()
 
 	r := gin.New()
-	r.Use(AuthN(stubJWTProvider{}, apiRepo, userRepo, nil))
+	r.Use(AuthN(stubJWTProvider{}, apiRepo, newFakeAgentKeyRepo(), userRepo, nil))
 	r.GET("/x", func(c *gin.Context) { c.Status(http.StatusOK) })
 
 	// An obviously broken vc2_ token must NOT fall back to cookie JWT — the
@@ -321,7 +321,7 @@ func TestAuthN_NoAuthorizationHeader_FallsThroughToJWT(t *testing.T) {
 	userRepo := newFakeUserRepo()
 
 	r := gin.New()
-	r.Use(AuthN(stubJWTProvider{}, apiRepo, userRepo, nil))
+	r.Use(AuthN(stubJWTProvider{}, apiRepo, newFakeAgentKeyRepo(), userRepo, nil))
 	r.GET("/x", func(c *gin.Context) { c.Status(http.StatusOK) })
 
 	// No Authorization header at all → JWTAuth path runs and rejects for

@@ -36,10 +36,10 @@ func CSRF(enabled bool) gin.HandlerFunc {
 			return
 		}
 
-		// API-key auth has no cookie surface, so the double-submit pattern
-		// doesn't apply. AuthN sets the flag; we trust it here because this
-		// middleware runs after auth.
-		if HasAPIKeyAuth(c) {
+		// Programmatic auth (API key or agent key) has no cookie surface, so
+		// the double-submit pattern doesn't apply. AuthN sets the flag; we
+		// trust it here because this middleware runs after auth.
+		if HasProgrammaticAuth(c) {
 			c.Next()
 			return
 		}

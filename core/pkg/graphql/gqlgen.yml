@@ -394,6 +394,26 @@ models:
       updatedAt:
         resolver: true         # field.DefaultField.UpdateAt -> string
 
+  # --- Agent Keys ---
+
+  # Map "AgentKey" to models.AgentKey. Same bridging as APIKey, plus
+  # operationScopes, which resolves []uuid.UUID into full Operation objects so
+  # the settings UI can render names rather than ids.
+  AgentKey:
+    model:
+      - github.com/vibe-c2/vibe-c2-core/core/pkg/models.AgentKey
+    fields:
+      id:
+        resolver: true         # AgentKeyID (uuid.UUID) -> ID (string)
+      operationScopes:
+        resolver: true         # []uuid.UUID -> [Operation!]!
+      lastUsedAt:
+        resolver: true         # *time.Time -> *string (RFC3339 or null)
+      createdAt:
+        resolver: true         # field.DefaultField.CreateAt -> string
+      updatedAt:
+        resolver: true         # field.DefaultField.UpdateAt -> string
+
   # --- Modules ---
 
   # Map the GraphQL "Module" type to our existing registry model. Most fields

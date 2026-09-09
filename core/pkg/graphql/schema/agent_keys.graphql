@@ -1,0 +1,106 @@
+# =============================================================================
+# Agent Keys
+# =============================================================================
+#
+# Delegated credentials a user mints for an AI agent to reach the MCP endpoint
+# at POST /api/v1/mcp. They are a separate principal from APIKey, not a flag on
+# it, for three reasons:
+#
+#   - Attribution. The Timeline and the activity rail say "Claude (via alice)".
+#     That is impossible if the agent authenticates as the user.
+#   - Revocation. Disabling the agent must not disable the user's own scripts.
+#   - Scope. An agent key narrows the owner's authority and can never widen it.
+#
+# Authority is an INTERSECTION, resolved live on every request:
+#
+#     effective role in operation X
+#         = min(owner's membership role in X, key.maxRole)
+#         , and only if X is in key.operationScopes (or that list is empty)
+#
+# Nothing is snapshotted. Remove the owner from an operation, or strip their
+# roles, and the key's reach shrinks on its next call with no key edit needed.
+# The app-admin bypass that applies to humans deliberately does NOT apply to
+# agents — an app admin's viewer-capped agent is a viewer.
+#
+# Unlike API keys there may be several per user, so an operator can run one
+# narrow long-lived agent and a broader ad-hoc one and revoke them separately.
+#
+# The raw token (vca_<key_id>_<secret>) is shown exactly once at creation and
+# regeneration; only the public key_id and a SHA-256 of the random tail are
+# stored. Requests using it bypass CSRF (no cookie surface) and are rejected on
+# every route except /api/v1/mcp.
+
+# AgentKey is the public, listable representation. The secret is never on it.
+type AgentKey {
+  id: ID! # Stable row UUID. Survives regeneration, unlike keyId.
+  keyId: String! # Public prefix carried in the token, e.g. "vca_a1b2c3d4e5f6"
+  name: String! # Operator-supplied, e.g. "Claude — Operation Nightfall"
+  enabled: Boolean! # Disabled keys return 401 on use
+  # Operations this key may act in. Empty means "every operation the owner is
+  # a member of" — a filter, never a grant: listing an operation here does
+  # nothing unless the owner is also a member of it.
+  operationScopes: [Operation!]!
+  # Ceiling on the effective operation role. Never ADMIN: agent keys exist to
+  # work inside an operation, not to administer membership or delete it.
+  maxRole: OperationRole!
+  # Gates every mutating MCP tool. False makes the key strictly observational
+  # even where maxRole would otherwise permit changes.
+  allowWrites: Boolean!
+  lastUsedAt: String # ISO 8601 — null if never used
+  createdAt: String!
+  updatedAt: String!
+}
+
+# AgentKeyWithSecret is returned ONLY by create/regenerate. The token field is
+# the only chance the client has to capture it — there is no "show it again".
+type AgentKeyWithSecret {
+  agentKey: AgentKey!
+  token: String! # vca_<key_id>_<secret> — show once, then discard
+}
+
+input CreateAgentKeyInput {
+  name: String!
+  # Omit or pass an empty list for "every operation the owner belongs to".
+  operationScopes: [ID!]
+  maxRole: OperationRole! # VIEWER or OPERATOR; ADMIN is rejected
+  allowWrites: Boolean! = false
+}
+
+# Every field optional — only what is provided is changed. Passing an empty
+# list for operationScopes widens the key back to "all the owner's operations",
+# which is the one case where omitting and clearing differ.
+input UpdateAgentKeyInput {
+  name: String
+  operationScopes: [ID!]
+  maxRole: OperationRole
+  allowWrites: Boolean
+}
+
+extend type Query {
+  # The caller's agent keys, oldest first. Secrets are never included.
+  myAgentKeys: [AgentKey!]! @hasPermission(permission: "*")
+}
+
+extend type Mutation {
+  # Mints a key and returns its one and only view of the raw token.
+  # Rejects maxRole: ADMIN, and rejects scoping to operations the caller is
+  # not a member of — a key that could never work is a configuration error
+  # worth surfacing at creation rather than at first use.
+  createAgentKey(input: CreateAgentKeyInput!): AgentKeyWithSecret!
+    @hasPermission(permission: "*")
+
+  # Rotates the secret in place, keeping id, name and scope. The old token
+  # 401s immediately.
+  regenerateAgentKey(id: ID!): AgentKeyWithSecret!
+    @hasPermission(permission: "*")
+
+  # Changes scope without rotating the secret.
+  updateAgentKey(id: ID!, input: UpdateAgentKeyInput!): AgentKey!
+    @hasPermission(permission: "*")
+
+  # The kill switch. Stops an agent mid-run without destroying the token.
+  setAgentKeyEnabled(id: ID!, enabled: Boolean!): AgentKey!
+    @hasPermission(permission: "*")
+
+  deleteAgentKey(id: ID!): Boolean! @hasPermission(permission: "*")
+}

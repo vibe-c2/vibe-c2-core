@@ -32,18 +32,19 @@ import (
 // EventBus, UserRepo, and OperationRepo are used by subscription resolvers
 // to receive real-time events and fetch full entities from the database.
 type Resolver struct {
-	UserResolver               resolver.IUserResolver
-	OperationResolver          resolver.IOperationResolver
-	SessionResolver            resolver.ISessionResolver
-	WikiDocumentResolver       resolver.IWikiDocumentResolver
-	WikiDocumentVisitResolver  resolver.IWikiDocumentVisitResolver
-	CredentialResolver         resolver.ICredentialResolver
-	HashResolver               resolver.IHashResolver
-	HostResolver               resolver.IHostResolver
-	TaskResolver               resolver.ITaskResolver
-	TimelineResolver           resolver.ITimelineResolver
-	APIKeyResolver             resolver.IAPIKeyResolver
-	ModuleResolver             resolver.IModuleResolver
+	UserResolver              resolver.IUserResolver
+	OperationResolver         resolver.IOperationResolver
+	SessionResolver           resolver.ISessionResolver
+	WikiDocumentResolver      resolver.IWikiDocumentResolver
+	WikiDocumentVisitResolver resolver.IWikiDocumentVisitResolver
+	CredentialResolver        resolver.ICredentialResolver
+	HashResolver              resolver.IHashResolver
+	HostResolver              resolver.IHostResolver
+	TaskResolver              resolver.ITaskResolver
+	TimelineResolver          resolver.ITimelineResolver
+	APIKeyResolver            resolver.IAPIKeyResolver
+	AgentKeyResolver          resolver.IAgentKeyResolver
+	ModuleResolver            resolver.IModuleResolver
 
 	// Subscription dependencies — event bus for real-time events,
 	// repos for fetching full entities to include in event payloads.

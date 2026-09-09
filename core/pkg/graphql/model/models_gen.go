@@ -17,6 +17,11 @@ type APIKeyWithSecret struct {
 	Token  string         `json:"token"`
 }
 
+type AgentKeyWithSecret struct {
+	AgentKey *models.AgentKey `json:"agentKey"`
+	Token    string           `json:"token"`
+}
+
 type BulkImportHashesInput struct {
 	Text    string   `json:"text"`
 	Tags    []string `json:"tags,omitempty"`
@@ -34,6 +39,13 @@ type ChangeTaskStageInput struct {
 	Stage   models.TaskStage   `json:"stage"`
 	Status  *models.TaskStatus `json:"status,omitempty"`
 	Summary *string            `json:"summary,omitempty"`
+}
+
+type CreateAgentKeyInput struct {
+	Name            string               `json:"name"`
+	OperationScopes []string             `json:"operationScopes,omitempty"`
+	MaxRole         models.OperationRole `json:"maxRole"`
+	AllowWrites     bool                 `json:"allowWrites"`
 }
 
 type CreateCredentialInput struct {
@@ -306,6 +318,13 @@ type TimelineTopicCount struct {
 	Emoji       string `json:"emoji"`
 	Icon        string `json:"icon"`
 	Color       string `json:"color"`
+}
+
+type UpdateAgentKeyInput struct {
+	Name            *string               `json:"name,omitempty"`
+	OperationScopes []string              `json:"operationScopes,omitempty"`
+	MaxRole         *models.OperationRole `json:"maxRole,omitempty"`
+	AllowWrites     *bool                 `json:"allowWrites,omitempty"`
 }
 
 type UpdateCredentialInput struct {

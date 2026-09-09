@@ -91,6 +91,7 @@ func (a *App) NewRouter() *gin.Engine {
 		a.repos.OperationEvent, a.repos.Operation, a.repos.User, a.eventBus,
 	)
 	apiKeyRes := resolver.NewAPIKeyResolver(a.repos.APIKey)
+	agentKeyRes := resolver.NewAgentKeyResolver(a.repos.AgentKey, a.repos.Operation)
 	// moduleRes is the app-admin Modules surface. removeModule routes through the
 	// lifecycle service so the GraphQL deregister and the RPC deregister share one
 	// transition (registry update + gate bust + audit + bus event).
@@ -187,12 +188,23 @@ func (a *App) NewRouter() *gin.Engine {
 			v1.GET("/graphql", gql.NewPlaygroundHandler("/api/v1/graphql"))
 		}
 
-		// Protected routes. Authentication runs first: either Authorization:
-		// Bearer vc2_... resolves to an API key, or the access_token cookie
-		// is validated as a JWT. CSRF then runs against the resolved identity
-		// — API-key callers skip it because they have no cookie surface.
-		v1.Use(middleware.AuthN(a.authProvider, a.repos.APIKey, a.repos.User, a.cache))
+		// Protected routes. Authentication runs first: Authorization: Bearer
+		// vc2_... resolves to an API key, vca_... to a delegated agent key,
+		// or the access_token cookie is validated as a JWT. CSRF then runs
+		// against the resolved identity — programmatic callers skip it
+		// because they have no cookie surface.
+		v1.Use(middleware.AuthN(a.authProvider, a.repos.APIKey, a.repos.AgentKey, a.repos.User, a.cache))
 		v1.Use(middleware.CSRF(a.authCfg.csrfEnabled))
+
+		// --- Agent-reachable routes go here, above RequireHuman ---
+		// (the MCP endpoint mounts in this gap)
+
+		// Everything below is closed to agent keys. gin.RouterGroup.Use only
+		// affects routes registered after it, so this single line — rather
+		// than a check inside every resolver — is what confines an agent to
+		// the MCP surface. Do not move route registrations above it without
+		// meaning to widen the agent blast radius.
+		v1.Use(middleware.RequireHuman())
 
 		v1.GET("/login/me", middleware.RBAC(permissions.BasicPermission), authCtrl.Me)
 		v1.POST("/logout", middleware.RBAC(permissions.BasicPermission), authCtrl.Logout)
@@ -232,7 +244,7 @@ func (a *App) NewRouter() *gin.Engine {
 		//                       inside gqlgen; one socket multiplexes every
 		//                       active subscription on the page.
 		gqlHandler := gql.NewHandler(
-			userRes, opRes, sessRes, wikiDocRes, wikiVisitRes, credRes, hashRes, hostRes, taskRes, timelineRes, apiKeyRes, moduleRes,
+			userRes, opRes, sessRes, wikiDocRes, wikiVisitRes, credRes, hashRes, hostRes, taskRes, timelineRes, apiKeyRes, agentKeyRes, moduleRes,
 			a.eventBus,
 			a.repos.User, a.repos.Operation, a.repos.Session, a.repos.WikiDocument, a.repos.Credential, a.repos.Hash, a.repos.Host, a.repos.Task, a.repos.ModuleRegistry,
 			a.presenceTracker,

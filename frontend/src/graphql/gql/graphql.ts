@@ -30,6 +30,24 @@ export type ApiKeyWithSecret = {
   token: Scalars['String']['output'];
 };
 
+export type AgentKey = {
+  allowWrites: Scalars['Boolean']['output'];
+  createdAt: Scalars['String']['output'];
+  enabled: Scalars['Boolean']['output'];
+  id: Scalars['ID']['output'];
+  keyId: Scalars['String']['output'];
+  lastUsedAt?: Maybe<Scalars['String']['output']>;
+  maxRole: OperationRole;
+  name: Scalars['String']['output'];
+  operationScopes: Array<Operation>;
+  updatedAt: Scalars['String']['output'];
+};
+
+export type AgentKeyWithSecret = {
+  agentKey: AgentKey;
+  token: Scalars['String']['output'];
+};
+
 export type BulkImportHashesInput = {
   comment?: InputMaybe<Scalars['String']['input']>;
   tags?: InputMaybe<Array<Scalars['String']['input']>>;
@@ -47,6 +65,13 @@ export type ChangeTaskStageInput = {
   status?: InputMaybe<TaskStatus>;
   summary?: InputMaybe<Scalars['String']['input']>;
   taskId: Scalars['ID']['input'];
+};
+
+export type CreateAgentKeyInput = {
+  allowWrites?: Scalars['Boolean']['input'];
+  maxRole: OperationRole;
+  name: Scalars['String']['input'];
+  operationScopes?: InputMaybe<Array<Scalars['ID']['input']>>;
 };
 
 export type CreateCredentialInput = {
@@ -351,6 +376,7 @@ export type Mutation = {
   adminRevokeSession: Scalars['Boolean']['output'];
   bulkImportHashes: BulkImportHashesResult;
   changeTaskStage: Task;
+  createAgentKey: AgentKeyWithSecret;
   createCredential: Credential;
   createCustomTimelineEvent: TimelineEvent;
   createHash: Hash;
@@ -361,6 +387,7 @@ export type Mutation = {
   createUser: User;
   createWikiDocument: WikiDocument;
   createWikiDocumentBackup: WikiDocumentBackup;
+  deleteAgentKey: Scalars['Boolean']['output'];
   deleteCredential: Scalars['Boolean']['output'];
   deleteCredentialComment: Credential;
   deleteCustomTimelineEvent: Scalars['Boolean']['output'];
@@ -378,6 +405,7 @@ export type Mutation = {
   markHashCracked: Hash;
   permanentlyDeleteWikiDocument: Scalars['Boolean']['output'];
   purgeTask: Scalars['Boolean']['output'];
+  regenerateAgentKey: AgentKeyWithSecret;
   regenerateMyAPIKey: ApiKeyWithSecret;
   removeModule: Module;
   removeOperationMember: Operation;
@@ -387,6 +415,7 @@ export type Mutation = {
   restoreWikiDocumentBackup: WikiDocument;
   revokeAllMySessions: Scalars['Int']['output'];
   revokeSession: Scalars['Boolean']['output'];
+  setAgentKeyEnabled: AgentKey;
   setHiddenIdentities: User;
   setMyAPIKeyEnabled: ApiKey;
   setTaskAssignees: Task;
@@ -394,6 +423,7 @@ export type Mutation = {
   setTaskWikiReferences: Task;
   setWikiDocumentTemplate: WikiDocument;
   trackWikiDocumentVisit: WikiDocumentVisit;
+  updateAgentKey: AgentKey;
   updateCredential: Credential;
   updateCredentialComment: Credential;
   updateCustomTimelineEvent: TimelineEvent;
@@ -448,6 +478,11 @@ export type MutationChangeTaskStageArgs = {
 };
 
 
+export type MutationCreateAgentKeyArgs = {
+  input: CreateAgentKeyInput;
+};
+
+
 export type MutationCreateCredentialArgs = {
   input: CreateCredentialInput;
   operationId: Scalars['ID']['input'];
@@ -496,6 +531,11 @@ export type MutationCreateWikiDocumentArgs = {
 export type MutationCreateWikiDocumentBackupArgs = {
   description?: InputMaybe<Scalars['String']['input']>;
   documentId: Scalars['ID']['input'];
+};
+
+
+export type MutationDeleteAgentKeyArgs = {
+  id: Scalars['ID']['input'];
 };
 
 
@@ -588,6 +628,11 @@ export type MutationPurgeTaskArgs = {
 };
 
 
+export type MutationRegenerateAgentKeyArgs = {
+  id: Scalars['ID']['input'];
+};
+
+
 export type MutationRemoveModuleArgs = {
   instance: Scalars['ID']['input'];
 };
@@ -622,6 +667,12 @@ export type MutationRestoreWikiDocumentBackupArgs = {
 
 
 export type MutationRevokeSessionArgs = {
+  id: Scalars['ID']['input'];
+};
+
+
+export type MutationSetAgentKeyEnabledArgs = {
+  enabled: Scalars['Boolean']['input'];
   id: Scalars['ID']['input'];
 };
 
@@ -662,6 +713,12 @@ export type MutationSetWikiDocumentTemplateArgs = {
 
 export type MutationTrackWikiDocumentVisitArgs = {
   documentId: Scalars['ID']['input'];
+};
+
+
+export type MutationUpdateAgentKeyArgs = {
+  id: Scalars['ID']['input'];
+  input: UpdateAgentKeyInput;
 };
 
 
@@ -813,6 +870,7 @@ export type Query = {
   me: User;
   modules: Array<Module>;
   myAPIKey?: Maybe<ApiKey>;
+  myAgentKeys: Array<AgentKey>;
   myCredentialTags: Array<Scalars['String']['output']>;
   myCredentials: CredentialConnection;
   myHashTags: Array<Scalars['String']['output']>;
@@ -1447,6 +1505,13 @@ export type TimelineTopicCount = {
   topic: Scalars['String']['output'];
 };
 
+export type UpdateAgentKeyInput = {
+  allowWrites?: InputMaybe<Scalars['Boolean']['input']>;
+  maxRole?: InputMaybe<OperationRole>;
+  name?: InputMaybe<Scalars['String']['input']>;
+  operationScopes?: InputMaybe<Array<Scalars['ID']['input']>>;
+};
+
 export type UpdateCredentialInput = {
   isValid?: InputMaybe<Scalars['Boolean']['input']>;
   keys?: InputMaybe<Array<CredentialKeyInput>>;
@@ -1698,6 +1763,50 @@ export type WikiSearchMatchRange = {
   end: Scalars['Int']['output'];
   start: Scalars['Int']['output'];
 };
+
+export type AgentKeyFieldsFragment = { id: string, keyId: string, name: string, enabled: boolean, maxRole: OperationRole, allowWrites: boolean, lastUsedAt?: string | null, createdAt: string, updatedAt: string, operationScopes: Array<{ id: string, name: string }> };
+
+export type MyAgentKeysQueryVariables = Exact<{ [key: string]: never; }>;
+
+
+export type MyAgentKeysQuery = { myAgentKeys: Array<{ id: string, keyId: string, name: string, enabled: boolean, maxRole: OperationRole, allowWrites: boolean, lastUsedAt?: string | null, createdAt: string, updatedAt: string, operationScopes: Array<{ id: string, name: string }> }> };
+
+export type CreateAgentKeyMutationVariables = Exact<{
+  input: CreateAgentKeyInput;
+}>;
+
+
+export type CreateAgentKeyMutation = { createAgentKey: { token: string, agentKey: { id: string, keyId: string, name: string, enabled: boolean, maxRole: OperationRole, allowWrites: boolean, lastUsedAt?: string | null, createdAt: string, updatedAt: string, operationScopes: Array<{ id: string, name: string }> } } };
+
+export type RegenerateAgentKeyMutationVariables = Exact<{
+  id: Scalars['ID']['input'];
+}>;
+
+
+export type RegenerateAgentKeyMutation = { regenerateAgentKey: { token: string, agentKey: { id: string, keyId: string, name: string, enabled: boolean, maxRole: OperationRole, allowWrites: boolean, lastUsedAt?: string | null, createdAt: string, updatedAt: string, operationScopes: Array<{ id: string, name: string }> } } };
+
+export type UpdateAgentKeyMutationVariables = Exact<{
+  id: Scalars['ID']['input'];
+  input: UpdateAgentKeyInput;
+}>;
+
+
+export type UpdateAgentKeyMutation = { updateAgentKey: { id: string, keyId: string, name: string, enabled: boolean, maxRole: OperationRole, allowWrites: boolean, lastUsedAt?: string | null, createdAt: string, updatedAt: string, operationScopes: Array<{ id: string, name: string }> } };
+
+export type SetAgentKeyEnabledMutationVariables = Exact<{
+  id: Scalars['ID']['input'];
+  enabled: Scalars['Boolean']['input'];
+}>;
+
+
+export type SetAgentKeyEnabledMutation = { setAgentKeyEnabled: { id: string, keyId: string, name: string, enabled: boolean, maxRole: OperationRole, allowWrites: boolean, lastUsedAt?: string | null, createdAt: string, updatedAt: string, operationScopes: Array<{ id: string, name: string }> } };
+
+export type DeleteAgentKeyMutationVariables = Exact<{
+  id: Scalars['ID']['input'];
+}>;
+
+
+export type DeleteAgentKeyMutation = { deleteAgentKey: boolean };
 
 export type ApiKeyFieldsFragment = { id: string, keyId: string, enabled: boolean, lastUsedAt?: string | null, createdAt: string, updatedAt: string };
 
@@ -2750,6 +2859,7 @@ export type WikiDocumentPresenceChangedSubscriptionVariables = Exact<{
 
 export type WikiDocumentPresenceChangedSubscription = { wikiDocumentPresenceChanged: { documentId: string, operationId: string, userId: string, username: string, action: PresenceAction } };
 
+export const AgentKeyFieldsFragmentDoc = {"kind":"Document","definitions":[{"kind":"FragmentDefinition","name":{"kind":"Name","value":"AgentKeyFields"},"typeCondition":{"kind":"NamedType","name":{"kind":"Name","value":"AgentKey"}},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"keyId"}},{"kind":"Field","name":{"kind":"Name","value":"name"}},{"kind":"Field","name":{"kind":"Name","value":"enabled"}},{"kind":"Field","name":{"kind":"Name","value":"maxRole"}},{"kind":"Field","name":{"kind":"Name","value":"allowWrites"}},{"kind":"Field","name":{"kind":"Name","value":"operationScopes"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"name"}}]}},{"kind":"Field","name":{"kind":"Name","value":"lastUsedAt"}},{"kind":"Field","name":{"kind":"Name","value":"createdAt"}},{"kind":"Field","name":{"kind":"Name","value":"updatedAt"}}]}}]} as unknown as DocumentNode<AgentKeyFieldsFragment, unknown>;
 export const ApiKeyFieldsFragmentDoc = {"kind":"Document","definitions":[{"kind":"FragmentDefinition","name":{"kind":"Name","value":"APIKeyFields"},"typeCondition":{"kind":"NamedType","name":{"kind":"Name","value":"APIKey"}},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"keyId"}},{"kind":"Field","name":{"kind":"Name","value":"enabled"}},{"kind":"Field","name":{"kind":"Name","value":"lastUsedAt"}},{"kind":"Field","name":{"kind":"Name","value":"createdAt"}},{"kind":"Field","name":{"kind":"Name","value":"updatedAt"}}]}}]} as unknown as DocumentNode<ApiKeyFieldsFragment, unknown>;
 export const CredentialCommentFieldsFragmentDoc = {"kind":"Document","definitions":[{"kind":"FragmentDefinition","name":{"kind":"Name","value":"CredentialCommentFields"},"typeCondition":{"kind":"NamedType","name":{"kind":"Name","value":"CredentialComment"}},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"text"}},{"kind":"Field","name":{"kind":"Name","value":"createdAt"}},{"kind":"Field","name":{"kind":"Name","value":"updatedAt"}},{"kind":"Field","name":{"kind":"Name","value":"author"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"username"}}]}}]}}]} as unknown as DocumentNode<CredentialCommentFieldsFragment, unknown>;
 export const CredentialFieldsFragmentDoc = {"kind":"Document","definitions":[{"kind":"FragmentDefinition","name":{"kind":"Name","value":"CredentialFields"},"typeCondition":{"kind":"NamedType","name":{"kind":"Name","value":"Credential"}},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"operationId"}},{"kind":"Field","name":{"kind":"Name","value":"name"}},{"kind":"Field","name":{"kind":"Name","value":"type"}},{"kind":"Field","name":{"kind":"Name","value":"username"}},{"kind":"Field","name":{"kind":"Name","value":"password"}},{"kind":"Field","name":{"kind":"Name","value":"keys"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"name"}},{"kind":"Field","name":{"kind":"Name","value":"content"}}]}},{"kind":"Field","name":{"kind":"Name","value":"properties"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"name"}},{"kind":"Field","name":{"kind":"Name","value":"value"}}]}},{"kind":"Field","name":{"kind":"Name","value":"isValid"}},{"kind":"Field","name":{"kind":"Name","value":"tags"}},{"kind":"Field","name":{"kind":"Name","value":"comments"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"FragmentSpread","name":{"kind":"Name","value":"CredentialCommentFields"}}]}},{"kind":"Field","name":{"kind":"Name","value":"viewerCanModerateComments"}},{"kind":"Field","name":{"kind":"Name","value":"createdBy"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"username"}}]}},{"kind":"Field","name":{"kind":"Name","value":"backlinkCount"}},{"kind":"Field","name":{"kind":"Name","value":"createdAt"}},{"kind":"Field","name":{"kind":"Name","value":"updatedAt"}}]}},{"kind":"FragmentDefinition","name":{"kind":"Name","value":"CredentialCommentFields"},"typeCondition":{"kind":"NamedType","name":{"kind":"Name","value":"CredentialComment"}},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"text"}},{"kind":"Field","name":{"kind":"Name","value":"createdAt"}},{"kind":"Field","name":{"kind":"Name","value":"updatedAt"}},{"kind":"Field","name":{"kind":"Name","value":"author"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"username"}}]}}]}}]} as unknown as DocumentNode<CredentialFieldsFragment, unknown>;
@@ -2773,6 +2883,12 @@ export const WikiDocumentFieldsFragmentDoc = {"kind":"Document","definitions":[{
 export const WikiDocumentBackupListFieldsFragmentDoc = {"kind":"Document","definitions":[{"kind":"FragmentDefinition","name":{"kind":"Name","value":"WikiDocumentBackupListFields"},"typeCondition":{"kind":"NamedType","name":{"kind":"Name","value":"WikiDocumentBackup"}},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"documentId"}},{"kind":"Field","name":{"kind":"Name","value":"title"}},{"kind":"Field","name":{"kind":"Name","value":"trigger"}},{"kind":"Field","name":{"kind":"Name","value":"description"}},{"kind":"Field","name":{"kind":"Name","value":"contentLength"}},{"kind":"Field","name":{"kind":"Name","value":"createdBy"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"username"}}]}},{"kind":"Field","name":{"kind":"Name","value":"createdAt"}}]}}]} as unknown as DocumentNode<WikiDocumentBackupListFieldsFragment, unknown>;
 export const WikiDocumentBackupDetailFieldsFragmentDoc = {"kind":"Document","definitions":[{"kind":"FragmentDefinition","name":{"kind":"Name","value":"WikiDocumentBackupDetailFields"},"typeCondition":{"kind":"NamedType","name":{"kind":"Name","value":"WikiDocumentBackup"}},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"documentId"}},{"kind":"Field","name":{"kind":"Name","value":"title"}},{"kind":"Field","name":{"kind":"Name","value":"content"}},{"kind":"Field","name":{"kind":"Name","value":"contentLength"}},{"kind":"Field","name":{"kind":"Name","value":"trigger"}},{"kind":"Field","name":{"kind":"Name","value":"description"}},{"kind":"Field","name":{"kind":"Name","value":"createdBy"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"username"}}]}},{"kind":"Field","name":{"kind":"Name","value":"createdAt"}}]}}]} as unknown as DocumentNode<WikiDocumentBackupDetailFieldsFragment, unknown>;
 export const WikiDocumentVisitListFieldsFragmentDoc = {"kind":"Document","definitions":[{"kind":"FragmentDefinition","name":{"kind":"Name","value":"WikiDocumentVisitListFields"},"typeCondition":{"kind":"NamedType","name":{"kind":"Name","value":"WikiDocumentVisit"}},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"visitedAt"}},{"kind":"Field","name":{"kind":"Name","value":"document"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"title"}},{"kind":"Field","name":{"kind":"Name","value":"emoji"}},{"kind":"Field","name":{"kind":"Name","value":"icon"}},{"kind":"Field","name":{"kind":"Name","value":"color"}},{"kind":"Field","name":{"kind":"Name","value":"ancestors"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"title"}},{"kind":"Field","name":{"kind":"Name","value":"emoji"}},{"kind":"Field","name":{"kind":"Name","value":"icon"}},{"kind":"Field","name":{"kind":"Name","value":"color"}},{"kind":"Field","name":{"kind":"Name","value":"isDeleted"}}]}}]}}]}}]} as unknown as DocumentNode<WikiDocumentVisitListFieldsFragment, unknown>;
+export const MyAgentKeysDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"query","name":{"kind":"Name","value":"MyAgentKeys"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"myAgentKeys"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"FragmentSpread","name":{"kind":"Name","value":"AgentKeyFields"}}]}}]}},{"kind":"FragmentDefinition","name":{"kind":"Name","value":"AgentKeyFields"},"typeCondition":{"kind":"NamedType","name":{"kind":"Name","value":"AgentKey"}},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"keyId"}},{"kind":"Field","name":{"kind":"Name","value":"name"}},{"kind":"Field","name":{"kind":"Name","value":"enabled"}},{"kind":"Field","name":{"kind":"Name","value":"maxRole"}},{"kind":"Field","name":{"kind":"Name","value":"allowWrites"}},{"kind":"Field","name":{"kind":"Name","value":"operationScopes"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"name"}}]}},{"kind":"Field","name":{"kind":"Name","value":"lastUsedAt"}},{"kind":"Field","name":{"kind":"Name","value":"createdAt"}},{"kind":"Field","name":{"kind":"Name","value":"updatedAt"}}]}}]} as unknown as DocumentNode<MyAgentKeysQuery, MyAgentKeysQueryVariables>;
+export const CreateAgentKeyDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"CreateAgentKey"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"input"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"CreateAgentKeyInput"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"createAgentKey"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"input"},"value":{"kind":"Variable","name":{"kind":"Name","value":"input"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"agentKey"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"FragmentSpread","name":{"kind":"Name","value":"AgentKeyFields"}}]}},{"kind":"Field","name":{"kind":"Name","value":"token"}}]}}]}},{"kind":"FragmentDefinition","name":{"kind":"Name","value":"AgentKeyFields"},"typeCondition":{"kind":"NamedType","name":{"kind":"Name","value":"AgentKey"}},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"keyId"}},{"kind":"Field","name":{"kind":"Name","value":"name"}},{"kind":"Field","name":{"kind":"Name","value":"enabled"}},{"kind":"Field","name":{"kind":"Name","value":"maxRole"}},{"kind":"Field","name":{"kind":"Name","value":"allowWrites"}},{"kind":"Field","name":{"kind":"Name","value":"operationScopes"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"name"}}]}},{"kind":"Field","name":{"kind":"Name","value":"lastUsedAt"}},{"kind":"Field","name":{"kind":"Name","value":"createdAt"}},{"kind":"Field","name":{"kind":"Name","value":"updatedAt"}}]}}]} as unknown as DocumentNode<CreateAgentKeyMutation, CreateAgentKeyMutationVariables>;
+export const RegenerateAgentKeyDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"RegenerateAgentKey"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"id"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"ID"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"regenerateAgentKey"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"id"},"value":{"kind":"Variable","name":{"kind":"Name","value":"id"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"agentKey"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"FragmentSpread","name":{"kind":"Name","value":"AgentKeyFields"}}]}},{"kind":"Field","name":{"kind":"Name","value":"token"}}]}}]}},{"kind":"FragmentDefinition","name":{"kind":"Name","value":"AgentKeyFields"},"typeCondition":{"kind":"NamedType","name":{"kind":"Name","value":"AgentKey"}},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"keyId"}},{"kind":"Field","name":{"kind":"Name","value":"name"}},{"kind":"Field","name":{"kind":"Name","value":"enabled"}},{"kind":"Field","name":{"kind":"Name","value":"maxRole"}},{"kind":"Field","name":{"kind":"Name","value":"allowWrites"}},{"kind":"Field","name":{"kind":"Name","value":"operationScopes"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"name"}}]}},{"kind":"Field","name":{"kind":"Name","value":"lastUsedAt"}},{"kind":"Field","name":{"kind":"Name","value":"createdAt"}},{"kind":"Field","name":{"kind":"Name","value":"updatedAt"}}]}}]} as unknown as DocumentNode<RegenerateAgentKeyMutation, RegenerateAgentKeyMutationVariables>;
+export const UpdateAgentKeyDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"UpdateAgentKey"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"id"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"ID"}}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"input"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"UpdateAgentKeyInput"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"updateAgentKey"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"id"},"value":{"kind":"Variable","name":{"kind":"Name","value":"id"}}},{"kind":"Argument","name":{"kind":"Name","value":"input"},"value":{"kind":"Variable","name":{"kind":"Name","value":"input"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"FragmentSpread","name":{"kind":"Name","value":"AgentKeyFields"}}]}}]}},{"kind":"FragmentDefinition","name":{"kind":"Name","value":"AgentKeyFields"},"typeCondition":{"kind":"NamedType","name":{"kind":"Name","value":"AgentKey"}},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"keyId"}},{"kind":"Field","name":{"kind":"Name","value":"name"}},{"kind":"Field","name":{"kind":"Name","value":"enabled"}},{"kind":"Field","name":{"kind":"Name","value":"maxRole"}},{"kind":"Field","name":{"kind":"Name","value":"allowWrites"}},{"kind":"Field","name":{"kind":"Name","value":"operationScopes"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"name"}}]}},{"kind":"Field","name":{"kind":"Name","value":"lastUsedAt"}},{"kind":"Field","name":{"kind":"Name","value":"createdAt"}},{"kind":"Field","name":{"kind":"Name","value":"updatedAt"}}]}}]} as unknown as DocumentNode<UpdateAgentKeyMutation, UpdateAgentKeyMutationVariables>;
+export const SetAgentKeyEnabledDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"SetAgentKeyEnabled"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"id"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"ID"}}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"enabled"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"Boolean"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"setAgentKeyEnabled"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"id"},"value":{"kind":"Variable","name":{"kind":"Name","value":"id"}}},{"kind":"Argument","name":{"kind":"Name","value":"enabled"},"value":{"kind":"Variable","name":{"kind":"Name","value":"enabled"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"FragmentSpread","name":{"kind":"Name","value":"AgentKeyFields"}}]}}]}},{"kind":"FragmentDefinition","name":{"kind":"Name","value":"AgentKeyFields"},"typeCondition":{"kind":"NamedType","name":{"kind":"Name","value":"AgentKey"}},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"keyId"}},{"kind":"Field","name":{"kind":"Name","value":"name"}},{"kind":"Field","name":{"kind":"Name","value":"enabled"}},{"kind":"Field","name":{"kind":"Name","value":"maxRole"}},{"kind":"Field","name":{"kind":"Name","value":"allowWrites"}},{"kind":"Field","name":{"kind":"Name","value":"operationScopes"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"name"}}]}},{"kind":"Field","name":{"kind":"Name","value":"lastUsedAt"}},{"kind":"Field","name":{"kind":"Name","value":"createdAt"}},{"kind":"Field","name":{"kind":"Name","value":"updatedAt"}}]}}]} as unknown as DocumentNode<SetAgentKeyEnabledMutation, SetAgentKeyEnabledMutationVariables>;
+export const DeleteAgentKeyDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"DeleteAgentKey"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"id"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"ID"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"deleteAgentKey"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"id"},"value":{"kind":"Variable","name":{"kind":"Name","value":"id"}}}]}]}}]} as unknown as DocumentNode<DeleteAgentKeyMutation, DeleteAgentKeyMutationVariables>;
 export const MyApiKeyDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"query","name":{"kind":"Name","value":"MyAPIKey"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"myAPIKey"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"FragmentSpread","name":{"kind":"Name","value":"APIKeyFields"}}]}}]}},{"kind":"FragmentDefinition","name":{"kind":"Name","value":"APIKeyFields"},"typeCondition":{"kind":"NamedType","name":{"kind":"Name","value":"APIKey"}},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"keyId"}},{"kind":"Field","name":{"kind":"Name","value":"enabled"}},{"kind":"Field","name":{"kind":"Name","value":"lastUsedAt"}},{"kind":"Field","name":{"kind":"Name","value":"createdAt"}},{"kind":"Field","name":{"kind":"Name","value":"updatedAt"}}]}}]} as unknown as DocumentNode<MyApiKeyQuery, MyApiKeyQueryVariables>;
 export const CreateMyApiKeyDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"CreateMyAPIKey"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"createMyAPIKey"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"apiKey"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"FragmentSpread","name":{"kind":"Name","value":"APIKeyFields"}}]}},{"kind":"Field","name":{"kind":"Name","value":"token"}}]}}]}},{"kind":"FragmentDefinition","name":{"kind":"Name","value":"APIKeyFields"},"typeCondition":{"kind":"NamedType","name":{"kind":"Name","value":"APIKey"}},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"keyId"}},{"kind":"Field","name":{"kind":"Name","value":"enabled"}},{"kind":"Field","name":{"kind":"Name","value":"lastUsedAt"}},{"kind":"Field","name":{"kind":"Name","value":"createdAt"}},{"kind":"Field","name":{"kind":"Name","value":"updatedAt"}}]}}]} as unknown as DocumentNode<CreateMyApiKeyMutation, CreateMyApiKeyMutationVariables>;
 export const RegenerateMyApiKeyDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"RegenerateMyAPIKey"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"regenerateMyAPIKey"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"apiKey"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"FragmentSpread","name":{"kind":"Name","value":"APIKeyFields"}}]}},{"kind":"Field","name":{"kind":"Name","value":"token"}}]}}]}},{"kind":"FragmentDefinition","name":{"kind":"Name","value":"APIKeyFields"},"typeCondition":{"kind":"NamedType","name":{"kind":"Name","value":"APIKey"}},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"keyId"}},{"kind":"Field","name":{"kind":"Name","value":"enabled"}},{"kind":"Field","name":{"kind":"Name","value":"lastUsedAt"}},{"kind":"Field","name":{"kind":"Name","value":"createdAt"}},{"kind":"Field","name":{"kind":"Name","value":"updatedAt"}}]}}]} as unknown as DocumentNode<RegenerateMyApiKeyMutation, RegenerateMyApiKeyMutationVariables>;

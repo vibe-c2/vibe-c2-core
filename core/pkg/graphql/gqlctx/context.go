@@ -15,7 +15,13 @@
 // We need to transfer the auth data from Gin's world into Go's standard context.
 package gqlctx
 
-import "context"
+import (
+	"context"
+	"slices"
+
+	"github.com/google/uuid"
+	"github.com/vibe-c2/vibe-c2-core/core/pkg/models"
+)
 
 // authKey is a private type used as a context key. Using a private type
 // (instead of a string like "auth") prevents other packages from
@@ -29,6 +35,44 @@ type AuthInfo struct {
 	Username         string   // The user's display name
 	Roles            []string // RBAC roles like ["admin"] or ["user"]
 	CurrentSessionID string   // Session UUID from the JWT (for isCurrent detection)
+
+	// Agent is non-nil only when the request authenticated with a delegated
+	// agent key. UserID/Username/Roles still describe the OWNER — the agent
+	// is not an account — so every existing check keeps working unchanged.
+	// What this field adds is a ceiling: see authorization.AuthorizeOperationRole.
+	Agent *AgentInfo
+}
+
+// AgentInfo is the authority-relevant subset of an agent key. Deliberately not
+// the models.AgentKey row: resolvers have no business reaching the secret hash,
+// and listing the fields here documents exactly what can narrow a request.
+type AgentInfo struct {
+	AgentKeyID      string
+	KeyID           string
+	Name            string
+	OperationScopes []uuid.UUID
+	MaxRole         models.OperationRole
+	AllowWrites     bool
+}
+
+// AllowsOperation reports whether the key may act in the given operation.
+// An empty OperationScopes means "any operation the owner belongs to" — the
+// membership check itself is separate, so this is a narrowing filter and never
+// a grant.
+func (a *AgentInfo) AllowsOperation(operationID uuid.UUID) bool {
+	if len(a.OperationScopes) == 0 {
+		return true
+	}
+	return slices.Contains(a.OperationScopes, operationID)
+}
+
+// Label renders the agent for display and audit, e.g.
+// "Claude — Nightfall (via eugen)".
+func (a *AgentInfo) Label(ownerUsername string) string {
+	if ownerUsername == "" {
+		return a.Name
+	}
+	return a.Name + " (via " + ownerUsername + ")"
 }
 
 // WithAuthInfo stores authentication data in the context.

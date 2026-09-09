@@ -51,6 +51,7 @@ type Repositories struct {
 	Task               repository.ITaskRepository
 	OperationEvent     repository.IOperationEventRepository
 	APIKey             repository.IAPIKeyRepository
+	AgentKey           repository.IAgentKeyRepository
 	ModuleRegistry     repository.IModuleRegistryRepository
 }
 
@@ -123,6 +124,7 @@ func NewApp() (*App, error) {
 		Task:               repository.NewTaskRepository(db),
 		OperationEvent:     repository.NewOperationEventRepository(db),
 		APIKey:             repository.NewAPIKeyRepository(db),
+		AgentKey:           repository.NewAgentKeyRepository(db),
 		ModuleRegistry:     repository.NewModuleRegistryRepository(db),
 	}
 

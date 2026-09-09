@@ -31,6 +31,7 @@ type Config = graphql.Config[ResolverRoot, DirectiveRoot, ComplexityRoot]
 
 type ResolverRoot interface {
 	APIKey() APIKeyResolver
+	AgentKey() AgentKeyResolver
 	Credential() CredentialResolver
 	CredentialComment() CredentialCommentResolver
 	Hash() HashResolver
@@ -67,6 +68,24 @@ type ComplexityRoot struct {
 	APIKeyWithSecret struct {
 		APIKey func(childComplexity int) int
 		Token  func(childComplexity int) int
+	}
+
+	AgentKey struct {
+		AllowWrites     func(childComplexity int) int
+		CreatedAt       func(childComplexity int) int
+		Enabled         func(childComplexity int) int
+		ID              func(childComplexity int) int
+		KeyID           func(childComplexity int) int
+		LastUsedAt      func(childComplexity int) int
+		MaxRole         func(childComplexity int) int
+		Name            func(childComplexity int) int
+		OperationScopes func(childComplexity int) int
+		UpdatedAt       func(childComplexity int) int
+	}
+
+	AgentKeyWithSecret struct {
+		AgentKey func(childComplexity int) int
+		Token    func(childComplexity int) int
 	}
 
 	BulkImportHashesResult struct {
@@ -241,6 +260,7 @@ type ComplexityRoot struct {
 		AdminRevokeSession            func(childComplexity int, id string) int
 		BulkImportHashes              func(childComplexity int, operationID string, input model.BulkImportHashesInput) int
 		ChangeTaskStage               func(childComplexity int, input model.ChangeTaskStageInput) int
+		CreateAgentKey                func(childComplexity int, input model.CreateAgentKeyInput) int
 		CreateCredential              func(childComplexity int, operationID string, input model.CreateCredentialInput) int
 		CreateCustomTimelineEvent     func(childComplexity int, operationID string, input model.CreateCustomTimelineEventInput) int
 		CreateHash                    func(childComplexity int, operationID string, input model.CreateHashInput) int
@@ -251,6 +271,7 @@ type ComplexityRoot struct {
 		CreateUser                    func(childComplexity int, input model.CreateUserInput) int
 		CreateWikiDocument            func(childComplexity int, operationID string, input model.CreateWikiDocumentInput) int
 		CreateWikiDocumentBackup      func(childComplexity int, documentID string, description *string) int
+		DeleteAgentKey                func(childComplexity int, id string) int
 		DeleteCredential              func(childComplexity int, id string) int
 		DeleteCredentialComment       func(childComplexity int, credentialID string, commentID string) int
 		DeleteCustomTimelineEvent     func(childComplexity int, id string) int
@@ -268,6 +289,7 @@ type ComplexityRoot struct {
 		MarkHashCracked               func(childComplexity int, id string, input model.MarkHashCrackedInput) int
 		PermanentlyDeleteWikiDocument func(childComplexity int, id string) int
 		PurgeTask                     func(childComplexity int, id string) int
+		RegenerateAgentKey            func(childComplexity int, id string) int
 		RegenerateMyAPIKey            func(childComplexity int) int
 		RemoveModule                  func(childComplexity int, instance string) int
 		RemoveOperationMember         func(childComplexity int, operationID string, userID string) int
@@ -277,6 +299,7 @@ type ComplexityRoot struct {
 		RestoreWikiDocumentBackup     func(childComplexity int, documentID string, backupID string) int
 		RevokeAllMySessions           func(childComplexity int) int
 		RevokeSession                 func(childComplexity int, id string) int
+		SetAgentKeyEnabled            func(childComplexity int, id string, enabled bool) int
 		SetHiddenIdentities           func(childComplexity int, names []string) int
 		SetMyAPIKeyEnabled            func(childComplexity int, enabled bool) int
 		SetTaskAssignees              func(childComplexity int, taskID string, assigneeIds []string) int
@@ -284,6 +307,7 @@ type ComplexityRoot struct {
 		SetTaskWikiReferences         func(childComplexity int, taskID string, wikiIds []string) int
 		SetWikiDocumentTemplate       func(childComplexity int, id string, isTemplate bool) int
 		TrackWikiDocumentVisit        func(childComplexity int, documentID string) int
+		UpdateAgentKey                func(childComplexity int, id string, input model.UpdateAgentKeyInput) int
 		UpdateCredential              func(childComplexity int, id string, input model.UpdateCredentialInput) int
 		UpdateCredentialComment       func(childComplexity int, credentialID string, commentID string, text string) int
 		UpdateCustomTimelineEvent     func(childComplexity int, id string, input model.UpdateCustomTimelineEventInput) int
@@ -360,6 +384,7 @@ type ComplexityRoot struct {
 		Me                                 func(childComplexity int) int
 		Modules                            func(childComplexity int, status []string) int
 		MyAPIKey                           func(childComplexity int) int
+		MyAgentKeys                        func(childComplexity int) int
 		MyCredentialTags                   func(childComplexity int, operationIds []string) int
 		MyCredentials                      func(childComplexity int, operationIds []string, search *string, searchFields []model.CredentialSearchField, typeArg *models.CredentialType, tags []string, validOnly *bool, sortBy *model.CredentialSortField, sortDirection *model.SortDirection, first *int, after *string, last *int, before *string) int
 		MyHashTags                         func(childComplexity int, operationIds []string) int
@@ -718,6 +743,15 @@ type APIKeyResolver interface {
 	CreatedAt(ctx context.Context, obj *models.APIKey) (string, error)
 	UpdatedAt(ctx context.Context, obj *models.APIKey) (string, error)
 }
+type AgentKeyResolver interface {
+	ID(ctx context.Context, obj *models.AgentKey) (string, error)
+
+	OperationScopes(ctx context.Context, obj *models.AgentKey) ([]*models.Operation, error)
+
+	LastUsedAt(ctx context.Context, obj *models.AgentKey) (*string, error)
+	CreatedAt(ctx context.Context, obj *models.AgentKey) (string, error)
+	UpdatedAt(ctx context.Context, obj *models.AgentKey) (string, error)
+}
 type CredentialResolver interface {
 	ID(ctx context.Context, obj *models.Credential) (string, error)
 	OperationID(ctx context.Context, obj *models.Credential) (string, error)
@@ -781,6 +815,11 @@ type MutationResolver interface {
 	AddOperationMember(ctx context.Context, operationID string, userID string, role models.OperationRole) (*models.Operation, error)
 	RemoveOperationMember(ctx context.Context, operationID string, userID string) (*models.Operation, error)
 	UpdateOperationMemberRole(ctx context.Context, operationID string, userID string, role models.OperationRole) (*models.Operation, error)
+	CreateAgentKey(ctx context.Context, input model.CreateAgentKeyInput) (*model.AgentKeyWithSecret, error)
+	RegenerateAgentKey(ctx context.Context, id string) (*model.AgentKeyWithSecret, error)
+	UpdateAgentKey(ctx context.Context, id string, input model.UpdateAgentKeyInput) (*models.AgentKey, error)
+	SetAgentKeyEnabled(ctx context.Context, id string, enabled bool) (*models.AgentKey, error)
+	DeleteAgentKey(ctx context.Context, id string) (bool, error)
 	CreateMyAPIKey(ctx context.Context) (*model.APIKeyWithSecret, error)
 	RegenerateMyAPIKey(ctx context.Context) (*model.APIKeyWithSecret, error)
 	SetMyAPIKeyEnabled(ctx context.Context, enabled bool) (*models.APIKey, error)
@@ -850,6 +889,7 @@ type QueryResolver interface {
 	Operation(ctx context.Context, id string) (*models.Operation, error)
 	Operations(ctx context.Context, search *string, sortBy *model.OperationSortField, sortDirection *model.SortDirection, first *int, after *string, last *int, before *string) (*model.OperationConnection, error)
 	MyOperationRole(ctx context.Context, operationID string) (*models.OperationRole, error)
+	MyAgentKeys(ctx context.Context) ([]*models.AgentKey, error)
 	MyAPIKey(ctx context.Context) (*models.APIKey, error)
 	Credential(ctx context.Context, id string) (*models.Credential, error)
 	Credentials(ctx context.Context, operationID string, search *string, searchFields []model.CredentialSearchField, typeArg *models.CredentialType, tags []string, validOnly *bool, sortBy *model.CredentialSortField, sortDirection *model.SortDirection, first *int, after *string, last *int, before *string) (*model.CredentialConnection, error)
@@ -1060,6 +1100,80 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.APIKeyWithSecret.Token(childComplexity), true
+
+	case "AgentKey.allowWrites":
+		if e.ComplexityRoot.AgentKey.AllowWrites == nil {
+			break
+		}
+
+		return e.ComplexityRoot.AgentKey.AllowWrites(childComplexity), true
+	case "AgentKey.createdAt":
+		if e.ComplexityRoot.AgentKey.CreatedAt == nil {
+			break
+		}
+
+		return e.ComplexityRoot.AgentKey.CreatedAt(childComplexity), true
+	case "AgentKey.enabled":
+		if e.ComplexityRoot.AgentKey.Enabled == nil {
+			break
+		}
+
+		return e.ComplexityRoot.AgentKey.Enabled(childComplexity), true
+	case "AgentKey.id":
+		if e.ComplexityRoot.AgentKey.ID == nil {
+			break
+		}
+
+		return e.ComplexityRoot.AgentKey.ID(childComplexity), true
+	case "AgentKey.keyId":
+		if e.ComplexityRoot.AgentKey.KeyID == nil {
+			break
+		}
+
+		return e.ComplexityRoot.AgentKey.KeyID(childComplexity), true
+	case "AgentKey.lastUsedAt":
+		if e.ComplexityRoot.AgentKey.LastUsedAt == nil {
+			break
+		}
+
+		return e.ComplexityRoot.AgentKey.LastUsedAt(childComplexity), true
+	case "AgentKey.maxRole":
+		if e.ComplexityRoot.AgentKey.MaxRole == nil {
+			break
+		}
+
+		return e.ComplexityRoot.AgentKey.MaxRole(childComplexity), true
+	case "AgentKey.name":
+		if e.ComplexityRoot.AgentKey.Name == nil {
+			break
+		}
+
+		return e.ComplexityRoot.AgentKey.Name(childComplexity), true
+	case "AgentKey.operationScopes":
+		if e.ComplexityRoot.AgentKey.OperationScopes == nil {
+			break
+		}
+
+		return e.ComplexityRoot.AgentKey.OperationScopes(childComplexity), true
+	case "AgentKey.updatedAt":
+		if e.ComplexityRoot.AgentKey.UpdatedAt == nil {
+			break
+		}
+
+		return e.ComplexityRoot.AgentKey.UpdatedAt(childComplexity), true
+
+	case "AgentKeyWithSecret.agentKey":
+		if e.ComplexityRoot.AgentKeyWithSecret.AgentKey == nil {
+			break
+		}
+
+		return e.ComplexityRoot.AgentKeyWithSecret.AgentKey(childComplexity), true
+	case "AgentKeyWithSecret.token":
+		if e.ComplexityRoot.AgentKeyWithSecret.Token == nil {
+			break
+		}
+
+		return e.ComplexityRoot.AgentKeyWithSecret.Token(childComplexity), true
 
 	case "BulkImportHashesResult.added":
 		if e.ComplexityRoot.BulkImportHashesResult.Added == nil {
@@ -1799,6 +1913,17 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.Mutation.ChangeTaskStage(childComplexity, args["input"].(model.ChangeTaskStageInput)), true
+	case "Mutation.createAgentKey":
+		if e.ComplexityRoot.Mutation.CreateAgentKey == nil {
+			break
+		}
+
+		args, err := ec.field_Mutation_createAgentKey_args(ctx, rawArgs)
+		if err != nil {
+			return 0, false
+		}
+
+		return e.ComplexityRoot.Mutation.CreateAgentKey(childComplexity, args["input"].(model.CreateAgentKeyInput)), true
 	case "Mutation.createCredential":
 		if e.ComplexityRoot.Mutation.CreateCredential == nil {
 			break
@@ -1904,6 +2029,17 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.Mutation.CreateWikiDocumentBackup(childComplexity, args["documentId"].(string), args["description"].(*string)), true
+	case "Mutation.deleteAgentKey":
+		if e.ComplexityRoot.Mutation.DeleteAgentKey == nil {
+			break
+		}
+
+		args, err := ec.field_Mutation_deleteAgentKey_args(ctx, rawArgs)
+		if err != nil {
+			return 0, false
+		}
+
+		return e.ComplexityRoot.Mutation.DeleteAgentKey(childComplexity, args["id"].(string)), true
 	case "Mutation.deleteCredential":
 		if e.ComplexityRoot.Mutation.DeleteCredential == nil {
 			break
@@ -2086,6 +2222,17 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.Mutation.PurgeTask(childComplexity, args["id"].(string)), true
+	case "Mutation.regenerateAgentKey":
+		if e.ComplexityRoot.Mutation.RegenerateAgentKey == nil {
+			break
+		}
+
+		args, err := ec.field_Mutation_regenerateAgentKey_args(ctx, rawArgs)
+		if err != nil {
+			return 0, false
+		}
+
+		return e.ComplexityRoot.Mutation.RegenerateAgentKey(childComplexity, args["id"].(string)), true
 	case "Mutation.regenerateMyAPIKey":
 		if e.ComplexityRoot.Mutation.RegenerateMyAPIKey == nil {
 			break
@@ -2175,6 +2322,17 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.Mutation.RevokeSession(childComplexity, args["id"].(string)), true
+	case "Mutation.setAgentKeyEnabled":
+		if e.ComplexityRoot.Mutation.SetAgentKeyEnabled == nil {
+			break
+		}
+
+		args, err := ec.field_Mutation_setAgentKeyEnabled_args(ctx, rawArgs)
+		if err != nil {
+			return 0, false
+		}
+
+		return e.ComplexityRoot.Mutation.SetAgentKeyEnabled(childComplexity, args["id"].(string), args["enabled"].(bool)), true
 	case "Mutation.setHiddenIdentities":
 		if e.ComplexityRoot.Mutation.SetHiddenIdentities == nil {
 			break
@@ -2252,6 +2410,17 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.Mutation.TrackWikiDocumentVisit(childComplexity, args["documentId"].(string)), true
+	case "Mutation.updateAgentKey":
+		if e.ComplexityRoot.Mutation.UpdateAgentKey == nil {
+			break
+		}
+
+		args, err := ec.field_Mutation_updateAgentKey_args(ctx, rawArgs)
+		if err != nil {
+			return 0, false
+		}
+
+		return e.ComplexityRoot.Mutation.UpdateAgentKey(childComplexity, args["id"].(string), args["input"].(model.UpdateAgentKeyInput)), true
 	case "Mutation.updateCredential":
 		if e.ComplexityRoot.Mutation.UpdateCredential == nil {
 			break
@@ -2656,6 +2825,12 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.Query.MyAPIKey(childComplexity), true
+	case "Query.myAgentKeys":
+		if e.ComplexityRoot.Query.MyAgentKeys == nil {
+			break
+		}
+
+		return e.ComplexityRoot.Query.MyAgentKeys(childComplexity), true
 	case "Query.myCredentialTags":
 		if e.ComplexityRoot.Query.MyCredentialTags == nil {
 			break
@@ -4381,6 +4556,7 @@ func (e *executableSchema) Exec(ctx context.Context) graphql.ResponseHandler {
 	inputUnmarshalMap := graphql.BuildUnmarshalerMap(
 		ec.unmarshalInputBulkImportHashesInput,
 		ec.unmarshalInputChangeTaskStageInput,
+		ec.unmarshalInputCreateAgentKeyInput,
 		ec.unmarshalInputCreateCredentialInput,
 		ec.unmarshalInputCreateCustomTimelineEventInput,
 		ec.unmarshalInputCreateHashInput,
@@ -4396,6 +4572,7 @@ func (e *executableSchema) Exec(ctx context.Context) graphql.ResponseHandler {
 		ec.unmarshalInputNetworkInterfaceInput,
 		ec.unmarshalInputReorderWikiDocumentSiblingsInput,
 		ec.unmarshalInputRouteInput,
+		ec.unmarshalInputUpdateAgentKeyInput,
 		ec.unmarshalInputUpdateCredentialInput,
 		ec.unmarshalInputUpdateCustomTimelineEventInput,
 		ec.unmarshalInputUpdateHashInput,
@@ -4496,6 +4673,113 @@ func newExecutionContext(
 }
 
 var sources = []*ast.Source{
+	{Name: "../schema/agent_keys.graphql", Input: `# =============================================================================
+# Agent Keys
+# =============================================================================
+#
+# Delegated credentials a user mints for an AI agent to reach the MCP endpoint
+# at POST /api/v1/mcp. They are a separate principal from APIKey, not a flag on
+# it, for three reasons:
+#
+#   - Attribution. The Timeline and the activity rail say "Claude (via alice)".
+#     That is impossible if the agent authenticates as the user.
+#   - Revocation. Disabling the agent must not disable the user's own scripts.
+#   - Scope. An agent key narrows the owner's authority and can never widen it.
+#
+# Authority is an INTERSECTION, resolved live on every request:
+#
+#     effective role in operation X
+#         = min(owner's membership role in X, key.maxRole)
+#         , and only if X is in key.operationScopes (or that list is empty)
+#
+# Nothing is snapshotted. Remove the owner from an operation, or strip their
+# roles, and the key's reach shrinks on its next call with no key edit needed.
+# The app-admin bypass that applies to humans deliberately does NOT apply to
+# agents — an app admin's viewer-capped agent is a viewer.
+#
+# Unlike API keys there may be several per user, so an operator can run one
+# narrow long-lived agent and a broader ad-hoc one and revoke them separately.
+#
+# The raw token (vca_<key_id>_<secret>) is shown exactly once at creation and
+# regeneration; only the public key_id and a SHA-256 of the random tail are
+# stored. Requests using it bypass CSRF (no cookie surface) and are rejected on
+# every route except /api/v1/mcp.
+
+# AgentKey is the public, listable representation. The secret is never on it.
+type AgentKey {
+  id: ID! # Stable row UUID. Survives regeneration, unlike keyId.
+  keyId: String! # Public prefix carried in the token, e.g. "vca_a1b2c3d4e5f6"
+  name: String! # Operator-supplied, e.g. "Claude — Operation Nightfall"
+  enabled: Boolean! # Disabled keys return 401 on use
+  # Operations this key may act in. Empty means "every operation the owner is
+  # a member of" — a filter, never a grant: listing an operation here does
+  # nothing unless the owner is also a member of it.
+  operationScopes: [Operation!]!
+  # Ceiling on the effective operation role. Never ADMIN: agent keys exist to
+  # work inside an operation, not to administer membership or delete it.
+  maxRole: OperationRole!
+  # Gates every mutating MCP tool. False makes the key strictly observational
+  # even where maxRole would otherwise permit changes.
+  allowWrites: Boolean!
+  lastUsedAt: String # ISO 8601 — null if never used
+  createdAt: String!
+  updatedAt: String!
+}
+
+# AgentKeyWithSecret is returned ONLY by create/regenerate. The token field is
+# the only chance the client has to capture it — there is no "show it again".
+type AgentKeyWithSecret {
+  agentKey: AgentKey!
+  token: String! # vca_<key_id>_<secret> — show once, then discard
+}
+
+input CreateAgentKeyInput {
+  name: String!
+  # Omit or pass an empty list for "every operation the owner belongs to".
+  operationScopes: [ID!]
+  maxRole: OperationRole! # VIEWER or OPERATOR; ADMIN is rejected
+  allowWrites: Boolean! = false
+}
+
+# Every field optional — only what is provided is changed. Passing an empty
+# list for operationScopes widens the key back to "all the owner's operations",
+# which is the one case where omitting and clearing differ.
+input UpdateAgentKeyInput {
+  name: String
+  operationScopes: [ID!]
+  maxRole: OperationRole
+  allowWrites: Boolean
+}
+
+extend type Query {
+  # The caller's agent keys, oldest first. Secrets are never included.
+  myAgentKeys: [AgentKey!]! @hasPermission(permission: "*")
+}
+
+extend type Mutation {
+  # Mints a key and returns its one and only view of the raw token.
+  # Rejects maxRole: ADMIN, and rejects scoping to operations the caller is
+  # not a member of — a key that could never work is a configuration error
+  # worth surfacing at creation rather than at first use.
+  createAgentKey(input: CreateAgentKeyInput!): AgentKeyWithSecret!
+    @hasPermission(permission: "*")
+
+  # Rotates the secret in place, keeping id, name and scope. The old token
+  # 401s immediately.
+  regenerateAgentKey(id: ID!): AgentKeyWithSecret!
+    @hasPermission(permission: "*")
+
+  # Changes scope without rotating the secret.
+  updateAgentKey(id: ID!, input: UpdateAgentKeyInput!): AgentKey!
+    @hasPermission(permission: "*")
+
+  # The kill switch. Stops an agent mid-run without destroying the token.
+  setAgentKeyEnabled(id: ID!, enabled: Boolean!): AgentKey!
+    @hasPermission(permission: "*")
+
+  deleteAgentKey(id: ID!): Boolean! @hasPermission(permission: "*")
+}
+`, BuiltIn: false},
 	{Name: "../schema/api_keys.graphql", Input: `# =============================================================================
 # API Keys
 # =============================================================================
@@ -6750,7 +7034,8 @@ extend type Query {
   # document can't be moved under its own subtree — so the picker can hide
   # invalid targets without pulling the whole wikiDocumentTree just to walk
   # parent links client-side. Cost scales with subtree size. Returns an empty
-  # list if the document doesn't exist or the caller lacks access.
+  # list for a missing or trashed document; denies with an error if the caller
+  # lacks access to the operation.
   wikiDocumentDescendantIds(documentId: ID!): [ID!]!
     @hasPermission(permission: "operation:member")
 
@@ -7058,6 +7343,17 @@ func (ec *executionContext) field_Mutation_changeTaskStage_args(ctx context.Cont
 	return args, nil
 }
 
+func (ec *executionContext) field_Mutation_createAgentKey_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
+	var err error
+	args := map[string]any{}
+	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "input", ec.unmarshalNCreateAgentKeyInput2githubᚗcomᚋvibeᚑc2ᚋvibeᚑc2ᚑcoreᚋcoreᚋpkgᚋgraphqlᚋmodelᚐCreateAgentKeyInput)
+	if err != nil {
+		return nil, err
+	}
+	args["input"] = arg0
+	return args, nil
+}
+
 func (ec *executionContext) field_Mutation_createCredential_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
 	var err error
 	args := map[string]any{}
@@ -7184,6 +7480,17 @@ func (ec *executionContext) field_Mutation_createWikiDocument_args(ctx context.C
 		return nil, err
 	}
 	args["input"] = arg1
+	return args, nil
+}
+
+func (ec *executionContext) field_Mutation_deleteAgentKey_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
+	var err error
+	args := map[string]any{}
+	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "id", ec.unmarshalNID2string)
+	if err != nil {
+		return nil, err
+	}
+	args["id"] = arg0
 	return args, nil
 }
 
@@ -7408,6 +7715,17 @@ func (ec *executionContext) field_Mutation_purgeTask_args(ctx context.Context, r
 	return args, nil
 }
 
+func (ec *executionContext) field_Mutation_regenerateAgentKey_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
+	var err error
+	args := map[string]any{}
+	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "id", ec.unmarshalNID2string)
+	if err != nil {
+		return nil, err
+	}
+	args["id"] = arg0
+	return args, nil
+}
+
 func (ec *executionContext) field_Mutation_removeModule_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
 	var err error
 	args := map[string]any{}
@@ -7497,6 +7815,22 @@ func (ec *executionContext) field_Mutation_revokeSession_args(ctx context.Contex
 		return nil, err
 	}
 	args["id"] = arg0
+	return args, nil
+}
+
+func (ec *executionContext) field_Mutation_setAgentKeyEnabled_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
+	var err error
+	args := map[string]any{}
+	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "id", ec.unmarshalNID2string)
+	if err != nil {
+		return nil, err
+	}
+	args["id"] = arg0
+	arg1, err := graphql.ProcessArgField(ctx, rawArgs, "enabled", ec.unmarshalNBoolean2bool)
+	if err != nil {
+		return nil, err
+	}
+	args["enabled"] = arg1
 	return args, nil
 }
 
@@ -7594,6 +7928,22 @@ func (ec *executionContext) field_Mutation_trackWikiDocumentVisit_args(ctx conte
 		return nil, err
 	}
 	args["documentId"] = arg0
+	return args, nil
+}
+
+func (ec *executionContext) field_Mutation_updateAgentKey_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
+	var err error
+	args := map[string]any{}
+	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "id", ec.unmarshalNID2string)
+	if err != nil {
+		return nil, err
+	}
+	args["id"] = arg0
+	arg1, err := graphql.ProcessArgField(ctx, rawArgs, "input", ec.unmarshalNUpdateAgentKeyInput2githubᚗcomᚋvibeᚑc2ᚋvibeᚑc2ᚑcoreᚋcoreᚋpkgᚋgraphqlᚋmodelᚐUpdateAgentKeyInput)
+	if err != nil {
+		return nil, err
+	}
+	args["input"] = arg1
 	return args, nil
 }
 
@@ -9332,6 +9682,390 @@ func (ec *executionContext) _APIKeyWithSecret_token(ctx context.Context, field g
 func (ec *executionContext) fieldContext_APIKeyWithSecret_token(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
 	fc = &graphql.FieldContext{
 		Object:     "APIKeyWithSecret",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _AgentKey_id(ctx context.Context, field graphql.CollectedField, obj *models.AgentKey) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_AgentKey_id,
+		func(ctx context.Context) (any, error) {
+			return ec.Resolvers.AgentKey().ID(ctx, obj)
+		},
+		nil,
+		ec.marshalNID2string,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_AgentKey_id(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "AgentKey",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type ID does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _AgentKey_keyId(ctx context.Context, field graphql.CollectedField, obj *models.AgentKey) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_AgentKey_keyId,
+		func(ctx context.Context) (any, error) {
+			return obj.KeyID, nil
+		},
+		nil,
+		ec.marshalNString2string,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_AgentKey_keyId(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "AgentKey",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _AgentKey_name(ctx context.Context, field graphql.CollectedField, obj *models.AgentKey) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_AgentKey_name,
+		func(ctx context.Context) (any, error) {
+			return obj.Name, nil
+		},
+		nil,
+		ec.marshalNString2string,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_AgentKey_name(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "AgentKey",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _AgentKey_enabled(ctx context.Context, field graphql.CollectedField, obj *models.AgentKey) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_AgentKey_enabled,
+		func(ctx context.Context) (any, error) {
+			return obj.Enabled, nil
+		},
+		nil,
+		ec.marshalNBoolean2bool,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_AgentKey_enabled(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "AgentKey",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Boolean does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _AgentKey_operationScopes(ctx context.Context, field graphql.CollectedField, obj *models.AgentKey) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_AgentKey_operationScopes,
+		func(ctx context.Context) (any, error) {
+			return ec.Resolvers.AgentKey().OperationScopes(ctx, obj)
+		},
+		nil,
+		ec.marshalNOperation2ᚕᚖgithubᚗcomᚋvibeᚑc2ᚋvibeᚑc2ᚑcoreᚋcoreᚋpkgᚋmodelsᚐOperationᚄ,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_AgentKey_operationScopes(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "AgentKey",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "id":
+				return ec.fieldContext_Operation_id(ctx, field)
+			case "name":
+				return ec.fieldContext_Operation_name(ctx, field)
+			case "description":
+				return ec.fieldContext_Operation_description(ctx, field)
+			case "members":
+				return ec.fieldContext_Operation_members(ctx, field)
+			case "createdAt":
+				return ec.fieldContext_Operation_createdAt(ctx, field)
+			case "updatedAt":
+				return ec.fieldContext_Operation_updatedAt(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type Operation", field.Name)
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _AgentKey_maxRole(ctx context.Context, field graphql.CollectedField, obj *models.AgentKey) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_AgentKey_maxRole,
+		func(ctx context.Context) (any, error) {
+			return obj.MaxRole, nil
+		},
+		nil,
+		ec.marshalNOperationRole2githubᚗcomᚋvibeᚑc2ᚋvibeᚑc2ᚑcoreᚋcoreᚋpkgᚋmodelsᚐOperationRole,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_AgentKey_maxRole(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "AgentKey",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type OperationRole does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _AgentKey_allowWrites(ctx context.Context, field graphql.CollectedField, obj *models.AgentKey) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_AgentKey_allowWrites,
+		func(ctx context.Context) (any, error) {
+			return obj.AllowWrites, nil
+		},
+		nil,
+		ec.marshalNBoolean2bool,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_AgentKey_allowWrites(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "AgentKey",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Boolean does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _AgentKey_lastUsedAt(ctx context.Context, field graphql.CollectedField, obj *models.AgentKey) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_AgentKey_lastUsedAt,
+		func(ctx context.Context) (any, error) {
+			return ec.Resolvers.AgentKey().LastUsedAt(ctx, obj)
+		},
+		nil,
+		ec.marshalOString2ᚖstring,
+		true,
+		false,
+	)
+}
+
+func (ec *executionContext) fieldContext_AgentKey_lastUsedAt(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "AgentKey",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _AgentKey_createdAt(ctx context.Context, field graphql.CollectedField, obj *models.AgentKey) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_AgentKey_createdAt,
+		func(ctx context.Context) (any, error) {
+			return ec.Resolvers.AgentKey().CreatedAt(ctx, obj)
+		},
+		nil,
+		ec.marshalNString2string,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_AgentKey_createdAt(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "AgentKey",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _AgentKey_updatedAt(ctx context.Context, field graphql.CollectedField, obj *models.AgentKey) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_AgentKey_updatedAt,
+		func(ctx context.Context) (any, error) {
+			return ec.Resolvers.AgentKey().UpdatedAt(ctx, obj)
+		},
+		nil,
+		ec.marshalNString2string,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_AgentKey_updatedAt(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "AgentKey",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _AgentKeyWithSecret_agentKey(ctx context.Context, field graphql.CollectedField, obj *model.AgentKeyWithSecret) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_AgentKeyWithSecret_agentKey,
+		func(ctx context.Context) (any, error) {
+			return obj.AgentKey, nil
+		},
+		nil,
+		ec.marshalNAgentKey2ᚖgithubᚗcomᚋvibeᚑc2ᚋvibeᚑc2ᚑcoreᚋcoreᚋpkgᚋmodelsᚐAgentKey,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_AgentKeyWithSecret_agentKey(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "AgentKeyWithSecret",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "id":
+				return ec.fieldContext_AgentKey_id(ctx, field)
+			case "keyId":
+				return ec.fieldContext_AgentKey_keyId(ctx, field)
+			case "name":
+				return ec.fieldContext_AgentKey_name(ctx, field)
+			case "enabled":
+				return ec.fieldContext_AgentKey_enabled(ctx, field)
+			case "operationScopes":
+				return ec.fieldContext_AgentKey_operationScopes(ctx, field)
+			case "maxRole":
+				return ec.fieldContext_AgentKey_maxRole(ctx, field)
+			case "allowWrites":
+				return ec.fieldContext_AgentKey_allowWrites(ctx, field)
+			case "lastUsedAt":
+				return ec.fieldContext_AgentKey_lastUsedAt(ctx, field)
+			case "createdAt":
+				return ec.fieldContext_AgentKey_createdAt(ctx, field)
+			case "updatedAt":
+				return ec.fieldContext_AgentKey_updatedAt(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type AgentKey", field.Name)
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _AgentKeyWithSecret_token(ctx context.Context, field graphql.CollectedField, obj *model.AgentKeyWithSecret) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_AgentKeyWithSecret_token,
+		func(ctx context.Context) (any, error) {
+			return obj.Token, nil
+		},
+		nil,
+		ec.marshalNString2string,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_AgentKeyWithSecret_token(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "AgentKeyWithSecret",
 		Field:      field,
 		IsMethod:   false,
 		IsResolver: false,
@@ -13926,6 +14660,357 @@ func (ec *executionContext) fieldContext_Mutation_updateOperationMemberRole(ctx 
 	}()
 	ctx = graphql.WithFieldContext(ctx, fc)
 	if fc.Args, err = ec.field_Mutation_updateOperationMemberRole_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
+		ec.Error(ctx, err)
+		return fc, err
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Mutation_createAgentKey(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Mutation_createAgentKey,
+		func(ctx context.Context) (any, error) {
+			fc := graphql.GetFieldContext(ctx)
+			return ec.Resolvers.Mutation().CreateAgentKey(ctx, fc.Args["input"].(model.CreateAgentKeyInput))
+		},
+		func(ctx context.Context, next graphql.Resolver) graphql.Resolver {
+			directive0 := next
+
+			directive1 := func(ctx context.Context) (any, error) {
+				permission, err := ec.unmarshalNString2string(ctx, "*")
+				if err != nil {
+					var zeroVal *model.AgentKeyWithSecret
+					return zeroVal, err
+				}
+				if ec.Directives.HasPermission == nil {
+					var zeroVal *model.AgentKeyWithSecret
+					return zeroVal, errors.New("directive hasPermission is not implemented")
+				}
+				return ec.Directives.HasPermission(ctx, nil, directive0, permission)
+			}
+
+			next = directive1
+			return next
+		},
+		ec.marshalNAgentKeyWithSecret2ᚖgithubᚗcomᚋvibeᚑc2ᚋvibeᚑc2ᚑcoreᚋcoreᚋpkgᚋgraphqlᚋmodelᚐAgentKeyWithSecret,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_Mutation_createAgentKey(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Mutation",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "agentKey":
+				return ec.fieldContext_AgentKeyWithSecret_agentKey(ctx, field)
+			case "token":
+				return ec.fieldContext_AgentKeyWithSecret_token(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type AgentKeyWithSecret", field.Name)
+		},
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			err = ec.Recover(ctx, r)
+			ec.Error(ctx, err)
+		}
+	}()
+	ctx = graphql.WithFieldContext(ctx, fc)
+	if fc.Args, err = ec.field_Mutation_createAgentKey_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
+		ec.Error(ctx, err)
+		return fc, err
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Mutation_regenerateAgentKey(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Mutation_regenerateAgentKey,
+		func(ctx context.Context) (any, error) {
+			fc := graphql.GetFieldContext(ctx)
+			return ec.Resolvers.Mutation().RegenerateAgentKey(ctx, fc.Args["id"].(string))
+		},
+		func(ctx context.Context, next graphql.Resolver) graphql.Resolver {
+			directive0 := next
+
+			directive1 := func(ctx context.Context) (any, error) {
+				permission, err := ec.unmarshalNString2string(ctx, "*")
+				if err != nil {
+					var zeroVal *model.AgentKeyWithSecret
+					return zeroVal, err
+				}
+				if ec.Directives.HasPermission == nil {
+					var zeroVal *model.AgentKeyWithSecret
+					return zeroVal, errors.New("directive hasPermission is not implemented")
+				}
+				return ec.Directives.HasPermission(ctx, nil, directive0, permission)
+			}
+
+			next = directive1
+			return next
+		},
+		ec.marshalNAgentKeyWithSecret2ᚖgithubᚗcomᚋvibeᚑc2ᚋvibeᚑc2ᚑcoreᚋcoreᚋpkgᚋgraphqlᚋmodelᚐAgentKeyWithSecret,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_Mutation_regenerateAgentKey(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Mutation",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "agentKey":
+				return ec.fieldContext_AgentKeyWithSecret_agentKey(ctx, field)
+			case "token":
+				return ec.fieldContext_AgentKeyWithSecret_token(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type AgentKeyWithSecret", field.Name)
+		},
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			err = ec.Recover(ctx, r)
+			ec.Error(ctx, err)
+		}
+	}()
+	ctx = graphql.WithFieldContext(ctx, fc)
+	if fc.Args, err = ec.field_Mutation_regenerateAgentKey_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
+		ec.Error(ctx, err)
+		return fc, err
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Mutation_updateAgentKey(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Mutation_updateAgentKey,
+		func(ctx context.Context) (any, error) {
+			fc := graphql.GetFieldContext(ctx)
+			return ec.Resolvers.Mutation().UpdateAgentKey(ctx, fc.Args["id"].(string), fc.Args["input"].(model.UpdateAgentKeyInput))
+		},
+		func(ctx context.Context, next graphql.Resolver) graphql.Resolver {
+			directive0 := next
+
+			directive1 := func(ctx context.Context) (any, error) {
+				permission, err := ec.unmarshalNString2string(ctx, "*")
+				if err != nil {
+					var zeroVal *models.AgentKey
+					return zeroVal, err
+				}
+				if ec.Directives.HasPermission == nil {
+					var zeroVal *models.AgentKey
+					return zeroVal, errors.New("directive hasPermission is not implemented")
+				}
+				return ec.Directives.HasPermission(ctx, nil, directive0, permission)
+			}
+
+			next = directive1
+			return next
+		},
+		ec.marshalNAgentKey2ᚖgithubᚗcomᚋvibeᚑc2ᚋvibeᚑc2ᚑcoreᚋcoreᚋpkgᚋmodelsᚐAgentKey,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_Mutation_updateAgentKey(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Mutation",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "id":
+				return ec.fieldContext_AgentKey_id(ctx, field)
+			case "keyId":
+				return ec.fieldContext_AgentKey_keyId(ctx, field)
+			case "name":
+				return ec.fieldContext_AgentKey_name(ctx, field)
+			case "enabled":
+				return ec.fieldContext_AgentKey_enabled(ctx, field)
+			case "operationScopes":
+				return ec.fieldContext_AgentKey_operationScopes(ctx, field)
+			case "maxRole":
+				return ec.fieldContext_AgentKey_maxRole(ctx, field)
+			case "allowWrites":
+				return ec.fieldContext_AgentKey_allowWrites(ctx, field)
+			case "lastUsedAt":
+				return ec.fieldContext_AgentKey_lastUsedAt(ctx, field)
+			case "createdAt":
+				return ec.fieldContext_AgentKey_createdAt(ctx, field)
+			case "updatedAt":
+				return ec.fieldContext_AgentKey_updatedAt(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type AgentKey", field.Name)
+		},
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			err = ec.Recover(ctx, r)
+			ec.Error(ctx, err)
+		}
+	}()
+	ctx = graphql.WithFieldContext(ctx, fc)
+	if fc.Args, err = ec.field_Mutation_updateAgentKey_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
+		ec.Error(ctx, err)
+		return fc, err
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Mutation_setAgentKeyEnabled(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Mutation_setAgentKeyEnabled,
+		func(ctx context.Context) (any, error) {
+			fc := graphql.GetFieldContext(ctx)
+			return ec.Resolvers.Mutation().SetAgentKeyEnabled(ctx, fc.Args["id"].(string), fc.Args["enabled"].(bool))
+		},
+		func(ctx context.Context, next graphql.Resolver) graphql.Resolver {
+			directive0 := next
+
+			directive1 := func(ctx context.Context) (any, error) {
+				permission, err := ec.unmarshalNString2string(ctx, "*")
+				if err != nil {
+					var zeroVal *models.AgentKey
+					return zeroVal, err
+				}
+				if ec.Directives.HasPermission == nil {
+					var zeroVal *models.AgentKey
+					return zeroVal, errors.New("directive hasPermission is not implemented")
+				}
+				return ec.Directives.HasPermission(ctx, nil, directive0, permission)
+			}
+
+			next = directive1
+			return next
+		},
+		ec.marshalNAgentKey2ᚖgithubᚗcomᚋvibeᚑc2ᚋvibeᚑc2ᚑcoreᚋcoreᚋpkgᚋmodelsᚐAgentKey,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_Mutation_setAgentKeyEnabled(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Mutation",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "id":
+				return ec.fieldContext_AgentKey_id(ctx, field)
+			case "keyId":
+				return ec.fieldContext_AgentKey_keyId(ctx, field)
+			case "name":
+				return ec.fieldContext_AgentKey_name(ctx, field)
+			case "enabled":
+				return ec.fieldContext_AgentKey_enabled(ctx, field)
+			case "operationScopes":
+				return ec.fieldContext_AgentKey_operationScopes(ctx, field)
+			case "maxRole":
+				return ec.fieldContext_AgentKey_maxRole(ctx, field)
+			case "allowWrites":
+				return ec.fieldContext_AgentKey_allowWrites(ctx, field)
+			case "lastUsedAt":
+				return ec.fieldContext_AgentKey_lastUsedAt(ctx, field)
+			case "createdAt":
+				return ec.fieldContext_AgentKey_createdAt(ctx, field)
+			case "updatedAt":
+				return ec.fieldContext_AgentKey_updatedAt(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type AgentKey", field.Name)
+		},
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			err = ec.Recover(ctx, r)
+			ec.Error(ctx, err)
+		}
+	}()
+	ctx = graphql.WithFieldContext(ctx, fc)
+	if fc.Args, err = ec.field_Mutation_setAgentKeyEnabled_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
+		ec.Error(ctx, err)
+		return fc, err
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Mutation_deleteAgentKey(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Mutation_deleteAgentKey,
+		func(ctx context.Context) (any, error) {
+			fc := graphql.GetFieldContext(ctx)
+			return ec.Resolvers.Mutation().DeleteAgentKey(ctx, fc.Args["id"].(string))
+		},
+		func(ctx context.Context, next graphql.Resolver) graphql.Resolver {
+			directive0 := next
+
+			directive1 := func(ctx context.Context) (any, error) {
+				permission, err := ec.unmarshalNString2string(ctx, "*")
+				if err != nil {
+					var zeroVal bool
+					return zeroVal, err
+				}
+				if ec.Directives.HasPermission == nil {
+					var zeroVal bool
+					return zeroVal, errors.New("directive hasPermission is not implemented")
+				}
+				return ec.Directives.HasPermission(ctx, nil, directive0, permission)
+			}
+
+			next = directive1
+			return next
+		},
+		ec.marshalNBoolean2bool,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_Mutation_deleteAgentKey(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Mutation",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Boolean does not have child fields")
+		},
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			err = ec.Recover(ctx, r)
+			ec.Error(ctx, err)
+		}
+	}()
+	ctx = graphql.WithFieldContext(ctx, fc)
+	if fc.Args, err = ec.field_Mutation_deleteAgentKey_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
 		ec.Error(ctx, err)
 		return fc, err
 	}
@@ -19484,6 +20569,75 @@ func (ec *executionContext) fieldContext_Query_myOperationRole(ctx context.Conte
 	if fc.Args, err = ec.field_Query_myOperationRole_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
 		ec.Error(ctx, err)
 		return fc, err
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Query_myAgentKeys(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Query_myAgentKeys,
+		func(ctx context.Context) (any, error) {
+			return ec.Resolvers.Query().MyAgentKeys(ctx)
+		},
+		func(ctx context.Context, next graphql.Resolver) graphql.Resolver {
+			directive0 := next
+
+			directive1 := func(ctx context.Context) (any, error) {
+				permission, err := ec.unmarshalNString2string(ctx, "*")
+				if err != nil {
+					var zeroVal []*models.AgentKey
+					return zeroVal, err
+				}
+				if ec.Directives.HasPermission == nil {
+					var zeroVal []*models.AgentKey
+					return zeroVal, errors.New("directive hasPermission is not implemented")
+				}
+				return ec.Directives.HasPermission(ctx, nil, directive0, permission)
+			}
+
+			next = directive1
+			return next
+		},
+		ec.marshalNAgentKey2ᚕᚖgithubᚗcomᚋvibeᚑc2ᚋvibeᚑc2ᚑcoreᚋcoreᚋpkgᚋmodelsᚐAgentKeyᚄ,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_Query_myAgentKeys(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Query",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "id":
+				return ec.fieldContext_AgentKey_id(ctx, field)
+			case "keyId":
+				return ec.fieldContext_AgentKey_keyId(ctx, field)
+			case "name":
+				return ec.fieldContext_AgentKey_name(ctx, field)
+			case "enabled":
+				return ec.fieldContext_AgentKey_enabled(ctx, field)
+			case "operationScopes":
+				return ec.fieldContext_AgentKey_operationScopes(ctx, field)
+			case "maxRole":
+				return ec.fieldContext_AgentKey_maxRole(ctx, field)
+			case "allowWrites":
+				return ec.fieldContext_AgentKey_allowWrites(ctx, field)
+			case "lastUsedAt":
+				return ec.fieldContext_AgentKey_lastUsedAt(ctx, field)
+			case "createdAt":
+				return ec.fieldContext_AgentKey_createdAt(ctx, field)
+			case "updatedAt":
+				return ec.fieldContext_AgentKey_updatedAt(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type AgentKey", field.Name)
+		},
 	}
 	return fc, nil
 }
@@ -31996,6 +33150,61 @@ func (ec *executionContext) unmarshalInputChangeTaskStageInput(ctx context.Conte
 	return it, nil
 }
 
+func (ec *executionContext) unmarshalInputCreateAgentKeyInput(ctx context.Context, obj any) (model.CreateAgentKeyInput, error) {
+	var it model.CreateAgentKeyInput
+	if obj == nil {
+		return it, nil
+	}
+
+	asMap := map[string]any{}
+	for k, v := range obj.(map[string]any) {
+		asMap[k] = v
+	}
+
+	if _, present := asMap["allowWrites"]; !present {
+		asMap["allowWrites"] = false
+	}
+
+	fieldsInOrder := [...]string{"name", "operationScopes", "maxRole", "allowWrites"}
+	for _, k := range fieldsInOrder {
+		v, ok := asMap[k]
+		if !ok {
+			continue
+		}
+		switch k {
+		case "name":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("name"))
+			data, err := ec.unmarshalNString2string(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.Name = data
+		case "operationScopes":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("operationScopes"))
+			data, err := ec.unmarshalOID2ᚕstringᚄ(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.OperationScopes = data
+		case "maxRole":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("maxRole"))
+			data, err := ec.unmarshalNOperationRole2githubᚗcomᚋvibeᚑc2ᚋvibeᚑc2ᚑcoreᚋcoreᚋpkgᚋmodelsᚐOperationRole(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.MaxRole = data
+		case "allowWrites":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("allowWrites"))
+			data, err := ec.unmarshalNBoolean2bool(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.AllowWrites = data
+		}
+	}
+	return it, nil
+}
+
 func (ec *executionContext) unmarshalInputCreateCredentialInput(ctx context.Context, obj any) (model.CreateCredentialInput, error) {
 	var it model.CreateCredentialInput
 	if obj == nil {
@@ -32856,6 +34065,57 @@ func (ec *executionContext) unmarshalInputRouteInput(ctx context.Context, obj an
 	return it, nil
 }
 
+func (ec *executionContext) unmarshalInputUpdateAgentKeyInput(ctx context.Context, obj any) (model.UpdateAgentKeyInput, error) {
+	var it model.UpdateAgentKeyInput
+	if obj == nil {
+		return it, nil
+	}
+
+	asMap := map[string]any{}
+	for k, v := range obj.(map[string]any) {
+		asMap[k] = v
+	}
+
+	fieldsInOrder := [...]string{"name", "operationScopes", "maxRole", "allowWrites"}
+	for _, k := range fieldsInOrder {
+		v, ok := asMap[k]
+		if !ok {
+			continue
+		}
+		switch k {
+		case "name":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("name"))
+			data, err := ec.unmarshalOString2ᚖstring(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.Name = data
+		case "operationScopes":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("operationScopes"))
+			data, err := ec.unmarshalOID2ᚕstringᚄ(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.OperationScopes = data
+		case "maxRole":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("maxRole"))
+			data, err := ec.unmarshalOOperationRole2ᚖgithubᚗcomᚋvibeᚑc2ᚋvibeᚑc2ᚑcoreᚋcoreᚋpkgᚋmodelsᚐOperationRole(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.MaxRole = data
+		case "allowWrites":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("allowWrites"))
+			data, err := ec.unmarshalOBoolean2ᚖbool(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.AllowWrites = data
+		}
+	}
+	return it, nil
+}
+
 func (ec *executionContext) unmarshalInputUpdateCredentialInput(ctx context.Context, obj any) (model.UpdateCredentialInput, error) {
 	var it model.UpdateCredentialInput
 	if obj == nil {
@@ -33566,6 +34826,286 @@ func (ec *executionContext) _APIKeyWithSecret(ctx context.Context, sel ast.Selec
 			}
 		case "token":
 			out.Values[i] = ec._APIKeyWithSecret_token(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		default:
+			panic("unknown field " + strconv.Quote(field.Name))
+		}
+	}
+	out.Dispatch(ctx)
+	if out.Invalids > 0 {
+		return graphql.Null
+	}
+
+	atomic.AddInt32(&ec.Deferred, int32(len(deferred)))
+
+	for label, dfs := range deferred {
+		ec.ProcessDeferredGroup(graphql.DeferredGroup{
+			Label:    label,
+			Path:     graphql.GetPath(ctx),
+			FieldSet: dfs,
+			Context:  ctx,
+		})
+	}
+
+	return out
+}
+
+var agentKeyImplementors = []string{"AgentKey"}
+
+func (ec *executionContext) _AgentKey(ctx context.Context, sel ast.SelectionSet, obj *models.AgentKey) graphql.Marshaler {
+	fields := graphql.CollectFields(ec.OperationContext, sel, agentKeyImplementors)
+
+	out := graphql.NewFieldSet(fields)
+	deferred := make(map[string]*graphql.FieldSet)
+	for i, field := range fields {
+		switch field.Name {
+		case "__typename":
+			out.Values[i] = graphql.MarshalString("AgentKey")
+		case "id":
+			field := field
+
+			innerFunc := func(ctx context.Context, fs *graphql.FieldSet) (res graphql.Marshaler) {
+				defer func() {
+					if r := recover(); r != nil {
+						ec.Error(ctx, ec.Recover(ctx, r))
+					}
+				}()
+				res = ec._AgentKey_id(ctx, field, obj)
+				if res == graphql.Null {
+					atomic.AddUint32(&fs.Invalids, 1)
+				}
+				return res
+			}
+
+			if field.Deferrable != nil {
+				dfs, ok := deferred[field.Deferrable.Label]
+				di := 0
+				if ok {
+					dfs.AddField(field)
+					di = len(dfs.Values) - 1
+				} else {
+					dfs = graphql.NewFieldSet([]graphql.CollectedField{field})
+					deferred[field.Deferrable.Label] = dfs
+				}
+				dfs.Concurrently(di, func(ctx context.Context) graphql.Marshaler {
+					return innerFunc(ctx, dfs)
+				})
+
+				// don't run the out.Concurrently() call below
+				out.Values[i] = graphql.Null
+				continue
+			}
+
+			out.Concurrently(i, func(ctx context.Context) graphql.Marshaler { return innerFunc(ctx, out) })
+		case "keyId":
+			out.Values[i] = ec._AgentKey_keyId(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				atomic.AddUint32(&out.Invalids, 1)
+			}
+		case "name":
+			out.Values[i] = ec._AgentKey_name(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				atomic.AddUint32(&out.Invalids, 1)
+			}
+		case "enabled":
+			out.Values[i] = ec._AgentKey_enabled(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				atomic.AddUint32(&out.Invalids, 1)
+			}
+		case "operationScopes":
+			field := field
+
+			innerFunc := func(ctx context.Context, fs *graphql.FieldSet) (res graphql.Marshaler) {
+				defer func() {
+					if r := recover(); r != nil {
+						ec.Error(ctx, ec.Recover(ctx, r))
+					}
+				}()
+				res = ec._AgentKey_operationScopes(ctx, field, obj)
+				if res == graphql.Null {
+					atomic.AddUint32(&fs.Invalids, 1)
+				}
+				return res
+			}
+
+			if field.Deferrable != nil {
+				dfs, ok := deferred[field.Deferrable.Label]
+				di := 0
+				if ok {
+					dfs.AddField(field)
+					di = len(dfs.Values) - 1
+				} else {
+					dfs = graphql.NewFieldSet([]graphql.CollectedField{field})
+					deferred[field.Deferrable.Label] = dfs
+				}
+				dfs.Concurrently(di, func(ctx context.Context) graphql.Marshaler {
+					return innerFunc(ctx, dfs)
+				})
+
+				// don't run the out.Concurrently() call below
+				out.Values[i] = graphql.Null
+				continue
+			}
+
+			out.Concurrently(i, func(ctx context.Context) graphql.Marshaler { return innerFunc(ctx, out) })
+		case "maxRole":
+			out.Values[i] = ec._AgentKey_maxRole(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				atomic.AddUint32(&out.Invalids, 1)
+			}
+		case "allowWrites":
+			out.Values[i] = ec._AgentKey_allowWrites(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				atomic.AddUint32(&out.Invalids, 1)
+			}
+		case "lastUsedAt":
+			field := field
+
+			innerFunc := func(ctx context.Context, _ *graphql.FieldSet) (res graphql.Marshaler) {
+				defer func() {
+					if r := recover(); r != nil {
+						ec.Error(ctx, ec.Recover(ctx, r))
+					}
+				}()
+				res = ec._AgentKey_lastUsedAt(ctx, field, obj)
+				return res
+			}
+
+			if field.Deferrable != nil {
+				dfs, ok := deferred[field.Deferrable.Label]
+				di := 0
+				if ok {
+					dfs.AddField(field)
+					di = len(dfs.Values) - 1
+				} else {
+					dfs = graphql.NewFieldSet([]graphql.CollectedField{field})
+					deferred[field.Deferrable.Label] = dfs
+				}
+				dfs.Concurrently(di, func(ctx context.Context) graphql.Marshaler {
+					return innerFunc(ctx, dfs)
+				})
+
+				// don't run the out.Concurrently() call below
+				out.Values[i] = graphql.Null
+				continue
+			}
+
+			out.Concurrently(i, func(ctx context.Context) graphql.Marshaler { return innerFunc(ctx, out) })
+		case "createdAt":
+			field := field
+
+			innerFunc := func(ctx context.Context, fs *graphql.FieldSet) (res graphql.Marshaler) {
+				defer func() {
+					if r := recover(); r != nil {
+						ec.Error(ctx, ec.Recover(ctx, r))
+					}
+				}()
+				res = ec._AgentKey_createdAt(ctx, field, obj)
+				if res == graphql.Null {
+					atomic.AddUint32(&fs.Invalids, 1)
+				}
+				return res
+			}
+
+			if field.Deferrable != nil {
+				dfs, ok := deferred[field.Deferrable.Label]
+				di := 0
+				if ok {
+					dfs.AddField(field)
+					di = len(dfs.Values) - 1
+				} else {
+					dfs = graphql.NewFieldSet([]graphql.CollectedField{field})
+					deferred[field.Deferrable.Label] = dfs
+				}
+				dfs.Concurrently(di, func(ctx context.Context) graphql.Marshaler {
+					return innerFunc(ctx, dfs)
+				})
+
+				// don't run the out.Concurrently() call below
+				out.Values[i] = graphql.Null
+				continue
+			}
+
+			out.Concurrently(i, func(ctx context.Context) graphql.Marshaler { return innerFunc(ctx, out) })
+		case "updatedAt":
+			field := field
+
+			innerFunc := func(ctx context.Context, fs *graphql.FieldSet) (res graphql.Marshaler) {
+				defer func() {
+					if r := recover(); r != nil {
+						ec.Error(ctx, ec.Recover(ctx, r))
+					}
+				}()
+				res = ec._AgentKey_updatedAt(ctx, field, obj)
+				if res == graphql.Null {
+					atomic.AddUint32(&fs.Invalids, 1)
+				}
+				return res
+			}
+
+			if field.Deferrable != nil {
+				dfs, ok := deferred[field.Deferrable.Label]
+				di := 0
+				if ok {
+					dfs.AddField(field)
+					di = len(dfs.Values) - 1
+				} else {
+					dfs = graphql.NewFieldSet([]graphql.CollectedField{field})
+					deferred[field.Deferrable.Label] = dfs
+				}
+				dfs.Concurrently(di, func(ctx context.Context) graphql.Marshaler {
+					return innerFunc(ctx, dfs)
+				})
+
+				// don't run the out.Concurrently() call below
+				out.Values[i] = graphql.Null
+				continue
+			}
+
+			out.Concurrently(i, func(ctx context.Context) graphql.Marshaler { return innerFunc(ctx, out) })
+		default:
+			panic("unknown field " + strconv.Quote(field.Name))
+		}
+	}
+	out.Dispatch(ctx)
+	if out.Invalids > 0 {
+		return graphql.Null
+	}
+
+	atomic.AddInt32(&ec.Deferred, int32(len(deferred)))
+
+	for label, dfs := range deferred {
+		ec.ProcessDeferredGroup(graphql.DeferredGroup{
+			Label:    label,
+			Path:     graphql.GetPath(ctx),
+			FieldSet: dfs,
+			Context:  ctx,
+		})
+	}
+
+	return out
+}
+
+var agentKeyWithSecretImplementors = []string{"AgentKeyWithSecret"}
+
+func (ec *executionContext) _AgentKeyWithSecret(ctx context.Context, sel ast.SelectionSet, obj *model.AgentKeyWithSecret) graphql.Marshaler {
+	fields := graphql.CollectFields(ec.OperationContext, sel, agentKeyWithSecretImplementors)
+
+	out := graphql.NewFieldSet(fields)
+	deferred := make(map[string]*graphql.FieldSet)
+	for i, field := range fields {
+		switch field.Name {
+		case "__typename":
+			out.Values[i] = graphql.MarshalString("AgentKeyWithSecret")
+		case "agentKey":
+			out.Values[i] = ec._AgentKeyWithSecret_agentKey(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "token":
+			out.Values[i] = ec._AgentKeyWithSecret_token(ctx, field, obj)
 			if out.Values[i] == graphql.Null {
 				out.Invalids++
 			}
@@ -35946,6 +37486,41 @@ func (ec *executionContext) _Mutation(ctx context.Context, sel ast.SelectionSet)
 			if out.Values[i] == graphql.Null {
 				out.Invalids++
 			}
+		case "createAgentKey":
+			out.Values[i] = ec.OperationContext.RootResolverMiddleware(innerCtx, func(ctx context.Context) (res graphql.Marshaler) {
+				return ec._Mutation_createAgentKey(ctx, field)
+			})
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "regenerateAgentKey":
+			out.Values[i] = ec.OperationContext.RootResolverMiddleware(innerCtx, func(ctx context.Context) (res graphql.Marshaler) {
+				return ec._Mutation_regenerateAgentKey(ctx, field)
+			})
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "updateAgentKey":
+			out.Values[i] = ec.OperationContext.RootResolverMiddleware(innerCtx, func(ctx context.Context) (res graphql.Marshaler) {
+				return ec._Mutation_updateAgentKey(ctx, field)
+			})
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "setAgentKeyEnabled":
+			out.Values[i] = ec.OperationContext.RootResolverMiddleware(innerCtx, func(ctx context.Context) (res graphql.Marshaler) {
+				return ec._Mutation_setAgentKeyEnabled(ctx, field)
+			})
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "deleteAgentKey":
+			out.Values[i] = ec.OperationContext.RootResolverMiddleware(innerCtx, func(ctx context.Context) (res graphql.Marshaler) {
+				return ec._Mutation_deleteAgentKey(ctx, field)
+			})
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
 		case "createMyAPIKey":
 			out.Values[i] = ec.OperationContext.RootResolverMiddleware(innerCtx, func(ctx context.Context) (res graphql.Marshaler) {
 				return ec._Mutation_createMyAPIKey(ctx, field)
@@ -37030,6 +38605,28 @@ func (ec *executionContext) _Query(ctx context.Context, sel ast.SelectionSet) gr
 					}
 				}()
 				res = ec._Query_myOperationRole(ctx, field)
+				return res
+			}
+
+			rrm := func(ctx context.Context) graphql.Marshaler {
+				return ec.OperationContext.RootResolverMiddleware(ctx,
+					func(ctx context.Context) graphql.Marshaler { return innerFunc(ctx, out) })
+			}
+
+			out.Concurrently(i, func(ctx context.Context) graphql.Marshaler { return rrm(innerCtx) })
+		case "myAgentKeys":
+			field := field
+
+			innerFunc := func(ctx context.Context, fs *graphql.FieldSet) (res graphql.Marshaler) {
+				defer func() {
+					if r := recover(); r != nil {
+						ec.Error(ctx, ec.Recover(ctx, r))
+					}
+				}()
+				res = ec._Query_myAgentKeys(ctx, field)
+				if res == graphql.Null {
+					atomic.AddUint32(&fs.Invalids, 1)
+				}
 				return res
 			}
 
@@ -42351,6 +43948,50 @@ func (ec *executionContext) marshalNAPIKeyWithSecret2ᚖgithubᚗcomᚋvibeᚑc2
 	return ec._APIKeyWithSecret(ctx, sel, v)
 }
 
+func (ec *executionContext) marshalNAgentKey2githubᚗcomᚋvibeᚑc2ᚋvibeᚑc2ᚑcoreᚋcoreᚋpkgᚋmodelsᚐAgentKey(ctx context.Context, sel ast.SelectionSet, v models.AgentKey) graphql.Marshaler {
+	return ec._AgentKey(ctx, sel, &v)
+}
+
+func (ec *executionContext) marshalNAgentKey2ᚕᚖgithubᚗcomᚋvibeᚑc2ᚋvibeᚑc2ᚑcoreᚋcoreᚋpkgᚋmodelsᚐAgentKeyᚄ(ctx context.Context, sel ast.SelectionSet, v []*models.AgentKey) graphql.Marshaler {
+	ret := graphql.MarshalSliceConcurrently(ctx, len(v), 0, false, func(ctx context.Context, i int) graphql.Marshaler {
+		fc := graphql.GetFieldContext(ctx)
+		fc.Result = &v[i]
+		return ec.marshalNAgentKey2ᚖgithubᚗcomᚋvibeᚑc2ᚋvibeᚑc2ᚑcoreᚋcoreᚋpkgᚋmodelsᚐAgentKey(ctx, sel, v[i])
+	})
+
+	for _, e := range ret {
+		if e == graphql.Null {
+			return graphql.Null
+		}
+	}
+
+	return ret
+}
+
+func (ec *executionContext) marshalNAgentKey2ᚖgithubᚗcomᚋvibeᚑc2ᚋvibeᚑc2ᚑcoreᚋcoreᚋpkgᚋmodelsᚐAgentKey(ctx context.Context, sel ast.SelectionSet, v *models.AgentKey) graphql.Marshaler {
+	if v == nil {
+		if !graphql.HasFieldError(ctx, graphql.GetFieldContext(ctx)) {
+			graphql.AddErrorf(ctx, "the requested element is null which the schema does not allow")
+		}
+		return graphql.Null
+	}
+	return ec._AgentKey(ctx, sel, v)
+}
+
+func (ec *executionContext) marshalNAgentKeyWithSecret2githubᚗcomᚋvibeᚑc2ᚋvibeᚑc2ᚑcoreᚋcoreᚋpkgᚋgraphqlᚋmodelᚐAgentKeyWithSecret(ctx context.Context, sel ast.SelectionSet, v model.AgentKeyWithSecret) graphql.Marshaler {
+	return ec._AgentKeyWithSecret(ctx, sel, &v)
+}
+
+func (ec *executionContext) marshalNAgentKeyWithSecret2ᚖgithubᚗcomᚋvibeᚑc2ᚋvibeᚑc2ᚑcoreᚋcoreᚋpkgᚋgraphqlᚋmodelᚐAgentKeyWithSecret(ctx context.Context, sel ast.SelectionSet, v *model.AgentKeyWithSecret) graphql.Marshaler {
+	if v == nil {
+		if !graphql.HasFieldError(ctx, graphql.GetFieldContext(ctx)) {
+			graphql.AddErrorf(ctx, "the requested element is null which the schema does not allow")
+		}
+		return graphql.Null
+	}
+	return ec._AgentKeyWithSecret(ctx, sel, v)
+}
+
 func (ec *executionContext) unmarshalNBoolean2bool(ctx context.Context, v any) (bool, error) {
 	res, err := graphql.UnmarshalBoolean(v)
 	return res, graphql.ErrorOnPath(ctx, err)
@@ -42388,6 +44029,11 @@ func (ec *executionContext) marshalNBulkImportHashesResult2ᚖgithubᚗcomᚋvib
 
 func (ec *executionContext) unmarshalNChangeTaskStageInput2githubᚗcomᚋvibeᚑc2ᚋvibeᚑc2ᚑcoreᚋcoreᚋpkgᚋgraphqlᚋmodelᚐChangeTaskStageInput(ctx context.Context, v any) (model.ChangeTaskStageInput, error) {
 	res, err := ec.unmarshalInputChangeTaskStageInput(ctx, v)
+	return res, graphql.ErrorOnPath(ctx, err)
+}
+
+func (ec *executionContext) unmarshalNCreateAgentKeyInput2githubᚗcomᚋvibeᚑc2ᚋvibeᚑc2ᚑcoreᚋcoreᚋpkgᚋgraphqlᚋmodelᚐCreateAgentKeyInput(ctx context.Context, v any) (model.CreateAgentKeyInput, error) {
+	res, err := ec.unmarshalInputCreateAgentKeyInput(ctx, v)
 	return res, graphql.ErrorOnPath(ctx, err)
 }
 
@@ -42962,6 +44608,22 @@ func (ec *executionContext) marshalNOperation2githubᚗcomᚋvibeᚑc2ᚋvibeᚑ
 	return ec._Operation(ctx, sel, &v)
 }
 
+func (ec *executionContext) marshalNOperation2ᚕᚖgithubᚗcomᚋvibeᚑc2ᚋvibeᚑc2ᚑcoreᚋcoreᚋpkgᚋmodelsᚐOperationᚄ(ctx context.Context, sel ast.SelectionSet, v []*models.Operation) graphql.Marshaler {
+	ret := graphql.MarshalSliceConcurrently(ctx, len(v), 0, false, func(ctx context.Context, i int) graphql.Marshaler {
+		fc := graphql.GetFieldContext(ctx)
+		fc.Result = &v[i]
+		return ec.marshalNOperation2ᚖgithubᚗcomᚋvibeᚑc2ᚋvibeᚑc2ᚑcoreᚋcoreᚋpkgᚋmodelsᚐOperation(ctx, sel, v[i])
+	})
+
+	for _, e := range ret {
+		if e == graphql.Null {
+			return graphql.Null
+		}
+	}
+
+	return ret
+}
+
 func (ec *executionContext) marshalNOperation2ᚖgithubᚗcomᚋvibeᚑc2ᚋvibeᚑc2ᚑcoreᚋcoreᚋpkgᚋmodelsᚐOperation(ctx context.Context, sel ast.SelectionSet, v *models.Operation) graphql.Marshaler {
 	if v == nil {
 		if !graphql.HasFieldError(ctx, graphql.GetFieldContext(ctx)) {
@@ -43472,6 +45134,11 @@ func (ec *executionContext) marshalNTimelineTopicCount2ᚖgithubᚗcomᚋvibeᚑ
 		return graphql.Null
 	}
 	return ec._TimelineTopicCount(ctx, sel, v)
+}
+
+func (ec *executionContext) unmarshalNUpdateAgentKeyInput2githubᚗcomᚋvibeᚑc2ᚋvibeᚑc2ᚑcoreᚋcoreᚋpkgᚋgraphqlᚋmodelᚐUpdateAgentKeyInput(ctx context.Context, v any) (model.UpdateAgentKeyInput, error) {
+	res, err := ec.unmarshalInputUpdateAgentKeyInput(ctx, v)
+	return res, graphql.ErrorOnPath(ctx, err)
 }
 
 func (ec *executionContext) unmarshalNUpdateCredentialInput2githubᚗcomᚋvibeᚑc2ᚋvibeᚑc2ᚑcoreᚋcoreᚋpkgᚋgraphqlᚋmodelᚐUpdateCredentialInput(ctx context.Context, v any) (model.UpdateCredentialInput, error) {

@@ -11,6 +11,7 @@ import (
 	"github.com/vibe-c2/vibe-c2-core/core/pkg/auth"
 	"github.com/vibe-c2/vibe-c2-core/core/pkg/cache"
 	"github.com/vibe-c2/vibe-c2-core/core/pkg/logger"
+	"github.com/vibe-c2/vibe-c2-core/core/pkg/models"
 	"github.com/vibe-c2/vibe-c2-core/core/pkg/repository"
 	"github.com/vibe-c2/vibe-c2-core/core/pkg/responses"
 	"go.uber.org/zap"
@@ -22,6 +23,17 @@ import (
 // browsers, so there's no cookie surface to defend.
 const APIKeyAuthFlag = "apiKeyAuth"
 
+// AgentAuthFlag is the gin.Context key set by AuthN when a request was
+// authenticated via a delegated agent key. Like API keys, agent callers are
+// not browsers, so CSRF does not apply. Unlike API keys, agent callers are
+// confined to the MCP endpoint — see RequireHuman.
+const AgentAuthFlag = "agentAuth"
+
+// AgentInfoKey is the gin.Context key holding the *models.AgentKey the request
+// authenticated with. The MCP layer reads it to resolve scope; nothing else
+// should need it.
+const AgentInfoKey = "agentKey"
+
 // touchDebounceTTL caps last_used_at write frequency to once per minute per
 // key. Cache key is per-key_id; a SET-with-TTL returning "already exists"
 // suppresses the write.
@@ -31,15 +43,19 @@ const touchDebounceTTL = 60 * time.Second
 //
 //   - Authorization: Bearer vc2_... (API key) — resolves to the owning user,
 //     loads roles from the user record, bypasses CSRF;
+//   - Authorization: Bearer vca_... (agent key) — resolves to the owning user
+//     too, but additionally carries the key's scope so downstream layers can
+//     narrow authority below the owner's;
 //   - access_token cookie (JWT) — existing behavior, delegated to JWTAuth.
 //
-// API key auth fails closed: a malformed `vc2_` token or a disabled/missing
-// key returns 401 immediately without falling back to cookie auth. This
-// avoids the "I sent the wrong key and got logged in as my browser session"
-// foot-gun.
+// Programmatic auth fails closed: a malformed `vc2_`/`vca_` token or a
+// disabled/missing key returns 401 immediately without falling back to cookie
+// auth. This avoids the "I sent the wrong key and got logged in as my browser
+// session" foot-gun.
 func AuthN(
 	provider auth.IAuthProvider,
 	apiKeys repository.IAPIKeyRepository,
+	agentKeys repository.IAgentKeyRepository,
 	users repository.IUserRepository,
 	c cache.Cache,
 ) gin.HandlerFunc {
@@ -51,6 +67,10 @@ func AuthN(
 			raw := strings.TrimPrefix(header, "Bearer ")
 			if strings.HasPrefix(raw, auth.APIKeyPrefix) {
 				authenticateAPIKey(ctx, raw, apiKeys, users, c)
+				return
+			}
+			if strings.HasPrefix(raw, auth.AgentKeyPrefix) {
+				authenticateAgentKey(ctx, raw, agentKeys, users, c)
 				return
 			}
 		}
@@ -114,30 +134,91 @@ func authenticateAPIKey(
 	// Fire-and-forget last_used_at touch, debounced per key_id so a chatty
 	// script doesn't write-amplify the api_keys collection. Failures here
 	// are non-fatal and logged at debug only.
-	go touchLastUsed(c, apiKeys, keyID, log)
+	go touchLastUsed(c, apiKeys, "apikey", keyID, log)
 
 	ctx.Next()
 }
 
-func touchLastUsed(c cache.Cache, apiKeys repository.IAPIKeyRepository, keyID string, log *zap.Logger) {
+// authenticateAgentKey mirrors authenticateAPIKey and then attaches the key's
+// scope to the request. The identity resolved is the OWNER's — the agent is a
+// delegate, not an account — so roles, active state and (downstream) operation
+// membership are all the owner's, re-read per request. What the agent key adds
+// is a ceiling on that authority, never an addition to it.
+func authenticateAgentKey(
+	ctx *gin.Context,
+	raw string,
+	agentKeys repository.IAgentKeyRepository,
+	users repository.IUserRepository,
+	c cache.Cache,
+) {
+	log := logger.From(ctx.Request.Context())
+
+	keyID, secretHash, ok := auth.ParseKey(auth.AgentKeyPrefix, raw)
+	if !ok {
+		ctx.AbortWithStatusJSON(http.StatusUnauthorized, responses.ErrUnauthorized)
+		return
+	}
+
+	key, err := agentKeys.FindByKeyID(ctx.Request.Context(), keyID)
+	if err != nil {
+		ctx.AbortWithStatusJSON(http.StatusUnauthorized, responses.ErrUnauthorized)
+		return
+	}
+
+	if subtle.ConstantTimeCompare([]byte(key.SecretHash), []byte(secretHash)) != 1 {
+		ctx.AbortWithStatusJSON(http.StatusUnauthorized, responses.ErrUnauthorized)
+		return
+	}
+	if !key.Enabled {
+		ctx.AbortWithStatusJSON(http.StatusUnauthorized, responses.ErrUnauthorized)
+		return
+	}
+
+	user, err := users.FindByID(ctx.Request.Context(), key.UserID)
+	if err != nil {
+		ctx.AbortWithStatusJSON(http.StatusUnauthorized, responses.ErrUnauthorized)
+		return
+	}
+	if !user.Active {
+		ctx.AbortWithStatusJSON(http.StatusUnauthorized, responses.ErrUnauthorized)
+		return
+	}
+
+	ctx.Set("userID", user.UserID.String())
+	ctx.Set("username", user.Username)
+	ctx.Set("roles", user.Roles)
+	ctx.Set(AgentAuthFlag, true)
+	ctx.Set(AgentInfoKey, &key)
+
+	go touchLastUsed(c, agentKeys, "agentkey", keyID, log)
+
+	ctx.Next()
+}
+
+// lastUsedToucher is the one method both key repositories share. Declared here,
+// where it is consumed, rather than in package repository.
+type lastUsedToucher interface {
+	TouchLastUsed(ctx context.Context, keyID string, at time.Time) error
+}
+
+func touchLastUsed(c cache.Cache, keys lastUsedToucher, kind, keyID string, log *zap.Logger) {
 	// Detach from request lifetime — touch must outlive the response write.
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer cancel()
 
-	debounceKey := "apikey:touched:" + keyID
+	debounceKey := kind + ":touched:" + keyID
 	if c != nil && c.IsEnabled() {
-		// If the debounce flag exists, skip this touch. The cache.Set wrapper
-		// doesn't expose SETNX directly; we use Get-then-Set which is
-		// good-enough — over-touching by a few writes/min under racey hot
-		// reloads is harmless.
-		if existing, _ := c.Get(ctx, debounceKey); existing != "" {
+		// SETNX: only the request that wins the race writes. Get-then-Set let
+		// a burst of concurrent requests all observe an empty key and each
+		// issue a write.
+		fresh, err := c.SetNX(ctx, debounceKey, "1", touchDebounceTTL)
+		if err == nil && !fresh {
 			return
 		}
-		_ = c.Set(ctx, debounceKey, "1", touchDebounceTTL)
 	}
 
-	if err := apiKeys.TouchLastUsed(ctx, keyID, time.Now().UTC()); err != nil {
-		log.Debug("api key: failed to touch last_used_at", zap.Error(err))
+	if err := keys.TouchLastUsed(ctx, keyID, time.Now().UTC()); err != nil {
+		log.Debug("failed to touch last_used_at", zap.String("kind", kind), zap.Error(err))
 	}
 }
 
@@ -145,4 +226,37 @@ func touchLastUsed(c cache.Cache, apiKeys repository.IAPIKeyRepository, keyID st
 // Used by CSRF and any other check that should branch on the auth surface.
 func HasAPIKeyAuth(ctx *gin.Context) bool {
 	return ctx.GetBool(APIKeyAuthFlag)
+}
+
+// HasAgentAuth returns true if the request was authenticated via an agent key.
+func HasAgentAuth(ctx *gin.Context) bool {
+	return ctx.GetBool(AgentAuthFlag)
+}
+
+// HasProgrammaticAuth returns true for any non-browser credential. Used by
+// CSRF, which defends a cookie surface that neither key kind has.
+func HasProgrammaticAuth(ctx *gin.Context) bool {
+	return HasAPIKeyAuth(ctx) || HasAgentAuth(ctx)
+}
+
+// AgentKeyFromContext returns the agent key a request authenticated with, or
+// nil for every other caller.
+func AgentKeyFromContext(ctx *gin.Context) *models.AgentKey {
+	key, _ := ctx.Value(AgentInfoKey).(*models.AgentKey)
+	return key
+}
+
+// RequireHuman aborts requests authenticated with an agent key. It is mounted
+// on every protected route except the MCP endpoint, which makes the agent
+// blast radius a property of routing rather than something each resolver has
+// to remember. An agent that finds its way to /graphql gets 403, not the
+// owner's entire API.
+func RequireHuman() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		if HasAgentAuth(c) {
+			c.AbortWithStatusJSON(http.StatusForbidden, responses.ErrForbidden)
+			return
+		}
+		c.Next()
+	}
 }

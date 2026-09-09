@@ -1,15 +1,6 @@
 import { useState } from "react"
 import { toast } from "sonner"
-import {
-  AlertTriangleIcon,
-  CheckIcon,
-  CopyIcon,
-  EyeIcon,
-  EyeOffIcon,
-  KeyIcon,
-  RefreshCwIcon,
-  Trash2Icon,
-} from "lucide-react"
+import { KeyIcon, RefreshCwIcon, Trash2Icon } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import {
@@ -24,6 +15,8 @@ import { FormattedDateTimeText } from "@/components/ui/formatted-date-time-text"
 import { Label } from "@/components/ui/label"
 import { Skeleton } from "@/components/ui/skeleton"
 import { Switch } from "@/components/ui/switch"
+import { ConfirmDialog } from "@/components/keys/confirm-dialog"
+import { FreshTokenBanner } from "@/components/keys/fresh-token-banner"
 import { useAPIKeyStore } from "@/stores/api-keys"
 import {
   useCreateMyAPIKey,
@@ -240,65 +233,6 @@ function APIKeyDialogBody() {
   )
 }
 
-// FreshTokenBanner shows the full token exactly once. Defaults to masked
-// to discourage shoulder-surfing; user clicks the eye to reveal, then must
-// confirm "I've saved it" to dismiss — preventing accidental loss.
-function FreshTokenBanner({ token, onDismiss }: { token: string; onDismiss: () => void }) {
-  const [revealed, setRevealed] = useState(false)
-  const [copied, setCopied] = useState(false)
-
-  async function handleCopy() {
-    try {
-      await navigator.clipboard.writeText(token)
-      setCopied(true)
-      setTimeout(() => setCopied(false), 1500)
-    } catch {
-      toast.error("Failed to copy to clipboard")
-    }
-  }
-
-  return (
-    <div className="min-w-0 rounded-md border border-yellow-500/50 bg-yellow-500/10 p-3 space-y-2">
-      <div className="flex items-start gap-2 text-sm text-yellow-700 dark:text-yellow-400">
-        <AlertTriangleIcon className="size-4 mt-0.5 shrink-0" />
-        <span>
-          Copy this token now — it won&apos;t be shown again. If you lose it,
-          you&apos;ll need to regenerate the key.
-        </span>
-      </div>
-      <div className="flex min-w-0 items-center gap-2">
-        <code className="flex-1 min-w-0 truncate rounded bg-background/80 px-2 py-1.5 font-mono text-xs">
-          {revealed ? token : maskToken(token)}
-        </code>
-        <Button
-          size="icon-sm"
-          variant="outline"
-          onClick={() => setRevealed((v) => !v)}
-          title={revealed ? "Hide" : "Reveal"}
-        >
-          {revealed ? <EyeOffIcon className="size-4" /> : <EyeIcon className="size-4" />}
-        </Button>
-        <Button size="icon-sm" variant="outline" onClick={handleCopy} title="Copy">
-          {copied ? <CheckIcon className="size-4" /> : <CopyIcon className="size-4" />}
-        </Button>
-      </div>
-      <div className="flex justify-end">
-        <Button size="sm" variant="ghost" onClick={onDismiss}>
-          I&apos;ve saved it
-        </Button>
-      </div>
-    </div>
-  )
-}
-
-// maskToken keeps the public prefix visible (so the user can confirm which
-// key was minted) while hiding the secret tail.
-function maskToken(token: string): string {
-  const lastSep = token.lastIndexOf("_")
-  if (lastSep === -1) return "•".repeat(token.length)
-  return token.slice(0, lastSep + 1) + "•".repeat(Math.max(8, token.length - lastSep - 1))
-}
-
 function UsageHint() {
   return (
     <details className="rounded-md border bg-muted/30 px-3 py-2 text-xs">
@@ -328,50 +262,5 @@ function UsageHint() {
         </p>
       </div>
     </details>
-  )
-}
-
-interface ConfirmDialogProps {
-  open: boolean
-  title: string
-  description: string
-  confirmLabel: string
-  onCancel: () => void
-  onConfirm: () => void
-  disabled?: boolean
-  destructive?: boolean
-}
-
-function ConfirmDialog({
-  open,
-  title,
-  description,
-  confirmLabel,
-  onCancel,
-  onConfirm,
-  disabled,
-  destructive,
-}: ConfirmDialogProps) {
-  return (
-    <Dialog open={open} onOpenChange={(o) => !o && onCancel()}>
-      <DialogContent>
-        <DialogHeader>
-          <DialogTitle>{title}</DialogTitle>
-          <DialogDescription>{description}</DialogDescription>
-        </DialogHeader>
-        <DialogFooter>
-          <Button variant="outline" onClick={onCancel}>
-            Cancel
-          </Button>
-          <Button
-            variant={destructive ? "destructive" : "default"}
-            onClick={onConfirm}
-            disabled={disabled}
-          >
-            {confirmLabel}
-          </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
   )
 }

@@ -14,6 +14,13 @@ import type { TypedDocumentNode as DocumentNode } from '@graphql-typed-document-
  * Learn more about it here: https://the-guild.dev/graphql/codegen/plugins/presets/preset-client#reducing-bundle-size
  */
 type Documents = {
+    "\n  fragment AgentKeyFields on AgentKey {\n    id\n    keyId\n    name\n    enabled\n    maxRole\n    allowWrites\n    operationScopes {\n      id\n      name\n    }\n    lastUsedAt\n    createdAt\n    updatedAt\n  }\n": typeof types.AgentKeyFieldsFragmentDoc,
+    "\n  query MyAgentKeys {\n    myAgentKeys {\n      ...AgentKeyFields\n    }\n  }\n": typeof types.MyAgentKeysDocument,
+    "\n  mutation CreateAgentKey($input: CreateAgentKeyInput!) {\n    createAgentKey(input: $input) {\n      agentKey {\n        ...AgentKeyFields\n      }\n      token\n    }\n  }\n": typeof types.CreateAgentKeyDocument,
+    "\n  mutation RegenerateAgentKey($id: ID!) {\n    regenerateAgentKey(id: $id) {\n      agentKey {\n        ...AgentKeyFields\n      }\n      token\n    }\n  }\n": typeof types.RegenerateAgentKeyDocument,
+    "\n  mutation UpdateAgentKey($id: ID!, $input: UpdateAgentKeyInput!) {\n    updateAgentKey(id: $id, input: $input) {\n      ...AgentKeyFields\n    }\n  }\n": typeof types.UpdateAgentKeyDocument,
+    "\n  mutation SetAgentKeyEnabled($id: ID!, $enabled: Boolean!) {\n    setAgentKeyEnabled(id: $id, enabled: $enabled) {\n      ...AgentKeyFields\n    }\n  }\n": typeof types.SetAgentKeyEnabledDocument,
+    "\n  mutation DeleteAgentKey($id: ID!) {\n    deleteAgentKey(id: $id)\n  }\n": typeof types.DeleteAgentKeyDocument,
     "\n  fragment APIKeyFields on APIKey {\n    id\n    keyId\n    enabled\n    lastUsedAt\n    createdAt\n    updatedAt\n  }\n": typeof types.ApiKeyFieldsFragmentDoc,
     "\n  query MyAPIKey {\n    myAPIKey {\n      ...APIKeyFields\n    }\n  }\n": typeof types.MyApiKeyDocument,
     "\n  mutation CreateMyAPIKey {\n    createMyAPIKey {\n      apiKey {\n        ...APIKeyFields\n      }\n      token\n    }\n  }\n": typeof types.CreateMyApiKeyDocument,
@@ -167,6 +174,13 @@ type Documents = {
     "\n  subscription WikiDocumentPresenceChanged($operationId: ID!) {\n    wikiDocumentPresenceChanged(operationId: $operationId) {\n      documentId operationId userId username action\n    }\n  }\n": typeof types.WikiDocumentPresenceChangedDocument,
 };
 const documents: Documents = {
+    "\n  fragment AgentKeyFields on AgentKey {\n    id\n    keyId\n    name\n    enabled\n    maxRole\n    allowWrites\n    operationScopes {\n      id\n      name\n    }\n    lastUsedAt\n    createdAt\n    updatedAt\n  }\n": types.AgentKeyFieldsFragmentDoc,
+    "\n  query MyAgentKeys {\n    myAgentKeys {\n      ...AgentKeyFields\n    }\n  }\n": types.MyAgentKeysDocument,
+    "\n  mutation CreateAgentKey($input: CreateAgentKeyInput!) {\n    createAgentKey(input: $input) {\n      agentKey {\n        ...AgentKeyFields\n      }\n      token\n    }\n  }\n": types.CreateAgentKeyDocument,
+    "\n  mutation RegenerateAgentKey($id: ID!) {\n    regenerateAgentKey(id: $id) {\n      agentKey {\n        ...AgentKeyFields\n      }\n      token\n    }\n  }\n": types.RegenerateAgentKeyDocument,
+    "\n  mutation UpdateAgentKey($id: ID!, $input: UpdateAgentKeyInput!) {\n    updateAgentKey(id: $id, input: $input) {\n      ...AgentKeyFields\n    }\n  }\n": types.UpdateAgentKeyDocument,
+    "\n  mutation SetAgentKeyEnabled($id: ID!, $enabled: Boolean!) {\n    setAgentKeyEnabled(id: $id, enabled: $enabled) {\n      ...AgentKeyFields\n    }\n  }\n": types.SetAgentKeyEnabledDocument,
+    "\n  mutation DeleteAgentKey($id: ID!) {\n    deleteAgentKey(id: $id)\n  }\n": types.DeleteAgentKeyDocument,
     "\n  fragment APIKeyFields on APIKey {\n    id\n    keyId\n    enabled\n    lastUsedAt\n    createdAt\n    updatedAt\n  }\n": types.ApiKeyFieldsFragmentDoc,
     "\n  query MyAPIKey {\n    myAPIKey {\n      ...APIKeyFields\n    }\n  }\n": types.MyApiKeyDocument,
     "\n  mutation CreateMyAPIKey {\n    createMyAPIKey {\n      apiKey {\n        ...APIKeyFields\n      }\n      token\n    }\n  }\n": types.CreateMyApiKeyDocument,
@@ -334,6 +348,34 @@ const documents: Documents = {
  */
 export function graphql(source: string): unknown;
 
+/**
+ * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
+ */
+export function graphql(source: "\n  fragment AgentKeyFields on AgentKey {\n    id\n    keyId\n    name\n    enabled\n    maxRole\n    allowWrites\n    operationScopes {\n      id\n      name\n    }\n    lastUsedAt\n    createdAt\n    updatedAt\n  }\n"): (typeof documents)["\n  fragment AgentKeyFields on AgentKey {\n    id\n    keyId\n    name\n    enabled\n    maxRole\n    allowWrites\n    operationScopes {\n      id\n      name\n    }\n    lastUsedAt\n    createdAt\n    updatedAt\n  }\n"];
+/**
+ * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
+ */
+export function graphql(source: "\n  query MyAgentKeys {\n    myAgentKeys {\n      ...AgentKeyFields\n    }\n  }\n"): (typeof documents)["\n  query MyAgentKeys {\n    myAgentKeys {\n      ...AgentKeyFields\n    }\n  }\n"];
+/**
+ * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
+ */
+export function graphql(source: "\n  mutation CreateAgentKey($input: CreateAgentKeyInput!) {\n    createAgentKey(input: $input) {\n      agentKey {\n        ...AgentKeyFields\n      }\n      token\n    }\n  }\n"): (typeof documents)["\n  mutation CreateAgentKey($input: CreateAgentKeyInput!) {\n    createAgentKey(input: $input) {\n      agentKey {\n        ...AgentKeyFields\n      }\n      token\n    }\n  }\n"];
+/**
+ * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
+ */
+export function graphql(source: "\n  mutation RegenerateAgentKey($id: ID!) {\n    regenerateAgentKey(id: $id) {\n      agentKey {\n        ...AgentKeyFields\n      }\n      token\n    }\n  }\n"): (typeof documents)["\n  mutation RegenerateAgentKey($id: ID!) {\n    regenerateAgentKey(id: $id) {\n      agentKey {\n        ...AgentKeyFields\n      }\n      token\n    }\n  }\n"];
+/**
+ * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
+ */
+export function graphql(source: "\n  mutation UpdateAgentKey($id: ID!, $input: UpdateAgentKeyInput!) {\n    updateAgentKey(id: $id, input: $input) {\n      ...AgentKeyFields\n    }\n  }\n"): (typeof documents)["\n  mutation UpdateAgentKey($id: ID!, $input: UpdateAgentKeyInput!) {\n    updateAgentKey(id: $id, input: $input) {\n      ...AgentKeyFields\n    }\n  }\n"];
+/**
+ * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
+ */
+export function graphql(source: "\n  mutation SetAgentKeyEnabled($id: ID!, $enabled: Boolean!) {\n    setAgentKeyEnabled(id: $id, enabled: $enabled) {\n      ...AgentKeyFields\n    }\n  }\n"): (typeof documents)["\n  mutation SetAgentKeyEnabled($id: ID!, $enabled: Boolean!) {\n    setAgentKeyEnabled(id: $id, enabled: $enabled) {\n      ...AgentKeyFields\n    }\n  }\n"];
+/**
+ * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
+ */
+export function graphql(source: "\n  mutation DeleteAgentKey($id: ID!) {\n    deleteAgentKey(id: $id)\n  }\n"): (typeof documents)["\n  mutation DeleteAgentKey($id: ID!) {\n    deleteAgentKey(id: $id)\n  }\n"];
 /**
  * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
  */
