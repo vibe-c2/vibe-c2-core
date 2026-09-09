@@ -59,6 +59,10 @@ func (m *mockOperationEventRepo) CoalesceAgentEvent(context.Context, uuid.UUID, 
 	return nil
 }
 
+func (m *mockOperationEventRepo) HasRecentEventForSubject(context.Context, uuid.UUID, uuid.UUID, time.Time) (bool, error) {
+	return false, nil
+}
+
 var errNotFoundStub = errors.New("not found")
 
 var _ repository.IOperationEventRepository = (*mockOperationEventRepo)(nil)

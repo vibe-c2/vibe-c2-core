@@ -18,6 +18,24 @@ import (
 // apart still reads as two separate visits.
 const coalesceWindow = 60 * time.Second
 
+// domainEchoWindow is how recently a row for the same subject must exist for
+// this layer to treat the domain path as having already recorded the action.
+const domainEchoWindow = 10 * time.Second
+
+// domainEchoDelay is how long to wait before deciding the domain path is not
+// going to write a row of its own.
+//
+// events.Logger persists its topics from a bus subscriber, on its own
+// goroutine, so its row lands AFTER the tool call returns. Checking
+// immediately therefore loses the race and writes a second row for the same
+// action. Waiting first is what makes the check mean what it says.
+//
+// Deferring costs nothing that matters: the timeline is a historical
+// narrative, not a live feed. The live feed is the activity rail, which is
+// published synchronously, and the durable record of what the agent did is
+// the audit row, also written synchronously.
+const domainEchoDelay = 2 * time.Second
+
 // recordOnTimeline puts an agent's write into the operator's timeline.
 //
 // Written here rather than by extending events.Logger.Topics() on purpose.
@@ -41,32 +59,13 @@ func (s *Server) recordOnTimeline(ctx context.Context, e auditEntry) {
 		return
 	}
 
+	// Everything the write needs is captured here, because the work below runs
+	// after this request's context is gone.
 	subjectID, subjectKind := e.result.subject()
-	topic := "agent." + e.tool
-	now := time.Now().UTC()
-
-	key := repository.AgentEventKey{
-		OperationID: *e.result.OperationID,
-		ActorID:     ownerID,
-		ActorName:   agent.Name,
-		Topic:       topic,
-		SubjectID:   subjectID,
-	}
-
-	// Fold into a recent row for the same subject rather than adding another.
-	if existing, findErr := s.deps.OperationEventRepo.FindRecentAgentEvent(ctx, key, now.Add(-coalesceWindow)); findErr == nil {
-		if err := s.deps.OperationEventRepo.CoalesceAgentEvent(ctx, existing.EventID, now, 1); err != nil {
-			s.deps.Logger.Error("mcp: failed to coalesce timeline row", zap.Error(err))
-			return
-		}
-		s.publishLogged(agent, ownerID, existing.EventID, *e.result.OperationID)
-		return
-	}
-
 	row := &models.OperationEvent{
 		EventID:     uuid.New(),
 		OperationID: *e.result.OperationID,
-		Topic:       topic,
+		Topic:       "agent." + e.tool,
 		SubjectKind: subjectKind,
 		SubjectID:   subjectID,
 		SubjectName: e.result.SubjectName,
@@ -75,18 +74,69 @@ func (s *Server) recordOnTimeline(ctx context.Context, e auditEntry) {
 		// surfaces what their agent did for them. ActorName says which agent.
 		ActorID:   &ownerID,
 		ActorName: agent.Name,
-		Metadata: map[string]any{
-			"tool":  e.tool,
-			"count": 1,
-		},
-		OccurredAt: now,
+		Metadata:  map[string]any{"tool": e.tool, "count": 1},
+	}
+	agentCopy := *agent
+
+	go s.writeTimelineRow(row, &agentCopy, ownerID)
+}
+
+// writeTimelineRow defers, deduplicates, coalesces, and writes.
+//
+// Detached from the request: the caller has already been answered, and the
+// wait below outlives the HTTP handler by design.
+func (s *Server) writeTimelineRow(row *models.OperationEvent, agent *gqlctx.AgentInfo, ownerID uuid.UUID) {
+	defer func() {
+		if r := recover(); r != nil {
+			s.deps.Logger.Error("mcp: timeline attribution panicked", zap.Any("panic", r))
+		}
+	}()
+
+	time.Sleep(domainEchoDelay)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	now := time.Now().UTC()
+	row.OccurredAt = now
+
+	// Did the normal domain path already record this action? Some tools act
+	// through resolvers that publish an event events.Logger persists — a task
+	// reaching DONE, a custom timeline marker. Those rows now carry agent
+	// attribution of their own (see resolver.eventActor), so a row here would
+	// show the operator the same action twice.
+	if row.SubjectID != uuid.Nil {
+		exists, err := s.deps.OperationEventRepo.HasRecentEventForSubject(
+			ctx, row.OperationID, row.SubjectID, now.Add(-domainEchoWindow))
+		if err == nil && exists {
+			return
+		}
+	}
+
+	// Fold repeated work on the same subject into one row rather than adding
+	// another. An agent edits a page twenty times in a minute; a person does
+	// not, and a row per edit would bury the human narrative.
+	key := repository.AgentEventKey{
+		OperationID: row.OperationID,
+		ActorID:     ownerID,
+		ActorName:   agent.Name,
+		Topic:       row.Topic,
+		SubjectID:   row.SubjectID,
+	}
+	if existing, err := s.deps.OperationEventRepo.FindRecentAgentEvent(ctx, key, now.Add(-coalesceWindow)); err == nil {
+		if err := s.deps.OperationEventRepo.CoalesceAgentEvent(ctx, existing.EventID, now, 1); err != nil {
+			s.deps.Logger.Error("mcp: failed to coalesce timeline row", zap.Error(err))
+			return
+		}
+		s.publishLogged(agent, ownerID, existing.EventID, row.OperationID)
+		return
 	}
 
 	if err := s.deps.OperationEventRepo.Insert(ctx, row); err != nil {
 		s.deps.Logger.Error("mcp: failed to write timeline row", zap.Error(err))
 		return
 	}
-	s.publishLogged(agent, ownerID, row.EventID, *e.result.OperationID)
+	s.publishLogged(agent, ownerID, row.EventID, row.OperationID)
 }
 
 // publishLogged drives the live timeline subscription, the same way the

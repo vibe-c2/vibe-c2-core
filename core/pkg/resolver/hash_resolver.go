@@ -203,7 +203,7 @@ func (r *hashResolver) CreateHash(ctx context.Context, operationID string, input
 
 	auth := gqlctx.AuthFromContext(ctx)
 	r.eventBus.Publish(eventbus.NewHashCreatedEvent(
-		eventbus.UserActor(auth.UserID),
+		eventActor(auth),
 		eventbus.HashEventPayload{
 			HashID:      h.HashID.String(),
 			OperationID: h.OperationID.String(),
@@ -289,7 +289,7 @@ func (r *hashResolver) UpdateHash(ctx context.Context, id string, input model.Up
 
 	auth := gqlctx.AuthFromContext(ctx)
 	r.eventBus.Publish(eventbus.NewHashUpdatedEvent(
-		eventbus.UserActor(auth.UserID),
+		eventActor(auth),
 		eventbus.HashEventPayload{
 			HashID:      updated.HashID.String(),
 			OperationID: updated.OperationID.String(),
@@ -331,7 +331,7 @@ func (r *hashResolver) DeleteHash(ctx context.Context, id string) (bool, error) 
 
 	auth := gqlctx.AuthFromContext(ctx)
 	r.eventBus.Publish(eventbus.NewHashDeletedEvent(
-		eventbus.UserActor(auth.UserID),
+		eventActor(auth),
 		eventbus.HashEventPayload{
 			HashID:      h.HashID.String(),
 			OperationID: h.OperationID.String(),
@@ -403,7 +403,7 @@ func (r *hashResolver) BulkImportHashes(ctx context.Context, operationID string,
 	auth := gqlctx.AuthFromContext(ctx)
 	if len(inserted) > 0 {
 		r.eventBus.Publish(eventbus.NewHashBulkImportedEvent(
-			eventbus.UserActor(auth.UserID),
+			eventActor(auth),
 			eventbus.HashBulkImportPayload{
 				OperationID: opUID.String(),
 				Count:       len(inserted),
@@ -492,7 +492,7 @@ func (r *hashResolver) MarkHashCracked(ctx context.Context, id string, input mod
 
 	auth := gqlctx.AuthFromContext(ctx)
 	r.eventBus.Publish(eventbus.NewHashCrackedEvent(
-		eventbus.UserActor(auth.UserID),
+		eventActor(auth),
 		eventbus.HashCrackedPayload{
 			HashID:       updated.HashID.String(),
 			OperationID:  updated.OperationID.String(),

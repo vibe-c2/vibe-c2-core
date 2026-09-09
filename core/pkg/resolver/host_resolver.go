@@ -136,7 +136,7 @@ func (r *hostResolver) CreateHost(ctx context.Context, operationID string, input
 	}
 
 	r.eventBus.Publish(eventbus.NewHostCreatedEvent(
-		eventbus.UserActor(auth.UserID),
+		eventActor(auth),
 		eventbus.HostEventPayload{
 			HostID:      host.HostID.String(),
 			OperationID: host.OperationID.String(),
@@ -220,7 +220,7 @@ func (r *hostResolver) UpdateHost(ctx context.Context, id string, input model.Up
 
 	auth := gqlctx.AuthFromContext(ctx)
 	r.eventBus.Publish(eventbus.NewHostUpdatedEvent(
-		eventbus.UserActor(auth.UserID),
+		eventActor(auth),
 		eventbus.HostEventPayload{
 			HostID:      updated.HostID.String(),
 			OperationID: updated.OperationID.String(),
@@ -266,7 +266,7 @@ func (r *hostResolver) DeleteHost(ctx context.Context, id string) (bool, error) 
 
 	auth := gqlctx.AuthFromContext(ctx)
 	r.eventBus.Publish(eventbus.NewHostDeletedEvent(
-		eventbus.UserActor(auth.UserID),
+		eventActor(auth),
 		eventbus.HostEventPayload{
 			HostID:      host.HostID.String(),
 			OperationID: host.OperationID.String(),

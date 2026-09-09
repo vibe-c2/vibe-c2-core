@@ -164,6 +164,16 @@ type IOperationEventRepository interface {
 	// CoalesceAgentEvent folds another occurrence into an existing agent row,
 	// bumping its count and its timestamp.
 	CoalesceAgentEvent(ctx context.Context, eventID uuid.UUID, at time.Time, count int) error
+
+	// HasRecentEventForSubject reports whether ANY row already exists for this
+	// subject inside the window, whoever wrote it.
+	//
+	// Some of what an agent does already reaches the timeline through the
+	// normal domain path — events.Logger persists a handful of topics, and
+	// custom timeline events write their own row. Without this check the agent
+	// layer adds a second row for the same action and the operator sees every
+	// such event twice.
+	HasRecentEventForSubject(ctx context.Context, operationID, subjectID uuid.UUID, since time.Time) (bool, error)
 }
 
 // AgentEventKey identifies the group of agent writes that collapse into one
@@ -221,6 +231,15 @@ func (r *operationEventRepository) FindRecentAgentEvent(ctx context.Context, q A
 		"occurred_at":  bson.M{"$gte": since},
 	}).Sort("-occurred_at").One(&e)
 	return e, err
+}
+
+func (r *operationEventRepository) HasRecentEventForSubject(ctx context.Context, operationID, subjectID uuid.UUID, since time.Time) (bool, error) {
+	n, err := r.coll.Find(ctx, bson.M{
+		"operation_id": operationID,
+		"subject_id":   subjectID,
+		"occurred_at":  bson.M{"$gte": since},
+	}).Count()
+	return n > 0, err
 }
 
 func (r *operationEventRepository) CoalesceAgentEvent(ctx context.Context, eventID uuid.UUID, at time.Time, count int) error {

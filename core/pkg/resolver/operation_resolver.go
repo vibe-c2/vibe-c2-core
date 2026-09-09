@@ -169,7 +169,7 @@ func (r *operationResolver) CreateOperation(ctx context.Context, input model.Cre
 		return nil, fmt.Errorf("failed to create operation: %w", err)
 	}
 
-	r.eventBus.Publish(eventbus.NewOperationCreatedEvent(eventbus.UserActor(auth.UserID), eventbus.OperationEventPayload{
+	r.eventBus.Publish(eventbus.NewOperationCreatedEvent(eventActor(auth), eventbus.OperationEventPayload{
 		OperationID: op.OperationID.String(), Name: op.Name,
 	}))
 
@@ -219,7 +219,7 @@ func (r *operationResolver) UpdateOperation(ctx context.Context, id string, inpu
 	}
 
 	auth := gqlctx.AuthFromContext(ctx)
-	r.eventBus.Publish(eventbus.NewOperationUpdatedEvent(eventbus.UserActor(auth.UserID), eventbus.OperationEventPayload{
+	r.eventBus.Publish(eventbus.NewOperationUpdatedEvent(eventActor(auth), eventbus.OperationEventPayload{
 		OperationID: updated.OperationID.String(), Name: updated.Name,
 	}))
 
@@ -274,7 +274,7 @@ func (r *operationResolver) DeleteOperation(ctx context.Context, id string) (boo
 	}
 
 	auth := gqlctx.AuthFromContext(ctx)
-	r.eventBus.Publish(eventbus.NewOperationDeletedEvent(eventbus.UserActor(auth.UserID), eventbus.OperationDeletedPayload{
+	r.eventBus.Publish(eventbus.NewOperationDeletedEvent(eventActor(auth), eventbus.OperationDeletedPayload{
 		OperationID: id,
 	}))
 
@@ -334,7 +334,7 @@ func (r *operationResolver) AddOperationMember(ctx context.Context, operationID 
 	}
 
 	auth := gqlctx.AuthFromContext(ctx)
-	r.eventBus.Publish(eventbus.NewOperationMemberAddedEvent(eventbus.UserActor(auth.UserID), eventbus.OperationMemberPayload{
+	r.eventBus.Publish(eventbus.NewOperationMemberAddedEvent(eventActor(auth), eventbus.OperationMemberPayload{
 		OperationID: operationID, MemberID: userID,
 	}))
 
@@ -382,7 +382,7 @@ func (r *operationResolver) RemoveOperationMember(ctx context.Context, operation
 	}
 
 	auth := gqlctx.AuthFromContext(ctx)
-	r.eventBus.Publish(eventbus.NewOperationMemberRemovedEvent(eventbus.UserActor(auth.UserID), eventbus.OperationMemberPayload{
+	r.eventBus.Publish(eventbus.NewOperationMemberRemovedEvent(eventActor(auth), eventbus.OperationMemberPayload{
 		OperationID: operationID, MemberID: userID,
 	}))
 
@@ -434,7 +434,7 @@ func (r *operationResolver) UpdateOperationMemberRole(ctx context.Context, opera
 	}
 
 	auth := gqlctx.AuthFromContext(ctx)
-	r.eventBus.Publish(eventbus.NewOperationMemberUpdatedEvent(eventbus.UserActor(auth.UserID), eventbus.OperationMemberPayload{
+	r.eventBus.Publish(eventbus.NewOperationMemberUpdatedEvent(eventActor(auth), eventbus.OperationMemberPayload{
 		OperationID: operationID, MemberID: userID,
 	}))
 

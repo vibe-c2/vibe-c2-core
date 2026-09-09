@@ -1130,7 +1130,7 @@ func (r *taskResolver) publishTaskEvent(ctx context.Context, topic eventbus.Topi
 		payload.DeletedAt = task.DeletedAt.UTC().Format(time.RFC3339)
 	}
 
-	actor := eventbus.UserActor(auth.UserID)
+	actor := eventActor(auth)
 	var event eventbus.Event
 	switch topic {
 	case eventbus.TopicTaskCreated:

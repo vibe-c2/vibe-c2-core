@@ -8,6 +8,7 @@ import (
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/vibe-c2/vibe-c2-core/core/pkg/graphql/gqlctx"
 	"github.com/vibe-c2/vibe-c2-core/core/pkg/models"
+	"go.uber.org/zap"
 )
 
 type listOperationsArgs struct{}
@@ -117,26 +118,65 @@ func handleGetOperationSummary(ctx context.Context, s *Server, args getOperation
 	summary := operationSummary{Operation: toOperationView(&op, cappedRoleFor(auth, &op))}
 	idStr := opID.String()
 
-	// Each count is a first-page fetch with the cheapest possible size; the
-	// connections carry TotalCount, so this is one query per kind rather than
-	// a full listing.
-	zero := 0
-	if conn, err := s.deps.Hosts.Hosts(ctx, idStr, nil, nil, nil, &zero, nil, nil, nil); err == nil {
-		summary.Hosts = conn.TotalCount
+	// Each count is a one-row fetch: the connections carry TotalCount, so this
+	// is one query per kind rather than a full listing.
+	//
+	// One row, not zero. `first: 0` is rejected by pagination.ParseArgs as
+	// "must be positive", and an earlier version swallowed that error and
+	// reported the count as 0 — so every count in this summary was silently
+	// zero, which an agent would read as "this operation is empty". A failed
+	// count must never be indistinguishable from a real one.
+	const probe = 1
+
+	count := func(kind string, fn func() (int, error)) int {
+		n, err := fn()
+		if err != nil {
+			s.deps.Logger.Warn("mcp: operation summary count failed",
+				zap.String("kind", kind), zap.Error(err))
+			summary.Notes = append(summary.Notes,
+				fmt.Sprintf("Could not count %s — treat that number as unknown, not zero.", kind))
+			return 0
+		}
+		return n
 	}
-	if conn, err := s.deps.Credentials.Credentials(ctx, idStr, nil, nil, nil, nil, nil, nil, nil, &zero, nil, nil, nil); err == nil {
-		summary.Credentials = conn.TotalCount
-	}
-	if conn, err := s.deps.Hashes.Hashes(ctx, idStr, nil, nil, nil, nil, &zero, nil, nil, nil); err == nil {
-		summary.Hashes = conn.TotalCount
-	}
-	done := models.TaskStageDone
-	if conn, err := s.deps.Tasks.Tasks(ctx, idStr, nil, []models.TaskStage{done}, nil, nil, nil, nil, nil, &zero, nil, nil, nil); err == nil {
-		summary.OpenTasks = conn.TotalCount
-	}
-	if tree, err := s.deps.WikiDocs.WikiDocumentTree(ctx, idStr); err == nil {
-		summary.WikiPages = len(tree)
-	}
+
+	first := probe
+	summary.Hosts = count("hosts", func() (int, error) {
+		conn, err := s.deps.Hosts.Hosts(ctx, idStr, nil, nil, nil, &first, nil, nil, nil)
+		if err != nil {
+			return 0, err
+		}
+		return conn.TotalCount, nil
+	})
+	summary.Credentials = count("credentials", func() (int, error) {
+		conn, err := s.deps.Credentials.Credentials(ctx, idStr, nil, nil, nil, nil, nil, nil, nil, &first, nil, nil, nil)
+		if err != nil {
+			return 0, err
+		}
+		return conn.TotalCount, nil
+	})
+	summary.Hashes = count("hashes", func() (int, error) {
+		conn, err := s.deps.Hashes.Hashes(ctx, idStr, nil, nil, nil, nil, &first, nil, nil, nil)
+		if err != nil {
+			return 0, err
+		}
+		return conn.TotalCount, nil
+	})
+	summary.OpenTasks = count("open tasks", func() (int, error) {
+		done := models.TaskStageDone
+		conn, err := s.deps.Tasks.Tasks(ctx, idStr, nil, []models.TaskStage{done}, nil, nil, nil, nil, nil, &first, nil, nil, nil)
+		if err != nil {
+			return 0, err
+		}
+		return conn.TotalCount, nil
+	})
+	summary.WikiPages = count("wiki pages", func() (int, error) {
+		tree, err := s.deps.WikiDocs.WikiDocumentTree(ctx, idStr)
+		if err != nil {
+			return 0, err
+		}
+		return len(tree), nil
+	})
 
 	return toolResult{
 		Payload:     summary,

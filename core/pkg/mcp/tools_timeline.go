@@ -68,12 +68,13 @@ func handleGetTimeline(ctx context.Context, s *Server, args getTimelineArgs) (to
 
 	views := make([]timelineEventView, 0, len(conn.Edges))
 	for _, edge := range conn.Edges {
-		actor := ""
-		// Actor resolution is best-effort: a deleted account or a service
-		// actor leaves the row intact but nameless, and that is not worth
-		// failing the whole read over.
-		if user, err := s.deps.Timeline.Actor(ctx, edge.Node); err == nil && user != nil {
-			actor = user.Username
+		// ActorLabel, not Actor. Actor resolves only for human rows, so an
+		// agent's own work came back unattributed — the agent could not even
+		// see what it had just done. ActorLabel renders every kind: a
+		// username, "Claude (via alice)", or a service name.
+		actor, err := s.deps.Timeline.ActorLabel(ctx, edge.Node)
+		if err != nil {
+			actor = ""
 		}
 		views = append(views, toTimelineEventView(edge.Node, actor))
 	}

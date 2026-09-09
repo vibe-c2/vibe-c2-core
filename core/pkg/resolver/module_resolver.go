@@ -82,7 +82,7 @@ func (r *moduleResolver) RemoveModule(ctx context.Context, instance string) (*mo
 	}
 
 	auth := gqlctx.AuthFromContext(ctx)
-	found, err := r.deregistrar.Deregister(ctx, instance, removeModuleReason, eventbus.UserActor(auth.UserID))
+	found, err := r.deregistrar.Deregister(ctx, instance, removeModuleReason, eventActor(auth))
 	if err != nil {
 		return nil, fmt.Errorf("failed to remove module: %w", err)
 	}

@@ -187,7 +187,7 @@ func (r *credentialResolver) CreateCredential(ctx context.Context, operationID s
 	}
 
 	r.eventBus.Publish(eventbus.NewCredentialCreatedEvent(
-		eventbus.UserActor(auth.UserID),
+		eventActor(auth),
 		eventbus.CredentialEventPayload{
 			CredentialID: cred.CredentialID.String(),
 			OperationID:  cred.OperationID.String(),
@@ -266,7 +266,7 @@ func (r *credentialResolver) UpdateCredential(ctx context.Context, id string, in
 
 	auth := gqlctx.AuthFromContext(ctx)
 	r.eventBus.Publish(eventbus.NewCredentialUpdatedEvent(
-		eventbus.UserActor(auth.UserID),
+		eventActor(auth),
 		eventbus.CredentialEventPayload{
 			CredentialID: updated.CredentialID.String(),
 			OperationID:  updated.OperationID.String(),
@@ -327,7 +327,7 @@ func (r *credentialResolver) DeleteCredential(ctx context.Context, id string) (b
 
 	auth := gqlctx.AuthFromContext(ctx)
 	r.eventBus.Publish(eventbus.NewCredentialDeletedEvent(
-		eventbus.UserActor(auth.UserID),
+		eventActor(auth),
 		eventbus.CredentialEventPayload{
 			CredentialID: cred.CredentialID.String(),
 			OperationID:  cred.OperationID.String(),
@@ -384,7 +384,7 @@ func (r *credentialResolver) AddCredentialComment(ctx context.Context, credentia
 	}
 
 	r.eventBus.Publish(eventbus.NewCredentialCommentAddedEvent(
-		eventbus.UserActor(auth.UserID),
+		eventActor(auth),
 		eventbus.CredentialEventPayload{
 			CredentialID: updated.CredentialID.String(),
 			OperationID:  updated.OperationID.String(),
@@ -437,7 +437,7 @@ func (r *credentialResolver) UpdateCredentialComment(ctx context.Context, creden
 
 	auth := gqlctx.AuthFromContext(ctx)
 	r.eventBus.Publish(eventbus.NewCredentialCommentUpdatedEvent(
-		eventbus.UserActor(auth.UserID),
+		eventActor(auth),
 		eventbus.CredentialEventPayload{
 			CredentialID: updated.CredentialID.String(),
 			OperationID:  updated.OperationID.String(),
@@ -484,7 +484,7 @@ func (r *credentialResolver) DeleteCredentialComment(ctx context.Context, creden
 
 	auth := gqlctx.AuthFromContext(ctx)
 	r.eventBus.Publish(eventbus.NewCredentialCommentRemovedEvent(
-		eventbus.UserActor(auth.UserID),
+		eventActor(auth),
 		eventbus.CredentialEventPayload{
 			CredentialID: updated.CredentialID.String(),
 			OperationID:  updated.OperationID.String(),

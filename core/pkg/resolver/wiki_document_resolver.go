@@ -346,7 +346,7 @@ func (r *wikiDocumentResolver) CreateWikiDocument(ctx context.Context, operation
 	}
 
 	r.eventBus.Publish(eventbus.NewWikiDocumentCreatedEvent(
-		eventbus.UserActor(auth.UserID), r.wikiDocPayload(doc),
+		eventActor(auth), r.wikiDocPayload(doc),
 	))
 
 	return doc, nil
@@ -482,9 +482,9 @@ func (r *wikiDocumentResolver) UpdateWikiDocument(ctx context.Context, id string
 		if previousParentID != nil {
 			payload.PreviousParentDocumentID = previousParentID.String()
 		}
-		r.eventBus.Publish(eventbus.NewWikiDocumentMovedEvent(eventbus.UserActor(auth.UserID), payload))
+		r.eventBus.Publish(eventbus.NewWikiDocumentMovedEvent(eventActor(auth), payload))
 	} else {
-		r.eventBus.Publish(eventbus.NewWikiDocumentUpdatedEvent(eventbus.UserActor(auth.UserID), payload))
+		r.eventBus.Publish(eventbus.NewWikiDocumentUpdatedEvent(eventActor(auth), payload))
 	}
 
 	return &updated, nil
@@ -680,7 +680,7 @@ func (r *wikiDocumentResolver) ReorderWikiDocumentSiblings(
 	// drop. The event is an invalidation hint, not a single-doc state event
 	// — the doc body in the payload exists only to keep the payload type
 	// consistent with the single-doc update path.
-	actor := eventbus.UserActor(auth.UserID)
+	actor := eventActor(auth)
 
 	r.publishBucketEvent(actor, results[0], targetParent)
 
@@ -770,7 +770,7 @@ func (r *wikiDocumentResolver) DeleteWikiDocument(ctx context.Context, id string
 	}
 
 	r.eventBus.Publish(eventbus.NewWikiDocumentSoftDeletedEvent(
-		eventbus.UserActor(auth.UserID), r.wikiDocPayload(&doc),
+		eventActor(auth), r.wikiDocPayload(&doc),
 	))
 
 	return true, nil
@@ -945,7 +945,7 @@ func (r *wikiDocumentResolver) DuplicateWikiDocument(ctx context.Context, id str
 	// in the duplicate's descendants on demand. Matches the cascade-delete
 	// pattern (one event per root, not per descendant).
 	r.eventBus.Publish(eventbus.NewWikiDocumentCreatedEvent(
-		eventbus.UserActor(auth.UserID), r.wikiDocPayload(rootDup),
+		eventActor(auth), r.wikiDocPayload(rootDup),
 	))
 
 	reloaded, err := r.docRepo.FindByID(ctx, rootDup.DocumentID)
@@ -1097,7 +1097,7 @@ func (r *wikiDocumentResolver) InstantiateTemplate(ctx context.Context, template
 	}
 
 	r.eventBus.Publish(eventbus.NewWikiDocumentCreatedEvent(
-		eventbus.UserActor(auth.UserID), r.wikiDocPayload(instance),
+		eventActor(auth), r.wikiDocPayload(instance),
 	))
 
 	return instance, nil
@@ -1151,7 +1151,7 @@ func (r *wikiDocumentResolver) SetWikiDocumentTemplate(ctx context.Context, id s
 	}
 
 	r.eventBus.Publish(eventbus.NewWikiDocumentUpdatedEvent(
-		eventbus.UserActor(auth.UserID), r.wikiDocPayload(&updated),
+		eventActor(auth), r.wikiDocPayload(&updated),
 	))
 
 	return &updated, nil
@@ -1249,7 +1249,7 @@ func (r *wikiDocumentResolver) RestoreWikiDocument(ctx context.Context, id strin
 	}
 
 	r.eventBus.Publish(eventbus.NewWikiDocumentRestoredEvent(
-		eventbus.UserActor(auth.UserID), r.wikiDocPayload(&restored),
+		eventActor(auth), r.wikiDocPayload(&restored),
 	))
 
 	return &restored, nil
@@ -1339,7 +1339,7 @@ func (r *wikiDocumentResolver) PermanentlyDeleteWikiDocument(ctx context.Context
 	}
 
 	r.eventBus.Publish(eventbus.NewWikiDocumentHardDeletedEvent(
-		eventbus.UserActor(auth.UserID), r.wikiDocPayload(&doc),
+		eventActor(auth), r.wikiDocPayload(&doc),
 	))
 
 	return true, nil
@@ -1403,7 +1403,7 @@ func (r *wikiDocumentResolver) EmptyWikiDocumentTrash(ctx context.Context, opera
 	}
 
 	r.eventBus.Publish(eventbus.NewWikiDocumentHardDeletedEvent(
-		eventbus.UserActor(auth.UserID), eventbus.WikiDocumentEventPayload{
+		eventActor(auth), eventbus.WikiDocumentEventPayload{
 			OperationID: operationID,
 		},
 	))
@@ -1520,7 +1520,7 @@ func (r *wikiDocumentResolver) RestoreWikiDocumentBackup(ctx context.Context, do
 	}
 
 	r.eventBus.Publish(eventbus.NewWikiDocumentUpdatedEvent(
-		eventbus.UserActor(auth.UserID), r.wikiDocPayload(&restored),
+		eventActor(auth), r.wikiDocPayload(&restored),
 	))
 
 	return &restored, nil
