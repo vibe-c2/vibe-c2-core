@@ -6,6 +6,7 @@ import Zoom from "yet-another-react-lightbox/plugins/zoom"
 import Fullscreen from "yet-another-react-lightbox/plugins/fullscreen"
 import Counter from "yet-another-react-lightbox/plugins/counter"
 import { usePrintMode } from "@/hooks/use-print-mode"
+import { useFocusRestoreWithoutScroll } from "@/hooks/use-focus-restore-without-scroll"
 import "yet-another-react-lightbox/styles.css"
 import "yet-another-react-lightbox/plugins/counter.css"
 
@@ -19,6 +20,16 @@ import "yet-another-react-lightbox/plugins/counter.css"
  */
 export function WikiImageNode({ node, editor, getPos }: ReactNodeViewProps) {
   const [isOpen, setIsOpen] = useState(false)
+  // Closing the lightbox hands focus back to the editor, and the browser
+  // scrolls whatever it focuses into view — which on a long document dropped
+  // the reader at the end of the page. See the hook.
+  const captureFocusTarget = useFocusRestoreWithoutScroll(isOpen)
+
+  function openLightbox() {
+    // Capture before the overlay mounts and takes focus for itself.
+    captureFocusTarget()
+    setIsOpen(true)
+  }
   const src: string = node.attrs.src ?? ""
   const alt: string = node.attrs.alt ?? ""
 
@@ -110,7 +121,7 @@ export function WikiImageNode({ node, editor, getPos }: ReactNodeViewProps) {
             decoding={isPrintMode ? "sync" : "async"}
             className="wiki-image"
             draggable={false}
-            onClick={() => setIsOpen(true)}
+            onClick={openLightbox}
             // A 404 (e.g. the blob was garbage-collected) flips to the
             // placeholder above instead of leaving a blank gap.
             onError={() => setErroredSrc(src)}
@@ -122,7 +133,7 @@ export function WikiImageNode({ node, editor, getPos }: ReactNodeViewProps) {
               aria-label="Open image preview"
               title="Preview"
               onMouseDown={(e) => e.preventDefault()}
-              onClick={() => setIsOpen(true)}
+              onClick={openLightbox}
             >
               <MaximizeIcon size={14} />
             </button>

@@ -36,6 +36,7 @@ import "yet-another-react-lightbox/styles.css"
 import "yet-another-react-lightbox/plugins/counter.css"
 
 import { usePrintMode } from "@/hooks/use-print-mode"
+import { useFocusRestoreWithoutScroll } from "@/hooks/use-focus-restore-without-scroll"
 import { PreviewResizeHandle } from "./wiki-file-preview-resize"
 import { isPreviewableImage } from "./wiki-file-preview-image"
 import {
@@ -142,6 +143,13 @@ export function WikiFileCard({ node, editor, getPos }: ReactNodeViewProps): Reac
   // viewport would still be unfetched when window.print() fires and export as a
   // blank tile. Same trade the image node makes.
   const isPrintMode = usePrintMode()
+  // Same focus-restore scroll as the inline image node — see the hook.
+  const captureFocusTarget = useFocusRestoreWithoutScroll(lightboxOpen)
+
+  function openLightbox() {
+    captureFocusTarget()
+    setLightboxOpen(true)
+  }
   // User-dragged preview height in px, or null to fall back to the CSS default
   // (min(75vh, 720px)). Held on the card — not the panel — so a resize survives
   // collapsing and re-expanding the same attachment.
@@ -221,7 +229,7 @@ export function WikiFileCard({ node, editor, getPos }: ReactNodeViewProps): Reac
   // download.
   function handleFilenameClick() {
     if (showThumbnail) {
-      setLightboxOpen(true)
+      openLightbox()
       return
     }
     if (canPreviewInline) {
@@ -245,7 +253,7 @@ export function WikiFileCard({ node, editor, getPos }: ReactNodeViewProps): Reac
             aria-label={`Open ${filename} full size`}
             title="Open full size"
             onMouseDown={swallow}
-            onClick={() => setLightboxOpen(true)}
+            onClick={openLightbox}
           >
             <img
               src={previewUrl}
@@ -283,7 +291,7 @@ export function WikiFileCard({ node, editor, getPos }: ReactNodeViewProps): Reac
               icon={<Maximize2Icon size={ACTION_ICON_SIZE} />}
               label="Open image full size"
               title="Open full size"
-              onClick={() => setLightboxOpen(true)}
+              onClick={openLightbox}
             />
           ) : null}
           {canPreviewInline ? (
