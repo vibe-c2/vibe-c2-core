@@ -31,6 +31,7 @@ type Config = graphql.Config[ResolverRoot, DirectiveRoot, ComplexityRoot]
 
 type ResolverRoot interface {
 	APIKey() APIKeyResolver
+	AgentAction() AgentActionResolver
 	AgentKey() AgentKeyResolver
 	Credential() CredentialResolver
 	CredentialComment() CredentialCommentResolver
@@ -70,6 +71,21 @@ type ComplexityRoot struct {
 		Token  func(childComplexity int) int
 	}
 
+	AgentAction struct {
+		AgentKeyID  func(childComplexity int) int
+		AgentName   func(childComplexity int) int
+		Arguments   func(childComplexity int) int
+		DurationMs  func(childComplexity int) int
+		Error       func(childComplexity int) int
+		ID          func(childComplexity int) int
+		OccurredAt  func(childComplexity int) int
+		OperationID func(childComplexity int) int
+		Outcome     func(childComplexity int) int
+		Owner       func(childComplexity int) int
+		Tool        func(childComplexity int) int
+		Write       func(childComplexity int) int
+	}
+
 	AgentActivityEvent struct {
 		AgentKeyID  func(childComplexity int) int
 		AgentLabel  func(childComplexity int) int
@@ -80,6 +96,13 @@ type ComplexityRoot struct {
 		Summary     func(childComplexity int) int
 		Tool        func(childComplexity int) int
 		Write       func(childComplexity int) int
+	}
+
+	AgentActivitySummary struct {
+		Actions    func(childComplexity int) int
+		AgentKeyID func(childComplexity int) int
+		AgentName  func(childComplexity int) int
+		LastSeen   func(childComplexity int) int
 	}
 
 	AgentKey struct {
@@ -403,6 +426,8 @@ type ComplexityRoot struct {
 	}
 
 	Query struct {
+		AgentActions                       func(childComplexity int, operationID string, agentKeyID *string, writesOnly *bool, outcomes []model.AgentActionOutcome, before *string, limit *int) int
+		AgentActivitySummary               func(childComplexity int, operationID string) int
 		Credential                         func(childComplexity int, id string) int
 		CredentialTags                     func(childComplexity int, operationID string) int
 		Credentials                        func(childComplexity int, operationID string, search *string, searchFields []model.CredentialSearchField, typeArg *models.CredentialType, tags []string, validOnly *bool, sortBy *model.CredentialSortField, sortDirection *model.SortDirection, first *int, after *string, last *int, before *string) int
@@ -777,6 +802,19 @@ type APIKeyResolver interface {
 	CreatedAt(ctx context.Context, obj *models.APIKey) (string, error)
 	UpdatedAt(ctx context.Context, obj *models.APIKey) (string, error)
 }
+type AgentActionResolver interface {
+	ID(ctx context.Context, obj *models.AgentAction) (string, error)
+	OperationID(ctx context.Context, obj *models.AgentAction) (*string, error)
+	AgentKeyID(ctx context.Context, obj *models.AgentAction) (string, error)
+
+	Owner(ctx context.Context, obj *models.AgentAction) (*models.User, error)
+
+	Outcome(ctx context.Context, obj *models.AgentAction) (model.AgentActionOutcome, error)
+	Error(ctx context.Context, obj *models.AgentAction) (*string, error)
+
+	DurationMs(ctx context.Context, obj *models.AgentAction) (int, error)
+	OccurredAt(ctx context.Context, obj *models.AgentAction) (string, error)
+}
 type AgentKeyResolver interface {
 	ID(ctx context.Context, obj *models.AgentKey) (string, error)
 
@@ -924,6 +962,8 @@ type QueryResolver interface {
 	Operation(ctx context.Context, id string) (*models.Operation, error)
 	Operations(ctx context.Context, search *string, sortBy *model.OperationSortField, sortDirection *model.SortDirection, first *int, after *string, last *int, before *string) (*model.OperationConnection, error)
 	MyOperationRole(ctx context.Context, operationID string) (*models.OperationRole, error)
+	AgentActions(ctx context.Context, operationID string, agentKeyID *string, writesOnly *bool, outcomes []model.AgentActionOutcome, before *string, limit *int) ([]*models.AgentAction, error)
+	AgentActivitySummary(ctx context.Context, operationID string) ([]*model.AgentActivitySummary, error)
 	MyAgentKeys(ctx context.Context) ([]*models.AgentKey, error)
 	MyAPIKey(ctx context.Context) (*models.APIKey, error)
 	Credential(ctx context.Context, id string) (*models.Credential, error)
@@ -1140,6 +1180,79 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 
 		return e.ComplexityRoot.APIKeyWithSecret.Token(childComplexity), true
 
+	case "AgentAction.agentKeyId":
+		if e.ComplexityRoot.AgentAction.AgentKeyID == nil {
+			break
+		}
+
+		return e.ComplexityRoot.AgentAction.AgentKeyID(childComplexity), true
+	case "AgentAction.agentName":
+		if e.ComplexityRoot.AgentAction.AgentName == nil {
+			break
+		}
+
+		return e.ComplexityRoot.AgentAction.AgentName(childComplexity), true
+	case "AgentAction.arguments":
+		if e.ComplexityRoot.AgentAction.Arguments == nil {
+			break
+		}
+
+		return e.ComplexityRoot.AgentAction.Arguments(childComplexity), true
+	case "AgentAction.durationMs":
+		if e.ComplexityRoot.AgentAction.DurationMs == nil {
+			break
+		}
+
+		return e.ComplexityRoot.AgentAction.DurationMs(childComplexity), true
+	case "AgentAction.error":
+		if e.ComplexityRoot.AgentAction.Error == nil {
+			break
+		}
+
+		return e.ComplexityRoot.AgentAction.Error(childComplexity), true
+	case "AgentAction.id":
+		if e.ComplexityRoot.AgentAction.ID == nil {
+			break
+		}
+
+		return e.ComplexityRoot.AgentAction.ID(childComplexity), true
+	case "AgentAction.occurredAt":
+		if e.ComplexityRoot.AgentAction.OccurredAt == nil {
+			break
+		}
+
+		return e.ComplexityRoot.AgentAction.OccurredAt(childComplexity), true
+	case "AgentAction.operationId":
+		if e.ComplexityRoot.AgentAction.OperationID == nil {
+			break
+		}
+
+		return e.ComplexityRoot.AgentAction.OperationID(childComplexity), true
+	case "AgentAction.outcome":
+		if e.ComplexityRoot.AgentAction.Outcome == nil {
+			break
+		}
+
+		return e.ComplexityRoot.AgentAction.Outcome(childComplexity), true
+	case "AgentAction.owner":
+		if e.ComplexityRoot.AgentAction.Owner == nil {
+			break
+		}
+
+		return e.ComplexityRoot.AgentAction.Owner(childComplexity), true
+	case "AgentAction.tool":
+		if e.ComplexityRoot.AgentAction.Tool == nil {
+			break
+		}
+
+		return e.ComplexityRoot.AgentAction.Tool(childComplexity), true
+	case "AgentAction.write":
+		if e.ComplexityRoot.AgentAction.Write == nil {
+			break
+		}
+
+		return e.ComplexityRoot.AgentAction.Write(childComplexity), true
+
 	case "AgentActivityEvent.agentKeyId":
 		if e.ComplexityRoot.AgentActivityEvent.AgentKeyID == nil {
 			break
@@ -1194,6 +1307,31 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.AgentActivityEvent.Write(childComplexity), true
+
+	case "AgentActivitySummary.actions":
+		if e.ComplexityRoot.AgentActivitySummary.Actions == nil {
+			break
+		}
+
+		return e.ComplexityRoot.AgentActivitySummary.Actions(childComplexity), true
+	case "AgentActivitySummary.agentKeyId":
+		if e.ComplexityRoot.AgentActivitySummary.AgentKeyID == nil {
+			break
+		}
+
+		return e.ComplexityRoot.AgentActivitySummary.AgentKeyID(childComplexity), true
+	case "AgentActivitySummary.agentName":
+		if e.ComplexityRoot.AgentActivitySummary.AgentName == nil {
+			break
+		}
+
+		return e.ComplexityRoot.AgentActivitySummary.AgentName(childComplexity), true
+	case "AgentActivitySummary.lastSeen":
+		if e.ComplexityRoot.AgentActivitySummary.LastSeen == nil {
+			break
+		}
+
+		return e.ComplexityRoot.AgentActivitySummary.LastSeen(childComplexity), true
 
 	case "AgentKey.allowWrites":
 		if e.ComplexityRoot.AgentKey.AllowWrites == nil {
@@ -2903,6 +3041,28 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 
 		return e.ComplexityRoot.PageInfo.StartCursor(childComplexity), true
 
+	case "Query.agentActions":
+		if e.ComplexityRoot.Query.AgentActions == nil {
+			break
+		}
+
+		args, err := ec.field_Query_agentActions_args(ctx, rawArgs)
+		if err != nil {
+			return 0, false
+		}
+
+		return e.ComplexityRoot.Query.AgentActions(childComplexity, args["operationId"].(string), args["agentKeyId"].(*string), args["writesOnly"].(*bool), args["outcomes"].([]model.AgentActionOutcome), args["before"].(*string), args["limit"].(*int)), true
+	case "Query.agentActivitySummary":
+		if e.ComplexityRoot.Query.AgentActivitySummary == nil {
+			break
+		}
+
+		args, err := ec.field_Query_agentActivitySummary_args(ctx, rawArgs)
+		if err != nil {
+			return 0, false
+		}
+
+		return e.ComplexityRoot.Query.AgentActivitySummary(childComplexity, args["operationId"].(string)), true
 	case "Query.credential":
 		if e.ComplexityRoot.Query.Credential == nil {
 			break
@@ -4893,6 +5053,85 @@ func newExecutionContext(
 }
 
 var sources = []*ast.Source{
+	{Name: "../schema/agent_actions.graphql", Input: `# =============================================================================
+# Agent Actions — the durable record of what an agent did
+# =============================================================================
+#
+# Every MCP tool call is recorded here, READS INCLUDED, and this is the query
+# behind the agent activity page.
+#
+# Reads matter as much as writes. The timeline shows what changed; only this
+# shows what an agent looked at — and an agent reading an operation's entire
+# credential set changes nothing, so it would otherwise leave no trace at all.
+# "The operator can see everything the agent does" is not satisfiable from the
+# timeline alone.
+#
+# Append-only: there is no mutation here, because an audit trail its own writer
+# can edit is not an audit trail.
+
+# How a tool call ended.
+#   ok      — it did what was asked
+#   refused — a scope, role, write-gate or rate-limit decision said no
+#   error   — something broke
+# refused is separate from error on purpose: a run full of refusals means the
+# key is scoped tighter than the work being asked of it, which is a
+# configuration answer, not a fault.
+enum AgentActionOutcome {
+  OK
+  REFUSED
+  ERROR
+}
+
+type AgentAction {
+  id: ID!
+  operationId: ID
+  agentKeyId: ID!
+  # Captured when the call was made, so the row still reads correctly after the
+  # key is renamed or deleted.
+  agentName: String!
+  # The user the agent was acting for.
+  owner: User
+  tool: String!
+  # True when the call changed something. Writes also appear on the timeline;
+  # reads live only here.
+  write: Boolean!
+  outcome: AgentActionOutcome!
+  # Present only when the call failed or was refused.
+  error: String
+  # JSON-encoded tool input, truncated at 4 KB.
+  arguments: String!
+  durationMs: Int!
+  occurredAt: String!
+}
+
+# One agent that has acted in an operation. Lets the UI offer a filter without
+# paging every action first.
+type AgentActivitySummary {
+  agentKeyId: ID!
+  agentName: String!
+  actions: Int!
+  lastSeen: String!
+}
+
+extend type Query {
+  # Recent agent activity in an operation, newest first. Viewer+ in the
+  # operation — anyone who can see the work can see what an agent did to it.
+  #
+  # ` + "`" + `before` + "`" + ` pages backwards: pass the oldest occurredAt you have.
+  agentActions(
+    operationId: ID!
+    agentKeyId: ID
+    writesOnly: Boolean
+    outcomes: [AgentActionOutcome!]
+    before: String
+    limit: Int = 50
+  ): [AgentAction!]! @hasPermission(permission: "operation:member")
+
+  # Which agents have acted in this operation.
+  agentActivitySummary(operationId: ID!): [AgentActivitySummary!]!
+    @hasPermission(permission: "operation:member")
+}
+`, BuiltIn: false},
 	{Name: "../schema/agent_activity.graphql", Input: `# =============================================================================
 # Agent Activity — the live half of "you can see what your agent is doing"
 # =============================================================================
@@ -8500,6 +8739,53 @@ func (ec *executionContext) field_Query___type_args(ctx context.Context, rawArgs
 	return args, nil
 }
 
+func (ec *executionContext) field_Query_agentActions_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
+	var err error
+	args := map[string]any{}
+	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "operationId", ec.unmarshalNID2string)
+	if err != nil {
+		return nil, err
+	}
+	args["operationId"] = arg0
+	arg1, err := graphql.ProcessArgField(ctx, rawArgs, "agentKeyId", ec.unmarshalOID2ᚖstring)
+	if err != nil {
+		return nil, err
+	}
+	args["agentKeyId"] = arg1
+	arg2, err := graphql.ProcessArgField(ctx, rawArgs, "writesOnly", ec.unmarshalOBoolean2ᚖbool)
+	if err != nil {
+		return nil, err
+	}
+	args["writesOnly"] = arg2
+	arg3, err := graphql.ProcessArgField(ctx, rawArgs, "outcomes", ec.unmarshalOAgentActionOutcome2ᚕgithubᚗcomᚋvibeᚑc2ᚋvibeᚑc2ᚑcoreᚋcoreᚋpkgᚋgraphqlᚋmodelᚐAgentActionOutcomeᚄ)
+	if err != nil {
+		return nil, err
+	}
+	args["outcomes"] = arg3
+	arg4, err := graphql.ProcessArgField(ctx, rawArgs, "before", ec.unmarshalOString2ᚖstring)
+	if err != nil {
+		return nil, err
+	}
+	args["before"] = arg4
+	arg5, err := graphql.ProcessArgField(ctx, rawArgs, "limit", ec.unmarshalOInt2ᚖint)
+	if err != nil {
+		return nil, err
+	}
+	args["limit"] = arg5
+	return args, nil
+}
+
+func (ec *executionContext) field_Query_agentActivitySummary_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
+	var err error
+	args := map[string]any{}
+	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "operationId", ec.unmarshalNID2string)
+	if err != nil {
+		return nil, err
+	}
+	args["operationId"] = arg0
+	return args, nil
+}
+
 func (ec *executionContext) field_Query_credentialTags_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
 	var err error
 	args := map[string]any{}
@@ -10064,6 +10350,370 @@ func (ec *executionContext) fieldContext_APIKeyWithSecret_token(_ context.Contex
 	return fc, nil
 }
 
+func (ec *executionContext) _AgentAction_id(ctx context.Context, field graphql.CollectedField, obj *models.AgentAction) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_AgentAction_id,
+		func(ctx context.Context) (any, error) {
+			return ec.Resolvers.AgentAction().ID(ctx, obj)
+		},
+		nil,
+		ec.marshalNID2string,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_AgentAction_id(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "AgentAction",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type ID does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _AgentAction_operationId(ctx context.Context, field graphql.CollectedField, obj *models.AgentAction) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_AgentAction_operationId,
+		func(ctx context.Context) (any, error) {
+			return ec.Resolvers.AgentAction().OperationID(ctx, obj)
+		},
+		nil,
+		ec.marshalOID2ᚖstring,
+		true,
+		false,
+	)
+}
+
+func (ec *executionContext) fieldContext_AgentAction_operationId(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "AgentAction",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type ID does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _AgentAction_agentKeyId(ctx context.Context, field graphql.CollectedField, obj *models.AgentAction) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_AgentAction_agentKeyId,
+		func(ctx context.Context) (any, error) {
+			return ec.Resolvers.AgentAction().AgentKeyID(ctx, obj)
+		},
+		nil,
+		ec.marshalNID2string,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_AgentAction_agentKeyId(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "AgentAction",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type ID does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _AgentAction_agentName(ctx context.Context, field graphql.CollectedField, obj *models.AgentAction) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_AgentAction_agentName,
+		func(ctx context.Context) (any, error) {
+			return obj.AgentName, nil
+		},
+		nil,
+		ec.marshalNString2string,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_AgentAction_agentName(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "AgentAction",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _AgentAction_owner(ctx context.Context, field graphql.CollectedField, obj *models.AgentAction) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_AgentAction_owner,
+		func(ctx context.Context) (any, error) {
+			return ec.Resolvers.AgentAction().Owner(ctx, obj)
+		},
+		nil,
+		ec.marshalOUser2ᚖgithubᚗcomᚋvibeᚑc2ᚋvibeᚑc2ᚑcoreᚋcoreᚋpkgᚋmodelsᚐUser,
+		true,
+		false,
+	)
+}
+
+func (ec *executionContext) fieldContext_AgentAction_owner(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "AgentAction",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "id":
+				return ec.fieldContext_User_id(ctx, field)
+			case "username":
+				return ec.fieldContext_User_username(ctx, field)
+			case "roles":
+				return ec.fieldContext_User_roles(ctx, field)
+			case "active":
+				return ec.fieldContext_User_active(ctx, field)
+			case "createdAt":
+				return ec.fieldContext_User_createdAt(ctx, field)
+			case "updatedAt":
+				return ec.fieldContext_User_updatedAt(ctx, field)
+			case "hiddenIdentities":
+				return ec.fieldContext_User_hiddenIdentities(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type User", field.Name)
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _AgentAction_tool(ctx context.Context, field graphql.CollectedField, obj *models.AgentAction) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_AgentAction_tool,
+		func(ctx context.Context) (any, error) {
+			return obj.Tool, nil
+		},
+		nil,
+		ec.marshalNString2string,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_AgentAction_tool(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "AgentAction",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _AgentAction_write(ctx context.Context, field graphql.CollectedField, obj *models.AgentAction) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_AgentAction_write,
+		func(ctx context.Context) (any, error) {
+			return obj.Write, nil
+		},
+		nil,
+		ec.marshalNBoolean2bool,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_AgentAction_write(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "AgentAction",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Boolean does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _AgentAction_outcome(ctx context.Context, field graphql.CollectedField, obj *models.AgentAction) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_AgentAction_outcome,
+		func(ctx context.Context) (any, error) {
+			return ec.Resolvers.AgentAction().Outcome(ctx, obj)
+		},
+		nil,
+		ec.marshalNAgentActionOutcome2githubᚗcomᚋvibeᚑc2ᚋvibeᚑc2ᚑcoreᚋcoreᚋpkgᚋgraphqlᚋmodelᚐAgentActionOutcome,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_AgentAction_outcome(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "AgentAction",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type AgentActionOutcome does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _AgentAction_error(ctx context.Context, field graphql.CollectedField, obj *models.AgentAction) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_AgentAction_error,
+		func(ctx context.Context) (any, error) {
+			return ec.Resolvers.AgentAction().Error(ctx, obj)
+		},
+		nil,
+		ec.marshalOString2ᚖstring,
+		true,
+		false,
+	)
+}
+
+func (ec *executionContext) fieldContext_AgentAction_error(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "AgentAction",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _AgentAction_arguments(ctx context.Context, field graphql.CollectedField, obj *models.AgentAction) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_AgentAction_arguments,
+		func(ctx context.Context) (any, error) {
+			return obj.Arguments, nil
+		},
+		nil,
+		ec.marshalNString2string,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_AgentAction_arguments(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "AgentAction",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _AgentAction_durationMs(ctx context.Context, field graphql.CollectedField, obj *models.AgentAction) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_AgentAction_durationMs,
+		func(ctx context.Context) (any, error) {
+			return ec.Resolvers.AgentAction().DurationMs(ctx, obj)
+		},
+		nil,
+		ec.marshalNInt2int,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_AgentAction_durationMs(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "AgentAction",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Int does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _AgentAction_occurredAt(ctx context.Context, field graphql.CollectedField, obj *models.AgentAction) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_AgentAction_occurredAt,
+		func(ctx context.Context) (any, error) {
+			return ec.Resolvers.AgentAction().OccurredAt(ctx, obj)
+		},
+		nil,
+		ec.marshalNString2string,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_AgentAction_occurredAt(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "AgentAction",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
 func (ec *executionContext) _AgentActivityEvent_operationId(ctx context.Context, field graphql.CollectedField, obj *model.AgentActivityEvent) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
@@ -10315,6 +10965,122 @@ func (ec *executionContext) _AgentActivityEvent_summary(ctx context.Context, fie
 func (ec *executionContext) fieldContext_AgentActivityEvent_summary(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
 	fc = &graphql.FieldContext{
 		Object:     "AgentActivityEvent",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _AgentActivitySummary_agentKeyId(ctx context.Context, field graphql.CollectedField, obj *model.AgentActivitySummary) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_AgentActivitySummary_agentKeyId,
+		func(ctx context.Context) (any, error) {
+			return obj.AgentKeyID, nil
+		},
+		nil,
+		ec.marshalNID2string,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_AgentActivitySummary_agentKeyId(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "AgentActivitySummary",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type ID does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _AgentActivitySummary_agentName(ctx context.Context, field graphql.CollectedField, obj *model.AgentActivitySummary) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_AgentActivitySummary_agentName,
+		func(ctx context.Context) (any, error) {
+			return obj.AgentName, nil
+		},
+		nil,
+		ec.marshalNString2string,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_AgentActivitySummary_agentName(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "AgentActivitySummary",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _AgentActivitySummary_actions(ctx context.Context, field graphql.CollectedField, obj *model.AgentActivitySummary) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_AgentActivitySummary_actions,
+		func(ctx context.Context) (any, error) {
+			return obj.Actions, nil
+		},
+		nil,
+		ec.marshalNInt2int,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_AgentActivitySummary_actions(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "AgentActivitySummary",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Int does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _AgentActivitySummary_lastSeen(ctx context.Context, field graphql.CollectedField, obj *model.AgentActivitySummary) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_AgentActivitySummary_lastSeen,
+		func(ctx context.Context) (any, error) {
+			return obj.LastSeen, nil
+		},
+		nil,
+		ec.marshalNString2string,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_AgentActivitySummary_lastSeen(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "AgentActivitySummary",
 		Field:      field,
 		IsMethod:   false,
 		IsResolver: false,
@@ -21673,6 +22439,160 @@ func (ec *executionContext) fieldContext_Query_myOperationRole(ctx context.Conte
 	}()
 	ctx = graphql.WithFieldContext(ctx, fc)
 	if fc.Args, err = ec.field_Query_myOperationRole_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
+		ec.Error(ctx, err)
+		return fc, err
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Query_agentActions(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Query_agentActions,
+		func(ctx context.Context) (any, error) {
+			fc := graphql.GetFieldContext(ctx)
+			return ec.Resolvers.Query().AgentActions(ctx, fc.Args["operationId"].(string), fc.Args["agentKeyId"].(*string), fc.Args["writesOnly"].(*bool), fc.Args["outcomes"].([]model.AgentActionOutcome), fc.Args["before"].(*string), fc.Args["limit"].(*int))
+		},
+		func(ctx context.Context, next graphql.Resolver) graphql.Resolver {
+			directive0 := next
+
+			directive1 := func(ctx context.Context) (any, error) {
+				permission, err := ec.unmarshalNString2string(ctx, "operation:member")
+				if err != nil {
+					var zeroVal []*models.AgentAction
+					return zeroVal, err
+				}
+				if ec.Directives.HasPermission == nil {
+					var zeroVal []*models.AgentAction
+					return zeroVal, errors.New("directive hasPermission is not implemented")
+				}
+				return ec.Directives.HasPermission(ctx, nil, directive0, permission)
+			}
+
+			next = directive1
+			return next
+		},
+		ec.marshalNAgentAction2ᚕᚖgithubᚗcomᚋvibeᚑc2ᚋvibeᚑc2ᚑcoreᚋcoreᚋpkgᚋmodelsᚐAgentActionᚄ,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_Query_agentActions(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Query",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "id":
+				return ec.fieldContext_AgentAction_id(ctx, field)
+			case "operationId":
+				return ec.fieldContext_AgentAction_operationId(ctx, field)
+			case "agentKeyId":
+				return ec.fieldContext_AgentAction_agentKeyId(ctx, field)
+			case "agentName":
+				return ec.fieldContext_AgentAction_agentName(ctx, field)
+			case "owner":
+				return ec.fieldContext_AgentAction_owner(ctx, field)
+			case "tool":
+				return ec.fieldContext_AgentAction_tool(ctx, field)
+			case "write":
+				return ec.fieldContext_AgentAction_write(ctx, field)
+			case "outcome":
+				return ec.fieldContext_AgentAction_outcome(ctx, field)
+			case "error":
+				return ec.fieldContext_AgentAction_error(ctx, field)
+			case "arguments":
+				return ec.fieldContext_AgentAction_arguments(ctx, field)
+			case "durationMs":
+				return ec.fieldContext_AgentAction_durationMs(ctx, field)
+			case "occurredAt":
+				return ec.fieldContext_AgentAction_occurredAt(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type AgentAction", field.Name)
+		},
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			err = ec.Recover(ctx, r)
+			ec.Error(ctx, err)
+		}
+	}()
+	ctx = graphql.WithFieldContext(ctx, fc)
+	if fc.Args, err = ec.field_Query_agentActions_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
+		ec.Error(ctx, err)
+		return fc, err
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Query_agentActivitySummary(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Query_agentActivitySummary,
+		func(ctx context.Context) (any, error) {
+			fc := graphql.GetFieldContext(ctx)
+			return ec.Resolvers.Query().AgentActivitySummary(ctx, fc.Args["operationId"].(string))
+		},
+		func(ctx context.Context, next graphql.Resolver) graphql.Resolver {
+			directive0 := next
+
+			directive1 := func(ctx context.Context) (any, error) {
+				permission, err := ec.unmarshalNString2string(ctx, "operation:member")
+				if err != nil {
+					var zeroVal []*model.AgentActivitySummary
+					return zeroVal, err
+				}
+				if ec.Directives.HasPermission == nil {
+					var zeroVal []*model.AgentActivitySummary
+					return zeroVal, errors.New("directive hasPermission is not implemented")
+				}
+				return ec.Directives.HasPermission(ctx, nil, directive0, permission)
+			}
+
+			next = directive1
+			return next
+		},
+		ec.marshalNAgentActivitySummary2ᚕᚖgithubᚗcomᚋvibeᚑc2ᚋvibeᚑc2ᚑcoreᚋcoreᚋpkgᚋgraphqlᚋmodelᚐAgentActivitySummaryᚄ,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_Query_agentActivitySummary(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Query",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "agentKeyId":
+				return ec.fieldContext_AgentActivitySummary_agentKeyId(ctx, field)
+			case "agentName":
+				return ec.fieldContext_AgentActivitySummary_agentName(ctx, field)
+			case "actions":
+				return ec.fieldContext_AgentActivitySummary_actions(ctx, field)
+			case "lastSeen":
+				return ec.fieldContext_AgentActivitySummary_lastSeen(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type AgentActivitySummary", field.Name)
+		},
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			err = ec.Recover(ctx, r)
+			ec.Error(ctx, err)
+		}
+	}()
+	ctx = graphql.WithFieldContext(ctx, fc)
+	if fc.Args, err = ec.field_Query_agentActivitySummary_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
 		ec.Error(ctx, err)
 		return fc, err
 	}
@@ -36294,6 +37214,339 @@ func (ec *executionContext) _APIKeyWithSecret(ctx context.Context, sel ast.Selec
 	return out
 }
 
+var agentActionImplementors = []string{"AgentAction"}
+
+func (ec *executionContext) _AgentAction(ctx context.Context, sel ast.SelectionSet, obj *models.AgentAction) graphql.Marshaler {
+	fields := graphql.CollectFields(ec.OperationContext, sel, agentActionImplementors)
+
+	out := graphql.NewFieldSet(fields)
+	deferred := make(map[string]*graphql.FieldSet)
+	for i, field := range fields {
+		switch field.Name {
+		case "__typename":
+			out.Values[i] = graphql.MarshalString("AgentAction")
+		case "id":
+			field := field
+
+			innerFunc := func(ctx context.Context, fs *graphql.FieldSet) (res graphql.Marshaler) {
+				defer func() {
+					if r := recover(); r != nil {
+						ec.Error(ctx, ec.Recover(ctx, r))
+					}
+				}()
+				res = ec._AgentAction_id(ctx, field, obj)
+				if res == graphql.Null {
+					atomic.AddUint32(&fs.Invalids, 1)
+				}
+				return res
+			}
+
+			if field.Deferrable != nil {
+				dfs, ok := deferred[field.Deferrable.Label]
+				di := 0
+				if ok {
+					dfs.AddField(field)
+					di = len(dfs.Values) - 1
+				} else {
+					dfs = graphql.NewFieldSet([]graphql.CollectedField{field})
+					deferred[field.Deferrable.Label] = dfs
+				}
+				dfs.Concurrently(di, func(ctx context.Context) graphql.Marshaler {
+					return innerFunc(ctx, dfs)
+				})
+
+				// don't run the out.Concurrently() call below
+				out.Values[i] = graphql.Null
+				continue
+			}
+
+			out.Concurrently(i, func(ctx context.Context) graphql.Marshaler { return innerFunc(ctx, out) })
+		case "operationId":
+			field := field
+
+			innerFunc := func(ctx context.Context, _ *graphql.FieldSet) (res graphql.Marshaler) {
+				defer func() {
+					if r := recover(); r != nil {
+						ec.Error(ctx, ec.Recover(ctx, r))
+					}
+				}()
+				res = ec._AgentAction_operationId(ctx, field, obj)
+				return res
+			}
+
+			if field.Deferrable != nil {
+				dfs, ok := deferred[field.Deferrable.Label]
+				di := 0
+				if ok {
+					dfs.AddField(field)
+					di = len(dfs.Values) - 1
+				} else {
+					dfs = graphql.NewFieldSet([]graphql.CollectedField{field})
+					deferred[field.Deferrable.Label] = dfs
+				}
+				dfs.Concurrently(di, func(ctx context.Context) graphql.Marshaler {
+					return innerFunc(ctx, dfs)
+				})
+
+				// don't run the out.Concurrently() call below
+				out.Values[i] = graphql.Null
+				continue
+			}
+
+			out.Concurrently(i, func(ctx context.Context) graphql.Marshaler { return innerFunc(ctx, out) })
+		case "agentKeyId":
+			field := field
+
+			innerFunc := func(ctx context.Context, fs *graphql.FieldSet) (res graphql.Marshaler) {
+				defer func() {
+					if r := recover(); r != nil {
+						ec.Error(ctx, ec.Recover(ctx, r))
+					}
+				}()
+				res = ec._AgentAction_agentKeyId(ctx, field, obj)
+				if res == graphql.Null {
+					atomic.AddUint32(&fs.Invalids, 1)
+				}
+				return res
+			}
+
+			if field.Deferrable != nil {
+				dfs, ok := deferred[field.Deferrable.Label]
+				di := 0
+				if ok {
+					dfs.AddField(field)
+					di = len(dfs.Values) - 1
+				} else {
+					dfs = graphql.NewFieldSet([]graphql.CollectedField{field})
+					deferred[field.Deferrable.Label] = dfs
+				}
+				dfs.Concurrently(di, func(ctx context.Context) graphql.Marshaler {
+					return innerFunc(ctx, dfs)
+				})
+
+				// don't run the out.Concurrently() call below
+				out.Values[i] = graphql.Null
+				continue
+			}
+
+			out.Concurrently(i, func(ctx context.Context) graphql.Marshaler { return innerFunc(ctx, out) })
+		case "agentName":
+			out.Values[i] = ec._AgentAction_agentName(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				atomic.AddUint32(&out.Invalids, 1)
+			}
+		case "owner":
+			field := field
+
+			innerFunc := func(ctx context.Context, _ *graphql.FieldSet) (res graphql.Marshaler) {
+				defer func() {
+					if r := recover(); r != nil {
+						ec.Error(ctx, ec.Recover(ctx, r))
+					}
+				}()
+				res = ec._AgentAction_owner(ctx, field, obj)
+				return res
+			}
+
+			if field.Deferrable != nil {
+				dfs, ok := deferred[field.Deferrable.Label]
+				di := 0
+				if ok {
+					dfs.AddField(field)
+					di = len(dfs.Values) - 1
+				} else {
+					dfs = graphql.NewFieldSet([]graphql.CollectedField{field})
+					deferred[field.Deferrable.Label] = dfs
+				}
+				dfs.Concurrently(di, func(ctx context.Context) graphql.Marshaler {
+					return innerFunc(ctx, dfs)
+				})
+
+				// don't run the out.Concurrently() call below
+				out.Values[i] = graphql.Null
+				continue
+			}
+
+			out.Concurrently(i, func(ctx context.Context) graphql.Marshaler { return innerFunc(ctx, out) })
+		case "tool":
+			out.Values[i] = ec._AgentAction_tool(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				atomic.AddUint32(&out.Invalids, 1)
+			}
+		case "write":
+			out.Values[i] = ec._AgentAction_write(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				atomic.AddUint32(&out.Invalids, 1)
+			}
+		case "outcome":
+			field := field
+
+			innerFunc := func(ctx context.Context, fs *graphql.FieldSet) (res graphql.Marshaler) {
+				defer func() {
+					if r := recover(); r != nil {
+						ec.Error(ctx, ec.Recover(ctx, r))
+					}
+				}()
+				res = ec._AgentAction_outcome(ctx, field, obj)
+				if res == graphql.Null {
+					atomic.AddUint32(&fs.Invalids, 1)
+				}
+				return res
+			}
+
+			if field.Deferrable != nil {
+				dfs, ok := deferred[field.Deferrable.Label]
+				di := 0
+				if ok {
+					dfs.AddField(field)
+					di = len(dfs.Values) - 1
+				} else {
+					dfs = graphql.NewFieldSet([]graphql.CollectedField{field})
+					deferred[field.Deferrable.Label] = dfs
+				}
+				dfs.Concurrently(di, func(ctx context.Context) graphql.Marshaler {
+					return innerFunc(ctx, dfs)
+				})
+
+				// don't run the out.Concurrently() call below
+				out.Values[i] = graphql.Null
+				continue
+			}
+
+			out.Concurrently(i, func(ctx context.Context) graphql.Marshaler { return innerFunc(ctx, out) })
+		case "error":
+			field := field
+
+			innerFunc := func(ctx context.Context, _ *graphql.FieldSet) (res graphql.Marshaler) {
+				defer func() {
+					if r := recover(); r != nil {
+						ec.Error(ctx, ec.Recover(ctx, r))
+					}
+				}()
+				res = ec._AgentAction_error(ctx, field, obj)
+				return res
+			}
+
+			if field.Deferrable != nil {
+				dfs, ok := deferred[field.Deferrable.Label]
+				di := 0
+				if ok {
+					dfs.AddField(field)
+					di = len(dfs.Values) - 1
+				} else {
+					dfs = graphql.NewFieldSet([]graphql.CollectedField{field})
+					deferred[field.Deferrable.Label] = dfs
+				}
+				dfs.Concurrently(di, func(ctx context.Context) graphql.Marshaler {
+					return innerFunc(ctx, dfs)
+				})
+
+				// don't run the out.Concurrently() call below
+				out.Values[i] = graphql.Null
+				continue
+			}
+
+			out.Concurrently(i, func(ctx context.Context) graphql.Marshaler { return innerFunc(ctx, out) })
+		case "arguments":
+			out.Values[i] = ec._AgentAction_arguments(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				atomic.AddUint32(&out.Invalids, 1)
+			}
+		case "durationMs":
+			field := field
+
+			innerFunc := func(ctx context.Context, fs *graphql.FieldSet) (res graphql.Marshaler) {
+				defer func() {
+					if r := recover(); r != nil {
+						ec.Error(ctx, ec.Recover(ctx, r))
+					}
+				}()
+				res = ec._AgentAction_durationMs(ctx, field, obj)
+				if res == graphql.Null {
+					atomic.AddUint32(&fs.Invalids, 1)
+				}
+				return res
+			}
+
+			if field.Deferrable != nil {
+				dfs, ok := deferred[field.Deferrable.Label]
+				di := 0
+				if ok {
+					dfs.AddField(field)
+					di = len(dfs.Values) - 1
+				} else {
+					dfs = graphql.NewFieldSet([]graphql.CollectedField{field})
+					deferred[field.Deferrable.Label] = dfs
+				}
+				dfs.Concurrently(di, func(ctx context.Context) graphql.Marshaler {
+					return innerFunc(ctx, dfs)
+				})
+
+				// don't run the out.Concurrently() call below
+				out.Values[i] = graphql.Null
+				continue
+			}
+
+			out.Concurrently(i, func(ctx context.Context) graphql.Marshaler { return innerFunc(ctx, out) })
+		case "occurredAt":
+			field := field
+
+			innerFunc := func(ctx context.Context, fs *graphql.FieldSet) (res graphql.Marshaler) {
+				defer func() {
+					if r := recover(); r != nil {
+						ec.Error(ctx, ec.Recover(ctx, r))
+					}
+				}()
+				res = ec._AgentAction_occurredAt(ctx, field, obj)
+				if res == graphql.Null {
+					atomic.AddUint32(&fs.Invalids, 1)
+				}
+				return res
+			}
+
+			if field.Deferrable != nil {
+				dfs, ok := deferred[field.Deferrable.Label]
+				di := 0
+				if ok {
+					dfs.AddField(field)
+					di = len(dfs.Values) - 1
+				} else {
+					dfs = graphql.NewFieldSet([]graphql.CollectedField{field})
+					deferred[field.Deferrable.Label] = dfs
+				}
+				dfs.Concurrently(di, func(ctx context.Context) graphql.Marshaler {
+					return innerFunc(ctx, dfs)
+				})
+
+				// don't run the out.Concurrently() call below
+				out.Values[i] = graphql.Null
+				continue
+			}
+
+			out.Concurrently(i, func(ctx context.Context) graphql.Marshaler { return innerFunc(ctx, out) })
+		default:
+			panic("unknown field " + strconv.Quote(field.Name))
+		}
+	}
+	out.Dispatch(ctx)
+	if out.Invalids > 0 {
+		return graphql.Null
+	}
+
+	atomic.AddInt32(&ec.Deferred, int32(len(deferred)))
+
+	for label, dfs := range deferred {
+		ec.ProcessDeferredGroup(graphql.DeferredGroup{
+			Label:    label,
+			Path:     graphql.GetPath(ctx),
+			FieldSet: dfs,
+			Context:  ctx,
+		})
+	}
+
+	return out
+}
+
 var agentActivityEventImplementors = []string{"AgentActivityEvent"}
 
 func (ec *executionContext) _AgentActivityEvent(ctx context.Context, sel ast.SelectionSet, obj *model.AgentActivityEvent) graphql.Marshaler {
@@ -36347,6 +37600,60 @@ func (ec *executionContext) _AgentActivityEvent(ctx context.Context, sel ast.Sel
 			}
 		case "summary":
 			out.Values[i] = ec._AgentActivityEvent_summary(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		default:
+			panic("unknown field " + strconv.Quote(field.Name))
+		}
+	}
+	out.Dispatch(ctx)
+	if out.Invalids > 0 {
+		return graphql.Null
+	}
+
+	atomic.AddInt32(&ec.Deferred, int32(len(deferred)))
+
+	for label, dfs := range deferred {
+		ec.ProcessDeferredGroup(graphql.DeferredGroup{
+			Label:    label,
+			Path:     graphql.GetPath(ctx),
+			FieldSet: dfs,
+			Context:  ctx,
+		})
+	}
+
+	return out
+}
+
+var agentActivitySummaryImplementors = []string{"AgentActivitySummary"}
+
+func (ec *executionContext) _AgentActivitySummary(ctx context.Context, sel ast.SelectionSet, obj *model.AgentActivitySummary) graphql.Marshaler {
+	fields := graphql.CollectFields(ec.OperationContext, sel, agentActivitySummaryImplementors)
+
+	out := graphql.NewFieldSet(fields)
+	deferred := make(map[string]*graphql.FieldSet)
+	for i, field := range fields {
+		switch field.Name {
+		case "__typename":
+			out.Values[i] = graphql.MarshalString("AgentActivitySummary")
+		case "agentKeyId":
+			out.Values[i] = ec._AgentActivitySummary_agentKeyId(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "agentName":
+			out.Values[i] = ec._AgentActivitySummary_agentName(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "actions":
+			out.Values[i] = ec._AgentActivitySummary_actions(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "lastSeen":
+			out.Values[i] = ec._AgentActivitySummary_lastSeen(ctx, field, obj)
 			if out.Values[i] == graphql.Null {
 				out.Invalids++
 			}
@@ -40198,6 +41505,50 @@ func (ec *executionContext) _Query(ctx context.Context, sel ast.SelectionSet) gr
 					}
 				}()
 				res = ec._Query_myOperationRole(ctx, field)
+				return res
+			}
+
+			rrm := func(ctx context.Context) graphql.Marshaler {
+				return ec.OperationContext.RootResolverMiddleware(ctx,
+					func(ctx context.Context) graphql.Marshaler { return innerFunc(ctx, out) })
+			}
+
+			out.Concurrently(i, func(ctx context.Context) graphql.Marshaler { return rrm(innerCtx) })
+		case "agentActions":
+			field := field
+
+			innerFunc := func(ctx context.Context, fs *graphql.FieldSet) (res graphql.Marshaler) {
+				defer func() {
+					if r := recover(); r != nil {
+						ec.Error(ctx, ec.Recover(ctx, r))
+					}
+				}()
+				res = ec._Query_agentActions(ctx, field)
+				if res == graphql.Null {
+					atomic.AddUint32(&fs.Invalids, 1)
+				}
+				return res
+			}
+
+			rrm := func(ctx context.Context) graphql.Marshaler {
+				return ec.OperationContext.RootResolverMiddleware(ctx,
+					func(ctx context.Context) graphql.Marshaler { return innerFunc(ctx, out) })
+			}
+
+			out.Concurrently(i, func(ctx context.Context) graphql.Marshaler { return rrm(innerCtx) })
+		case "agentActivitySummary":
+			field := field
+
+			innerFunc := func(ctx context.Context, fs *graphql.FieldSet) (res graphql.Marshaler) {
+				defer func() {
+					if r := recover(); r != nil {
+						ec.Error(ctx, ec.Recover(ctx, r))
+					}
+				}()
+				res = ec._Query_agentActivitySummary(ctx, field)
+				if res == graphql.Null {
+					atomic.AddUint32(&fs.Invalids, 1)
+				}
 				return res
 			}
 
@@ -45634,6 +46985,42 @@ func (ec *executionContext) marshalNAPIKeyWithSecret2ᚖgithubᚗcomᚋvibeᚑc2
 	return ec._APIKeyWithSecret(ctx, sel, v)
 }
 
+func (ec *executionContext) marshalNAgentAction2ᚕᚖgithubᚗcomᚋvibeᚑc2ᚋvibeᚑc2ᚑcoreᚋcoreᚋpkgᚋmodelsᚐAgentActionᚄ(ctx context.Context, sel ast.SelectionSet, v []*models.AgentAction) graphql.Marshaler {
+	ret := graphql.MarshalSliceConcurrently(ctx, len(v), 0, false, func(ctx context.Context, i int) graphql.Marshaler {
+		fc := graphql.GetFieldContext(ctx)
+		fc.Result = &v[i]
+		return ec.marshalNAgentAction2ᚖgithubᚗcomᚋvibeᚑc2ᚋvibeᚑc2ᚑcoreᚋcoreᚋpkgᚋmodelsᚐAgentAction(ctx, sel, v[i])
+	})
+
+	for _, e := range ret {
+		if e == graphql.Null {
+			return graphql.Null
+		}
+	}
+
+	return ret
+}
+
+func (ec *executionContext) marshalNAgentAction2ᚖgithubᚗcomᚋvibeᚑc2ᚋvibeᚑc2ᚑcoreᚋcoreᚋpkgᚋmodelsᚐAgentAction(ctx context.Context, sel ast.SelectionSet, v *models.AgentAction) graphql.Marshaler {
+	if v == nil {
+		if !graphql.HasFieldError(ctx, graphql.GetFieldContext(ctx)) {
+			graphql.AddErrorf(ctx, "the requested element is null which the schema does not allow")
+		}
+		return graphql.Null
+	}
+	return ec._AgentAction(ctx, sel, v)
+}
+
+func (ec *executionContext) unmarshalNAgentActionOutcome2githubᚗcomᚋvibeᚑc2ᚋvibeᚑc2ᚑcoreᚋcoreᚋpkgᚋgraphqlᚋmodelᚐAgentActionOutcome(ctx context.Context, v any) (model.AgentActionOutcome, error) {
+	var res model.AgentActionOutcome
+	err := res.UnmarshalGQL(v)
+	return res, graphql.ErrorOnPath(ctx, err)
+}
+
+func (ec *executionContext) marshalNAgentActionOutcome2githubᚗcomᚋvibeᚑc2ᚋvibeᚑc2ᚑcoreᚋcoreᚋpkgᚋgraphqlᚋmodelᚐAgentActionOutcome(ctx context.Context, sel ast.SelectionSet, v model.AgentActionOutcome) graphql.Marshaler {
+	return v
+}
+
 func (ec *executionContext) marshalNAgentActivityEvent2githubᚗcomᚋvibeᚑc2ᚋvibeᚑc2ᚑcoreᚋcoreᚋpkgᚋgraphqlᚋmodelᚐAgentActivityEvent(ctx context.Context, sel ast.SelectionSet, v model.AgentActivityEvent) graphql.Marshaler {
 	return ec._AgentActivityEvent(ctx, sel, &v)
 }
@@ -45646,6 +47033,32 @@ func (ec *executionContext) marshalNAgentActivityEvent2ᚖgithubᚗcomᚋvibeᚑ
 		return graphql.Null
 	}
 	return ec._AgentActivityEvent(ctx, sel, v)
+}
+
+func (ec *executionContext) marshalNAgentActivitySummary2ᚕᚖgithubᚗcomᚋvibeᚑc2ᚋvibeᚑc2ᚑcoreᚋcoreᚋpkgᚋgraphqlᚋmodelᚐAgentActivitySummaryᚄ(ctx context.Context, sel ast.SelectionSet, v []*model.AgentActivitySummary) graphql.Marshaler {
+	ret := graphql.MarshalSliceConcurrently(ctx, len(v), 0, false, func(ctx context.Context, i int) graphql.Marshaler {
+		fc := graphql.GetFieldContext(ctx)
+		fc.Result = &v[i]
+		return ec.marshalNAgentActivitySummary2ᚖgithubᚗcomᚋvibeᚑc2ᚋvibeᚑc2ᚑcoreᚋcoreᚋpkgᚋgraphqlᚋmodelᚐAgentActivitySummary(ctx, sel, v[i])
+	})
+
+	for _, e := range ret {
+		if e == graphql.Null {
+			return graphql.Null
+		}
+	}
+
+	return ret
+}
+
+func (ec *executionContext) marshalNAgentActivitySummary2ᚖgithubᚗcomᚋvibeᚑc2ᚋvibeᚑc2ᚑcoreᚋcoreᚋpkgᚋgraphqlᚋmodelᚐAgentActivitySummary(ctx context.Context, sel ast.SelectionSet, v *model.AgentActivitySummary) graphql.Marshaler {
+	if v == nil {
+		if !graphql.HasFieldError(ctx, graphql.GetFieldContext(ctx)) {
+			graphql.AddErrorf(ctx, "the requested element is null which the schema does not allow")
+		}
+		return graphql.Null
+	}
+	return ec._AgentActivitySummary(ctx, sel, v)
 }
 
 func (ec *executionContext) marshalNAgentKey2githubᚗcomᚋvibeᚑc2ᚋvibeᚑc2ᚑcoreᚋcoreᚋpkgᚋmodelsᚐAgentKey(ctx context.Context, sel ast.SelectionSet, v models.AgentKey) graphql.Marshaler {
@@ -47506,6 +48919,43 @@ func (ec *executionContext) marshalOAPIKey2ᚖgithubᚗcomᚋvibeᚑc2ᚋvibeᚑ
 		return graphql.Null
 	}
 	return ec._APIKey(ctx, sel, v)
+}
+
+func (ec *executionContext) unmarshalOAgentActionOutcome2ᚕgithubᚗcomᚋvibeᚑc2ᚋvibeᚑc2ᚑcoreᚋcoreᚋpkgᚋgraphqlᚋmodelᚐAgentActionOutcomeᚄ(ctx context.Context, v any) ([]model.AgentActionOutcome, error) {
+	if v == nil {
+		return nil, nil
+	}
+	var vSlice []any
+	vSlice = graphql.CoerceList(v)
+	var err error
+	res := make([]model.AgentActionOutcome, len(vSlice))
+	for i := range vSlice {
+		ctx := graphql.WithPathContext(ctx, graphql.NewPathWithIndex(i))
+		res[i], err = ec.unmarshalNAgentActionOutcome2githubᚗcomᚋvibeᚑc2ᚋvibeᚑc2ᚑcoreᚋcoreᚋpkgᚋgraphqlᚋmodelᚐAgentActionOutcome(ctx, vSlice[i])
+		if err != nil {
+			return nil, err
+		}
+	}
+	return res, nil
+}
+
+func (ec *executionContext) marshalOAgentActionOutcome2ᚕgithubᚗcomᚋvibeᚑc2ᚋvibeᚑc2ᚑcoreᚋcoreᚋpkgᚋgraphqlᚋmodelᚐAgentActionOutcomeᚄ(ctx context.Context, sel ast.SelectionSet, v []model.AgentActionOutcome) graphql.Marshaler {
+	if v == nil {
+		return graphql.Null
+	}
+	ret := graphql.MarshalSliceConcurrently(ctx, len(v), 0, false, func(ctx context.Context, i int) graphql.Marshaler {
+		fc := graphql.GetFieldContext(ctx)
+		fc.Result = &v[i]
+		return ec.marshalNAgentActionOutcome2githubᚗcomᚋvibeᚑc2ᚋvibeᚑc2ᚑcoreᚋcoreᚋpkgᚋgraphqlᚋmodelᚐAgentActionOutcome(ctx, sel, v[i])
+	})
+
+	for _, e := range ret {
+		if e == graphql.Null {
+			return graphql.Null
+		}
+	}
+
+	return ret
 }
 
 func (ec *executionContext) unmarshalOBoolean2bool(ctx context.Context, v any) (bool, error) {

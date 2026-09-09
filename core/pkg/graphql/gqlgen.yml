@@ -414,6 +414,29 @@ models:
       updatedAt:
         resolver: true         # field.DefaultField.UpdateAt -> string
 
+  # --- Agent Actions ---
+
+  AgentAction:
+    model:
+      - github.com/vibe-c2/vibe-c2-core/core/pkg/models.AgentAction
+    fields:
+      id:
+        resolver: true         # ActionID (uuid.UUID) -> ID
+      operationId:
+        resolver: true         # *uuid.UUID -> *ID
+      agentKeyId:
+        resolver: true         # uuid.UUID -> ID
+      owner:
+        resolver: true         # OwnerUserID -> User (fetched)
+      outcome:
+        resolver: true         # models enum -> GraphQL enum
+      error:
+        resolver: true         # "" -> null
+      durationMs:
+        resolver: true         # int64 -> Int
+      occurredAt:
+        resolver: true         # time.Time -> RFC3339
+
   # --- Modules ---
 
   # Map the GraphQL "Module" type to our existing registry model. Most fields

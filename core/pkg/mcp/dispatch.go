@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -227,19 +226,6 @@ func (s *Server) publishActivity(action *models.AgentAction, agent *gqlctx.Agent
 		eventbus.AgentActor(agent.AgentKeyID, agent.Name, action.OwnerUserID.String()),
 		payload,
 	))
-}
-
-// isRefusal distinguishes "you may not" from "something broke". Both are
-// errors to the agent, but only the first is a policy decision worth being
-// able to query for separately when reviewing what an agent tried to reach.
-func isRefusal(err error) bool {
-	msg := err.Error()
-	for _, marker := range []string{"forbidden", "read-only", "not scoped", "not a member", "rate limit"} {
-		if strings.Contains(msg, marker) {
-			return true
-		}
-	}
-	return false
 }
 
 // encodeArgs renders the tool input for the audit row, bounded so one call

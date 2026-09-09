@@ -63,7 +63,7 @@ func (l rateLimits) writesPerWindow() int {
 // "wait 34 seconds" can wait; one that reads "429" will usually retry
 // immediately and make it worse.
 func rateLimitError(kind string, limit int, retryIn time.Duration) error {
-	return fmt.Errorf(
+	return refuse(
 		"rate limit reached: this agent key is allowed %d %s per minute. Wait about %d seconds and continue — do not retry immediately",
 		limit, kind, int(retryIn.Seconds())+1)
 }

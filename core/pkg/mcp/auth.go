@@ -69,7 +69,7 @@ func requireWrites(ctx context.Context) error {
 		return err
 	}
 	if !agent.AllowWrites {
-		return fmt.Errorf("this agent key is read-only; ask the operator to enable writes on it")
+		return refuse("this agent key is read-only; ask the operator to enable writes on it")
 	}
 	return nil
 }

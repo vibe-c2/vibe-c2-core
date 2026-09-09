@@ -29,6 +29,13 @@ type AgentActivityEvent struct {
 	Summary     string `json:"summary"`
 }
 
+type AgentActivitySummary struct {
+	AgentKeyID string `json:"agentKeyId"`
+	AgentName  string `json:"agentName"`
+	Actions    int    `json:"actions"`
+	LastSeen   string `json:"lastSeen"`
+}
+
 type AgentKeyWithSecret struct {
 	AgentKey *models.AgentKey `json:"agentKey"`
 	Token    string           `json:"token"`
@@ -550,6 +557,63 @@ type WikiSearchHit struct {
 type WikiSearchMatchRange struct {
 	Start int `json:"start"`
 	End   int `json:"end"`
+}
+
+type AgentActionOutcome string
+
+const (
+	AgentActionOutcomeOk      AgentActionOutcome = "OK"
+	AgentActionOutcomeRefused AgentActionOutcome = "REFUSED"
+	AgentActionOutcomeError   AgentActionOutcome = "ERROR"
+)
+
+var AllAgentActionOutcome = []AgentActionOutcome{
+	AgentActionOutcomeOk,
+	AgentActionOutcomeRefused,
+	AgentActionOutcomeError,
+}
+
+func (e AgentActionOutcome) IsValid() bool {
+	switch e {
+	case AgentActionOutcomeOk, AgentActionOutcomeRefused, AgentActionOutcomeError:
+		return true
+	}
+	return false
+}
+
+func (e AgentActionOutcome) String() string {
+	return string(e)
+}
+
+func (e *AgentActionOutcome) UnmarshalGQL(v any) error {
+	str, ok := v.(string)
+	if !ok {
+		return fmt.Errorf("enums must be strings")
+	}
+
+	*e = AgentActionOutcome(str)
+	if !e.IsValid() {
+		return fmt.Errorf("%s is not a valid AgentActionOutcome", str)
+	}
+	return nil
+}
+
+func (e AgentActionOutcome) MarshalGQL(w io.Writer) {
+	fmt.Fprint(w, strconv.Quote(e.String()))
+}
+
+func (e *AgentActionOutcome) UnmarshalJSON(b []byte) error {
+	s, err := strconv.Unquote(string(b))
+	if err != nil {
+		return err
+	}
+	return e.UnmarshalGQL(s)
+}
+
+func (e AgentActionOutcome) MarshalJSON() ([]byte, error) {
+	var buf bytes.Buffer
+	e.MarshalGQL(&buf)
+	return buf.Bytes(), nil
 }
 
 type CredentialSearchField string

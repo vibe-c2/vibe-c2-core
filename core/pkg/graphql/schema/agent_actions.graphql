@@ -1,0 +1,78 @@
+# =============================================================================
+# Agent Actions — the durable record of what an agent did
+# =============================================================================
+#
+# Every MCP tool call is recorded here, READS INCLUDED, and this is the query
+# behind the agent activity page.
+#
+# Reads matter as much as writes. The timeline shows what changed; only this
+# shows what an agent looked at — and an agent reading an operation's entire
+# credential set changes nothing, so it would otherwise leave no trace at all.
+# "The operator can see everything the agent does" is not satisfiable from the
+# timeline alone.
+#
+# Append-only: there is no mutation here, because an audit trail its own writer
+# can edit is not an audit trail.
+
+# How a tool call ended.
+#   ok      — it did what was asked
+#   refused — a scope, role, write-gate or rate-limit decision said no
+#   error   — something broke
+# refused is separate from error on purpose: a run full of refusals means the
+# key is scoped tighter than the work being asked of it, which is a
+# configuration answer, not a fault.
+enum AgentActionOutcome {
+  OK
+  REFUSED
+  ERROR
+}
+
+type AgentAction {
+  id: ID!
+  operationId: ID
+  agentKeyId: ID!
+  # Captured when the call was made, so the row still reads correctly after the
+  # key is renamed or deleted.
+  agentName: String!
+  # The user the agent was acting for.
+  owner: User
+  tool: String!
+  # True when the call changed something. Writes also appear on the timeline;
+  # reads live only here.
+  write: Boolean!
+  outcome: AgentActionOutcome!
+  # Present only when the call failed or was refused.
+  error: String
+  # JSON-encoded tool input, truncated at 4 KB.
+  arguments: String!
+  durationMs: Int!
+  occurredAt: String!
+}
+
+# One agent that has acted in an operation. Lets the UI offer a filter without
+# paging every action first.
+type AgentActivitySummary {
+  agentKeyId: ID!
+  agentName: String!
+  actions: Int!
+  lastSeen: String!
+}
+
+extend type Query {
+  # Recent agent activity in an operation, newest first. Viewer+ in the
+  # operation — anyone who can see the work can see what an agent did to it.
+  #
+  # `before` pages backwards: pass the oldest occurredAt you have.
+  agentActions(
+    operationId: ID!
+    agentKeyId: ID
+    writesOnly: Boolean
+    outcomes: [AgentActionOutcome!]
+    before: String
+    limit: Int = 50
+  ): [AgentAction!]! @hasPermission(permission: "operation:member")
+
+  # Which agents have acted in this operation.
+  agentActivitySummary(operationId: ID!): [AgentActivitySummary!]!
+    @hasPermission(permission: "operation:member")
+}

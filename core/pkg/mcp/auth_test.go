@@ -2,6 +2,7 @@ package mcp
 
 import (
 	"context"
+	"fmt"
 	"strings"
 	"testing"
 
@@ -115,29 +116,57 @@ func TestResolveOperation(t *testing.T) {
 }
 
 // The audit trail distinguishes "you may not" from "something broke", so a
-// reviewer can ask what an agent tried to reach separately from what failed.
+// reviewer can ask what an agent was stopped from doing separately from what
+// failed. The classification is typed rather than matched on message text —
+// an earlier version compared against a list of phrases and misfiled every
+// refusal whose wording nobody had thought to add.
 func TestIsRefusal(t *testing.T) {
-	refusals := []string{
-		"forbidden: requires at least 'operator' role in this operation",
-		"forbidden: agent key is not scoped to this operation",
-		"this agent key is read-only; ask the operator to enable writes on it",
-		"forbidden: agent owner is not a member of this operation",
-	}
-	for _, msg := range refusals {
-		if !isRefusal(errString(msg)) {
-			t.Fatalf("not classified as a refusal: %q", msg)
+	t.Run("this package's own gates are refusals", func(t *testing.T) {
+		for _, err := range []error{
+			refuse("this agent key is read-only; ask the operator to enable writes on it"),
+			refuse("rate limit reached: allowed 120 tool calls per minute"),
+			// Wording nobody anticipated is still classified correctly,
+			// because the type carries the meaning, not the string.
+			refuse("some future policy nobody has written yet"),
+		} {
+			if !isRefusal(err) {
+				t.Errorf("not classified as a refusal: %q", err)
+			}
 		}
-	}
+	})
 
-	failures := []string{
-		"failed to search hosts: connection reset",
-		"host not found",
-	}
-	for _, msg := range failures {
-		if isRefusal(errString(msg)) {
-			t.Fatalf("a plain failure was classified as a refusal: %q", msg)
+	t.Run("authorization denials are refusals", func(t *testing.T) {
+		// package authorization prefixes every denial this way, on every path.
+		for _, msg := range []string{
+			"forbidden: requires at least 'operator' role in this operation",
+			"forbidden: agent key is not scoped to this operation",
+			"forbidden: agent owner is not a member of this operation",
+		} {
+			if !isRefusal(errString(msg)) {
+				t.Errorf("not classified as a refusal: %q", msg)
+			}
 		}
-	}
+	})
+
+	t.Run("wrapping preserves the classification", func(t *testing.T) {
+		wrapped := fmt.Errorf("failed to save the page: %w",
+			refuse("this agent key is read-only"))
+		if !isRefusal(wrapped) {
+			t.Fatal("a wrapped refusal was classified as an error")
+		}
+	})
+
+	t.Run("faults and bad input are not refusals", func(t *testing.T) {
+		for _, msg := range []string{
+			"failed to search hosts: connection reset",
+			"host not found",
+			`status "BANANA" is not one of NOT_PROCESSED, QUEUED, CRACKING, CRACKED, FAILED`,
+		} {
+			if isRefusal(errString(msg)) {
+				t.Errorf("classified as a refusal: %q", msg)
+			}
+		}
+	})
 }
 
 type errString string
