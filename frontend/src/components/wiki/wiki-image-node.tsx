@@ -1,4 +1,4 @@
-import { useRef, useState } from "react"
+import { useState } from "react"
 import { NodeViewWrapper, type ReactNodeViewProps } from "@tiptap/react"
 import { ImageOffIcon, MaximizeIcon, Trash2Icon } from "lucide-react"
 import Lightbox from "yet-another-react-lightbox"
@@ -6,7 +6,6 @@ import Zoom from "yet-another-react-lightbox/plugins/zoom"
 import Fullscreen from "yet-another-react-lightbox/plugins/fullscreen"
 import Counter from "yet-another-react-lightbox/plugins/counter"
 import { usePrintMode } from "@/hooks/use-print-mode"
-import { usePreservedScroll } from "@/hooks/use-preserved-scroll"
 import "yet-another-react-lightbox/styles.css"
 import "yet-another-react-lightbox/plugins/counter.css"
 
@@ -20,11 +19,6 @@ import "yet-another-react-lightbox/plugins/counter.css"
  */
 export function WikiImageNode({ node, editor, getPos }: ReactNodeViewProps) {
   const [isOpen, setIsOpen] = useState(false)
-  // Anchor for locating the scroll container. Closing the lightbox otherwise
-  // leaves the reader somewhere other than where they opened it on a long
-  // document — see usePreservedScroll.
-  const wrapperRef = useRef<HTMLElement>(null)
-  usePreservedScroll(isOpen, wrapperRef)
   const src: string = node.attrs.src ?? ""
   const alt: string = node.attrs.alt ?? ""
 
@@ -64,7 +58,6 @@ export function WikiImageNode({ node, editor, getPos }: ReactNodeViewProps) {
 
   return (
     <NodeViewWrapper
-      ref={wrapperRef}
       className="wiki-image-wrapper"
       // The wrapper is structural, not editable text; kill contentEditable
       // so clicks don't steal the ProseMirror selection.

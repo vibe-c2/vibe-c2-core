@@ -3,7 +3,6 @@ import { type Editor, useEditorState } from "@tiptap/react"
 import { Button } from "@/components/ui/button"
 import { useWikiStore } from "@/stores/wiki"
 import { cn } from "@/lib/utils"
-import { findScrollParent } from "@/lib/scroll-parent"
 
 interface WikiEditorTocProps {
   editor: Editor | null
@@ -195,4 +194,19 @@ export function WikiEditorToc({ editor }: WikiEditorTocProps) {
       </div>
     </div>
   )
+}
+
+// Walks up from the editor DOM until the nearest scrollable ancestor.
+// The wiki editor lives inside `.flex-1.overflow-y-auto`, so the first
+// ancestor with a scrolling overflow-y is the right target.
+function findScrollParent(el: HTMLElement | null): HTMLElement | null {
+  let node: HTMLElement | null = el
+  while (node && node !== document.body) {
+    const style = window.getComputedStyle(node)
+    if (style.overflowY === "auto" || style.overflowY === "scroll") {
+      return node
+    }
+    node = node.parentElement
+  }
+  return null
 }
