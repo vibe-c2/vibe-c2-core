@@ -135,6 +135,10 @@ type findCredentialsArgs struct {
 	Cursor      string   `json:"cursor,omitempty"       jsonschema:"Continue a previous page using its nextCursor."`
 }
 
+type getCredentialArgs struct {
+	CredentialID string `json:"credential_id" jsonschema:"The credential's id, from find_credentials."`
+}
+
 type addCredentialCommentArgs struct {
 	IdempotencyKey
 	CredentialID string `json:"credential_id" jsonschema:"The credential's id, from find_credentials."`
@@ -147,6 +151,12 @@ func registerCredentialTools(s *Server) {
 		Description: "Search credentials harvested during the engagement. Secret material is " +
 			"included in the results.",
 	}, readTool, handleFindCredentials)
+
+	register(s, &mcp.Tool{
+		Name: "get_credential",
+		Description: "One credential in full, including its keys, custom properties and the " +
+			"comment history explaining where it came from and what it opens.",
+	}, readTool, handleGetCredential)
 
 	register(s, &mcp.Tool{
 		Name: "add_credential_comment",
@@ -189,6 +199,41 @@ func handleFindCredentials(ctx context.Context, s *Server, args findCredentialsA
 		Payload:     result,
 		OperationID: &opID,
 		Summary:     fmt.Sprintf("searched credentials (%d shown of %d)", len(views), conn.TotalCount),
+	}, nil
+}
+
+func handleGetCredential(ctx context.Context, s *Server, args getCredentialArgs) (toolResult, error) {
+	cred, err := s.deps.Credentials.Credential(ctx, args.CredentialID)
+	if err != nil {
+		return toolResult{}, fmt.Errorf("credential not found")
+	}
+	if _, err := s.authorizeOperation(ctx, cred.OperationID, models.OperationRoleViewer); err != nil {
+		return toolResult{}, err
+	}
+
+	view := struct {
+		credentialView
+		Keys       []credentialKeyView      `json:"keys,omitempty"`
+		Properties []credentialPropertyView `json:"properties,omitempty"`
+		Comments   []credentialCommentView  `json:"comments,omitempty"`
+	}{credentialView: toCredentialView(cred)}
+
+	for _, k := range cred.Keys {
+		view.Keys = append(view.Keys, credentialKeyView{Name: k.Name, Content: k.Content})
+	}
+	for _, prop := range cred.Properties {
+		view.Properties = append(view.Properties, credentialPropertyView{Name: prop.Name, Value: prop.Value})
+	}
+	for _, c := range cred.Comments {
+		view.Comments = append(view.Comments, credentialCommentView{
+			Text: c.Text, CreatedAt: formatTime(c.CreatedAt),
+		})
+	}
+
+	return toolResult{
+		Payload:     view,
+		OperationID: &cred.OperationID,
+		Summary:     fmt.Sprintf("read credential %s", cred.Name),
 	}, nil
 }
 

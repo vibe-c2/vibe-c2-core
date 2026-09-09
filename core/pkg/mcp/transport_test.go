@@ -186,7 +186,7 @@ func TestServer_ToolSurface(t *testing.T) {
 	want := []string{
 		"list_operations", "get_operation_summary",
 		"find_hosts", "get_host", "create_host",
-		"find_credentials", "add_credential_comment",
+		"find_credentials", "get_credential", "add_credential_comment",
 		"find_hashes",
 		"find_tasks", "get_task", "create_task", "change_task_stage",
 		"search_wiki", "list_wiki_tree", "get_wiki_document",
@@ -209,6 +209,50 @@ func TestServer_ToolSurface(t *testing.T) {
 	for _, forbidden := range []string{"session", "implant", "channel", "module", "task_agent"} {
 		if strings.Contains(body, `"name":"`+forbidden) {
 			t.Errorf("a tool touching %q is registered; the agent surface must stay knowledge-layer only", forbidden)
+		}
+	}
+}
+
+// Resources and prompts are a second surface onto the same data, so they get
+// the same "this exists and is named what callers expect" guard as the tools.
+func TestServer_ResourcesAndPrompts(t *testing.T) {
+	s := New(Deps{Logger: zap.NewNop()})
+
+	key := testAgentKey(models.OperationRoleViewer, false)
+	gin.SetMode(gin.TestMode)
+	r := gin.New()
+	r.POST("/mcp", func(c *gin.Context) {
+		c.Set("userID", key.UserID.String())
+		c.Set("username", "alice")
+		c.Set("roles", []string{"user"})
+		c.Set(middleware.AgentAuthFlag, true)
+		c.Set(middleware.AgentInfoKey, key)
+		c.Next()
+	}, s.Handler())
+
+	post(t, r, `{"jsonrpc":"2.0","id":1,"method":"initialize","params":{`+
+		`"protocolVersion":"2025-06-18","capabilities":{},`+
+		`"clientInfo":{"name":"test","version":"1"}}}`)
+
+	templates := post(t, r, `{"jsonrpc":"2.0","id":2,"method":"resources/templates/list","params":{}}`).Body.String()
+	for _, want := range []string{
+		"vibe://op/{operationId}/wiki/{documentId}",
+		"vibe://op/{operationId}/host/{hostId}",
+	} {
+		if !strings.Contains(templates, want) {
+			t.Errorf("resource template %q is not registered", want)
+		}
+	}
+
+	resources := post(t, r, `{"jsonrpc":"2.0","id":3,"method":"resources/list","params":{}}`).Body.String()
+	if !strings.Contains(resources, focusResourceURI) {
+		t.Errorf("resource %q is not registered", focusResourceURI)
+	}
+
+	prompts := post(t, r, `{"jsonrpc":"2.0","id":4,"method":"prompts/list","params":{}}`).Body.String()
+	for _, want := range []string{"triage_findings", "engagement_notes", "whats_changed"} {
+		if !strings.Contains(prompts, `"name":"`+want+`"`) {
+			t.Errorf("prompt %q is not registered", want)
 		}
 	}
 }

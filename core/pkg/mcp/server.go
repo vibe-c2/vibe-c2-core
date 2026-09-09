@@ -37,6 +37,9 @@ func New(deps Deps) *Server {
 	registerTimelineTools(s)
 	registerFocusTools(s)
 
+	registerResources(s)
+	registerPrompts(s)
+
 	return s
 }
 

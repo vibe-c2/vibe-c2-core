@@ -84,6 +84,24 @@ type credentialView struct {
 	Tags     []string `json:"tags,omitempty"`
 }
 
+// Detail views for a single credential. Keys and properties carry their
+// contents in full, consistent with credentialView — see the note there on why
+// secret material is not redacted.
+type credentialKeyView struct {
+	Name    string `json:"name,omitempty"`
+	Content string `json:"content,omitempty"`
+}
+
+type credentialPropertyView struct {
+	Name  string `json:"name,omitempty"`
+	Value string `json:"value,omitempty"`
+}
+
+type credentialCommentView struct {
+	Text      string `json:"text"`
+	CreatedAt string `json:"createdAt,omitempty"`
+}
+
 type hashView struct {
 	ID      string `json:"id"`
 	Value   string `json:"value"`
