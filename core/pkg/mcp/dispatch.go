@@ -54,6 +54,15 @@ type handlerFunc[A any] func(ctx context.Context, s *Server, args A) (toolResult
 // and error shaping. A handler that forgets one of these cannot exist, because
 // no handler is reachable except through this wrapper.
 func register[A any](s *Server, tool *mcp.Tool, kind toolKind, fn handlerFunc[A]) {
+	// Record it so the generated skill is assembled from what is actually
+	// registered. A hand-maintained list would be stale the moment somebody
+	// adds a tool, which is exactly what happened ten times in one day.
+	s.tools = append(s.tools, toolDoc{
+		Name:        tool.Name,
+		Description: tool.Description,
+		Write:       kind == writeTool,
+	})
+
 	mcp.AddTool(s.server, tool, func(ctx context.Context, req *mcp.CallToolRequest, args A) (*mcp.CallToolResult, any, error) {
 		started := time.Now()
 

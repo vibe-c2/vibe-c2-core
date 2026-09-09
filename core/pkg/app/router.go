@@ -232,6 +232,12 @@ func (a *App) NewRouter() *gin.Engine {
 		// meaning to widen the agent blast radius.
 		v1.Use(middleware.RequireHuman())
 
+		// The agent skill: generated from the live tool registry so an
+		// operator's installed copy always matches this server. Below
+		// RequireHuman because a skill is installed by a person into their own
+		// client — it cannot be delivered over MCP.
+		v1.GET("/mcp/skill", middleware.RBAC(permissions.BasicPermission), mcpServer.SkillHandler())
+
 		v1.GET("/login/me", middleware.RBAC(permissions.BasicPermission), authCtrl.Me)
 		v1.POST("/logout", middleware.RBAC(permissions.BasicPermission), authCtrl.Logout)
 

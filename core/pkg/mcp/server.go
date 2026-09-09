@@ -15,6 +15,16 @@ type Server struct {
 	server *mcp.Server
 	deps   Deps
 	limits rateLimits
+	// tools is the registry the generated skill is built from. Appended to by
+	// register during New; never mutated afterwards.
+	tools []toolDoc
+}
+
+// toolDoc is one tool as the skill describes it.
+type toolDoc struct {
+	Name        string
+	Description string
+	Write       bool
 }
 
 // New builds the MCP server and registers the tool surface.

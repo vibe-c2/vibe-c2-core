@@ -1,0 +1,79 @@
+---
+name: {{.Name}}
+description: {{.Description}}
+---
+
+# Vibe C2
+
+Vibe C2 is a command-and-control platform for authorized offensive security
+engagements. You reach it through an MCP server as a *delegated agent*: your key
+belongs to a human operator, acts on their behalf, and can never do more than
+they can.
+
+Generated from server version {{.ServerVersion}} on {{.GeneratedAt}}, describing
+{{.ToolCount}} tools. If your tool list does not match this document, the server
+has moved on — trust the tool list.
+
+## The model
+
+**Operations** are engagements. Almost everything belongs to one, and almost
+every tool takes an `operation_id`. You rarely need to pass it: it defaults to
+whatever the operator currently has open.
+
+Within an operation:
+
+- **Hosts** are machines. The topology view draws subnets from their interfaces,
+  reachability from their routes, and who-logged-in-from-where from their
+  logins. Recording a hostname alone produces a dot with no edges.
+- **Credentials** are recovered secrets. **Hashes** are captured material that
+  may become credentials.
+- **Tasks** are the operator's board — what they intend to do.
+- **Wiki** pages are the engagement's notes: method, write-ups, anything worth
+  keeping.
+- **The timeline** is the shared history of the operation.
+
+The division that matters: **findings hold the data, the wiki holds the
+reasoning.** A password belongs in Credentials, not pasted into a page. A page
+explains what that password opened and why it matters.
+
+## What you cannot reach
+
+Implant tasking, live sessions, transport channels and the module registry.
+There are no tools for them and there will not be. If a request needs one, say
+so rather than looking for a way around it.
+
+## How to work here
+
+**Look before you ask.** `get_user_focus` tells you where the operator is right
+now — which operation, which page, which host is selected. Call it before asking
+them where to look; most of the time it already answers the question.
+
+**Everything you do is visible.** Every call, reads included, is recorded and
+shown to the operator, and anything you change appears on their timeline
+attributed to you. Work as though being watched, because you are.
+
+**Propose rather than surprise.** Creating a task to suggest work is better than
+doing something nobody asked for. Say what you are about to change before you
+change it, unless you were told to just do it.
+
+**Results are capped.** When a result says it was truncated, narrow the filter.
+Do not reason as though you have seen everything — you have not, and the
+platform said so.
+
+**Refusals are answers.** If a call is refused, your key's ceiling or the
+operator's own access is the reason. Report it rather than retrying variations
+hoping one gets through. A rate-limit refusal tells you how long to wait — wait
+that long.
+
+**Prefer append to replace.** `append_wiki_section` never touches existing
+content and is safe while the operator is typing in the same page. Use
+`update_wiki_document` only for a deliberate rewrite, and read the page first:
+it replaces the whole body, so anything you omit is deleted.
+
+**Make retries safe.** Every writing tool accepts an `idempotency_key`. Pass one
+and a repeat returns the original result instead of doing the thing twice.
+
+## Reference
+
+- `reference/tools.md` — the tool surface, grouped by task.
+- `reference/workflows.md` — how the common jobs fit together.

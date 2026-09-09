@@ -1,5 +1,5 @@
 import { toast } from "sonner"
-import { BotIcon, PlusIcon } from "lucide-react"
+import { BotIcon, DownloadIcon, PlusIcon, SparklesIcon } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import {
   Dialog,
@@ -113,8 +113,68 @@ function AgentKeysDialogBody() {
         New agent key
       </Button>
 
+      <SkillHint />
       <ConnectionHint />
     </>
+  )
+}
+
+/**
+ * The skill is what stops every operator having to teach their agent this app
+ * from scratch. It is generated from the running server's tool registry, so
+ * the copy downloaded here always matches the tools this deployment actually
+ * has — which a skill maintained anywhere else would not.
+ *
+ * A plain link rather than a fetch: the endpoint sits behind the same cookie
+ * auth as the rest of the API, and letting the browser handle the download
+ * avoids holding a zip in memory to hand straight back to it.
+ */
+function SkillHint() {
+  return (
+    <div className="rounded-md border bg-muted/30 px-3 py-2.5 space-y-2">
+      <div className="flex items-start gap-2">
+        <SparklesIcon className="mt-0.5 size-4 shrink-0 text-muted-foreground" />
+        <div className="space-y-1">
+          <div className="text-sm font-medium">Teach the agent this app</div>
+          <p className="text-xs text-muted-foreground">
+            A ready-made skill covering the tools, the data model and how to
+            work here. Generated from this server, so it always matches the
+            tools you have.
+          </p>
+        </div>
+      </div>
+
+      <Button
+        size="sm"
+        variant="outline"
+        render={<a href="/api/v1/mcp/skill" download />}
+      >
+        <DownloadIcon className="size-4" />
+        Download skill
+      </Button>
+
+      <details className="text-xs">
+        <summary className="cursor-pointer select-none text-muted-foreground">
+          Where to put it
+        </summary>
+        <div className="mt-2 space-y-2">
+          <p className="text-muted-foreground">
+            Unzip into your skills directory — per project or for every project:
+          </p>
+          <pre className="overflow-x-auto rounded bg-background/80 p-2 font-mono text-[11px]">
+{`# just this project
+unzip vibe-c2-skill.zip -d .claude/skills/
+
+# everywhere
+unzip vibe-c2-skill.zip -d ~/.claude/skills/`}
+          </pre>
+          <p className="text-muted-foreground">
+            The agent loads it on its own when the work calls for it. Download
+            it again after the platform is updated to pick up new tools.
+          </p>
+        </div>
+      </details>
+    </div>
   )
 }
 
