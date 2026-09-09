@@ -36,6 +36,7 @@ import "yet-another-react-lightbox/styles.css"
 import "yet-another-react-lightbox/plugins/counter.css"
 
 import { usePrintMode } from "@/hooks/use-print-mode"
+import { usePreservedScroll } from "@/hooks/use-preserved-scroll"
 import { PreviewResizeHandle } from "./wiki-file-preview-resize"
 import { isPreviewableImage } from "./wiki-file-preview-image"
 import {
@@ -142,6 +143,10 @@ export function WikiFileCard({ node, editor, getPos }: ReactNodeViewProps): Reac
   // viewport would still be unfetched when window.print() fires and export as a
   // blank tile. Same trade the image node makes.
   const isPrintMode = usePrintMode()
+  // Same scroll-position guard the inline image node uses — the attachment
+  // lightbox covers the document the same way.
+  const cardRef = useRef<HTMLElement>(null)
+  usePreservedScroll(lightboxOpen, cardRef)
   // User-dragged preview height in px, or null to fall back to the CSS default
   // (min(75vh, 720px)). Held on the card — not the panel — so a resize survives
   // collapsing and re-expanding the same attachment.
@@ -236,7 +241,7 @@ export function WikiFileCard({ node, editor, getPos }: ReactNodeViewProps): Reac
   }
 
   return (
-    <NodeViewWrapper className="wiki-file-wrapper" as="figure">
+    <NodeViewWrapper ref={cardRef} className="wiki-file-wrapper" as="figure">
       <div className="wiki-file-card" contentEditable={false}>
         {showThumbnail ? (
           <button
