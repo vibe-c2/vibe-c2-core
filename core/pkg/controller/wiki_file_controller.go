@@ -82,6 +82,26 @@ var previewAllowedContentTypes = map[string]bool{
 	"application/pdf": true,
 	"text/plain":      true,
 	"text/markdown":   true,
+	// Raster images. An image attachment is the one case where the browser
+	// already is the renderer, so serving it inline is what makes a thumbnail
+	// and a lightbox possible without a second copy of the bytes.
+	//
+	// Safe even though the content type here can be client-declared (IngestFile
+	// prefers the declared type and only sniffs when it is empty), because the
+	// response carries X-Content-Type-Options: nosniff and a
+	// "default-src 'none'; sandbox" CSP. A payload lying about being a PNG is
+	// therefore pinned to image/png: the browser will not re-sniff it into
+	// markup, and a document interpretation of it is sandboxed and cut off from
+	// the network. It simply fails to decode.
+	//
+	// SVG is deliberately absent — it is a scriptable document, not a raster,
+	// and stays in dangerousContentTypes below, which wins over this map.
+	"image/png":  true,
+	"image/jpeg": true,
+	"image/gif":  true,
+	"image/webp": true,
+	"image/avif": true,
+	"image/bmp":  true,
 }
 
 // dangerousContentTypes are formats the browser may execute if served inline.
@@ -271,7 +291,7 @@ func (wfc *WikiFileController) IngestFile(
 // attachment; ?preview=1 switches to inline for known-safe types.
 //
 //	@Summary		Fetch a wiki file attachment
-//	@Description	Streams the file bytes. Caller must be a member of the file's operation. Pass ?preview=1 for inline rendering of safe formats (PDF, text).
+//	@Description	Streams the file bytes. Caller must be a member of the file's operation. Pass ?preview=1 for inline rendering of safe formats (PDF, text, raster images).
 //	@Tags			Wiki
 //	@Produce		application/octet-stream
 //	@Security		BearerAuth

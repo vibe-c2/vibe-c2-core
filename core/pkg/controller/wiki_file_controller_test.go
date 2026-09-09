@@ -92,6 +92,12 @@ func TestContentDispositionFor(t *testing.T) {
 		{"preview text is inline", "notes.txt", "text/plain", true, "inline;"},
 		{"preview docx stays attachment", "a.docx", "application/vnd.openxmlformats-officedocument.wordprocessingml.document", true, "attachment;"},
 		{"preview html forced to attachment", "x.html", "text/html", true, "attachment;"},
+		{"preview png is inline", "shot.png", "image/png", true, "inline;"},
+		{"preview jpeg is inline", "shot.jpg", "image/jpeg", true, "inline;"},
+		{"preview webp is inline", "shot.webp", "image/webp", true, "inline;"},
+		{"image default is still attachment", "shot.png", "image/png", false, "attachment;"},
+		// SVG is a scriptable document, not a raster: it must stay an
+		// attachment even though every other image type is now inline.
 		{"preview svg forced to attachment", "x.svg", "image/svg+xml", true, "attachment;"},
 		{"preview js forced to attachment", "x.js", "application/javascript", true, "attachment;"},
 	}

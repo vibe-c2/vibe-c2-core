@@ -973,6 +973,41 @@
   flex-shrink: 0;
 }
 
+/* Image attachments swap the type-icon slot for a real thumbnail. Slightly
+   larger than the 36px icon — at icon size a photo is unreadable, and the few
+   extra pixels are what make the card worth having. Fixed square so a portrait
+   and a landscape attachment produce identically-sized cards; object-fit
+   crops rather than letterboxes so the tile is never part-empty. */
+.tiptap .wiki-file-thumb {
+  appearance: none;
+  padding: 0;
+  margin: 0;
+  width: 48px;
+  height: 48px;
+  flex-shrink: 0;
+  display: block;
+  overflow: hidden;
+  border: 1px solid var(--color-border);
+  border-radius: 6px;
+  background: var(--color-background, #fff);
+  cursor: zoom-in;
+  transition: border-color 120ms ease, box-shadow 120ms ease;
+}
+
+.tiptap .wiki-file-thumb img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.tiptap .wiki-file-thumb:hover,
+.tiptap .wiki-file-thumb:focus-visible {
+  border-color: var(--color-ring, #6b7280);
+  box-shadow: 0 0 0 2px var(--color-ring, #6b7280);
+  outline: none;
+}
+
 .tiptap .wiki-file-meta {
   display: flex;
   flex-direction: column;

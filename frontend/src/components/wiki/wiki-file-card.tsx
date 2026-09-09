@@ -14,6 +14,7 @@ import {
   FileSpreadsheetIcon,
   FileTextIcon,
   FileVideoIcon,
+  ImageIcon,
   Maximize2Icon,
   Trash2Icon,
 } from "lucide-react"
@@ -27,7 +28,16 @@ import {
   type RefObject,
 } from "react"
 
+import Lightbox from "yet-another-react-lightbox"
+import Zoom from "yet-another-react-lightbox/plugins/zoom"
+import Fullscreen from "yet-another-react-lightbox/plugins/fullscreen"
+import Counter from "yet-another-react-lightbox/plugins/counter"
+import "yet-another-react-lightbox/styles.css"
+import "yet-another-react-lightbox/plugins/counter.css"
+
+import { usePrintMode } from "@/hooks/use-print-mode"
 import { PreviewResizeHandle } from "./wiki-file-preview-resize"
+import { isPreviewableImage } from "./wiki-file-preview-image"
 import {
   detectInlinePreviewKind,
   useRenderedPreview,
@@ -41,6 +51,12 @@ const PREVIEW_ALLOWED_CONTENT_TYPES = new Set<string>([
   "application/pdf",
   "text/plain",
   "text/markdown",
+  "image/png",
+  "image/jpeg",
+  "image/gif",
+  "image/webp",
+  "image/avif",
+  "image/bmp",
 ])
 
 /** Types we never serve inline regardless of ?preview=1 — mirrors the backend's
@@ -73,6 +89,9 @@ const FILE_ICON_SIZE = 20
 // spreadsheets, delimited text, Markdown and plain text all get an expandable
 // inline preview panel (PDF via an inline iframe src; the rest converted
 // client-side into a sandboxed srcdoc — see wiki-file-preview-source.ts).
+// Image attachments take a third path: the browser is already the renderer, so
+// the card shows a real thumbnail in its leading slot and clicking it opens the
+// full image in a lightbox — no expandable panel, no conversion.
 // A type that has no inline renderer, or is too large for one, falls back to
 // the new-tab preview when the backend will serve it inline, and to download
 // otherwise. Action buttons use the FileActionButton helper below — see its
@@ -92,9 +111,12 @@ export function WikiFileCard({ node, editor, getPos }: ReactNodeViewProps): Reac
   //     converted ourselves, fully sandboxed and CSP-constrained.
   // Other previewable types (text, markdown) still open in a new tab.
   const isPdf = contentType === "application/pdf"
-  const renderedKind: InlinePreviewKind | null = isPdf
-    ? null
-    : detectInlinePreviewKind(contentType, filename, attrs.size)
+  // Images bypass the panel entirely — see the thumbnail/lightbox path below.
+  const isImage = isPreviewableImage(contentType, filename) && url !== ""
+  const renderedKind: InlinePreviewKind | null =
+    isPdf || isImage
+      ? null
+      : detectInlinePreviewKind(contentType, filename, attrs.size)
   const canPreviewInline = (isPdf || renderedKind !== null) && url !== ""
   const previewUrl = url ? `${url}?preview=1` : ""
 
@@ -107,6 +129,19 @@ export function WikiFileCard({ node, editor, getPos }: ReactNodeViewProps): Reac
   // Whether the inline preview panel is open. The frame is only mounted while
   // expanded, so collapsed cards never fetch the file bytes.
   const [expanded, setExpanded] = useState(false)
+  // Whether the image lightbox is open. Mounted only while open, so a document
+  // full of image attachments pays nothing for the ones nobody opens.
+  const [lightboxOpen, setLightboxOpen] = useState(false)
+  // Set when the thumbnail fails to load — most often a blob the sweeper
+  // collected, leaving the node behind. Falling back to the type icon keeps the
+  // card readable instead of leaving a broken-image gap, and disarms the
+  // lightbox, which would only show the same failure larger.
+  const [thumbFailed, setThumbFailed] = useState(false)
+  const showThumbnail = isImage && !thumbFailed
+  // The print page never scrolls, so a lazy thumbnail below the initial
+  // viewport would still be unfetched when window.print() fires and export as a
+  // blank tile. Same trade the image node makes.
+  const isPrintMode = usePrintMode()
   // User-dragged preview height in px, or null to fall back to the CSS default
   // (min(75vh, 720px)). Held on the card — not the panel — so a resize survives
   // collapsing and re-expanding the same attachment.
@@ -185,6 +220,10 @@ export function WikiFileCard({ node, editor, getPos }: ReactNodeViewProps): Reac
   // for PDF/HTML, preview in a new tab for other safe types, otherwise
   // download.
   function handleFilenameClick() {
+    if (showThumbnail) {
+      setLightboxOpen(true)
+      return
+    }
     if (canPreviewInline) {
       toggleInlinePreview()
       return
@@ -199,9 +238,33 @@ export function WikiFileCard({ node, editor, getPos }: ReactNodeViewProps): Reac
   return (
     <NodeViewWrapper className="wiki-file-wrapper" as="figure">
       <div className="wiki-file-card" contentEditable={false}>
-        <div className="wiki-file-icon" aria-hidden="true">
-          {renderIcon(contentType, filename)}
-        </div>
+        {showThumbnail ? (
+          <button
+            type="button"
+            className="wiki-file-thumb"
+            aria-label={`Open ${filename} full size`}
+            title="Open full size"
+            onMouseDown={swallow}
+            onClick={() => setLightboxOpen(true)}
+          >
+            <img
+              src={previewUrl}
+              alt=""
+              // Below-the-fold attachments must not fetch until scrolled to —
+              // a long document can carry many of these, and the thumbnail is
+              // the full-size image scaled down by the browser (there is no
+              // separate thumbnail artifact on the backend).
+              loading={isPrintMode ? "eager" : "lazy"}
+              decoding={isPrintMode ? "sync" : "async"}
+              draggable={false}
+              onError={() => setThumbFailed(true)}
+            />
+          </button>
+        ) : (
+          <div className="wiki-file-icon" aria-hidden="true">
+            {renderIcon(contentType, filename)}
+          </div>
+        )}
         <div className="wiki-file-meta">
           <button
             type="button"
@@ -215,6 +278,14 @@ export function WikiFileCard({ node, editor, getPos }: ReactNodeViewProps): Reac
           <span className="wiki-file-size">{formatBytes(attrs.size)}</span>
         </div>
         <div className="wiki-file-actions">
+          {showThumbnail ? (
+            <FileActionButton
+              icon={<Maximize2Icon size={ACTION_ICON_SIZE} />}
+              label="Open image full size"
+              title="Open full size"
+              onClick={() => setLightboxOpen(true)}
+            />
+          ) : null}
           {canPreviewInline ? (
             <FileActionButton
               icon={expanded ? <ChevronDownIcon size={ACTION_ICON_SIZE} /> : <EyeIcon size={ACTION_ICON_SIZE} />}
@@ -232,7 +303,7 @@ export function WikiFileCard({ node, editor, getPos }: ReactNodeViewProps): Reac
               onClick={toggleFullscreen}
             />
           ) : null}
-          {canPreview && !canPreviewInline && url ? (
+          {canPreview && !canPreviewInline && !showThumbnail && url ? (
             <FileActionButton
               icon={<ExternalLinkIcon size={ACTION_ICON_SIZE} />}
               label="Preview file"
@@ -259,6 +330,22 @@ export function WikiFileCard({ node, editor, getPos }: ReactNodeViewProps): Reac
           ) : null}
         </div>
       </div>
+      {lightboxOpen ? (
+        <Lightbox
+          open
+          close={() => setLightboxOpen(false)}
+          slides={[{ src: previewUrl, alt: filename }]}
+          plugins={[Zoom, Fullscreen, Counter]}
+          carousel={{ finite: true }}
+          controller={{ closeOnBackdropClick: true }}
+          render={{
+            // One attachment per card — no carousel to page through.
+            buttonPrev: () => null,
+            buttonNext: () => null,
+          }}
+          zoom={{ maxZoomPixelRatio: 4, scrollToZoom: true }}
+        />
+      ) : null}
       {canPreviewInline && expanded ? (
         <FilePreviewPanel
           containerRef={previewRef}
@@ -408,6 +495,9 @@ function renderIcon(contentType: string, filename: string): ReactElement {
 
   if (type.startsWith("audio/")) return <FileAudioIcon size={size} />
   if (type.startsWith("video/")) return <FileVideoIcon size={size} />
+  // Reached by images that have no thumbnail: SVG (never rendered inline), a
+  // format the browser can't decode, or one whose bytes have gone missing.
+  if (type.startsWith("image/")) return <ImageIcon size={size} />
   if (
     type === "text/html" ||
     type === "application/xhtml+xml" ||

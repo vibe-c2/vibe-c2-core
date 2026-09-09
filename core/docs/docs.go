@@ -461,7 +461,7 @@ const docTemplate = `{
                         "BearerAuth": []
                     }
                 ],
-                "description": "Streams the file bytes. Caller must be a member of the file's operation. Pass ?preview=1 for inline rendering of safe formats (PDF, text).",
+                "description": "Streams the file bytes. Caller must be a member of the file's operation. Pass ?preview=1 for inline rendering of safe formats (PDF, text, raster images).",
                 "produces": [
                     "application/octet-stream"
                 ],

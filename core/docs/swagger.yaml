@@ -487,7 +487,7 @@ paths:
   /wiki/files/{id}:
     get:
       description: Streams the file bytes. Caller must be a member of the file's operation.
-        Pass ?preview=1 for inline rendering of safe formats (PDF, text).
+        Pass ?preview=1 for inline rendering of safe formats (PDF, text, raster images).
       parameters:
       - description: File ID (UUID)
         in: path
