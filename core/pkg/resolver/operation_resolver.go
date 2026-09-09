@@ -59,11 +59,11 @@ type IOperationResolver interface {
 type operationResolver struct {
 	operationRepo  repository.IOperationRepository
 	userRepo       repository.IUserRepository               // needed for Members field resolver
-	wikiDocRepo    repository.IWikiDocumentRepository        // needed for cascade delete
-	wikiBackupRepo repository.IWikiDocumentBackupRepository  // needed for cascade delete
-	credRepo       repository.ICredentialRepository          // needed for cascade delete
-	hostRepo       repository.IHostRepository                // needed for cascade delete
-	eventBus       eventbus.IEventBus                        // async event publishing
+	wikiDocRepo    repository.IWikiDocumentRepository       // needed for cascade delete
+	wikiBackupRepo repository.IWikiDocumentBackupRepository // needed for cascade delete
+	credRepo       repository.ICredentialRepository         // needed for cascade delete
+	hostRepo       repository.IHostRepository               // needed for cascade delete
+	eventBus       eventbus.IEventBus                       // async event publishing
 }
 
 // NewOperationResolver creates a new operation resolver with the given dependencies.

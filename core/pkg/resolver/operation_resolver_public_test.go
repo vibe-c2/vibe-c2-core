@@ -24,10 +24,16 @@ func panicRepo() *mockOpRepo {
 		panic("repo method should not have been called for Public")
 	}
 	return &mockOpRepo{
-		createFn:               func(context.Context, *models.Operation) error { panicAny(); return nil },
-		findByIDFn:             func(context.Context, uuid.UUID) (models.Operation, error) { panicAny(); return models.Operation{}, nil },
-		findAllFn:              func(context.Context, string, int64, int64, *uuid.UUID) ([]models.Operation, error) { panicAny(); return nil, nil },
-		findWithCursorFn:       func(context.Context, string, repository.OperationSort, *pagination.Cursor, int64, bool, *uuid.UUID) ([]models.Operation, error) { panicAny(); return nil, nil },
+		createFn:   func(context.Context, *models.Operation) error { panicAny(); return nil },
+		findByIDFn: func(context.Context, uuid.UUID) (models.Operation, error) { panicAny(); return models.Operation{}, nil },
+		findAllFn: func(context.Context, string, int64, int64, *uuid.UUID) ([]models.Operation, error) {
+			panicAny()
+			return nil, nil
+		},
+		findWithCursorFn: func(context.Context, string, repository.OperationSort, *pagination.Cursor, int64, bool, *uuid.UUID) ([]models.Operation, error) {
+			panicAny()
+			return nil, nil
+		},
 		countFn:                func(context.Context, string, *uuid.UUID) (int64, error) { panicAny(); return 0, nil },
 		updateFn:               func(context.Context, *models.Operation, map[string]interface{}) error { panicAny(); return nil },
 		deleteFn:               func(context.Context, *models.Operation) error { panicAny(); return nil },

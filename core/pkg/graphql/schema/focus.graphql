@@ -1,0 +1,73 @@
+# =============================================================================
+# Operator Focus — the attention channel
+# =============================================================================
+#
+# What the operator is looking at right now: which operation is scoped, which
+# page they are on, which record is selected. The SPA publishes it as they
+# navigate; an AI agent connected over MCP reads it through get_user_focus.
+#
+# This is what separates an agent with an API from one working alongside
+# someone. Every MCP tool takes an optional operation_id and falls back to the
+# operation reported here, so following along usually needs no argument at all,
+# and the agent can say "I see you're on the topology users lens" instead of
+# asking where to look.
+#
+# Deliberately ephemeral: stored only in Redis under a 90-second TTL, never
+# persisted. When the operator closes the tab the key expires and the agent
+# correctly sees nobody there, rather than a stale location it would treat as
+# current. Losing it costs nothing, so a Redis outage degrades the agent's
+# awareness without failing any request.
+
+type OperatorFocus {
+  # Current SPA route, e.g. "/findings" or "/wiki/<id>".
+  route: String!
+  # The scoped operation. Empty when the operator is working unscoped.
+  operationId: ID
+  # The wiki can target the synthetic Public operation independently of the
+  # scoped one, so it is reported separately rather than folded in.
+  wikiOperationId: ID
+  wikiDocumentId: ID
+  hostId: ID
+  credentialId: ID
+  hashId: ID
+  taskId: ID
+  findingsTab: String
+  topologyLens: String
+  topologyFocusedNodeId: String
+  topologyFocusedEdgeId: String
+  # Short description of any active filter, so the agent knows the operator is
+  # looking at a subset rather than everything.
+  searchSummary: String
+  # When this was published, ISO 8601. Absent means no beacon was found.
+  updatedAt: String
+}
+
+input OperatorFocusInput {
+  route: String!
+  operationId: ID
+  wikiOperationId: ID
+  wikiDocumentId: ID
+  hostId: ID
+  credentialId: ID
+  hashId: ID
+  taskId: ID
+  findingsTab: String
+  topologyLens: String
+  topologyFocusedNodeId: String
+  topologyFocusedEdgeId: String
+  searchSummary: String
+}
+
+extend type Query {
+  # The caller's own current focus. Mostly useful for debugging the beacon —
+  # agents read it through MCP, not here.
+  myOperatorFocus: OperatorFocus @hasPermission(permission: "*")
+}
+
+extend type Mutation {
+  # Publish where the caller currently is. Called by the SPA on navigation and
+  # on a slow heartbeat while the tab is visible. Returns false when no focus
+  # store is configured, which is not an error worth surfacing to the user.
+  publishOperatorFocus(input: OperatorFocusInput!): Boolean!
+    @hasPermission(permission: "*")
+}

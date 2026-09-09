@@ -241,6 +241,39 @@ type OperationMemberEvent struct {
 	UserID      string      `json:"userId"`
 }
 
+type OperatorFocus struct {
+	Route                 string  `json:"route"`
+	OperationID           *string `json:"operationId,omitempty"`
+	WikiOperationID       *string `json:"wikiOperationId,omitempty"`
+	WikiDocumentID        *string `json:"wikiDocumentId,omitempty"`
+	HostID                *string `json:"hostId,omitempty"`
+	CredentialID          *string `json:"credentialId,omitempty"`
+	HashID                *string `json:"hashId,omitempty"`
+	TaskID                *string `json:"taskId,omitempty"`
+	FindingsTab           *string `json:"findingsTab,omitempty"`
+	TopologyLens          *string `json:"topologyLens,omitempty"`
+	TopologyFocusedNodeID *string `json:"topologyFocusedNodeId,omitempty"`
+	TopologyFocusedEdgeID *string `json:"topologyFocusedEdgeId,omitempty"`
+	SearchSummary         *string `json:"searchSummary,omitempty"`
+	UpdatedAt             *string `json:"updatedAt,omitempty"`
+}
+
+type OperatorFocusInput struct {
+	Route                 string  `json:"route"`
+	OperationID           *string `json:"operationId,omitempty"`
+	WikiOperationID       *string `json:"wikiOperationId,omitempty"`
+	WikiDocumentID        *string `json:"wikiDocumentId,omitempty"`
+	HostID                *string `json:"hostId,omitempty"`
+	CredentialID          *string `json:"credentialId,omitempty"`
+	HashID                *string `json:"hashId,omitempty"`
+	TaskID                *string `json:"taskId,omitempty"`
+	FindingsTab           *string `json:"findingsTab,omitempty"`
+	TopologyLens          *string `json:"topologyLens,omitempty"`
+	TopologyFocusedNodeID *string `json:"topologyFocusedNodeId,omitempty"`
+	TopologyFocusedEdgeID *string `json:"topologyFocusedEdgeId,omitempty"`
+	SearchSummary         *string `json:"searchSummary,omitempty"`
+}
+
 type Query struct {
 }
 

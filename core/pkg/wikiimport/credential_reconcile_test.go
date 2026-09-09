@@ -62,7 +62,7 @@ func (f *fakeCredRepo) DistinctTagsByOperationIDs(context.Context, []uuid.UUID) 
 func (f *fakeCredRepo) Update(context.Context, *models.Credential, map[string]interface{}) error {
 	panic("unused")
 }
-func (f *fakeCredRepo) Delete(context.Context, *models.Credential) error    { panic("unused") }
+func (f *fakeCredRepo) Delete(context.Context, *models.Credential) error     { panic("unused") }
 func (f *fakeCredRepo) DeleteByOperationID(context.Context, uuid.UUID) error { panic("unused") }
 func (f *fakeCredRepo) AddComment(context.Context, uuid.UUID, models.CredentialComment) error {
 	panic("unused")

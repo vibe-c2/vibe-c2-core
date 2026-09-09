@@ -62,6 +62,13 @@ interface HostStoreState {
   // Topology-only: which relation type builds the graph. Lives here (not
   // component state) so the preference survives reloads and view switches.
   topologyRelation: TopologyRelation
+  // What is currently emphasised in the graph. The emphasis logic itself owns
+  // these as component state (see use-emphasis.ts) and mirrors them here, so
+  // the focus beacon can report what the operator is looking at without the
+  // beacon reaching into a component. Session-only — never persisted, because
+  // a selection restored on reload would be a lie about where the operator is.
+  topologyFocusedNodeId: string | null
+  topologyFocusedEdgeId: string | null
   // Users lens, layer 1: hide the built-in ubiquitous accounts (root, ubuntu, …)
   // as a group so the genuinely interesting identities stand out. Hidden by
   // default — the noise accounts are noise until proven otherwise. A per-browser
@@ -81,6 +88,7 @@ interface HostStoreState {
   setSort: (sort: HostSort) => void
   setView: (view: HostView) => void
   setTopologyRelation: (relation: TopologyRelation) => void
+  setTopologyFocus: (nodeId: string | null, edgeId: string | null) => void
   setHideWellKnownIdentities: (hide: boolean) => void
   setTopologyLegendOpen: (open: boolean) => void
   resetFilters: () => void
@@ -110,6 +118,8 @@ export const useHostStore = create<HostStoreState>()(
       selected: null,
       view: "table",
       topologyRelation: "routes",
+      topologyFocusedNodeId: null,
+      topologyFocusedEdgeId: null,
       hideWellKnownIdentities: true,
       topologyLegendOpen: false,
 
@@ -120,6 +130,8 @@ export const useHostStore = create<HostStoreState>()(
       setSort: (sort) => set({ sort }),
       setView: (view) => set({ view }),
       setTopologyRelation: (topologyRelation) => set({ topologyRelation }),
+      setTopologyFocus: (topologyFocusedNodeId, topologyFocusedEdgeId) =>
+        set({ topologyFocusedNodeId, topologyFocusedEdgeId }),
       setHideWellKnownIdentities: (hideWellKnownIdentities) =>
         set({ hideWellKnownIdentities }),
       setTopologyLegendOpen: (topologyLegendOpen) =>

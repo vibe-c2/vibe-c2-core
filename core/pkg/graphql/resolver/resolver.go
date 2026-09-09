@@ -44,6 +44,7 @@ type Resolver struct {
 	TimelineResolver          resolver.ITimelineResolver
 	APIKeyResolver            resolver.IAPIKeyResolver
 	AgentKeyResolver          resolver.IAgentKeyResolver
+	FocusResolver             resolver.IFocusResolver
 	ModuleResolver            resolver.IModuleResolver
 
 	// Subscription dependencies — event bus for real-time events,

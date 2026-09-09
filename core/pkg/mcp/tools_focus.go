@@ -4,6 +4,7 @@ import (
 	"context"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
+	"github.com/vibe-c2/vibe-c2-core/core/pkg/focus"
 	"github.com/vibe-c2/vibe-c2-core/core/pkg/graphql/gqlctx"
 )
 
@@ -12,9 +13,9 @@ type getUserFocusArgs struct{}
 type userFocusResult struct {
 	// Present is false when the operator has not published a location
 	// recently — they closed the tab, or went to do something else.
-	Present bool   `json:"present"`
-	Focus   *Focus `json:"focus,omitempty"`
-	Note    string `json:"note,omitempty"`
+	Present bool         `json:"present"`
+	Focus   *focus.Focus `json:"focus,omitempty"`
+	Note    string       `json:"note,omitempty"`
 }
 
 func registerFocusTools(s *Server) {
@@ -32,7 +33,7 @@ func handleGetUserFocus(ctx context.Context, s *Server, _ getUserFocusArgs) (too
 
 	// Only ever the key owner's focus. An agent follows the person who
 	// delegated to it, not whoever else happens to be online.
-	focus, ok := ReadFocus(ctx, s.deps.Cache, auth.UserID)
+	current, ok := focus.Read(ctx, s.deps.Cache, auth.UserID)
 	if !ok {
 		return toolResult{
 			Payload: userFocusResult{
@@ -44,7 +45,7 @@ func handleGetUserFocus(ctx context.Context, s *Server, _ getUserFocusArgs) (too
 	}
 
 	return toolResult{
-		Payload: userFocusResult{Present: true, Focus: &focus},
+		Payload: userFocusResult{Present: true, Focus: &current},
 		Summary: "checked operator focus",
 	}, nil
 }

@@ -114,17 +114,17 @@ type SkipRecord struct {
 // inside the zip; never returned to the HTTP caller because the response
 // body is the zip stream itself.
 type Report struct {
-	RootTitle           string       `json:"rootTitle"`
-	Scope               string       `json:"scope"`        // "tree" or "subtree"
-	TotalDocs           int          `json:"totalDocs"`    // attempted
-	ExportedDocs        int          `json:"exportedDocs"` // produced an .md
-	SkippedDocs         int          `json:"skippedDocs"`  // counted in Skipped
-	ImagesExported      int          `json:"imagesExported"`
-	FilesExported       int          `json:"filesExported"`
-	CredentialsHydrated int          `json:"credentialsHydrated"` // fences resolved to full payload
-	CredentialsTombstoned int        `json:"credentialsTombstoned"` // fences lowered to {deleted:true}
-	Skipped             []SkipRecord `json:"skipped,omitempty"`
-	Warnings            []SkipRecord `json:"warnings,omitempty"`
+	RootTitle             string       `json:"rootTitle"`
+	Scope                 string       `json:"scope"`        // "tree" or "subtree"
+	TotalDocs             int          `json:"totalDocs"`    // attempted
+	ExportedDocs          int          `json:"exportedDocs"` // produced an .md
+	SkippedDocs           int          `json:"skippedDocs"`  // counted in Skipped
+	ImagesExported        int          `json:"imagesExported"`
+	FilesExported         int          `json:"filesExported"`
+	CredentialsHydrated   int          `json:"credentialsHydrated"`   // fences resolved to full payload
+	CredentialsTombstoned int          `json:"credentialsTombstoned"` // fences lowered to {deleted:true}
+	Skipped               []SkipRecord `json:"skipped,omitempty"`
+	Warnings              []SkipRecord `json:"warnings,omitempty"`
 }
 
 // Request describes one export run. RootID == nil means tree-wide export.

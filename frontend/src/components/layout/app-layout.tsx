@@ -7,6 +7,7 @@ import {
 import { TooltipProvider } from "@/components/ui/tooltip"
 import { useAppStore } from "@/stores/app"
 import { useTaskDeepLink } from "@/hooks/use-task-deep-link"
+import { useFocusBeacon } from "@/hooks/use-focus-beacon"
 import { EditTaskDialog } from "@/components/tasks/edit-task-dialog"
 import { DeleteTaskDialog } from "@/components/tasks/delete-task-dialog"
 import { StatusRequiredDialog } from "@/components/tasks/status-required-dialog"
@@ -29,6 +30,13 @@ export function AppLayout() {
   // stays on the tasks page — it needs the page's scoped operation context
   // and there's no cross-domain entry point for it.
   useTaskDeepLink()
+
+  // The attention channel. Publishes what the operator is currently looking
+  // at so an AI agent connected over MCP can follow along rather than asking
+  // which operation or page to work on. Mounted here because it needs router
+  // context (App.tsx nests BrowserRouter inside the providers) and because
+  // every authed surface should report, not just one page.
+  useFocusBeacon()
 
   return (
     <TooltipProvider>

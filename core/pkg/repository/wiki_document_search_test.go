@@ -14,10 +14,10 @@ import (
 // punctuation into many short terms (e.g. `4`, `YES`, `d`) and OR'd them.
 func TestBuildTextSearchPhrase_QuotesAndStripsEmbeddedQuotes(t *testing.T) {
 	cases := []struct {
-		name    string
-		query   string
-		want    string
-		wantOK  bool
+		name   string
+		query  string
+		want   string
+		wantOK bool
 	}{
 		{
 			name:   "plain word phrase-quoted",

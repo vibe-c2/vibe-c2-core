@@ -10,6 +10,7 @@ import {
   focusSets,
   searchSets,
 } from "@/components/findings/topology/emphasis"
+import { useHostStore } from "@/stores/hosts"
 
 // State for the three emphasis sources — click-to-focus on a node, click-to-
 // focus on an edge, and search — and the derived dim/ring styling over the
@@ -209,6 +210,20 @@ export function useTopologyEmphasis(
     onActiveIndexChange: setActiveMatch,
     restoreSignal,
   }
+
+  // Mirror the current emphasis into the host store so the focus beacon can
+  // report what the operator is looking at. The emphasis logic keeps owning
+  // these as local state — this is a one-way projection out, not a move, so
+  // nothing here depends on the store and the graph behaves identically if the
+  // beacon is switched off. Cleared on unmount so leaving the topology view
+  // does not leave a stale selection behind for an agent to act on.
+  const setTopologyFocus = useHostStore((s) => s.setTopologyFocus)
+  useEffect(() => {
+    setTopologyFocus(focusedId, focusedEdgeId)
+  }, [focusedId, focusedEdgeId, setTopologyFocus])
+  useEffect(() => {
+    return () => setTopologyFocus(null, null)
+  }, [setTopologyFocus])
 
   return {
     displayNodes,

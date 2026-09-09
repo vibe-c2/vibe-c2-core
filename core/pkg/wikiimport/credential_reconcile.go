@@ -208,16 +208,16 @@ func RewriteFenceIDs(body string, idMap map[string]string) string {
 // --- internals ---
 
 type fenceInPayload struct {
-	ID         string                 `json:"id"`
-	Name       string                 `json:"name"`
-	Type       string                 `json:"type"`
-	Username   string                 `json:"username"`
-	Password   string                 `json:"password"`
-	Keys       []fenceInKey           `json:"keys"`
-	Properties []fenceInProperty      `json:"properties"`
-	IsValid    bool                   `json:"isValid"`
-	Tags       []string               `json:"tags"`
-	Deleted    bool                   `json:"deleted"`
+	ID         string            `json:"id"`
+	Name       string            `json:"name"`
+	Type       string            `json:"type"`
+	Username   string            `json:"username"`
+	Password   string            `json:"password"`
+	Keys       []fenceInKey      `json:"keys"`
+	Properties []fenceInProperty `json:"properties"`
+	IsValid    bool              `json:"isValid"`
+	Tags       []string          `json:"tags"`
+	Deleted    bool              `json:"deleted"`
 }
 
 type fenceInKey struct {
@@ -311,4 +311,3 @@ func buildCredentialFromPayload(
 		CreatedByID:  callerID,
 	}
 }
-

@@ -288,6 +288,7 @@ type ComplexityRoot struct {
 		InstantiateTemplate           func(childComplexity int, templateID string, targetOperationID string, parentDocumentID *string, title *string, emoji *string, icon *string, color *string) int
 		MarkHashCracked               func(childComplexity int, id string, input model.MarkHashCrackedInput) int
 		PermanentlyDeleteWikiDocument func(childComplexity int, id string) int
+		PublishOperatorFocus          func(childComplexity int, input model.OperatorFocusInput) int
 		PurgeTask                     func(childComplexity int, id string) int
 		RegenerateAgentKey            func(childComplexity int, id string) int
 		RegenerateMyAPIKey            func(childComplexity int) int
@@ -365,6 +366,23 @@ type ComplexityRoot struct {
 		UserID      func(childComplexity int) int
 	}
 
+	OperatorFocus struct {
+		CredentialID          func(childComplexity int) int
+		FindingsTab           func(childComplexity int) int
+		HashID                func(childComplexity int) int
+		HostID                func(childComplexity int) int
+		OperationID           func(childComplexity int) int
+		Route                 func(childComplexity int) int
+		SearchSummary         func(childComplexity int) int
+		TaskID                func(childComplexity int) int
+		TopologyFocusedEdgeID func(childComplexity int) int
+		TopologyFocusedNodeID func(childComplexity int) int
+		TopologyLens          func(childComplexity int) int
+		UpdatedAt             func(childComplexity int) int
+		WikiDocumentID        func(childComplexity int) int
+		WikiOperationID       func(childComplexity int) int
+	}
+
 	PageInfo struct {
 		EndCursor       func(childComplexity int) int
 		HasNextPage     func(childComplexity int) int
@@ -390,6 +408,7 @@ type ComplexityRoot struct {
 		MyHashTags                         func(childComplexity int, operationIds []string) int
 		MyHashes                           func(childComplexity int, operationIds []string, search *string, statuses []models.HashStatus, tags []string, hasCredential *bool, first *int, after *string, last *int, before *string) int
 		MyOperationRole                    func(childComplexity int, operationID string) int
+		MyOperatorFocus                    func(childComplexity int) int
 		MySessions                         func(childComplexity int, activeOnly *bool, first *int, after *string, last *int, before *string) int
 		Operation                          func(childComplexity int, id string) int
 		Operations                         func(childComplexity int, search *string, sortBy *model.OperationSortField, sortDirection *model.SortDirection, first *int, after *string, last *int, before *string) int
@@ -830,6 +849,7 @@ type MutationResolver interface {
 	AddCredentialComment(ctx context.Context, credentialID string, text string) (*models.Credential, error)
 	UpdateCredentialComment(ctx context.Context, credentialID string, commentID string, text string) (*models.Credential, error)
 	DeleteCredentialComment(ctx context.Context, credentialID string, commentID string) (*models.Credential, error)
+	PublishOperatorFocus(ctx context.Context, input model.OperatorFocusInput) (bool, error)
 	CreateHash(ctx context.Context, operationID string, input model.CreateHashInput) (*models.Hash, error)
 	UpdateHash(ctx context.Context, id string, input model.UpdateHashInput) (*models.Hash, error)
 	DeleteHash(ctx context.Context, id string) (bool, error)
@@ -896,6 +916,7 @@ type QueryResolver interface {
 	CredentialTags(ctx context.Context, operationID string) ([]string, error)
 	MyCredentials(ctx context.Context, operationIds []string, search *string, searchFields []model.CredentialSearchField, typeArg *models.CredentialType, tags []string, validOnly *bool, sortBy *model.CredentialSortField, sortDirection *model.SortDirection, first *int, after *string, last *int, before *string) (*model.CredentialConnection, error)
 	MyCredentialTags(ctx context.Context, operationIds []string) ([]string, error)
+	MyOperatorFocus(ctx context.Context) (*model.OperatorFocus, error)
 	Hash(ctx context.Context, id string) (*models.Hash, error)
 	Hashes(ctx context.Context, operationID string, search *string, statuses []models.HashStatus, tags []string, hasCredential *bool, first *int, after *string, last *int, before *string) (*model.HashConnection, error)
 	HashTags(ctx context.Context, operationID string) ([]string, error)
@@ -2211,6 +2232,17 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.Mutation.PermanentlyDeleteWikiDocument(childComplexity, args["id"].(string)), true
+	case "Mutation.publishOperatorFocus":
+		if e.ComplexityRoot.Mutation.PublishOperatorFocus == nil {
+			break
+		}
+
+		args, err := ec.field_Mutation_publishOperatorFocus_args(ctx, rawArgs)
+		if err != nil {
+			return 0, false
+		}
+
+		return e.ComplexityRoot.Mutation.PublishOperatorFocus(childComplexity, args["input"].(model.OperatorFocusInput)), true
 	case "Mutation.purgeTask":
 		if e.ComplexityRoot.Mutation.PurgeTask == nil {
 			break
@@ -2688,6 +2720,91 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 
 		return e.ComplexityRoot.OperationMemberEvent.UserID(childComplexity), true
 
+	case "OperatorFocus.credentialId":
+		if e.ComplexityRoot.OperatorFocus.CredentialID == nil {
+			break
+		}
+
+		return e.ComplexityRoot.OperatorFocus.CredentialID(childComplexity), true
+	case "OperatorFocus.findingsTab":
+		if e.ComplexityRoot.OperatorFocus.FindingsTab == nil {
+			break
+		}
+
+		return e.ComplexityRoot.OperatorFocus.FindingsTab(childComplexity), true
+	case "OperatorFocus.hashId":
+		if e.ComplexityRoot.OperatorFocus.HashID == nil {
+			break
+		}
+
+		return e.ComplexityRoot.OperatorFocus.HashID(childComplexity), true
+	case "OperatorFocus.hostId":
+		if e.ComplexityRoot.OperatorFocus.HostID == nil {
+			break
+		}
+
+		return e.ComplexityRoot.OperatorFocus.HostID(childComplexity), true
+	case "OperatorFocus.operationId":
+		if e.ComplexityRoot.OperatorFocus.OperationID == nil {
+			break
+		}
+
+		return e.ComplexityRoot.OperatorFocus.OperationID(childComplexity), true
+	case "OperatorFocus.route":
+		if e.ComplexityRoot.OperatorFocus.Route == nil {
+			break
+		}
+
+		return e.ComplexityRoot.OperatorFocus.Route(childComplexity), true
+	case "OperatorFocus.searchSummary":
+		if e.ComplexityRoot.OperatorFocus.SearchSummary == nil {
+			break
+		}
+
+		return e.ComplexityRoot.OperatorFocus.SearchSummary(childComplexity), true
+	case "OperatorFocus.taskId":
+		if e.ComplexityRoot.OperatorFocus.TaskID == nil {
+			break
+		}
+
+		return e.ComplexityRoot.OperatorFocus.TaskID(childComplexity), true
+	case "OperatorFocus.topologyFocusedEdgeId":
+		if e.ComplexityRoot.OperatorFocus.TopologyFocusedEdgeID == nil {
+			break
+		}
+
+		return e.ComplexityRoot.OperatorFocus.TopologyFocusedEdgeID(childComplexity), true
+	case "OperatorFocus.topologyFocusedNodeId":
+		if e.ComplexityRoot.OperatorFocus.TopologyFocusedNodeID == nil {
+			break
+		}
+
+		return e.ComplexityRoot.OperatorFocus.TopologyFocusedNodeID(childComplexity), true
+	case "OperatorFocus.topologyLens":
+		if e.ComplexityRoot.OperatorFocus.TopologyLens == nil {
+			break
+		}
+
+		return e.ComplexityRoot.OperatorFocus.TopologyLens(childComplexity), true
+	case "OperatorFocus.updatedAt":
+		if e.ComplexityRoot.OperatorFocus.UpdatedAt == nil {
+			break
+		}
+
+		return e.ComplexityRoot.OperatorFocus.UpdatedAt(childComplexity), true
+	case "OperatorFocus.wikiDocumentId":
+		if e.ComplexityRoot.OperatorFocus.WikiDocumentID == nil {
+			break
+		}
+
+		return e.ComplexityRoot.OperatorFocus.WikiDocumentID(childComplexity), true
+	case "OperatorFocus.wikiOperationId":
+		if e.ComplexityRoot.OperatorFocus.WikiOperationID == nil {
+			break
+		}
+
+		return e.ComplexityRoot.OperatorFocus.WikiOperationID(childComplexity), true
+
 	case "PageInfo.endCursor":
 		if e.ComplexityRoot.PageInfo.EndCursor == nil {
 			break
@@ -2886,6 +3003,12 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.Query.MyOperationRole(childComplexity, args["operationId"].(string)), true
+	case "Query.myOperatorFocus":
+		if e.ComplexityRoot.Query.MyOperatorFocus == nil {
+			break
+		}
+
+		return e.ComplexityRoot.Query.MyOperatorFocus(childComplexity), true
 	case "Query.mySessions":
 		if e.ComplexityRoot.Query.MySessions == nil {
 			break
@@ -4570,6 +4693,7 @@ func (e *executableSchema) Exec(ctx context.Context) graphql.ResponseHandler {
 		ec.unmarshalInputLoginInput,
 		ec.unmarshalInputMarkHashCrackedInput,
 		ec.unmarshalInputNetworkInterfaceInput,
+		ec.unmarshalInputOperatorFocusInput,
 		ec.unmarshalInputReorderWikiDocumentSiblingsInput,
 		ec.unmarshalInputRouteInput,
 		ec.unmarshalInputUpdateAgentKeyInput,
@@ -5148,6 +5272,80 @@ extend type Subscription {
   # reconnect to pick up the new membership set — same constraint as
   # operationChanged.
   myCredentialChanged(operationIds: [ID!]): CredentialEvent!
+}
+`, BuiltIn: false},
+	{Name: "../schema/focus.graphql", Input: `# =============================================================================
+# Operator Focus — the attention channel
+# =============================================================================
+#
+# What the operator is looking at right now: which operation is scoped, which
+# page they are on, which record is selected. The SPA publishes it as they
+# navigate; an AI agent connected over MCP reads it through get_user_focus.
+#
+# This is what separates an agent with an API from one working alongside
+# someone. Every MCP tool takes an optional operation_id and falls back to the
+# operation reported here, so following along usually needs no argument at all,
+# and the agent can say "I see you're on the topology users lens" instead of
+# asking where to look.
+#
+# Deliberately ephemeral: stored only in Redis under a 90-second TTL, never
+# persisted. When the operator closes the tab the key expires and the agent
+# correctly sees nobody there, rather than a stale location it would treat as
+# current. Losing it costs nothing, so a Redis outage degrades the agent's
+# awareness without failing any request.
+
+type OperatorFocus {
+  # Current SPA route, e.g. "/findings" or "/wiki/<id>".
+  route: String!
+  # The scoped operation. Empty when the operator is working unscoped.
+  operationId: ID
+  # The wiki can target the synthetic Public operation independently of the
+  # scoped one, so it is reported separately rather than folded in.
+  wikiOperationId: ID
+  wikiDocumentId: ID
+  hostId: ID
+  credentialId: ID
+  hashId: ID
+  taskId: ID
+  findingsTab: String
+  topologyLens: String
+  topologyFocusedNodeId: String
+  topologyFocusedEdgeId: String
+  # Short description of any active filter, so the agent knows the operator is
+  # looking at a subset rather than everything.
+  searchSummary: String
+  # When this was published, ISO 8601. Absent means no beacon was found.
+  updatedAt: String
+}
+
+input OperatorFocusInput {
+  route: String!
+  operationId: ID
+  wikiOperationId: ID
+  wikiDocumentId: ID
+  hostId: ID
+  credentialId: ID
+  hashId: ID
+  taskId: ID
+  findingsTab: String
+  topologyLens: String
+  topologyFocusedNodeId: String
+  topologyFocusedEdgeId: String
+  searchSummary: String
+}
+
+extend type Query {
+  # The caller's own current focus. Mostly useful for debugging the beacon —
+  # agents read it through MCP, not here.
+  myOperatorFocus: OperatorFocus @hasPermission(permission: "*")
+}
+
+extend type Mutation {
+  # Publish where the caller currently is. Called by the SPA on navigation and
+  # on a slow heartbeat while the tab is visible. Returns false when no focus
+  # store is configured, which is not an error worth surfacing to the user.
+  publishOperatorFocus(input: OperatorFocusInput!): Boolean!
+    @hasPermission(permission: "*")
 }
 `, BuiltIn: false},
 	{Name: "../schema/hashes.graphql", Input: `# =============================================================================
@@ -7701,6 +7899,17 @@ func (ec *executionContext) field_Mutation_permanentlyDeleteWikiDocument_args(ct
 		return nil, err
 	}
 	args["id"] = arg0
+	return args, nil
+}
+
+func (ec *executionContext) field_Mutation_publishOperatorFocus_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
+	var err error
+	args := map[string]any{}
+	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "input", ec.unmarshalNOperatorFocusInput2githubᚗcomᚋvibeᚑc2ᚋvibeᚑc2ᚑcoreᚋcoreᚋpkgᚋgraphqlᚋmodelᚐOperatorFocusInput)
+	if err != nil {
+		return nil, err
+	}
+	args["input"] = arg0
 	return args, nil
 }
 
@@ -15807,6 +16016,65 @@ func (ec *executionContext) fieldContext_Mutation_deleteCredentialComment(ctx co
 	return fc, nil
 }
 
+func (ec *executionContext) _Mutation_publishOperatorFocus(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Mutation_publishOperatorFocus,
+		func(ctx context.Context) (any, error) {
+			fc := graphql.GetFieldContext(ctx)
+			return ec.Resolvers.Mutation().PublishOperatorFocus(ctx, fc.Args["input"].(model.OperatorFocusInput))
+		},
+		func(ctx context.Context, next graphql.Resolver) graphql.Resolver {
+			directive0 := next
+
+			directive1 := func(ctx context.Context) (any, error) {
+				permission, err := ec.unmarshalNString2string(ctx, "*")
+				if err != nil {
+					var zeroVal bool
+					return zeroVal, err
+				}
+				if ec.Directives.HasPermission == nil {
+					var zeroVal bool
+					return zeroVal, errors.New("directive hasPermission is not implemented")
+				}
+				return ec.Directives.HasPermission(ctx, nil, directive0, permission)
+			}
+
+			next = directive1
+			return next
+		},
+		ec.marshalNBoolean2bool,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_Mutation_publishOperatorFocus(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Mutation",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Boolean does not have child fields")
+		},
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			err = ec.Recover(ctx, r)
+			ec.Error(ctx, err)
+		}
+	}()
+	ctx = graphql.WithFieldContext(ctx, fc)
+	if fc.Args, err = ec.field_Mutation_publishOperatorFocus_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
+		ec.Error(ctx, err)
+		return fc, err
+	}
+	return fc, nil
+}
+
 func (ec *executionContext) _Mutation_createHash(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
@@ -19988,6 +20256,412 @@ func (ec *executionContext) fieldContext_OperationMemberEvent_userId(_ context.C
 	return fc, nil
 }
 
+func (ec *executionContext) _OperatorFocus_route(ctx context.Context, field graphql.CollectedField, obj *model.OperatorFocus) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_OperatorFocus_route,
+		func(ctx context.Context) (any, error) {
+			return obj.Route, nil
+		},
+		nil,
+		ec.marshalNString2string,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_OperatorFocus_route(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "OperatorFocus",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _OperatorFocus_operationId(ctx context.Context, field graphql.CollectedField, obj *model.OperatorFocus) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_OperatorFocus_operationId,
+		func(ctx context.Context) (any, error) {
+			return obj.OperationID, nil
+		},
+		nil,
+		ec.marshalOID2ᚖstring,
+		true,
+		false,
+	)
+}
+
+func (ec *executionContext) fieldContext_OperatorFocus_operationId(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "OperatorFocus",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type ID does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _OperatorFocus_wikiOperationId(ctx context.Context, field graphql.CollectedField, obj *model.OperatorFocus) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_OperatorFocus_wikiOperationId,
+		func(ctx context.Context) (any, error) {
+			return obj.WikiOperationID, nil
+		},
+		nil,
+		ec.marshalOID2ᚖstring,
+		true,
+		false,
+	)
+}
+
+func (ec *executionContext) fieldContext_OperatorFocus_wikiOperationId(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "OperatorFocus",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type ID does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _OperatorFocus_wikiDocumentId(ctx context.Context, field graphql.CollectedField, obj *model.OperatorFocus) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_OperatorFocus_wikiDocumentId,
+		func(ctx context.Context) (any, error) {
+			return obj.WikiDocumentID, nil
+		},
+		nil,
+		ec.marshalOID2ᚖstring,
+		true,
+		false,
+	)
+}
+
+func (ec *executionContext) fieldContext_OperatorFocus_wikiDocumentId(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "OperatorFocus",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type ID does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _OperatorFocus_hostId(ctx context.Context, field graphql.CollectedField, obj *model.OperatorFocus) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_OperatorFocus_hostId,
+		func(ctx context.Context) (any, error) {
+			return obj.HostID, nil
+		},
+		nil,
+		ec.marshalOID2ᚖstring,
+		true,
+		false,
+	)
+}
+
+func (ec *executionContext) fieldContext_OperatorFocus_hostId(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "OperatorFocus",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type ID does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _OperatorFocus_credentialId(ctx context.Context, field graphql.CollectedField, obj *model.OperatorFocus) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_OperatorFocus_credentialId,
+		func(ctx context.Context) (any, error) {
+			return obj.CredentialID, nil
+		},
+		nil,
+		ec.marshalOID2ᚖstring,
+		true,
+		false,
+	)
+}
+
+func (ec *executionContext) fieldContext_OperatorFocus_credentialId(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "OperatorFocus",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type ID does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _OperatorFocus_hashId(ctx context.Context, field graphql.CollectedField, obj *model.OperatorFocus) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_OperatorFocus_hashId,
+		func(ctx context.Context) (any, error) {
+			return obj.HashID, nil
+		},
+		nil,
+		ec.marshalOID2ᚖstring,
+		true,
+		false,
+	)
+}
+
+func (ec *executionContext) fieldContext_OperatorFocus_hashId(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "OperatorFocus",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type ID does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _OperatorFocus_taskId(ctx context.Context, field graphql.CollectedField, obj *model.OperatorFocus) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_OperatorFocus_taskId,
+		func(ctx context.Context) (any, error) {
+			return obj.TaskID, nil
+		},
+		nil,
+		ec.marshalOID2ᚖstring,
+		true,
+		false,
+	)
+}
+
+func (ec *executionContext) fieldContext_OperatorFocus_taskId(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "OperatorFocus",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type ID does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _OperatorFocus_findingsTab(ctx context.Context, field graphql.CollectedField, obj *model.OperatorFocus) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_OperatorFocus_findingsTab,
+		func(ctx context.Context) (any, error) {
+			return obj.FindingsTab, nil
+		},
+		nil,
+		ec.marshalOString2ᚖstring,
+		true,
+		false,
+	)
+}
+
+func (ec *executionContext) fieldContext_OperatorFocus_findingsTab(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "OperatorFocus",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _OperatorFocus_topologyLens(ctx context.Context, field graphql.CollectedField, obj *model.OperatorFocus) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_OperatorFocus_topologyLens,
+		func(ctx context.Context) (any, error) {
+			return obj.TopologyLens, nil
+		},
+		nil,
+		ec.marshalOString2ᚖstring,
+		true,
+		false,
+	)
+}
+
+func (ec *executionContext) fieldContext_OperatorFocus_topologyLens(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "OperatorFocus",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _OperatorFocus_topologyFocusedNodeId(ctx context.Context, field graphql.CollectedField, obj *model.OperatorFocus) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_OperatorFocus_topologyFocusedNodeId,
+		func(ctx context.Context) (any, error) {
+			return obj.TopologyFocusedNodeID, nil
+		},
+		nil,
+		ec.marshalOString2ᚖstring,
+		true,
+		false,
+	)
+}
+
+func (ec *executionContext) fieldContext_OperatorFocus_topologyFocusedNodeId(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "OperatorFocus",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _OperatorFocus_topologyFocusedEdgeId(ctx context.Context, field graphql.CollectedField, obj *model.OperatorFocus) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_OperatorFocus_topologyFocusedEdgeId,
+		func(ctx context.Context) (any, error) {
+			return obj.TopologyFocusedEdgeID, nil
+		},
+		nil,
+		ec.marshalOString2ᚖstring,
+		true,
+		false,
+	)
+}
+
+func (ec *executionContext) fieldContext_OperatorFocus_topologyFocusedEdgeId(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "OperatorFocus",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _OperatorFocus_searchSummary(ctx context.Context, field graphql.CollectedField, obj *model.OperatorFocus) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_OperatorFocus_searchSummary,
+		func(ctx context.Context) (any, error) {
+			return obj.SearchSummary, nil
+		},
+		nil,
+		ec.marshalOString2ᚖstring,
+		true,
+		false,
+	)
+}
+
+func (ec *executionContext) fieldContext_OperatorFocus_searchSummary(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "OperatorFocus",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _OperatorFocus_updatedAt(ctx context.Context, field graphql.CollectedField, obj *model.OperatorFocus) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_OperatorFocus_updatedAt,
+		func(ctx context.Context) (any, error) {
+			return obj.UpdatedAt, nil
+		},
+		nil,
+		ec.marshalOString2ᚖstring,
+		true,
+		false,
+	)
+}
+
+func (ec *executionContext) fieldContext_OperatorFocus_updatedAt(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "OperatorFocus",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
 func (ec *executionContext) _PageInfo_hasNextPage(ctx context.Context, field graphql.CollectedField, obj *pagination.PageInfo) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
@@ -21016,6 +21690,83 @@ func (ec *executionContext) fieldContext_Query_myCredentialTags(ctx context.Cont
 	if fc.Args, err = ec.field_Query_myCredentialTags_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
 		ec.Error(ctx, err)
 		return fc, err
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Query_myOperatorFocus(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Query_myOperatorFocus,
+		func(ctx context.Context) (any, error) {
+			return ec.Resolvers.Query().MyOperatorFocus(ctx)
+		},
+		func(ctx context.Context, next graphql.Resolver) graphql.Resolver {
+			directive0 := next
+
+			directive1 := func(ctx context.Context) (any, error) {
+				permission, err := ec.unmarshalNString2string(ctx, "*")
+				if err != nil {
+					var zeroVal *model.OperatorFocus
+					return zeroVal, err
+				}
+				if ec.Directives.HasPermission == nil {
+					var zeroVal *model.OperatorFocus
+					return zeroVal, errors.New("directive hasPermission is not implemented")
+				}
+				return ec.Directives.HasPermission(ctx, nil, directive0, permission)
+			}
+
+			next = directive1
+			return next
+		},
+		ec.marshalOOperatorFocus2ᚖgithubᚗcomᚋvibeᚑc2ᚋvibeᚑc2ᚑcoreᚋcoreᚋpkgᚋgraphqlᚋmodelᚐOperatorFocus,
+		true,
+		false,
+	)
+}
+
+func (ec *executionContext) fieldContext_Query_myOperatorFocus(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Query",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "route":
+				return ec.fieldContext_OperatorFocus_route(ctx, field)
+			case "operationId":
+				return ec.fieldContext_OperatorFocus_operationId(ctx, field)
+			case "wikiOperationId":
+				return ec.fieldContext_OperatorFocus_wikiOperationId(ctx, field)
+			case "wikiDocumentId":
+				return ec.fieldContext_OperatorFocus_wikiDocumentId(ctx, field)
+			case "hostId":
+				return ec.fieldContext_OperatorFocus_hostId(ctx, field)
+			case "credentialId":
+				return ec.fieldContext_OperatorFocus_credentialId(ctx, field)
+			case "hashId":
+				return ec.fieldContext_OperatorFocus_hashId(ctx, field)
+			case "taskId":
+				return ec.fieldContext_OperatorFocus_taskId(ctx, field)
+			case "findingsTab":
+				return ec.fieldContext_OperatorFocus_findingsTab(ctx, field)
+			case "topologyLens":
+				return ec.fieldContext_OperatorFocus_topologyLens(ctx, field)
+			case "topologyFocusedNodeId":
+				return ec.fieldContext_OperatorFocus_topologyFocusedNodeId(ctx, field)
+			case "topologyFocusedEdgeId":
+				return ec.fieldContext_OperatorFocus_topologyFocusedEdgeId(ctx, field)
+			case "searchSummary":
+				return ec.fieldContext_OperatorFocus_searchSummary(ctx, field)
+			case "updatedAt":
+				return ec.fieldContext_OperatorFocus_updatedAt(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type OperatorFocus", field.Name)
+		},
 	}
 	return fc, nil
 }
@@ -33977,6 +34728,120 @@ func (ec *executionContext) unmarshalInputNetworkInterfaceInput(ctx context.Cont
 	return it, nil
 }
 
+func (ec *executionContext) unmarshalInputOperatorFocusInput(ctx context.Context, obj any) (model.OperatorFocusInput, error) {
+	var it model.OperatorFocusInput
+	if obj == nil {
+		return it, nil
+	}
+
+	asMap := map[string]any{}
+	for k, v := range obj.(map[string]any) {
+		asMap[k] = v
+	}
+
+	fieldsInOrder := [...]string{"route", "operationId", "wikiOperationId", "wikiDocumentId", "hostId", "credentialId", "hashId", "taskId", "findingsTab", "topologyLens", "topologyFocusedNodeId", "topologyFocusedEdgeId", "searchSummary"}
+	for _, k := range fieldsInOrder {
+		v, ok := asMap[k]
+		if !ok {
+			continue
+		}
+		switch k {
+		case "route":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("route"))
+			data, err := ec.unmarshalNString2string(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.Route = data
+		case "operationId":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("operationId"))
+			data, err := ec.unmarshalOID2ᚖstring(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.OperationID = data
+		case "wikiOperationId":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("wikiOperationId"))
+			data, err := ec.unmarshalOID2ᚖstring(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.WikiOperationID = data
+		case "wikiDocumentId":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("wikiDocumentId"))
+			data, err := ec.unmarshalOID2ᚖstring(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.WikiDocumentID = data
+		case "hostId":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("hostId"))
+			data, err := ec.unmarshalOID2ᚖstring(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.HostID = data
+		case "credentialId":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("credentialId"))
+			data, err := ec.unmarshalOID2ᚖstring(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.CredentialID = data
+		case "hashId":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("hashId"))
+			data, err := ec.unmarshalOID2ᚖstring(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.HashID = data
+		case "taskId":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("taskId"))
+			data, err := ec.unmarshalOID2ᚖstring(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.TaskID = data
+		case "findingsTab":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("findingsTab"))
+			data, err := ec.unmarshalOString2ᚖstring(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.FindingsTab = data
+		case "topologyLens":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("topologyLens"))
+			data, err := ec.unmarshalOString2ᚖstring(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.TopologyLens = data
+		case "topologyFocusedNodeId":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("topologyFocusedNodeId"))
+			data, err := ec.unmarshalOString2ᚖstring(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.TopologyFocusedNodeID = data
+		case "topologyFocusedEdgeId":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("topologyFocusedEdgeId"))
+			data, err := ec.unmarshalOString2ᚖstring(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.TopologyFocusedEdgeID = data
+		case "searchSummary":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("searchSummary"))
+			data, err := ec.unmarshalOString2ᚖstring(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.SearchSummary = data
+		}
+	}
+	return it, nil
+}
+
 func (ec *executionContext) unmarshalInputReorderWikiDocumentSiblingsInput(ctx context.Context, obj any) (model.ReorderWikiDocumentSiblingsInput, error) {
 	var it model.ReorderWikiDocumentSiblingsInput
 	if obj == nil {
@@ -37591,6 +38456,13 @@ func (ec *executionContext) _Mutation(ctx context.Context, sel ast.SelectionSet)
 			if out.Values[i] == graphql.Null {
 				out.Invalids++
 			}
+		case "publishOperatorFocus":
+			out.Values[i] = ec.OperationContext.RootResolverMiddleware(innerCtx, func(ctx context.Context) (res graphql.Marshaler) {
+				return ec._Mutation_publishOperatorFocus(ctx, field)
+			})
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
 		case "createHash":
 			out.Values[i] = ec.OperationContext.RootResolverMiddleware(innerCtx, func(ctx context.Context) (res graphql.Marshaler) {
 				return ec._Mutation_createHash(ctx, field)
@@ -38396,6 +39268,71 @@ func (ec *executionContext) _OperationMemberEvent(ctx context.Context, sel ast.S
 	return out
 }
 
+var operatorFocusImplementors = []string{"OperatorFocus"}
+
+func (ec *executionContext) _OperatorFocus(ctx context.Context, sel ast.SelectionSet, obj *model.OperatorFocus) graphql.Marshaler {
+	fields := graphql.CollectFields(ec.OperationContext, sel, operatorFocusImplementors)
+
+	out := graphql.NewFieldSet(fields)
+	deferred := make(map[string]*graphql.FieldSet)
+	for i, field := range fields {
+		switch field.Name {
+		case "__typename":
+			out.Values[i] = graphql.MarshalString("OperatorFocus")
+		case "route":
+			out.Values[i] = ec._OperatorFocus_route(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "operationId":
+			out.Values[i] = ec._OperatorFocus_operationId(ctx, field, obj)
+		case "wikiOperationId":
+			out.Values[i] = ec._OperatorFocus_wikiOperationId(ctx, field, obj)
+		case "wikiDocumentId":
+			out.Values[i] = ec._OperatorFocus_wikiDocumentId(ctx, field, obj)
+		case "hostId":
+			out.Values[i] = ec._OperatorFocus_hostId(ctx, field, obj)
+		case "credentialId":
+			out.Values[i] = ec._OperatorFocus_credentialId(ctx, field, obj)
+		case "hashId":
+			out.Values[i] = ec._OperatorFocus_hashId(ctx, field, obj)
+		case "taskId":
+			out.Values[i] = ec._OperatorFocus_taskId(ctx, field, obj)
+		case "findingsTab":
+			out.Values[i] = ec._OperatorFocus_findingsTab(ctx, field, obj)
+		case "topologyLens":
+			out.Values[i] = ec._OperatorFocus_topologyLens(ctx, field, obj)
+		case "topologyFocusedNodeId":
+			out.Values[i] = ec._OperatorFocus_topologyFocusedNodeId(ctx, field, obj)
+		case "topologyFocusedEdgeId":
+			out.Values[i] = ec._OperatorFocus_topologyFocusedEdgeId(ctx, field, obj)
+		case "searchSummary":
+			out.Values[i] = ec._OperatorFocus_searchSummary(ctx, field, obj)
+		case "updatedAt":
+			out.Values[i] = ec._OperatorFocus_updatedAt(ctx, field, obj)
+		default:
+			panic("unknown field " + strconv.Quote(field.Name))
+		}
+	}
+	out.Dispatch(ctx)
+	if out.Invalids > 0 {
+		return graphql.Null
+	}
+
+	atomic.AddInt32(&ec.Deferred, int32(len(deferred)))
+
+	for label, dfs := range deferred {
+		ec.ProcessDeferredGroup(graphql.DeferredGroup{
+			Label:    label,
+			Path:     graphql.GetPath(ctx),
+			FieldSet: dfs,
+			Context:  ctx,
+		})
+	}
+
+	return out
+}
+
 var pageInfoImplementors = []string{"PageInfo"}
 
 func (ec *executionContext) _PageInfo(ctx context.Context, sel ast.SelectionSet, obj *pagination.PageInfo) graphql.Marshaler {
@@ -38756,6 +39693,25 @@ func (ec *executionContext) _Query(ctx context.Context, sel ast.SelectionSet) gr
 				if res == graphql.Null {
 					atomic.AddUint32(&fs.Invalids, 1)
 				}
+				return res
+			}
+
+			rrm := func(ctx context.Context) graphql.Marshaler {
+				return ec.OperationContext.RootResolverMiddleware(ctx,
+					func(ctx context.Context) graphql.Marshaler { return innerFunc(ctx, out) })
+			}
+
+			out.Concurrently(i, func(ctx context.Context) graphql.Marshaler { return rrm(innerCtx) })
+		case "myOperatorFocus":
+			field := field
+
+			innerFunc := func(ctx context.Context, _ *graphql.FieldSet) (res graphql.Marshaler) {
+				defer func() {
+					if r := recover(); r != nil {
+						ec.Error(ctx, ec.Recover(ctx, r))
+					}
+				}()
+				res = ec._Query_myOperatorFocus(ctx, field)
 				return res
 			}
 
@@ -44738,6 +45694,11 @@ func (ec *executionContext) marshalNOperationRole2githubᚗcomᚋvibeᚑc2ᚋvib
 	return v
 }
 
+func (ec *executionContext) unmarshalNOperatorFocusInput2githubᚗcomᚋvibeᚑc2ᚋvibeᚑc2ᚑcoreᚋcoreᚋpkgᚋgraphqlᚋmodelᚐOperatorFocusInput(ctx context.Context, v any) (model.OperatorFocusInput, error) {
+	res, err := ec.unmarshalInputOperatorFocusInput(ctx, v)
+	return res, graphql.ErrorOnPath(ctx, err)
+}
+
 func (ec *executionContext) marshalNPageInfo2ᚖgithubᚗcomᚋvibeᚑc2ᚋvibeᚑc2ᚑcoreᚋcoreᚋpkgᚋpaginationᚐPageInfo(ctx context.Context, sel ast.SelectionSet, v *pagination.PageInfo) graphql.Marshaler {
 	if v == nil {
 		if !graphql.HasFieldError(ctx, graphql.GetFieldContext(ctx)) {
@@ -46211,6 +47172,13 @@ func (ec *executionContext) marshalOOperationSortField2ᚖgithubᚗcomᚋvibeᚑ
 		return graphql.Null
 	}
 	return v
+}
+
+func (ec *executionContext) marshalOOperatorFocus2ᚖgithubᚗcomᚋvibeᚑc2ᚋvibeᚑc2ᚑcoreᚋcoreᚋpkgᚋgraphqlᚋmodelᚐOperatorFocus(ctx context.Context, sel ast.SelectionSet, v *model.OperatorFocus) graphql.Marshaler {
+	if v == nil {
+		return graphql.Null
+	}
+	return ec._OperatorFocus(ctx, sel, v)
 }
 
 func (ec *executionContext) unmarshalORouteInput2ᚕᚖgithubᚗcomᚋvibeᚑc2ᚋvibeᚑc2ᚑcoreᚋcoreᚋpkgᚋgraphqlᚋmodelᚐRouteInputᚄ(ctx context.Context, v any) ([]*model.RouteInput, error) {

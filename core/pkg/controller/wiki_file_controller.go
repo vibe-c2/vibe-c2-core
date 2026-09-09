@@ -31,8 +31,8 @@ import (
 // WikiFileControllerConfig groups the limits and policies the file controller
 // needs to enforce. Mirrors the relevant subset of environment.EnvironmentSettings.
 type WikiFileControllerConfig struct {
-	MaxSize             int64    // upload max in bytes
-	DeniedContentTypes  []string // exact-match MIME denylist; empty = allow all
+	MaxSize            int64    // upload max in bytes
+	DeniedContentTypes []string // exact-match MIME denylist; empty = allow all
 }
 
 // WikiFileController handles non-image file attachment uploads and proxied

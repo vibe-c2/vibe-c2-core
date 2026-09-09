@@ -443,4 +443,3 @@ func (r *sessionResolver) CreatedAt(_ context.Context, obj *models.Session) (str
 func (r *sessionResolver) UpdatedAt(_ context.Context, obj *models.Session) (string, error) {
 	return obj.UpdateAt.Format(time.RFC3339), nil
 }
-

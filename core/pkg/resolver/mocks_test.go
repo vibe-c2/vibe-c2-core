@@ -76,19 +76,19 @@ func (m *mockCredRepo) RemoveComment(ctx context.Context, credentialID, commentI
 
 // mockOpRepo is a function-field mock of IOperationRepository.
 type mockOpRepo struct {
-	createFn                func(ctx context.Context, op *models.Operation) error
-	findByIDFn              func(ctx context.Context, id uuid.UUID) (models.Operation, error)
-	findAllFn               func(ctx context.Context, search string, offset, limit int64, memberID *uuid.UUID) ([]models.Operation, error)
-	findWithCursorFn        func(ctx context.Context, search string, sort repository.OperationSort, cursor *pagination.Cursor, limit int64, forward bool, memberID *uuid.UUID) ([]models.Operation, error)
-	countFn                 func(ctx context.Context, search string, memberID *uuid.UUID) (int64, error)
-	updateFn                func(ctx context.Context, op *models.Operation, updates map[string]interface{}) error
-	deleteFn                func(ctx context.Context, op *models.Operation) error
-	addMemberFn             func(ctx context.Context, operationID uuid.UUID, userID uuid.UUID, role models.OperationRole) error
-	removeMemberFn          func(ctx context.Context, operationID uuid.UUID, userID uuid.UUID) error
-	updateMemberRoleFn      func(ctx context.Context, operationID uuid.UUID, userID uuid.UUID, role models.OperationRole) error
-	findByMemberIDFn        func(ctx context.Context, userID uuid.UUID) ([]models.Operation, error)
-	removeMemberSafeFn      func(ctx context.Context, operationID uuid.UUID, userID uuid.UUID) error
-	updateMemberRoleSafeFn  func(ctx context.Context, operationID uuid.UUID, userID uuid.UUID, role models.OperationRole) error
+	createFn               func(ctx context.Context, op *models.Operation) error
+	findByIDFn             func(ctx context.Context, id uuid.UUID) (models.Operation, error)
+	findAllFn              func(ctx context.Context, search string, offset, limit int64, memberID *uuid.UUID) ([]models.Operation, error)
+	findWithCursorFn       func(ctx context.Context, search string, sort repository.OperationSort, cursor *pagination.Cursor, limit int64, forward bool, memberID *uuid.UUID) ([]models.Operation, error)
+	countFn                func(ctx context.Context, search string, memberID *uuid.UUID) (int64, error)
+	updateFn               func(ctx context.Context, op *models.Operation, updates map[string]interface{}) error
+	deleteFn               func(ctx context.Context, op *models.Operation) error
+	addMemberFn            func(ctx context.Context, operationID uuid.UUID, userID uuid.UUID, role models.OperationRole) error
+	removeMemberFn         func(ctx context.Context, operationID uuid.UUID, userID uuid.UUID) error
+	updateMemberRoleFn     func(ctx context.Context, operationID uuid.UUID, userID uuid.UUID, role models.OperationRole) error
+	findByMemberIDFn       func(ctx context.Context, userID uuid.UUID) ([]models.Operation, error)
+	removeMemberSafeFn     func(ctx context.Context, operationID uuid.UUID, userID uuid.UUID) error
+	updateMemberRoleSafeFn func(ctx context.Context, operationID uuid.UUID, userID uuid.UUID, role models.OperationRole) error
 }
 
 func (m *mockOpRepo) Create(ctx context.Context, op *models.Operation) error {

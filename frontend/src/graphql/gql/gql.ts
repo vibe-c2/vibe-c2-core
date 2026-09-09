@@ -45,6 +45,8 @@ type Documents = {
     "\n  mutation DeleteCredentialComment($credentialId: ID!, $commentId: ID!) {\n    deleteCredentialComment(credentialId: $credentialId, commentId: $commentId) {\n      ...CredentialFields\n    }\n  }\n": typeof types.DeleteCredentialCommentDocument,
     "\n  subscription CredentialChanged($operationId: ID!) {\n    credentialChanged(operationId: $operationId) {\n      action\n      credentialId\n      operationId\n      credential {\n        ...CredentialFields\n      }\n    }\n  }\n": typeof types.CredentialChangedDocument,
     "\n  subscription MyCredentialChanged($operationIds: [ID!]) {\n    myCredentialChanged(operationIds: $operationIds) {\n      action\n      credentialId\n      operationId\n      credential {\n        ...CredentialFieldsWithOperation\n      }\n    }\n  }\n": typeof types.MyCredentialChangedDocument,
+    "\n  mutation PublishOperatorFocus($input: OperatorFocusInput!) {\n    publishOperatorFocus(input: $input)\n  }\n": typeof types.PublishOperatorFocusDocument,
+    "\n  query MyOperatorFocus {\n    myOperatorFocus {\n      route\n      operationId\n      wikiOperationId\n      wikiDocumentId\n      hostId\n      credentialId\n      hashId\n      taskId\n      findingsTab\n      topologyLens\n      topologyFocusedNodeId\n      topologyFocusedEdgeId\n      searchSummary\n      updatedAt\n    }\n  }\n": typeof types.MyOperatorFocusDocument,
     "\n  fragment HashFields on Hash {\n    id\n    operationId\n    value\n    status\n    comment\n    tags\n    credentialId\n    createdBy {\n      id\n      username\n    }\n    createdAt\n    updatedAt\n  }\n": typeof types.HashFieldsFragmentDoc,
     "\n  fragment HashFieldsWithCredential on Hash {\n    ...HashFields\n    credential {\n      id\n      name\n      type\n      username\n    }\n  }\n": typeof types.HashFieldsWithCredentialFragmentDoc,
     "\n  fragment HashFieldsWithOperation on Hash {\n    ...HashFields\n    operation {\n      id\n      name\n    }\n  }\n": typeof types.HashFieldsWithOperationFragmentDoc,
@@ -205,6 +207,8 @@ const documents: Documents = {
     "\n  mutation DeleteCredentialComment($credentialId: ID!, $commentId: ID!) {\n    deleteCredentialComment(credentialId: $credentialId, commentId: $commentId) {\n      ...CredentialFields\n    }\n  }\n": types.DeleteCredentialCommentDocument,
     "\n  subscription CredentialChanged($operationId: ID!) {\n    credentialChanged(operationId: $operationId) {\n      action\n      credentialId\n      operationId\n      credential {\n        ...CredentialFields\n      }\n    }\n  }\n": types.CredentialChangedDocument,
     "\n  subscription MyCredentialChanged($operationIds: [ID!]) {\n    myCredentialChanged(operationIds: $operationIds) {\n      action\n      credentialId\n      operationId\n      credential {\n        ...CredentialFieldsWithOperation\n      }\n    }\n  }\n": types.MyCredentialChangedDocument,
+    "\n  mutation PublishOperatorFocus($input: OperatorFocusInput!) {\n    publishOperatorFocus(input: $input)\n  }\n": types.PublishOperatorFocusDocument,
+    "\n  query MyOperatorFocus {\n    myOperatorFocus {\n      route\n      operationId\n      wikiOperationId\n      wikiDocumentId\n      hostId\n      credentialId\n      hashId\n      taskId\n      findingsTab\n      topologyLens\n      topologyFocusedNodeId\n      topologyFocusedEdgeId\n      searchSummary\n      updatedAt\n    }\n  }\n": types.MyOperatorFocusDocument,
     "\n  fragment HashFields on Hash {\n    id\n    operationId\n    value\n    status\n    comment\n    tags\n    credentialId\n    createdBy {\n      id\n      username\n    }\n    createdAt\n    updatedAt\n  }\n": types.HashFieldsFragmentDoc,
     "\n  fragment HashFieldsWithCredential on Hash {\n    ...HashFields\n    credential {\n      id\n      name\n      type\n      username\n    }\n  }\n": types.HashFieldsWithCredentialFragmentDoc,
     "\n  fragment HashFieldsWithOperation on Hash {\n    ...HashFields\n    operation {\n      id\n      name\n    }\n  }\n": types.HashFieldsWithOperationFragmentDoc,
@@ -472,6 +476,14 @@ export function graphql(source: "\n  subscription CredentialChanged($operationId
  * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
  */
 export function graphql(source: "\n  subscription MyCredentialChanged($operationIds: [ID!]) {\n    myCredentialChanged(operationIds: $operationIds) {\n      action\n      credentialId\n      operationId\n      credential {\n        ...CredentialFieldsWithOperation\n      }\n    }\n  }\n"): (typeof documents)["\n  subscription MyCredentialChanged($operationIds: [ID!]) {\n    myCredentialChanged(operationIds: $operationIds) {\n      action\n      credentialId\n      operationId\n      credential {\n        ...CredentialFieldsWithOperation\n      }\n    }\n  }\n"];
+/**
+ * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
+ */
+export function graphql(source: "\n  mutation PublishOperatorFocus($input: OperatorFocusInput!) {\n    publishOperatorFocus(input: $input)\n  }\n"): (typeof documents)["\n  mutation PublishOperatorFocus($input: OperatorFocusInput!) {\n    publishOperatorFocus(input: $input)\n  }\n"];
+/**
+ * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
+ */
+export function graphql(source: "\n  query MyOperatorFocus {\n    myOperatorFocus {\n      route\n      operationId\n      wikiOperationId\n      wikiDocumentId\n      hostId\n      credentialId\n      hashId\n      taskId\n      findingsTab\n      topologyLens\n      topologyFocusedNodeId\n      topologyFocusedEdgeId\n      searchSummary\n      updatedAt\n    }\n  }\n"): (typeof documents)["\n  query MyOperatorFocus {\n    myOperatorFocus {\n      route\n      operationId\n      wikiOperationId\n      wikiDocumentId\n      hostId\n      credentialId\n      hashId\n      taskId\n      findingsTab\n      topologyLens\n      topologyFocusedNodeId\n      topologyFocusedEdgeId\n      searchSummary\n      updatedAt\n    }\n  }\n"];
 /**
  * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
  */

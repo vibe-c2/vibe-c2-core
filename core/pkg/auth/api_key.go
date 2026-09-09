@@ -11,12 +11,12 @@ import (
 // API key format: vc2_<key_id>_<secret>
 //
 //   - "vc2_"     constant prefix; lets middleware fast-reject anything that
-//                isn't an API key without parsing further.
+//     isn't an API key without parsing further.
 //   - <key_id>   12 hex chars (6 random bytes). Public, indexed in Mongo,
-//                used to find the row in O(1).
+//     used to find the row in O(1).
 //   - <secret>   43 chars of URL-safe base64 (32 random bytes). The thing
-//                we actually verify against SecretHash with constant-time
-//                compare.
+//     we actually verify against SecretHash with constant-time
+//     compare.
 //
 // The two-segment layout means a stolen key_id alone is useless — the
 // attacker still needs the secret tail.

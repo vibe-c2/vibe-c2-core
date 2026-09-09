@@ -384,4 +384,3 @@ func extFor(contentType string) string {
 		return ""
 	}
 }
-

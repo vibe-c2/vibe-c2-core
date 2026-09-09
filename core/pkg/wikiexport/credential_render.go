@@ -181,15 +181,15 @@ func buildTombstoneFence(id string) string {
 //
 // JSON tags use camelCase to match the editor's existing client-side shape.
 type credentialFencePayload struct {
-	ID         string              `json:"id"`
-	Name       string              `json:"name,omitempty"`
-	Type       string              `json:"type,omitempty"`
-	Username   string              `json:"username,omitempty"`
-	Password   string              `json:"password,omitempty"`
-	Keys       []fenceKey          `json:"keys,omitempty"`
-	Properties []fenceProperty     `json:"properties,omitempty"`
-	IsValid    bool                `json:"isValid"`
-	Tags       []string            `json:"tags,omitempty"`
+	ID         string          `json:"id"`
+	Name       string          `json:"name,omitempty"`
+	Type       string          `json:"type,omitempty"`
+	Username   string          `json:"username,omitempty"`
+	Password   string          `json:"password,omitempty"`
+	Keys       []fenceKey      `json:"keys,omitempty"`
+	Properties []fenceProperty `json:"properties,omitempty"`
+	IsValid    bool            `json:"isValid"`
+	Tags       []string        `json:"tags,omitempty"`
 }
 
 type fenceKey struct {

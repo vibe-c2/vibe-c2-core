@@ -453,4 +453,3 @@ func (b *fakeEventBus) Subscribe([]eventbus.Topic, eventbus.Handler, ...eventbus
 }
 func (b *fakeEventBus) Start()                 {}
 func (b *fakeEventBus) Stop(_ context.Context) {}
-

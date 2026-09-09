@@ -120,6 +120,7 @@ func (r *hashResolver) authorizeForOperation(ctx context.Context, operationID uu
 //   - (nil, false, nil) when the field was omitted (no change)
 //   - (nil, true, nil)  when the field was an empty string (clear the link)
 //   - (&uid, true, nil) when a UUID was supplied (set or replace)
+//
 // The same-operation check is enforced on the set path.
 func (r *hashResolver) resolveCredentialLink(ctx context.Context, raw *string, operationID uuid.UUID) (*uuid.UUID, bool, error) {
 	if raw == nil {
