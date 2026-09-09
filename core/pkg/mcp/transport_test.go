@@ -185,10 +185,11 @@ func TestServer_ToolSurface(t *testing.T) {
 
 	want := []string{
 		"list_operations", "get_operation_summary",
-		"find_hosts", "get_host", "create_host",
-		"find_credentials", "get_credential", "add_credential_comment",
+		"find_hosts", "get_host", "create_host", "update_host",
+		"find_credentials", "get_credential", "create_credential", "add_credential_comment",
 		"find_hashes",
-		"find_tasks", "get_task", "create_task", "change_task_stage",
+		"find_tasks", "get_task", "create_task", "update_task", "change_task_stage",
+		"add_task_wiki_reference",
 		"search_wiki", "list_wiki_tree", "get_wiki_document",
 		"create_wiki_document", "append_wiki_section", "update_wiki_document",
 		"get_timeline", "create_timeline_event",

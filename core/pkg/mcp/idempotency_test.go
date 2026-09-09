@@ -128,8 +128,12 @@ func TestIdempotency_NoCacheDegradesQuietly(t *testing.T) {
 func TestIdempotency_EveryWriteToolAcceptsAKey(t *testing.T) {
 	writeArgs := []any{
 		createHostArgs{},
+		updateHostArgs{},
+		createCredentialArgs{},
 		addCredentialCommentArgs{},
 		createTaskArgs{},
+		updateTaskArgs{},
+		addTaskWikiReferenceArgs{},
 		changeTaskStageArgs{},
 		createWikiDocumentArgs{},
 		appendWikiSectionArgs{},

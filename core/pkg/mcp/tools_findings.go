@@ -3,6 +3,7 @@ package mcp
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/vibe-c2/vibe-c2-core/core/pkg/graphql/model"
@@ -25,9 +26,22 @@ type getHostArgs struct {
 
 type createHostArgs struct {
 	IdempotencyKey
-	OperationID string `json:"operation_id,omitempty" jsonschema:"Operation to create the host in. Defaults to whatever the operator currently has open."`
-	Hostname    string `json:"hostname"               jsonschema:"The host's name."`
-	OS          string `json:"os,omitempty"           jsonschema:"Free-text OS fingerprint, e.g. 'Windows Server 2019'."`
+	OperationID string         `json:"operation_id,omitempty" jsonschema:"Operation to create the host in. Defaults to whatever the operator currently has open."`
+	Hostname    string         `json:"hostname"               jsonschema:"The host's name."`
+	OS          string         `json:"os,omitempty"           jsonschema:"Free-text OS fingerprint, e.g. 'Windows Server 2019'."`
+	Interfaces  []interfaceArg `json:"interfaces,omitempty"   jsonschema:"Network interfaces. Without these the host cannot be placed on a subnet in the topology view."`
+	Routes      []routeArg     `json:"routes,omitempty"       jsonschema:"Routing table entries."`
+	Logins      []loginArg     `json:"logins,omitempty"       jsonschema:"Observed logins. These draw the edges in the topology users lens."`
+}
+
+type updateHostArgs struct {
+	IdempotencyKey
+	HostID     string         `json:"host_id"               jsonschema:"The host to update, from find_hosts."`
+	Hostname   string         `json:"hostname,omitempty"    jsonschema:"Rename the host."`
+	OS         string         `json:"os,omitempty"          jsonschema:"Set or correct the OS fingerprint."`
+	Interfaces []interfaceArg `json:"interfaces,omitempty"  jsonschema:"REPLACES the interface list. Call get_host first and send the full set, including any you are not changing."`
+	Routes     []routeArg     `json:"routes,omitempty"      jsonschema:"REPLACES the route list. Send the full set."`
+	Logins     []loginArg     `json:"logins,omitempty"      jsonschema:"REPLACES the login list. Send the full set."`
 }
 
 func registerHostTools(s *Server) {
@@ -44,9 +58,18 @@ func registerHostTools(s *Server) {
 	}, readTool, handleGetHost)
 
 	register(s, &mcp.Tool{
-		Name:        "create_host",
-		Description: "Record a newly discovered host.",
+		Name: "create_host",
+		Description: "Record a newly discovered host. Supply interfaces, routes and logins " +
+			"where you know them — they are what the topology view draws the network from, " +
+			"so a host without them appears as an isolated node.",
 	}, writeTool, handleCreateHost)
+
+	register(s, &mcp.Tool{
+		Name: "update_host",
+		Description: "Change a host, typically to fill in network detail discovered later. " +
+			"The interface, route and login lists REPLACE what is stored rather than merging, " +
+			"so read the host first and send back the complete set.",
+	}, writeTool, handleUpdateHost)
 }
 
 func handleFindHosts(ctx context.Context, s *Server, args findHostsArgs) (toolResult, error) {
@@ -108,8 +131,11 @@ func handleCreateHost(ctx context.Context, s *Server, args createHostArgs) (tool
 	}
 
 	host, err := s.deps.Hosts.CreateHost(ctx, opID.String(), model.CreateHostInput{
-		Hostname: args.Hostname,
-		Os:       optionalString(args.OS),
+		Hostname:   args.Hostname,
+		Os:         optionalString(args.OS),
+		Interfaces: toInterfaceInputs(args.Interfaces),
+		Routes:     toRouteInputs(args.Routes),
+		Logins:     toLoginInputs(args.Logins),
 	})
 	if err != nil {
 		return toolResult{}, fmt.Errorf("failed to create host: %w", err)
@@ -124,6 +150,46 @@ func handleCreateHost(ctx context.Context, s *Server, args createHostArgs) (tool
 	}, nil
 }
 
+func handleUpdateHost(ctx context.Context, s *Server, args updateHostArgs) (toolResult, error) {
+	host, err := s.deps.Hosts.Host(ctx, args.HostID)
+	if err != nil {
+		return toolResult{}, fmt.Errorf("host not found")
+	}
+	if _, err := s.authorizeOperation(ctx, host.OperationID, models.OperationRoleOperator); err != nil {
+		return toolResult{}, err
+	}
+
+	input := model.UpdateHostInput{
+		Hostname: optionalString(args.Hostname),
+		Os:       optionalString(args.OS),
+	}
+	// Nil and empty mean different things to the resolver: nil leaves the list
+	// alone, empty clears it. Only send a list the caller actually supplied.
+	if args.Interfaces != nil {
+		input.Interfaces = toInterfaceInputs(args.Interfaces)
+	}
+	if args.Routes != nil {
+		input.Routes = toRouteInputs(args.Routes)
+	}
+	if args.Logins != nil {
+		input.Logins = toLoginInputs(args.Logins)
+	}
+
+	updated, err := s.deps.Hosts.UpdateHost(ctx, args.HostID, input)
+	if err != nil {
+		return toolResult{}, fmt.Errorf("failed to update host: %w", err)
+	}
+
+	return toolResult{
+		Payload:     toHostDetailView(updated),
+		OperationID: &host.OperationID,
+		SubjectID:   host.HostID,
+		SubjectKind: models.SubjectKindHost,
+		SubjectName: updated.Hostname,
+		Summary:     fmt.Sprintf("updated host %s", updated.Hostname),
+	}, nil
+}
+
 // --- Credentials ---
 
 type findCredentialsArgs struct {
@@ -133,6 +199,25 @@ type findCredentialsArgs struct {
 	ValidOnly   bool     `json:"valid_only,omitempty"   jsonschema:"Only credentials currently marked valid."`
 	Limit       int      `json:"limit,omitempty"        jsonschema:"Maximum credentials to return (default 25, maximum 50)."`
 	Cursor      string   `json:"cursor,omitempty"       jsonschema:"Continue a previous page using its nextCursor."`
+}
+
+type createCredentialArgs struct {
+	IdempotencyKey
+	OperationID string `json:"operation_id,omitempty" jsonschema:"Operation to record the credential in. Defaults to whatever the operator currently has open."`
+	Name        string `json:"name"                   jsonschema:"What this credential is, e.g. 'web-01 local admin'."`
+	Type        string `json:"type"                   jsonschema:"One of PASSWORD, SSH_KEY, API_KEY, TOKEN, HASH, OTHER."`
+	Username    string `json:"username,omitempty"     jsonschema:"Account the credential belongs to."`
+	Password    string `json:"password,omitempty"     jsonschema:"The secret, for PASSWORD and similar types."`
+	Keys        []struct {
+		Name    string `json:"name"    jsonschema:"Label for this key, e.g. 'id_rsa'."`
+		Content string `json:"content" jsonschema:"The key material."`
+	} `json:"keys,omitempty" jsonschema:"Key material, for SSH_KEY and API_KEY credentials."`
+	Properties []struct {
+		Name  string `json:"name"  jsonschema:"Field name, e.g. 'domain' or 'port'."`
+		Value string `json:"value" jsonschema:"Field value."`
+	} `json:"properties,omitempty" jsonschema:"Anything else worth recording alongside the credential."`
+	Tags    []string `json:"tags,omitempty"     jsonschema:"Tags, e.g. the host it came from."`
+	IsValid *bool    `json:"is_valid,omitempty" jsonschema:"Whether the credential is known to work. Omit if untested."`
 }
 
 type getCredentialArgs struct {
@@ -151,6 +236,13 @@ func registerCredentialTools(s *Server) {
 		Description: "Search credentials harvested during the engagement. Secret material is " +
 			"included in the results.",
 	}, readTool, handleFindCredentials)
+
+	register(s, &mcp.Tool{
+		Name: "create_credential",
+		Description: "Record a credential recovered during the engagement — a password, an SSH " +
+			"key, a token. Use this after cracking a hash or finding a secret on a host, so the " +
+			"credential is linked into findings rather than living only in the conversation.",
+	}, writeTool, handleCreateCredential)
 
 	register(s, &mcp.Tool{
 		Name: "get_credential",
@@ -199,6 +291,51 @@ func handleFindCredentials(ctx context.Context, s *Server, args findCredentialsA
 		Payload:     result,
 		OperationID: &opID,
 		Summary:     fmt.Sprintf("searched credentials (%d shown of %d)", len(views), conn.TotalCount),
+	}, nil
+}
+
+func handleCreateCredential(ctx context.Context, s *Server, args createCredentialArgs) (toolResult, error) {
+	opID, err := s.resolveOperation(ctx, args.OperationID)
+	if err != nil {
+		return toolResult{}, err
+	}
+	if _, err := s.authorizeOperation(ctx, opID, models.OperationRoleOperator); err != nil {
+		return toolResult{}, err
+	}
+
+	credType := models.CredentialType(strings.ToUpper(strings.TrimSpace(args.Type)))
+	if !credType.IsValid() {
+		return toolResult{}, fmt.Errorf(
+			"type %q is not one of PASSWORD, SSH_KEY, API_KEY, TOKEN, HASH, OTHER", args.Type)
+	}
+
+	input := model.CreateCredentialInput{
+		Name:     args.Name,
+		Type:     credType,
+		Username: optionalString(args.Username),
+		Password: optionalString(args.Password),
+		Tags:     args.Tags,
+		IsValid:  args.IsValid,
+	}
+	for _, k := range args.Keys {
+		input.Keys = append(input.Keys, &model.CredentialKeyInput{Name: k.Name, Content: k.Content})
+	}
+	for _, prop := range args.Properties {
+		input.Properties = append(input.Properties, &model.CredentialPropertyInput{Name: prop.Name, Value: prop.Value})
+	}
+
+	cred, err := s.deps.Credentials.CreateCredential(ctx, opID.String(), input)
+	if err != nil {
+		return toolResult{}, fmt.Errorf("failed to create credential: %w", err)
+	}
+
+	return toolResult{
+		Payload:     toCredentialView(cred),
+		OperationID: &opID,
+		SubjectID:   cred.CredentialID,
+		SubjectKind: models.SubjectKindCredential,
+		SubjectName: cred.Name,
+		Summary:     fmt.Sprintf("recorded credential %s", cred.Name),
 	}, nil
 }
 
