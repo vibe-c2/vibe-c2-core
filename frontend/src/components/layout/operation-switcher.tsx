@@ -15,16 +15,40 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
-import { SidebarMenuButton, useSidebar } from "@/components/ui/sidebar";
+import { SidebarMenuButton } from "@/components/ui/sidebar";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
 import { useInfiniteOperations } from "@/graphql/hooks/operations";
 import { useScopedOperationStore } from "@/stores/scoped-operation";
+
+interface OperationTooltipBodyProps {
+  name: string;
+  description?: string | null;
+}
+
+// Shared tooltip body for the trigger and the list rows, so both read the same
+// way. Stacked rather than inline because a description is a sentence, not a
+// label — the tooltip wraps at its own max-width and the name stays scannable
+// as the first line.
+function OperationTooltipBody({ name, description }: OperationTooltipBodyProps) {
+  return (
+    <span className="flex flex-col gap-0.5 text-left">
+      <span className="font-medium">{name}</span>
+      {description ? (
+        <span className="text-background/70">{description}</span>
+      ) : null}
+    </span>
+  );
+}
 
 export function OperationSwitcher() {
   const scopedOperation = useScopedOperationStore((s) => s.scopedOperation);
   const scopeOperation = useScopedOperationStore((s) => s.scopeOperation);
   const unscopeOperation = useScopedOperationStore((s) => s.unscopeOperation);
-  const { state: sidebarState } = useSidebar();
 
   const [open, setOpen] = useState(false);
   const [search, setSearch] = useState("");
@@ -128,7 +152,26 @@ export function OperationSwitcher() {
         render={
           <SidebarMenuButton
             size="lg"
-            tooltip={scopedOperation ? scopedOperation.name : "Vibe C2"}
+            // SidebarMenuButton hides its tooltip unless the sidebar is
+            // collapsed, on the assumption that an expanded label is already
+            // readable. That does not hold here: the name and description are
+            // truncated at the sidebar's width whatever its state. The object
+            // form spreads over the component's own props, so `hidden: false`
+            // overrides just that rule for this one button and leaves the
+            // shared default alone for every other caller.
+            tooltip={{
+              hidden: false,
+              children: (
+                <OperationTooltipBody
+                  name={scopedOperation ? scopedOperation.name : "Vibe C2"}
+                  description={
+                    scopedOperation
+                      ? scopedOperation.description || "Active operation"
+                      : "Command & Control"
+                  }
+                />
+              ),
+            }}
           />
         }
       >
@@ -180,10 +223,11 @@ export function OperationSwitcher() {
       </PopoverTrigger>
 
       <PopoverContent
-        className={cn(
-          "p-1.5 overflow-hidden",
-          sidebarState === "collapsed" ? "w-64" : "w-(--anchor-width)!",
-        )}
+        // Sized independently of the trigger. Anchoring to the sidebar's width
+        // (16rem, less padding) left almost every name and description cut off,
+        // and the collapsed sidebar would have pinned it narrower still. Capped
+        // against the viewport so a narrow window can't push it off-screen.
+        className="w-[min(26rem,calc(100vw-2rem))] p-1.5 overflow-hidden"
         side="bottom"
         align="start"
         sideOffset={4}
@@ -228,40 +272,58 @@ export function OperationSwitcher() {
               const isActive = scopedOperation?.id === op.id;
 
               return (
-                <button
-                  key={op.id}
-                  role="option"
-                  aria-selected={index === highlightedIndex}
-                  className={cn(
-                    "flex w-full items-center gap-2 rounded-md px-1.5 py-1.5 text-left text-sm",
-                    index === highlightedIndex
-                      ? "bg-accent text-accent-foreground"
-                      : "hover:bg-accent/50",
-                  )}
-                  onMouseEnter={() => {
-                    scrollOnHighlight.current = false;
-                    setHighlightedIndex(index);
-                  }}
-                  onMouseDown={(e) => {
-                    e.preventDefault();
-                    selectOperation(op);
-                  }}
-                >
-                  <SwordsIcon className="size-5 shrink-0 text-muted-foreground" />
-                  <div className="grid flex-1 min-w-0 leading-tight">
-                    <span className="truncate text-sm font-medium">
-                      {op.name}
-                    </span>
-                    {op.description && (
-                      <span className="truncate text-xs text-muted-foreground">
-                        {op.description}
+                // Widening the popover shortens the truncation but cannot end
+                // it — operation descriptions are free text. The tooltip is
+                // what guarantees the full value is always reachable.
+                // Only the rows Virtuoso has mounted carry one, so the cost
+                // tracks the viewport rather than the size of the result set.
+                <Tooltip key={op.id}>
+                  <TooltipTrigger
+                    render={
+                      <button
+                        role="option"
+                        aria-selected={index === highlightedIndex}
+                        className={cn(
+                          "flex w-full items-center gap-2 rounded-md px-1.5 py-1.5 text-left text-sm",
+                          index === highlightedIndex
+                            ? "bg-accent text-accent-foreground"
+                            : "hover:bg-accent/50",
+                        )}
+                        onMouseEnter={() => {
+                          scrollOnHighlight.current = false;
+                          setHighlightedIndex(index);
+                        }}
+                        onMouseDown={(e) => {
+                          e.preventDefault();
+                          selectOperation(op);
+                        }}
+                      />
+                    }
+                  >
+                    <SwordsIcon className="size-5 shrink-0 text-muted-foreground" />
+                    <div className="grid flex-1 min-w-0 leading-tight">
+                      <span className="truncate text-sm font-medium">
+                        {op.name}
                       </span>
+                      {op.description && (
+                        <span className="truncate text-xs text-muted-foreground">
+                          {op.description}
+                        </span>
+                      )}
+                    </div>
+                    {isActive && (
+                      <CheckIcon className="size-3.5 shrink-0 text-primary" />
                     )}
-                  </div>
-                  {isActive && (
-                    <CheckIcon className="size-3.5 shrink-0 text-primary" />
-                  )}
-                </button>
+                  </TooltipTrigger>
+                  {/* To the right of the popover, so it never covers the rows
+                      above and below the one being read. */}
+                  <TooltipContent side="right" align="center">
+                    <OperationTooltipBody
+                      name={op.name}
+                      description={op.description}
+                    />
+                  </TooltipContent>
+                </Tooltip>
               );
             }}
             components={{
