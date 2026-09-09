@@ -59,9 +59,28 @@ func (s *Server) recordOnTimeline(ctx context.Context, e auditEntry) {
 		return
 	}
 
+	subjectID, subjectKind := e.result.subject()
+
+	// No subject means no timeline row.
+	//
+	// Both of this layer's safeguards key on the subject: deduplicating
+	// against the domain path, and coalescing repeated work. A subject-less
+	// row gets neither, so it lands as a duplicate whenever the resolver
+	// already recorded the action — which is exactly the case that produces
+	// one, a bulk import, where the domain row is its own subject and there is
+	// no shared id to match on.
+	//
+	// Failing by omission is the right way round here. The audit trail records
+	// every call regardless, and the activity rail still shows it live; what
+	// is lost is a timeline row for an action the timeline usually already
+	// has. A duplicate, by contrast, tells the operator something happened
+	// twice when it happened once.
+	if subjectID == uuid.Nil {
+		return
+	}
+
 	// Everything the write needs is captured here, because the work below runs
 	// after this request's context is gone.
-	subjectID, subjectKind := e.result.subject()
 	row := &models.OperationEvent{
 		EventID:     uuid.New(),
 		OperationID: *e.result.OperationID,
@@ -105,12 +124,10 @@ func (s *Server) writeTimelineRow(row *models.OperationEvent, agent *gqlctx.Agen
 	// reaching DONE, a custom timeline marker. Those rows now carry agent
 	// attribution of their own (see resolver.eventActor), so a row here would
 	// show the operator the same action twice.
-	if row.SubjectID != uuid.Nil {
-		exists, err := s.deps.OperationEventRepo.HasRecentEventForSubject(
-			ctx, row.OperationID, row.SubjectID, now.Add(-domainEchoWindow))
-		if err == nil && exists {
-			return
-		}
+	exists, err := s.deps.OperationEventRepo.HasRecentEventForSubject(
+		ctx, row.OperationID, row.SubjectID, now.Add(-domainEchoWindow))
+	if err == nil && exists {
+		return
 	}
 
 	// Fold repeated work on the same subject into one row rather than adding
@@ -154,13 +171,8 @@ func (s *Server) publishLogged(agent *gqlctx.AgentInfo, ownerID, eventID, operat
 	))
 }
 
-// subject resolves what a write acted on, for the timeline row. Falling back
-// to the event's own id keeps the coalescing key stable for writes that have
-// no distinct subject (a timeline marker is its own subject, as it is for
-// custom events).
+// subject resolves what a write acted on. uuid.Nil means the tool did not act
+// on one identifiable thing — see recordOnTimeline for why that skips the row.
 func (r toolResult) subject() (uuid.UUID, models.SubjectKind) {
-	if r.SubjectID != uuid.Nil {
-		return r.SubjectID, r.SubjectKind
-	}
-	return uuid.Nil, r.SubjectKind
+	return r.SubjectID, r.SubjectKind
 }
