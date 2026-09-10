@@ -199,6 +199,62 @@ func TestAuthorizeAgent_PublicOperation(t *testing.T) {
 	}
 }
 
+// An operation scope narrows which *operations* a key may act in. Public is
+// not one of the owner's operations — it is a shared space every authenticated
+// user already has — so scoping a key to an engagement says nothing about it.
+// Withholding Public from a scoped key cut agents off from the shared wiki
+// their operator was looking straight at.
+//
+// Still capped, and still no admin: the scope list is not what contains a key
+// on Public, MaxRole is.
+func TestAuthorizeAgent_PublicIsNotNarrowedByScope(t *testing.T) {
+	owner := uuid.New()
+	elsewhere := uuid.New()
+	publicOp := models.SynthesizePublicOperation()
+
+	cases := []struct {
+		name    string
+		maxRole models.OperationRole
+		minRole models.OperationRole
+		wantErr bool
+	}{
+		{"scoped elsewhere, reads Public", models.OperationRoleOperator, models.OperationRoleViewer, false},
+		{"scoped elsewhere, writes Public", models.OperationRoleOperator, models.OperationRoleOperator, false},
+		{"scoped elsewhere, viewer cap cannot write Public", models.OperationRoleViewer, models.OperationRoleOperator, true},
+		{"scoped elsewhere, still no admin on Public", models.OperationRoleOperator, models.OperationRoleAdmin, true},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			agent := &gqlctx.AgentInfo{
+				MaxRole:         tc.maxRole,
+				OperationScopes: []uuid.UUID{elsewhere},
+			}
+			err := AuthorizeOperationRole(agentCtx(owner, agent, "user"), &publicOp, tc.minRole)
+			if (err != nil) != tc.wantErr {
+				t.Fatalf("cap=%s min=%s: err = %v, wantErr = %v", tc.maxRole, tc.minRole, err, tc.wantErr)
+			}
+		})
+	}
+}
+
+// The scope list must still bite everywhere else — the Public carve-out is a
+// carve-out, not a hole.
+func TestAuthorizeAgent_ScopeStillRefusesOtherOperations(t *testing.T) {
+	owner := uuid.New()
+	scoped := uuid.New()
+	op := opWithMember(owner, models.OperationRoleOperator)
+
+	agent := &gqlctx.AgentInfo{
+		MaxRole:         models.OperationRoleOperator,
+		OperationScopes: []uuid.UUID{scoped},
+	}
+	err := AuthorizeOperationRole(agentCtx(owner, agent, "user"), &op, models.OperationRoleViewer)
+	if err == nil {
+		t.Fatal("agent reached an operation its key is not scoped to")
+	}
+}
+
 // Whatever the inputs, an agent must never be granted something the same owner
 // would have been refused on the human path. This is the property the rest of
 // the file's cases are specific instances of.

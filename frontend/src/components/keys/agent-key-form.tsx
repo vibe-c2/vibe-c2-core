@@ -94,7 +94,8 @@ export function AgentKeyForm({
         <p className="text-xs text-muted-foreground">
           Leave as all operations to track your membership automatically. Naming
           operations narrows the key — it never grants access you don&apos;t
-          already have.
+          already have. The shared Public wiki stays reachable either way; it
+          isn&apos;t one of your operations.
         </p>
       </div>
 

@@ -1,8 +1,6 @@
 package mcp
 
 import (
-	"fmt"
-	"strings"
 	"testing"
 
 	"github.com/google/uuid"
@@ -15,81 +13,67 @@ import (
 // often the only place there are any. An operator looking straight at a list
 // of templates was told the agent could see none.
 func TestPublicTemplateScope(t *testing.T) {
-	engagement := uuid.New()
-	other := uuid.New()
-
 	tests := []struct {
-		name        string
-		opID        uuid.UUID
-		agent       *gqlctx.AgentInfo
-		agentErr    error
-		wantInclude bool
-		wantNote    bool
+		name string
+		opID uuid.UUID
+		want bool
 	}{
 		{
-			name:        "unscoped key reaches the shared templates",
-			opID:        engagement,
-			agent:       &gqlctx.AgentInfo{},
-			wantInclude: true,
-		},
-		{
-			name:        "key scoped to an operation that includes Public reaches them",
-			opID:        engagement,
-			agent:       &gqlctx.AgentInfo{OperationScopes: []uuid.UUID{engagement, models.PublicOperationID}},
-			wantInclude: true,
-		},
-		{
-			name:        "key scoped away from Public is told why they are missing",
-			opID:        engagement,
-			agent:       &gqlctx.AgentInfo{OperationScopes: []uuid.UUID{engagement, other}},
-			wantInclude: false,
-			wantNote:    true,
+			name: "an operation listing also reaches the shared templates",
+			opID: uuid.New(),
+			want: true,
 		},
 		{
 			// Listing Public itself already returns them; reaching again
 			// would show every shared template twice.
-			name:        "listing Public does not fold Public in again",
-			opID:        models.PublicOperationID,
-			agent:       &gqlctx.AgentInfo{},
-			wantInclude: false,
-			wantNote:    false,
-		},
-		{
-			name:        "a scoped key listing Public still does not duplicate",
-			opID:        models.PublicOperationID,
-			agent:       &gqlctx.AgentInfo{OperationScopes: []uuid.UUID{engagement}},
-			wantInclude: false,
-			wantNote:    false,
-		},
-		{
-			name:        "missing agent identity is refused, not assumed",
-			opID:        engagement,
-			agent:       nil,
-			agentErr:    fmt.Errorf("no agent identity on this request"),
-			wantInclude: false,
-			wantNote:    true,
+			name: "listing Public does not fold Public in again",
+			opID: models.PublicOperationID,
+			want: false,
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			include, note := publicTemplateScope(tt.opID, tt.agent, tt.agentErr)
-
-			if include != tt.wantInclude {
-				t.Errorf("include = %v, want %v", include, tt.wantInclude)
-			}
-			if got := note != ""; got != tt.wantNote {
-				t.Errorf("note = %q, wanted a note: %v", note, tt.wantNote)
-			}
-			if include && note != "" {
-				t.Errorf("included the shared templates and still explained their absence: %q", note)
-			}
-			// The note is the only thing that tells an agent its view is
-			// narrower than the operator's, so it has to name where the
-			// missing templates live.
-			if note != "" && !strings.Contains(note, "Public") {
-				t.Errorf("note does not say where the templates are: %q", note)
+			if got := publicTemplateScope(tt.opID); got != tt.want {
+				t.Errorf("publicTemplateScope = %v, want %v", got, tt.want)
 			}
 		})
+	}
+}
+
+// The reach into Public must not depend on the key's operation scope. This is
+// the property the listing bug came down to: a key scoped to one engagement
+// was refused on Public, so it saw none of the shared templates its operator
+// could see. Asserted here as well as in pkg/authorization because this is the
+// call site that regressed.
+func TestPublicTemplatesIgnoreOperationScope(t *testing.T) {
+	engagement := uuid.New()
+
+	agents := map[string]*gqlctx.AgentInfo{
+		"unscoped key":                                    {},
+		"key scoped to one operation":                     {OperationScopes: []uuid.UUID{engagement}},
+		"key scoped away from the operation being listed": {OperationScopes: []uuid.UUID{uuid.New()}},
+	}
+
+	for name, agent := range agents {
+		t.Run(name, func(t *testing.T) {
+			if !agent.AllowsOperation(models.PublicOperationID) {
+				t.Error("agent key was narrowed away from the Public wiki by its operation scope")
+			}
+		})
+	}
+}
+
+// The carve-out is a carve-out, not a hole: everything that is a real
+// operation is still subject to the scope list.
+func TestOperationScopeStillNarrowsRealOperations(t *testing.T) {
+	scoped := uuid.New()
+	agent := &gqlctx.AgentInfo{OperationScopes: []uuid.UUID{scoped}}
+
+	if !agent.AllowsOperation(scoped) {
+		t.Error("key refused the operation it is scoped to")
+	}
+	if agent.AllowsOperation(uuid.New()) {
+		t.Error("key allowed an operation outside its scope")
 	}
 }

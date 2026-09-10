@@ -7,7 +7,6 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
-	"github.com/vibe-c2/vibe-c2-core/core/pkg/graphql/gqlctx"
 	"github.com/vibe-c2/vibe-c2-core/core/pkg/graphql/model"
 	"github.com/vibe-c2/vibe-c2-core/core/pkg/models"
 	"github.com/vibe-c2/vibe-c2-core/core/pkg/wiki"
@@ -256,36 +255,28 @@ func (s *Server) collectTemplates(ctx context.Context, opID uuid.UUID) ([]wikiTe
 	return views, notes, nil
 }
 
-// publicTemplateScope decides whether a listing for opID should reach into the
-// Public wiki, and what to say when it must not. Split out from the fetch so
-// the decision — the part that was wrong — is testable on its own.
+// publicTemplateScope decides whether a listing for opID should also reach
+// into the Public wiki. Split out from the fetch so the decision — the part
+// that was wrong — is testable on its own.
 //
-// An empty note with include=false means "nothing to add and nothing to
-// explain": the caller already listed the Public templates itself.
-func publicTemplateScope(opID uuid.UUID, agent *gqlctx.AgentInfo, agentErr error) (include bool, note string) {
-	if models.IsPublicOperation(opID) {
-		return false, ""
-	}
-	if agentErr != nil || agent == nil || !agent.AllowsOperation(models.PublicOperationID) {
-		return false, "Shared templates in the Public wiki are outside this key's operation scope, " +
-			"so they are not listed."
-	}
-	return true, ""
+// The only reason not to is that the caller already listed Public itself;
+// reaching again would show every shared template twice. An operation scope
+// is not a reason: Public is not one of the owner's operations, and
+// AgentInfo.AllowsOperation never narrows it away.
+func publicTemplateScope(opID uuid.UUID) bool {
+	return !models.IsPublicOperation(opID)
 }
 
 // publicTemplates returns the shared templates, or nothing plus an
 // explanation when this key cannot reach the Public wiki.
 //
-// A key with an explicit scope list that omits Public is refused there — the
-// scope check runs before the implicit-operator rule — so this must not be
-// fatal to the listing. It is said out loud rather than skipped silently:
-// an agent that sees fewer templates than the operator describes should know
-// why, instead of concluding they are gone.
+// Every agent key can read Public — that is the point of it — so the refusal
+// path should never fire. It is kept, and says so out loud rather than
+// skipping silently, because an agent that sees fewer templates than the
+// operator describes should know why instead of concluding they are gone.
 func (s *Server) publicTemplates(ctx context.Context, opID uuid.UUID) ([]wikiTemplateView, string) {
-	agent, agentErr := agentFromContext(ctx)
-	include, note := publicTemplateScope(opID, agent, agentErr)
-	if !include {
-		return nil, note
+	if !publicTemplateScope(opID) {
+		return nil, ""
 	}
 
 	if _, err := s.authorizeOperation(ctx, models.PublicOperationID, models.OperationRoleViewer); err != nil {

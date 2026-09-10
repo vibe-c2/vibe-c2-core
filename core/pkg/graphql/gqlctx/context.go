@@ -59,7 +59,20 @@ type AgentInfo struct {
 // An empty OperationScopes means "any operation the owner belongs to" — the
 // membership check itself is separate, so this is a narrowing filter and never
 // a grant.
+//
+// The Public wiki is never narrowed away. It is not one of the owner's
+// operations: it is a shared space every authenticated user already has, so
+// scoping a key to an engagement says nothing about it. Treating an
+// operation scope as a reason to withhold Public cut agents off from the
+// shared templates and notes their operator was looking straight at.
+//
+// This is not a widening. Public grants an implicit *operator* role to
+// everyone, and MaxRole still caps what the key may do there — a viewer-
+// capped key reads Public and cannot write to it.
 func (a *AgentInfo) AllowsOperation(operationID uuid.UUID) bool {
+	if models.IsPublicOperation(operationID) {
+		return true
+	}
 	if len(a.OperationScopes) == 0 {
 		return true
 	}

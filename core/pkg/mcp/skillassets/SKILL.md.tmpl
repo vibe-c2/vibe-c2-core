@@ -36,7 +36,12 @@ One operation is not like the others. **Public** is shared across the whole
 platform: everyone can read and write it, and nobody is a member. It is the
 right place for things that outlive one engagement — method, reference,
 checklists — and the wrong place for anything belonging to a specific target.
-`list_operations` shows it when your key can reach it.
+
+You can always reach it. A key scoped to particular operations is still not
+narrowed away from Public, because Public is not one of the operator's
+operations — so `list_operations` always shows it, and the shared wiki is
+always yours to read. What your key may *do* there is capped the same way as
+anywhere else.
 
 The division that matters: **findings hold the data, the wiki holds the
 reasoning.** A password belongs in Credentials, not pasted into a page. A page

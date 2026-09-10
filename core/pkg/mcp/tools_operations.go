@@ -77,10 +77,11 @@ func handleListOperations(ctx context.Context, s *Server, _ listOperationsArgs) 
 	// implicit operator there — which is the worst combination: usable, and
 	// undiscoverable except by being handed the id.
 	//
-	// Listed only when this key could actually act in it, so the list never
-	// advertises something the next call would refuse. A key with an explicit
-	// scope list that omits Public is refused there, since the scope check runs
-	// before the implicit-operator rule.
+	// Listed whatever the key's operation scope is. Public is not one of the
+	// owner's operations — it is a shared space every authenticated user
+	// already has — so narrowing a key to an engagement says nothing about it.
+	// AllowsOperation encodes that; the call stays for the same reason the
+	// role cap stays, as the one place that decides reachability.
 	if agent.AllowsOperation(models.PublicOperationID) {
 		public := models.SynthesizePublicOperation()
 		view := toOperationView(&public, cappedRoleFor(auth, &public))
