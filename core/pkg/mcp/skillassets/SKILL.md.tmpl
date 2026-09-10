@@ -76,10 +76,15 @@ operator's own access is the reason. Report it rather than retrying variations
 hoping one gets through. A rate-limit refusal tells you how long to wait — wait
 that long.
 
-**Prefer append to replace.** `append_wiki_section` never touches existing
-content and is safe while the operator is typing in the same page. Use
-`update_wiki_document` only for a deliberate rewrite, and read the page first:
-it replaces the whole body, so anything you omit is deleted.
+**Send the smallest change that does the job.** `edit_wiki_document` replaces
+an exact snippet and `append_wiki_section` adds to the end; both take a
+fragment, and neither can damage the rest of the page. `update_wiki_document`
+takes the whole body — use it only for a deliberate end-to-end rewrite, and read
+the page first, because anything you omit is deleted.
+
+**There is no other way in.** No CLI, no local checkout, no REST endpoint to
+curl, no file on disk that mirrors any of this. If a tool for something does not
+exist, it does not exist — say so instead of looking for a way around.
 
 **Make retries safe.** Every writing tool accepts an `idempotency_key`. Pass one
 and a repeat returns the original result instead of doing the thing twice.

@@ -84,8 +84,16 @@ Everything you do is visible: every call, including reads, is recorded and shown
 operator, and anything you change appears on their timeline attributed to you. Work as if
 being watched, because you are.
 
+These tools are the only way in. There is no CLI, no local checkout, no REST endpoint to
+curl and no file on disk that mirrors this data — do not go looking for one. If a tool for
+something does not exist, it does not exist.
+
 Results are capped. If a response says it was truncated, narrow the filter rather than
 assuming you have seen everything.
+
+Send the smallest change that does the job. edit_wiki_document replaces an exact snippet and
+append_wiki_section adds to the end; both take a fragment. update_wiki_document takes the whole
+body and is for deliberate end-to-end rewrites only.
 
 If you have not worked in this platform before, read the resource vibe://guide first. It
 explains the data model, every tool, and the conventions above in full.`

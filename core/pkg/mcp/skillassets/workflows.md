@@ -102,8 +102,35 @@ Everything else is ordinary markdown: headings, tables, task lists
 The thing to watch is `update_wiki_document`, which replaces the whole body.
 Read the page first and put back every construct you are not deliberately
 changing — a checklist you drop takes its answers and the operator's coverage
-with it. `append_wiki_section` cannot make that mistake, which is one more
-reason to prefer it.
+with it. `edit_wiki_document` and `append_wiki_section` cannot make that
+mistake, which is the main reason to prefer them.
+
+## Changing part of a page
+
+`edit_wiki_document` replaces an exact snippet, the way you would edit a source
+file:
+
+```
+document_id: <id>
+old_text:    "| dc-01 | unknown |"
+new_text:    "| dc-01 | Windows Server 2019 |"
+```
+
+Use it for essentially every edit. Sending the whole body to rewrite one line
+is slow, costs you the entire page in the tool call each time, and gives you a
+fresh chance to mangle something you never meant to touch.
+
+Copy `old_text` out of `get_wiki_document` verbatim — whitespace, list markers
+and all. It has to match exactly and it has to be unique: if the snippet occurs
+more than once the edit is refused with the count, and the fix is to include a
+line or two either side rather than to pass `replace_all`. `replace_all` is for
+when you genuinely mean every occurrence, like renaming a host throughout.
+
+To answer a checklist question, edit the marker line's `state` and put the
+answer in the body — both in one call, with the item's own text as `old_text`.
+
+`append_wiki_section` is still the right tool for adding to the end, and
+`update_wiki_document` is for a deliberate rewrite of the whole page.
 
 ## Reading what is attached to a page
 

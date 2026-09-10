@@ -6,7 +6,7 @@ import { Y_FRAGMENT_FIELD } from "../markdown-to-yjs.js";
 import { yjsUpdateToMarkdown } from "../yjs-to-markdown.js";
 import { encodeStateAsUpdate } from "yjs";
 
-const { markdownToDetachedNodes } = __testing;
+const { markdownToDetachedNodes, markdownToDetachedBlocks, spliceFragment } = __testing;
 
 // Y.js types cannot be moved between documents, so an agent's edit has to be
 // deep-copied out of a scratch doc before it can be inserted into the live
@@ -14,10 +14,17 @@ const { markdownToDetachedNodes } = __testing;
 // asserted through a full round-trip rather than by inspecting nodes.
 function insertInto(doc: Doc, markdown: string, mode: "replace" | "append"): string {
   const fragment = doc.getXmlFragment(Y_FRAGMENT_FIELD);
-  const nodes = markdownToDetachedNodes(markdown);
+  const blocks = markdownToDetachedBlocks(markdown);
   doc.transact(() => {
-    if (mode === "replace") fragment.delete(0, fragment.length);
-    if (nodes.length > 0) fragment.insert(fragment.length, nodes);
+    // Same branch the endpoint takes, so these tests exercise the real write
+    // path rather than a second copy of it that can drift.
+    if (mode === "append") {
+      if (blocks.length > 0) {
+        fragment.insert(fragment.length, blocks.map((b) => b.node));
+      }
+      return;
+    }
+    spliceFragment(fragment, blocks);
   });
   return yjsUpdateToMarkdown(encodeStateAsUpdate(doc));
 }
@@ -81,5 +88,70 @@ test("empty markdown appends nothing rather than throwing", () => {
   insertInto(doc, "# Kept\n", "replace");
   const out = insertInto(doc, "", "append");
   assert.match(out, /# Kept/);
+  doc.destroy();
+});
+
+// Replacing used to delete every block and re-insert it. For a collaborator
+// typing in the same page that is destructive — their cursor sits in a block
+// that no longer exists — and it puts the whole document on the wire for a
+// one-word fix. Untouched blocks must survive as the same Y.js items.
+test("replace leaves untouched blocks alone", () => {
+  const doc = new Doc();
+  const fragment = doc.getXmlFragment(Y_FRAGMENT_FIELD);
+
+  insertInto(doc, "# Title\n\nfirst\n\nsecond\n\nthird\n", "replace");
+  const before = fragment.toArray();
+  const untouchedFirst = before[0];
+  const untouchedLast = before[before.length - 1];
+
+  insertInto(doc, "# Title\n\nfirst\n\nCHANGED\n\nthird\n", "replace");
+  const after = fragment.toArray();
+
+  assert.equal(after.length, before.length);
+  assert.equal(after[0], untouchedFirst, "leading block was recreated");
+  assert.equal(after[after.length - 1], untouchedLast, "trailing block was recreated");
+  assert.notEqual(after[2], before[2], "the changed block should be a new node");
+
+  const markdown = yjsUpdateToMarkdown(encodeStateAsUpdate(doc));
+  assert.match(markdown, /CHANGED/);
+  assert.ok(!markdown.includes("second"), `old text survived: ${markdown}`);
+  doc.destroy();
+});
+
+test("replace with identical content changes nothing", () => {
+  const doc = new Doc();
+  const fragment = doc.getXmlFragment(Y_FRAGMENT_FIELD);
+  const md = "# Title\n\nfirst\n\nsecond\n";
+
+  insertInto(doc, md, "replace");
+  const before = fragment.toArray();
+
+  insertInto(doc, md, "replace");
+  const after = fragment.toArray();
+
+  assert.deepEqual(after, before, "a no-op edit rewrote the document");
+  doc.destroy();
+});
+
+test("replace handles growing and shrinking documents", () => {
+  const doc = new Doc();
+  insertInto(doc, "a\n\nb\n", "replace");
+
+  let out = insertInto(doc, "a\n\nb\n\nc\n", "replace");
+  assert.match(out, /a\n\na?b?/);
+  assert.ok(out.includes("c"), `grew wrongly: ${out}`);
+
+  out = insertInto(doc, "a\n", "replace");
+  assert.ok(!out.includes("b"), `shrank wrongly: ${out}`);
+  assert.ok(!out.includes("c"), `shrank wrongly: ${out}`);
+  assert.match(out, /a/);
+  doc.destroy();
+});
+
+test("replace can empty a document", () => {
+  const doc = new Doc();
+  insertInto(doc, "something\n", "replace");
+  const out = insertInto(doc, "", "replace");
+  assert.equal(out.trim(), "");
   doc.destroy();
 });

@@ -44,6 +44,63 @@ function roomName(documentId: string): string {
 }
 
 /**
+ * Replace a fragment's contents with `nodes`, touching only the blocks that
+ * actually differ.
+ *
+ * Deleting everything and re-inserting is far simpler and was what this did,
+ * but it is the wrong shape for a CRDT that someone else may be typing into.
+ * Every block is destroyed and recreated, so a collaborator's cursor jumps,
+ * their selection is lost, and the update carries the whole document even for
+ * a one-word fix. Most edits change one block out of dozens.
+ *
+ * Common leading and trailing blocks are therefore left in place and only the
+ * middle is spliced. This is not a diff: a change in the first block and the
+ * last one still rewrites everything between them. It is the cheap 90% case,
+ * and the expensive case is no worse than the old behaviour.
+ */
+function spliceFragment(fragment: XmlFragment, blocks: DetachedBlock[]): void {
+  const existing = fragment.toArray().map(nodeKey);
+  const incoming = blocks.map((block) => block.key);
+
+  let prefix = 0;
+  while (
+    prefix < existing.length &&
+    prefix < incoming.length &&
+    existing[prefix] === incoming[prefix]
+  ) {
+    prefix += 1;
+  }
+
+  let suffix = 0;
+  while (
+    suffix < existing.length - prefix &&
+    suffix < incoming.length - prefix &&
+    existing[existing.length - 1 - suffix] === incoming[incoming.length - 1 - suffix]
+  ) {
+    suffix += 1;
+  }
+
+  const removeCount = existing.length - prefix - suffix;
+  const insert = blocks
+    .slice(prefix, blocks.length - suffix)
+    .map((block) => block.node);
+
+  if (removeCount > 0) fragment.delete(prefix, removeCount);
+  if (insert.length > 0) fragment.insert(prefix, insert);
+}
+
+/**
+ * Identity of one top-level block, for the splice comparison.
+ *
+ * The XML serialization carries the node name, its attributes and its whole
+ * subtree, which is exactly the granularity wanted: two blocks are "the same"
+ * when replacing one with the other would be a no-op.
+ */
+function nodeKey(node: XmlElement | XmlText | unknown): string {
+  return String(node);
+}
+
+/**
  * Build the top-level nodes for some Markdown as detached Y.js types, ready to
  * insert into a live fragment.
  *
@@ -52,11 +109,32 @@ function roomName(documentId: string): string {
  * detached nodes" entry point, which is why this walks the tree itself.
  */
 function markdownToDetachedNodes(markdown: string): (XmlElement | XmlText)[] {
+  return markdownToDetachedBlocks(markdown).map((block) => block.node);
+}
+
+/** One top-level block: the detached node, and its identity for splicing. */
+interface DetachedBlock {
+  node: XmlElement | XmlText;
+  key: string;
+}
+
+/**
+ * The same conversion, keeping each block's serialized form alongside it.
+ *
+ * The key has to be taken here, while the node is still attached to the
+ * scratch document. A detached Y.js type refuses to be read — "Add Yjs type
+ * to a document before reading data" — so there is no second chance to
+ * compute it after the clone.
+ */
+function markdownToDetachedBlocks(markdown: string): DetachedBlock[] {
   const pmDoc = parseOutlineMarkdown(markdown);
   const scratch = prosemirrorJSONToYDoc(wikiSchema, pmDoc.toJSON(), Y_FRAGMENT_FIELD);
   try {
     const fragment = scratch.getXmlFragment(Y_FRAGMENT_FIELD);
-    return fragment.toArray().map(cloneNode);
+    return fragment.toArray().map((node) => ({
+      node: cloneNode(node),
+      key: nodeKey(node),
+    }));
   } finally {
     scratch.destroy();
   }
@@ -137,17 +215,22 @@ export function setupApplyApi(app: Express, server: Hocuspocus): void {
 
         await connection.transact((document) => {
           const fragment = document.getXmlFragment(Y_FRAGMENT_FIELD);
-          const nodes = markdownToDetachedNodes(markdown);
-          appliedNodes = nodes.length;
+          const blocks = markdownToDetachedBlocks(markdown);
+          appliedNodes = blocks.length;
 
-          if (mode === "replace") {
-            // One transaction, so collaborators see a single coherent change
-            // rather than the document briefly emptying.
-            fragment.delete(0, fragment.length);
+          if (mode === "append") {
+            if (blocks.length > 0) {
+              fragment.insert(
+                fragment.length,
+                blocks.map((block) => block.node),
+              );
+            }
+            return;
           }
-          if (nodes.length > 0) {
-            fragment.insert(fragment.length, nodes);
-          }
+
+          // One transaction, so collaborators see a single coherent change
+          // rather than the document briefly emptying.
+          spliceFragment(fragment, blocks);
         });
 
         const connections =
@@ -175,4 +258,9 @@ export function setupApplyApi(app: Express, server: Hocuspocus): void {
 }
 
 /** Internals exposed for tests only. */
-export const __testing = { markdownToDetachedNodes, cloneNode };
+export const __testing = {
+  markdownToDetachedNodes,
+  markdownToDetachedBlocks,
+  cloneNode,
+  spliceFragment,
+};

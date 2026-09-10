@@ -3,6 +3,7 @@ package mcp
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	"github.com/google/uuid"
 
@@ -70,6 +71,14 @@ type updateWikiDocumentArgs struct {
 	visualIdentity
 }
 
+type editWikiDocumentArgs struct {
+	IdempotencyKey
+	DocumentID string `json:"document_id"          jsonschema:"The page to edit, from search_wiki."`
+	OldText    string `json:"old_text"             jsonschema:"The exact text to replace, copied from get_wiki_document. Whitespace matters. Include enough surrounding lines to make it unique."`
+	NewText    string `json:"new_text"             jsonschema:"What to put there instead. An empty string deletes the matched text."`
+	ReplaceAll bool   `json:"replace_all,omitempty" jsonschema:"Replace every occurrence instead of refusing when old_text appears more than once."`
+}
+
 func registerWikiTools(s *Server) {
 	register(s, &mcp.Tool{
 		Name:        "search_wiki",
@@ -120,6 +129,14 @@ func registerWikiTools(s *Server) {
 			"there. Prefer this over update_wiki_document: it is safe while the operator is " +
 			"editing the same page, and they will see your text appear as you write it.",
 	}, writeTool, handleAppendWikiSection)
+
+	register(s, &mcp.Tool{
+		Name: "edit_wiki_document",
+		Description: "Change part of a page by replacing an exact snippet, the way you would " +
+			"edit a source file. Send only the text that changes, not the whole page. This is " +
+			"the tool for almost every edit — reach for update_wiki_document only when you are " +
+			"deliberately rewriting a page end to end.",
+	}, writeTool, handleEditWikiDocument)
 
 	register(s, &mcp.Tool{
 		Name: "update_wiki_document",
@@ -461,6 +478,86 @@ func handleAppendWikiSection(ctx context.Context, s *Server, args appendWikiSect
 		SubjectKind: models.SubjectKindWikiDocument,
 		SubjectName: doc.Title,
 		Summary:     fmt.Sprintf("added a section to %s", doc.Title),
+	}, nil
+}
+
+// handleEditWikiDocument replaces an exact snippet.
+//
+// The reason this exists is cost. update_wiki_document takes the whole body,
+// so fixing one line in a 10 KB page means an agent serializes 10 KB into a
+// tool call — every time, for every edit. That is slow, expensive, and it puts
+// the entire page at risk of a transcription slip on each pass.
+//
+// The uniqueness rule is the same one a code-editing tool uses, and for the
+// same reason: an ambiguous match is far more likely to be the agent misreading
+// the page than a genuine intent to change all of them, so it is refused with
+// the count rather than guessed at.
+func handleEditWikiDocument(ctx context.Context, s *Server, args editWikiDocumentArgs) (toolResult, error) {
+	doc, err := s.deps.WikiDocs.WikiDocument(ctx, args.DocumentID)
+	if err != nil {
+		return toolResult{}, fmt.Errorf("wiki page not found")
+	}
+	if _, err := s.authorizeOperation(ctx, doc.OperationID, models.OperationRoleOperator); err != nil {
+		return toolResult{}, err
+	}
+
+	if args.OldText == "" {
+		return toolResult{}, refuse(
+			"old_text is required: it is the snippet to replace. To add to the end of a page " +
+				"use append_wiki_section instead.")
+	}
+	if args.OldText == args.NewText {
+		return toolResult{}, refuse("old_text and new_text are identical, so this edit would do nothing.")
+	}
+
+	body := s.documentMarkdown(ctx, doc)
+	matches := strings.Count(body, args.OldText)
+
+	switch {
+	case matches == 0:
+		return toolResult{}, refuse(
+			"that exact text is not on %q. Read it with get_wiki_document and copy the snippet "+
+				"from what it returns — whitespace and list markers have to match exactly.",
+			doc.Title)
+	case matches > 1 && !args.ReplaceAll:
+		return toolResult{}, refuse(
+			"that text appears %d times on %q, so it is ambiguous. Include more of the "+
+				"surrounding lines to pin down which one you mean, or pass replace_all to "+
+				"change every occurrence.", matches, doc.Title)
+	}
+
+	replacements := 1
+	if args.ReplaceAll {
+		replacements = matches
+	}
+	updated := strings.Replace(body, args.OldText, args.NewText, replacements)
+
+	watchers, err := s.writeBody(ctx, doc, updated, wiki.ApplyReplace)
+	if err != nil {
+		return toolResult{}, err
+	}
+
+	payload := struct {
+		wikiDocView
+		Replacements int    `json:"replacements"`
+		Watchers     int    `json:"watchers"`
+		Note         string `json:"note,omitempty"`
+	}{
+		wikiDocView:  toWikiDocView(doc),
+		Replacements: replacements,
+		Watchers:     watchers,
+	}
+	if watchers > 0 {
+		payload.Note = "The operator has this page open and saw your edit appear."
+	}
+
+	return toolResult{
+		Payload:     payload,
+		OperationID: &doc.OperationID,
+		SubjectID:   doc.DocumentID,
+		SubjectKind: models.SubjectKindWikiDocument,
+		SubjectName: doc.Title,
+		Summary:     fmt.Sprintf("edited wiki page %s", doc.Title),
 	}, nil
 }
 
