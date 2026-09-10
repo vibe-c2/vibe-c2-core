@@ -94,6 +94,12 @@ type ITaskRepository interface {
 	// calling; the repo write itself does not enforce either.
 	AddWikiReference(ctx context.Context, taskID, wikiID, callerID uuid.UUID) error
 
+	// AddCredentialReference is the credential equivalent of
+	// AddWikiReference, with the same guarantees: $addToSet, so idempotent
+	// and race-free, and the same last-updated stamping. Scope and cap
+	// checks belong to the caller.
+	AddCredentialReference(ctx context.Context, taskID, credentialID, callerID uuid.UUID) error
+
 	// PullWikiReference removes wikiID from the wiki_references array on
 	// every active or trashed task in opID. Called by the wiki document
 	// hard-delete path so dangling pointers don't accumulate. A miss (the
@@ -321,11 +327,21 @@ func (r *taskRepository) HardDeleteTrashed(ctx context.Context, opID uuid.UUID) 
 }
 
 func (r *taskRepository) AddWikiReference(ctx context.Context, taskID, wikiID, callerID uuid.UUID) error {
+	return r.addReference(ctx, taskID, "wiki_references", wikiID, callerID)
+}
+
+func (r *taskRepository) AddCredentialReference(ctx context.Context, taskID, credentialID, callerID uuid.UUID) error {
+	return r.addReference(ctx, taskID, "credential_references", credentialID, callerID)
+}
+
+// addReference is the shared body of the two atomic append operations. The
+// field name is a package constant in every call, never caller-supplied.
+func (r *taskRepository) addReference(ctx context.Context, taskID uuid.UUID, field string, refID, callerID uuid.UUID) error {
 	now := time.Now().UTC()
 	err := r.coll.UpdateOne(ctx,
 		bson.M{"task_id": taskID},
 		bson.M{
-			"$addToSet": bson.M{"wiki_references": wikiID},
+			"$addToSet": bson.M{field: refID},
 			"$set": bson.M{
 				"last_updated_at":    now,
 				"last_updated_by_id": callerID,
@@ -333,7 +349,7 @@ func (r *taskRepository) AddWikiReference(ctx context.Context, taskID, wikiID, c
 		},
 	)
 	if err != nil {
-		return fmt.Errorf("failed to add wiki reference: %w", err)
+		return fmt.Errorf("failed to add %s: %w", field, err)
 	}
 	return nil
 }

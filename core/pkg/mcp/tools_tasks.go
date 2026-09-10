@@ -4,6 +4,8 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/google/uuid"
+
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/vibe-c2/vibe-c2-core/core/pkg/graphql/model"
 	"github.com/vibe-c2/vibe-c2-core/core/pkg/models"
@@ -29,6 +31,9 @@ type createTaskArgs struct {
 	RiskScore   int    `json:"risk_score,omitempty"   jsonschema:"How risky this is to attempt, 0-10."`
 	ProfitScore int    `json:"profit_score,omitempty" jsonschema:"How valuable success would be, 0-10."`
 	AssignToMe  bool   `json:"assign_to_me,omitempty" jsonschema:"Assign the task to the operator you act for. Leave it off to propose work without claiming it."`
+
+	WikiIDs       []string `json:"wiki_ids,omitempty"       jsonschema:"Wiki pages this task comes out of or writes up, from search_wiki. Link them here rather than leaving the task to stand alone."`
+	CredentialIDs []string `json:"credential_ids,omitempty" jsonschema:"Credentials this task depends on or is meant to produce, from find_credentials."`
 }
 
 type taskAssignmentArgs struct {
@@ -55,6 +60,12 @@ type addTaskWikiReferenceArgs struct {
 	WikiID string `json:"wiki_id"     jsonschema:"The wiki page to attach, from search_wiki."`
 }
 
+type addTaskCredentialReferenceArgs struct {
+	IdempotencyKey
+	TaskID       string `json:"task_id"       jsonschema:"The task to attach the credential to."`
+	CredentialID string `json:"credential_id" jsonschema:"The credential to attach, from find_credentials."`
+}
+
 type changeTaskStageArgs struct {
 	IdempotencyKey
 	TaskID  string `json:"task_id"           jsonschema:"The task to move."`
@@ -77,7 +88,9 @@ func registerTaskTools(s *Server) {
 	register(s, &mcp.Tool{
 		Name: "create_task",
 		Description: "Add a task to the board. Use this to propose work rather than doing " +
-			"something the operator has not asked for.",
+			"something the operator has not asked for. Link the wiki pages and credentials the " +
+			"task came out of or will produce — a task with no references leaves the next person " +
+			"to work out by hand what it meant.",
 	}, writeTool, handleCreateTask)
 
 	register(s, &mcp.Tool{
@@ -103,6 +116,13 @@ func registerTaskTools(s *Server) {
 		Description: "Link a wiki page to a task, so the notes and the work that produced them " +
 			"stay connected. Idempotent — linking the same page twice is harmless.",
 	}, writeTool, handleAddTaskWikiReference)
+
+	register(s, &mcp.Tool{
+		Name: "add_task_credential_reference",
+		Description: "Link a credential to a task, so the task carries the access it depends on " +
+			"or the access it produced. Idempotent — linking the same credential twice is " +
+			"harmless.",
+	}, writeTool, handleAddTaskCredentialReference)
 
 	register(s, &mcp.Tool{
 		Name: "change_task_stage",
@@ -193,11 +213,19 @@ func handleGetTask(ctx context.Context, s *Server, args getTaskArgs) (toolResult
 		RiskDescription   string `json:"riskDescription,omitempty"`
 		ProfitDescription string `json:"profitDescription,omitempty"`
 		Summary           string `json:"summary,omitempty"`
+		// Named, and never omitted. An agent that cannot see what a task is
+		// already linked to cannot tell a task that was deliberately left bare
+		// from one whose links someone forgot — and will guess wrong in both
+		// directions.
+		WikiReferences       []referenceView `json:"wikiReferences"`
+		CredentialReferences []referenceView `json:"credentialReferences"`
 	}{
-		taskView:          toTaskView(task),
-		RiskDescription:   task.RiskDescription,
-		ProfitDescription: task.ProfitDescription,
-		Summary:           task.Summary,
+		taskView:             toTaskView(task),
+		RiskDescription:      task.RiskDescription,
+		ProfitDescription:    task.ProfitDescription,
+		Summary:              task.Summary,
+		WikiReferences:       s.namedWikiReferences(ctx, task.WikiReferences),
+		CredentialReferences: s.namedCredentialReferences(ctx, task.CredentialReferences),
 	}
 
 	return toolResult{
@@ -205,6 +233,37 @@ func handleGetTask(ctx context.Context, s *Server, args getTaskArgs) (toolResult
 		OperationID: &task.OperationID,
 		Summary:     fmt.Sprintf("read task %s", task.Name),
 	}, nil
+}
+
+// namedWikiReferences resolves link targets to titles.
+//
+// A reference whose target cannot be read comes back with its id and no name
+// rather than being dropped: the link genuinely exists on the task, and
+// hiding it would make a real relationship invisible for no benefit. Nothing
+// here is authorized separately — these ids are already on a task the caller
+// was allowed to load, and a title is not the document.
+func (s *Server) namedWikiReferences(ctx context.Context, ids []uuid.UUID) []referenceView {
+	out := make([]referenceView, 0, len(ids))
+	for _, id := range ids {
+		ref := referenceView{ID: id.String()}
+		if doc, err := s.deps.WikiDocs.WikiDocument(ctx, id.String()); err == nil {
+			ref.Name = doc.Title
+		}
+		out = append(out, ref)
+	}
+	return out
+}
+
+func (s *Server) namedCredentialReferences(ctx context.Context, ids []uuid.UUID) []referenceView {
+	out := make([]referenceView, 0, len(ids))
+	for _, id := range ids {
+		ref := referenceView{ID: id.String()}
+		if cred, err := s.deps.Credentials.Credential(ctx, id.String()); err == nil {
+			ref.Name = cred.Name
+		}
+		out = append(out, ref)
+	}
+	return out
 }
 
 func handleCreateTask(ctx context.Context, s *Server, args createTaskArgs) (toolResult, error) {
@@ -235,14 +294,50 @@ func handleCreateTask(ctx context.Context, s *Server, args createTaskArgs) (tool
 	if err != nil {
 		return toolResult{}, fmt.Errorf("failed to create task: %w", err)
 	}
+
+	// Links are applied after creation because the create mutation does not
+	// take them. A link that fails does not fail the task — the task exists,
+	// and unwinding it would be worse than saying which link did not stick.
+	task, notes := s.linkOnCreate(ctx, task, args)
+
+	payload := struct {
+		taskView
+		Notes []string `json:"notes,omitempty"`
+	}{taskView: toTaskView(task), Notes: notes}
+
 	return toolResult{
-		Payload:     toTaskView(task),
+		Payload:     payload,
 		OperationID: &opID,
 		SubjectID:   task.TaskID,
 		SubjectKind: models.SubjectKindTask,
 		SubjectName: task.Name,
 		Summary:     fmt.Sprintf("created task %s", task.Name),
 	}, nil
+}
+
+// linkOnCreate applies the reference lists supplied to create_task, returning
+// the latest task and a note for anything that would not link.
+func (s *Server) linkOnCreate(ctx context.Context, task *models.Task, args createTaskArgs) (*models.Task, []string) {
+	var notes []string
+	id := task.TaskID.String()
+
+	for _, wikiID := range args.WikiIDs {
+		updated, err := s.deps.Tasks.AddTaskWikiReference(ctx, id, wikiID)
+		if err != nil {
+			notes = append(notes, fmt.Sprintf("could not link wiki page %s: %v", wikiID, err))
+			continue
+		}
+		task = updated
+	}
+	for _, credID := range args.CredentialIDs {
+		updated, err := s.deps.Tasks.AddTaskCredentialReference(ctx, id, credID)
+		if err != nil {
+			notes = append(notes, fmt.Sprintf("could not link credential %s: %v", credID, err))
+			continue
+		}
+		task = updated
+	}
+	return task, notes
 }
 
 func handleUpdateTask(ctx context.Context, s *Server, args updateTaskArgs) (toolResult, error) {
@@ -316,6 +411,37 @@ func handleAddTaskWikiReference(ctx context.Context, s *Server, args addTaskWiki
 		SubjectKind: models.SubjectKindTask,
 		SubjectName: task.Name,
 		Summary:     fmt.Sprintf("linked %q to task %s", doc.Title, task.Name),
+	}, nil
+}
+
+func handleAddTaskCredentialReference(ctx context.Context, s *Server, args addTaskCredentialReferenceArgs) (toolResult, error) {
+	task, err := s.loadTaskInScope(ctx, args.TaskID, models.OperationRoleOperator)
+	if err != nil {
+		return toolResult{}, err
+	}
+
+	// Readable by this key too — a link must not become a way to point at a
+	// credential the agent could not otherwise open.
+	cred, err := s.deps.Credentials.Credential(ctx, args.CredentialID)
+	if err != nil {
+		return toolResult{}, fmt.Errorf("credential not found")
+	}
+	if _, err := s.authorizeOperation(ctx, cred.OperationID, models.OperationRoleViewer); err != nil {
+		return toolResult{}, err
+	}
+
+	updated, err := s.deps.Tasks.AddTaskCredentialReference(ctx, args.TaskID, args.CredentialID)
+	if err != nil {
+		return toolResult{}, fmt.Errorf("failed to link the credential: %w", err)
+	}
+
+	return toolResult{
+		Payload:     toTaskView(updated),
+		OperationID: &task.OperationID,
+		SubjectID:   task.TaskID,
+		SubjectKind: models.SubjectKindTask,
+		SubjectName: task.Name,
+		Summary:     fmt.Sprintf("linked credential %q to task %s", cred.Name, task.Name),
 	}, nil
 }
 

@@ -121,6 +121,20 @@ type taskView struct {
 	Status      string `json:"status,omitempty"`
 	RiskScore   int    `json:"riskScore"`
 	ProfitScore int    `json:"profitScore"`
+
+	// Counts, not the lists themselves — a board listing should not carry
+	// dozens of nested rows. Deliberately NOT omitempty: a zero here is the
+	// most useful number on the view, because it says the task is floating
+	// free of the notes and access it belongs to. get_task expands them.
+	WikiReferenceCount       int `json:"wikiReferenceCount"`
+	CredentialReferenceCount int `json:"credentialReferenceCount"`
+}
+
+// referenceView is one thing a task points at, named so the agent can judge
+// whether the link is the right one without a second read.
+type referenceView struct {
+	ID   string `json:"id"`
+	Name string `json:"name"`
 }
 
 type wikiDocView struct {
@@ -239,6 +253,9 @@ func toTaskView(t *models.Task) taskView {
 		Status:      string(t.Status),
 		RiskScore:   int(t.RiskScore),
 		ProfitScore: int(t.ProfitScore),
+
+		WikiReferenceCount:       len(t.WikiReferences),
+		CredentialReferenceCount: len(t.CredentialReferences),
 	}
 }
 

@@ -128,6 +128,10 @@ the point.
 `create_task` with an honest risk and profit score, and a description that says
 why. A task is how you propose something without doing it.
 
+Link it at the same time. `create_task` takes `wiki_ids` and `credential_ids`,
+and the moment you are writing the task is the moment you still know what it
+came out of — see "Tasks do not stand alone" below.
+
 Leave it unassigned unless you are about to work on it. An unassigned task is a
 suggestion the operator can take or ignore; assigning it to them announces they
 are doing it, which is their call and not yours. When you do start on
@@ -137,6 +141,37 @@ When you finish a piece of work, `change_task_stage` to DONE with a `status` and
 a `summary` saying what actually happened — including when the answer was
 "nothing here". A closed task with an empty summary teaches the next person
 nothing.
+
+## Tasks do not stand alone
+
+A task with no references is a sentence with the context cut off. Someone
+reading the board later sees "Test credential reuse across the subnet" and has
+to go and find, by hand, which credential and which notes that meant.
+
+So whenever you create or touch a task, link:
+
+- the **wiki pages** it comes out of, or that it will be written up on —
+  `wiki_ids` on `create_task`, or `add_task_wiki_reference` afterwards;
+- the **credentials** it depends on or is meant to produce — `credential_ids`
+  on `create_task`, or `add_task_credential_reference` afterwards.
+
+Both are idempotent, so linking something twice costs nothing and you never
+have to check first.
+
+Two habits that make this automatic:
+
+- **Work backwards from what you just did.** You created a credential, then a
+  task to use it: link the credential. You wrote a page about a host, then a
+  task to go further on it: link the page. The link is almost always something
+  that was in front of you a moment ago.
+- **Read the counts.** Every task view carries `wikiReferenceCount` and
+  `credentialReferenceCount`. A zero on a task you are actively working is a
+  prompt, not a fact about the world. `get_task` expands both lists with names
+  so you can tell a wrong link from a missing one.
+
+The reverse holds too: when you close a task with `change_task_stage`, check
+that what it produced is linked. A DONE task whose credential is not attached
+has lost the only durable pointer between the work and its result.
 
 ## Whose tasks you can see
 

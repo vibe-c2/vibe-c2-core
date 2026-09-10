@@ -34,9 +34,17 @@ var toolGroups = []toolGroup{
 		Title: "Tasks",
 		Intro: "The operator's board. Propose work here rather than doing something nobody asked for. " +
 			"You can see and change tasks assigned to the operator you act for, and unassigned ones; " +
-			"tasks another operator has taken are not yours to read or edit.",
+			"tasks another operator has taken are not yours to read or edit.\n\n" +
+			"A task is only half a record without its references. Every task you create or touch " +
+			"should point at the wiki pages it comes out of or writes up, and at the credentials it " +
+			"needs or produces. Pass `wiki_ids` and `credential_ids` to `create_task` so the links " +
+			"land with the task; use `add_task_wiki_reference` and `add_task_credential_reference` " +
+			"when you learn about the connection later. `get_task` lists what is already linked, and " +
+			"every task view carries `wikiReferenceCount` and `credentialReferenceCount` — a zero " +
+			"there on a task you are working is the cue to go and link something.",
 		Tools: []string{"find_tasks", "get_task", "create_task", "update_task", "change_task_stage",
-			"assign_task_to_me", "unassign_task_from_me", "add_task_wiki_reference"},
+			"assign_task_to_me", "unassign_task_from_me", "add_task_wiki_reference",
+			"add_task_credential_reference"},
 	},
 	{
 		Title: "Wiki",

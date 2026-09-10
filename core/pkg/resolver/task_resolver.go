@@ -53,6 +53,7 @@ type ITaskResolver interface {
 	SetTaskWikiReferences(ctx context.Context, taskID string, wikiIDs []string) (*models.Task, error)
 	AddTaskWikiReference(ctx context.Context, taskID string, wikiID string) (*models.Task, error)
 	SetTaskCredentialReferences(ctx context.Context, taskID string, credentialIDs []string) (*models.Task, error)
+	AddTaskCredentialReference(ctx context.Context, taskID string, credentialID string) (*models.Task, error)
 	DeleteTask(ctx context.Context, id string) (bool, error)
 	RestoreTask(ctx context.Context, id string) (*models.Task, error)
 	PurgeTask(ctx context.Context, id string) (bool, error)
@@ -523,6 +524,75 @@ func (r *taskResolver) AddTaskWikiReference(ctx context.Context, taskID string, 
 	}
 
 	if err := r.taskRepo.AddWikiReference(ctx, tUID, wUID, callerUID); err != nil {
+		return nil, err
+	}
+
+	updated, err := r.taskRepo.FindByID(ctx, tUID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to fetch updated task: %w", err)
+	}
+
+	r.publishTaskEvent(ctx, eventbus.TopicTaskReferencesChanged, &updated, "")
+	return &updated, nil
+}
+
+// AddTaskCredentialReference atomically appends a single credential to a
+// task's reference list — the credential counterpart of
+// AddTaskWikiReference, with the same idempotency and race behaviour.
+//
+// Unlike its wiki sibling this has no GraphQL mutation behind it: the SPA
+// edits credential links through the task dialog, which sets the whole list.
+// The MCP agent surface needs the append form, because an agent linking one
+// credential must not have to read the current list and write it back — that
+// read-modify-write would clobber a concurrent edit by the operator it is
+// working alongside, which is precisely the case this platform exists to
+// support.
+func (r *taskResolver) AddTaskCredentialReference(ctx context.Context, taskID string, credentialID string) (*models.Task, error) {
+	tUID, err := uuid.Parse(taskID)
+	if err != nil {
+		return nil, fmt.Errorf("invalid task ID: %w", err)
+	}
+	cUID, err := uuid.Parse(credentialID)
+	if err != nil {
+		return nil, fmt.Errorf("invalid credential ID: %w", err)
+	}
+
+	task, err := r.taskRepo.FindByID(ctx, tUID)
+	if err != nil {
+		return nil, fmt.Errorf("task not found: %w", err)
+	}
+
+	if err := r.authorizeForOperation(ctx, task.OperationID, models.OperationRoleOperator); err != nil {
+		return nil, err
+	}
+
+	// Same-operation scope enforced at write time, as with wiki references:
+	// a link must never become a way to point at something outside the
+	// operation the task lives in.
+	cred, err := r.credRepo.FindByID(ctx, cUID)
+	if err != nil {
+		return nil, fmt.Errorf("credential not found: %w", err)
+	}
+	if cred.OperationID != task.OperationID {
+		return nil, fmt.Errorf("credential is not in the task's operation")
+	}
+
+	for _, existing := range task.CredentialReferences {
+		if existing == cUID {
+			return &task, nil
+		}
+	}
+
+	if len(task.CredentialReferences) >= maxTaskReferences {
+		return nil, fmt.Errorf("credential references exceed max %d entries", maxTaskReferences)
+	}
+
+	callerUID, err := callerUIDFromCtx(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	if err := r.taskRepo.AddCredentialReference(ctx, tUID, cUID, callerUID); err != nil {
 		return nil, err
 	}
 
