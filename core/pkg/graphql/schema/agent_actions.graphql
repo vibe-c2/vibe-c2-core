@@ -1,24 +1,28 @@
 # =============================================================================
-# Agent Actions — the durable record of what an agent did
+# Agent Actions — a personal audit trail
 # =============================================================================
 #
-# Every MCP tool call is recorded here, READS INCLUDED, and this is the query
-# behind the agent activity page.
+# Every MCP tool call is recorded, READS INCLUDED, and this is the query behind
+# the agent activity page.
+#
+# Scoped to the CALLER, not to an operation. The question this answers is "what
+# have my agents been doing" — across every engagement they touched. An
+# operator delegates to a key, not to an operation, so making them visit each
+# engagement in turn to find out what they had authorized would be the opposite
+# of an audit. Operation is a filter on top, not the frame.
 #
 # Reads matter as much as writes. The timeline shows what changed; only this
 # shows what an agent looked at — and an agent reading an operation's entire
 # credential set changes nothing, so it would otherwise leave no trace at all.
-# "The operator can see everything the agent does" is not satisfiable from the
-# timeline alone.
 #
 # Append-only: there is no mutation here, because an audit trail its own writer
 # can edit is not an audit trail.
 
 # How a tool call ended.
-#   ok      — it did what was asked
-#   refused — a scope, role, write-gate or rate-limit decision said no
-#   error   — something broke
-# refused is separate from error on purpose: a run full of refusals means the
+#   OK      — it did what was asked
+#   REFUSED — a scope, role, write-gate or rate-limit decision said no
+#   ERROR   — something broke
+# REFUSED is separate from ERROR on purpose: a run full of refusals means the
 # key is scoped tighter than the work being asked of it, which is a
 # configuration answer, not a fault.
 enum AgentActionOutcome {
@@ -29,16 +33,19 @@ enum AgentActionOutcome {
 
 type AgentAction {
   id: ID!
+  # Null for calls that are not operation-scoped, such as list_operations.
   operationId: ID
+  # The operation this call acted in, resolved for display. Null when the call
+  # was not operation-scoped, or when the operation has since been deleted —
+  # the action still happened, so the row survives it.
+  operation: Operation
   agentKeyId: ID!
   # Captured when the call was made, so the row still reads correctly after the
   # key is renamed or deleted.
   agentName: String!
-  # The user the agent was acting for.
-  owner: User
   tool: String!
-  # True when the call changed something. Writes also appear on the timeline;
-  # reads live only here.
+  # True when the call changed something. Writes also appear on the operation
+  # timeline; reads live only here.
   write: Boolean!
   outcome: AgentActionOutcome!
   # Present only when the call failed or was refused.
@@ -49,30 +56,32 @@ type AgentAction {
   occurredAt: String!
 }
 
-# One agent that has acted in an operation. Lets the UI offer a filter without
-# paging every action first.
+# One of the caller's agents and what it has been up to.
 type AgentActivitySummary {
   agentKeyId: ID!
   agentName: String!
   actions: Int!
+  # How many distinct operations this agent has touched. An agent working in
+  # one is expected; the same key active across five is worth a look.
+  operations: Int!
   lastSeen: String!
 }
 
 extend type Query {
-  # Recent agent activity in an operation, newest first. Viewer+ in the
-  # operation — anyone who can see the work can see what an agent did to it.
+  # What the caller's own agents have done, newest first, across every
+  # operation. Any authenticated user may read their own trail; there is no
+  # way to read anyone else's.
   #
   # `before` pages backwards: pass the oldest occurredAt you have.
-  agentActions(
-    operationId: ID!
+  myAgentActions(
     agentKeyId: ID
+    operationId: ID
     writesOnly: Boolean
     outcomes: [AgentActionOutcome!]
     before: String
     limit: Int = 50
-  ): [AgentAction!]! @hasPermission(permission: "operation:member")
+  ): [AgentAction!]! @hasPermission(permission: "*")
 
-  # Which agents have acted in this operation.
-  agentActivitySummary(operationId: ID!): [AgentActivitySummary!]!
-    @hasPermission(permission: "operation:member")
+  # The caller's agents that have actually done something.
+  myAgentActivitySummary: [AgentActivitySummary!]! @hasPermission(permission: "*")
 }

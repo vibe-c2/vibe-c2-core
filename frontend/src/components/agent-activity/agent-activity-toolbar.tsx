@@ -4,12 +4,15 @@ import { Button } from "@/components/ui/button"
 import { FormattedDateTimeText } from "@/components/ui/formatted-date-time-text"
 import { cn } from "@/lib/utils"
 import type { AgentActionFilters } from "@/graphql/hooks/agent-actions"
-import type { AgentActivitySummaryQuery } from "@/graphql/gql/graphql"
+import type { MyAgentActivitySummaryQuery } from "@/graphql/gql/graphql"
 
-type AgentSummary = AgentActivitySummaryQuery["agentActivitySummary"][number]
+type AgentSummary = MyAgentActivitySummaryQuery["myAgentActivitySummary"][number]
 
 interface AgentActivityToolbarProps {
   agents: AgentSummary[]
+  // Derived from the rows on screen: the only operations worth offering are
+  // the ones an agent has actually touched.
+  operations: { id: string; name: string }[]
   filters: AgentActionFilters
   onFiltersChange: (next: AgentActionFilters) => void
   totalShown: number
@@ -26,6 +29,7 @@ interface AgentActivityToolbarProps {
  */
 export function AgentActivityToolbar({
   agents,
+  operations,
   filters,
   onFiltersChange,
   totalShown,
@@ -59,7 +63,7 @@ export function AgentActivityToolbar({
           Refused
         </Button>
 
-        {(filters.agentKeyId || filters.writesOnly || refusedOnly) && (
+        {(filters.agentKeyId || filters.operationId || filters.writesOnly || refusedOnly) && (
           <Button size="sm" variant="ghost" onClick={() => onFiltersChange({})}>
             Clear
           </Button>
@@ -69,6 +73,33 @@ export function AgentActivityToolbar({
           {totalShown} shown
         </span>
       </div>
+
+      {operations.length > 1 && (
+        <div className="flex flex-wrap items-center gap-1.5">
+          <span className="text-xs text-muted-foreground">Operation:</span>
+          {operations.map((op) => {
+            const active = filters.operationId === op.id
+            return (
+              <button
+                key={op.id}
+                type="button"
+                onClick={() =>
+                  onFiltersChange({
+                    ...filters,
+                    operationId: active ? null : op.id,
+                  })
+                }
+                className={cn(
+                  "max-w-48 truncate rounded-md border px-2 py-1 text-xs transition-colors",
+                  active ? "border-primary bg-accent" : "hover:bg-accent/50",
+                )}
+              >
+                {op.name}
+              </button>
+            )
+          })}
+        </div>
+      )}
 
       {agents.length > 0 && (
         <div className="flex flex-wrap gap-2">
@@ -94,6 +125,13 @@ export function AgentActivityToolbar({
                   {agent.agentName}
                 </span>
                 <Badge variant="secondary">{agent.actions}</Badge>
+                {/* An agent working in one operation is expected; the same key
+                    active across several is worth an operator noticing. */}
+                {agent.operations > 1 && (
+                  <span className="text-muted-foreground">
+                    {agent.operations} ops
+                  </span>
+                )}
                 <span className="text-muted-foreground">
                   <FormattedDateTimeText date={agent.lastSeen} />
                 </span>

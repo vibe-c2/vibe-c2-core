@@ -25,7 +25,7 @@ export function AgentActionList({
         <BotIcon className="mx-auto mb-2 size-5" />
         {filtered
           ? "No activity matches these filters."
-          : "No agent has acted in this operation yet."}
+          : "None of your agents has done anything yet."}
       </div>
     )
   }
@@ -62,10 +62,14 @@ function ActionRow({ action }: { action: AgentActionFieldsFragment }) {
               write
             </span>
           )}
-          <span className="text-xs text-muted-foreground">
-            {action.agentName}
-            {action.owner ? ` (via ${action.owner.username})` : ""}
-          </span>
+          <span className="text-xs text-muted-foreground">{action.agentName}</span>
+          {/* The feed spans operations, so each row has to say which one it
+              acted in. Absent for calls that are not operation-scoped. */}
+          {action.operation && (
+            <span className="text-xs text-muted-foreground/70">
+              · {action.operation.name}
+            </span>
+          )}
         </div>
 
         {action.error && (

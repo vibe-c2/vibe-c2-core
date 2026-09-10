@@ -1,6 +1,6 @@
 "use client"
 
-import { useNavigate } from "react-router"
+import { Link, useNavigate } from "react-router"
 import { useTheme } from "next-themes"
 import {
   Avatar,
@@ -25,7 +25,7 @@ import {
   SidebarMenuItem,
   useSidebar,
 } from "@/components/ui/sidebar"
-import { BotIcon, ChevronsUpDownIcon, KeyIcon, LogOutIcon, MonitorIcon, MonitorSmartphoneIcon, MoonIcon, SunIcon, UserIcon } from "lucide-react"
+import { ActivityIcon, BotIcon, ChevronsUpDownIcon, KeyIcon, LogOutIcon, MonitorIcon, MonitorSmartphoneIcon, MoonIcon, SunIcon, UserIcon } from "lucide-react"
 import { useAuthStore } from "@/stores/auth"
 import { useSessionStore } from "@/stores/sessions"
 import { useAPIKeyStore } from "@/stores/api-keys"
@@ -139,6 +139,16 @@ export function NavUser({
             <DropdownMenuItem onClick={openAgentKeysDialog}>
               <BotIcon className="size-4" />
               Agent Keys
+            </DropdownMenuItem>
+            {/* A personal audit surface, like Sessions: what YOUR agents did,
+                across every operation. Not part of the operation navigation,
+                because it is not about any one operation and works without a
+                scoped one. */}
+            <DropdownMenuItem
+              render={<Link to="/agent-activity" />}
+            >
+              <ActivityIcon className="size-4" />
+              Agent Activity
             </DropdownMenuItem>
             <DropdownMenuSeparator />
             <DropdownMenuItem onClick={handleLogout}>

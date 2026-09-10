@@ -1,11 +1,9 @@
 import { useMemo, useState } from "react"
-import { Navigate } from "react-router"
 import { BotIcon } from "lucide-react"
-import { useScopedOperation } from "@/hooks/use-scoped-operation"
 import { usePageMetadata } from "@/hooks/use-page-metadata"
 import {
-  useAgentActions,
-  useAgentActivitySummary,
+  useMyAgentActions,
+  useMyAgentActivitySummary,
   type AgentActionFilters,
 } from "@/graphql/hooks/agent-actions"
 import { AgentActivityToolbar } from "@/components/agent-activity/agent-activity-toolbar"
@@ -13,45 +11,62 @@ import { AgentActionList } from "@/components/agent-activity/agent-action-list"
 import { Skeleton } from "@/components/ui/skeleton"
 
 /**
- * What the agents connected to this operation have actually been doing.
+ * What the operator's own agents have been doing — across every operation they
+ * touched.
  *
- * The timeline shows what changed. This shows every call, reads included —
- * which is the only place an agent reading the whole credential set leaves a
- * trace, because reading changes nothing. Without this page that record exists
- * but is reachable only from a database shell.
+ * Deliberately a personal page rather than an operation one. You delegate to a
+ * key, not to an engagement, and a key can reach several; making an operator
+ * visit each operation in turn to find out what they had authorized would be
+ * the opposite of an audit. Operation is a filter here, not the frame.
+ *
+ * It also needs no scoped operation to be useful, which is why it lives in the
+ * user menu next to sessions and keys rather than in the operation navigation.
  */
 export function AgentActivityPage() {
-  const scopedOperation = useScopedOperation()
-
   usePageMetadata({
     title: "Agent activity",
     icon: { kind: "lucide", component: BotIcon },
   })
 
-  if (!scopedOperation) {
-    return <Navigate to="/operations" replace />
-  }
-
-  return <AgentActivityPageInner operationId={scopedOperation.id} />
-}
-
-function AgentActivityPageInner({ operationId }: { operationId: string }) {
   const [filters, setFilters] = useState<AgentActionFilters>({})
 
-  const summary = useAgentActivitySummary(operationId)
-  const feed = useAgentActions(operationId, filters)
+  const summary = useMyAgentActivitySummary()
+  const feed = useMyAgentActions(filters)
 
   const actions = useMemo(
-    () => feed.data?.pages.flatMap((page) => page.agentActions) ?? [],
+    () => feed.data?.pages.flatMap((page) => page.myAgentActions) ?? [],
     [feed.data],
   )
 
-  const agents = summary.data?.agentActivitySummary ?? []
+  const agents = summary.data?.myAgentActivitySummary ?? []
+
+  // Operations are derived from what is on screen rather than fetched: the
+  // only ones worth filtering by are the ones an agent has actually touched.
+  const operations = useMemo(() => {
+    const seen = new Map<string, string>()
+    for (const action of actions) {
+      if (action.operation) seen.set(action.operation.id, action.operation.name)
+    }
+    return [...seen].map(([id, name]) => ({ id, name }))
+  }, [actions])
 
   return (
     <div className="flex h-full min-h-0 flex-col">
+      <header className="border-b px-4 py-3">
+        <h1 className="flex items-center gap-2 text-sm font-medium">
+          <BotIcon className="size-4 text-muted-foreground" />
+          Agent activity
+        </h1>
+        <p className="mt-0.5 text-xs text-muted-foreground">
+          Every call your agents have made, across all your operations. Reads
+          included — the operation timeline shows what they changed, this shows
+          what they looked at.
+        </p>
+      </header>
+
       <AgentActivityToolbar
         agents={agents}
+        operations={operations}
         filters={filters}
         onFiltersChange={setFilters}
         totalShown={actions.length}
@@ -72,6 +87,7 @@ function AgentActivityPageInner({ operationId }: { operationId: string }) {
             onLoadMore={() => feed.fetchNextPage()}
             filtered={
               !!filters.agentKeyId ||
+              !!filters.operationId ||
               !!filters.writesOnly ||
               !!filters.outcomes?.length
             }

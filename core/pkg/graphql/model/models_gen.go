@@ -33,6 +33,7 @@ type AgentActivitySummary struct {
 	AgentKeyID string `json:"agentKeyId"`
 	AgentName  string `json:"agentName"`
 	Actions    int    `json:"actions"`
+	Operations int    `json:"operations"`
 	LastSeen   string `json:"lastSeen"`
 }
 

@@ -79,9 +79,9 @@ type ComplexityRoot struct {
 		Error       func(childComplexity int) int
 		ID          func(childComplexity int) int
 		OccurredAt  func(childComplexity int) int
+		Operation   func(childComplexity int) int
 		OperationID func(childComplexity int) int
 		Outcome     func(childComplexity int) int
-		Owner       func(childComplexity int) int
 		Tool        func(childComplexity int) int
 		Write       func(childComplexity int) int
 	}
@@ -103,6 +103,7 @@ type ComplexityRoot struct {
 		AgentKeyID func(childComplexity int) int
 		AgentName  func(childComplexity int) int
 		LastSeen   func(childComplexity int) int
+		Operations func(childComplexity int) int
 	}
 
 	AgentKey struct {
@@ -426,8 +427,6 @@ type ComplexityRoot struct {
 	}
 
 	Query struct {
-		AgentActions                       func(childComplexity int, operationID string, agentKeyID *string, writesOnly *bool, outcomes []model.AgentActionOutcome, before *string, limit *int) int
-		AgentActivitySummary               func(childComplexity int, operationID string) int
 		Credential                         func(childComplexity int, id string) int
 		CredentialTags                     func(childComplexity int, operationID string) int
 		Credentials                        func(childComplexity int, operationID string, search *string, searchFields []model.CredentialSearchField, typeArg *models.CredentialType, tags []string, validOnly *bool, sortBy *model.CredentialSortField, sortDirection *model.SortDirection, first *int, after *string, last *int, before *string) int
@@ -439,6 +438,8 @@ type ComplexityRoot struct {
 		Me                                 func(childComplexity int) int
 		Modules                            func(childComplexity int, status []string) int
 		MyAPIKey                           func(childComplexity int) int
+		MyAgentActions                     func(childComplexity int, agentKeyID *string, operationID *string, writesOnly *bool, outcomes []model.AgentActionOutcome, before *string, limit *int) int
+		MyAgentActivitySummary             func(childComplexity int) int
 		MyAgentKeys                        func(childComplexity int) int
 		MyCredentialTags                   func(childComplexity int, operationIds []string) int
 		MyCredentials                      func(childComplexity int, operationIds []string, search *string, searchFields []model.CredentialSearchField, typeArg *models.CredentialType, tags []string, validOnly *bool, sortBy *model.CredentialSortField, sortDirection *model.SortDirection, first *int, after *string, last *int, before *string) int
@@ -805,9 +806,8 @@ type APIKeyResolver interface {
 type AgentActionResolver interface {
 	ID(ctx context.Context, obj *models.AgentAction) (string, error)
 	OperationID(ctx context.Context, obj *models.AgentAction) (*string, error)
+	Operation(ctx context.Context, obj *models.AgentAction) (*models.Operation, error)
 	AgentKeyID(ctx context.Context, obj *models.AgentAction) (string, error)
-
-	Owner(ctx context.Context, obj *models.AgentAction) (*models.User, error)
 
 	Outcome(ctx context.Context, obj *models.AgentAction) (model.AgentActionOutcome, error)
 	Error(ctx context.Context, obj *models.AgentAction) (*string, error)
@@ -962,8 +962,8 @@ type QueryResolver interface {
 	Operation(ctx context.Context, id string) (*models.Operation, error)
 	Operations(ctx context.Context, search *string, sortBy *model.OperationSortField, sortDirection *model.SortDirection, first *int, after *string, last *int, before *string) (*model.OperationConnection, error)
 	MyOperationRole(ctx context.Context, operationID string) (*models.OperationRole, error)
-	AgentActions(ctx context.Context, operationID string, agentKeyID *string, writesOnly *bool, outcomes []model.AgentActionOutcome, before *string, limit *int) ([]*models.AgentAction, error)
-	AgentActivitySummary(ctx context.Context, operationID string) ([]*model.AgentActivitySummary, error)
+	MyAgentActions(ctx context.Context, agentKeyID *string, operationID *string, writesOnly *bool, outcomes []model.AgentActionOutcome, before *string, limit *int) ([]*models.AgentAction, error)
+	MyAgentActivitySummary(ctx context.Context) ([]*model.AgentActivitySummary, error)
 	MyAgentKeys(ctx context.Context) ([]*models.AgentKey, error)
 	MyAPIKey(ctx context.Context) (*models.APIKey, error)
 	Credential(ctx context.Context, id string) (*models.Credential, error)
@@ -1222,6 +1222,12 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.AgentAction.OccurredAt(childComplexity), true
+	case "AgentAction.operation":
+		if e.ComplexityRoot.AgentAction.Operation == nil {
+			break
+		}
+
+		return e.ComplexityRoot.AgentAction.Operation(childComplexity), true
 	case "AgentAction.operationId":
 		if e.ComplexityRoot.AgentAction.OperationID == nil {
 			break
@@ -1234,12 +1240,6 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.AgentAction.Outcome(childComplexity), true
-	case "AgentAction.owner":
-		if e.ComplexityRoot.AgentAction.Owner == nil {
-			break
-		}
-
-		return e.ComplexityRoot.AgentAction.Owner(childComplexity), true
 	case "AgentAction.tool":
 		if e.ComplexityRoot.AgentAction.Tool == nil {
 			break
@@ -1332,6 +1332,12 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.AgentActivitySummary.LastSeen(childComplexity), true
+	case "AgentActivitySummary.operations":
+		if e.ComplexityRoot.AgentActivitySummary.Operations == nil {
+			break
+		}
+
+		return e.ComplexityRoot.AgentActivitySummary.Operations(childComplexity), true
 
 	case "AgentKey.allowWrites":
 		if e.ComplexityRoot.AgentKey.AllowWrites == nil {
@@ -3041,28 +3047,6 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 
 		return e.ComplexityRoot.PageInfo.StartCursor(childComplexity), true
 
-	case "Query.agentActions":
-		if e.ComplexityRoot.Query.AgentActions == nil {
-			break
-		}
-
-		args, err := ec.field_Query_agentActions_args(ctx, rawArgs)
-		if err != nil {
-			return 0, false
-		}
-
-		return e.ComplexityRoot.Query.AgentActions(childComplexity, args["operationId"].(string), args["agentKeyId"].(*string), args["writesOnly"].(*bool), args["outcomes"].([]model.AgentActionOutcome), args["before"].(*string), args["limit"].(*int)), true
-	case "Query.agentActivitySummary":
-		if e.ComplexityRoot.Query.AgentActivitySummary == nil {
-			break
-		}
-
-		args, err := ec.field_Query_agentActivitySummary_args(ctx, rawArgs)
-		if err != nil {
-			return 0, false
-		}
-
-		return e.ComplexityRoot.Query.AgentActivitySummary(childComplexity, args["operationId"].(string)), true
 	case "Query.credential":
 		if e.ComplexityRoot.Query.Credential == nil {
 			break
@@ -3175,6 +3159,23 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.Query.MyAPIKey(childComplexity), true
+	case "Query.myAgentActions":
+		if e.ComplexityRoot.Query.MyAgentActions == nil {
+			break
+		}
+
+		args, err := ec.field_Query_myAgentActions_args(ctx, rawArgs)
+		if err != nil {
+			return 0, false
+		}
+
+		return e.ComplexityRoot.Query.MyAgentActions(childComplexity, args["agentKeyId"].(*string), args["operationId"].(*string), args["writesOnly"].(*bool), args["outcomes"].([]model.AgentActionOutcome), args["before"].(*string), args["limit"].(*int)), true
+	case "Query.myAgentActivitySummary":
+		if e.ComplexityRoot.Query.MyAgentActivitySummary == nil {
+			break
+		}
+
+		return e.ComplexityRoot.Query.MyAgentActivitySummary(childComplexity), true
 	case "Query.myAgentKeys":
 		if e.ComplexityRoot.Query.MyAgentKeys == nil {
 			break
@@ -5054,26 +5055,30 @@ func newExecutionContext(
 
 var sources = []*ast.Source{
 	{Name: "../schema/agent_actions.graphql", Input: `# =============================================================================
-# Agent Actions — the durable record of what an agent did
+# Agent Actions — a personal audit trail
 # =============================================================================
 #
-# Every MCP tool call is recorded here, READS INCLUDED, and this is the query
-# behind the agent activity page.
+# Every MCP tool call is recorded, READS INCLUDED, and this is the query behind
+# the agent activity page.
+#
+# Scoped to the CALLER, not to an operation. The question this answers is "what
+# have my agents been doing" — across every engagement they touched. An
+# operator delegates to a key, not to an operation, so making them visit each
+# engagement in turn to find out what they had authorized would be the opposite
+# of an audit. Operation is a filter on top, not the frame.
 #
 # Reads matter as much as writes. The timeline shows what changed; only this
 # shows what an agent looked at — and an agent reading an operation's entire
 # credential set changes nothing, so it would otherwise leave no trace at all.
-# "The operator can see everything the agent does" is not satisfiable from the
-# timeline alone.
 #
 # Append-only: there is no mutation here, because an audit trail its own writer
 # can edit is not an audit trail.
 
 # How a tool call ended.
-#   ok      — it did what was asked
-#   refused — a scope, role, write-gate or rate-limit decision said no
-#   error   — something broke
-# refused is separate from error on purpose: a run full of refusals means the
+#   OK      — it did what was asked
+#   REFUSED — a scope, role, write-gate or rate-limit decision said no
+#   ERROR   — something broke
+# REFUSED is separate from ERROR on purpose: a run full of refusals means the
 # key is scoped tighter than the work being asked of it, which is a
 # configuration answer, not a fault.
 enum AgentActionOutcome {
@@ -5084,16 +5089,19 @@ enum AgentActionOutcome {
 
 type AgentAction {
   id: ID!
+  # Null for calls that are not operation-scoped, such as list_operations.
   operationId: ID
+  # The operation this call acted in, resolved for display. Null when the call
+  # was not operation-scoped, or when the operation has since been deleted —
+  # the action still happened, so the row survives it.
+  operation: Operation
   agentKeyId: ID!
   # Captured when the call was made, so the row still reads correctly after the
   # key is renamed or deleted.
   agentName: String!
-  # The user the agent was acting for.
-  owner: User
   tool: String!
-  # True when the call changed something. Writes also appear on the timeline;
-  # reads live only here.
+  # True when the call changed something. Writes also appear on the operation
+  # timeline; reads live only here.
   write: Boolean!
   outcome: AgentActionOutcome!
   # Present only when the call failed or was refused.
@@ -5104,32 +5112,34 @@ type AgentAction {
   occurredAt: String!
 }
 
-# One agent that has acted in an operation. Lets the UI offer a filter without
-# paging every action first.
+# One of the caller's agents and what it has been up to.
 type AgentActivitySummary {
   agentKeyId: ID!
   agentName: String!
   actions: Int!
+  # How many distinct operations this agent has touched. An agent working in
+  # one is expected; the same key active across five is worth a look.
+  operations: Int!
   lastSeen: String!
 }
 
 extend type Query {
-  # Recent agent activity in an operation, newest first. Viewer+ in the
-  # operation — anyone who can see the work can see what an agent did to it.
+  # What the caller's own agents have done, newest first, across every
+  # operation. Any authenticated user may read their own trail; there is no
+  # way to read anyone else's.
   #
   # ` + "`" + `before` + "`" + ` pages backwards: pass the oldest occurredAt you have.
-  agentActions(
-    operationId: ID!
+  myAgentActions(
     agentKeyId: ID
+    operationId: ID
     writesOnly: Boolean
     outcomes: [AgentActionOutcome!]
     before: String
     limit: Int = 50
-  ): [AgentAction!]! @hasPermission(permission: "operation:member")
+  ): [AgentAction!]! @hasPermission(permission: "*")
 
-  # Which agents have acted in this operation.
-  agentActivitySummary(operationId: ID!): [AgentActivitySummary!]!
-    @hasPermission(permission: "operation:member")
+  # The caller's agents that have actually done something.
+  myAgentActivitySummary: [AgentActivitySummary!]! @hasPermission(permission: "*")
 }
 `, BuiltIn: false},
 	{Name: "../schema/agent_activity.graphql", Input: `# =============================================================================
@@ -8739,53 +8749,6 @@ func (ec *executionContext) field_Query___type_args(ctx context.Context, rawArgs
 	return args, nil
 }
 
-func (ec *executionContext) field_Query_agentActions_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
-	var err error
-	args := map[string]any{}
-	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "operationId", ec.unmarshalNID2string)
-	if err != nil {
-		return nil, err
-	}
-	args["operationId"] = arg0
-	arg1, err := graphql.ProcessArgField(ctx, rawArgs, "agentKeyId", ec.unmarshalOID2ᚖstring)
-	if err != nil {
-		return nil, err
-	}
-	args["agentKeyId"] = arg1
-	arg2, err := graphql.ProcessArgField(ctx, rawArgs, "writesOnly", ec.unmarshalOBoolean2ᚖbool)
-	if err != nil {
-		return nil, err
-	}
-	args["writesOnly"] = arg2
-	arg3, err := graphql.ProcessArgField(ctx, rawArgs, "outcomes", ec.unmarshalOAgentActionOutcome2ᚕgithubᚗcomᚋvibeᚑc2ᚋvibeᚑc2ᚑcoreᚋcoreᚋpkgᚋgraphqlᚋmodelᚐAgentActionOutcomeᚄ)
-	if err != nil {
-		return nil, err
-	}
-	args["outcomes"] = arg3
-	arg4, err := graphql.ProcessArgField(ctx, rawArgs, "before", ec.unmarshalOString2ᚖstring)
-	if err != nil {
-		return nil, err
-	}
-	args["before"] = arg4
-	arg5, err := graphql.ProcessArgField(ctx, rawArgs, "limit", ec.unmarshalOInt2ᚖint)
-	if err != nil {
-		return nil, err
-	}
-	args["limit"] = arg5
-	return args, nil
-}
-
-func (ec *executionContext) field_Query_agentActivitySummary_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
-	var err error
-	args := map[string]any{}
-	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "operationId", ec.unmarshalNID2string)
-	if err != nil {
-		return nil, err
-	}
-	args["operationId"] = arg0
-	return args, nil
-}
-
 func (ec *executionContext) field_Query_credentialTags_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
 	var err error
 	args := map[string]any{}
@@ -9012,6 +8975,42 @@ func (ec *executionContext) field_Query_modules_args(ctx context.Context, rawArg
 		return nil, err
 	}
 	args["status"] = arg0
+	return args, nil
+}
+
+func (ec *executionContext) field_Query_myAgentActions_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
+	var err error
+	args := map[string]any{}
+	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "agentKeyId", ec.unmarshalOID2ᚖstring)
+	if err != nil {
+		return nil, err
+	}
+	args["agentKeyId"] = arg0
+	arg1, err := graphql.ProcessArgField(ctx, rawArgs, "operationId", ec.unmarshalOID2ᚖstring)
+	if err != nil {
+		return nil, err
+	}
+	args["operationId"] = arg1
+	arg2, err := graphql.ProcessArgField(ctx, rawArgs, "writesOnly", ec.unmarshalOBoolean2ᚖbool)
+	if err != nil {
+		return nil, err
+	}
+	args["writesOnly"] = arg2
+	arg3, err := graphql.ProcessArgField(ctx, rawArgs, "outcomes", ec.unmarshalOAgentActionOutcome2ᚕgithubᚗcomᚋvibeᚑc2ᚋvibeᚑc2ᚑcoreᚋcoreᚋpkgᚋgraphqlᚋmodelᚐAgentActionOutcomeᚄ)
+	if err != nil {
+		return nil, err
+	}
+	args["outcomes"] = arg3
+	arg4, err := graphql.ProcessArgField(ctx, rawArgs, "before", ec.unmarshalOString2ᚖstring)
+	if err != nil {
+		return nil, err
+	}
+	args["before"] = arg4
+	arg5, err := graphql.ProcessArgField(ctx, rawArgs, "limit", ec.unmarshalOInt2ᚖint)
+	if err != nil {
+		return nil, err
+	}
+	args["limit"] = arg5
 	return args, nil
 }
 
@@ -10408,6 +10407,49 @@ func (ec *executionContext) fieldContext_AgentAction_operationId(_ context.Conte
 	return fc, nil
 }
 
+func (ec *executionContext) _AgentAction_operation(ctx context.Context, field graphql.CollectedField, obj *models.AgentAction) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_AgentAction_operation,
+		func(ctx context.Context) (any, error) {
+			return ec.Resolvers.AgentAction().Operation(ctx, obj)
+		},
+		nil,
+		ec.marshalOOperation2ᚖgithubᚗcomᚋvibeᚑc2ᚋvibeᚑc2ᚑcoreᚋcoreᚋpkgᚋmodelsᚐOperation,
+		true,
+		false,
+	)
+}
+
+func (ec *executionContext) fieldContext_AgentAction_operation(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "AgentAction",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "id":
+				return ec.fieldContext_Operation_id(ctx, field)
+			case "name":
+				return ec.fieldContext_Operation_name(ctx, field)
+			case "description":
+				return ec.fieldContext_Operation_description(ctx, field)
+			case "members":
+				return ec.fieldContext_Operation_members(ctx, field)
+			case "createdAt":
+				return ec.fieldContext_Operation_createdAt(ctx, field)
+			case "updatedAt":
+				return ec.fieldContext_Operation_updatedAt(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type Operation", field.Name)
+		},
+	}
+	return fc, nil
+}
+
 func (ec *executionContext) _AgentAction_agentKeyId(ctx context.Context, field graphql.CollectedField, obj *models.AgentAction) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
@@ -10461,51 +10503,6 @@ func (ec *executionContext) fieldContext_AgentAction_agentName(_ context.Context
 		IsResolver: false,
 		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
 			return nil, errors.New("field of type String does not have child fields")
-		},
-	}
-	return fc, nil
-}
-
-func (ec *executionContext) _AgentAction_owner(ctx context.Context, field graphql.CollectedField, obj *models.AgentAction) (ret graphql.Marshaler) {
-	return graphql.ResolveField(
-		ctx,
-		ec.OperationContext,
-		field,
-		ec.fieldContext_AgentAction_owner,
-		func(ctx context.Context) (any, error) {
-			return ec.Resolvers.AgentAction().Owner(ctx, obj)
-		},
-		nil,
-		ec.marshalOUser2ᚖgithubᚗcomᚋvibeᚑc2ᚋvibeᚑc2ᚑcoreᚋcoreᚋpkgᚋmodelsᚐUser,
-		true,
-		false,
-	)
-}
-
-func (ec *executionContext) fieldContext_AgentAction_owner(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
-	fc = &graphql.FieldContext{
-		Object:     "AgentAction",
-		Field:      field,
-		IsMethod:   true,
-		IsResolver: true,
-		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
-			switch field.Name {
-			case "id":
-				return ec.fieldContext_User_id(ctx, field)
-			case "username":
-				return ec.fieldContext_User_username(ctx, field)
-			case "roles":
-				return ec.fieldContext_User_roles(ctx, field)
-			case "active":
-				return ec.fieldContext_User_active(ctx, field)
-			case "createdAt":
-				return ec.fieldContext_User_createdAt(ctx, field)
-			case "updatedAt":
-				return ec.fieldContext_User_updatedAt(ctx, field)
-			case "hiddenIdentities":
-				return ec.fieldContext_User_hiddenIdentities(ctx, field)
-			}
-			return nil, fmt.Errorf("no field named %q was found under type User", field.Name)
 		},
 	}
 	return fc, nil
@@ -11050,6 +11047,35 @@ func (ec *executionContext) _AgentActivitySummary_actions(ctx context.Context, f
 }
 
 func (ec *executionContext) fieldContext_AgentActivitySummary_actions(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "AgentActivitySummary",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Int does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _AgentActivitySummary_operations(ctx context.Context, field graphql.CollectedField, obj *model.AgentActivitySummary) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_AgentActivitySummary_operations,
+		func(ctx context.Context) (any, error) {
+			return obj.Operations, nil
+		},
+		nil,
+		ec.marshalNInt2int,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_AgentActivitySummary_operations(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
 	fc = &graphql.FieldContext{
 		Object:     "AgentActivitySummary",
 		Field:      field,
@@ -22445,21 +22471,21 @@ func (ec *executionContext) fieldContext_Query_myOperationRole(ctx context.Conte
 	return fc, nil
 }
 
-func (ec *executionContext) _Query_agentActions(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
+func (ec *executionContext) _Query_myAgentActions(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
 		ec.OperationContext,
 		field,
-		ec.fieldContext_Query_agentActions,
+		ec.fieldContext_Query_myAgentActions,
 		func(ctx context.Context) (any, error) {
 			fc := graphql.GetFieldContext(ctx)
-			return ec.Resolvers.Query().AgentActions(ctx, fc.Args["operationId"].(string), fc.Args["agentKeyId"].(*string), fc.Args["writesOnly"].(*bool), fc.Args["outcomes"].([]model.AgentActionOutcome), fc.Args["before"].(*string), fc.Args["limit"].(*int))
+			return ec.Resolvers.Query().MyAgentActions(ctx, fc.Args["agentKeyId"].(*string), fc.Args["operationId"].(*string), fc.Args["writesOnly"].(*bool), fc.Args["outcomes"].([]model.AgentActionOutcome), fc.Args["before"].(*string), fc.Args["limit"].(*int))
 		},
 		func(ctx context.Context, next graphql.Resolver) graphql.Resolver {
 			directive0 := next
 
 			directive1 := func(ctx context.Context) (any, error) {
-				permission, err := ec.unmarshalNString2string(ctx, "operation:member")
+				permission, err := ec.unmarshalNString2string(ctx, "*")
 				if err != nil {
 					var zeroVal []*models.AgentAction
 					return zeroVal, err
@@ -22480,7 +22506,7 @@ func (ec *executionContext) _Query_agentActions(ctx context.Context, field graph
 	)
 }
 
-func (ec *executionContext) fieldContext_Query_agentActions(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+func (ec *executionContext) fieldContext_Query_myAgentActions(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
 	fc = &graphql.FieldContext{
 		Object:     "Query",
 		Field:      field,
@@ -22492,12 +22518,12 @@ func (ec *executionContext) fieldContext_Query_agentActions(ctx context.Context,
 				return ec.fieldContext_AgentAction_id(ctx, field)
 			case "operationId":
 				return ec.fieldContext_AgentAction_operationId(ctx, field)
+			case "operation":
+				return ec.fieldContext_AgentAction_operation(ctx, field)
 			case "agentKeyId":
 				return ec.fieldContext_AgentAction_agentKeyId(ctx, field)
 			case "agentName":
 				return ec.fieldContext_AgentAction_agentName(ctx, field)
-			case "owner":
-				return ec.fieldContext_AgentAction_owner(ctx, field)
 			case "tool":
 				return ec.fieldContext_AgentAction_tool(ctx, field)
 			case "write":
@@ -22523,28 +22549,27 @@ func (ec *executionContext) fieldContext_Query_agentActions(ctx context.Context,
 		}
 	}()
 	ctx = graphql.WithFieldContext(ctx, fc)
-	if fc.Args, err = ec.field_Query_agentActions_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
+	if fc.Args, err = ec.field_Query_myAgentActions_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
 		ec.Error(ctx, err)
 		return fc, err
 	}
 	return fc, nil
 }
 
-func (ec *executionContext) _Query_agentActivitySummary(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
+func (ec *executionContext) _Query_myAgentActivitySummary(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
 		ec.OperationContext,
 		field,
-		ec.fieldContext_Query_agentActivitySummary,
+		ec.fieldContext_Query_myAgentActivitySummary,
 		func(ctx context.Context) (any, error) {
-			fc := graphql.GetFieldContext(ctx)
-			return ec.Resolvers.Query().AgentActivitySummary(ctx, fc.Args["operationId"].(string))
+			return ec.Resolvers.Query().MyAgentActivitySummary(ctx)
 		},
 		func(ctx context.Context, next graphql.Resolver) graphql.Resolver {
 			directive0 := next
 
 			directive1 := func(ctx context.Context) (any, error) {
-				permission, err := ec.unmarshalNString2string(ctx, "operation:member")
+				permission, err := ec.unmarshalNString2string(ctx, "*")
 				if err != nil {
 					var zeroVal []*model.AgentActivitySummary
 					return zeroVal, err
@@ -22565,7 +22590,7 @@ func (ec *executionContext) _Query_agentActivitySummary(ctx context.Context, fie
 	)
 }
 
-func (ec *executionContext) fieldContext_Query_agentActivitySummary(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+func (ec *executionContext) fieldContext_Query_myAgentActivitySummary(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
 	fc = &graphql.FieldContext{
 		Object:     "Query",
 		Field:      field,
@@ -22579,22 +22604,13 @@ func (ec *executionContext) fieldContext_Query_agentActivitySummary(ctx context.
 				return ec.fieldContext_AgentActivitySummary_agentName(ctx, field)
 			case "actions":
 				return ec.fieldContext_AgentActivitySummary_actions(ctx, field)
+			case "operations":
+				return ec.fieldContext_AgentActivitySummary_operations(ctx, field)
 			case "lastSeen":
 				return ec.fieldContext_AgentActivitySummary_lastSeen(ctx, field)
 			}
 			return nil, fmt.Errorf("no field named %q was found under type AgentActivitySummary", field.Name)
 		},
-	}
-	defer func() {
-		if r := recover(); r != nil {
-			err = ec.Recover(ctx, r)
-			ec.Error(ctx, err)
-		}
-	}()
-	ctx = graphql.WithFieldContext(ctx, fc)
-	if fc.Args, err = ec.field_Query_agentActivitySummary_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
-		ec.Error(ctx, err)
-		return fc, err
 	}
 	return fc, nil
 }
@@ -37294,6 +37310,39 @@ func (ec *executionContext) _AgentAction(ctx context.Context, sel ast.SelectionS
 			}
 
 			out.Concurrently(i, func(ctx context.Context) graphql.Marshaler { return innerFunc(ctx, out) })
+		case "operation":
+			field := field
+
+			innerFunc := func(ctx context.Context, _ *graphql.FieldSet) (res graphql.Marshaler) {
+				defer func() {
+					if r := recover(); r != nil {
+						ec.Error(ctx, ec.Recover(ctx, r))
+					}
+				}()
+				res = ec._AgentAction_operation(ctx, field, obj)
+				return res
+			}
+
+			if field.Deferrable != nil {
+				dfs, ok := deferred[field.Deferrable.Label]
+				di := 0
+				if ok {
+					dfs.AddField(field)
+					di = len(dfs.Values) - 1
+				} else {
+					dfs = graphql.NewFieldSet([]graphql.CollectedField{field})
+					deferred[field.Deferrable.Label] = dfs
+				}
+				dfs.Concurrently(di, func(ctx context.Context) graphql.Marshaler {
+					return innerFunc(ctx, dfs)
+				})
+
+				// don't run the out.Concurrently() call below
+				out.Values[i] = graphql.Null
+				continue
+			}
+
+			out.Concurrently(i, func(ctx context.Context) graphql.Marshaler { return innerFunc(ctx, out) })
 		case "agentKeyId":
 			field := field
 
@@ -37335,39 +37384,6 @@ func (ec *executionContext) _AgentAction(ctx context.Context, sel ast.SelectionS
 			if out.Values[i] == graphql.Null {
 				atomic.AddUint32(&out.Invalids, 1)
 			}
-		case "owner":
-			field := field
-
-			innerFunc := func(ctx context.Context, _ *graphql.FieldSet) (res graphql.Marshaler) {
-				defer func() {
-					if r := recover(); r != nil {
-						ec.Error(ctx, ec.Recover(ctx, r))
-					}
-				}()
-				res = ec._AgentAction_owner(ctx, field, obj)
-				return res
-			}
-
-			if field.Deferrable != nil {
-				dfs, ok := deferred[field.Deferrable.Label]
-				di := 0
-				if ok {
-					dfs.AddField(field)
-					di = len(dfs.Values) - 1
-				} else {
-					dfs = graphql.NewFieldSet([]graphql.CollectedField{field})
-					deferred[field.Deferrable.Label] = dfs
-				}
-				dfs.Concurrently(di, func(ctx context.Context) graphql.Marshaler {
-					return innerFunc(ctx, dfs)
-				})
-
-				// don't run the out.Concurrently() call below
-				out.Values[i] = graphql.Null
-				continue
-			}
-
-			out.Concurrently(i, func(ctx context.Context) graphql.Marshaler { return innerFunc(ctx, out) })
 		case "tool":
 			out.Values[i] = ec._AgentAction_tool(ctx, field, obj)
 			if out.Values[i] == graphql.Null {
@@ -37649,6 +37665,11 @@ func (ec *executionContext) _AgentActivitySummary(ctx context.Context, sel ast.S
 			}
 		case "actions":
 			out.Values[i] = ec._AgentActivitySummary_actions(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "operations":
+			out.Values[i] = ec._AgentActivitySummary_operations(ctx, field, obj)
 			if out.Values[i] == graphql.Null {
 				out.Invalids++
 			}
@@ -41514,7 +41535,7 @@ func (ec *executionContext) _Query(ctx context.Context, sel ast.SelectionSet) gr
 			}
 
 			out.Concurrently(i, func(ctx context.Context) graphql.Marshaler { return rrm(innerCtx) })
-		case "agentActions":
+		case "myAgentActions":
 			field := field
 
 			innerFunc := func(ctx context.Context, fs *graphql.FieldSet) (res graphql.Marshaler) {
@@ -41523,7 +41544,7 @@ func (ec *executionContext) _Query(ctx context.Context, sel ast.SelectionSet) gr
 						ec.Error(ctx, ec.Recover(ctx, r))
 					}
 				}()
-				res = ec._Query_agentActions(ctx, field)
+				res = ec._Query_myAgentActions(ctx, field)
 				if res == graphql.Null {
 					atomic.AddUint32(&fs.Invalids, 1)
 				}
@@ -41536,7 +41557,7 @@ func (ec *executionContext) _Query(ctx context.Context, sel ast.SelectionSet) gr
 			}
 
 			out.Concurrently(i, func(ctx context.Context) graphql.Marshaler { return rrm(innerCtx) })
-		case "agentActivitySummary":
+		case "myAgentActivitySummary":
 			field := field
 
 			innerFunc := func(ctx context.Context, fs *graphql.FieldSet) (res graphql.Marshaler) {
@@ -41545,7 +41566,7 @@ func (ec *executionContext) _Query(ctx context.Context, sel ast.SelectionSet) gr
 						ec.Error(ctx, ec.Recover(ctx, r))
 					}
 				}()
-				res = ec._Query_agentActivitySummary(ctx, field)
+				res = ec._Query_myAgentActivitySummary(ctx, field)
 				if res == graphql.Null {
 					atomic.AddUint32(&fs.Invalids, 1)
 				}

@@ -23,14 +23,14 @@ func (r *agentActionResolver) OperationID(ctx context.Context, obj *models.Agent
 	return r.AgentActionResolver.OperationIDField(ctx, obj)
 }
 
+// Operation is the resolver for the operation field.
+func (r *agentActionResolver) Operation(ctx context.Context, obj *models.AgentAction) (*models.Operation, error) {
+	return r.AgentActionResolver.Operation(ctx, obj)
+}
+
 // AgentKeyID is the resolver for the agentKeyId field.
 func (r *agentActionResolver) AgentKeyID(ctx context.Context, obj *models.AgentAction) (string, error) {
 	return r.AgentActionResolver.AgentKeyIDField(ctx, obj)
-}
-
-// Owner is the resolver for the owner field.
-func (r *agentActionResolver) Owner(ctx context.Context, obj *models.AgentAction) (*models.User, error) {
-	return r.AgentActionResolver.Owner(ctx, obj)
 }
 
 // Outcome is the resolver for the outcome field.
@@ -53,14 +53,14 @@ func (r *agentActionResolver) OccurredAt(ctx context.Context, obj *models.AgentA
 	return r.AgentActionResolver.OccurredAt(ctx, obj)
 }
 
-// AgentActions is the resolver for the agentActions field.
-func (r *queryResolver) AgentActions(ctx context.Context, operationID string, agentKeyID *string, writesOnly *bool, outcomes []model.AgentActionOutcome, before *string, limit *int) ([]*models.AgentAction, error) {
-	return r.AgentActionResolver.AgentActions(ctx, operationID, agentKeyID, writesOnly, outcomes, before, limit)
+// MyAgentActions is the resolver for the myAgentActions field.
+func (r *queryResolver) MyAgentActions(ctx context.Context, agentKeyID *string, operationID *string, writesOnly *bool, outcomes []model.AgentActionOutcome, before *string, limit *int) ([]*models.AgentAction, error) {
+	return r.AgentActionResolver.MyAgentActions(ctx, agentKeyID, operationID, writesOnly, outcomes, before, limit)
 }
 
-// AgentActivitySummary is the resolver for the agentActivitySummary field.
-func (r *queryResolver) AgentActivitySummary(ctx context.Context, operationID string) ([]*model.AgentActivitySummary, error) {
-	return r.AgentActionResolver.AgentActivitySummary(ctx, operationID)
+// MyAgentActivitySummary is the resolver for the myAgentActivitySummary field.
+func (r *queryResolver) MyAgentActivitySummary(ctx context.Context) ([]*model.AgentActivitySummary, error) {
+	return r.AgentActionResolver.MyAgentActivitySummary(ctx)
 }
 
 // AgentAction returns generated.AgentActionResolver implementation.

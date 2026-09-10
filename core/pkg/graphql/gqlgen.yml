@@ -426,8 +426,8 @@ models:
         resolver: true         # *uuid.UUID -> *ID
       agentKeyId:
         resolver: true         # uuid.UUID -> ID
-      owner:
-        resolver: true         # OwnerUserID -> User (fetched)
+      operation:
+        resolver: true         # OperationID -> Operation (fetched, for a cross-operation feed)
       outcome:
         resolver: true         # models enum -> GraphQL enum
       error:

@@ -6,7 +6,6 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/vibe-c2/vibe-c2-core/core/pkg/authorization"
 	"github.com/vibe-c2/vibe-c2-core/core/pkg/graphql/model"
 	"github.com/vibe-c2/vibe-c2-core/core/pkg/models"
 	"github.com/vibe-c2/vibe-c2-core/core/pkg/repository"
@@ -22,15 +21,15 @@ const maxAgentActionLimit = 200
 // Read-only by design. An audit trail its own writer can edit is not an audit
 // trail, so there is no mutation surface here and none should be added.
 type IAgentActionResolver interface {
-	AgentActions(ctx context.Context, operationID string, agentKeyID *string, writesOnly *bool,
+	MyAgentActions(ctx context.Context, agentKeyID *string, operationID *string, writesOnly *bool,
 		outcomes []model.AgentActionOutcome, before *string, limit *int) ([]*models.AgentAction, error)
-	AgentActivitySummary(ctx context.Context, operationID string) ([]*model.AgentActivitySummary, error)
+	MyAgentActivitySummary(ctx context.Context) ([]*model.AgentActivitySummary, error)
 
 	// Field resolvers
 	ID(ctx context.Context, obj *models.AgentAction) (string, error)
 	OperationIDField(ctx context.Context, obj *models.AgentAction) (*string, error)
+	Operation(ctx context.Context, obj *models.AgentAction) (*models.Operation, error)
 	AgentKeyIDField(ctx context.Context, obj *models.AgentAction) (string, error)
-	Owner(ctx context.Context, obj *models.AgentAction) (*models.User, error)
 	Outcome(ctx context.Context, obj *models.AgentAction) (model.AgentActionOutcome, error)
 	Error(ctx context.Context, obj *models.AgentAction) (*string, error)
 	DurationMs(ctx context.Context, obj *models.AgentAction) (int, error)
@@ -51,34 +50,18 @@ func NewAgentActionResolver(
 	return &agentActionResolver{repo: repo, opsRepo: opsRepo, userRepo: userRepo}
 }
 
-// authorize gates on the OPERATION, not on key ownership. Anyone who can see
-// the work an agent did can see that the agent did it — hiding one operator's
-// agent from their teammates would undermine the point of recording it.
-func (r *agentActionResolver) authorize(ctx context.Context, operationID string) (uuid.UUID, error) {
-	opID, err := uuid.Parse(operationID)
-	if err != nil {
-		return uuid.Nil, fmt.Errorf("invalid operation ID")
-	}
-	op, err := r.opsRepo.FindByID(ctx, opID)
-	if err != nil {
-		return uuid.Nil, fmt.Errorf("operation not found")
-	}
-	if err := authorization.AuthorizeOperationRole(ctx, &op, models.OperationRoleViewer); err != nil {
-		return uuid.Nil, err
-	}
-	return opID, nil
-}
-
-func (r *agentActionResolver) AgentActions(
-	ctx context.Context, operationID string, agentKeyID *string, writesOnly *bool,
+func (r *agentActionResolver) MyAgentActions(
+	ctx context.Context, agentKeyID *string, operationID *string, writesOnly *bool,
 	outcomes []model.AgentActionOutcome, before *string, limit *int,
 ) ([]*models.AgentAction, error) {
-	opID, err := r.authorize(ctx, operationID)
+	// The owner comes from the token, never from an argument. There is
+	// deliberately no way to ask for somebody else's trail.
+	uid, err := callerUserID(ctx)
 	if err != nil {
 		return nil, err
 	}
 
-	filter := repository.AgentActionFilter{OperationID: opID}
+	filter := repository.AgentActionFilter{OwnerUserID: uid}
 
 	if agentKeyID != nil && *agentKeyID != "" {
 		keyID, err := uuid.Parse(*agentKeyID)
@@ -86,6 +69,17 @@ func (r *agentActionResolver) AgentActions(
 			return nil, fmt.Errorf("invalid agent key ID")
 		}
 		filter.AgentKeyID = &keyID
+	}
+	if operationID != nil && *operationID != "" {
+		opID, err := uuid.Parse(*operationID)
+		if err != nil {
+			return nil, fmt.Errorf("invalid operation ID")
+		}
+		// No membership check: these are the caller's own actions. If they
+		// have since lost access to the operation, what their agent did there
+		// while they had it is still theirs to review — that is the point of
+		// keeping a record.
+		filter.OperationID = &opID
 	}
 	if writesOnly != nil {
 		filter.WritesOnly = *writesOnly
@@ -121,24 +115,25 @@ func (r *agentActionResolver) AgentActions(
 	return out, nil
 }
 
-func (r *agentActionResolver) AgentActivitySummary(ctx context.Context, operationID string) ([]*model.AgentActivitySummary, error) {
-	opID, err := r.authorize(ctx, operationID)
+func (r *agentActionResolver) MyAgentActivitySummary(ctx context.Context) ([]*model.AgentActivitySummary, error) {
+	uid, err := callerUserID(ctx)
 	if err != nil {
 		return nil, err
 	}
 
-	summaries, err := r.repo.DistinctAgents(ctx, opID)
+	summaries, err := r.repo.DistinctAgents(ctx, uid)
 	if err != nil {
 		return nil, fmt.Errorf("failed to read agent summary: %w", err)
 	}
 
 	out := make([]*model.AgentActivitySummary, 0, len(summaries))
-	for _, s := range summaries {
+	for _, sum := range summaries {
 		out = append(out, &model.AgentActivitySummary{
-			AgentKeyID: s.AgentKeyID.String(),
-			AgentName:  s.AgentName,
-			Actions:    s.Actions,
-			LastSeen:   s.LastSeen.UTC().Format(time.RFC3339),
+			AgentKeyID: sum.AgentKeyID.String(),
+			AgentName:  sum.AgentName,
+			Actions:    sum.Actions,
+			Operations: sum.Operations,
+			LastSeen:   sum.LastSeen.UTC().Format(time.RFC3339),
 		})
 	}
 	return out, nil
@@ -162,17 +157,18 @@ func (r *agentActionResolver) AgentKeyIDField(_ context.Context, obj *models.Age
 	return obj.AgentKeyID.String(), nil
 }
 
-// Owner resolves the human the agent was acting for. Best-effort: a deleted
-// account leaves the row intact but unattributed rather than failing the read.
-func (r *agentActionResolver) Owner(ctx context.Context, obj *models.AgentAction) (*models.User, error) {
-	if obj.OwnerUserID == uuid.Nil {
+// Operation resolves the engagement a call acted in, so a feed spanning many
+// of them can name each row. Best-effort: an operation deleted since the call
+// leaves the action intact but unlabelled, because the action still happened.
+func (r *agentActionResolver) Operation(ctx context.Context, obj *models.AgentAction) (*models.Operation, error) {
+	if obj.OperationID == nil {
 		return nil, nil
 	}
-	user, err := r.userRepo.FindByID(ctx, obj.OwnerUserID)
+	op, err := r.opsRepo.FindByID(ctx, *obj.OperationID)
 	if err != nil {
 		return nil, nil
 	}
-	return &user, nil
+	return &op, nil
 }
 
 func (r *agentActionResolver) Outcome(_ context.Context, obj *models.AgentAction) (model.AgentActionOutcome, error) {

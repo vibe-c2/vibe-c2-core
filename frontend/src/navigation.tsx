@@ -1,6 +1,5 @@
 import {
   BlocksIcon,
-  BotIcon,
   BookOpenIcon,
   FileCode2Icon,
   KanbanSquareIcon,
@@ -65,12 +64,6 @@ export const navigationOperationItems: NavigationItem[] = [
     url: "/timeline",
     permission: null,
     icon: RouteIcon,
-  },
-  {
-    title: "Agent activity",
-    url: "/agent-activity",
-    permission: null,
-    icon: BotIcon,
   },
 ];
 

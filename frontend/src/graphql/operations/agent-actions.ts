@@ -12,28 +12,28 @@ export const AgentActionFields = graphql(`
     arguments
     durationMs
     occurredAt
-    owner {
+    operation {
       id
-      username
+      name
     }
   }
 `)
 
-// The audit trail behind the agent activity page. Reads are included, which is
-// the point: the timeline shows what an agent changed, this shows what it
-// looked at.
-export const AgentActionsQuery = graphql(`
-  query AgentActions(
-    $operationId: ID!
+// The caller's own audit trail, across every operation their agents touched.
+// Reads are included, which is the point: the timeline shows what an agent
+// changed, this shows what it looked at.
+export const MyAgentActionsQuery = graphql(`
+  query MyAgentActions(
     $agentKeyId: ID
+    $operationId: ID
     $writesOnly: Boolean
     $outcomes: [AgentActionOutcome!]
     $before: String
     $limit: Int
   ) {
-    agentActions(
-      operationId: $operationId
+    myAgentActions(
       agentKeyId: $agentKeyId
+      operationId: $operationId
       writesOnly: $writesOnly
       outcomes: $outcomes
       before: $before
@@ -44,12 +44,13 @@ export const AgentActionsQuery = graphql(`
   }
 `)
 
-export const AgentActivitySummaryQuery = graphql(`
-  query AgentActivitySummary($operationId: ID!) {
-    agentActivitySummary(operationId: $operationId) {
+export const MyAgentActivitySummaryQuery = graphql(`
+  query MyAgentActivitySummary {
+    myAgentActivitySummary {
       agentKeyId
       agentName
       actions
+      operations
       lastSeen
     }
   }
