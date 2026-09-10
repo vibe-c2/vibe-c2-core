@@ -37,11 +37,20 @@ operator's team already agreed on — what sections a host write-up has, what a
 finding needs to record — and starting from one keeps your pages consistent
 with theirs instead of introducing a second house style.
 
+The listing spans two places: the operation's own templates, and the shared
+ones in the Public wiki, which come back marked `shared`. Public is where a
+team keeps its house templates, so it is often the only place there are any.
+
 `create_wiki_document_from_template` copies that structure and content into a
-new page; fill in the sections afterwards with `append_wiki_section` or
-`update_wiki_document`. When no template fits, `create_wiki_document` is
-correct — an operation with none is common, and the tool says so rather than
-leaving you guessing.
+new page — including from a shared template into your operation, which is the
+normal way to use one. Fill in the sections afterwards with
+`append_wiki_section` or `update_wiki_document`. When no template fits,
+`create_wiki_document` is correct; the tool says so rather than leaving you
+guessing.
+
+Instantiating a shared template is routine. *Editing* one is not: it is what
+everybody else starts from, and `set_wiki_template` on a Public page changes
+their next page too.
 
 Templates themselves are shared conventions, so treat them as the operator's to
 change:

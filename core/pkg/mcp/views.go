@@ -149,6 +149,16 @@ type wikiDocView struct {
 	IsTemplate bool `json:"isTemplate,omitempty"`
 }
 
+// wikiTemplateView is a template in a listing that spans two operations —
+// the operator's own and the shared Public wiki. Without the marker an agent
+// cannot tell a house template from one belonging to this engagement, which
+// matters: instantiating a shared one is normal, editing it changes what
+// everybody else starts from.
+type wikiTemplateView struct {
+	wikiDocView
+	Shared bool `json:"shared,omitempty"`
+}
+
 type wikiDocDetailView struct {
 	wikiDocView
 	Content   string `json:"content"`

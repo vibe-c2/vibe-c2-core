@@ -4,7 +4,10 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/google/uuid"
+
 	"github.com/modelcontextprotocol/go-sdk/mcp"
+	"github.com/vibe-c2/vibe-c2-core/core/pkg/graphql/gqlctx"
 	"github.com/vibe-c2/vibe-c2-core/core/pkg/graphql/model"
 	"github.com/vibe-c2/vibe-c2-core/core/pkg/models"
 	"github.com/vibe-c2/vibe-c2-core/core/pkg/wiki"
@@ -82,9 +85,10 @@ func registerWikiTools(s *Server) {
 
 	register(s, &mcp.Tool{
 		Name: "list_wiki_templates",
-		Description: "The operation's reusable page templates. Check here before writing a " +
-			"page from scratch — a template carries the structure the operator expects, and " +
-			"starting from one keeps your pages consistent with theirs.",
+		Description: "Reusable page templates you can start from — the operation's own, plus the " +
+			"shared ones in the Public wiki, marked `shared`. Check here before writing a page " +
+			"from scratch: a template carries the structure the operator expects, and starting " +
+			"from one keeps your pages consistent with theirs.",
 	}, readTool, handleListWikiTemplates)
 
 	register(s, &mcp.Tool{
@@ -200,21 +204,9 @@ func handleListWikiTemplates(ctx context.Context, s *Server, args listWikiTempla
 		return toolResult{}, err
 	}
 
-	templates, err := s.deps.WikiDocs.WikiTemplates(ctx, opID.String())
+	views, notes, err := s.collectTemplates(ctx, opID)
 	if err != nil {
-		return toolResult{}, fmt.Errorf("failed to list templates: %w", err)
-	}
-
-	views := make([]wikiDocView, 0, len(templates))
-	for _, doc := range templates {
-		views = append(views, toWikiDocView(doc))
-	}
-
-	notes := []string{}
-	if len(views) == 0 {
-		// Otherwise an agent reads an empty list as "templates are broken"
-		// rather than "this operation has none", and asks about it.
-		notes = append(notes, "This operation has no templates. Write the page directly.")
+		return toolResult{}, err
 	}
 
 	result, err := newPage(views, "", notes...)
@@ -226,6 +218,91 @@ func handleListWikiTemplates(ctx context.Context, s *Server, args listWikiTempla
 		OperationID: &opID,
 		Summary:     fmt.Sprintf("listed %d wiki templates", len(views)),
 	}, nil
+}
+
+// collectTemplates gathers the templates this key can actually start a page
+// from: the operation's own, plus the shared ones in the Public wiki.
+//
+// Public is where house templates live — it is readable by every
+// authenticated caller and shared across every operation — but it is a
+// separate operation, so a single-operation listing hid it completely. That
+// left the tool saying "this operation has no templates" to an operator
+// looking straight at a list of them, and it was inconsistent with
+// create_wiki_document_from_template, which has always accepted a template
+// from another operation.
+func (s *Server) collectTemplates(ctx context.Context, opID uuid.UUID) ([]wikiTemplateView, []string, error) {
+	templates, err := s.deps.WikiDocs.WikiTemplates(ctx, opID.String())
+	if err != nil {
+		return nil, nil, fmt.Errorf("failed to list templates: %w", err)
+	}
+
+	views := make([]wikiTemplateView, 0, len(templates))
+	for _, doc := range templates {
+		views = append(views, wikiTemplateView{wikiDocView: toWikiDocView(doc)})
+	}
+
+	var notes []string
+	shared, sharedNote := s.publicTemplates(ctx, opID)
+	views = append(views, shared...)
+	if sharedNote != "" {
+		notes = append(notes, sharedNote)
+	}
+
+	if len(views) == 0 {
+		// Otherwise an agent reads an empty list as "templates are broken"
+		// rather than "there are none to start from", and asks about it.
+		notes = append(notes, "No templates are available to you. Write the page directly.")
+	}
+	return views, notes, nil
+}
+
+// publicTemplateScope decides whether a listing for opID should reach into the
+// Public wiki, and what to say when it must not. Split out from the fetch so
+// the decision — the part that was wrong — is testable on its own.
+//
+// An empty note with include=false means "nothing to add and nothing to
+// explain": the caller already listed the Public templates itself.
+func publicTemplateScope(opID uuid.UUID, agent *gqlctx.AgentInfo, agentErr error) (include bool, note string) {
+	if models.IsPublicOperation(opID) {
+		return false, ""
+	}
+	if agentErr != nil || agent == nil || !agent.AllowsOperation(models.PublicOperationID) {
+		return false, "Shared templates in the Public wiki are outside this key's operation scope, " +
+			"so they are not listed."
+	}
+	return true, ""
+}
+
+// publicTemplates returns the shared templates, or nothing plus an
+// explanation when this key cannot reach the Public wiki.
+//
+// A key with an explicit scope list that omits Public is refused there — the
+// scope check runs before the implicit-operator rule — so this must not be
+// fatal to the listing. It is said out loud rather than skipped silently:
+// an agent that sees fewer templates than the operator describes should know
+// why, instead of concluding they are gone.
+func (s *Server) publicTemplates(ctx context.Context, opID uuid.UUID) ([]wikiTemplateView, string) {
+	agent, agentErr := agentFromContext(ctx)
+	include, note := publicTemplateScope(opID, agent, agentErr)
+	if !include {
+		return nil, note
+	}
+
+	if _, err := s.authorizeOperation(ctx, models.PublicOperationID, models.OperationRoleViewer); err != nil {
+		return nil, "Shared templates in the Public wiki are not readable by this key, " +
+			"so they are not listed."
+	}
+
+	docs, err := s.deps.WikiDocs.WikiTemplates(ctx, models.PublicOperationID.String())
+	if err != nil {
+		return nil, "Shared templates in the Public wiki could not be read, so they are not listed."
+	}
+
+	views := make([]wikiTemplateView, 0, len(docs))
+	for _, doc := range docs {
+		views = append(views, wikiTemplateView{wikiDocView: toWikiDocView(doc), Shared: true})
+	}
+	return views, ""
 }
 
 func handleCreateFromTemplate(ctx context.Context, s *Server, args createFromTemplateArgs) (toolResult, error) {
