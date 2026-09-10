@@ -22,6 +22,25 @@ type listWikiTreeArgs struct {
 	OperationID string `json:"operation_id,omitempty" jsonschema:"Operation whose page tree to list. Defaults to whatever the operator currently has open."`
 }
 
+type listWikiTemplatesArgs struct {
+	OperationID string `json:"operation_id,omitempty" jsonschema:"Operation whose templates to list. Defaults to whatever the operator currently has open."`
+}
+
+type createFromTemplateArgs struct {
+	IdempotencyKey
+	TemplateID  string `json:"template_id"            jsonschema:"The template to instantiate, from list_wiki_templates."`
+	OperationID string `json:"operation_id,omitempty" jsonschema:"Operation to create the page in. Defaults to whatever the operator currently has open. A template from one operation can be instantiated into another."`
+	Title       string `json:"title,omitempty"        jsonschema:"Title for the new page. Defaults to the template's own title."`
+	ParentID    string `json:"parent_id,omitempty"    jsonschema:"Create as a child of this page."`
+	visualIdentity
+}
+
+type setWikiTemplateArgs struct {
+	IdempotencyKey
+	DocumentID string `json:"document_id"  jsonschema:"The page to mark or unmark."`
+	IsTemplate bool   `json:"is_template"  jsonschema:"True to make this page a reusable template, false to turn it back into an ordinary page."`
+}
+
 type getWikiDocumentArgs struct {
 	DocumentID string `json:"document_id" jsonschema:"The page's id, from search_wiki or list_wiki_tree."`
 }
@@ -60,6 +79,26 @@ func registerWikiTools(s *Server) {
 		Description: "The operation's page tree, titles and parents only. Cheaper than " +
 			"searching when you want to see how the engagement notes are organized.",
 	}, readTool, handleListWikiTree)
+
+	register(s, &mcp.Tool{
+		Name: "list_wiki_templates",
+		Description: "The operation's reusable page templates. Check here before writing a " +
+			"page from scratch — a template carries the structure the operator expects, and " +
+			"starting from one keeps your pages consistent with theirs.",
+	}, readTool, handleListWikiTemplates)
+
+	register(s, &mcp.Tool{
+		Name: "create_wiki_document_from_template",
+		Description: "Create a page from a template, copying its structure and content. " +
+			"Prefer this over create_wiki_document whenever a template fits the job.",
+	}, writeTool, handleCreateFromTemplate)
+
+	register(s, &mcp.Tool{
+		Name: "set_wiki_template",
+		Description: "Mark a page as a reusable template, or turn it back into an ordinary " +
+			"page. Templates are a shared convention the operator's whole team works from, so " +
+			"propose this rather than deciding it yourself.",
+	}, writeTool, handleSetWikiTemplate)
 
 	register(s, &mcp.Tool{
 		Name:        "get_wiki_document",
@@ -149,6 +188,118 @@ func handleListWikiTree(ctx context.Context, s *Server, args listWikiTreeArgs) (
 		Payload:     result,
 		OperationID: &opID,
 		Summary:     fmt.Sprintf("listed %d wiki pages", len(views)),
+	}, nil
+}
+
+func handleListWikiTemplates(ctx context.Context, s *Server, args listWikiTemplatesArgs) (toolResult, error) {
+	opID, err := s.resolveOperation(ctx, args.OperationID)
+	if err != nil {
+		return toolResult{}, err
+	}
+	if _, err := s.authorizeOperation(ctx, opID, models.OperationRoleViewer); err != nil {
+		return toolResult{}, err
+	}
+
+	templates, err := s.deps.WikiDocs.WikiTemplates(ctx, opID.String())
+	if err != nil {
+		return toolResult{}, fmt.Errorf("failed to list templates: %w", err)
+	}
+
+	views := make([]wikiDocView, 0, len(templates))
+	for _, doc := range templates {
+		views = append(views, toWikiDocView(doc))
+	}
+
+	notes := []string{}
+	if len(views) == 0 {
+		// Otherwise an agent reads an empty list as "templates are broken"
+		// rather than "this operation has none", and asks about it.
+		notes = append(notes, "This operation has no templates. Write the page directly.")
+	}
+
+	result, err := newPage(views, "", notes...)
+	if err != nil {
+		return toolResult{}, err
+	}
+	return toolResult{
+		Payload:     result,
+		OperationID: &opID,
+		Summary:     fmt.Sprintf("listed %d wiki templates", len(views)),
+	}, nil
+}
+
+func handleCreateFromTemplate(ctx context.Context, s *Server, args createFromTemplateArgs) (toolResult, error) {
+	opID, err := s.resolveOperation(ctx, args.OperationID)
+	if err != nil {
+		return toolResult{}, err
+	}
+	if _, err := s.authorizeOperation(ctx, opID, models.OperationRoleOperator); err != nil {
+		return toolResult{}, err
+	}
+	if err := args.validate(); err != nil {
+		return toolResult{}, err
+	}
+
+	// The template may live in a different operation, so it gets its own
+	// check. The resolver authorizes both sides too; doing it here as well
+	// means the agent's scope list and role ceiling apply to the source, not
+	// just the destination — a template is content, and reading one the key
+	// has no business reading would leak it into the new page.
+	template, err := s.deps.WikiDocs.WikiDocument(ctx, args.TemplateID)
+	if err != nil {
+		return toolResult{}, fmt.Errorf("template not found")
+	}
+	if _, err := s.authorizeOperation(ctx, template.OperationID, models.OperationRoleViewer); err != nil {
+		return toolResult{}, err
+	}
+	if !template.IsTemplate {
+		return toolResult{}, refuse(
+			"%q is an ordinary page, not a template. Use list_wiki_templates to see what is "+
+				"available, or create_wiki_document to write a page directly.", template.Title)
+	}
+
+	emoji, icon, color := args.apply()
+	doc, err := s.deps.WikiDocs.InstantiateTemplate(ctx, args.TemplateID, opID.String(),
+		optionalString(args.ParentID), optionalString(args.Title), emoji, icon, color)
+	if err != nil {
+		return toolResult{}, fmt.Errorf("failed to create the page from the template: %w", err)
+	}
+
+	return toolResult{
+		Payload:     toWikiDocView(doc),
+		OperationID: &opID,
+		SubjectID:   doc.DocumentID,
+		SubjectKind: models.SubjectKindWikiDocument,
+		SubjectName: doc.Title,
+		Summary:     fmt.Sprintf("created %s from template %s", doc.Title, template.Title),
+	}, nil
+}
+
+func handleSetWikiTemplate(ctx context.Context, s *Server, args setWikiTemplateArgs) (toolResult, error) {
+	doc, err := s.deps.WikiDocs.WikiDocument(ctx, args.DocumentID)
+	if err != nil {
+		return toolResult{}, fmt.Errorf("wiki page not found")
+	}
+	if _, err := s.authorizeOperation(ctx, doc.OperationID, models.OperationRoleOperator); err != nil {
+		return toolResult{}, err
+	}
+
+	updated, err := s.deps.WikiDocs.SetWikiDocumentTemplate(ctx, args.DocumentID, args.IsTemplate)
+	if err != nil {
+		return toolResult{}, fmt.Errorf("failed to change the template flag: %w", err)
+	}
+
+	verb := "unmarked as a template"
+	if args.IsTemplate {
+		verb = "marked as a template"
+	}
+	return toolResult{
+		Payload:     toWikiDocView(updated),
+		OperationID: &doc.OperationID,
+		SubjectID:   doc.DocumentID,
+		SubjectKind: models.SubjectKindWikiDocument,
+		SubjectName: doc.Title,
+		Summary:     fmt.Sprintf("%s %s", doc.Title, verb),
 	}, nil
 }
 

@@ -193,6 +193,7 @@ func TestServer_ToolSurface(t *testing.T) {
 		"assign_task_to_me", "unassign_task_from_me",
 		"add_task_wiki_reference",
 		"search_wiki", "list_wiki_tree", "get_wiki_document",
+		"list_wiki_templates", "create_wiki_document_from_template", "set_wiki_template",
 		"create_wiki_document", "append_wiki_section", "update_wiki_document",
 		"get_timeline", "create_timeline_event",
 		"get_user_focus",

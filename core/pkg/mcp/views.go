@@ -128,6 +128,11 @@ type wikiDocView struct {
 	Title    string `json:"title"`
 	ParentID string `json:"parentId,omitempty"`
 	Depth    int    `json:"depth,omitempty"`
+	// IsTemplate matters before editing: a template is a shared convention the
+	// operator's team writes from, and rewriting one silently changes every
+	// page made from it afterwards. Without this an agent cannot tell one from
+	// an ordinary page.
+	IsTemplate bool `json:"isTemplate,omitempty"`
 }
 
 type wikiDocDetailView struct {
@@ -238,7 +243,7 @@ func toTaskView(t *models.Task) taskView {
 }
 
 func toWikiDocView(d *models.WikiDocument) wikiDocView {
-	view := wikiDocView{ID: d.DocumentID.String(), Title: d.Title}
+	view := wikiDocView{ID: d.DocumentID.String(), Title: d.Title, IsTemplate: d.IsTemplate}
 	if d.ParentDocumentID != nil {
 		view.ParentID = d.ParentDocumentID.String()
 	}

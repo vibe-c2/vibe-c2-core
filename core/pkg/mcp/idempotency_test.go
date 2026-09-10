@@ -150,6 +150,8 @@ func TestIdempotency_EveryWriteToolAcceptsAKey(t *testing.T) {
 		taskAssignmentArgs{},
 		changeTaskStageArgs{},
 		createWikiDocumentArgs{},
+		createFromTemplateArgs{},
+		setWikiTemplateArgs{},
 		appendWikiSectionArgs{},
 		updateWikiDocumentArgs{},
 		createTimelineEventArgs{},

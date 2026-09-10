@@ -30,6 +30,29 @@ Findings hold the data; the wiki explains it. Both, not one.
 Then write the page that says what it means: which hosts a credential reaches,
 what that implies, what you would do next.
 
+## Before writing a page from scratch
+
+Check `list_wiki_templates` first. A template carries the structure the
+operator's team already agreed on — what sections a host write-up has, what a
+finding needs to record — and starting from one keeps your pages consistent
+with theirs instead of introducing a second house style.
+
+`create_wiki_document_from_template` copies that structure and content into a
+new page; fill in the sections afterwards with `append_wiki_section` or
+`update_wiki_document`. When no template fits, `create_wiki_document` is
+correct — an operation with none is common, and the tool says so rather than
+leaving you guessing.
+
+Templates themselves are shared conventions, so treat them as the operator's to
+change:
+
+- Pages carry `isTemplate`. Check it before editing. Rewriting a template
+  silently changes every page made from it afterwards, which is rarely what
+  anyone asked for.
+- `set_wiki_template` exists, but propose it rather than deciding alone.
+  Promoting your own page to a template is a claim about how the whole team
+  should work.
+
 ## Giving a page an icon
 
 The default is deliberate: leave `emoji` and `icon` unset and the page gets an

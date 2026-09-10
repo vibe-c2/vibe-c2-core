@@ -62,13 +62,30 @@ func handleListOperations(ctx context.Context, s *Server, _ listOperationsArgs) 
 		return toolResult{}, fmt.Errorf("failed to list operations: %w", err)
 	}
 
-	views := make([]operationView, 0, len(ops))
+	views := make([]operationView, 0, len(ops)+1)
 	for i := range ops {
 		op := &ops[i]
 		if !agent.AllowsOperation(op.OperationID) {
 			continue
 		}
 		views = append(views, toOperationView(op, cappedRoleFor(auth, op)))
+	}
+
+	// The Public operation is synthetic: nobody is a member, so it never comes
+	// back from a membership query and an agent had no way to learn it exists.
+	// It was reachable the whole time — every authenticated caller is an
+	// implicit operator there — which is the worst combination: usable, and
+	// undiscoverable except by being handed the id.
+	//
+	// Listed only when this key could actually act in it, so the list never
+	// advertises something the next call would refuse. A key with an explicit
+	// scope list that omits Public is refused there, since the scope check runs
+	// before the implicit-operator rule.
+	if agent.AllowsOperation(models.PublicOperationID) {
+		public := models.SynthesizePublicOperation()
+		view := toOperationView(&public, cappedRoleFor(auth, &public))
+		view.Description = "Shared across every operation. Anyone authenticated can read and write here."
+		views = append(views, view)
 	}
 
 	notes := []string{}

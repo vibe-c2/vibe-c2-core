@@ -311,3 +311,39 @@ func TestSkill_KeepsItsReferencePointers(t *testing.T) {
 		t.Error("the skill-only markers are visible in SKILL.md")
 	}
 }
+
+// The Public operation is reachable by every authenticated caller and appears
+// in no membership query, so an agent can only learn it exists from the guide
+// or from list_operations. It was usable and undiscoverable for a while, which
+// is the worst of both.
+func TestGuide_MentionsThePublicOperation(t *testing.T) {
+	s := New(Deps{Logger: zap.NewNop()})
+	guide := s.GuideText()
+
+	if !strings.Contains(guide, "Public") {
+		t.Error("the guide never mentions the Public operation, which an agent " +
+			"cannot otherwise discover")
+	}
+	// Reachable is not the same as appropriate; the guide has to say what it
+	// is for, or an agent will file target-specific notes in a shared space.
+	if !strings.Contains(guide, "outlive") {
+		t.Error("the guide mentions Public without saying what belongs there")
+	}
+}
+
+// Templates are a shared convention. An agent that cannot see them writes a
+// second house style; one that edits them changes everyone's pages.
+func TestGuide_CoversTemplates(t *testing.T) {
+	s := New(Deps{Logger: zap.NewNop()})
+	guide := s.GuideText()
+
+	for _, want := range []string{
+		"list_wiki_templates",
+		"create_wiki_document_from_template",
+		"isTemplate",
+	} {
+		if !strings.Contains(guide, want) {
+			t.Errorf("the guide does not cover %q", want)
+		}
+	}
+}
