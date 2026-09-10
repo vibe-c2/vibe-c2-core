@@ -211,14 +211,127 @@ func TestSkillIconExamplesAreAllValid(t *testing.T) {
 		section = section[:next+10]
 	}
 
-	names := regexp.MustCompile("`([A-Z][A-Za-z0-9]+)`").FindAllStringSubmatch(section, -1)
+	// Both namespaces: PascalCase concept icons and si:-prefixed brand slugs.
+	// Checking only the first would have let a wrong brand slug through, and
+	// brands are the easier of the two to get wrong — si:windows looks
+	// entirely plausible and does not exist.
+	pattern := regexp.MustCompile("`(" + SimpleIconPrefix + "[a-z0-9._-]+|[A-Z][A-Za-z0-9]+)`")
+	names := pattern.FindAllStringSubmatch(section, -1)
 	if len(names) == 0 {
 		t.Fatal("found no icon examples in the guide's icon section; this check needs updating")
 	}
 
+	var sawBrand bool
 	for _, m := range names {
+		if strings.HasPrefix(m[1], SimpleIconPrefix) {
+			sawBrand = true
+		}
 		if err := validateIcon(m[1]); err != nil {
 			t.Errorf("the guide suggests icon %q, which the server refuses", m[1])
+		}
+	}
+	if !sawBrand {
+		t.Error("the guide's icon section names no brand logos; either it stopped " +
+			"documenting them or this check is no longer matching them")
+	}
+}
+
+func TestValidateIcon_BrandLogos(t *testing.T) {
+	t.Run("accepts a curated brand slug", func(t *testing.T) {
+		for _, name := range []string{"si:linux", "si:docker", "si:kubernetes", "si:nginx"} {
+			if err := validateIcon(name); err != nil {
+				t.Errorf("validateIcon(%q) = %v, want nil", name, err)
+			}
+		}
+	})
+
+	t.Run("refuses an uncurated brand", func(t *testing.T) {
+		// simple-icons has no Windows logo, which is worth failing loudly on:
+		// most targets in this domain are Windows, so it is the brand an agent
+		// is most likely to reach for and not find.
+		err := validateIcon("si:windows")
+		if err == nil {
+			t.Fatal("si:windows was accepted; it would store and never render")
+		}
+		if !isRefusal(err) {
+			t.Errorf("should be a refusal: %v", err)
+		}
+	})
+
+	t.Run("a brand slug is not measured against the lucide palette", func(t *testing.T) {
+		// Dispatching on the prefix matters: without it "si:linux" would be
+		// looked up among PascalCase names and refused for the wrong reason,
+		// telling the agent to use PascalCase when the real answer is that the
+		// brand is fine.
+		err := validateIcon("si:notabrandatall")
+		if err == nil {
+			t.Fatal("an invented brand was accepted")
+		}
+		if strings.Contains(err.Error(), "PascalCase") {
+			t.Errorf("a bad brand slug was reported as a lucide problem: %v", err)
+		}
+		if !strings.Contains(err.Error(), "simple-icons") {
+			t.Errorf("the refusal should name the namespace: %v", err)
+		}
+	})
+
+	t.Run("the bare prefix is refused", func(t *testing.T) {
+		if err := validateIcon("si:"); err == nil {
+			t.Fatal("an empty brand slug was accepted")
+		}
+	})
+}
+
+// Same guard as iconExamples: the refusal must not suggest a slug the palette
+// does not have. The first draft offered "si:windows".
+func TestSimpleIconExamplesAreAllValid(t *testing.T) {
+	for _, name := range simpleIconExamples {
+		if err := validateIcon(name); err != nil {
+			t.Errorf("the refusal suggests %q, which is not in the palette", name)
+		}
+	}
+}
+
+// The brand palette mirrors the client's curated groups, and drifts the same
+// way the lucide one would.
+func TestSimpleIconPaletteMatchesTheFrontendCatalog(t *testing.T) {
+	source, err := os.ReadFile("../../../frontend/src/components/wiki/simple-icon-catalog.ts")
+	if err != nil {
+		t.Skipf("frontend catalog not readable from here (%v); skipping the drift check", err)
+	}
+
+	catalog := string(source)
+	start := strings.Index(catalog, "export const SIMPLE_ICON_CATALOG")
+	end := strings.Index(catalog, "export const CURATED_SIMPLE_SLUGS")
+	if start < 0 || end < 0 || end < start {
+		t.Fatal("could not find SIMPLE_ICON_CATALOG; the drift check needs updating")
+	}
+
+	// Only the first argument of si(...) — the rest are search keywords, not
+	// slugs, and treating them as slugs would let a keyword pass validation.
+	slugRe := regexp.MustCompile(`\bsi\("([a-z0-9][a-z0-9._-]*)"`)
+	frontend := map[string]bool{}
+	for _, m := range slugRe.FindAllStringSubmatch(catalog[start:end], -1) {
+		frontend[m[1]] = true
+	}
+	if len(frontend) == 0 {
+		t.Fatal("parsed no brand slugs; the drift check needs updating")
+	}
+
+	ours := map[string]bool{}
+	for _, slug := range curatedSimpleIconSlugs {
+		ours[slug] = true
+	}
+
+	for slug := range frontend {
+		if !ours[slug] {
+			t.Errorf("%q is in the operator's brand picker but not in the agent palette", slug)
+		}
+	}
+	for slug := range ours {
+		if !frontend[slug] {
+			t.Errorf("%q is in the agent palette but not in the picker — "+
+				"an agent could store it and it would never render", slug)
 		}
 	}
 }

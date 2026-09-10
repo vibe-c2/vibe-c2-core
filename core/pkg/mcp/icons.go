@@ -65,6 +65,37 @@ var curatedIcons = []string{
 	"Scissors", "Printer", "Palette", "Paintbrush", "Download", "Swords",
 }
 
+// Brand logos, under the "si:" prefix — simple-icons slugs, lowercase, e.g.
+// "si:linux" or "si:docker". A separate namespace from the lucide palette
+// above, and the client dispatches on the prefix.
+//
+// Same curated-subset reasoning: this mirrors the groups the operator's picker
+// offers rather than all ~3000 brands, and those four groups happen to be
+// exactly what a security engagement names — operating systems, cloud and
+// infrastructure, dev and data, network and security. A wiki page about a
+// Windows domain controller or a Kubernetes cluster can now say so at a
+// glance; the long tail of consumer brands would only be noise here.
+var curatedSimpleIconSlugs = []string{
+	// Operating systems
+	"linux", "ubuntu", "debian", "archlinux", "fedora", "redhat",
+	"centos", "rockylinux", "almalinux", "kalilinux", "alpinelinux", "opensuse",
+	"gentoo", "freebsd", "openbsd", "android", "apple", "macos",
+	"ios",
+	// Cloud & infrastructure
+	"googlecloud", "docker", "kubernetes", "nginx", "apache", "cloudflare",
+	"digitalocean", "vmware", "proxmox", "openstack", "terraform", "ansible",
+	// Dev & data
+	"git", "github", "gitlab", "python", "go", "rust",
+	"javascript", "typescript", "react", "nodedotjs", "postgresql", "mysql",
+	"mongodb", "redis",
+	// Network & security
+	"wireshark", "torproject", "openvpn", "wireguard", "tailscale", "gnubash",
+	"cisco", "mikrotik", "fortinet",
+}
+
+// SimpleIconPrefix marks a brand logo. Must match the client's constant.
+const SimpleIconPrefix = "si:"
+
 // AdaptiveIconName is the reserved default: the client renders it as a page or
 // folder glyph depending on whether the document has children. Not a lucide
 // name, so it has to be permitted explicitly.
@@ -80,11 +111,24 @@ var iconSet = func() map[string]struct{} {
 	return set
 }()
 
+// simpleIconSet is the brand-logo lookup, keyed on the bare slug.
+var simpleIconSet = func() map[string]struct{} {
+	set := make(map[string]struct{}, len(curatedSimpleIconSlugs))
+	for _, slug := range curatedSimpleIconSlugs {
+		set[slug] = struct{}{}
+	}
+	return set
+}()
+
 // iconExamples are the names the refusal below suggests. Held as a variable
 // so a test can assert every one is actually in the palette — the first draft
 // of that message offered "KeyRound", which the palette does not have, so the
 // error would have handed a model a name it was about to be refused for.
 var iconExamples = []string{"FileText", "Server", "Key", "ShieldAlert", "Network"}
+
+// simpleIconExamples are suggested when a brand slug is wrong. Tested against
+// the palette for the same reason as iconExamples.
+var simpleIconExamples = []string{"si:linux", "si:docker", "si:kubernetes", "si:python"}
 
 // validateIcon checks a caller-supplied icon name.
 //
@@ -96,6 +140,20 @@ func validateIcon(name string) error {
 	if name == "" {
 		return nil
 	}
+	// Brand logos are a separate namespace with its own lookup. Dispatching on
+	// the prefix here, as the client does, keeps a brand slug from being
+	// measured against the lucide palette and refused for the wrong reason.
+	if slug, ok := strings.CutPrefix(name, SimpleIconPrefix); ok {
+		if _, known := simpleIconSet[slug]; known {
+			return nil
+		}
+		return refuse(
+			"brand icon %q is not one this platform has. Brand icons are simple-icons slugs "+
+				"under the %q prefix, such as %s. Use a palette icon or an emoji if the brand "+
+				"you want is not there.",
+			name, SimpleIconPrefix, strings.Join(quoteAll(simpleIconExamples), ", "))
+	}
+
 	if _, ok := iconSet[name]; ok {
 		return nil
 	}
@@ -119,7 +177,7 @@ func quoteAll(names []string) []string {
 // mutual exclusivity, stay identical wherever an agent meets it.
 type visualIdentity struct {
 	Emoji string `json:"emoji,omitempty" jsonschema:"A single emoji to show beside this, e.g. 🔑 or 🖥️. Use this when nothing in the icon palette fits — an emoji always works."`
-	Icon  string `json:"icon,omitempty"  jsonschema:"A PascalCase lucide icon name from the platform's palette, e.g. FileText, Server, Key, ShieldAlert, Network. Mutually exclusive with emoji. Unknown names are refused rather than silently ignored. Leave this and emoji unset on a wiki page unless the page genuinely warrants its own glyph — the default adapts to a page or folder icon on its own."`
+	Icon  string `json:"icon,omitempty"  jsonschema:"An icon name. Either a PascalCase lucide name from the platform's palette (FileText, Server, Key, ShieldAlert, Network) or a brand logo as an si:-prefixed simple-icons slug (si:linux, si:docker, si:kubernetes, si:python). Mutually exclusive with emoji. Unknown names are refused rather than silently ignored. Leave this and emoji unset on a wiki page unless the page genuinely warrants its own glyph — the default adapts to a page or folder icon on its own."`
 	Color string `json:"color,omitempty" jsonschema:"Hex colour for the icon, e.g. #22c55e. Applies to icon, not emoji."`
 }
 

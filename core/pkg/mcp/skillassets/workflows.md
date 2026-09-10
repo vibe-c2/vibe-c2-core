@@ -36,17 +36,28 @@ The default is deliberate: leave `emoji` and `icon` unset and the page gets an
 adaptive icon, which shows as a page and becomes a folder on its own once it has
 children. Most pages want exactly that.
 
-When a page genuinely warrants its own glyph, you have two options and they are
-mutually exclusive:
+When a page genuinely warrants its own glyph, `icon` and `emoji` are mutually
+exclusive and `icon` takes one of two forms:
 
-- **`icon`** — a PascalCase name from the platform's palette, the same set the
-  operator's own picker offers: `FileText`, `Folder`, `Server`, `Database`,
-  `Network`, `Key`, `Lock`, `Shield`, `ShieldAlert`, `Bug`, `Terminal`,
-  `Users`, `Target`, `Flag`, `Search`, `Wrench`, `Zap`, and so on. A name
-  outside the palette is refused rather than quietly ignored, so if you are
-  unsure, use an emoji instead.
+- **A concept icon** — a PascalCase name from the platform's palette, the same
+  set the operator's own picker offers: `FileText`, `Folder`, `Server`,
+  `Database`, `Network`, `Key`, `Lock`, `Shield`, `ShieldAlert`, `Bug`,
+  `Terminal`, `Users`, `Target`, `Flag`, `Search`, `Wrench`, `Zap`, and so on.
+- **A brand logo** — a simple-icons slug behind an `si:` prefix, lowercase:
+  `si:linux`, `si:ubuntu`, `si:debian`, `si:kalilinux`, `si:docker`,
+  `si:kubernetes`, `si:nginx`, `si:postgresql`, `si:python`, `si:git`,
+  `si:wireshark`, `si:openvpn`, `si:cisco`. Reach for one when a page is
+  genuinely about that technology — a host running Alpine, notes on a
+  Kubernetes cluster.
+
+  There is **no Windows logo**: simple-icons does not ship one. For a Windows
+  host use a concept icon such as `Server`, or an emoji.
+
 - **`emoji`** — any single emoji. Always valid, and the right escape hatch when
-  nothing in the palette fits.
+  nothing in either palette fits.
+
+A name outside the palettes is refused rather than quietly ignored, so if you
+are unsure, use an emoji.
 
 `color` is a hex value that tints an icon. It does nothing to an emoji.
 
