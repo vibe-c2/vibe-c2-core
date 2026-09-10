@@ -56,6 +56,17 @@ type AgentAction {
   occurredAt: String!
 }
 
+type AgentActionEdge {
+  node: AgentAction!
+  cursor: String!
+}
+
+type AgentActionConnection {
+  edges: [AgentActionEdge!]!
+  pageInfo: PageInfo!
+  totalCount: Int!
+}
+
 # One of the caller's agents and what it has been up to.
 type AgentActivitySummary {
   agentKeyId: ID!
@@ -78,10 +89,23 @@ extend type Query {
     operationId: ID
     writesOnly: Boolean
     outcomes: [AgentActionOutcome!]
+    first: Int = 50
+    after: String
+    last: Int
     before: String
-    limit: Int = 50
-  ): [AgentAction!]! @hasPermission(permission: "*")
+  ): AgentActionConnection! @hasPermission(permission: "*")
 
   # The caller's agents that have actually done something.
   myAgentActivitySummary: [AgentActivitySummary!]! @hasPermission(permission: "*")
+}
+
+extend type Subscription {
+  # Fires whenever any of the caller's own agents makes a call — reads
+  # included. The page invalidates its list on each event, the same way the
+  # user and operation tables do, so it stays current without a reload.
+  #
+  # Owner-scoped rather than operation-scoped: this feeds a personal audit
+  # page that spans engagements, and an operator watching it should see an
+  # agent working in any of them.
+  myAgentActionOccurred: AgentActivityEvent! @hasPermission(permission: "*")
 }

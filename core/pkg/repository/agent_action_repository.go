@@ -8,6 +8,7 @@ import (
 	opts "github.com/qiniu/qmgo/options"
 	"github.com/vibe-c2/vibe-c2-core/core/pkg/database"
 	"github.com/vibe-c2/vibe-c2-core/core/pkg/models"
+	"github.com/vibe-c2/vibe-c2-core/core/pkg/pagination"
 	"go.mongodb.org/mongo-driver/v2/bson"
 )
 
@@ -23,8 +24,13 @@ type IAgentActionRepository interface {
 	ListByOperation(ctx context.Context, operationID uuid.UUID, limit int64) ([]models.AgentAction, error)
 	ListByOwner(ctx context.Context, ownerUserID uuid.UUID, limit int64) ([]models.AgentAction, error)
 
-	// Query is the read path behind the agent activity page.
-	Query(ctx context.Context, f AgentActionFilter, limit int64) ([]models.AgentAction, error)
+	// QueryWithCursor is the read path behind the agent activity page. Keyset
+	// pagination on occurred_at, matching every other list in the app — an
+	// offset would repeat or skip rows as the feed grows underneath a reader,
+	// and this one grows faster than most.
+	QueryWithCursor(ctx context.Context, f AgentActionFilter, cursor *pagination.Cursor, limit int64, forward bool) ([]models.AgentAction, error)
+	// Count is the connection's totalCount.
+	Count(ctx context.Context, f AgentActionFilter) (int64, error)
 	// DistinctAgents lists the agents a user owns that have actually acted,
 	// so the UI can offer a filter without first paging every action.
 	DistinctAgents(ctx context.Context, ownerUserID uuid.UUID) ([]AgentSummary, error)
@@ -49,7 +55,15 @@ type AgentActionFilter struct {
 	// Outcomes restricts to ok / error / refused. Refusals on their own are
 	// the useful view: they mean a key is scoped tighter than the work.
 	Outcomes []models.AgentActionOutcome
-	Before   *time.Time
+}
+
+// agentActionSortKey is the list's primary order: newest first, the only
+// ordering an audit feed is ever read in.
+var agentActionSortKey = pagination.SortKey{Field: "occurred_at", Ascending: false}
+
+// AgentActionCursor encodes a row's position in that order.
+func AgentActionCursor(a *models.AgentAction) string {
+	return pagination.EncodeCursor(a.OccurredAt, a.Id)
 }
 
 // AgentSummary is one of the caller's agents and what it has been up to.
@@ -94,7 +108,7 @@ func (r *agentActionRepository) ListByOperation(ctx context.Context, operationID
 	return actions, err
 }
 
-func (r *agentActionRepository) Query(ctx context.Context, f AgentActionFilter, limit int64) ([]models.AgentAction, error) {
+func (f AgentActionFilter) toBSON() bson.M {
 	filter := bson.M{"owner_user_id": f.OwnerUserID}
 	if f.OperationID != nil {
 		filter["operation_id"] = *f.OperationID
@@ -108,15 +122,36 @@ func (r *agentActionRepository) Query(ctx context.Context, f AgentActionFilter, 
 	if len(f.Outcomes) > 0 {
 		filter["outcome"] = bson.M{"$in": f.Outcomes}
 	}
-	if f.Before != nil {
-		// Strictly before, so paging with the last row's timestamp cannot
-		// return that row again.
-		filter["occurred_at"] = bson.M{"$lt": *f.Before}
+	return filter
+}
+
+func (r *agentActionRepository) QueryWithCursor(ctx context.Context, f AgentActionFilter, cursor *pagination.Cursor, limit int64, forward bool) ([]models.AgentAction, error) {
+	if err := agentActionSortKey.ValidateCursor(cursor); err != nil {
+		return nil, err
 	}
 
 	actions := make([]models.AgentAction, 0)
-	err := r.coll.Find(ctx, filter).Sort("-occurred_at").Limit(limit).All(&actions)
-	return actions, err
+	err := r.coll.
+		Find(ctx, pagination.ApplyCursorFilterKey(f.toBSON(), cursor, forward, agentActionSortKey)).
+		Sort(pagination.SortFieldsKey(forward, agentActionSortKey)...).
+		Limit(limit).
+		All(&actions)
+	if err != nil {
+		return nil, err
+	}
+
+	// A backward page comes back against the list's direction; flip it so the
+	// caller always sees newest-first.
+	if !forward {
+		for i, j := 0, len(actions)-1; i < j; i, j = i+1, j-1 {
+			actions[i], actions[j] = actions[j], actions[i]
+		}
+	}
+	return actions, nil
+}
+
+func (r *agentActionRepository) Count(ctx context.Context, f AgentActionFilter) (int64, error) {
+	return r.coll.Find(ctx, f.toBSON()).Count()
 }
 
 func (r *agentActionRepository) DistinctAgents(ctx context.Context, ownerUserID uuid.UUID) ([]AgentSummary, error) {

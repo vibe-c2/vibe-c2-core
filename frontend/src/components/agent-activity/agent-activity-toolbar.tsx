@@ -3,7 +3,7 @@ import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { FormattedDateTimeText } from "@/components/ui/formatted-date-time-text"
 import { cn } from "@/lib/utils"
-import type { AgentActionFilters } from "@/graphql/hooks/agent-actions"
+import { useAgentActionStore } from "@/stores/agent-actions"
 import type { MyAgentActivitySummaryQuery } from "@/graphql/gql/graphql"
 
 type AgentSummary = MyAgentActivitySummaryQuery["myAgentActivitySummary"][number]
@@ -13,38 +13,43 @@ interface AgentActivityToolbarProps {
   // Derived from the rows on screen: the only operations worth offering are
   // the ones an agent has actually touched.
   operations: { id: string; name: string }[]
-  filters: AgentActionFilters
-  onFiltersChange: (next: AgentActionFilters) => void
-  totalShown: number
+  totalCount: number
 }
 
 /**
- * Filters, plus a row of the agents that have worked in this operation.
+ * Filters, plus the agents that have actually done something.
  *
- * The two toggles are the two questions an operator actually asks. "Changes
- * only" answers what did it do to my engagement. "Refused" answers where it
- * hit the edge of what its key allows — which usually means the key is scoped
- * tighter than the work being asked of it, and is a configuration answer
- * rather than a fault.
+ * The two toggles are the two questions an operator asks. "Changes only"
+ * answers what an agent did to their engagements. "Refused" answers where one
+ * hit the edge of its key — usually meaning the key is scoped tighter than the
+ * work, which is a configuration answer rather than a fault.
  */
 export function AgentActivityToolbar({
   agents,
   operations,
-  filters,
-  onFiltersChange,
-  totalShown,
+  totalCount,
 }: AgentActivityToolbarProps) {
-  const refusedOnly = filters.outcomes?.includes("REFUSED") ?? false
+  const {
+    agentKeyId,
+    operationId,
+    writesOnly,
+    refusedOnly,
+    setAgentKeyId,
+    setOperationId,
+    toggleWritesOnly,
+    toggleRefusedOnly,
+    clearFilters,
+  } = useAgentActionStore()
+
+  const filtered = !!agentKeyId || !!operationId || writesOnly || refusedOnly
 
   return (
-    <div className="space-y-3 border-b px-4 py-3">
+    <div className="space-y-2">
       <div className="flex flex-wrap items-center gap-2">
         <Button
           size="sm"
-          variant={filters.writesOnly ? "default" : "outline"}
-          onClick={() =>
-            onFiltersChange({ ...filters, writesOnly: !filters.writesOnly })
-          }
+          variant={writesOnly ? "default" : "outline"}
+          onClick={toggleWritesOnly}
         >
           <PencilIcon className="size-3.5" />
           Changes only
@@ -52,68 +57,46 @@ export function AgentActivityToolbar({
         <Button
           size="sm"
           variant={refusedOnly ? "default" : "outline"}
-          onClick={() =>
-            onFiltersChange({
-              ...filters,
-              outcomes: refusedOnly ? undefined : ["REFUSED"],
-            })
-          }
+          onClick={toggleRefusedOnly}
         >
           <ShieldOffIcon className="size-3.5" />
           Refused
         </Button>
 
-        {(filters.agentKeyId || filters.operationId || filters.writesOnly || refusedOnly) && (
-          <Button size="sm" variant="ghost" onClick={() => onFiltersChange({})}>
+        {operations.length > 1 &&
+          operations.map((op) => (
+            <Button
+              key={op.id}
+              size="sm"
+              variant={operationId === op.id ? "default" : "outline"}
+              className="max-w-48 truncate"
+              onClick={() => setOperationId(operationId === op.id ? null : op.id)}
+            >
+              {op.name}
+            </Button>
+          ))}
+
+        {filtered && (
+          <Button size="sm" variant="ghost" onClick={clearFilters}>
             Clear
           </Button>
         )}
 
         <span className="ml-auto text-xs text-muted-foreground">
-          {totalShown} shown
+          {totalCount} {totalCount === 1 ? "call" : "calls"}
         </span>
       </div>
-
-      {operations.length > 1 && (
-        <div className="flex flex-wrap items-center gap-1.5">
-          <span className="text-xs text-muted-foreground">Operation:</span>
-          {operations.map((op) => {
-            const active = filters.operationId === op.id
-            return (
-              <button
-                key={op.id}
-                type="button"
-                onClick={() =>
-                  onFiltersChange({
-                    ...filters,
-                    operationId: active ? null : op.id,
-                  })
-                }
-                className={cn(
-                  "max-w-48 truncate rounded-md border px-2 py-1 text-xs transition-colors",
-                  active ? "border-primary bg-accent" : "hover:bg-accent/50",
-                )}
-              >
-                {op.name}
-              </button>
-            )
-          })}
-        </div>
-      )}
 
       {agents.length > 0 && (
         <div className="flex flex-wrap gap-2">
           {agents.map((agent) => {
-            const active = filters.agentKeyId === agent.agentKeyId
+            const active = agentKeyId === agent.agentKeyId
             return (
               <button
                 key={agent.agentKeyId}
                 type="button"
                 onClick={() =>
-                  onFiltersChange({
-                    ...filters,
-                    agentKeyId: active ? null : agent.agentKeyId,
-                  })
+                  setAgentKeyId(active ? null : agent.agentKeyId)
                 }
                 className={cn(
                   "flex items-center gap-2 rounded-md border px-2.5 py-1.5 text-left text-xs transition-colors",

@@ -8,13 +8,9 @@ import (
 	"github.com/google/uuid"
 	"github.com/vibe-c2/vibe-c2-core/core/pkg/graphql/model"
 	"github.com/vibe-c2/vibe-c2-core/core/pkg/models"
+	"github.com/vibe-c2/vibe-c2-core/core/pkg/pagination"
 	"github.com/vibe-c2/vibe-c2-core/core/pkg/repository"
 )
-
-// maxAgentActionLimit bounds a page. The feed is chatty by nature — an agent
-// can produce hundreds of rows a minute — so the cap is what stops a careless
-// client asking for all of it.
-const maxAgentActionLimit = 200
 
 // IAgentActionResolver reads the MCP audit trail.
 //
@@ -22,7 +18,7 @@ const maxAgentActionLimit = 200
 // trail, so there is no mutation surface here and none should be added.
 type IAgentActionResolver interface {
 	MyAgentActions(ctx context.Context, agentKeyID *string, operationID *string, writesOnly *bool,
-		outcomes []model.AgentActionOutcome, before *string, limit *int) ([]*models.AgentAction, error)
+		outcomes []model.AgentActionOutcome, first *int, after *string, last *int, before *string) (*model.AgentActionConnection, error)
 	MyAgentActivitySummary(ctx context.Context) ([]*model.AgentActivitySummary, error)
 
 	// Field resolvers
@@ -52,11 +48,16 @@ func NewAgentActionResolver(
 
 func (r *agentActionResolver) MyAgentActions(
 	ctx context.Context, agentKeyID *string, operationID *string, writesOnly *bool,
-	outcomes []model.AgentActionOutcome, before *string, limit *int,
-) ([]*models.AgentAction, error) {
+	outcomes []model.AgentActionOutcome, first *int, after *string, last *int, before *string,
+) (*model.AgentActionConnection, error) {
 	// The owner comes from the token, never from an argument. There is
 	// deliberately no way to ask for somebody else's trail.
 	uid, err := callerUserID(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	args, err := pagination.ParseArgs(first, after, last, before)
 	if err != nil {
 		return nil, err
 	}
@@ -77,8 +78,7 @@ func (r *agentActionResolver) MyAgentActions(
 		}
 		// No membership check: these are the caller's own actions. If they
 		// have since lost access to the operation, what their agent did there
-		// while they had it is still theirs to review — that is the point of
-		// keeping a record.
+		// while they had it is still theirs to review.
 		filter.OperationID = &opID
 	}
 	if writesOnly != nil {
@@ -87,32 +87,45 @@ func (r *agentActionResolver) MyAgentActions(
 	for _, o := range outcomes {
 		filter.Outcomes = append(filter.Outcomes, toModelOutcome(o))
 	}
-	if before != nil && *before != "" {
-		t, err := time.Parse(time.RFC3339, *before)
-		if err != nil {
-			return nil, fmt.Errorf("before must be an RFC3339 timestamp")
-		}
-		filter.Before = &t
+
+	total, err := r.repo.Count(ctx, filter)
+	if err != nil {
+		return nil, fmt.Errorf("failed to count agent activity: %w", err)
 	}
 
-	size := int64(50)
-	if limit != nil && *limit > 0 {
-		size = int64(*limit)
-	}
-	if size > maxAgentActionLimit {
-		size = maxAgentActionLimit
-	}
-
-	actions, err := r.repo.Query(ctx, filter, size)
+	// One extra row is how hasNextPage is answered without a second query.
+	actions, err := r.repo.QueryWithCursor(ctx, filter, args.Cursor, args.Limit+1, args.Forward)
 	if err != nil {
 		return nil, fmt.Errorf("failed to read agent activity: %w", err)
 	}
 
-	out := make([]*models.AgentAction, 0, len(actions))
-	for i := range actions {
-		out = append(out, &actions[i])
+	hasMore := int64(len(actions)) > args.Limit
+	if hasMore {
+		actions = actions[:args.Limit]
 	}
-	return out, nil
+
+	edges := make([]*model.AgentActionEdge, len(actions))
+	for i := range actions {
+		edges[i] = &model.AgentActionEdge{
+			Node:   &actions[i],
+			Cursor: repository.AgentActionCursor(&actions[i]),
+		}
+	}
+
+	pageInfo := pagination.PageInfo{
+		HasNextPage:     args.Forward && hasMore,
+		HasPreviousPage: (!args.Forward && hasMore) || (args.Forward && args.Cursor != nil),
+	}
+	if len(edges) > 0 {
+		pageInfo.StartCursor = &edges[0].Cursor
+		pageInfo.EndCursor = &edges[len(edges)-1].Cursor
+	}
+
+	return &model.AgentActionConnection{
+		Edges:      edges,
+		PageInfo:   &pageInfo,
+		TotalCount: int(total),
+	}, nil
 }
 
 func (r *agentActionResolver) MyAgentActivitySummary(ctx context.Context) ([]*model.AgentActivitySummary, error) {

@@ -86,6 +86,17 @@ type ComplexityRoot struct {
 		Write       func(childComplexity int) int
 	}
 
+	AgentActionConnection struct {
+		Edges      func(childComplexity int) int
+		PageInfo   func(childComplexity int) int
+		TotalCount func(childComplexity int) int
+	}
+
+	AgentActionEdge struct {
+		Cursor func(childComplexity int) int
+		Node   func(childComplexity int) int
+	}
+
 	AgentActivityEvent struct {
 		AgentKeyID  func(childComplexity int) int
 		AgentLabel  func(childComplexity int) int
@@ -438,7 +449,7 @@ type ComplexityRoot struct {
 		Me                                 func(childComplexity int) int
 		Modules                            func(childComplexity int, status []string) int
 		MyAPIKey                           func(childComplexity int) int
-		MyAgentActions                     func(childComplexity int, agentKeyID *string, operationID *string, writesOnly *bool, outcomes []model.AgentActionOutcome, before *string, limit *int) int
+		MyAgentActions                     func(childComplexity int, agentKeyID *string, operationID *string, writesOnly *bool, outcomes []model.AgentActionOutcome, first *int, after *string, last *int, before *string) int
 		MyAgentActivitySummary             func(childComplexity int) int
 		MyAgentKeys                        func(childComplexity int) int
 		MyCredentialTags                   func(childComplexity int, operationIds []string) int
@@ -529,6 +540,7 @@ type ComplexityRoot struct {
 		HashChanged                 func(childComplexity int, operationID string) int
 		HostChanged                 func(childComplexity int, operationID string) int
 		ModuleChanged               func(childComplexity int) int
+		MyAgentActionOccurred       func(childComplexity int) int
 		MyCredentialChanged         func(childComplexity int, operationIds []string) int
 		MyHashChanged               func(childComplexity int, operationIds []string) int
 		MySessionChanged            func(childComplexity int) int
@@ -962,7 +974,7 @@ type QueryResolver interface {
 	Operation(ctx context.Context, id string) (*models.Operation, error)
 	Operations(ctx context.Context, search *string, sortBy *model.OperationSortField, sortDirection *model.SortDirection, first *int, after *string, last *int, before *string) (*model.OperationConnection, error)
 	MyOperationRole(ctx context.Context, operationID string) (*models.OperationRole, error)
-	MyAgentActions(ctx context.Context, agentKeyID *string, operationID *string, writesOnly *bool, outcomes []model.AgentActionOutcome, before *string, limit *int) ([]*models.AgentAction, error)
+	MyAgentActions(ctx context.Context, agentKeyID *string, operationID *string, writesOnly *bool, outcomes []model.AgentActionOutcome, first *int, after *string, last *int, before *string) (*model.AgentActionConnection, error)
 	MyAgentActivitySummary(ctx context.Context) ([]*model.AgentActivitySummary, error)
 	MyAgentKeys(ctx context.Context) ([]*models.AgentKey, error)
 	MyAPIKey(ctx context.Context) (*models.APIKey, error)
@@ -1025,6 +1037,7 @@ type SubscriptionResolver interface {
 	UserChanged(ctx context.Context) (<-chan *model.UserEvent, error)
 	OperationChanged(ctx context.Context, operationID *string) (<-chan *model.OperationEvent, error)
 	OperationMemberChanged(ctx context.Context, operationID *string) (<-chan *model.OperationMemberEvent, error)
+	MyAgentActionOccurred(ctx context.Context) (<-chan *model.AgentActivityEvent, error)
 	AgentActivity(ctx context.Context, operationID string) (<-chan *model.AgentActivityEvent, error)
 	CredentialChanged(ctx context.Context, operationID string) (<-chan *model.CredentialEvent, error)
 	MyCredentialChanged(ctx context.Context, operationIds []string) (<-chan *model.CredentialEvent, error)
@@ -1252,6 +1265,38 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.AgentAction.Write(childComplexity), true
+
+	case "AgentActionConnection.edges":
+		if e.ComplexityRoot.AgentActionConnection.Edges == nil {
+			break
+		}
+
+		return e.ComplexityRoot.AgentActionConnection.Edges(childComplexity), true
+	case "AgentActionConnection.pageInfo":
+		if e.ComplexityRoot.AgentActionConnection.PageInfo == nil {
+			break
+		}
+
+		return e.ComplexityRoot.AgentActionConnection.PageInfo(childComplexity), true
+	case "AgentActionConnection.totalCount":
+		if e.ComplexityRoot.AgentActionConnection.TotalCount == nil {
+			break
+		}
+
+		return e.ComplexityRoot.AgentActionConnection.TotalCount(childComplexity), true
+
+	case "AgentActionEdge.cursor":
+		if e.ComplexityRoot.AgentActionEdge.Cursor == nil {
+			break
+		}
+
+		return e.ComplexityRoot.AgentActionEdge.Cursor(childComplexity), true
+	case "AgentActionEdge.node":
+		if e.ComplexityRoot.AgentActionEdge.Node == nil {
+			break
+		}
+
+		return e.ComplexityRoot.AgentActionEdge.Node(childComplexity), true
 
 	case "AgentActivityEvent.agentKeyId":
 		if e.ComplexityRoot.AgentActivityEvent.AgentKeyID == nil {
@@ -3169,7 +3214,7 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 			return 0, false
 		}
 
-		return e.ComplexityRoot.Query.MyAgentActions(childComplexity, args["agentKeyId"].(*string), args["operationId"].(*string), args["writesOnly"].(*bool), args["outcomes"].([]model.AgentActionOutcome), args["before"].(*string), args["limit"].(*int)), true
+		return e.ComplexityRoot.Query.MyAgentActions(childComplexity, args["agentKeyId"].(*string), args["operationId"].(*string), args["writesOnly"].(*bool), args["outcomes"].([]model.AgentActionOutcome), args["first"].(*int), args["after"].(*string), args["last"].(*int), args["before"].(*string)), true
 	case "Query.myAgentActivitySummary":
 		if e.ComplexityRoot.Query.MyAgentActivitySummary == nil {
 			break
@@ -3823,6 +3868,12 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.Subscription.ModuleChanged(childComplexity), true
+	case "Subscription.myAgentActionOccurred":
+		if e.ComplexityRoot.Subscription.MyAgentActionOccurred == nil {
+			break
+		}
+
+		return e.ComplexityRoot.Subscription.MyAgentActionOccurred(childComplexity), true
 	case "Subscription.myCredentialChanged":
 		if e.ComplexityRoot.Subscription.MyCredentialChanged == nil {
 			break
@@ -5112,6 +5163,17 @@ type AgentAction {
   occurredAt: String!
 }
 
+type AgentActionEdge {
+  node: AgentAction!
+  cursor: String!
+}
+
+type AgentActionConnection {
+  edges: [AgentActionEdge!]!
+  pageInfo: PageInfo!
+  totalCount: Int!
+}
+
 # One of the caller's agents and what it has been up to.
 type AgentActivitySummary {
   agentKeyId: ID!
@@ -5134,12 +5196,25 @@ extend type Query {
     operationId: ID
     writesOnly: Boolean
     outcomes: [AgentActionOutcome!]
+    first: Int = 50
+    after: String
+    last: Int
     before: String
-    limit: Int = 50
-  ): [AgentAction!]! @hasPermission(permission: "*")
+  ): AgentActionConnection! @hasPermission(permission: "*")
 
   # The caller's agents that have actually done something.
   myAgentActivitySummary: [AgentActivitySummary!]! @hasPermission(permission: "*")
+}
+
+extend type Subscription {
+  # Fires whenever any of the caller's own agents makes a call — reads
+  # included. The page invalidates its list on each event, the same way the
+  # user and operation tables do, so it stays current without a reload.
+  #
+  # Owner-scoped rather than operation-scoped: this feeds a personal audit
+  # page that spans engagements, and an operator watching it should see an
+  # agent working in any of them.
+  myAgentActionOccurred: AgentActivityEvent! @hasPermission(permission: "*")
 }
 `, BuiltIn: false},
 	{Name: "../schema/agent_activity.graphql", Input: `# =============================================================================
@@ -9001,16 +9076,26 @@ func (ec *executionContext) field_Query_myAgentActions_args(ctx context.Context,
 		return nil, err
 	}
 	args["outcomes"] = arg3
-	arg4, err := graphql.ProcessArgField(ctx, rawArgs, "before", ec.unmarshalOString2ᚖstring)
+	arg4, err := graphql.ProcessArgField(ctx, rawArgs, "first", ec.unmarshalOInt2ᚖint)
 	if err != nil {
 		return nil, err
 	}
-	args["before"] = arg4
-	arg5, err := graphql.ProcessArgField(ctx, rawArgs, "limit", ec.unmarshalOInt2ᚖint)
+	args["first"] = arg4
+	arg5, err := graphql.ProcessArgField(ctx, rawArgs, "after", ec.unmarshalOString2ᚖstring)
 	if err != nil {
 		return nil, err
 	}
-	args["limit"] = arg5
+	args["after"] = arg5
+	arg6, err := graphql.ProcessArgField(ctx, rawArgs, "last", ec.unmarshalOInt2ᚖint)
+	if err != nil {
+		return nil, err
+	}
+	args["last"] = arg6
+	arg7, err := graphql.ProcessArgField(ctx, rawArgs, "before", ec.unmarshalOString2ᚖstring)
+	if err != nil {
+		return nil, err
+	}
+	args["before"] = arg7
 	return args, nil
 }
 
@@ -10704,6 +10789,193 @@ func (ec *executionContext) fieldContext_AgentAction_occurredAt(_ context.Contex
 		Field:      field,
 		IsMethod:   true,
 		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _AgentActionConnection_edges(ctx context.Context, field graphql.CollectedField, obj *model.AgentActionConnection) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_AgentActionConnection_edges,
+		func(ctx context.Context) (any, error) {
+			return obj.Edges, nil
+		},
+		nil,
+		ec.marshalNAgentActionEdge2ᚕᚖgithubᚗcomᚋvibeᚑc2ᚋvibeᚑc2ᚑcoreᚋcoreᚋpkgᚋgraphqlᚋmodelᚐAgentActionEdgeᚄ,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_AgentActionConnection_edges(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "AgentActionConnection",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "node":
+				return ec.fieldContext_AgentActionEdge_node(ctx, field)
+			case "cursor":
+				return ec.fieldContext_AgentActionEdge_cursor(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type AgentActionEdge", field.Name)
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _AgentActionConnection_pageInfo(ctx context.Context, field graphql.CollectedField, obj *model.AgentActionConnection) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_AgentActionConnection_pageInfo,
+		func(ctx context.Context) (any, error) {
+			return obj.PageInfo, nil
+		},
+		nil,
+		ec.marshalNPageInfo2ᚖgithubᚗcomᚋvibeᚑc2ᚋvibeᚑc2ᚑcoreᚋcoreᚋpkgᚋpaginationᚐPageInfo,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_AgentActionConnection_pageInfo(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "AgentActionConnection",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "hasNextPage":
+				return ec.fieldContext_PageInfo_hasNextPage(ctx, field)
+			case "hasPreviousPage":
+				return ec.fieldContext_PageInfo_hasPreviousPage(ctx, field)
+			case "startCursor":
+				return ec.fieldContext_PageInfo_startCursor(ctx, field)
+			case "endCursor":
+				return ec.fieldContext_PageInfo_endCursor(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type PageInfo", field.Name)
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _AgentActionConnection_totalCount(ctx context.Context, field graphql.CollectedField, obj *model.AgentActionConnection) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_AgentActionConnection_totalCount,
+		func(ctx context.Context) (any, error) {
+			return obj.TotalCount, nil
+		},
+		nil,
+		ec.marshalNInt2int,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_AgentActionConnection_totalCount(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "AgentActionConnection",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Int does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _AgentActionEdge_node(ctx context.Context, field graphql.CollectedField, obj *model.AgentActionEdge) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_AgentActionEdge_node,
+		func(ctx context.Context) (any, error) {
+			return obj.Node, nil
+		},
+		nil,
+		ec.marshalNAgentAction2ᚖgithubᚗcomᚋvibeᚑc2ᚋvibeᚑc2ᚑcoreᚋcoreᚋpkgᚋmodelsᚐAgentAction,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_AgentActionEdge_node(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "AgentActionEdge",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "id":
+				return ec.fieldContext_AgentAction_id(ctx, field)
+			case "operationId":
+				return ec.fieldContext_AgentAction_operationId(ctx, field)
+			case "operation":
+				return ec.fieldContext_AgentAction_operation(ctx, field)
+			case "agentKeyId":
+				return ec.fieldContext_AgentAction_agentKeyId(ctx, field)
+			case "agentName":
+				return ec.fieldContext_AgentAction_agentName(ctx, field)
+			case "tool":
+				return ec.fieldContext_AgentAction_tool(ctx, field)
+			case "write":
+				return ec.fieldContext_AgentAction_write(ctx, field)
+			case "outcome":
+				return ec.fieldContext_AgentAction_outcome(ctx, field)
+			case "error":
+				return ec.fieldContext_AgentAction_error(ctx, field)
+			case "arguments":
+				return ec.fieldContext_AgentAction_arguments(ctx, field)
+			case "durationMs":
+				return ec.fieldContext_AgentAction_durationMs(ctx, field)
+			case "occurredAt":
+				return ec.fieldContext_AgentAction_occurredAt(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type AgentAction", field.Name)
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _AgentActionEdge_cursor(ctx context.Context, field graphql.CollectedField, obj *model.AgentActionEdge) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_AgentActionEdge_cursor,
+		func(ctx context.Context) (any, error) {
+			return obj.Cursor, nil
+		},
+		nil,
+		ec.marshalNString2string,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_AgentActionEdge_cursor(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "AgentActionEdge",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
 		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
 			return nil, errors.New("field of type String does not have child fields")
 		},
@@ -22479,7 +22751,7 @@ func (ec *executionContext) _Query_myAgentActions(ctx context.Context, field gra
 		ec.fieldContext_Query_myAgentActions,
 		func(ctx context.Context) (any, error) {
 			fc := graphql.GetFieldContext(ctx)
-			return ec.Resolvers.Query().MyAgentActions(ctx, fc.Args["agentKeyId"].(*string), fc.Args["operationId"].(*string), fc.Args["writesOnly"].(*bool), fc.Args["outcomes"].([]model.AgentActionOutcome), fc.Args["before"].(*string), fc.Args["limit"].(*int))
+			return ec.Resolvers.Query().MyAgentActions(ctx, fc.Args["agentKeyId"].(*string), fc.Args["operationId"].(*string), fc.Args["writesOnly"].(*bool), fc.Args["outcomes"].([]model.AgentActionOutcome), fc.Args["first"].(*int), fc.Args["after"].(*string), fc.Args["last"].(*int), fc.Args["before"].(*string))
 		},
 		func(ctx context.Context, next graphql.Resolver) graphql.Resolver {
 			directive0 := next
@@ -22487,11 +22759,11 @@ func (ec *executionContext) _Query_myAgentActions(ctx context.Context, field gra
 			directive1 := func(ctx context.Context) (any, error) {
 				permission, err := ec.unmarshalNString2string(ctx, "*")
 				if err != nil {
-					var zeroVal []*models.AgentAction
+					var zeroVal *model.AgentActionConnection
 					return zeroVal, err
 				}
 				if ec.Directives.HasPermission == nil {
-					var zeroVal []*models.AgentAction
+					var zeroVal *model.AgentActionConnection
 					return zeroVal, errors.New("directive hasPermission is not implemented")
 				}
 				return ec.Directives.HasPermission(ctx, nil, directive0, permission)
@@ -22500,7 +22772,7 @@ func (ec *executionContext) _Query_myAgentActions(ctx context.Context, field gra
 			next = directive1
 			return next
 		},
-		ec.marshalNAgentAction2ᚕᚖgithubᚗcomᚋvibeᚑc2ᚋvibeᚑc2ᚑcoreᚋcoreᚋpkgᚋmodelsᚐAgentActionᚄ,
+		ec.marshalNAgentActionConnection2ᚖgithubᚗcomᚋvibeᚑc2ᚋvibeᚑc2ᚑcoreᚋcoreᚋpkgᚋgraphqlᚋmodelᚐAgentActionConnection,
 		true,
 		true,
 	)
@@ -22514,32 +22786,14 @@ func (ec *executionContext) fieldContext_Query_myAgentActions(ctx context.Contex
 		IsResolver: true,
 		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
 			switch field.Name {
-			case "id":
-				return ec.fieldContext_AgentAction_id(ctx, field)
-			case "operationId":
-				return ec.fieldContext_AgentAction_operationId(ctx, field)
-			case "operation":
-				return ec.fieldContext_AgentAction_operation(ctx, field)
-			case "agentKeyId":
-				return ec.fieldContext_AgentAction_agentKeyId(ctx, field)
-			case "agentName":
-				return ec.fieldContext_AgentAction_agentName(ctx, field)
-			case "tool":
-				return ec.fieldContext_AgentAction_tool(ctx, field)
-			case "write":
-				return ec.fieldContext_AgentAction_write(ctx, field)
-			case "outcome":
-				return ec.fieldContext_AgentAction_outcome(ctx, field)
-			case "error":
-				return ec.fieldContext_AgentAction_error(ctx, field)
-			case "arguments":
-				return ec.fieldContext_AgentAction_arguments(ctx, field)
-			case "durationMs":
-				return ec.fieldContext_AgentAction_durationMs(ctx, field)
-			case "occurredAt":
-				return ec.fieldContext_AgentAction_occurredAt(ctx, field)
+			case "edges":
+				return ec.fieldContext_AgentActionConnection_edges(ctx, field)
+			case "pageInfo":
+				return ec.fieldContext_AgentActionConnection_pageInfo(ctx, field)
+			case "totalCount":
+				return ec.fieldContext_AgentActionConnection_totalCount(ctx, field)
 			}
-			return nil, fmt.Errorf("no field named %q was found under type AgentAction", field.Name)
+			return nil, fmt.Errorf("no field named %q was found under type AgentActionConnection", field.Name)
 		},
 	}
 	defer func() {
@@ -27330,6 +27584,73 @@ func (ec *executionContext) fieldContext_Subscription_operationMemberChanged(ctx
 	if fc.Args, err = ec.field_Subscription_operationMemberChanged_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
 		ec.Error(ctx, err)
 		return fc, err
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Subscription_myAgentActionOccurred(ctx context.Context, field graphql.CollectedField) (ret func(ctx context.Context) graphql.Marshaler) {
+	return graphql.ResolveFieldStream(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Subscription_myAgentActionOccurred,
+		func(ctx context.Context) (any, error) {
+			return ec.Resolvers.Subscription().MyAgentActionOccurred(ctx)
+		},
+		func(ctx context.Context, next graphql.Resolver) graphql.Resolver {
+			directive0 := next
+
+			directive1 := func(ctx context.Context) (any, error) {
+				permission, err := ec.unmarshalNString2string(ctx, "*")
+				if err != nil {
+					var zeroVal *model.AgentActivityEvent
+					return zeroVal, err
+				}
+				if ec.Directives.HasPermission == nil {
+					var zeroVal *model.AgentActivityEvent
+					return zeroVal, errors.New("directive hasPermission is not implemented")
+				}
+				return ec.Directives.HasPermission(ctx, nil, directive0, permission)
+			}
+
+			next = directive1
+			return next
+		},
+		ec.marshalNAgentActivityEvent2ᚖgithubᚗcomᚋvibeᚑc2ᚋvibeᚑc2ᚑcoreᚋcoreᚋpkgᚋgraphqlᚋmodelᚐAgentActivityEvent,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_Subscription_myAgentActionOccurred(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Subscription",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "operationId":
+				return ec.fieldContext_AgentActivityEvent_operationId(ctx, field)
+			case "agentKeyId":
+				return ec.fieldContext_AgentActivityEvent_agentKeyId(ctx, field)
+			case "agentName":
+				return ec.fieldContext_AgentActivityEvent_agentName(ctx, field)
+			case "agentLabel":
+				return ec.fieldContext_AgentActivityEvent_agentLabel(ctx, field)
+			case "ownerUserId":
+				return ec.fieldContext_AgentActivityEvent_ownerUserId(ctx, field)
+			case "tool":
+				return ec.fieldContext_AgentActivityEvent_tool(ctx, field)
+			case "write":
+				return ec.fieldContext_AgentActivityEvent_write(ctx, field)
+			case "outcome":
+				return ec.fieldContext_AgentActivityEvent_outcome(ctx, field)
+			case "summary":
+				return ec.fieldContext_AgentActivityEvent_summary(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type AgentActivityEvent", field.Name)
+		},
 	}
 	return fc, nil
 }
@@ -37563,6 +37884,99 @@ func (ec *executionContext) _AgentAction(ctx context.Context, sel ast.SelectionS
 	return out
 }
 
+var agentActionConnectionImplementors = []string{"AgentActionConnection"}
+
+func (ec *executionContext) _AgentActionConnection(ctx context.Context, sel ast.SelectionSet, obj *model.AgentActionConnection) graphql.Marshaler {
+	fields := graphql.CollectFields(ec.OperationContext, sel, agentActionConnectionImplementors)
+
+	out := graphql.NewFieldSet(fields)
+	deferred := make(map[string]*graphql.FieldSet)
+	for i, field := range fields {
+		switch field.Name {
+		case "__typename":
+			out.Values[i] = graphql.MarshalString("AgentActionConnection")
+		case "edges":
+			out.Values[i] = ec._AgentActionConnection_edges(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "pageInfo":
+			out.Values[i] = ec._AgentActionConnection_pageInfo(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "totalCount":
+			out.Values[i] = ec._AgentActionConnection_totalCount(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		default:
+			panic("unknown field " + strconv.Quote(field.Name))
+		}
+	}
+	out.Dispatch(ctx)
+	if out.Invalids > 0 {
+		return graphql.Null
+	}
+
+	atomic.AddInt32(&ec.Deferred, int32(len(deferred)))
+
+	for label, dfs := range deferred {
+		ec.ProcessDeferredGroup(graphql.DeferredGroup{
+			Label:    label,
+			Path:     graphql.GetPath(ctx),
+			FieldSet: dfs,
+			Context:  ctx,
+		})
+	}
+
+	return out
+}
+
+var agentActionEdgeImplementors = []string{"AgentActionEdge"}
+
+func (ec *executionContext) _AgentActionEdge(ctx context.Context, sel ast.SelectionSet, obj *model.AgentActionEdge) graphql.Marshaler {
+	fields := graphql.CollectFields(ec.OperationContext, sel, agentActionEdgeImplementors)
+
+	out := graphql.NewFieldSet(fields)
+	deferred := make(map[string]*graphql.FieldSet)
+	for i, field := range fields {
+		switch field.Name {
+		case "__typename":
+			out.Values[i] = graphql.MarshalString("AgentActionEdge")
+		case "node":
+			out.Values[i] = ec._AgentActionEdge_node(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "cursor":
+			out.Values[i] = ec._AgentActionEdge_cursor(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		default:
+			panic("unknown field " + strconv.Quote(field.Name))
+		}
+	}
+	out.Dispatch(ctx)
+	if out.Invalids > 0 {
+		return graphql.Null
+	}
+
+	atomic.AddInt32(&ec.Deferred, int32(len(deferred)))
+
+	for label, dfs := range deferred {
+		ec.ProcessDeferredGroup(graphql.DeferredGroup{
+			Label:    label,
+			Path:     graphql.GetPath(ctx),
+			FieldSet: dfs,
+			Context:  ctx,
+		})
+	}
+
+	return out
+}
+
 var agentActivityEventImplementors = []string{"AgentActivityEvent"}
 
 func (ec *executionContext) _AgentActivityEvent(ctx context.Context, sel ast.SelectionSet, obj *model.AgentActivityEvent) graphql.Marshaler {
@@ -43150,6 +43564,8 @@ func (ec *executionContext) _Subscription(ctx context.Context, sel ast.Selection
 		return ec._Subscription_operationChanged(ctx, fields[0])
 	case "operationMemberChanged":
 		return ec._Subscription_operationMemberChanged(ctx, fields[0])
+	case "myAgentActionOccurred":
+		return ec._Subscription_myAgentActionOccurred(ctx, fields[0])
 	case "agentActivity":
 		return ec._Subscription_agentActivity(ctx, fields[0])
 	case "credentialChanged":
@@ -47006,11 +47422,35 @@ func (ec *executionContext) marshalNAPIKeyWithSecret2ᚖgithubᚗcomᚋvibeᚑc2
 	return ec._APIKeyWithSecret(ctx, sel, v)
 }
 
-func (ec *executionContext) marshalNAgentAction2ᚕᚖgithubᚗcomᚋvibeᚑc2ᚋvibeᚑc2ᚑcoreᚋcoreᚋpkgᚋmodelsᚐAgentActionᚄ(ctx context.Context, sel ast.SelectionSet, v []*models.AgentAction) graphql.Marshaler {
+func (ec *executionContext) marshalNAgentAction2ᚖgithubᚗcomᚋvibeᚑc2ᚋvibeᚑc2ᚑcoreᚋcoreᚋpkgᚋmodelsᚐAgentAction(ctx context.Context, sel ast.SelectionSet, v *models.AgentAction) graphql.Marshaler {
+	if v == nil {
+		if !graphql.HasFieldError(ctx, graphql.GetFieldContext(ctx)) {
+			graphql.AddErrorf(ctx, "the requested element is null which the schema does not allow")
+		}
+		return graphql.Null
+	}
+	return ec._AgentAction(ctx, sel, v)
+}
+
+func (ec *executionContext) marshalNAgentActionConnection2githubᚗcomᚋvibeᚑc2ᚋvibeᚑc2ᚑcoreᚋcoreᚋpkgᚋgraphqlᚋmodelᚐAgentActionConnection(ctx context.Context, sel ast.SelectionSet, v model.AgentActionConnection) graphql.Marshaler {
+	return ec._AgentActionConnection(ctx, sel, &v)
+}
+
+func (ec *executionContext) marshalNAgentActionConnection2ᚖgithubᚗcomᚋvibeᚑc2ᚋvibeᚑc2ᚑcoreᚋcoreᚋpkgᚋgraphqlᚋmodelᚐAgentActionConnection(ctx context.Context, sel ast.SelectionSet, v *model.AgentActionConnection) graphql.Marshaler {
+	if v == nil {
+		if !graphql.HasFieldError(ctx, graphql.GetFieldContext(ctx)) {
+			graphql.AddErrorf(ctx, "the requested element is null which the schema does not allow")
+		}
+		return graphql.Null
+	}
+	return ec._AgentActionConnection(ctx, sel, v)
+}
+
+func (ec *executionContext) marshalNAgentActionEdge2ᚕᚖgithubᚗcomᚋvibeᚑc2ᚋvibeᚑc2ᚑcoreᚋcoreᚋpkgᚋgraphqlᚋmodelᚐAgentActionEdgeᚄ(ctx context.Context, sel ast.SelectionSet, v []*model.AgentActionEdge) graphql.Marshaler {
 	ret := graphql.MarshalSliceConcurrently(ctx, len(v), 0, false, func(ctx context.Context, i int) graphql.Marshaler {
 		fc := graphql.GetFieldContext(ctx)
 		fc.Result = &v[i]
-		return ec.marshalNAgentAction2ᚖgithubᚗcomᚋvibeᚑc2ᚋvibeᚑc2ᚑcoreᚋcoreᚋpkgᚋmodelsᚐAgentAction(ctx, sel, v[i])
+		return ec.marshalNAgentActionEdge2ᚖgithubᚗcomᚋvibeᚑc2ᚋvibeᚑc2ᚑcoreᚋcoreᚋpkgᚋgraphqlᚋmodelᚐAgentActionEdge(ctx, sel, v[i])
 	})
 
 	for _, e := range ret {
@@ -47022,14 +47462,14 @@ func (ec *executionContext) marshalNAgentAction2ᚕᚖgithubᚗcomᚋvibeᚑc2�
 	return ret
 }
 
-func (ec *executionContext) marshalNAgentAction2ᚖgithubᚗcomᚋvibeᚑc2ᚋvibeᚑc2ᚑcoreᚋcoreᚋpkgᚋmodelsᚐAgentAction(ctx context.Context, sel ast.SelectionSet, v *models.AgentAction) graphql.Marshaler {
+func (ec *executionContext) marshalNAgentActionEdge2ᚖgithubᚗcomᚋvibeᚑc2ᚋvibeᚑc2ᚑcoreᚋcoreᚋpkgᚋgraphqlᚋmodelᚐAgentActionEdge(ctx context.Context, sel ast.SelectionSet, v *model.AgentActionEdge) graphql.Marshaler {
 	if v == nil {
 		if !graphql.HasFieldError(ctx, graphql.GetFieldContext(ctx)) {
 			graphql.AddErrorf(ctx, "the requested element is null which the schema does not allow")
 		}
 		return graphql.Null
 	}
-	return ec._AgentAction(ctx, sel, v)
+	return ec._AgentActionEdge(ctx, sel, v)
 }
 
 func (ec *executionContext) unmarshalNAgentActionOutcome2githubᚗcomᚋvibeᚑc2ᚋvibeᚑc2ᚑcoreᚋcoreᚋpkgᚋgraphqlᚋmodelᚐAgentActionOutcome(ctx context.Context, v any) (model.AgentActionOutcome, error) {

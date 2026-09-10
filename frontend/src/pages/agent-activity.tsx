@@ -1,14 +1,15 @@
-import { useMemo, useState } from "react"
+import { useMemo } from "react"
 import { BotIcon } from "lucide-react"
 import { usePageMetadata } from "@/hooks/use-page-metadata"
+import { useConnectionNodes } from "@/hooks/use-connection-nodes"
 import {
-  useMyAgentActions,
+  useInfiniteAgentActions,
+  useMyAgentActionSubscription,
   useMyAgentActivitySummary,
-  type AgentActionFilters,
 } from "@/graphql/hooks/agent-actions"
+import { outcomesFor, useAgentActionStore } from "@/stores/agent-actions"
 import { AgentActivityToolbar } from "@/components/agent-activity/agent-activity-toolbar"
-import { AgentActionList } from "@/components/agent-activity/agent-action-list"
-import { Skeleton } from "@/components/ui/skeleton"
+import { AgentActionsTable } from "@/components/agent-activity/agent-actions-table"
 
 /**
  * What the operator's own agents have been doing — across every operation they
@@ -19,8 +20,8 @@ import { Skeleton } from "@/components/ui/skeleton"
  * visit each operation in turn to find out what they had authorized would be
  * the opposite of an audit. Operation is a filter here, not the frame.
  *
- * It also needs no scoped operation to be useful, which is why it lives in the
- * user menu next to sessions and keys rather than in the operation navigation.
+ * It needs no scoped operation to be useful, which is why it lives in the user
+ * menu beside sessions and keys rather than in the operation navigation.
  */
 export function AgentActivityPage() {
   usePageMetadata({
@@ -28,20 +29,31 @@ export function AgentActivityPage() {
     icon: { kind: "lucide", component: BotIcon },
   })
 
-  const [filters, setFilters] = useState<AgentActionFilters>({})
+  // Live updates: an agent working while this page is open should appear
+  // without a reload, the same way the users and operations tables behave.
+  useMyAgentActionSubscription()
+
+  const agentKeyId = useAgentActionStore((s) => s.agentKeyId)
+  const operationId = useAgentActionStore((s) => s.operationId)
+  const writesOnly = useAgentActionStore((s) => s.writesOnly)
+  const refusedOnly = useAgentActionStore((s) => s.refusedOnly)
+
+  const { data, isLoading, isFetchingNextPage, hasNextPage, fetchNextPage } =
+    useInfiniteAgentActions({
+      agentKeyId,
+      operationId,
+      writesOnly: writesOnly || null,
+      outcomes: outcomesFor(refusedOnly),
+    })
+
+  const actions = useConnectionNodes(data, (p) => p.myAgentActions)
+  const totalCount = data?.pages[0]?.myAgentActions.totalCount ?? 0
 
   const summary = useMyAgentActivitySummary()
-  const feed = useMyAgentActions(filters)
-
-  const actions = useMemo(
-    () => feed.data?.pages.flatMap((page) => page.myAgentActions) ?? [],
-    [feed.data],
-  )
-
   const agents = summary.data?.myAgentActivitySummary ?? []
 
-  // Operations are derived from what is on screen rather than fetched: the
-  // only ones worth filtering by are the ones an agent has actually touched.
+  // Operations are derived from what has loaded rather than fetched: the only
+  // ones worth filtering by are the ones an agent has actually touched.
   const operations = useMemo(() => {
     const seen = new Map<string, string>()
     for (const action of actions) {
@@ -51,49 +63,19 @@ export function AgentActivityPage() {
   }, [actions])
 
   return (
-    <div className="flex h-full min-h-0 flex-col">
-      <header className="border-b px-4 py-3">
-        <h1 className="flex items-center gap-2 text-sm font-medium">
-          <BotIcon className="size-4 text-muted-foreground" />
-          Agent activity
-        </h1>
-        <p className="mt-0.5 text-xs text-muted-foreground">
-          Every call your agents have made, across all your operations. Reads
-          included — the operation timeline shows what they changed, this shows
-          what they looked at.
-        </p>
-      </header>
-
+    <div className="flex flex-1 flex-col gap-2 p-2">
       <AgentActivityToolbar
         agents={agents}
         operations={operations}
-        filters={filters}
-        onFiltersChange={setFilters}
-        totalShown={actions.length}
+        totalCount={totalCount}
       />
-
-      <div className="min-h-0 flex-1 overflow-y-auto px-4 pb-4">
-        {feed.isLoading ? (
-          <div className="space-y-2 pt-2">
-            {Array.from({ length: 6 }).map((_, i) => (
-              <Skeleton key={i} className="h-12 w-full" />
-            ))}
-          </div>
-        ) : (
-          <AgentActionList
-            actions={actions}
-            hasMore={!!feed.hasNextPage}
-            loadingMore={feed.isFetchingNextPage}
-            onLoadMore={() => feed.fetchNextPage()}
-            filtered={
-              !!filters.agentKeyId ||
-              !!filters.operationId ||
-              !!filters.writesOnly ||
-              !!filters.outcomes?.length
-            }
-          />
-        )}
-      </div>
+      <AgentActionsTable
+        actions={actions}
+        isLoading={isLoading}
+        isFetchingNextPage={isFetchingNextPage}
+        hasNextPage={!!hasNextPage}
+        fetchNextPage={fetchNextPage}
+      />
     </div>
   )
 }

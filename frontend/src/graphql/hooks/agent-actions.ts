@@ -1,55 +1,48 @@
-import { useInfiniteQuery, useQuery } from "@tanstack/react-query"
+import { useInfiniteQuery, useQuery, useQueryClient } from "@tanstack/react-query"
 import { graphqlClient } from "@/lib/graphql-client"
+import { useSubscription } from "@/hooks/use-subscription"
 import {
   MyAgentActionsDocument,
   MyAgentActivitySummaryDocument,
+  MyAgentActionOccurredDocument,
   type AgentActionOutcome,
 } from "@/graphql/gql/graphql"
 
 export const agentActionKeys = {
   all: ["agent-actions"] as const,
-  list: (filters: AgentActionFilters) =>
-    [...agentActionKeys.all, "list", filters] as const,
+  infiniteLists: () => [...agentActionKeys.all, "infinite-list"] as const,
+  infiniteList: (params: AgentActionListParams) =>
+    [...agentActionKeys.infiniteLists(), params] as const,
   summary: () => [...agentActionKeys.all, "summary"] as const,
 }
 
-export interface AgentActionFilters {
+export interface AgentActionListParams {
   agentKeyId?: string | null
   // Narrows an otherwise cross-operation feed. Not the frame: the trail
   // belongs to the operator, not to any one engagement.
   operationId?: string | null
-  writesOnly?: boolean
-  outcomes?: AgentActionOutcome[]
+  writesOnly?: boolean | null
+  outcomes?: AgentActionOutcome[] | null
+  first?: number
 }
 
-const PAGE_SIZE = 50
-
-/**
- * Pages backwards through the caller's audit trail by timestamp rather than by
- * offset. The feed grows while it is being read — an agent adds rows faster
- * than an operator scrolls — and an offset would silently repeat or skip rows
- * as it shifted underneath them.
- */
-export function useMyAgentActions(filters: AgentActionFilters) {
+export function useInfiniteAgentActions(params: AgentActionListParams) {
   return useInfiniteQuery({
-    queryKey: agentActionKeys.list(filters),
-    initialPageParam: null as string | null,
+    queryKey: agentActionKeys.infiniteList(params),
     queryFn: ({ pageParam }) =>
       graphqlClient(MyAgentActionsDocument, {
-        agentKeyId: filters.agentKeyId ?? null,
-        operationId: filters.operationId ?? null,
-        writesOnly: filters.writesOnly ?? null,
-        outcomes: filters.outcomes?.length ? filters.outcomes : null,
-        before: pageParam,
-        limit: PAGE_SIZE,
+        agentKeyId: params.agentKeyId ?? null,
+        operationId: params.operationId ?? null,
+        writesOnly: params.writesOnly ?? null,
+        outcomes: params.outcomes?.length ? params.outcomes : null,
+        first: params.first ?? 30,
+        after: pageParam,
       }),
-    getNextPageParam: (lastPage) => {
-      const rows = lastPage.myAgentActions
-      // A short page means the end; otherwise the oldest row's timestamp is
-      // where the next page starts.
-      if (rows.length < PAGE_SIZE) return null
-      return rows[rows.length - 1].occurredAt
-    },
+    initialPageParam: undefined as string | undefined,
+    getNextPageParam: (lastPage) =>
+      lastPage.myAgentActions.pageInfo.hasNextPage
+        ? lastPage.myAgentActions.pageInfo.endCursor ?? undefined
+        : undefined,
   })
 }
 
@@ -57,5 +50,26 @@ export function useMyAgentActivitySummary() {
   return useQuery({
     queryKey: agentActionKeys.summary(),
     queryFn: () => graphqlClient(MyAgentActivitySummaryDocument),
+  })
+}
+
+/**
+ * Keeps the activity page current while an agent is working.
+ *
+ * Invalidates rather than patching the cache. The event carries enough to
+ * render a rail entry but not a full row — no id, no arguments, no duration —
+ * and inventing a partial row that a refetch then replaces would make the list
+ * flicker between two versions of the same entry.
+ */
+export function useMyAgentActionSubscription() {
+  const queryClient = useQueryClient()
+
+  useSubscription(MyAgentActionOccurredDocument, undefined, {
+    onData: () => {
+      queryClient.invalidateQueries({ queryKey: agentActionKeys.infiniteLists() })
+      // The summary carries per-agent counts and last-seen, so it moves on
+      // every call too.
+      queryClient.invalidateQueries({ queryKey: agentActionKeys.summary() })
+    },
   })
 }

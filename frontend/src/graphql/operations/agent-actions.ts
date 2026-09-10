@@ -28,18 +28,28 @@ export const MyAgentActionsQuery = graphql(`
     $operationId: ID
     $writesOnly: Boolean
     $outcomes: [AgentActionOutcome!]
-    $before: String
-    $limit: Int
+    $first: Int
+    $after: String
   ) {
     myAgentActions(
       agentKeyId: $agentKeyId
       operationId: $operationId
       writesOnly: $writesOnly
       outcomes: $outcomes
-      before: $before
-      limit: $limit
+      first: $first
+      after: $after
     ) {
-      ...AgentActionFields
+      edges {
+        node {
+          ...AgentActionFields
+        }
+        cursor
+      }
+      pageInfo {
+        hasNextPage
+        endCursor
+      }
+      totalCount
     }
   }
 `)
@@ -52,6 +62,21 @@ export const MyAgentActivitySummaryQuery = graphql(`
       actions
       operations
       lastSeen
+    }
+  }
+`)
+
+// Fires on every call any of the caller's agents makes, so the page stays
+// current without a reload.
+export const MyAgentActionOccurredSubscription = graphql(`
+  subscription MyAgentActionOccurred {
+    myAgentActionOccurred {
+      agentKeyId
+      agentName
+      tool
+      write
+      outcome
+      operationId
     }
   }
 `)

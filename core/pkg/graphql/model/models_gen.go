@@ -17,6 +17,17 @@ type APIKeyWithSecret struct {
 	Token  string         `json:"token"`
 }
 
+type AgentActionConnection struct {
+	Edges      []*AgentActionEdge   `json:"edges"`
+	PageInfo   *pagination.PageInfo `json:"pageInfo"`
+	TotalCount int                  `json:"totalCount"`
+}
+
+type AgentActionEdge struct {
+	Node   *models.AgentAction `json:"node"`
+	Cursor string              `json:"cursor"`
+}
+
 type AgentActivityEvent struct {
 	OperationID string `json:"operationId"`
 	AgentKeyID  string `json:"agentKeyId"`
