@@ -169,6 +169,16 @@ func TestGracefulShutdownDrain(t *testing.T) {
 }
 
 func TestConcurrentPublish(t *testing.T) {
+	// Publish exactly as many events as a subscriber channel can hold. Within
+	// that, no drop is possible whatever the scheduler does — every event fits
+	// in the buffer even if the handler never runs until Stop drains it — so
+	// the exact count below is a real guarantee rather than a hope.
+	//
+	// Keyed to the constant, not a literal: changing the buffer size should
+	// change what this publishes, not quietly turn a deterministic assertion
+	// into a flaky one.
+	const n = defaultSubscriberBufferSize
+
 	bus := newTestBus()
 	var count atomic.Int32
 
@@ -178,7 +188,7 @@ func TestConcurrentPublish(t *testing.T) {
 	bus.Start()
 
 	var wg sync.WaitGroup
-	for range 100 {
+	for range n {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
@@ -187,10 +197,56 @@ func TestConcurrentPublish(t *testing.T) {
 	}
 	wg.Wait()
 
+	// Stop is documented to drain: it closes the publisher channel, waits for
+	// the dispatcher, then waits for every handler. Anything buffered at this
+	// point must still be delivered.
 	bus.Stop(context.Background())
 
-	if got := count.Load(); got != 100 {
-		t.Errorf("expected 100 events processed, got %d", got)
+	if got := count.Load(); got != n {
+		t.Errorf("expected %d events processed, got %d — nothing should be dropped "+
+			"while the in-flight count fits the subscriber buffer", n, got)
+	}
+}
+
+// Beyond the buffers the bus drops rather than blocking, per subscriber. That
+// is deliberate: a slow handler must not be able to stall every publisher in
+// the process. This pins the property the old assertion got wrong — it
+// published more than a subscriber channel holds and then required that none
+// were dropped, which the bus has never promised, so it failed whenever CPU
+// contention kept the handler from draining in time.
+func TestPublishDropsRatherThanBlocking(t *testing.T) {
+	// Comfortably past both the publisher and subscriber buffers.
+	const n = defaultBufferSize * 4
+
+	bus := newTestBus()
+	var delivered atomic.Int32
+	release := make(chan struct{})
+
+	bus.Subscribe([]Topic{TopicUserCreated}, func(ctx context.Context, e Event) {
+		// Hold the single drain goroutine so the subscriber buffer fills and
+		// the dispatcher is forced down its drop path.
+		<-release
+		delivered.Add(1)
+	})
+	bus.Start()
+
+	// Published from this goroutine on purpose: if Publish ever blocked, this
+	// loop would not finish and the test would hang. Completing IS the
+	// assertion — no timing threshold to be flaky about.
+	for range n {
+		bus.Publish(NewUserCreatedEvent(UserActor("user-1"), UserEventPayload{}))
+	}
+
+	close(release)
+	bus.Stop(context.Background())
+
+	got := delivered.Load()
+	switch {
+	case got > n:
+		t.Errorf("delivered %d of %d published — the bus must never invent events", got, n)
+	case got == 0:
+		t.Errorf("delivered nothing of %d published — dropping under pressure is "+
+			"expected, dropping everything is not", n)
 	}
 }
 
