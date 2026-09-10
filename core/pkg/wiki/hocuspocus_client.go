@@ -5,8 +5,10 @@ import (
 	"context"
 	"crypto/hmac"
 	"crypto/sha256"
+	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -277,4 +279,82 @@ func (c *HocuspocusClient) ApplyMarkdown(ctx context.Context, documentID, markdo
 		return result, fmt.Errorf("read apply-markdown response: %w", err)
 	}
 	return result, nil
+}
+
+type extractTextRequest struct {
+	Filename    string `json:"filename"`
+	ContentType string `json:"contentType"`
+	// Data is the file, base64-encoded. JSON rather than a raw body because
+	// the HMAC covers the exact bytes sent, and the filename and content type
+	// have to travel under that signature too.
+	Data string `json:"data"`
+}
+
+// ExtractedText is what the sidecar made of an attachment.
+type ExtractedText struct {
+	Kind      string `json:"kind"`
+	Text      string `json:"text"`
+	Truncated bool   `json:"truncated"`
+}
+
+// ErrNoTextExtractor means the sidecar has no converter for this file. It is
+// an ordinary answer, not a failure: most attachments are not documents.
+var ErrNoTextExtractor = errors.New("no text extractor for this file type")
+
+// ExtractText converts a .docx or .xlsx attachment to plain text.
+//
+// Delegated to the sidecar because the converters already live there — the
+// wiki's own attachment preview renders these in the browser with mammoth and
+// read-excel-file, and reimplementing either in Go would be a second
+// implementation to keep in step with what the operator sees. It also keeps
+// this away from SheetJS, which the frontend documents at length as unsafe to
+// feed untrusted spreadsheets to.
+func (c *HocuspocusClient) ExtractText(ctx context.Context, filename, contentType string, data []byte) (ExtractedText, error) {
+	var out ExtractedText
+
+	if c.internalSecret == "" {
+		return out, fmt.Errorf("extract-text: no internal secret configured")
+	}
+
+	body, err := json.Marshal(extractTextRequest{
+		Filename:    filename,
+		ContentType: contentType,
+		Data:        base64.StdEncoding.EncodeToString(data),
+	})
+	if err != nil {
+		return out, fmt.Errorf("marshal extract payload: %w", err)
+	}
+
+	mac := hmac.New(sha256.New, []byte(c.internalSecret))
+	mac.Write(body)
+	signature := "sha256=" + hex.EncodeToString(mac.Sum(nil))
+
+	url := c.baseURL + "/internal/extract-text"
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewReader(body))
+	if err != nil {
+		return out, fmt.Errorf("build extract-text request: %w", err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("X-Internal-Signature-256", signature)
+
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return out, fmt.Errorf("call hocuspocus extract-text: %w", err)
+	}
+	defer resp.Body.Close()
+
+	// 415 is "not a document I can read", which callers handle rather than
+	// report as breakage.
+	if resp.StatusCode == http.StatusUnsupportedMediaType {
+		return out, ErrNoTextExtractor
+	}
+	if resp.StatusCode != http.StatusOK {
+		errBody, _ := io.ReadAll(io.LimitReader(resp.Body, 4096))
+		return out, fmt.Errorf("extract-text returned %d: %s", resp.StatusCode, string(errBody))
+	}
+
+	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
+		return out, fmt.Errorf("read extract-text response: %w", err)
+	}
+	return out, nil
 }

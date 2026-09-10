@@ -5,6 +5,7 @@ import { createDatabaseExtension, debounceMs } from "./persistence.js";
 import { setupDisconnectApi } from "./disconnect.js";
 import { setupInternalApi } from "./internal-api.js";
 import { setupApplyApi } from "./apply-markdown.js";
+import { setupExtractApi } from "./extract-text.js";
 
 const port = parseInt(process.env.PORT || "1234", 10);
 const maxActiveRooms = parseInt(process.env.MAX_ACTIVE_ROOMS || "100", 10);
@@ -119,6 +120,9 @@ setupInternalApi(app);
 // verifies an HMAC over the exact bytes Go signed. Takes the server so it can
 // edit live documents rather than only convert markdown.
 setupApplyApi(app, server);
+// Office-attachment text extraction for the MCP agent surface. Same raw-body
+// HMAC path as the routes above, so it mounts before express.json() too.
+setupExtractApi(app);
 app.use(express.json());
 setupDisconnectApi(app, server);
 

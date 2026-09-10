@@ -195,6 +195,7 @@ func TestServer_ToolSurface(t *testing.T) {
 		"search_wiki", "list_wiki_tree", "get_wiki_document",
 		"list_wiki_templates", "create_wiki_document_from_template", "set_wiki_template",
 		"create_wiki_document", "append_wiki_section", "update_wiki_document",
+		"list_wiki_attachments", "read_wiki_attachment",
 		"get_timeline", "create_timeline_event",
 		"get_user_focus",
 	}

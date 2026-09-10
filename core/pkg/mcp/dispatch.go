@@ -41,6 +41,11 @@ type toolResult struct {
 	// Summary is one human-readable line for the activity rail and the
 	// timeline: "read 24 hosts", "appended to Recon Notes".
 	Summary string
+
+	// Content overrides the default JSON encoding of Payload. Set it only when
+	// a tool returns something that is not data — an image, chiefly, where
+	// base64 inside a JSON string would be an image the model cannot look at.
+	Content []mcp.Content
 }
 
 // handlerFunc is the shape every tool in this package implements. Args are
@@ -103,6 +108,13 @@ func register[A any](s *Server, tool *mcp.Tool, kind toolKind, fn handlerFunc[A]
 				IsError: true,
 				Content: []mcp.Content{&mcp.TextContent{Text: err.Error()}},
 			}, nil, nil
+		}
+
+		if len(result.Content) > 0 {
+			// Deliberately not remembered for idempotency: the cache stores an
+			// encoded string, and these results are not that. Replaying a read
+			// costs nothing anyway — the guarantee that matters is for writes.
+			return &mcp.CallToolResult{Content: result.Content}, nil, nil
 		}
 
 		encoded, encErr := encodeResult(result.Payload)

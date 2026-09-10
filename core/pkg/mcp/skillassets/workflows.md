@@ -53,6 +53,30 @@ change:
   Promoting your own page to a template is a claim about how the whole team
   should work.
 
+## Reading what is attached to a page
+
+A page's text is often a summary of something attached to it — a scan export,
+a spreadsheet of accounts, a screenshot of a console. `list_wiki_attachments`
+shows what a page carries, and each entry says whether you can read it, so you
+do not have to spend a call finding out.
+
+`read_wiki_attachment` handles three shapes:
+
+- **Already text** — `.txt`, `.csv`, `.md`, `.json`, `.log`, config and script
+  files. Returned as-is. An LDAP dump or a DNS export is exactly the sort of
+  thing worth correlating against hosts and credentials.
+- **Word and Excel** — converted to plain text. You get the words and the cell
+  values, not the layout.
+- **Images** — returned as an image you can actually look at. Useful for
+  screenshots and network diagrams.
+
+PDFs and other binaries are not readable. That is a real limit, not a
+transient error: say so rather than retrying.
+
+Long files come back truncated with a note. When you see it, treat what you
+have as the beginning of the file and nothing more — summarising a truncated
+log as though it were complete is worse than saying you only saw part of it.
+
 ## Giving a page an icon
 
 The default is deliberate: leave `emoji` and `icon` unset and the page gets an

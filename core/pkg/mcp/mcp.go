@@ -32,6 +32,7 @@
 package mcp
 
 import (
+	"github.com/vibe-c2/vibe-c2-core/core/pkg/blob"
 	"github.com/vibe-c2/vibe-c2-core/core/pkg/cache"
 	"github.com/vibe-c2/vibe-c2-core/core/pkg/eventbus"
 	"github.com/vibe-c2/vibe-c2-core/core/pkg/repository"
@@ -64,12 +65,16 @@ type Deps struct {
 	// through Hocuspocus rather than a plain document update.
 	OperationRepo    repository.IOperationRepository
 	WikiDocumentRepo repository.IWikiDocumentRepository
+	WikiFileRepo     repository.IWikiFileRepository
 	AgentActionRepo  repository.IAgentActionRepository
 	// OperationEventRepo is the timeline. Agent WRITES land here alongside
 	// human activity; reads do not — they go only to agent_actions.
 	OperationEventRepo repository.IOperationEventRepository
 
 	Cache cache.Cache
+	// Blobs is where attachment bytes live. Read-only from here: an agent can
+	// look at what is attached to a page, not add to or remove from it.
+	Blobs blob.ObjectStore
 	// Hocuspocus is the write path for wiki bodies, not just a converter —
 	// edits are applied as Y.js transactions on the live document so they
 	// merge with whatever the operator is doing rather than overwriting it.
