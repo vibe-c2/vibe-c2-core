@@ -32,6 +32,7 @@ type createWikiDocumentArgs struct {
 	Title       string `json:"title"                  jsonschema:"Page title."`
 	Content     string `json:"content,omitempty"      jsonschema:"Page body as Markdown."`
 	ParentID    string `json:"parent_id,omitempty"    jsonschema:"Create as a child of this page."`
+	visualIdentity
 }
 
 type appendWikiSectionArgs struct {
@@ -45,6 +46,7 @@ type updateWikiDocumentArgs struct {
 	DocumentID string `json:"document_id"       jsonschema:"The page to rewrite."`
 	Content    string `json:"content"           jsonschema:"The new body as Markdown. This REPLACES the page, so read it first and send the whole thing back."`
 	Title      string `json:"title,omitempty"   jsonschema:"Optionally rename the page at the same time."`
+	visualIdentity
 }
 
 func registerWikiTools(s *Server) {
@@ -187,9 +189,17 @@ func handleCreateWikiDocument(ctx context.Context, s *Server, args createWikiDoc
 	// path and the domain event are all handled the same way they are for a
 	// human. Content is applied afterwards, because it needs the CRDT seeding
 	// the resolver does not do — see writeBody.
+	if err := args.validate(); err != nil {
+		return toolResult{}, err
+	}
+	emoji, icon, color := args.apply()
+
 	doc, err := s.deps.WikiDocs.CreateWikiDocument(ctx, opID.String(), model.CreateWikiDocumentInput{
 		Title:            args.Title,
 		ParentDocumentID: optionalString(args.ParentID),
+		Emoji:            emoji,
+		Icon:             icon,
+		Color:            color,
 	})
 	if err != nil {
 		return toolResult{}, fmt.Errorf("failed to create wiki page: %w", err)
@@ -244,11 +254,20 @@ func handleUpdateWikiDocument(ctx context.Context, s *Server, args updateWikiDoc
 		return toolResult{}, err
 	}
 
-	if args.Title != "" && args.Title != doc.Title {
-		if _, err := s.deps.WikiDocs.UpdateWikiDocument(ctx, args.DocumentID, model.UpdateWikiDocumentInput{
-			Title: &args.Title,
-		}); err != nil {
-			return toolResult{}, fmt.Errorf("failed to rename wiki page: %w", err)
+	if err := args.validate(); err != nil {
+		return toolResult{}, err
+	}
+	emoji, icon, color := args.apply()
+
+	// Title and the visual identity go through the resolver; only the body
+	// needs the collaboration path.
+	if (args.Title != "" && args.Title != doc.Title) || emoji != nil || icon != nil || color != nil {
+		input := model.UpdateWikiDocumentInput{Emoji: emoji, Icon: icon, Color: color}
+		if args.Title != "" && args.Title != doc.Title {
+			input.Title = &args.Title
+		}
+		if _, err := s.deps.WikiDocs.UpdateWikiDocument(ctx, args.DocumentID, input); err != nil {
+			return toolResult{}, fmt.Errorf("failed to update the wiki page: %w", err)
 		}
 	}
 

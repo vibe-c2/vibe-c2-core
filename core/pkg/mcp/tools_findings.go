@@ -32,6 +32,7 @@ type createHostArgs struct {
 	Interfaces  []interfaceArg `json:"interfaces,omitempty"   jsonschema:"Network interfaces. Without these the host cannot be placed on a subnet in the topology view."`
 	Routes      []routeArg     `json:"routes,omitempty"       jsonschema:"Routing table entries."`
 	Logins      []loginArg     `json:"logins,omitempty"       jsonschema:"Observed logins. These draw the edges in the topology users lens."`
+	visualIdentity
 }
 
 type updateHostArgs struct {
@@ -42,6 +43,7 @@ type updateHostArgs struct {
 	Interfaces []interfaceArg `json:"interfaces,omitempty"  jsonschema:"REPLACES the interface list. Call get_host first and send the full set, including any you are not changing."`
 	Routes     []routeArg     `json:"routes,omitempty"      jsonschema:"REPLACES the route list. Send the full set."`
 	Logins     []loginArg     `json:"logins,omitempty"      jsonschema:"REPLACES the login list. Send the full set."`
+	visualIdentity
 }
 
 func registerHostTools(s *Server) {
@@ -130,9 +132,17 @@ func handleCreateHost(ctx context.Context, s *Server, args createHostArgs) (tool
 		return toolResult{}, err
 	}
 
+	if err := args.validate(); err != nil {
+		return toolResult{}, err
+	}
+	emoji, icon, color := args.apply()
+
 	host, err := s.deps.Hosts.CreateHost(ctx, opID.String(), model.CreateHostInput{
 		Hostname:   args.Hostname,
 		Os:         optionalString(args.OS),
+		Emoji:      emoji,
+		Icon:       icon,
+		Color:      color,
 		Interfaces: toInterfaceInputs(args.Interfaces),
 		Routes:     toRouteInputs(args.Routes),
 		Logins:     toLoginInputs(args.Logins),
@@ -159,9 +169,17 @@ func handleUpdateHost(ctx context.Context, s *Server, args updateHostArgs) (tool
 		return toolResult{}, err
 	}
 
+	if err := args.validate(); err != nil {
+		return toolResult{}, err
+	}
+	emoji, icon, color := args.apply()
+
 	input := model.UpdateHostInput{
 		Hostname: optionalString(args.Hostname),
 		Os:       optionalString(args.OS),
+		Emoji:    emoji,
+		Icon:     icon,
+		Color:    color,
 	}
 	// Nil and empty mean different things to the resolver: nil leaves the list
 	// alone, empty clears it. Only send a list the caller actually supplied.

@@ -24,6 +24,7 @@ type createTimelineEventArgs struct {
 	Name        string `json:"name"                   jsonschema:"Short label for what happened."`
 	Description string `json:"description,omitempty"  jsonschema:"Longer detail."`
 	OccurredAt  string `json:"occurred_at,omitempty"  jsonschema:"When it happened, RFC3339. Defaults to now."`
+	visualIdentity
 }
 
 func registerTimelineTools(s *Server) {
@@ -104,11 +105,19 @@ func handleCreateTimelineEvent(ctx context.Context, s *Server, args createTimeli
 		occurredAt = time.Now().UTC().Format(time.RFC3339)
 	}
 
+	if err := args.validate(); err != nil {
+		return toolResult{}, err
+	}
+	emoji, icon, color := args.apply()
+
 	event, err := s.deps.Timeline.CreateCustomTimelineEvent(ctx, opID.String(),
 		model.CreateCustomTimelineEventInput{
 			Name:        args.Name,
 			Description: optionalString(args.Description),
 			OccurredAt:  occurredAt,
+			Emoji:       emoji,
+			Icon:        icon,
+			Color:       color,
 		})
 	if err != nil {
 		return toolResult{}, fmt.Errorf("failed to create timeline event: %w", err)
