@@ -20,6 +20,7 @@ import (
 const (
 	wikiResourceScheme  = "vibe://op/"
 	focusResourceURI    = "vibe://session/focus"
+	guideResourceURI    = "vibe://guide"
 	resourceMIMEText    = "text/markdown"
 	resourceMIMEJSON    = "application/json"
 	resourceMIMEPlain   = "text/plain"
@@ -45,6 +46,15 @@ func registerResources(s *Server) {
 	}, s.readResource)
 
 	s.server.AddResource(&mcp.Resource{
+		Name:  "vibe-c2-guide",
+		Title: "How to work in Vibe C2",
+		URI:   guideResourceURI,
+		Description: "The platform's data model, the full tool surface, and how to work " +
+			"alongside the operator. Read this first if you have not worked here before.",
+		MIMEType: resourceMIMEText,
+	}, s.readResource)
+
+	s.server.AddResource(&mcp.Resource{
 		Name:        "operator-focus",
 		Title:       "What the operator is looking at",
 		URI:         focusResourceURI,
@@ -57,6 +67,14 @@ func registerResources(s *Server) {
 // closures so the authorization path is impossible to skip for a new kind.
 func (s *Server) readResource(ctx context.Context, req *mcp.ReadResourceRequest) (*mcp.ReadResourceResult, error) {
 	uri := req.Params.URI
+
+	if uri == guideResourceURI {
+		// No authorization: the guide describes the tool surface, which the
+		// caller can already enumerate, and contains nothing about any
+		// operation. Gating it would only stop an agent learning how to
+		// behave.
+		return textResource(uri, resourceMIMEText, s.GuideText()), nil
+	}
 
 	if uri == focusResourceURI {
 		return s.readFocusResource(ctx, uri)

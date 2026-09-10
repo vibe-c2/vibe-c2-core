@@ -59,6 +59,10 @@ func New(deps Deps) *Server {
 // It exists because the difference between an agent that helps and one that
 // gets in the way is mostly knowing what surface it is on and what it must not
 // assume.
+// Every client receives this on connect and carries it for the whole session,
+// so it is charged per turn and has to stay short. The last line is what makes
+// that affordable: it buys the full guide on demand, in any client, instead of
+// paying for it permanently here.
 const serverInstructions = `You are connected to Vibe C2, a command-and-control platform for
 authorized offensive security engagements, as a delegated agent working alongside a human
 operator.
@@ -80,4 +84,7 @@ operator, and anything you change appears on their timeline attributed to you. W
 being watched, because you are.
 
 Results are capped. If a response says it was truncated, narrow the filter rather than
-assuming you have seen everything.`
+assuming you have seen everything.
+
+If you have not worked in this platform before, read the resource vibe://guide first. It
+explains the data model, every tool, and the conventions above in full.`

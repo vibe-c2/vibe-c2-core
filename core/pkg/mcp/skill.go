@@ -74,6 +74,76 @@ func (s *Server) SkillBundle() []SkillFile {
 	}
 }
 
+// GuideText renders the same content as the skill, flattened into one
+// document, for clients that have no skill mechanism at all.
+//
+// A skill file is client-side: the operator installs it, and only Claude
+// clients load it. An operator on any other MCP client would otherwise get
+// nothing but the short instructions string — so the same guidance is offered
+// as a resource they can pull on demand. It costs nothing until something
+// reads it, which is what lets it be this long.
+//
+// The frontmatter is stripped: it exists so a skill runtime can decide whether
+// to load the file, and there is no such runtime here — whoever is reading
+// this already decided.
+func (s *Server) GuideText() string {
+	groups, ungrouped := groupedTools(s.tools)
+
+	var b strings.Builder
+	b.WriteString(stripSkillOnly(stripFrontmatter(s.renderSkillSource())))
+	b.WriteString("\n\n---\n\n")
+	b.WriteString(renderToolsReference(groups, ungrouped))
+	b.WriteString("\n---\n\n")
+	b.WriteString(workflowsMD)
+	return b.String()
+}
+
+// removeSkillOnlyMarkers deletes the marker lines, keeping what they wrap.
+func removeSkillOnlyMarkers(doc string) string {
+	doc = strings.ReplaceAll(doc, skillOnlyStart+"\n", "")
+	doc = strings.ReplaceAll(doc, skillOnlyEnd+"\n", "")
+	doc = strings.ReplaceAll(doc, skillOnlyStart, "")
+	return strings.ReplaceAll(doc, skillOnlyEnd, "")
+}
+
+// skillOnly delimits passages that make sense only in the installed skill,
+// where the reference files exist as sibling documents. In the flattened guide
+// they would point at files the reader has no way to open.
+const (
+	skillOnlyStart = "<!-- skill-only:start -->"
+	skillOnlyEnd   = "<!-- skill-only:end -->"
+)
+
+// stripSkillOnly removes every delimited passage. HTML comments because they
+// are invisible wherever the skill itself is rendered.
+func stripSkillOnly(doc string) string {
+	for {
+		start := strings.Index(doc, skillOnlyStart)
+		if start < 0 {
+			return doc
+		}
+		end := strings.Index(doc[start:], skillOnlyEnd)
+		if end < 0 {
+			// Unterminated: drop from the marker rather than leaving a
+			// dangling instruction in a document that cannot honour it.
+			return strings.TrimRight(doc[:start], "\n") + "\n"
+		}
+		doc = doc[:start] + doc[start+end+len(skillOnlyEnd):]
+	}
+}
+
+// stripFrontmatter removes a leading YAML block, if there is one.
+func stripFrontmatter(doc string) string {
+	if !strings.HasPrefix(doc, "---\n") {
+		return doc
+	}
+	end := strings.Index(doc[4:], "\n---\n")
+	if end < 0 {
+		return doc
+	}
+	return strings.TrimLeft(doc[4+end+len("\n---\n"):], "\n")
+}
+
 // SkillZip writes the bundle as a zip, ready to unpack into a skills
 // directory.
 func (s *Server) SkillZip(w io.Writer) error {
@@ -90,7 +160,17 @@ func (s *Server) SkillZip(w io.Writer) error {
 	return zw.Close()
 }
 
+// renderSkillMD is the installed skill: the delimited content kept, the
+// markers removed. An agent reads this file raw, so leftover plumbing is noise
+// in its context.
 func (s *Server) renderSkillMD() string {
+	return removeSkillOnlyMarkers(s.renderSkillSource())
+}
+
+// renderSkillSource is the templated document with its markers intact. The two
+// presentations both derive from it — one keeps the delimited passages, the
+// other drops them — so neither can be built from the other's output.
+func (s *Server) renderSkillSource() string {
 	var b strings.Builder
 	if err := skillTemplate.Execute(&b, skillTemplateData{
 		Name:          SkillName,

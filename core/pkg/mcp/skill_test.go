@@ -168,3 +168,146 @@ func findFile(t *testing.T, files []SkillFile, path string) string {
 	t.Fatalf("%s is not in the bundle", path)
 	return ""
 }
+
+// The guide is the same knowledge as the skill, for clients with no skill
+// mechanism. If it drifted from the skill an operator on Cursor would be
+// working from different documentation than one on Claude Code.
+func TestGuide_CarriesTheSameContentAsTheSkill(t *testing.T) {
+	s := New(Deps{Logger: zap.NewNop()})
+	guide := s.GuideText()
+
+	// Every tool, same as the skill's reference.
+	for _, tool := range s.tools {
+		if !strings.Contains(guide, "`"+tool.Name+"`") {
+			t.Errorf("tool %q is missing from the guide", tool.Name)
+		}
+	}
+
+	// Both reference documents, folded in rather than linked — there is no
+	// file tree here to follow a link through.
+	for _, marker := range []string{
+		"# Tool reference",
+		"# Workflows",
+		"findings hold the data", // the conduct guidance from SKILL.md
+	} {
+		if !strings.Contains(guide, marker) {
+			t.Errorf("the guide is missing %q", marker)
+		}
+	}
+
+	// The pointers to sibling files make no sense in a flattened document.
+	if strings.Contains(guide, "reference/tools.md") {
+		t.Error("the guide still points at reference files that do not exist for a resource reader")
+	}
+}
+
+// Frontmatter is for a skill runtime deciding whether to load a file. A
+// resource reader has already decided, so leading YAML would just be noise at
+// the top of the document.
+func TestGuide_HasNoFrontmatter(t *testing.T) {
+	s := New(Deps{Logger: zap.NewNop()})
+	guide := s.GuideText()
+
+	if strings.HasPrefix(guide, "---") {
+		t.Fatalf("the guide starts with frontmatter:\n%s", guide[:120])
+	}
+	if !strings.HasPrefix(guide, "# Vibe C2") {
+		t.Fatalf("the guide should open with its title, got: %q", firstLine(guide))
+	}
+}
+
+func TestStripFrontmatter(t *testing.T) {
+	cases := []struct {
+		name string
+		in   string
+		want string
+	}{
+		{"with frontmatter", "---\nname: x\n---\n\n# Title\n\nbody", "# Title\n\nbody"},
+		{"without frontmatter", "# Title\n\nbody", "# Title\n\nbody"},
+		{"unterminated frontmatter is left alone", "---\nname: x\n# Title", "---\nname: x\n# Title"},
+		{"empty", "", ""},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := stripFrontmatter(tc.in); got != tc.want {
+				t.Fatalf("stripFrontmatter(%q) = %q, want %q", tc.in, got, tc.want)
+			}
+		})
+	}
+}
+
+// The instructions string is charged on every turn, so it has to stay short —
+// and it has to point at the guide, which is the only reason it can afford to.
+func TestInstructions_StayShortAndPointAtTheGuide(t *testing.T) {
+	const budget = 2000
+	if len(serverInstructions) > budget {
+		t.Errorf("instructions are %d chars, over the %d budget — they are carried every turn; "+
+			"move detail into the guide instead", len(serverInstructions), budget)
+	}
+	if !strings.Contains(serverInstructions, guideResourceURI) {
+		t.Errorf("instructions do not mention %s, so a client with no skill support "+
+			"has no way to learn the guide exists", guideResourceURI)
+	}
+}
+
+func firstLine(s string) string {
+	if i := strings.IndexByte(s, '\n'); i >= 0 {
+		return s[:i]
+	}
+	return s
+}
+
+func TestStripSkillOnly(t *testing.T) {
+	cases := []struct {
+		name string
+		in   string
+		want string
+	}{
+		{
+			name: "removes a delimited passage",
+			in:   "before\n" + skillOnlyStart + "\ngone\n" + skillOnlyEnd + "\nafter",
+			want: "before\n\nafter",
+		},
+		{
+			name: "removes several",
+			in:   "a" + skillOnlyStart + "x" + skillOnlyEnd + "b" + skillOnlyStart + "y" + skillOnlyEnd + "c",
+			want: "abc",
+		},
+		{
+			name: "leaves undelimited text alone",
+			in:   "# Title\n\nbody",
+			want: "# Title\n\nbody",
+		},
+		{
+			// Better to lose the tail than to leave an instruction the reader
+			// cannot act on.
+			name: "unterminated drops the remainder",
+			in:   "keep\n" + skillOnlyStart + "\nlost",
+			want: "keep\n",
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := stripSkillOnly(tc.in); got != tc.want {
+				t.Fatalf("stripSkillOnly(%q) = %q, want %q", tc.in, got, tc.want)
+			}
+		})
+	}
+}
+
+// The installed skill must KEEP what the guide drops — the reference pointers
+// are how its sibling files ever get loaded.
+func TestSkill_KeepsItsReferencePointers(t *testing.T) {
+	s := New(Deps{Logger: zap.NewNop()})
+	skill := findFile(t, s.SkillBundle(), SkillName+"/SKILL.md")
+
+	for _, want := range []string{"reference/tools.md", "reference/workflows.md"} {
+		if !strings.Contains(skill, want) {
+			t.Errorf("SKILL.md no longer points at %s, so it will never be loaded", want)
+		}
+	}
+	// The markers themselves are plumbing and should not reach the reader.
+	if strings.Contains(skill, skillOnlyStart) || strings.Contains(skill, skillOnlyEnd) {
+		t.Error("the skill-only markers are visible in SKILL.md")
+	}
+}

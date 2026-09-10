@@ -247,8 +247,10 @@ func TestServer_ResourcesAndPrompts(t *testing.T) {
 	}
 
 	resources := post(t, r, `{"jsonrpc":"2.0","id":3,"method":"resources/list","params":{}}`).Body.String()
-	if !strings.Contains(resources, focusResourceURI) {
-		t.Errorf("resource %q is not registered", focusResourceURI)
+	for _, uri := range []string{focusResourceURI, guideResourceURI} {
+		if !strings.Contains(resources, uri) {
+			t.Errorf("resource %q is not registered", uri)
+		}
 	}
 
 	prompts := post(t, r, `{"jsonrpc":"2.0","id":4,"method":"prompts/list","params":{}}`).Body.String()
