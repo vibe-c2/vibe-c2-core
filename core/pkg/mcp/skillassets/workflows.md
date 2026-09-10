@@ -81,10 +81,35 @@ the point.
 `create_task` with an honest risk and profit score, and a description that says
 why. A task is how you propose something without doing it.
 
+Leave it unassigned unless you are about to work on it. An unassigned task is a
+suggestion the operator can take or ignore; assigning it to them announces they
+are doing it, which is their call and not yours. When you do start on
+something, `assign_task_to_me` first, so the board shows who is on it.
+
 When you finish a piece of work, `change_task_stage` to DONE with a `status` and
 a `summary` saying what actually happened — including when the answer was
 "nothing here". A closed task with an empty summary teaches the next person
 nothing.
+
+## Whose tasks you can see
+
+You work on one operator's behalf, not on the team's. So:
+
+- Tasks **assigned to the operator you act for** are yours to read and change.
+- **Unassigned** tasks are too — nobody has claimed them.
+- Tasks **another operator has taken** are neither. `find_tasks` leaves them
+  out, and reading or changing one by id is refused.
+
+That is narrower than what the operator themselves can see: they can read the
+whole board, because it is shared. Handing you a key is not the same as adding
+you to the team, so their colleagues' work stays theirs.
+
+Two consequences worth expecting:
+
+- A page of results can come back smaller than you asked for, with a note
+  saying how many were withheld. Do not read that as an empty board.
+- On a task shared between the operator and a colleague, you may add or remove
+  **only** the operator you act for. The colleague's claim stays put.
 
 ## Picking an engagement back up
 

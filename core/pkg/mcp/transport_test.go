@@ -190,6 +190,7 @@ func TestServer_ToolSurface(t *testing.T) {
 		"find_hashes", "get_hash", "create_hash", "import_hashes", "update_hash",
 		"mark_hash_cracked",
 		"find_tasks", "get_task", "create_task", "update_task", "change_task_stage",
+		"assign_task_to_me", "unassign_task_from_me",
 		"add_task_wiki_reference",
 		"search_wiki", "list_wiki_tree", "get_wiki_document",
 		"create_wiki_document", "append_wiki_section", "update_wiki_document",

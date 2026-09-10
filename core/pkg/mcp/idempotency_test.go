@@ -147,6 +147,7 @@ func TestIdempotency_EveryWriteToolAcceptsAKey(t *testing.T) {
 		createTaskArgs{},
 		updateTaskArgs{},
 		addTaskWikiReferenceArgs{},
+		taskAssignmentArgs{},
 		changeTaskStageArgs{},
 		createWikiDocumentArgs{},
 		appendWikiSectionArgs{},

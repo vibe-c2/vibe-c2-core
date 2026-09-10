@@ -28,6 +28,12 @@ type createTaskArgs struct {
 	Description string `json:"description,omitempty"  jsonschema:"What needs doing, and why."`
 	RiskScore   int    `json:"risk_score,omitempty"   jsonschema:"How risky this is to attempt, 0-10."`
 	ProfitScore int    `json:"profit_score,omitempty" jsonschema:"How valuable success would be, 0-10."`
+	AssignToMe  bool   `json:"assign_to_me,omitempty" jsonschema:"Assign the task to the operator you act for. Leave it off to propose work without claiming it."`
+}
+
+type taskAssignmentArgs struct {
+	IdempotencyKey
+	TaskID string `json:"task_id" jsonschema:"The task, from find_tasks."`
 }
 
 type updateTaskArgs struct {
@@ -75,6 +81,18 @@ func registerTaskTools(s *Server) {
 	}, writeTool, handleCreateTask)
 
 	register(s, &mcp.Tool{
+		Name: "assign_task_to_me",
+		Description: "Put the operator you act for on a task's assignee list. Other assignees " +
+			"are left alone — you can only ever add or remove that one operator.",
+	}, writeTool, handleAssignTaskToMe)
+
+	register(s, &mcp.Tool{
+		Name: "unassign_task_from_me",
+		Description: "Take the operator you act for off a task's assignee list, leaving any " +
+			"other assignees in place.",
+	}, writeTool, handleUnassignTaskFromMe)
+
+	register(s, &mcp.Tool{
 		Name: "update_task",
 		Description: "Change a task's name, description or risk/profit scoring. Use " +
 			"change_task_stage to move it between columns.",
@@ -118,28 +136,55 @@ func handleFindTasks(ctx context.Context, s *Server, args findTasksArgs) (toolRe
 		return toolResult{}, fmt.Errorf("failed to search tasks: %w", err)
 	}
 
+	owner, err := agentOwnerID(ctx)
+	if err != nil {
+		return toolResult{}, err
+	}
+
+	// Filtered here rather than in the query. The restriction belongs to the
+	// agent principal, not to the task API — a human on this board sees all of
+	// it, and pushing an agent-only rule into the shared resolver would change
+	// what everyone can do.
+	//
+	// The consequence is that a page can come back smaller than asked for.
+	// That is said out loud below rather than papered over, because an agent
+	// that reads "3 tasks" without being told some were withheld will conclude
+	// the board is nearly empty.
 	views := make([]taskView, 0, len(conn.Edges))
+	hidden := 0
 	for _, edge := range conn.Edges {
+		if !taskInAgentScope(edge.Node, owner) {
+			hidden++
+			continue
+		}
 		views = append(views, toTaskView(edge.Node))
 	}
 
-	result, err := newPage(views, endCursor(conn.PageInfo), totalNote(conn.TotalCount, len(views))...)
+	notes := totalNote(conn.TotalCount, len(views)+hidden)
+	if hidden > 0 {
+		notes = append(notes, fmt.Sprintf(
+			"%d task(s) on this page are assigned to other operators and are not shown. "+
+				"You can see tasks assigned to the operator you act for, and unassigned ones.",
+			hidden))
+	}
+
+	// The cursor comes from the underlying page, not from what survived the
+	// filter: paging has to continue from where the scan stopped, or the
+	// withheld rows would be scanned again on every subsequent page.
+	result, err := newPage(views, endCursor(conn.PageInfo), notes...)
 	if err != nil {
 		return toolResult{}, err
 	}
 	return toolResult{
 		Payload:     result,
 		OperationID: &opID,
-		Summary:     fmt.Sprintf("searched tasks (%d shown of %d)", len(views), conn.TotalCount),
+		Summary:     fmt.Sprintf("searched tasks (%d shown, %d withheld)", len(views), hidden),
 	}, nil
 }
 
 func handleGetTask(ctx context.Context, s *Server, args getTaskArgs) (toolResult, error) {
-	task, err := s.deps.Tasks.Task(ctx, args.TaskID)
+	task, err := s.loadTaskInScope(ctx, args.TaskID, models.OperationRoleViewer)
 	if err != nil {
-		return toolResult{}, fmt.Errorf("task not found")
-	}
-	if _, err := s.authorizeOperation(ctx, task.OperationID, models.OperationRoleViewer); err != nil {
 		return toolResult{}, err
 	}
 
@@ -171,13 +216,22 @@ func handleCreateTask(ctx context.Context, s *Server, args createTaskArgs) (tool
 		return toolResult{}, err
 	}
 
-	task, err := s.deps.Tasks.CreateTask(ctx, model.CreateTaskInput{
+	input := model.CreateTaskInput{
 		OperationID: opID.String(),
 		Name:        args.Name,
 		Description: optionalString(args.Description),
 		RiskScore:   args.RiskScore,
 		ProfitScore: args.ProfitScore,
-	})
+	}
+	if args.AssignToMe {
+		owner, err := agentOwnerID(ctx)
+		if err != nil {
+			return toolResult{}, err
+		}
+		input.AssigneeIds = []string{owner.String()}
+	}
+
+	task, err := s.deps.Tasks.CreateTask(ctx, input)
 	if err != nil {
 		return toolResult{}, fmt.Errorf("failed to create task: %w", err)
 	}
@@ -192,11 +246,8 @@ func handleCreateTask(ctx context.Context, s *Server, args createTaskArgs) (tool
 }
 
 func handleUpdateTask(ctx context.Context, s *Server, args updateTaskArgs) (toolResult, error) {
-	task, err := s.deps.Tasks.Task(ctx, args.TaskID)
+	task, err := s.loadTaskInScope(ctx, args.TaskID, models.OperationRoleOperator)
 	if err != nil {
-		return toolResult{}, fmt.Errorf("task not found")
-	}
-	if _, err := s.authorizeOperation(ctx, task.OperationID, models.OperationRoleOperator); err != nil {
 		return toolResult{}, err
 	}
 
@@ -238,11 +289,8 @@ func handleUpdateTask(ctx context.Context, s *Server, args updateTaskArgs) (tool
 }
 
 func handleAddTaskWikiReference(ctx context.Context, s *Server, args addTaskWikiReferenceArgs) (toolResult, error) {
-	task, err := s.deps.Tasks.Task(ctx, args.TaskID)
+	task, err := s.loadTaskInScope(ctx, args.TaskID, models.OperationRoleOperator)
 	if err != nil {
-		return toolResult{}, fmt.Errorf("task not found")
-	}
-	if _, err := s.authorizeOperation(ctx, task.OperationID, models.OperationRoleOperator); err != nil {
 		return toolResult{}, err
 	}
 
@@ -272,11 +320,8 @@ func handleAddTaskWikiReference(ctx context.Context, s *Server, args addTaskWiki
 }
 
 func handleChangeTaskStage(ctx context.Context, s *Server, args changeTaskStageArgs) (toolResult, error) {
-	task, err := s.deps.Tasks.Task(ctx, args.TaskID)
+	task, err := s.loadTaskInScope(ctx, args.TaskID, models.OperationRoleOperator)
 	if err != nil {
-		return toolResult{}, fmt.Errorf("task not found")
-	}
-	if _, err := s.authorizeOperation(ctx, task.OperationID, models.OperationRoleOperator); err != nil {
 		return toolResult{}, err
 	}
 
@@ -307,4 +352,69 @@ func handleChangeTaskStage(ctx context.Context, s *Server, args changeTaskStageA
 		SubjectName: task.Name,
 		Summary:     fmt.Sprintf("moved task %s to %s", task.Name, stage),
 	}, nil
+}
+
+func handleAssignTaskToMe(ctx context.Context, s *Server, args taskAssignmentArgs) (toolResult, error) {
+	return s.changeOwnAssignment(ctx, args.TaskID, true)
+}
+
+func handleUnassignTaskFromMe(ctx context.Context, s *Server, args taskAssignmentArgs) (toolResult, error) {
+	return s.changeOwnAssignment(ctx, args.TaskID, false)
+}
+
+// changeOwnAssignment adds or removes the owner, and only the owner. It reads
+// the current list and edits it rather than replacing it, so a colleague who
+// had also claimed the task keeps their claim — SetTaskAssignees overwrites
+// outright, and handing an agent that verb directly is how someone else's work
+// would quietly lose its owner.
+func (s *Server) changeOwnAssignment(ctx context.Context, taskID string, assign bool) (toolResult, error) {
+	task, err := s.loadTaskInScope(ctx, taskID, models.OperationRoleOperator)
+	if err != nil {
+		return toolResult{}, err
+	}
+	owner, err := agentOwnerID(ctx)
+	if err != nil {
+		return toolResult{}, err
+	}
+
+	next := withOwnerUnassigned(task.AssigneeIDs, owner)
+	verb := "unassigned the operator from"
+	if assign {
+		next = withOwnerAssigned(task.AssigneeIDs, owner)
+		verb = "assigned the operator to"
+	}
+
+	updated, err := s.deps.Tasks.SetTaskAssignees(ctx, taskID, next)
+	if err != nil {
+		return toolResult{}, fmt.Errorf("failed to change the assignment: %w", err)
+	}
+
+	return toolResult{
+		Payload:     toTaskView(updated),
+		OperationID: &task.OperationID,
+		SubjectID:   task.TaskID,
+		SubjectKind: models.SubjectKindTask,
+		SubjectName: task.Name,
+		Summary:     fmt.Sprintf("%s task %s", verb, task.Name),
+	}, nil
+}
+
+// loadTaskInScope fetches a task and applies both gates: the operation role,
+// and whether this agent may touch that particular task at all.
+func (s *Server) loadTaskInScope(ctx context.Context, taskID string, minRole models.OperationRole) (*models.Task, error) {
+	task, err := s.deps.Tasks.Task(ctx, taskID)
+	if err != nil {
+		return nil, fmt.Errorf("task not found")
+	}
+	if _, err := s.authorizeOperation(ctx, task.OperationID, minRole); err != nil {
+		return nil, err
+	}
+	owner, err := agentOwnerID(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if err := requireTaskInScope(task, owner); err != nil {
+		return nil, err
+	}
+	return task, nil
 }

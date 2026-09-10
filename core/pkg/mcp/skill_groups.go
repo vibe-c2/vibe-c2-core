@@ -32,8 +32,11 @@ var toolGroups = []toolGroup{
 	},
 	{
 		Title: "Tasks",
-		Intro: "The operator's board. Propose work here rather than doing something nobody asked for.",
-		Tools: []string{"find_tasks", "get_task", "create_task", "update_task", "change_task_stage", "add_task_wiki_reference"},
+		Intro: "The operator's board. Propose work here rather than doing something nobody asked for. " +
+			"You can see and change tasks assigned to the operator you act for, and unassigned ones; " +
+			"tasks another operator has taken are not yours to read or edit.",
+		Tools: []string{"find_tasks", "get_task", "create_task", "update_task", "change_task_stage",
+			"assign_task_to_me", "unassign_task_from_me", "add_task_wiki_reference"},
 	},
 	{
 		Title: "Wiki",
