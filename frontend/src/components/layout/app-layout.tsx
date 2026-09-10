@@ -8,6 +8,7 @@ import { TooltipProvider } from "@/components/ui/tooltip"
 import { useAppStore } from "@/stores/app"
 import { useTaskDeepLink } from "@/hooks/use-task-deep-link"
 import { useFocusBeacon } from "@/hooks/use-focus-beacon"
+import { useResumeRefetch } from "@/hooks/use-resume-refetch"
 import { AgentActivityRail } from "@/components/layout/agent-activity-rail"
 import { EditTaskDialog } from "@/components/tasks/edit-task-dialog"
 import { DeleteTaskDialog } from "@/components/tasks/delete-task-dialog"
@@ -38,6 +39,12 @@ export function AppLayout() {
   // context (App.tsx nests BrowserRouter inside the providers) and because
   // every authed surface should report, not just one page.
   useFocusBeacon()
+
+  // Subscriptions are dropped while the tab is hidden and nothing replays what
+  // they missed, so the caches they feed come back stale. Mounted alongside the
+  // beacon because the two describe the same absence from the operator's side:
+  // one says they stopped watching, this one catches them up when they return.
+  useResumeRefetch()
 
   return (
     <TooltipProvider>

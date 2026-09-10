@@ -69,6 +69,43 @@ function opNameFor(
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const registry = new Map<string, SharedSubscription<any>>()
 
+// --- Resume notification ---
+//
+// Disposing subscriptions on a hidden tab loses every event published while
+// they were down: the event bus has no replay, so a document created by a
+// colleague — or by an operator's own MCP agent, which is the case where the
+// tab is hidden *by definition* — never reaches the caches that were relying
+// on the subscription to invalidate them.
+//
+// The registry knows exactly when that gap opened and closed, so it says so.
+// Deciding what to refetch is not its business; that belongs to whoever owns
+// the caches (see hooks/use-resume-refetch.ts).
+
+const resumeListeners = new Set<() => void>()
+
+// True once a hidden tab has torn subscriptions down, until the resume has
+// been announced. Guards against firing on a visibilitychange that disposed
+// nothing — an alt-tab with no subscriptions mounted loses no events.
+let gapOpen = false
+
+/**
+ * Register a callback for "subscriptions were down and are now back". Returns
+ * an unsubscribe function.
+ */
+export function onSubscriptionsResumed(callback: () => void): () => void {
+  resumeListeners.add(callback)
+  return () => {
+    resumeListeners.delete(callback)
+  }
+}
+
+function announceResume() {
+  // Copy before iterating — a listener may unregister in response.
+  for (const listener of Array.from(resumeListeners)) {
+    listener()
+  }
+}
+
 function keyFor(
   document: TypedDocumentNode<unknown, unknown>,
   variables: unknown,
@@ -189,25 +226,46 @@ function teardown<T>(sub: SharedSubscription<T>) {
 // refcount reaches zero (lazy: true). On visible, re-open every subscription
 // that still has listeners; getGraphQLWSClient() lazily rebuilds the socket
 // on the first reopen.
+//
+// The two halves are exported so the gap bookkeeping can be tested without a
+// DOM environment; the listener below is the only production caller.
+
+/** Tear down every open subscription. Anything published from here until
+ *  resumeSubscriptions() is lost — there is no replay. */
+export function pauseSubscriptions() {
+  for (const sub of registry.values()) {
+    if (sub.dispose) {
+      try {
+        sub.dispose()
+      } catch {
+        // ignore — already disposed by client teardown
+      }
+      sub.dispose = null
+      gapOpen = true
+    }
+  }
+}
+
+/** Re-open every subscription that still has listeners, then announce the gap
+ *  to anyone who needs to catch their caches up. */
+export function resumeSubscriptions() {
+  for (const sub of registry.values()) {
+    if (!sub.dispose && sub.listeners.size > 0) {
+      openSubscription(sub)
+    }
+  }
+  if (gapOpen) {
+    gapOpen = false
+    announceResume()
+  }
+}
+
 if (typeof document !== "undefined") {
   document.addEventListener("visibilitychange", () => {
     if (document.visibilityState === "hidden") {
-      for (const sub of registry.values()) {
-        if (sub.dispose) {
-          try {
-            sub.dispose()
-          } catch {
-            // ignore — already disposed by client teardown
-          }
-          sub.dispose = null
-        }
-      }
+      pauseSubscriptions()
     } else {
-      for (const sub of registry.values()) {
-        if (!sub.dispose && sub.listeners.size > 0) {
-          openSubscription(sub)
-        }
-      }
+      resumeSubscriptions()
     }
   })
 }
