@@ -308,9 +308,6 @@ func handleCreateTask(ctx context.Context, s *Server, args createTaskArgs) (tool
 	return toolResult{
 		Payload:     payload,
 		OperationID: &opID,
-		SubjectID:   task.TaskID,
-		SubjectKind: models.SubjectKindTask,
-		SubjectName: task.Name,
 		Summary:     fmt.Sprintf("created task %s", task.Name),
 	}, nil
 }
@@ -376,9 +373,6 @@ func handleUpdateTask(ctx context.Context, s *Server, args updateTaskArgs) (tool
 	return toolResult{
 		Payload:     toTaskView(updated),
 		OperationID: &task.OperationID,
-		SubjectID:   task.TaskID,
-		SubjectKind: models.SubjectKindTask,
-		SubjectName: updated.Name,
 		Summary:     fmt.Sprintf("updated task %s", updated.Name),
 	}, nil
 }
@@ -407,9 +401,6 @@ func handleAddTaskWikiReference(ctx context.Context, s *Server, args addTaskWiki
 	return toolResult{
 		Payload:     toTaskView(updated),
 		OperationID: &task.OperationID,
-		SubjectID:   task.TaskID,
-		SubjectKind: models.SubjectKindTask,
-		SubjectName: task.Name,
 		Summary:     fmt.Sprintf("linked %q to task %s", doc.Title, task.Name),
 	}, nil
 }
@@ -438,9 +429,6 @@ func handleAddTaskCredentialReference(ctx context.Context, s *Server, args addTa
 	return toolResult{
 		Payload:     toTaskView(updated),
 		OperationID: &task.OperationID,
-		SubjectID:   task.TaskID,
-		SubjectKind: models.SubjectKindTask,
-		SubjectName: task.Name,
 		Summary:     fmt.Sprintf("linked credential %q to task %s", cred.Name, task.Name),
 	}, nil
 }
@@ -473,9 +461,6 @@ func handleChangeTaskStage(ctx context.Context, s *Server, args changeTaskStageA
 	return toolResult{
 		Payload:     toTaskView(updated),
 		OperationID: &task.OperationID,
-		SubjectID:   task.TaskID,
-		SubjectKind: models.SubjectKindTask,
-		SubjectName: task.Name,
 		Summary:     fmt.Sprintf("moved task %s to %s", task.Name, stage),
 	}, nil
 }
@@ -518,9 +503,6 @@ func (s *Server) changeOwnAssignment(ctx context.Context, taskID string, assign 
 	return toolResult{
 		Payload:     toTaskView(updated),
 		OperationID: &task.OperationID,
-		SubjectID:   task.TaskID,
-		SubjectKind: models.SubjectKindTask,
-		SubjectName: task.Name,
 		Summary:     fmt.Sprintf("%s task %s", verb, task.Name),
 	}, nil
 }

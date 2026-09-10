@@ -81,8 +81,9 @@ tools take operation_id, but if you omit it they default to the operation the op
 currently has open, so following along usually needs no argument at all.
 
 Everything you do is visible: every call, including reads, is recorded and shown to the
-operator, and anything you change appears on their timeline attributed to you. Work as if
-being watched, because you are.
+operator. Your writes are attributed to you wherever they surface, including the timeline,
+which records milestones rather than activity — the same handful of events it records for a
+person. Work as if being watched, because you are.
 
 These tools are the only way in. There is no CLI, no local checkout, no REST endpoint to
 curl and no file on disk that mirrors this data — do not go looking for one. If a tool for

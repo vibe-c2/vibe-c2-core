@@ -151,39 +151,6 @@ type IOperationEventRepository interface {
 	// DeleteCustomEvent removes a custom-event row. Same subject_kind
 	// guard as UpdateCustomEvent — only custom events are deletable.
 	DeleteCustomEvent(ctx context.Context, eventID uuid.UUID) error
-
-	// FindRecentAgentEvent looks for an agent-authored row this write can be
-	// folded into: same agent, operation, topic and subject, inside `since`.
-	//
-	// An agent produces bursts a human never would — twenty edits to one page
-	// in a minute is ordinary for it and impossible for a person. Without
-	// coalescing, the Timeline (a shared, human-scale narrative of the
-	// engagement) becomes unreadable the first time one runs.
-	FindRecentAgentEvent(ctx context.Context, q AgentEventKey, since time.Time) (models.OperationEvent, error)
-
-	// CoalesceAgentEvent folds another occurrence into an existing agent row,
-	// bumping its count and its timestamp.
-	CoalesceAgentEvent(ctx context.Context, eventID uuid.UUID, at time.Time, count int) error
-
-	// HasRecentEventForSubject reports whether ANY row already exists for this
-	// subject inside the window, whoever wrote it.
-	//
-	// Some of what an agent does already reaches the timeline through the
-	// normal domain path — events.Logger persists a handful of topics, and
-	// custom timeline events write their own row. Without this check the agent
-	// layer adds a second row for the same action and the operator sees every
-	// such event twice.
-	HasRecentEventForSubject(ctx context.Context, operationID, subjectID uuid.UUID, since time.Time) (bool, error)
-}
-
-// AgentEventKey identifies the group of agent writes that collapse into one
-// timeline row.
-type AgentEventKey struct {
-	OperationID uuid.UUID
-	ActorID     uuid.UUID
-	ActorName   string
-	Topic       string
-	SubjectID   uuid.UUID
 }
 
 type operationEventRepository struct {
@@ -217,41 +184,6 @@ func (r *operationEventRepository) FindByEventID(ctx context.Context, eventID uu
 	var e models.OperationEvent
 	err := r.coll.FindOne(ctx, bson.M{"event_id": eventID}).One(&e)
 	return e, err
-}
-
-func (r *operationEventRepository) FindRecentAgentEvent(ctx context.Context, q AgentEventKey, since time.Time) (models.OperationEvent, error) {
-	var e models.OperationEvent
-	err := r.coll.FindOne(ctx, bson.M{
-		"operation_id": q.OperationID,
-		"actor_type":   models.EventActorAgent,
-		"actor_id":     q.ActorID,
-		"actor_name":   q.ActorName,
-		"topic":        q.Topic,
-		"subject_id":   q.SubjectID,
-		"occurred_at":  bson.M{"$gte": since},
-	}).Sort("-occurred_at").One(&e)
-	return e, err
-}
-
-func (r *operationEventRepository) HasRecentEventForSubject(ctx context.Context, operationID, subjectID uuid.UUID, since time.Time) (bool, error) {
-	n, err := r.coll.Find(ctx, bson.M{
-		"operation_id": operationID,
-		"subject_id":   subjectID,
-		"occurred_at":  bson.M{"$gte": since},
-	}).Count()
-	return n > 0, err
-}
-
-func (r *operationEventRepository) CoalesceAgentEvent(ctx context.Context, eventID uuid.UUID, at time.Time, count int) error {
-	return r.coll.UpdateOne(ctx,
-		bson.M{"event_id": eventID},
-		bson.M{
-			// occurred_at moves forward so the collapsed row sits at the time
-			// of the latest change rather than the first.
-			"$set": bson.M{"occurred_at": at},
-			"$inc": bson.M{"metadata.count": count},
-		},
-	)
 }
 
 // InsertMany inserts a batch of events. Pre-checks for empty input so

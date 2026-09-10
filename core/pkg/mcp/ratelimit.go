@@ -13,9 +13,8 @@ import (
 //
 // A human clicking through a UI is self-limiting; an agent is not. A retry
 // loop or a confused plan can drive these tools as fast as the network allows,
-// which floods the activity rail, grows agent_actions without bound, and
-// writes timeline rows faster than the coalescer collapses them. Nothing else
-// in this service throttles anything, so this is the only guard.
+// which floods the activity rail and grows agent_actions without bound.
+// Nothing else in this service throttles anything, so this is the only guard.
 //
 // A fixed window rather than a sliding one or a token bucket: it costs one
 // Redis round trip, it is trivially auditable, and the worst case — a caller

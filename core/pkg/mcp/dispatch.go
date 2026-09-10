@@ -29,12 +29,6 @@ const (
 // handler having to remember to report it.
 type toolResult struct {
 	Payload any
-	// SubjectID and SubjectKind identify what a write acted on, so the
-	// timeline row points at the same entity a human's action would and
-	// repeated edits to one thing collapse into one row.
-	SubjectID   uuid.UUID
-	SubjectKind models.SubjectKind
-	SubjectName string
 	// OperationID is the operation acted on, if any. Left nil by tools that
 	// are not operation-scoped.
 	OperationID *uuid.UUID
@@ -98,7 +92,6 @@ func register[A any](s *Server, tool *mcp.Tool, kind toolKind, fn handlerFunc[A]
 			duration: time.Since(started),
 		}
 		s.record(ctx, entry)
-		s.recordOnTimeline(ctx, entry)
 
 		if err != nil {
 			// Tool errors are returned to the model as content, not as

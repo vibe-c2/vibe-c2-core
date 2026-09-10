@@ -67,9 +67,6 @@ type Deps struct {
 	WikiDocumentRepo repository.IWikiDocumentRepository
 	WikiFileRepo     repository.IWikiFileRepository
 	AgentActionRepo  repository.IAgentActionRepository
-	// OperationEventRepo is the timeline. Agent WRITES land here alongside
-	// human activity; reads do not — they go only to agent_actions.
-	OperationEventRepo repository.IOperationEventRepository
 
 	Cache cache.Cache
 	// Blobs is where attachment bytes live. Read-only from here: an agent can

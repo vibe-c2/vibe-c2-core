@@ -64,7 +64,11 @@ var toolGroups = []toolGroup{
 	},
 	{
 		Title: "Timeline",
-		Intro: "The shared history of the engagement.",
+		Intro: "The shared history of the engagement. Deliberately sparse: it records milestones — " +
+			"a task closed, a credential recovered, a hash cracked — not everything that happened. " +
+			"Your work goes on it under exactly the same rules as a person's, so wiki edits and " +
+			"task bookkeeping do not appear. create_timeline_event is there when something " +
+			"belongs on it that no tool would record on its own.",
 		Tools: []string{"get_timeline", "create_timeline_event"},
 	},
 }

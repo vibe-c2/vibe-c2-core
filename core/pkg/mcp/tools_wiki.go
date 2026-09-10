@@ -353,9 +353,6 @@ func handleCreateFromTemplate(ctx context.Context, s *Server, args createFromTem
 	return toolResult{
 		Payload:     toWikiDocView(doc),
 		OperationID: &opID,
-		SubjectID:   doc.DocumentID,
-		SubjectKind: models.SubjectKindWikiDocument,
-		SubjectName: doc.Title,
 		Summary:     fmt.Sprintf("created %s from template %s", doc.Title, template.Title),
 	}, nil
 }
@@ -381,9 +378,6 @@ func handleSetWikiTemplate(ctx context.Context, s *Server, args setWikiTemplateA
 	return toolResult{
 		Payload:     toWikiDocView(updated),
 		OperationID: &doc.OperationID,
-		SubjectID:   doc.DocumentID,
-		SubjectKind: models.SubjectKindWikiDocument,
-		SubjectName: doc.Title,
 		Summary:     fmt.Sprintf("%s %s", doc.Title, verb),
 	}, nil
 }
@@ -450,9 +444,6 @@ func handleCreateWikiDocument(ctx context.Context, s *Server, args createWikiDoc
 	return toolResult{
 		Payload:     toWikiDocView(doc),
 		OperationID: &opID,
-		SubjectID:   doc.DocumentID,
-		SubjectKind: models.SubjectKindWikiDocument,
-		SubjectName: doc.Title,
 		Summary:     fmt.Sprintf("created wiki page %s", doc.Title),
 	}, nil
 }
@@ -474,9 +465,6 @@ func handleAppendWikiSection(ctx context.Context, s *Server, args appendWikiSect
 	return toolResult{
 		Payload:     appendResult(doc, watchers),
 		OperationID: &doc.OperationID,
-		SubjectID:   doc.DocumentID,
-		SubjectKind: models.SubjectKindWikiDocument,
-		SubjectName: doc.Title,
 		Summary:     fmt.Sprintf("added a section to %s", doc.Title),
 	}, nil
 }
@@ -554,9 +542,6 @@ func handleEditWikiDocument(ctx context.Context, s *Server, args editWikiDocumen
 	return toolResult{
 		Payload:     payload,
 		OperationID: &doc.OperationID,
-		SubjectID:   doc.DocumentID,
-		SubjectKind: models.SubjectKindWikiDocument,
-		SubjectName: doc.Title,
 		Summary:     fmt.Sprintf("edited wiki page %s", doc.Title),
 	}, nil
 }
@@ -595,9 +580,6 @@ func handleUpdateWikiDocument(ctx context.Context, s *Server, args updateWikiDoc
 	return toolResult{
 		Payload:     appendResult(doc, watchers),
 		OperationID: &doc.OperationID,
-		SubjectID:   doc.DocumentID,
-		SubjectKind: models.SubjectKindWikiDocument,
-		SubjectName: doc.Title,
 		Summary:     fmt.Sprintf("rewrote wiki page %s", doc.Title),
 	}, nil
 }

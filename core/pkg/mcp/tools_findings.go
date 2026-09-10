@@ -153,9 +153,6 @@ func handleCreateHost(ctx context.Context, s *Server, args createHostArgs) (tool
 	return toolResult{
 		Payload:     toHostView(host),
 		OperationID: &opID,
-		SubjectID:   host.HostID,
-		SubjectKind: models.SubjectKindHost,
-		SubjectName: host.Hostname,
 		Summary:     fmt.Sprintf("created host %s", host.Hostname),
 	}, nil
 }
@@ -201,9 +198,6 @@ func handleUpdateHost(ctx context.Context, s *Server, args updateHostArgs) (tool
 	return toolResult{
 		Payload:     toHostDetailView(updated),
 		OperationID: &host.OperationID,
-		SubjectID:   host.HostID,
-		SubjectKind: models.SubjectKindHost,
-		SubjectName: updated.Hostname,
 		Summary:     fmt.Sprintf("updated host %s", updated.Hostname),
 	}, nil
 }
@@ -350,9 +344,6 @@ func handleCreateCredential(ctx context.Context, s *Server, args createCredentia
 	return toolResult{
 		Payload:     toCredentialView(cred),
 		OperationID: &opID,
-		SubjectID:   cred.CredentialID,
-		SubjectKind: models.SubjectKindCredential,
-		SubjectName: cred.Name,
 		Summary:     fmt.Sprintf("recorded credential %s", cred.Name),
 	}, nil
 }
@@ -408,9 +399,6 @@ func handleAddCredentialComment(ctx context.Context, s *Server, args addCredenti
 	return toolResult{
 		Payload:     toCredentialView(updated),
 		OperationID: &cred.OperationID,
-		SubjectID:   cred.CredentialID,
-		SubjectKind: models.SubjectKindCredential,
-		SubjectName: cred.Name,
 		Summary:     fmt.Sprintf("commented on credential %s", cred.Name),
 	}, nil
 }
@@ -559,9 +547,6 @@ func handleCreateHash(ctx context.Context, s *Server, args createHashArgs) (tool
 	return toolResult{
 		Payload:     toHashView(hash),
 		OperationID: &opID,
-		SubjectID:   hash.HashID,
-		SubjectKind: models.SubjectKindHash,
-		SubjectName: hashLabel(hash),
 		Summary:     "recorded a hash",
 	}, nil
 }
@@ -600,8 +585,6 @@ func handleImportHashes(ctx context.Context, s *Server, args importHashesArgs) (
 	return toolResult{
 		Payload:     payload,
 		OperationID: &opID,
-		SubjectKind: models.SubjectKindHash,
-		SubjectName: fmt.Sprintf("%d hashes", res.Added),
 		Summary:     fmt.Sprintf("imported %d hashes (%d already known)", res.Added, res.Skipped),
 	}, nil
 }
@@ -631,9 +614,6 @@ func handleUpdateHash(ctx context.Context, s *Server, args updateHashArgs) (tool
 	return toolResult{
 		Payload:     toHashView(updated),
 		OperationID: &hash.OperationID,
-		SubjectID:   hash.HashID,
-		SubjectKind: models.SubjectKindHash,
-		SubjectName: hashLabel(updated),
 		Summary:     "updated a hash",
 	}, nil
 }
@@ -675,9 +655,6 @@ func handleMarkHashCracked(ctx context.Context, s *Server, args markHashCrackedA
 	return toolResult{
 		Payload:     toHashView(updated),
 		OperationID: &hash.OperationID,
-		SubjectID:   hash.HashID,
-		SubjectKind: models.SubjectKindHash,
-		SubjectName: hashLabel(updated),
 		Summary:     "recorded a cracked hash and its credential",
 	}, nil
 }

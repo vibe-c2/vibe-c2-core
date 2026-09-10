@@ -128,9 +128,6 @@ func handleCreateTimelineEvent(ctx context.Context, s *Server, args createTimeli
 		OperationID: &opID,
 		// A marker is its own subject, the same way a human-authored custom
 		// event is.
-		SubjectID:   event.EventID,
-		SubjectKind: models.SubjectKindCustomEvent,
-		SubjectName: args.Name,
-		Summary:     fmt.Sprintf("added timeline marker %q", args.Name),
+		Summary: fmt.Sprintf("added timeline marker %q", args.Name),
 	}, nil
 }
