@@ -119,7 +119,7 @@ func quoteAll(names []string) []string {
 // mutual exclusivity, stay identical wherever an agent meets it.
 type visualIdentity struct {
 	Emoji string `json:"emoji,omitempty" jsonschema:"A single emoji to show beside this, e.g. 🔑 or 🖥️. Use this when nothing in the icon palette fits — an emoji always works."`
-	Icon  string `json:"icon,omitempty"  jsonschema:"A PascalCase lucide icon name from the platform's palette, e.g. FileText, Server, Key, ShieldAlert, Network. Mutually exclusive with emoji. Unknown names are refused rather than silently ignored."`
+	Icon  string `json:"icon,omitempty"  jsonschema:"A PascalCase lucide icon name from the platform's palette, e.g. FileText, Server, Key, ShieldAlert, Network. Mutually exclusive with emoji. Unknown names are refused rather than silently ignored. Leave this and emoji unset on a wiki page unless the page genuinely warrants its own glyph — the default adapts to a page or folder icon on its own."`
 	Color string `json:"color,omitempty" jsonschema:"Hex colour for the icon, e.g. #22c55e. Applies to icon, not emoji."`
 }
 
@@ -135,4 +135,22 @@ func (v visualIdentity) validate() error {
 // not supplied, so an update leaves what it does not mention alone.
 func (v visualIdentity) apply() (emoji, icon, color *string) {
 	return optionalString(v.Emoji), optionalString(v.Icon), optionalString(v.Color)
+}
+
+// applyWithAdaptiveDefault is apply for creating a wiki page, where leaving the
+// icon unset is not the same as choosing nothing.
+//
+// The operator's own create dialog stores "Adaptive", and that is not merely a
+// placeholder: the client renders it as a page or folder glyph depending on
+// whether the document has children, so a page given it starts looking like a
+// folder the moment one is nested under it. An empty icon falls through to a
+// static fallback instead and never gains that behaviour — so an agent-created
+// page would quietly diverge from every page a human made.
+func (v visualIdentity) applyWithAdaptiveDefault() (emoji, icon, color *string) {
+	e, i, c := v.apply()
+	if e == nil && i == nil {
+		adaptive := AdaptiveIconName
+		i = &adaptive
+	}
+	return e, i, c
 }

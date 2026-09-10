@@ -30,6 +30,29 @@ Findings hold the data; the wiki explains it. Both, not one.
 Then write the page that says what it means: which hosts a credential reaches,
 what that implies, what you would do next.
 
+## Giving a page an icon
+
+The default is deliberate: leave `emoji` and `icon` unset and the page gets an
+adaptive icon, which shows as a page and becomes a folder on its own once it has
+children. Most pages want exactly that.
+
+When a page genuinely warrants its own glyph, you have two options and they are
+mutually exclusive:
+
+- **`icon`** — a PascalCase name from the platform's palette, the same set the
+  operator's own picker offers: `FileText`, `Folder`, `Server`, `Database`,
+  `Network`, `Key`, `Lock`, `Shield`, `ShieldAlert`, `Bug`, `Terminal`,
+  `Users`, `Target`, `Flag`, `Search`, `Wrench`, `Zap`, and so on. A name
+  outside the palette is refused rather than quietly ignored, so if you are
+  unsure, use an emoji instead.
+- **`emoji`** — any single emoji. Always valid, and the right escape hatch when
+  nothing in the palette fits.
+
+`color` is a hex value that tints an icon. It does nothing to an emoji.
+
+Pick for recognition, not decoration. An icon earns its place when an operator
+scanning the tree would find the page faster because of it.
+
 ## Working alongside someone
 
 The operator may be reading the page you are writing to. That is fine and it is

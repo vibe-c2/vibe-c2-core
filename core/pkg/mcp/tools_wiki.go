@@ -192,7 +192,7 @@ func handleCreateWikiDocument(ctx context.Context, s *Server, args createWikiDoc
 	if err := args.validate(); err != nil {
 		return toolResult{}, err
 	}
-	emoji, icon, color := args.apply()
+	emoji, icon, color := args.applyWithAdaptiveDefault()
 
 	doc, err := s.deps.WikiDocs.CreateWikiDocument(ctx, opID.String(), model.CreateWikiDocumentInput{
 		Title:            args.Title,

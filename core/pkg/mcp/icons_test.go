@@ -5,6 +5,8 @@ import (
 	"regexp"
 	"strings"
 	"testing"
+
+	"go.uber.org/zap"
 )
 
 // frontendCatalogPath is the operator's own icon picker. The Go palette is a
@@ -141,6 +143,82 @@ func TestIconPaletteMatchesTheFrontendCatalog(t *testing.T) {
 		if !frontend[name] {
 			t.Errorf("%q is in the agent palette but not in the picker — "+
 				"an agent could store it and it would never render", name)
+		}
+	}
+}
+
+// Creating a wiki page with no icon must store the adaptive default, not an
+// empty string. The two look similar at a glance and behave differently: only
+// "Adaptive" switches to a folder glyph when the page gains children, so an
+// empty one would leave agent-made pages quietly unlike every human-made one.
+func TestVisualIdentity_AdaptiveDefaultOnCreate(t *testing.T) {
+	t.Run("nothing supplied gets the adaptive default", func(t *testing.T) {
+		emoji, icon, color := visualIdentity{}.applyWithAdaptiveDefault()
+		if icon == nil || *icon != AdaptiveIconName {
+			t.Fatalf("icon = %v, want %q", icon, AdaptiveIconName)
+		}
+		if emoji != nil || color != nil {
+			t.Error("only the icon should be defaulted")
+		}
+	})
+
+	t.Run("an explicit icon is left alone", func(t *testing.T) {
+		_, icon, _ := visualIdentity{Icon: "Key"}.applyWithAdaptiveDefault()
+		if icon == nil || *icon != "Key" {
+			t.Fatalf("icon = %v, want Key", icon)
+		}
+	})
+
+	t.Run("an emoji suppresses the default", func(t *testing.T) {
+		// Defaulting the icon here would set both, which the client treats as
+		// mutually exclusive and the validator refuses.
+		emoji, icon, _ := visualIdentity{Emoji: "📓"}.applyWithAdaptiveDefault()
+		if icon != nil {
+			t.Fatalf("icon = %v, want nil when an emoji was chosen", *icon)
+		}
+		if emoji == nil || *emoji != "📓" {
+			t.Fatalf("emoji = %v", emoji)
+		}
+	})
+
+	// Updates must NOT default: an update that mentions no icon has to leave
+	// whatever the operator chose in place.
+	t.Run("plain apply never defaults", func(t *testing.T) {
+		_, icon, _ := visualIdentity{}.apply()
+		if icon != nil {
+			t.Fatalf("icon = %v, want nil so an update leaves it alone", *icon)
+		}
+	})
+}
+
+// The skill names example icons in prose. Every one has to be in the palette,
+// for the same reason the refusal message's examples do: a document that
+// suggests a name the server refuses teaches the agent something false, and
+// prose is where that is easiest to get wrong and hardest to notice.
+func TestSkillIconExamplesAreAllValid(t *testing.T) {
+	s := New(Deps{Logger: zap.NewNop()})
+	guide := s.GuideText()
+
+	// Backtick-quoted PascalCase words in the icon section. Deliberately
+	// narrow: it looks only between the icon heading and the next one, so
+	// unrelated code spans elsewhere are not dragged in.
+	start := strings.Index(guide, "## Giving a page an icon")
+	if start < 0 {
+		t.Fatal("the guide no longer has an icon section; this check needs updating")
+	}
+	section := guide[start:]
+	if next := strings.Index(section[10:], "\n## "); next >= 0 {
+		section = section[:next+10]
+	}
+
+	names := regexp.MustCompile("`([A-Z][A-Za-z0-9]+)`").FindAllStringSubmatch(section, -1)
+	if len(names) == 0 {
+		t.Fatal("found no icon examples in the guide's icon section; this check needs updating")
+	}
+
+	for _, m := range names {
+		if err := validateIcon(m[1]); err != nil {
+			t.Errorf("the guide suggests icon %q, which the server refuses", m[1])
 		}
 	}
 }
