@@ -9,7 +9,7 @@ import { taskStatus } from "./event-icons"
 // future topics added to the persistence subscriber without code changes
 // here.
 export function renderEventSummary(event: TimelineEventFieldsFragment): string {
-  const actor = event.actor?.username ?? "System"
+  const actor = eventActorName(event)
   const name = event.subjectName || "(unnamed)"
 
   switch (event.topic) {
@@ -37,6 +37,22 @@ export function renderEventSummary(event: TimelineEventFieldsFragment): string {
         event.subjectKind,
       )} "${name}"`
   }
+}
+
+/**
+ * Who to name in a summary line.
+ *
+ * Prefers actorLabel, which the server builds for every kind of actor: a
+ * username for a person, "Claude (via alice)" for a delegated agent, a service
+ * name for a service. Naming only the owner would read as though they did it
+ * themselves, and the point of attributing agent work is that the two are
+ * distinguishable.
+ *
+ * Falls back to the resolved user and then to "System", so rows written before
+ * actorLabel existed still read sensibly.
+ */
+function eventActorName(event: TimelineEventFieldsFragment): string {
+  return event.actorLabel || event.actor?.username || "System"
 }
 
 // renderSubjectKindSummary describes a stack of N events that share a subject

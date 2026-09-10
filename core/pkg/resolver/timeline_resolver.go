@@ -270,8 +270,13 @@ func (r *timelineResolver) CreateCustomTimelineEvent(
 		// subject_id == event_id: a custom event has no underlying entity.
 		SubjectID:   eventID,
 		SubjectName: name,
-		ActorType:   models.EventActorUser,
-		ActorID:     &callerUID,
+		// An agent-authored marker must not be indistinguishable from one the
+		// operator typed themselves. Hard-coding the user actor here claimed
+		// on the timeline that a person did something they did not do, which
+		// is worse than the "System" it used to render as elsewhere.
+		ActorType: customEventActorType(auth),
+		ActorID:   &callerUID,
+		ActorName: customEventActorName(auth),
 		Metadata: customEventMetadata(
 			strOrEmpty(input.Description),
 			strOrEmpty(input.Emoji),
@@ -419,6 +424,23 @@ func (r *timelineResolver) publishLogged(userID string, row *models.OperationEve
 	))
 }
 
+// customEventActorType and customEventActorName describe whoever is creating
+// the marker. Split out rather than inlined because the row is built inside a
+// long literal and the distinction is easy to lose there.
+func customEventActorType(auth gqlctx.AuthInfo) models.EventActorType {
+	if auth.Agent != nil {
+		return models.EventActorAgent
+	}
+	return models.EventActorUser
+}
+
+func customEventActorName(auth gqlctx.AuthInfo) string {
+	if auth.Agent != nil {
+		return auth.Agent.Name
+	}
+	return ""
+}
+
 // customEventMetadata builds the metadata bag for a custom event. Empty
 // fields are omitted so a glyph-less, description-less annotation serialises
 // as "{}" rather than spraying empty-string keys onto the wire. The bucket
@@ -471,10 +493,25 @@ func (r *timelineResolver) SubjectKind(_ context.Context, obj *models.OperationE
 	return string(obj.SubjectKind), nil
 }
 
-// Actor returns the User that originated the event, or nil for system /
-// service actors and for users whose account was later deleted.
+// Actor returns the User behind the event, or nil for system / service actors
+// and for users whose account was later deleted.
+//
+// Agent rows resolve to the OWNER of the agent key. They store that owner's id
+// precisely so this works: filtering the timeline by an operator finds what
+// their agent did for them, and every existing render site keeps showing a
+// person rather than falling through to "System". Use actorKind and actorLabel
+// to tell a delegated action from a hand-made one.
+//
+// This previously returned nil for anything but a plain user, so agent rows
+// rendered as "System" everywhere — the schema documented the behaviour below
+// while the code did the opposite.
 func (r *timelineResolver) Actor(ctx context.Context, obj *models.OperationEvent) (*models.User, error) {
-	if obj.ActorType != models.EventActorUser || obj.ActorID == nil {
+	switch obj.ActorType {
+	case models.EventActorUser, models.EventActorAgent:
+	default:
+		return nil, nil
+	}
+	if obj.ActorID == nil {
 		return nil, nil
 	}
 	user, err := r.userRepo.FindByID(ctx, *obj.ActorID)
