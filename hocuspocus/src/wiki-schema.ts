@@ -1,17 +1,26 @@
 // MUST stay in sync with frontend/src/components/wiki/wiki-editor.tsx.
 // Adding/changing a node there requires updating this file.
 //
-// This schema is used only for encoding markdown → Y.js binary inside the
-// import flow. It is not used to render anything; the frontend's TipTap
+// This schema is used for encoding markdown → Y.js binary on import AND for
+// decoding Y.js → markdown on export, which is how an MCP agent reads and
+// writes a page. It is not used to render anything; the frontend's TipTap
 // extensions own rendering. Therefore we only need to declare the node
 // types, attributes, and content models — not toDOM/parseDOM details that
 // the editor cares about. The toDOM/parseDOM stubs here exist to satisfy
 // prosemirror-model's API; the values they produce are never inspected.
 //
-// The markdown parser falls back to a plain paragraph for any token shape
-// it doesn't recognise (see markdown-parser.ts), so a node added to the
-// editor without being added here degrades to a styling regression on
-// import — never lost text content.
+// On the import side (markdown → Y.js) an unrecognised token shape falls
+// back to a plain paragraph, so nothing is lost there.
+//
+// The export side is not so forgiving, and this comment used to claim it
+// was. A node the editor writes but this schema does not declare is DROPPED
+// by y-prosemirror on the way to markdown, and a node with no serializer
+// entry is skipped in silence by the non-strict serializer. Either way it
+// disappears from what an MCP agent reads — and since the agent writes that
+// markdown back, the next write deletes it from the document.
+//
+// src/__tests__/schema-drift.test.ts fails when the editor gains a node this
+// file has not been taught.
 
 import { Schema } from "prosemirror-model";
 
@@ -241,6 +250,76 @@ export const wikiSchema = new Schema({
         "div",
         { "data-type": "wiki-notice", "data-variant": node.attrs.variant },
         0,
+      ],
+    },
+
+    // One checklist question and its answer. Mirrors the editor's
+    // wiki-checklist-item-node.ts: the structure (prompt, command hint,
+    // required, state) lives in attributes and the answer is the content
+    // region, which accepts any block content including reference chips.
+    //
+    // Attribute defaults match the editor's exactly. They have to: a value
+    // that round-trips to a different default silently changes what the
+    // coverage bar counts.
+    wikiChecklistItem: {
+      group: "block",
+      content: "block+",
+      defining: true,
+      isolating: true,
+      attrs: {
+        key: { default: null },
+        prompt: { default: "" },
+        commandHint: { default: "" },
+        commandHintEnabled: { default: false },
+        required: { default: true },
+        state: { default: "" },
+      },
+      parseDOM: [{ tag: 'div[data-type="wiki-checklist-item"]' }],
+      toDOM: (node) => [
+        "div",
+        {
+          "data-type": "wiki-checklist-item",
+          "data-prompt": String(node.attrs.prompt ?? ""),
+          "data-required": node.attrs.required ? "true" : "false",
+          "data-state": String(node.attrs.state ?? ""),
+        },
+        0,
+      ],
+    },
+
+    // Inline atom referencing a host by id. Matches the editor's
+    // wiki-host-reference-node.tsx. Sibling of wikiCredentialReference and
+    // wikiHashReference: the only persisted attribute is the id, and the
+    // chip's visible text is hydrated client-side from the hosts API.
+    wikiHostReference: {
+      group: "inline",
+      inline: true,
+      atom: true,
+      attrs: { hostId: { default: null } },
+      parseDOM: [{ tag: "span[data-wiki-host]" }],
+      toDOM: (node) => [
+        "span",
+        {
+          "data-wiki-host": "true",
+          "data-host-id": node.attrs.hostId,
+        },
+      ],
+    },
+
+    // Inline atom referencing another wiki page by id. Matches the editor's
+    // wiki-document-reference-node.tsx.
+    wikiDocumentReference: {
+      group: "inline",
+      inline: true,
+      atom: true,
+      attrs: { documentId: { default: null } },
+      parseDOM: [{ tag: "span[data-wiki-document]" }],
+      toDOM: (node) => [
+        "span",
+        {
+          "data-wiki-document": "true",
+          "data-document-id": node.attrs.documentId,
+        },
       ],
     },
 

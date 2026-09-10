@@ -49,7 +49,13 @@ var toolGroups = []toolGroup{
 	{
 		Title: "Wiki",
 		Intro: "Engagement notes. Pages are collaboratively edited, so the operator may be reading one while you write to it. " +
-			"Pages can also carry file attachments — the evidence the notes are about.",
+			"Pages can also carry file attachments — the evidence the notes are about.\n\n" +
+			"A page is richer than plain markdown: checklist items (`:::checklist {...}`), notices " +
+			"(`:::warning`), and inline reference chips to hosts, hashes, credentials and other " +
+			"pages. You read and write all of them as markdown, and `update_wiki_document` " +
+			"replaces the whole body — so read a page before rewriting it and put back every " +
+			"construct you are not deliberately changing. See workflows.md, \"What a page can " +
+			"contain\".",
 		Tools: []string{"search_wiki", "list_wiki_tree", "get_wiki_document",
 			"list_wiki_templates", "create_wiki_document_from_template", "set_wiki_template",
 			"create_wiki_document", "append_wiki_section", "update_wiki_document",

@@ -162,3 +162,73 @@ test("empty Y.js update returns empty string", () => {
   // Empty paragraph or empty string both round-trip back to the empty doc.
   assert.ok(structurallyEqual("", out));
 });
+
+// The serializer emitted GFM checkboxes from the start; nothing read them
+// back, so a read-modify-write turned a task list into a bullet list of
+// escaped "\\[x\\]" prose. One round trip per edit, quietly.
+test("task list survives the yjs pipeline", () => {
+  const md = "- [x] ran the sweep\n- [ ] wrote it up";
+  const out = roundTripViaYjs(md);
+  assert.match(out, /- \[x\] ran the sweep/);
+  assert.match(out, /- \[ \] wrote it up/);
+  assert.ok(structurallyEqual(md, out), `expected equivalent, got: ${out}`);
+});
+
+// The lift requires every item to carry a marker. A list that merely mentions
+// brackets is a bullet list, and rewriting it would be the same damage in the
+// other direction.
+test("a list where only some items look like tasks stays a bullet list", () => {
+  const doc = parseOutlineMarkdown("- [x] done\n- not a task");
+  const kinds: string[] = [];
+  doc.descendants((node) => {
+    kinds.push(node.type.name);
+    return true;
+  });
+  assert.ok(kinds.includes("bulletList"), `expected a bulletList, got ${kinds.join(",")}`);
+  assert.ok(!kinds.includes("taskList"), `converted a mixed list: ${kinds.join(",")}`);
+});
+
+// Checklist items are the operator's coverage bar. Dropping one loses both
+// the question and the answer under it.
+test("checklist item round-trips with its attributes and answer", () => {
+  const md =
+    ':::checklist {"prompt":"Enumerated SMB shares?","required":true,"state":"answered"}\n' +
+    "Three shares, one world-readable.\n\n:::";
+  const out = roundTripViaYjs(md);
+  assert.match(out, /"prompt":"Enumerated SMB shares\?"/);
+  assert.match(out, /"required":true/);
+  assert.match(out, /"state":"answered"/);
+  assert.match(out, /Three shares, one world-readable\./);
+  assert.ok(structurallyEqual(md, out), `expected equivalent, got: ${out}`);
+});
+
+// A chip that does not survive stops resolving, and the reverse lookups that
+// hang off it ("which pages reference this host?") go quiet.
+test("host, hash and page chips survive the yjs pipeline", () => {
+  const md =
+    "reached [host](vibe://host/11111111-1111-1111-1111-111111111111) " +
+    "with [hash](vibe://hash/22222222-2222-2222-2222-222222222222), " +
+    "see [page](vibe://doc/33333333-3333-3333-3333-333333333333)";
+  const out = roundTripViaYjs(md);
+  assert.ok(structurallyEqual(md, out), `expected equivalent, got: ${out}`);
+
+  const kinds: string[] = [];
+  parseOutlineMarkdown(out).descendants((node) => {
+    kinds.push(node.type.name);
+    return true;
+  });
+  for (const node of ["wikiHostReference", "wikiHashReference", "wikiDocumentReference"]) {
+    assert.ok(kinds.includes(node), `${node} did not survive: ${kinds.join(",")}`);
+  }
+});
+
+// An ordinary link must not be swept up by the chip lowering.
+test("an ordinary link is not turned into a chip", () => {
+  const doc = parseOutlineMarkdown("see [docs](https://example.com/x)");
+  const kinds: string[] = [];
+  doc.descendants((node) => {
+    kinds.push(node.type.name);
+    return true;
+  });
+  assert.ok(!kinds.some((k) => k.endsWith("Reference")), `made a chip: ${kinds.join(",")}`);
+});

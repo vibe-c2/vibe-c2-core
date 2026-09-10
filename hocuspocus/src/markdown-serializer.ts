@@ -9,6 +9,8 @@
 //   - ::: info / success / warning / tip … :::  ←  wikiNotice nodes
 //   - ![](url " =WxH")                          ←  image with width/height
 //   - [label bytes](url)                        ←  wikiFile atom block
+//   - ::: checklist {json} … :::                ←  wikiChecklistItem block
+//   - [label](vibe://host|hash|doc/<id>)        ←  inline reference chips
 //   - GFM tables, task lists, strikethrough
 //
 // Built on top of prosemirror-markdown's MarkdownSerializer. The default
@@ -18,6 +20,10 @@
 import { MarkdownSerializer } from "prosemirror-markdown";
 import { Fragment, Node } from "prosemirror-model";
 import { wikiSchema } from "./wiki-schema.js";
+// The same truth-test the coverage walker uses. Sharing it means the
+// markdown and the coverage bar can never disagree about whether an item is
+// required.
+import { isTruthyAttr } from "./references.js";
 
 const NOTICE_VARIANTS = new Set(["info", "success", "warning", "tip"]);
 
@@ -26,6 +32,94 @@ const NOTICE_VARIANTS = new Set(["info", "success", "warning", "tip"]);
 // any code that wants to recognise a credential fence should reference
 // this constant rather than the literal.
 export const CREDENTIAL_FENCE_INFO = "vibe-credential";
+
+// Container name for a checklist item. Registered on the markdown-it side
+// alongside the notice variants.
+export const CHECKLIST_CONTAINER = "checklist";
+
+// Inline reference chips carry nothing but an id, so a link is a richer
+// representation than a fence would be: it survives inside a sentence, stays
+// valid markdown for anything that does not know the scheme, and matches the
+// vibe:// URIs the MCP resource surface already hands out.
+//
+// The map is the single source of truth for both directions — the serializer
+// writes these hrefs and the parser lowers them back — so a new chip type is
+// one entry rather than two matching regexes.
+export const REFERENCE_LINK_SCHEME = "vibe://";
+
+export interface ReferenceChipKind {
+  /** Path segment after the scheme, e.g. "host" in vibe://host/<id>. */
+  segment: string;
+  /** Schema node name for the inline atom. */
+  node: string;
+  /** Attribute on that node holding the id. */
+  idAttr: string;
+  /** Link text, so the markdown reads as something even out of context. */
+  label: string;
+}
+
+export const REFERENCE_CHIP_KINDS: ReferenceChipKind[] = [
+  { segment: "host", node: "wikiHostReference", idAttr: "hostId", label: "host" },
+  { segment: "hash", node: "wikiHashReference", idAttr: "hashId", label: "hash" },
+  { segment: "doc", node: "wikiDocumentReference", idAttr: "documentId", label: "page" },
+];
+
+// Serializer defaults for a checklist item, mirroring the schema. Anything
+// equal to its default is left out of the emitted JSON: an agent reading a
+// page should see the question, not a wall of bookkeeping.
+const CHECKLIST_DEFAULTS: Record<string, unknown> = {
+  key: null,
+  prompt: "",
+  commandHint: "",
+  commandHintEnabled: false,
+  required: true,
+  state: "",
+};
+
+/**
+ * The info-string payload for a checklist container: every attribute that
+ * differs from its default, as compact JSON.
+ *
+ * `required` is always emitted even when it holds the default. It is the one
+ * attribute a reader acts on — "must this be answered?" — and inferring it
+ * from absence is exactly the kind of thing a model gets wrong.
+ */
+function checklistInfoJSON(node: Node): string {
+  const out: Record<string, unknown> = {};
+  for (const [name, fallback] of Object.entries(CHECKLIST_DEFAULTS)) {
+    // Y.js XmlElement attributes come back as whatever was stored, and the
+    // editor has written booleans as strings in the past. Normalise the two
+    // flags so the emitted JSON is always `true`/`false` and a round trip
+    // cannot turn a boolean into the string "false" — which is truthy.
+    const value =
+      name === "required" || name === "commandHintEnabled"
+        ? isTruthyAttr(node.attrs[name])
+        : node.attrs[name];
+    if (name === "required" || value !== fallback) out[name] = value;
+  }
+  return JSON.stringify(out);
+}
+
+/**
+ * Emit an inline reference chip as `[label](vibe://<segment>/<id>)`.
+ *
+ * A chip whose id is missing degrades to plain label text rather than an
+ * empty link — a dangling `vibe://host/` would parse back into a chip
+ * pointing at nothing.
+ */
+function writeReferenceChip(
+  state: { write: (s: string) => void },
+  node: Node,
+): void {
+  const kind = REFERENCE_CHIP_KINDS.find((k) => k.node === node.type.name);
+  if (!kind) return;
+  const id = String(node.attrs[kind.idAttr] ?? "");
+  if (id === "") {
+    state.write(kind.label);
+    return;
+  }
+  state.write(`[${kind.label}](${REFERENCE_LINK_SCHEME}${kind.segment}/${id})`);
+}
 
 // Render the contents of a cell as a single line of markdown so it fits in
 // a pipe-table row. Block content (paragraphs) gets flattened: each block's
@@ -180,6 +274,18 @@ function buildSerializer(): MarkdownSerializer {
       state.closeBlock(node);
     },
 
+    wikiChecklistItem(state, node) {
+      // The structure goes on the info line as JSON and the answer stays in
+      // the container body, which keeps the answer ordinary markdown an agent
+      // can read and edit in place. Defaults are omitted so a plain question
+      // emits `:::checklist {"prompt":"…"}` rather than six redundant keys.
+      state.write(":::" + CHECKLIST_CONTAINER + " " + checklistInfoJSON(node) + "\n");
+      state.renderContent(node);
+      state.ensureNewLine();
+      state.write(":::");
+      state.closeBlock(node);
+    },
+
     wikiCredentialBlock(state, node) {
       // Emit a fenced code block whose info-string is the discriminator the
       // importer's lifter looks for. The payload is JSON.stringified verbatim
@@ -208,6 +314,18 @@ function buildSerializer(): MarkdownSerializer {
       const escUrl = url.replace(/[\(\)]/g, "\\$&");
       state.write(`[${label.replace(/[\[\]]/g, "\\$&")}](${escUrl})`);
       state.closeBlock(node);
+    },
+
+    wikiHostReference(state, node) {
+      writeReferenceChip(state, node);
+    },
+
+    wikiHashReference(state, node) {
+      writeReferenceChip(state, node);
+    },
+
+    wikiDocumentReference(state, node) {
+      writeReferenceChip(state, node);
     },
 
     table(state, node) {
@@ -478,6 +596,16 @@ function liftCredentialChipsToBlocks(
  * nodes (legacy editor extensions added without a serializer entry) are
  * silently skipped rather than aborting the export.
  */
+/**
+ * The node types this serializer can emit. Exported for the schema-drift
+ * guard: the serializer is deliberately non-strict, so a node with no entry
+ * here is skipped in silence, and only a test comparing the two lists can
+ * catch it.
+ */
+export function serializerNodeNames(): Set<string> {
+  return new Set(Object.keys(serializer.nodes));
+}
+
 export function serializeWikiDocument(
   doc: Node,
   resolveCredential?: CredentialPayloadResolver,

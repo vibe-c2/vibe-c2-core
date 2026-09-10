@@ -62,6 +62,49 @@ change:
   Promoting your own page to a template is a claim about how the whole team
   should work.
 
+## What a page can contain
+
+Pages are richer than plain markdown, and you read and write that richness as
+markdown extensions. Preserve them. They are not decoration — the checklist
+drives a coverage bar the operator watches, and every chip is a live link the
+platform follows in both directions.
+
+**Checklist items** — a question and its answer:
+
+```
+:::checklist {"prompt":"Enumerated SMB shares?","required":true,"state":"answered"}
+Three shares, one world-readable.
+:::
+```
+
+The body is the answer, and it takes any content, including chips. `prompt` is
+the question, `required` says whether it must be answered, and `state` is
+`answered`, `not_applicable`, `flagged`, or absent for unanswered. Answering a
+question means putting content in the body — that is what the coverage bar
+counts, so leave the marker line alone and write below it.
+
+**Reference chips** — inline links to platform objects:
+
+```
+reached [host](vibe://host/<id>) with [hash](vibe://hash/<id>), see [page](vibe://doc/<id>)
+```
+
+Credentials are the exception: they come through as a `vibe-credential` fenced
+block rather than an inline link.
+
+**Notices** — `:::info`, `:::success`, `:::warning`, `:::tip`, closed with
+`:::`.
+
+Everything else is ordinary markdown: headings, tables, task lists
+(`- [x]`), code fences, images, and file attachments as
+`[name size](/api/v1/wiki/files/<id>)`.
+
+The thing to watch is `update_wiki_document`, which replaces the whole body.
+Read the page first and put back every construct you are not deliberately
+changing — a checklist you drop takes its answers and the operator's coverage
+with it. `append_wiki_section` cannot make that mistake, which is one more
+reason to prefer it.
+
 ## Reading what is attached to a page
 
 A page's text is often a summary of something attached to it — a scan export,

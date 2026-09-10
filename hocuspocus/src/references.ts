@@ -300,6 +300,6 @@ function itemHasAnswer(node: Y.XmlElement): boolean {
  * attribute as a real boolean or, after an HTML round-trip, as the string
  * "true" — accept either.
  */
-function isTruthyAttr(value: unknown): boolean {
+export function isTruthyAttr(value: unknown): boolean {
   return value === true || value === "true";
 }

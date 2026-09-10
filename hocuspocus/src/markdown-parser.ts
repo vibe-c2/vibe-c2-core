@@ -18,9 +18,15 @@ import Token from "markdown-it/lib/token.mjs";
 import type StateCore from "markdown-it/lib/rules_core/state_core.mjs";
 import type StateInline from "markdown-it/lib/rules_inline/state_inline.mjs";
 import { MarkdownParser } from "prosemirror-markdown";
-import { Node, type Attrs } from "prosemirror-model";
+import { Node, type Attrs, Fragment } from "prosemirror-model";
+import { isTruthyAttr } from "./references.js";
 import { wikiSchema } from "./wiki-schema.js";
-import { CREDENTIAL_FENCE_INFO } from "./markdown-serializer.js";
+import {
+  CHECKLIST_CONTAINER,
+  CREDENTIAL_FENCE_INFO,
+  REFERENCE_CHIP_KINDS,
+  REFERENCE_LINK_SCHEME,
+} from "./markdown-serializer.js";
 
 // The four notice variants our editor supports. New variants must be added
 // here, in wiki-schema.ts, and on the editor side at the same time.
@@ -281,6 +287,11 @@ function buildTokenizer(): MarkdownIt {
     md.use(MarkdownItContainer as unknown as PluginWithParams, variant, {});
   }
 
+  // Checklist items ride the same container mechanism as notices. The
+  // structure travels on the marker line as JSON, which the token map reads
+  // off token.info.
+  md.use(MarkdownItContainer as unknown as PluginWithParams, CHECKLIST_CONTAINER, {});
+
   return md;
 }
 
@@ -432,8 +443,63 @@ function buildTokenMap() {
     };
   }
 
+  map[`container_${CHECKLIST_CONTAINER}`] = {
+    block: "wikiChecklistItem",
+    getAttrs: (tok: { info: string }) => parseChecklistInfo(tok.info),
+  };
+
   return map;
 }
+
+/**
+ * Read a checklist container's marker line back into node attributes.
+ *
+ * The info string is `checklist {json}`. A malformed or absent payload
+ * degrades to an unattributed item rather than throwing: the answer text is
+ * the part that matters, and losing a page because someone hand-edited a
+ * marker line would be a far worse outcome than losing its `state`.
+ */
+function parseChecklistInfo(info: string): Attrs {
+  const brace = info.indexOf("{");
+  if (brace === -1) return {};
+
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(info.slice(brace));
+  } catch {
+    return {};
+  }
+  if (typeof parsed !== "object" || parsed === null) return {};
+
+  // Only known attributes are carried across. An unknown key in the JSON
+  // would be rejected by prosemirror-model when the node is constructed, so
+  // filtering here is what keeps a hand-edited marker line from failing the
+  // whole parse.
+  const source = parsed as Record<string, unknown>;
+  const attrs: Record<string, unknown> = {};
+  for (const name of CHECKLIST_ATTRS) {
+    if (!(name in source)) continue;
+    // The two flags are coerced rather than trusted. A hand-written marker
+    // line saying "required": "false" would otherwise land a truthy string in
+    // an attribute the coverage walker reads as a boolean.
+    attrs[name] =
+      name === "required" || name === "commandHintEnabled"
+        ? isTruthyAttr(source[name])
+        : source[name];
+  }
+  return attrs as Attrs;
+}
+
+// Attribute names wikiChecklistItem declares. Kept beside the parser because
+// this is the only place an untrusted key set reaches the schema.
+const CHECKLIST_ATTRS = [
+  "key",
+  "prompt",
+  "commandHint",
+  "commandHintEnabled",
+  "required",
+  "state",
+] as const;
 
 const tokenizer = buildTokenizer();
 const tokens = buildTokenMap() as ConstructorParameters<typeof MarkdownParser>[2];
@@ -626,7 +692,152 @@ export function parseOutlineMarkdown(markdown: string): Node {
   }
 
   const withFiles = liftFileLinksToBlocks(parsed);
-  return lowerCredentialBlocksToChips(withFiles);
+  const withTasks = liftCheckboxListsToTaskLists(withFiles);
+  const withChips = lowerReferenceLinksToChips(withTasks);
+  return lowerCredentialBlocksToChips(withChips);
+}
+
+// A GFM task marker at the start of a list item: "[ ] ", "[x] ", "[X] ".
+const TASK_MARKER = /^\[([ xX])\]\s+/;
+
+/**
+ * Turn a bullet list whose every item opens with a `[ ]` / `[x]` marker into
+ * a taskList.
+ *
+ * The serializer has always emitted task lists as GFM checkboxes, but nothing
+ * read them back: markdown-it core has no task-list rule, so they parsed as
+ * an ordinary bullet list with a literal "[x]" in the text — which the next
+ * serialize then escaped to "\[x\]". An agent that read a page and wrote it
+ * back turned every checklist of this kind into escaped prose, one round trip
+ * at a time.
+ *
+ * All items must carry a marker. A list where only some do is a bullet list
+ * that happens to mention brackets, and rewriting it would be the same class
+ * of damage in the other direction.
+ */
+function liftCheckboxListsToTaskLists(doc: Node): Node {
+  const bulletList = wikiSchema.nodes.bulletList;
+  const taskList = wikiSchema.nodes.taskList;
+  const taskItem = wikiSchema.nodes.taskItem;
+  const paragraph = wikiSchema.nodes.paragraph;
+  if (!bulletList || !taskList || !taskItem || !paragraph) return doc;
+
+  // The marker lives in the first text node of the item's first paragraph.
+  const markerOf = (item: Node): RegExpMatchArray | null => {
+    const first = item.firstChild;
+    if (!first || first.type !== paragraph) return null;
+    const text = first.firstChild;
+    if (!text || !text.isText) return null;
+    return text.text?.match(TASK_MARKER) ?? null;
+  };
+
+  const convert = (list: Node): Node | null => {
+    const items: Node[] = [];
+    let ok = true;
+
+    list.forEach((item) => {
+      if (!ok) return;
+      const match = markerOf(item);
+      if (!match) {
+        ok = false;
+        return;
+      }
+      const para = item.firstChild!;
+      const text = para.firstChild!;
+      const remaining = (text.text ?? "").slice(match[0].length);
+
+      const inline: Node[] = [];
+      if (remaining !== "") inline.push(wikiSchema.text(remaining, text.marks));
+      para.content.forEach((child, _offset, index) => {
+        if (index > 0) inline.push(child);
+      });
+
+      const blocks: Node[] = [para.copy(Fragment.fromArray(inline))];
+      item.content.forEach((child, _offset, index) => {
+        if (index > 0) blocks.push(child);
+      });
+
+      items.push(
+        taskItem.create(
+          { checked: match[1] !== " " },
+          Fragment.fromArray(blocks),
+        ),
+      );
+    });
+
+    if (!ok || items.length === 0) return null;
+    return taskList.create(null, Fragment.fromArray(items));
+  };
+
+  const rebuild = (node: Node): Node => {
+    if (node.content.size === 0) return node;
+
+    const children: Node[] = [];
+    node.forEach((child) => {
+      if (child.type === bulletList) {
+        const converted = convert(child);
+        children.push(converted ?? rebuild(child));
+        return;
+      }
+      children.push(rebuild(child));
+    });
+    return node.copy(Fragment.fromArray(children));
+  };
+
+  return rebuild(doc);
+}
+
+/**
+ * Turn every `[label](vibe://host|hash|doc/<id>)` link back into the inline
+ * atom it was serialized from.
+ *
+ * This is what makes a chip survive a read-modify-write. Without it an agent
+ * that reads a page and writes it back would replace every host, hash and
+ * page reference with an inert link — the chips would stop resolving, and
+ * the reverse lookups that hang off them ("which pages reference this host?")
+ * would go quiet.
+ *
+ * A link the scheme does not match is left alone; ordinary links are not
+ * this function's business.
+ */
+function lowerReferenceLinksToChips(doc: Node): Node {
+  const linkType = wikiSchema.marks.link;
+  if (!linkType) return doc;
+
+  const rebuild = (node: Node): Node => {
+    if (node.isText) {
+      const mark = node.marks.find((m) => m.type === linkType);
+      const chip = mark ? chipForHref(String(mark.attrs.href ?? "")) : null;
+      return chip ?? node;
+    }
+    if (node.content.size === 0) return node;
+
+    const children: Node[] = [];
+    node.forEach((child) => children.push(rebuild(child)));
+    return node.copy(Fragment.fromArray(children));
+  };
+
+  return rebuild(doc);
+}
+
+/** The inline atom a reference href names, or null when it names none. */
+function chipForHref(href: string): Node | null {
+  if (!href.startsWith(REFERENCE_LINK_SCHEME)) return null;
+
+  const rest = href.slice(REFERENCE_LINK_SCHEME.length);
+  const slash = rest.indexOf("/");
+  if (slash === -1) return null;
+
+  const segment = rest.slice(0, slash);
+  const id = rest.slice(slash + 1);
+  if (id === "") return null;
+
+  const kind = REFERENCE_CHIP_KINDS.find((k) => k.segment === segment);
+  if (!kind) return null;
+
+  const type = wikiSchema.nodes[kind.node];
+  if (!type) return null;
+  return type.create({ [kind.idAttr]: id });
 }
 
 /**
