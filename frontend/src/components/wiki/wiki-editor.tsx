@@ -53,7 +53,33 @@ import {
   extractMarkdownFromClipboard,
   markdownToSlice,
 } from "@/components/wiki/wiki-markdown-paste"
+import { toast } from "sonner"
+import { clipboardFileShortfall } from "@/components/wiki/wiki-clipboard-files"
 import "./wiki-editor.css"
+
+/**
+ * Tell the user when a paste dropped files on the floor.
+ *
+ * Our extractors and upload loop both handle any number of files; what varies
+ * is how many the browser exposes from a multi-file clipboard. Rather than
+ * leave the missing ones unexplained, point at the two routes that do carry
+ * a whole selection.
+ */
+function warnOnClipboardShortfall(
+  clipboardData: DataTransfer | null,
+  extracted: number,
+): void {
+  const missing = clipboardFileShortfall(clipboardData, extracted)
+  if (missing === 0) return
+
+  toast.warning(
+    `Your system only handed over ${extracted} of ${extracted + missing} copied files.`,
+    {
+      description:
+        "Drag the files in from Finder, or use the /image and /file commands, to add them all at once.",
+    },
+  )
+}
 
 interface WikiEditorProps {
   documentId: string
@@ -125,6 +151,13 @@ export function WikiEditor({
           if (attachments.length > 0) {
             void uploadAndInsertWikiFiles(currentEditor, documentId, attachments, { pos })
           }
+          // Pasting a multi-file selection does not reliably hand over every
+          // file — macOS is the reported case. Say so rather than letting the
+          // user believe four of their five images simply failed.
+          warnOnClipboardShortfall(
+            event.clipboardData,
+            images.length + attachments.length,
+          )
           return true
         }
 
