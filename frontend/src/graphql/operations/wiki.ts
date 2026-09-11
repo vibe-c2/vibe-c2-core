@@ -180,6 +180,15 @@ export const WikiTemplatesQuery = graphql(`
   }
 `)
 
+// The page as Markdown, for the export dialog. Fetched on demand rather than
+// alongside the document: it costs a sidecar round trip to render the CRDT
+// body, and nothing needs it until someone asks to export.
+export const WikiDocumentMarkdownQuery = graphql(`
+  query WikiDocumentMarkdown($id: ID!) {
+    wikiDocumentMarkdown(id: $id)
+  }
+`)
+
 // Direct children of a parent (roots when parentDocumentId is null) — the
 // core query for the lazy sidebar. One request per expanded branch.
 export const WikiDocumentChildrenQuery = graphql(`

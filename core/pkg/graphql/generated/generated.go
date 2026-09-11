@@ -480,6 +480,7 @@ type ComplexityRoot struct {
 		WikiDocumentChildren               func(childComplexity int, operationID string, parentDocumentID *string) int
 		WikiDocumentDescendantIds          func(childComplexity int, documentID string) int
 		WikiDocumentHistory                func(childComplexity int, operationID string, offset *int, limit *int) int
+		WikiDocumentMarkdown               func(childComplexity int, id string) int
 		WikiDocumentPresence               func(childComplexity int, documentID string) int
 		WikiDocumentTrash                  func(childComplexity int, operationID string, first *int, after *string, last *int, before *string) int
 		WikiDocumentTrashCount             func(childComplexity int, operationID string) int
@@ -1007,6 +1008,7 @@ type QueryResolver interface {
 	WikiDocuments(ctx context.Context, operationID string, parentDocumentID *string, search *string, sort *model.WikiDocumentSort, first *int, after *string, last *int, before *string) (*model.WikiDocumentConnection, error)
 	WikiDocumentTree(ctx context.Context, operationID string) ([]*models.WikiDocument, error)
 	WikiTemplates(ctx context.Context, operationID string) ([]*models.WikiDocument, error)
+	WikiDocumentMarkdown(ctx context.Context, id string) (string, error)
 	WikiDocumentChildren(ctx context.Context, operationID string, parentDocumentID *string) ([]*models.WikiDocument, error)
 	WikiDocumentTreeRevealPath(ctx context.Context, documentID string) ([]*models.WikiDocument, error)
 	WikiDocumentDescendantIds(ctx context.Context, documentID string) ([]string, error)
@@ -3530,6 +3532,17 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.Query.WikiDocumentHistory(childComplexity, args["operationId"].(string), args["offset"].(*int), args["limit"].(*int)), true
+	case "Query.wikiDocumentMarkdown":
+		if e.ComplexityRoot.Query.WikiDocumentMarkdown == nil {
+			break
+		}
+
+		args, err := ec.field_Query_wikiDocumentMarkdown_args(ctx, rawArgs)
+		if err != nil {
+			return 0, false
+		}
+
+		return e.ComplexityRoot.Query.WikiDocumentMarkdown(childComplexity, args["id"].(string)), true
 	case "Query.wikiDocumentPresence":
 		if e.ComplexityRoot.Query.WikiDocumentPresence == nil {
 			break
@@ -7682,6 +7695,16 @@ extend type Query {
   wikiTemplates(operationId: ID!): [WikiDocument!]!
     @hasPermission(permission: "operation:member")
 
+  # The document's body as Markdown, for export.
+  #
+  # Not the same as WikiDocument.content, which is a plain-text search
+  # projection with headings and lists flattened and inline marks rendered as
+  # pseudo-tags. This renders content_state — the authoritative CRDT body —
+  # back through the Hocuspocus sidecar that wrote it, so it round-trips.
+  # Viewer role, the same as reading the page.
+  wikiDocumentMarkdown(id: ID!): String!
+    @hasPermission(permission: "operation:member")
+
   # Direct children of ` + "`" + `parentDocumentId` + "`" + ` (or root-level documents when
   # ` + "`" + `parentDocumentId` + "`" + ` is null), sorted by sortOrder. Trashed documents are
   # excluded. Drives the lazy tree sidebar — the client fetches roots on
@@ -9772,6 +9795,17 @@ func (ec *executionContext) field_Query_wikiDocumentHistory_args(ctx context.Con
 		return nil, err
 	}
 	args["limit"] = arg2
+	return args, nil
+}
+
+func (ec *executionContext) field_Query_wikiDocumentMarkdown_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
+	var err error
+	args := map[string]any{}
+	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "id", ec.unmarshalNID2string)
+	if err != nil {
+		return nil, err
+	}
+	args["id"] = arg0
 	return args, nil
 }
 
@@ -25278,6 +25312,65 @@ func (ec *executionContext) fieldContext_Query_wikiTemplates(ctx context.Context
 	}()
 	ctx = graphql.WithFieldContext(ctx, fc)
 	if fc.Args, err = ec.field_Query_wikiTemplates_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
+		ec.Error(ctx, err)
+		return fc, err
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Query_wikiDocumentMarkdown(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Query_wikiDocumentMarkdown,
+		func(ctx context.Context) (any, error) {
+			fc := graphql.GetFieldContext(ctx)
+			return ec.Resolvers.Query().WikiDocumentMarkdown(ctx, fc.Args["id"].(string))
+		},
+		func(ctx context.Context, next graphql.Resolver) graphql.Resolver {
+			directive0 := next
+
+			directive1 := func(ctx context.Context) (any, error) {
+				permission, err := ec.unmarshalNString2string(ctx, "operation:member")
+				if err != nil {
+					var zeroVal string
+					return zeroVal, err
+				}
+				if ec.Directives.HasPermission == nil {
+					var zeroVal string
+					return zeroVal, errors.New("directive hasPermission is not implemented")
+				}
+				return ec.Directives.HasPermission(ctx, nil, directive0, permission)
+			}
+
+			next = directive1
+			return next
+		},
+		ec.marshalNString2string,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_Query_wikiDocumentMarkdown(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Query",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			err = ec.Recover(ctx, r)
+			ec.Error(ctx, err)
+		}
+	}()
+	ctx = graphql.WithFieldContext(ctx, fc)
+	if fc.Args, err = ec.field_Query_wikiDocumentMarkdown_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
 		ec.Error(ctx, err)
 		return fc, err
 	}
@@ -42657,6 +42750,28 @@ func (ec *executionContext) _Query(ctx context.Context, sel ast.SelectionSet) gr
 					}
 				}()
 				res = ec._Query_wikiTemplates(ctx, field)
+				if res == graphql.Null {
+					atomic.AddUint32(&fs.Invalids, 1)
+				}
+				return res
+			}
+
+			rrm := func(ctx context.Context) graphql.Marshaler {
+				return ec.OperationContext.RootResolverMiddleware(ctx,
+					func(ctx context.Context) graphql.Marshaler { return innerFunc(ctx, out) })
+			}
+
+			out.Concurrently(i, func(ctx context.Context) graphql.Marshaler { return rrm(innerCtx) })
+		case "wikiDocumentMarkdown":
+			field := field
+
+			innerFunc := func(ctx context.Context, fs *graphql.FieldSet) (res graphql.Marshaler) {
+				defer func() {
+					if r := recover(); r != nil {
+						ec.Error(ctx, ec.Recover(ctx, r))
+					}
+				}()
+				res = ec._Query_wikiDocumentMarkdown(ctx, field)
 				if res == graphql.Null {
 					atomic.AddUint32(&fs.Invalids, 1)
 				}

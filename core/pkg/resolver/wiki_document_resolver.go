@@ -56,6 +56,14 @@ type IWikiDocumentResolver interface {
 	WikiDocuments(ctx context.Context, operationID string, parentDocumentID *string, search *string, sort *model.WikiDocumentSort, first *int, after *string, last *int, before *string) (*model.WikiDocumentConnection, error)
 	WikiDocumentTree(ctx context.Context, operationID string) ([]*models.WikiDocument, error)
 	WikiTemplates(ctx context.Context, operationID string) ([]*models.WikiDocument, error)
+
+	// WikiDocumentMarkdown renders a document's body as Markdown.
+	//
+	// Deliberately not WikiDocument.content: that field is a plain-text search
+	// projection written by the sidecar, with headings and lists flattened and
+	// inline marks rendered as pseudo-tags. content_state is the authoritative
+	// body, so it is converted back through the same sidecar that wrote it.
+	WikiDocumentMarkdown(ctx context.Context, id string) (string, error)
 	WikiDocumentChildren(ctx context.Context, operationID string, parentDocumentID *string) ([]*models.WikiDocument, error)
 	WikiDocumentTreeRevealPath(ctx context.Context, documentID string) ([]*models.WikiDocument, error)
 	WikiDocumentDescendantIDs(ctx context.Context, documentID string) ([]string, error)
@@ -160,6 +168,17 @@ type wikiDocumentResolver struct {
 	taskRepo repository.ITaskRepository
 	eventBus eventbus.IEventBus
 	presence *wiki.PresenceTracker
+	// renderer converts content_state back to Markdown. Declared as a
+	// one-method interface here rather than taking *wiki.HocuspocusClient so
+	// this resolver depends on the conversion, not on the sidecar client.
+	// Nil is acceptable — WikiDocumentMarkdown is the only caller and says so.
+	renderer MarkdownRenderer
+}
+
+// MarkdownRenderer converts a document's Y.js binary state back to Markdown.
+// Satisfied by *wiki.HocuspocusClient.
+type MarkdownRenderer interface {
+	YjsToMarkdown(ctx context.Context, contentState []byte) (string, error)
 }
 
 // NewWikiDocumentResolver creates a new wiki document resolver with the given dependencies.
@@ -175,6 +194,7 @@ func NewWikiDocumentResolver(
 	taskRepo repository.ITaskRepository,
 	eventBus eventbus.IEventBus,
 	presence *wiki.PresenceTracker,
+	renderer MarkdownRenderer,
 ) IWikiDocumentResolver {
 	return &wikiDocumentResolver{
 		docRepo:       docRepo,
@@ -187,6 +207,7 @@ func NewWikiDocumentResolver(
 		taskRepo:      taskRepo,
 		eventBus:      eventBus,
 		presence:      presence,
+		renderer:      renderer,
 	}
 }
 
@@ -1795,6 +1816,38 @@ func (r *wikiDocumentResolver) WikiTemplates(ctx context.Context, operationID st
 		ptrs[i] = &docs[i]
 	}
 	return ptrs, nil
+}
+
+// WikiDocumentMarkdown renders one document's body as Markdown for export.
+//
+// Authorized at viewer level, the same as reading the page — this returns what
+// the reader can already see, in a different shape.
+func (r *wikiDocumentResolver) WikiDocumentMarkdown(ctx context.Context, id string) (string, error) {
+	uid, err := uuid.Parse(id)
+	if err != nil {
+		return "", fmt.Errorf("invalid document ID: %w", err)
+	}
+
+	doc, err := r.docRepo.FindByID(ctx, uid)
+	if err != nil {
+		return "", fmt.Errorf("document not found: %w", err)
+	}
+	if err := r.authorizeForOperation(ctx, doc.OperationID, models.OperationRoleViewer); err != nil {
+		return "", err
+	}
+
+	// A document that has never been opened in the editor has no CRDT state.
+	// The search projection is the only body it has, and degraded text beats
+	// an error for a page that genuinely has nothing else.
+	if len(doc.ContentState) == 0 || r.renderer == nil {
+		return doc.Content, nil
+	}
+
+	markdown, err := r.renderer.YjsToMarkdown(ctx, doc.ContentState)
+	if err != nil {
+		return "", fmt.Errorf("failed to render the document as Markdown: %w", err)
+	}
+	return markdown, nil
 }
 
 // WikiDocumentChildren returns the active direct children of a parent

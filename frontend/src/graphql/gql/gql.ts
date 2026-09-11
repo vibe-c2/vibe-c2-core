@@ -147,6 +147,7 @@ type Documents = {
     "\n  fragment WikiDocumentVisitListFields on WikiDocumentVisit {\n    id\n    visitedAt\n    document {\n      id\n      title\n      emoji\n      icon\n      color\n      ancestors { id title emoji icon color isDeleted }\n    }\n  }\n": typeof types.WikiDocumentVisitListFieldsFragmentDoc,
     "\n  query WikiDocumentTree($operationId: ID!) {\n    wikiDocumentTree(operationId: $operationId) {\n      ...WikiDocumentTreeFields\n    }\n  }\n": typeof types.WikiDocumentTreeDocument,
     "\n  query WikiTemplates($operationId: ID!) {\n    wikiTemplates(operationId: $operationId) {\n      ...WikiDocumentTreeFields\n    }\n  }\n": typeof types.WikiTemplatesDocument,
+    "\n  query WikiDocumentMarkdown($id: ID!) {\n    wikiDocumentMarkdown(id: $id)\n  }\n": typeof types.WikiDocumentMarkdownDocument,
     "\n  query WikiDocumentChildren($operationId: ID!, $parentDocumentId: ID) {\n    wikiDocumentChildren(\n      operationId: $operationId\n      parentDocumentId: $parentDocumentId\n    ) {\n      ...WikiDocumentTreeFields\n    }\n  }\n": typeof types.WikiDocumentChildrenDocument,
     "\n  query WikiDocumentTreeRevealPath($documentId: ID!) {\n    wikiDocumentTreeRevealPath(documentId: $documentId) {\n      ...WikiDocumentTreeFields\n    }\n  }\n": typeof types.WikiDocumentTreeRevealPathDocument,
     "\n  query WikiDocumentDescendantIds($documentId: ID!) {\n    wikiDocumentDescendantIds(documentId: $documentId)\n  }\n": typeof types.WikiDocumentDescendantIdsDocument,
@@ -314,6 +315,7 @@ const documents: Documents = {
     "\n  fragment WikiDocumentVisitListFields on WikiDocumentVisit {\n    id\n    visitedAt\n    document {\n      id\n      title\n      emoji\n      icon\n      color\n      ancestors { id title emoji icon color isDeleted }\n    }\n  }\n": types.WikiDocumentVisitListFieldsFragmentDoc,
     "\n  query WikiDocumentTree($operationId: ID!) {\n    wikiDocumentTree(operationId: $operationId) {\n      ...WikiDocumentTreeFields\n    }\n  }\n": types.WikiDocumentTreeDocument,
     "\n  query WikiTemplates($operationId: ID!) {\n    wikiTemplates(operationId: $operationId) {\n      ...WikiDocumentTreeFields\n    }\n  }\n": types.WikiTemplatesDocument,
+    "\n  query WikiDocumentMarkdown($id: ID!) {\n    wikiDocumentMarkdown(id: $id)\n  }\n": types.WikiDocumentMarkdownDocument,
     "\n  query WikiDocumentChildren($operationId: ID!, $parentDocumentId: ID) {\n    wikiDocumentChildren(\n      operationId: $operationId\n      parentDocumentId: $parentDocumentId\n    ) {\n      ...WikiDocumentTreeFields\n    }\n  }\n": types.WikiDocumentChildrenDocument,
     "\n  query WikiDocumentTreeRevealPath($documentId: ID!) {\n    wikiDocumentTreeRevealPath(documentId: $documentId) {\n      ...WikiDocumentTreeFields\n    }\n  }\n": types.WikiDocumentTreeRevealPathDocument,
     "\n  query WikiDocumentDescendantIds($documentId: ID!) {\n    wikiDocumentDescendantIds(documentId: $documentId)\n  }\n": types.WikiDocumentDescendantIdsDocument,
@@ -894,6 +896,10 @@ export function graphql(source: "\n  query WikiDocumentTree($operationId: ID!) {
  * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
  */
 export function graphql(source: "\n  query WikiTemplates($operationId: ID!) {\n    wikiTemplates(operationId: $operationId) {\n      ...WikiDocumentTreeFields\n    }\n  }\n"): (typeof documents)["\n  query WikiTemplates($operationId: ID!) {\n    wikiTemplates(operationId: $operationId) {\n      ...WikiDocumentTreeFields\n    }\n  }\n"];
+/**
+ * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
+ */
+export function graphql(source: "\n  query WikiDocumentMarkdown($id: ID!) {\n    wikiDocumentMarkdown(id: $id)\n  }\n"): (typeof documents)["\n  query WikiDocumentMarkdown($id: ID!) {\n    wikiDocumentMarkdown(id: $id)\n  }\n"];
 /**
  * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
  */

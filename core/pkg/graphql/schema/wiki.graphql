@@ -293,6 +293,16 @@ extend type Query {
   wikiTemplates(operationId: ID!): [WikiDocument!]!
     @hasPermission(permission: "operation:member")
 
+  # The document's body as Markdown, for export.
+  #
+  # Not the same as WikiDocument.content, which is a plain-text search
+  # projection with headings and lists flattened and inline marks rendered as
+  # pseudo-tags. This renders content_state — the authoritative CRDT body —
+  # back through the Hocuspocus sidecar that wrote it, so it round-trips.
+  # Viewer role, the same as reading the page.
+  wikiDocumentMarkdown(id: ID!): String!
+    @hasPermission(permission: "operation:member")
+
   # Direct children of `parentDocumentId` (or root-level documents when
   # `parentDocumentId` is null), sorted by sortOrder. Trashed documents are
   # excluded. Drives the lazy tree sidebar — the client fetches roots on

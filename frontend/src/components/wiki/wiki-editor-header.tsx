@@ -5,7 +5,6 @@ import {
   ChevronRightIcon,
   ClockIcon,
   EllipsisIcon,
-  FileDownIcon,
   ListTreeIcon,
   Maximize2Icon,
   Minimize2Icon,
@@ -29,6 +28,7 @@ import {
   type DocumentIconValue,
 } from "@/components/wiki/document-icon-picker"
 import { DocumentIcon } from "@/components/wiki/document-icon"
+import { WikiExportMenu } from "@/components/wiki/wiki-export-menu"
 import { sortByOrder } from "@/components/wiki/wiki-tree-helpers"
 import type { WikiDocumentFieldsFragment } from "@/graphql/gql/graphql"
 
@@ -381,33 +381,9 @@ export function WikiEditorHeader({
           <TooltipContent>{tocLabel}</TooltipContent>
         </Tooltip>
 
-        {/* Export as PDF — opens the chromeless print route in a new tab.
-            That page mounts the same WikiEditor in read-only mode and
-            auto-triggers window.print() once the document loads. The user
-            picks "Save as PDF" from the browser's print dialog. Cookies
-            travel automatically on the new tab, so the protected route
-            still authenticates. Not gated on isEditor. */}
-        <Tooltip>
-          <TooltipTrigger
-            render={
-              <Button
-                variant="ghost"
-                size="icon-sm"
-                onClick={() =>
-                  window.open(
-                    `/wiki/${encodeURIComponent(doc.id)}/print`,
-                    "_blank",
-                    "noopener,noreferrer",
-                  )
-                }
-                aria-label="Export as PDF"
-              />
-            }
-          >
-            <FileDownIcon className="size-4" />
-          </TooltipTrigger>
-          <TooltipContent>Export as PDF</TooltipContent>
-        </Tooltip>
+        {/* Export — PDF via the print route, Markdown via a modal. Not gated
+            on isEditor: exporting is reading. */}
+        <WikiExportMenu documentId={doc.id} title={doc.title} />
 
         {/* Zoom toggle — not gated on isEditor (focus reading is useful
             without edit rights). */}

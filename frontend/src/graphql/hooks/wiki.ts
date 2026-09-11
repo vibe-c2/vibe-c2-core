@@ -9,6 +9,7 @@ import type {
 } from "@/graphql/gql/graphql"
 import {
   WikiDocumentTreeDocument,
+  WikiDocumentMarkdownDocument,
   WikiTemplatesDocument,
   WikiDocumentChildrenDocument,
   WikiDocumentTreeRevealPathDocument,
@@ -57,6 +58,10 @@ export const wikiKeys = {
   // operation. Separate from `tree` so the dialog fetches only templates
   // instead of the whole tree.
   templates: (operationId: string) => [...wikiKeys.all, "templates", operationId] as const,
+  // Rendered Markdown for one document. Its own family so the export dialog
+  // can be refetched without disturbing the document caches, and so the
+  // wikiDocumentChanged handler can drop it when the body changes.
+  markdown: (documentId: string) => [...wikiKeys.all, "markdown", documentId] as const,
   // Per-parent direct-children entry. Used by the lazy sidebar (one entry per
   // expanded branch) and the document-footer Sub-pages list. Root-level rows
   // live under the sentinel "__root__" so a single shape covers both cases.
@@ -133,6 +138,24 @@ export function useWikiTemplates(
     queryKey: wikiKeys.templates(operationId),
     queryFn: () => graphqlClient(WikiTemplatesDocument, { operationId }),
     enabled: !!operationId && (options?.enabled ?? true),
+  })
+}
+
+// The document body as Markdown, for the export dialog.
+//
+// Not cached indefinitely like the tree queries: it is a render of the CRDT
+// body taken at fetch time, and the body can move under it while the dialog
+// is open. `enabled` keeps the sidecar round trip out of the common path
+// where nobody opens the dialog at all.
+export function useWikiDocumentMarkdown(
+  documentId: string,
+  options?: { enabled?: boolean },
+) {
+  return useQuery({
+    queryKey: wikiKeys.markdown(documentId),
+    queryFn: () => graphqlClient(WikiDocumentMarkdownDocument, { id: documentId }),
+    enabled: !!documentId && (options?.enabled ?? true),
+    staleTime: 0,
   })
 }
 
@@ -799,6 +822,9 @@ export function useWikiDocumentChangedSubscription(operationId: string) {
         // Seed detail cache on create/update so navigating to the doc is instant.
         queryClient.invalidateQueries({ queryKey: wikiKeys.detail(documentId) })
         queryClient.invalidateQueries({ queryKey: wikiKeys.lite(documentId) })
+        // The export dialog renders the body; a body change makes its copy
+        // stale even though it is keyed separately from the document itself.
+        queryClient.invalidateQueries({ queryKey: wikiKeys.markdown(documentId) })
       }
 
       // Tree query — the move dialog and other full-tree consumers depend on

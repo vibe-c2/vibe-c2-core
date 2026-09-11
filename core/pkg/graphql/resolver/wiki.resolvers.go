@@ -103,6 +103,11 @@ func (r *queryResolver) WikiTemplates(ctx context.Context, operationID string) (
 	return r.WikiDocumentResolver.WikiTemplates(ctx, operationID)
 }
 
+// WikiDocumentMarkdown is the resolver for the wikiDocumentMarkdown field.
+func (r *queryResolver) WikiDocumentMarkdown(ctx context.Context, id string) (string, error) {
+	return r.WikiDocumentResolver.WikiDocumentMarkdown(ctx, id)
+}
+
 // WikiDocumentChildren is the resolver for the wikiDocumentChildren field.
 func (r *queryResolver) WikiDocumentChildren(ctx context.Context, operationID string, parentDocumentID *string) ([]*models.WikiDocument, error) {
 	return r.WikiDocumentResolver.WikiDocumentChildren(ctx, operationID, parentDocumentID)

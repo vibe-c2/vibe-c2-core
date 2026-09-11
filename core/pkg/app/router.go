@@ -62,6 +62,7 @@ func (a *App) NewRouter() *gin.Engine {
 		a.repos.Hash,
 		a.repos.Task,
 		a.eventBus, a.presenceTracker,
+		a.hpClient,
 	)
 	wikiVisitRes := resolver.NewWikiDocumentVisitResolver(
 		a.repos.WikiDocumentVisit, a.repos.WikiDocument, a.repos.Operation,
