@@ -33,8 +33,15 @@ import {
 const NOTICE_VARIANTS = ["info", "success", "warning", "tip"] as const;
 type NoticeVariant = (typeof NOTICE_VARIANTS)[number];
 
+// An attachment link, with or without an origin in front of it.
+//
+// The canonical form stored in a document is relative. The export dialog
+// absolutises it so the Markdown is useful outside the app, which means
+// re-importing an exported page hands us `https://host/api/v1/wiki/files/…`.
+// Anchoring to the relative form alone would leave that as an inert link and
+// quietly lose the attachment on the way back in.
 const FILE_HREF_PATTERN =
-  /^\/api\/v1\/wiki\/files\/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$/i;
+  /^(?:[a-z][a-z0-9+.-]*:\/\/[^/]+)?\/api\/v1\/wiki\/files\/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$/i;
 
 // markdown-it core rule: walk the block-level token stream and replace any
 // paragraph whose inline children are images and whitespace only with one
@@ -551,7 +558,12 @@ function liftFileLinksToBlocks(doc: Node): Node {
 
     const fileNode = wikiSchema.nodes.wikiFile.create({
       fileId: match[1],
-      url: href,
+      // Canonical relative form, not the href as written. An exported page
+      // carries an absolute link so it is useful outside the app; storing
+      // that back would bake one deployment's hostname into a document on
+      // another, and those links die with that host. The id is what matters
+      // and the path is derived from it.
+      url: `/api/v1/wiki/files/${match[1]}`,
       filename,
       size,
       contentType: guessContentType(filename),
@@ -599,7 +611,9 @@ function liftFileLinksToBlocks(doc: Node): Node {
         type: "wikiFile",
         attrs: {
           fileId: m[1],
-          url: href,
+          // Canonical relative form — see the sibling lift above for why the
+          // href as written is not kept.
+          url: `/api/v1/wiki/files/${m[1]}`,
           filename: trailing ? trailing[1] : label,
           size: trailing ? parseInt(trailing[2], 10) : 0,
           contentType: guessContentType(trailing ? trailing[1] : label),

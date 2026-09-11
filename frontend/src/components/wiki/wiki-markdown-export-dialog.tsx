@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react"
+import { useEffect, useMemo, useRef } from "react"
 import { CopyIcon, DownloadIcon } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import {
@@ -12,6 +12,7 @@ import { Skeleton } from "@/components/ui/skeleton"
 import { copyToClipboard } from "@/lib/copy-to-clipboard"
 import { useWikiDocumentMarkdown } from "@/graphql/hooks/wiki"
 import { markdownFilename } from "@/components/wiki/wiki-markdown-filename"
+import { absolutizeWikiMedia } from "@/components/wiki/wiki-absolute-urls"
 
 interface WikiMarkdownExportDialogProps {
   documentId: string
@@ -44,7 +45,17 @@ export function WikiMarkdownExportDialog({
   const { data, isLoading, isError, error } = useWikiDocumentMarkdown(documentId, {
     enabled: open,
   })
-  const markdown = data?.wikiDocumentMarkdown ?? ""
+  // Absolute links, because the whole point of this dialog is that the text
+  // leaves the app. A relative /api/v1/wiki/files/... resolves against
+  // nothing once it is pasted into Obsidian or a ticket.
+  const markdown = useMemo(
+    () =>
+      absolutizeWikiMedia(
+        data?.wikiDocumentMarkdown ?? "",
+        window.location.origin,
+      ),
+    [data?.wikiDocumentMarkdown],
+  )
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>

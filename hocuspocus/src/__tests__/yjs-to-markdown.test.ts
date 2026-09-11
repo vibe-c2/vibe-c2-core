@@ -89,6 +89,28 @@ test("file attachment round-trips", () => {
   assert.match(out, /report\.pdf 2048/);
 });
 
+// The export dialog absolutises media links so the Markdown is useful
+// outside the app. Re-importing an exported page therefore hands the parser
+// an absolute href; anchoring to the relative form alone left it as an inert
+// link and lost the attachment.
+test("an absolute attachment link still lifts to a file node", () => {
+  const md =
+    "[report.pdf 2048](https://c2.example.com/api/v1/wiki/files/12345678-1234-1234-1234-123456789012)";
+  const doc = parseOutlineMarkdown(md);
+
+  const kinds: string[] = [];
+  doc.descendants((node) => {
+    kinds.push(node.type.name);
+    return true;
+  });
+  assert.ok(kinds.includes("wikiFile"), `no attachment node: ${kinds.join(",")}`);
+
+  // Re-serialising normalises back to the canonical relative form, which is
+  // what the document stores and what every in-app link resolves against.
+  const out = serializeWikiDocument(doc);
+  assert.match(out, /\(\/api\/v1\/wiki\/files\/12345678-1234-1234-1234-123456789012\)/);
+});
+
 test("bold + italic + strikethrough round-trip", () => {
   const md = "This **is bold** and *italic* and ~~struck~~.";
   assert.ok(structurallyEqual(md, roundTripDirect(md)));
