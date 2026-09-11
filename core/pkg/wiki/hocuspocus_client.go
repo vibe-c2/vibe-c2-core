@@ -193,6 +193,18 @@ func (c *HocuspocusClient) YjsToMarkdown(ctx context.Context, contentState []byt
 	return string(bytesOut), nil
 }
 
+// MaxMarkdownBytes is the largest body ApplyMarkdown will accept.
+//
+// MUST match MAX_INPUT_BYTES in hocuspocus/src/apply-markdown.ts. Declared
+// here so callers can refuse an oversized body with a useful message instead
+// of discovering the limit as a 413 from a service they have never heard of.
+const MaxMarkdownBytes = 1024 * 1024
+
+// ErrMarkdownTooLarge reports a body the sidecar refused on size. Typed so
+// callers can turn it into their own message rather than matching on the text
+// of an HTTP error.
+var ErrMarkdownTooLarge = errors.New("markdown body exceeds the size limit")
+
 // ApplyMode selects how ApplyMarkdown combines an edit with what is already
 // in the document.
 type ApplyMode string
@@ -270,6 +282,9 @@ func (c *HocuspocusClient) ApplyMarkdown(ctx context.Context, documentID, markdo
 	}
 	defer resp.Body.Close()
 
+	if resp.StatusCode == http.StatusRequestEntityTooLarge {
+		return result, ErrMarkdownTooLarge
+	}
 	if resp.StatusCode != http.StatusOK {
 		errBody, _ := io.ReadAll(io.LimitReader(resp.Body, 4096))
 		return result, fmt.Errorf("apply-markdown returned %d: %s", resp.StatusCode, string(errBody))

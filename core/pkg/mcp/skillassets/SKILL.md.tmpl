@@ -90,6 +90,17 @@ the page first, because anything you omit is deleted.
 curl, no file on disk that mirrors any of this. If a tool for something does not
 exist, it does not exist — say so instead of looking for a way around.
 
+**One value, one call.** Arguments hold a megabyte. Never split a long value
+across several calls with a placeholder to stitch them together: it costs a
+round trip each, every chunk depends on the last one surviving, and no limit
+here asked for it. Raw output — a command history, a scan, a config — goes to
+`attach_text_to_wiki_document` rather than into the page body. See
+workflows.md, "Putting something long on a page".
+
+**Do not re-read to check your own work.** Every write reports what it did.
+Fetch a page again when you need its current state for the next decision, not
+to confirm the last one landed.
+
 **Make retries safe.** Every writing tool accepts an `idempotency_key`. Pass one
 and a repeat returns the original result instead of doing the thing twice.
 

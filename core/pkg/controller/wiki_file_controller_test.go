@@ -24,9 +24,9 @@ func TestSanitizeUploadFilename(t *testing.T) {
 
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
-			got := sanitizeUploadFilename(c.in)
+			got := SanitizeUploadFilename(c.in)
 			if got != c.want {
-				t.Errorf("sanitizeUploadFilename(%q) = %q, want %q", c.in, got, c.want)
+				t.Errorf("SanitizeUploadFilename(%q) = %q, want %q", c.in, got, c.want)
 			}
 		})
 	}
@@ -37,7 +37,7 @@ func TestSanitizeUploadFilename_LongName(t *testing.T) {
 	// preserving the extension.
 	base := strings.Repeat("a", 400)
 	in := base + ".pdf"
-	got := sanitizeUploadFilename(in)
+	got := SanitizeUploadFilename(in)
 	if len(got) > 255 {
 		t.Fatalf("length %d exceeds 255", len(got))
 	}

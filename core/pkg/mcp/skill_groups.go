@@ -55,12 +55,17 @@ var toolGroups = []toolGroup{
 			"pages. You read and write all of them as markdown, and `update_wiki_document` " +
 			"replaces the whole body — so read a page before rewriting it and put back every " +
 			"construct you are not deliberately changing. See workflows.md, \"What a page can " +
-			"contain\".",
+			"contain\".\n\n" +
+			"Size is not a reason to split anything. A page body can be up to 1 MB in a single " +
+			"call, which is far more than a command history or a scan dump. Send it whole; " +
+			"chunking a long value across several calls costs a round trip each, leaves the " +
+			"page half-written if one fails, and buys nothing.",
 		Tools: []string{"search_wiki", "list_wiki_tree", "get_wiki_document",
 			"list_wiki_templates", "create_wiki_document_from_template", "set_wiki_template",
 			"create_wiki_document", "append_wiki_section", "edit_wiki_document",
 			"update_wiki_document",
-			"list_wiki_attachments", "read_wiki_attachment"},
+			"list_wiki_attachments", "read_wiki_attachment",
+			"attach_text_to_wiki_document"},
 	},
 	{
 		Title: "Timeline",

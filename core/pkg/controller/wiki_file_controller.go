@@ -151,7 +151,7 @@ func (wfc *WikiFileController) Upload(c *gin.Context) {
 		return
 	}
 
-	filename := sanitizeUploadFilename(fileHeader.Filename)
+	filename := SanitizeUploadFilename(fileHeader.Filename)
 	if filename == "" {
 		c.JSON(http.StatusBadRequest, responses.NewErrorResponse("filename is required"))
 		return
@@ -215,7 +215,7 @@ func (wfc *WikiFileController) Upload(c *gin.Context) {
 // `declaredContentType` is the type the client labelled the upload with
 // (e.g. multipart `Content-Type:` header). Empty string forces sniffing.
 // `filename` MUST already be sanitized — callers are expected to run it
-// through sanitizeUploadFilename before invoking this helper.
+// through SanitizeUploadFilename before invoking this helper.
 func (wfc *WikiFileController) IngestFile(
 	ctx context.Context,
 	doc *models.WikiDocument,
@@ -397,13 +397,13 @@ func (wfc *WikiFileController) callerIsOperationMember(c *gin.Context, opID uuid
 	return authorization.AuthorizeOperationRole(ctx, &op, models.OperationRoleViewer) == nil
 }
 
-// sanitizeUploadFilename normalizes the client-supplied filename into something
+// SanitizeUploadFilename normalizes the client-supplied filename into something
 // safe to persist, echo in headers, and display in a download card.
 //
 // Steps: strip any directory components the browser might have leaked, drop
 // control characters, collapse internal whitespace, trim surrounding dots and
 // spaces (which defeat Windows filename quirks), and cap the byte length.
-func sanitizeUploadFilename(raw string) string {
+func SanitizeUploadFilename(raw string) string {
 	base := filepath.Base(strings.ReplaceAll(raw, `\`, "/"))
 	if base == "." || base == "/" || base == "\\" {
 		base = ""

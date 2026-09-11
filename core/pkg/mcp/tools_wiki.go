@@ -2,6 +2,7 @@ package mcp
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 
@@ -52,7 +53,7 @@ type createWikiDocumentArgs struct {
 	IdempotencyKey
 	OperationID string `json:"operation_id,omitempty" jsonschema:"Operation to create the page in. Defaults to whatever the operator currently has open."`
 	Title       string `json:"title"                  jsonschema:"Page title."`
-	Content     string `json:"content,omitempty"      jsonschema:"Page body as Markdown."`
+	Content     string `json:"content,omitempty"      jsonschema:"Page body as Markdown. Send it whole — the limit is 1 MB, so there is no reason to split it."`
 	ParentID    string `json:"parent_id,omitempty"    jsonschema:"Create as a child of this page."`
 	visualIdentity
 }
@@ -60,13 +61,13 @@ type createWikiDocumentArgs struct {
 type appendWikiSectionArgs struct {
 	IdempotencyKey
 	DocumentID string `json:"document_id"     jsonschema:"The page to add to."`
-	Content    string `json:"content"         jsonschema:"Markdown to add at the end of the page. Existing content is never touched."`
+	Content    string `json:"content"         jsonschema:"Markdown to add at the end of the page. Existing content is never touched. Send it whole — the limit is 1 MB, so there is no reason to split it across calls."`
 }
 
 type updateWikiDocumentArgs struct {
 	IdempotencyKey
 	DocumentID string `json:"document_id"       jsonschema:"The page to rewrite."`
-	Content    string `json:"content"           jsonschema:"The new body as Markdown. This REPLACES the page, so read it first and send the whole thing back."`
+	Content    string `json:"content"           jsonschema:"The new body as Markdown. This REPLACES the page, so read it first and send the whole thing back. The limit is 1 MB — send it in one call, never in chunks."`
 	Title      string `json:"title,omitempty"   jsonschema:"Optionally rename the page at the same time."`
 	visualIdentity
 }
@@ -644,11 +645,35 @@ func (s *Server) documentMarkdown(ctx context.Context, doc *models.WikiDocument)
 // implementation refused that case, which meant the more engaged the operator
 // was with a page, the less the agent could help with it.
 func (s *Server) writeBody(ctx context.Context, doc *models.WikiDocument, body string, mode wiki.ApplyMode) (int, error) {
+	// Size is checked before anything else: it is true whatever the rest of
+	// the deployment looks like, and it is the more useful thing to say.
+	//
+	// Checked here as well as in the sidecar so the refusal names the limit
+	// and a way forward. An agent that meets an opaque error starts splitting
+	// its content into chunks, which is slower, leaves the page half-written
+	// when one chunk fails, and was never necessary — see the note on the
+	// tool descriptions.
+	if len(body) > wiki.MaxMarkdownBytes {
+		return 0, refuse(
+			"that body is %d bytes and the limit for one page is %d (about 1 MB). "+
+				"Do not split it across several edits — attach it instead with "+
+				"attach_text_to_wiki_document, which takes the whole thing in one call, "+
+				"and link to it from the page.",
+			len(body), wiki.MaxMarkdownBytes)
+	}
+
 	if s.deps.Hocuspocus == nil {
 		return 0, fmt.Errorf("wiki writing is unavailable: the collaboration service is not configured")
 	}
 
 	result, err := s.deps.Hocuspocus.ApplyMarkdown(ctx, doc.DocumentID.String(), body, mode)
+	if errors.Is(err, wiki.ErrMarkdownTooLarge) {
+		// Belt and braces: the check above should have caught this, and will
+		// not if the sidecar's limit is lowered without this one following.
+		return 0, refuse(
+			"that body is too large for one page. Attach it instead with " +
+				"attach_text_to_wiki_document, rather than splitting it across several edits.")
+	}
 	if err != nil {
 		s.deps.Logger.Warn("mcp: failed to apply wiki edit",
 			zap.String("document_id", doc.DocumentID.String()),

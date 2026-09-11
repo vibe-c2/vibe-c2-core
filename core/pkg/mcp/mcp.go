@@ -32,9 +32,14 @@
 package mcp
 
 import (
+	"context"
+	"io"
+
+	"github.com/google/uuid"
 	"github.com/vibe-c2/vibe-c2-core/core/pkg/blob"
 	"github.com/vibe-c2/vibe-c2-core/core/pkg/cache"
 	"github.com/vibe-c2/vibe-c2-core/core/pkg/eventbus"
+	"github.com/vibe-c2/vibe-c2-core/core/pkg/models"
 	"github.com/vibe-c2/vibe-c2-core/core/pkg/repository"
 	"github.com/vibe-c2/vibe-c2-core/core/pkg/resolver"
 	"github.com/vibe-c2/vibe-c2-core/core/pkg/wiki"
@@ -46,6 +51,21 @@ const (
 	serverName    = "vibe-c2"
 	serverVersion = "0.1.0"
 )
+
+// FileIngestor attaches bytes to a wiki document. Satisfied by
+// *controller.WikiFileController — declared here as the one method this
+// package needs rather than taking the controller, which would drag the HTTP
+// layer into the tool surface.
+type FileIngestor interface {
+	IngestFile(
+		ctx context.Context,
+		doc *models.WikiDocument,
+		uploaderID uuid.UUID,
+		body io.Reader,
+		filename string,
+		declaredContentType string,
+	) (*models.WikiFile, *wiki.IngestError)
+}
 
 // Deps is everything the tool layer needs. Resolvers rather than repositories
 // wherever one exists: they already carry the authorization checks, input
@@ -67,6 +87,10 @@ type Deps struct {
 	WikiDocumentRepo repository.IWikiDocumentRepository
 	WikiFileRepo     repository.IWikiFileRepository
 	AgentActionRepo  repository.IAgentActionRepository
+	// Files attaches bytes to a wiki page. The same ingest path the browser
+	// upload uses, so an agent's attachment is indistinguishable from a
+	// person's — same size cap, same type sniffing, same deny-list.
+	Files FileIngestor
 
 	Cache cache.Cache
 	// Blobs is where attachment bytes live. Read-only from here: an agent can

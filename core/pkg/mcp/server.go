@@ -80,21 +80,22 @@ Working alongside: call get_user_focus to see what the operator is looking at ri
 tools take operation_id, but if you omit it they default to the operation the operator
 currently has open, so following along usually needs no argument at all.
 
-Everything you do is visible: every call, including reads, is recorded and shown to the
-operator. Your writes are attributed to you wherever they surface, including the timeline,
-which records milestones rather than activity — the same handful of events it records for a
-person. Work as if being watched, because you are.
+Everything you do is visible: every call, reads included, is recorded and shown to the
+operator, and your writes are attributed to you wherever they surface. Work as if being
+watched, because you are.
 
-These tools are the only way in. There is no CLI, no local checkout, no REST endpoint to
-curl and no file on disk that mirrors this data — do not go looking for one. If a tool for
-something does not exist, it does not exist.
+These tools are the only way in: no CLI, no checkout, no endpoint to curl, no file on disk.
+If a tool for something does not exist, it does not exist.
 
 Results are capped. If a response says it was truncated, narrow the filter rather than
 assuming you have seen everything.
 
-Send the smallest change that does the job. edit_wiki_document replaces an exact snippet and
-append_wiki_section adds to the end; both take a fragment. update_wiki_document takes the whole
-body and is for deliberate end-to-end rewrites only.
+Send the smallest change that does the job: edit_wiki_document for a snippet,
+append_wiki_section to add to the end, update_wiki_document only to rewrite a page end to end.
+
+Small change, not small call. Arguments hold a megabyte, so never split one value across
+several calls. Long output — a history, a scan dump — goes to attach_text_to_wiki_document,
+not into the page. And trust what a write returns rather than re-reading to check it landed.
 
 If you have not worked in this platform before, read the resource vibe://guide first. It
 explains the data model, every tool, and the conventions above in full.`

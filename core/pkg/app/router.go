@@ -217,6 +217,7 @@ func (a *App) NewRouter() *gin.Engine {
 			WikiDocumentRepo: a.repos.WikiDocument,
 			WikiFileRepo:     a.repos.WikiFile,
 			AgentActionRepo:  a.repos.AgentAction,
+			Files:            wikiFileCtrl,
 			Cache:            a.cache,
 			Blobs:            a.fileStore,
 			Hocuspocus:       a.hpClient,

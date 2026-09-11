@@ -132,6 +132,41 @@ answer in the body — both in one call, with the item's own text as `old_text`.
 `append_wiki_section` is still the right tool for adding to the end, and
 `update_wiki_document` is for a deliberate rewrite of the whole page.
 
+## Putting something long on a page
+
+A tool argument holds a megabyte. Whatever you are about to send, send it in
+one call.
+
+This is worth stating because the opposite is a tempting mistake. Faced with a
+22 KB command history, it is natural to assume an argument that size is risky,
+split it into chunks, drop a `__PLACEHOLDER__` in the page and replace it chunk
+by chunk. That costs a round trip per chunk, makes every chunk depend on the
+previous one still being there, and leaves the page visibly half-written if any
+of them fails. Nothing here ever required it: 22 KB is not close to the limit,
+and neither is 500 KB.
+
+Where it goes depends on what it is:
+
+- **Prose, notes, a write-up** — the page body. `create_wiki_document` takes
+  content up front; `append_wiki_section` adds a section; `edit_wiki_document`
+  changes part of one.
+- **Raw output — a command history, a scan, a config, a dump** — attach it with
+  `attach_text_to_wiki_document` and link to it from the page. It is evidence,
+  and evidence attaches. A page holding 20 KB of scrollback buries the
+  reasoning that makes it useful, and the operator cannot skim it. You can read
+  it back later with `read_wiki_attachment`.
+
+If a body genuinely exceeds 1 MB you will be told so, with the limit named. The
+answer is still not to split it — attach it.
+
+## Trust what a tool returns
+
+Every write reports what it did. Reading the page back to confirm the write
+landed adds a round trip and tells you what the write already told you. Read
+again when you need the *current* state for a decision — before an
+`edit_wiki_document` whose `old_text` has to match, or when the operator may
+have been typing in the same page — not to verify your own work.
+
 ## Reading what is attached to a page
 
 A page's text is often a summary of something attached to it — a scan export,

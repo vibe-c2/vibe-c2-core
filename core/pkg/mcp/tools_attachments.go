@@ -9,6 +9,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
+	"github.com/vibe-c2/vibe-c2-core/core/pkg/controller"
 	"github.com/vibe-c2/vibe-c2-core/core/pkg/models"
 	"github.com/vibe-c2/vibe-c2-core/core/pkg/wiki"
 )
@@ -71,6 +72,13 @@ type attachmentView struct {
 	Kind     string `json:"kind"`
 }
 
+type attachTextArgs struct {
+	IdempotencyKey
+	DocumentID string `json:"document_id" jsonschema:"The page to attach the file to."`
+	Filename   string `json:"filename"    jsonschema:"Name for the file, with an extension: recon.txt, hosts.csv, nginx.conf."`
+	Content    string `json:"content"     jsonschema:"The file's contents, as text. Send the whole thing in one call — the cap is megabytes, not kilobytes."`
+}
+
 func registerAttachmentTools(s *Server) {
 	register(s, &mcp.Tool{
 		Name: "list_wiki_attachments",
@@ -85,6 +93,83 @@ func registerAttachmentTools(s *Server) {
 			"directly; Word and Excel documents are converted to plain text; images come back " +
 			"as images you can look at. Large files are truncated and say so.",
 	}, readTool, handleReadWikiAttachment)
+
+	register(s, &mcp.Tool{
+		Name: "attach_text_to_wiki_document",
+		Description: "Attach text to a page as a file — a command history, a scan output, a " +
+			"config, anything long enough that pasting it into the page would bury the notes. " +
+			"One call, whole content, no splitting: the cap is megabytes.",
+	}, writeTool, handleAttachTextToWikiDocument)
+}
+
+// handleAttachTextToWikiDocument writes agent-supplied text to a page as an
+// attachment.
+//
+// The gap this fills was reported by an agent: faced with a 22 KB command
+// history it split the text into chunks and stitched them into the page body
+// with placeholder markers, one dependent round trip each, because nothing
+// here offered a way to hand over a blob. The page body was never the right
+// home for that anyway — it is evidence, and evidence attaches.
+//
+// Bytes go through the same ingest path as a browser upload: same size cap,
+// same content-type sniffing, same deny-list. An agent's attachment is not a
+// second class of file.
+func handleAttachTextToWikiDocument(ctx context.Context, s *Server, args attachTextArgs) (toolResult, error) {
+	if s.deps.Files == nil {
+		return toolResult{}, fmt.Errorf("attachments are unavailable: file storage is not configured")
+	}
+
+	doc, err := s.deps.WikiDocs.WikiDocument(ctx, args.DocumentID)
+	if err != nil {
+		return toolResult{}, fmt.Errorf("wiki page not found")
+	}
+	if _, err := s.authorizeOperation(ctx, doc.OperationID, models.OperationRoleOperator); err != nil {
+		return toolResult{}, err
+	}
+	if doc.DeletedAt != nil {
+		return toolResult{}, refuse("%q is in the trash; restore it before attaching to it.", doc.Title)
+	}
+
+	filename := controller.SanitizeUploadFilename(args.Filename)
+	if filename == "" {
+		return toolResult{}, refuse(
+			"filename is required, and should carry an extension so the file opens in the " +
+				"right thing: recon.txt, hosts.csv, nginx.conf.")
+	}
+	if args.Content == "" {
+		return toolResult{}, refuse("content is empty; there is nothing to attach.")
+	}
+
+	owner, err := agentOwnerID(ctx)
+	if err != nil {
+		return toolResult{}, err
+	}
+
+	// Declared type left empty on purpose: the ingest path sniffs and
+	// canonicalises, which is what the browser upload relies on too, and an
+	// agent guessing a MIME type is a worse source of truth than the bytes.
+	file, ingestErr := s.deps.Files.IngestFile(
+		ctx, doc, owner, strings.NewReader(args.Content), filename, "")
+	if ingestErr != nil {
+		// Ingest failures are ordinary outcomes — too big, wrong type — and
+		// the agent can act on them, so they come back as refusals rather
+		// than errors it will retry verbatim.
+		return toolResult{}, refuse("could not attach %q: %s", filename, ingestErr.Message)
+	}
+
+	kind := attachmentKind(file.Filename, file.ContentType)
+	return toolResult{
+		Payload: attachmentView{
+			ID:          file.FileID.String(),
+			Filename:    file.Filename,
+			ContentType: file.ContentType,
+			SizeBytes:   file.SizeBytes,
+			Kind:        string(kind),
+			Readable:    kind != attachmentUnsupported,
+		},
+		OperationID: &doc.OperationID,
+		Summary:     fmt.Sprintf("attached %s to %s", file.Filename, doc.Title),
+	}, nil
 }
 
 func handleListWikiAttachments(ctx context.Context, s *Server, args listWikiAttachmentsArgs) (toolResult, error) {
