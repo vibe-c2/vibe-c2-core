@@ -226,6 +226,13 @@ func (a *App) NewRouter() *gin.Engine {
 			WritesPerMinute:  a.env.MCPWritesPerMinute,
 		})
 		v1.POST("/mcp", mcpServer.Handler())
+		// The other two Streamable HTTP methods, answered rather than left to
+		// the router's 404. A client that probes with GET and sees 404 reads
+		// it as "no MCP server here"; 405 + Allow tells it to use POST.
+		// OPTIONS is for browser clients' preflight.
+		v1.GET("/mcp", mcpServer.MethodNotAllowedHandler())
+		v1.DELETE("/mcp", mcpServer.MethodNotAllowedHandler())
+		v1.OPTIONS("/mcp", mcpServer.PreflightHandler())
 
 		// Everything below is closed to agent keys. gin.RouterGroup.Use only
 		// affects routes registered after it, so this single line — rather

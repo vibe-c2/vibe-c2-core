@@ -34,6 +34,46 @@ func (s *Server) SkillHandler() gin.HandlerFunc {
 	}
 }
 
+// allowedMCPMethods is what /api/v1/mcp answers to. POST carries every
+// message; OPTIONS exists for preflight. Declared once so the Allow header
+// and the routing cannot disagree.
+const allowedMCPMethods = "POST, OPTIONS"
+
+// MethodNotAllowedHandler answers GET and DELETE on the MCP endpoint.
+//
+// Streamable HTTP defines three methods: POST for messages, GET to open a
+// server-to-client SSE stream, and DELETE to end a session. In stateless mode
+// with JSON responses there is no stream to open and no session to end, so
+// only POST is implemented — which is allowed, provided the other two are
+// refused correctly.
+//
+// Correctly means 405 with an Allow header, not 404. Gin returns 404 for a
+// path registered under a different method, and a client that probes with GET
+// reads that as "there is no MCP server here" and stops, rather than "that
+// method is not offered, use POST". The endpoint worked the whole time; it
+// just said the wrong thing to anyone who knocked on the wrong door.
+func (s *Server) MethodNotAllowedHandler() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		c.Header("Allow", allowedMCPMethods)
+		c.JSON(http.StatusMethodNotAllowed, gin.H{
+			"error": "this MCP endpoint carries every message over POST; " +
+				"it runs stateless, so there is no SSE stream to GET and no session to DELETE",
+		})
+	}
+}
+
+// PreflightHandler answers a CORS preflight for the MCP endpoint.
+//
+// Only a browser-based client sends one — Cursor and other desktop clients
+// run in Node and never preflight. It is here so that such a client gets an
+// answer instead of a 404 from the router.
+func (s *Server) PreflightHandler() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		c.Header("Allow", allowedMCPMethods)
+		c.Status(http.StatusNoContent)
+	}
+}
+
 // Handler serves the MCP endpoint at POST /api/v1/mcp.
 //
 // Stateless mode is deliberate. An agent key is a bearer credential presented

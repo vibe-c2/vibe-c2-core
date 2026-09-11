@@ -158,6 +158,52 @@ func TestHandler_RefusesNonAgentCallers(t *testing.T) {
 	}
 }
 
+// A client that probes the endpoint with GET must be told the method is
+// wrong, not that the endpoint is missing. Gin answers a path registered
+// under another method with 404, and a 404 reads as "no MCP server here" —
+// which is how a working endpoint looks broken to a client that knocks with
+// the wrong verb.
+func TestHandler_RefusesOtherMethodsWithAllow(t *testing.T) {
+	s := New(Deps{Logger: zap.NewNop()})
+
+	for _, method := range []string{http.MethodGet, http.MethodDelete} {
+		t.Run(method, func(t *testing.T) {
+			r := gin.New()
+			r.Handle(method, "/mcp", s.MethodNotAllowedHandler())
+
+			req := httptest.NewRequest(method, "/mcp", nil)
+			w := httptest.NewRecorder()
+			r.ServeHTTP(w, req)
+
+			if w.Code != http.StatusMethodNotAllowed {
+				t.Fatalf("got %d, want 405", w.Code)
+			}
+			// The Allow header is the actionable half: it names the method
+			// that does work, which is what lets a client recover.
+			if got := w.Header().Get("Allow"); !strings.Contains(got, http.MethodPost) {
+				t.Fatalf("Allow = %q, want it to name POST", got)
+			}
+		})
+	}
+}
+
+func TestHandler_AnswersPreflight(t *testing.T) {
+	s := New(Deps{Logger: zap.NewNop()})
+	r := gin.New()
+	r.OPTIONS("/mcp", s.PreflightHandler())
+
+	req := httptest.NewRequest(http.MethodOptions, "/mcp", nil)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusNoContent {
+		t.Fatalf("got %d, want 204", w.Code)
+	}
+	if got := w.Header().Get("Allow"); !strings.Contains(got, http.MethodPost) {
+		t.Fatalf("Allow = %q, want it to name POST", got)
+	}
+}
+
 // The tool surface is the agent-facing contract. This pins it so a rename or
 // an accidental drop is a failing test rather than a silently broken agent,
 // and so the read/write split stays deliberate: a tool that mutates must be
