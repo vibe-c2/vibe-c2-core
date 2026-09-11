@@ -147,6 +147,18 @@ type wikiDocView struct {
 	// page made from it afterwards. Without this an agent cannot tell one from
 	// an ordinary page.
 	IsTemplate bool `json:"isTemplate,omitempty"`
+
+	// Emoji and Icon travel with every row so an agent can see what the
+	// operator's pages already use without opening them one by one. Choosing
+	// an icon is a style decision, and style is only visible in aggregate —
+	// a listing that omitted these forced a call per page to learn it, which
+	// in practice meant the agent guessed instead.
+	//
+	// Both omitempty: most pages carry one or the other, never both, and the
+	// adaptive default is omitted too (see toWikiDocView) because a row that
+	// says "Adaptive" is a row that says nothing.
+	Emoji string `json:"emoji,omitempty"`
+	Icon  string `json:"icon,omitempty"`
 }
 
 // wikiTemplateView is a template in a listing that spans two operations —
@@ -270,7 +282,19 @@ func toTaskView(t *models.Task) taskView {
 }
 
 func toWikiDocView(d *models.WikiDocument) wikiDocView {
-	view := wikiDocView{ID: d.DocumentID.String(), Title: d.Title, IsTemplate: d.IsTemplate}
+	view := wikiDocView{
+		ID:         d.DocumentID.String(),
+		Title:      d.Title,
+		IsTemplate: d.IsTemplate,
+		Emoji:      d.Emoji,
+	}
+	// The adaptive icon is the default every page gets when nobody chose
+	// anything, so reporting it would drown the handful of deliberate choices
+	// in noise — which is exactly the signal an agent is reading these rows
+	// for. Absence here means "no deliberate icon", not "no icon".
+	if d.Icon != AdaptiveIconName {
+		view.Icon = d.Icon
+	}
 	if d.ParentDocumentID != nil {
 		view.ParentID = d.ParentDocumentID.String()
 	}

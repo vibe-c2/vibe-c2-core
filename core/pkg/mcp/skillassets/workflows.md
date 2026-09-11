@@ -197,6 +197,17 @@ The default is deliberate: leave `emoji` and `icon` unset and the page gets an
 adaptive icon, which shows as a page and becomes a folder on its own once it has
 children. Most pages want exactly that.
 
+**Match what is already there.** Every listing — `list_wiki_tree`,
+`search_wiki`, `list_wiki_templates` — returns each page's `emoji` and `icon`,
+so one call shows you the house style. Read it before choosing. A tree where
+host pages all carry `si:linux` and finding pages all carry `ShieldAlert` is a
+convention someone established, and a page that breaks it looks like it came
+from somewhere else — which, from the operator's side, it did.
+
+Rows with no `emoji` or `icon` are on the adaptive default. If that is most of
+the tree, the convention is *not to set one*, and the right move is to leave
+yours unset too rather than being the only page with a glyph.
+
 When a page genuinely warrants its own glyph, `icon` and `emoji` are mutually
 exclusive and `icon` takes one of two forms:
 
@@ -218,7 +229,8 @@ exclusive and `icon` takes one of two forms:
   nothing in either palette fits.
 
 A name outside the palettes is refused rather than quietly ignored, so if you
-are unsure, use an emoji.
+are unsure, use an emoji — or reuse whatever a comparable page in the same tree
+already uses, which is the better answer anyway.
 
 `color` is a hex value that tints an icon. It does nothing to an emoji.
 
