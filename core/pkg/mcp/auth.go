@@ -145,3 +145,18 @@ func (s *Server) authorizeOperation(ctx context.Context, opID uuid.UUID, minRole
 	}
 	return op, nil
 }
+
+// scopedOperation is resolveOperation followed by authorizeOperation: it
+// decides which operation a tool acts on and applies the full check in one
+// step. Every operation-scoped tool starts here, so a new one cannot resolve
+// an id and forget the check that goes with it.
+func (s *Server) scopedOperation(ctx context.Context, explicit string, minRole models.OperationRole) (uuid.UUID, error) {
+	opID, err := s.resolveOperation(ctx, explicit)
+	if err != nil {
+		return uuid.Nil, err
+	}
+	if _, err := s.authorizeOperation(ctx, opID, minRole); err != nil {
+		return uuid.Nil, err
+	}
+	return opID, nil
+}

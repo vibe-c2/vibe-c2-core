@@ -29,11 +29,10 @@ import (
 
 // agentOwnerID is the user an agent is acting for.
 func agentOwnerID(ctx context.Context) (uuid.UUID, error) {
-	auth := gqlctx.AuthFromContext(ctx)
-	if auth.Agent == nil {
-		return uuid.Nil, fmt.Errorf("no agent identity on this request")
+	if _, err := agentFromContext(ctx); err != nil {
+		return uuid.Nil, err
 	}
-	id, err := uuid.Parse(auth.UserID)
+	id, err := uuid.Parse(gqlctx.AuthFromContext(ctx).UserID)
 	if err != nil {
 		return uuid.Nil, fmt.Errorf("invalid caller id")
 	}

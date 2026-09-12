@@ -42,11 +42,8 @@ func registerTimelineTools(s *Server) {
 }
 
 func handleGetTimeline(ctx context.Context, s *Server, args getTimelineArgs) (toolResult, error) {
-	opID, err := s.resolveOperation(ctx, args.OperationID)
+	opID, err := s.scopedOperation(ctx, args.OperationID, models.OperationRoleViewer)
 	if err != nil {
-		return toolResult{}, err
-	}
-	if _, err := s.authorizeOperation(ctx, opID, models.OperationRoleViewer); err != nil {
 		return toolResult{}, err
 	}
 
@@ -92,11 +89,8 @@ func handleGetTimeline(ctx context.Context, s *Server, args getTimelineArgs) (to
 }
 
 func handleCreateTimelineEvent(ctx context.Context, s *Server, args createTimelineEventArgs) (toolResult, error) {
-	opID, err := s.resolveOperation(ctx, args.OperationID)
+	opID, err := s.scopedOperation(ctx, args.OperationID, models.OperationRoleOperator)
 	if err != nil {
-		return toolResult{}, err
-	}
-	if _, err := s.authorizeOperation(ctx, opID, models.OperationRoleOperator); err != nil {
 		return toolResult{}, err
 	}
 

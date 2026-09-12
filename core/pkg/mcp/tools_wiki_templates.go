@@ -28,11 +28,8 @@ type setWikiTemplateArgs struct {
 }
 
 func handleListWikiTemplates(ctx context.Context, s *Server, args listWikiTemplatesArgs) (toolResult, error) {
-	opID, err := s.resolveOperation(ctx, args.OperationID)
+	opID, err := s.scopedOperation(ctx, args.OperationID, models.OperationRoleViewer)
 	if err != nil {
-		return toolResult{}, err
-	}
-	if _, err := s.authorizeOperation(ctx, opID, models.OperationRoleViewer); err != nil {
 		return toolResult{}, err
 	}
 
@@ -130,11 +127,8 @@ func (s *Server) publicTemplates(ctx context.Context, opID uuid.UUID) ([]wikiTem
 }
 
 func handleCreateFromTemplate(ctx context.Context, s *Server, args createFromTemplateArgs) (toolResult, error) {
-	opID, err := s.resolveOperation(ctx, args.OperationID)
+	opID, err := s.scopedOperation(ctx, args.OperationID, models.OperationRoleOperator)
 	if err != nil {
-		return toolResult{}, err
-	}
-	if _, err := s.authorizeOperation(ctx, opID, models.OperationRoleOperator); err != nil {
 		return toolResult{}, err
 	}
 	if err := args.validate(); err != nil {
@@ -174,11 +168,8 @@ func handleCreateFromTemplate(ctx context.Context, s *Server, args createFromTem
 }
 
 func handleSetWikiTemplate(ctx context.Context, s *Server, args setWikiTemplateArgs) (toolResult, error) {
-	doc, err := s.deps.WikiDocs.WikiDocument(ctx, args.DocumentID)
+	doc, err := s.loadWikiDocument(ctx, args.DocumentID, models.OperationRoleOperator)
 	if err != nil {
-		return toolResult{}, fmt.Errorf("wiki page not found")
-	}
-	if _, err := s.authorizeOperation(ctx, doc.OperationID, models.OperationRoleOperator); err != nil {
 		return toolResult{}, err
 	}
 

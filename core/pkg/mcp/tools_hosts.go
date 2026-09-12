@@ -71,11 +71,8 @@ func registerHostTools(s *Server) {
 }
 
 func handleFindHosts(ctx context.Context, s *Server, args findHostsArgs) (toolResult, error) {
-	opID, err := s.resolveOperation(ctx, args.OperationID)
+	opID, err := s.scopedOperation(ctx, args.OperationID, models.OperationRoleViewer)
 	if err != nil {
-		return toolResult{}, err
-	}
-	if _, err := s.authorizeOperation(ctx, opID, models.OperationRoleViewer); err != nil {
 		return toolResult{}, err
 	}
 
@@ -103,13 +100,10 @@ func handleFindHosts(ctx context.Context, s *Server, args findHostsArgs) (toolRe
 }
 
 func handleGetHost(ctx context.Context, s *Server, args getHostArgs) (toolResult, error) {
-	host, err := s.deps.Hosts.Host(ctx, args.HostID)
-	if err != nil {
-		return toolResult{}, fmt.Errorf("host not found")
-	}
 	// The resolver's own authorization runs on the operation the host belongs
 	// to, but it does not know about the key's scope list, so re-check here.
-	if _, err := s.authorizeOperation(ctx, host.OperationID, models.OperationRoleViewer); err != nil {
+	host, err := s.loadHost(ctx, args.HostID, models.OperationRoleViewer)
+	if err != nil {
 		return toolResult{}, err
 	}
 	return toolResult{
@@ -120,11 +114,8 @@ func handleGetHost(ctx context.Context, s *Server, args getHostArgs) (toolResult
 }
 
 func handleCreateHost(ctx context.Context, s *Server, args createHostArgs) (toolResult, error) {
-	opID, err := s.resolveOperation(ctx, args.OperationID)
+	opID, err := s.scopedOperation(ctx, args.OperationID, models.OperationRoleOperator)
 	if err != nil {
-		return toolResult{}, err
-	}
-	if _, err := s.authorizeOperation(ctx, opID, models.OperationRoleOperator); err != nil {
 		return toolResult{}, err
 	}
 
@@ -154,11 +145,8 @@ func handleCreateHost(ctx context.Context, s *Server, args createHostArgs) (tool
 }
 
 func handleUpdateHost(ctx context.Context, s *Server, args updateHostArgs) (toolResult, error) {
-	host, err := s.deps.Hosts.Host(ctx, args.HostID)
+	host, err := s.loadHost(ctx, args.HostID, models.OperationRoleOperator)
 	if err != nil {
-		return toolResult{}, fmt.Errorf("host not found")
-	}
-	if _, err := s.authorizeOperation(ctx, host.OperationID, models.OperationRoleOperator); err != nil {
 		return toolResult{}, err
 	}
 

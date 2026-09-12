@@ -84,35 +84,32 @@ func (s *Server) checkRateLimit(ctx context.Context, kind toolKind) error {
 	}
 
 	window := time.Now().UTC().Truncate(rateWindow)
-	retryIn := window.Add(rateWindow).Sub(time.Now().UTC())
 
-	if limit := s.limits.callsPerWindow(); limit > 0 {
-		key := fmt.Sprintf("mcp:rl:calls:%s:%d", agent.AgentKeyID, window.Unix())
-		n, err := s.deps.Cache.IncrWithTTL(ctx, key, rateWindow)
-		if err != nil {
-			s.deps.Logger.Warn("mcp: rate limit counter failed, allowing the call", zap.Error(err))
-			return nil
-		}
-		if n > int64(limit) {
-			return rateLimitError("tool calls", limit, retryIn)
-		}
+	if err := s.bump(ctx, "calls", "tool calls", agent.AgentKeyID, window, s.limits.callsPerWindow()); err != nil {
+		return err
 	}
-
 	if kind != writeTool {
 		return nil
 	}
+	return s.bump(ctx, "writes", "writes", agent.AgentKeyID, window, s.limits.writesPerWindow())
+}
 
-	if limit := s.limits.writesPerWindow(); limit > 0 {
-		key := fmt.Sprintf("mcp:rl:writes:%s:%d", agent.AgentKeyID, window.Unix())
-		n, err := s.deps.Cache.IncrWithTTL(ctx, key, rateWindow)
-		if err != nil {
-			s.deps.Logger.Warn("mcp: write rate limit counter failed, allowing the call", zap.Error(err))
-			return nil
-		}
-		if n > int64(limit) {
-			return rateLimitError("writes", limit, retryIn)
-		}
+// bump counts one event in the named window and refuses once it passes limit.
+// A counter that cannot be reached allows the call, for the reason given in
+// checkRateLimit.
+func (s *Server) bump(ctx context.Context, counter, label, agentKeyID string, window time.Time, limit int) error {
+	if limit <= 0 {
+		return nil
 	}
-
+	key := fmt.Sprintf("mcp:rl:%s:%s:%d", counter, agentKeyID, window.Unix())
+	n, err := s.deps.Cache.IncrWithTTL(ctx, key, rateWindow)
+	if err != nil {
+		s.deps.Logger.Warn("mcp: rate limit counter failed, allowing the call",
+			zap.String("counter", counter), zap.Error(err))
+		return nil
+	}
+	if n > int64(limit) {
+		return rateLimitError(label, limit, window.Add(rateWindow).Sub(time.Now().UTC()))
+	}
 	return nil
 }

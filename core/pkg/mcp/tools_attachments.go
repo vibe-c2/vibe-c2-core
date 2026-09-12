@@ -119,11 +119,8 @@ func handleAttachTextToWikiDocument(ctx context.Context, s *Server, args attachT
 		return toolResult{}, fmt.Errorf("attachments are unavailable: file storage is not configured")
 	}
 
-	doc, err := s.deps.WikiDocs.WikiDocument(ctx, args.DocumentID)
+	doc, err := s.loadWikiDocument(ctx, args.DocumentID, models.OperationRoleOperator)
 	if err != nil {
-		return toolResult{}, fmt.Errorf("wiki page not found")
-	}
-	if _, err := s.authorizeOperation(ctx, doc.OperationID, models.OperationRoleOperator); err != nil {
 		return toolResult{}, err
 	}
 	if doc.DeletedAt != nil {
@@ -173,11 +170,8 @@ func handleAttachTextToWikiDocument(ctx context.Context, s *Server, args attachT
 }
 
 func handleListWikiAttachments(ctx context.Context, s *Server, args listWikiAttachmentsArgs) (toolResult, error) {
-	doc, err := s.deps.WikiDocs.WikiDocument(ctx, args.DocumentID)
+	doc, err := s.loadWikiDocument(ctx, args.DocumentID, models.OperationRoleViewer)
 	if err != nil {
-		return toolResult{}, fmt.Errorf("wiki page not found")
-	}
-	if _, err := s.authorizeOperation(ctx, doc.OperationID, models.OperationRoleViewer); err != nil {
 		return toolResult{}, err
 	}
 

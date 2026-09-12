@@ -132,11 +132,8 @@ func registerTaskTools(s *Server) {
 }
 
 func handleFindTasks(ctx context.Context, s *Server, args findTasksArgs) (toolResult, error) {
-	opID, err := s.resolveOperation(ctx, args.OperationID)
+	opID, err := s.scopedOperation(ctx, args.OperationID, models.OperationRoleViewer)
 	if err != nil {
-		return toolResult{}, err
-	}
-	if _, err := s.authorizeOperation(ctx, opID, models.OperationRoleViewer); err != nil {
 		return toolResult{}, err
 	}
 
@@ -267,11 +264,8 @@ func (s *Server) namedCredentialReferences(ctx context.Context, ids []uuid.UUID)
 }
 
 func handleCreateTask(ctx context.Context, s *Server, args createTaskArgs) (toolResult, error) {
-	opID, err := s.resolveOperation(ctx, args.OperationID)
+	opID, err := s.scopedOperation(ctx, args.OperationID, models.OperationRoleOperator)
 	if err != nil {
-		return toolResult{}, err
-	}
-	if _, err := s.authorizeOperation(ctx, opID, models.OperationRoleOperator); err != nil {
 		return toolResult{}, err
 	}
 
@@ -385,11 +379,8 @@ func handleAddTaskWikiReference(ctx context.Context, s *Server, args addTaskWiki
 
 	// The page has to be reachable by this key too, or a link could be used to
 	// point at a document the agent is not allowed to read.
-	doc, err := s.deps.WikiDocs.WikiDocument(ctx, args.WikiID)
+	doc, err := s.loadWikiDocument(ctx, args.WikiID, models.OperationRoleViewer)
 	if err != nil {
-		return toolResult{}, fmt.Errorf("wiki page not found")
-	}
-	if _, err := s.authorizeOperation(ctx, doc.OperationID, models.OperationRoleViewer); err != nil {
 		return toolResult{}, err
 	}
 
@@ -413,11 +404,8 @@ func handleAddTaskCredentialReference(ctx context.Context, s *Server, args addTa
 
 	// Readable by this key too — a link must not become a way to point at a
 	// credential the agent could not otherwise open.
-	cred, err := s.deps.Credentials.Credential(ctx, args.CredentialID)
+	cred, err := s.loadCredential(ctx, args.CredentialID, models.OperationRoleViewer)
 	if err != nil {
-		return toolResult{}, fmt.Errorf("credential not found")
-	}
-	if _, err := s.authorizeOperation(ctx, cred.OperationID, models.OperationRoleViewer); err != nil {
 		return toolResult{}, err
 	}
 
@@ -505,24 +493,4 @@ func (s *Server) changeOwnAssignment(ctx context.Context, taskID string, assign 
 		OperationID: &task.OperationID,
 		Summary:     fmt.Sprintf("%s task %s", verb, task.Name),
 	}, nil
-}
-
-// loadTaskInScope fetches a task and applies both gates: the operation role,
-// and whether this agent may touch that particular task at all.
-func (s *Server) loadTaskInScope(ctx context.Context, taskID string, minRole models.OperationRole) (*models.Task, error) {
-	task, err := s.deps.Tasks.Task(ctx, taskID)
-	if err != nil {
-		return nil, fmt.Errorf("task not found")
-	}
-	if _, err := s.authorizeOperation(ctx, task.OperationID, minRole); err != nil {
-		return nil, err
-	}
-	owner, err := agentOwnerID(ctx)
-	if err != nil {
-		return nil, err
-	}
-	if err := requireTaskInScope(task, owner); err != nil {
-		return nil, err
-	}
-	return task, nil
 }

@@ -109,11 +109,8 @@ func registerWikiTools(s *Server) {
 }
 
 func handleSearchWiki(ctx context.Context, s *Server, args searchWikiArgs) (toolResult, error) {
-	opID, err := s.resolveOperation(ctx, args.OperationID)
+	opID, err := s.scopedOperation(ctx, args.OperationID, models.OperationRoleViewer)
 	if err != nil {
-		return toolResult{}, err
-	}
-	if _, err := s.authorizeOperation(ctx, opID, models.OperationRoleViewer); err != nil {
 		return toolResult{}, err
 	}
 
@@ -146,11 +143,8 @@ func handleSearchWiki(ctx context.Context, s *Server, args searchWikiArgs) (tool
 }
 
 func handleListWikiTree(ctx context.Context, s *Server, args listWikiTreeArgs) (toolResult, error) {
-	opID, err := s.resolveOperation(ctx, args.OperationID)
+	opID, err := s.scopedOperation(ctx, args.OperationID, models.OperationRoleViewer)
 	if err != nil {
-		return toolResult{}, err
-	}
-	if _, err := s.authorizeOperation(ctx, opID, models.OperationRoleViewer); err != nil {
 		return toolResult{}, err
 	}
 
@@ -178,11 +172,8 @@ func handleListWikiTree(ctx context.Context, s *Server, args listWikiTreeArgs) (
 }
 
 func handleGetWikiDocument(ctx context.Context, s *Server, args getWikiDocumentArgs) (toolResult, error) {
-	doc, err := s.deps.WikiDocs.WikiDocument(ctx, args.DocumentID)
+	doc, err := s.loadWikiDocument(ctx, args.DocumentID, models.OperationRoleViewer)
 	if err != nil {
-		return toolResult{}, fmt.Errorf("wiki page not found")
-	}
-	if _, err := s.authorizeOperation(ctx, doc.OperationID, models.OperationRoleViewer); err != nil {
 		return toolResult{}, err
 	}
 

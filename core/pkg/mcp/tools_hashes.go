@@ -98,11 +98,8 @@ func registerHashTools(s *Server) {
 }
 
 func handleGetHash(ctx context.Context, s *Server, args getHashArgs) (toolResult, error) {
-	hash, err := s.deps.Hashes.Hash(ctx, args.HashID)
+	hash, err := s.loadHash(ctx, args.HashID, models.OperationRoleViewer)
 	if err != nil {
-		return toolResult{}, fmt.Errorf("hash not found")
-	}
-	if _, err := s.authorizeOperation(ctx, hash.OperationID, models.OperationRoleViewer); err != nil {
 		return toolResult{}, err
 	}
 	return toolResult{
@@ -127,11 +124,8 @@ func parseHashStatus(raw string) (*models.HashStatus, error) {
 }
 
 func handleCreateHash(ctx context.Context, s *Server, args createHashArgs) (toolResult, error) {
-	opID, err := s.resolveOperation(ctx, args.OperationID)
+	opID, err := s.scopedOperation(ctx, args.OperationID, models.OperationRoleOperator)
 	if err != nil {
-		return toolResult{}, err
-	}
-	if _, err := s.authorizeOperation(ctx, opID, models.OperationRoleOperator); err != nil {
 		return toolResult{}, err
 	}
 	status, err := parseHashStatus(args.Status)
@@ -157,11 +151,8 @@ func handleCreateHash(ctx context.Context, s *Server, args createHashArgs) (tool
 }
 
 func handleImportHashes(ctx context.Context, s *Server, args importHashesArgs) (toolResult, error) {
-	opID, err := s.resolveOperation(ctx, args.OperationID)
+	opID, err := s.scopedOperation(ctx, args.OperationID, models.OperationRoleOperator)
 	if err != nil {
-		return toolResult{}, err
-	}
-	if _, err := s.authorizeOperation(ctx, opID, models.OperationRoleOperator); err != nil {
 		return toolResult{}, err
 	}
 
@@ -195,11 +186,8 @@ func handleImportHashes(ctx context.Context, s *Server, args importHashesArgs) (
 }
 
 func handleUpdateHash(ctx context.Context, s *Server, args updateHashArgs) (toolResult, error) {
-	hash, err := s.deps.Hashes.Hash(ctx, args.HashID)
+	hash, err := s.loadHash(ctx, args.HashID, models.OperationRoleOperator)
 	if err != nil {
-		return toolResult{}, fmt.Errorf("hash not found")
-	}
-	if _, err := s.authorizeOperation(ctx, hash.OperationID, models.OperationRoleOperator); err != nil {
 		return toolResult{}, err
 	}
 	status, err := parseHashStatus(args.Status)
@@ -224,11 +212,8 @@ func handleUpdateHash(ctx context.Context, s *Server, args updateHashArgs) (tool
 }
 
 func handleMarkHashCracked(ctx context.Context, s *Server, args markHashCrackedArgs) (toolResult, error) {
-	hash, err := s.deps.Hashes.Hash(ctx, args.HashID)
+	hash, err := s.loadHash(ctx, args.HashID, models.OperationRoleOperator)
 	if err != nil {
-		return toolResult{}, fmt.Errorf("hash not found")
-	}
-	if _, err := s.authorizeOperation(ctx, hash.OperationID, models.OperationRoleOperator); err != nil {
 		return toolResult{}, err
 	}
 
@@ -276,11 +261,8 @@ func hashLabel(h *models.Hash) string {
 }
 
 func handleFindHashes(ctx context.Context, s *Server, args findHashesArgs) (toolResult, error) {
-	opID, err := s.resolveOperation(ctx, args.OperationID)
+	opID, err := s.scopedOperation(ctx, args.OperationID, models.OperationRoleViewer)
 	if err != nil {
-		return toolResult{}, err
-	}
-	if _, err := s.authorizeOperation(ctx, opID, models.OperationRoleViewer); err != nil {
 		return toolResult{}, err
 	}
 

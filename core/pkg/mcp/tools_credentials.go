@@ -76,11 +76,8 @@ func registerCredentialTools(s *Server) {
 }
 
 func handleFindCredentials(ctx context.Context, s *Server, args findCredentialsArgs) (toolResult, error) {
-	opID, err := s.resolveOperation(ctx, args.OperationID)
+	opID, err := s.scopedOperation(ctx, args.OperationID, models.OperationRoleViewer)
 	if err != nil {
-		return toolResult{}, err
-	}
-	if _, err := s.authorizeOperation(ctx, opID, models.OperationRoleViewer); err != nil {
 		return toolResult{}, err
 	}
 
@@ -113,11 +110,8 @@ func handleFindCredentials(ctx context.Context, s *Server, args findCredentialsA
 }
 
 func handleCreateCredential(ctx context.Context, s *Server, args createCredentialArgs) (toolResult, error) {
-	opID, err := s.resolveOperation(ctx, args.OperationID)
+	opID, err := s.scopedOperation(ctx, args.OperationID, models.OperationRoleOperator)
 	if err != nil {
-		return toolResult{}, err
-	}
-	if _, err := s.authorizeOperation(ctx, opID, models.OperationRoleOperator); err != nil {
 		return toolResult{}, err
 	}
 
@@ -155,11 +149,8 @@ func handleCreateCredential(ctx context.Context, s *Server, args createCredentia
 }
 
 func handleGetCredential(ctx context.Context, s *Server, args getCredentialArgs) (toolResult, error) {
-	cred, err := s.deps.Credentials.Credential(ctx, args.CredentialID)
+	cred, err := s.loadCredential(ctx, args.CredentialID, models.OperationRoleViewer)
 	if err != nil {
-		return toolResult{}, fmt.Errorf("credential not found")
-	}
-	if _, err := s.authorizeOperation(ctx, cred.OperationID, models.OperationRoleViewer); err != nil {
 		return toolResult{}, err
 	}
 
@@ -190,11 +181,8 @@ func handleGetCredential(ctx context.Context, s *Server, args getCredentialArgs)
 }
 
 func handleAddCredentialComment(ctx context.Context, s *Server, args addCredentialCommentArgs) (toolResult, error) {
-	cred, err := s.deps.Credentials.Credential(ctx, args.CredentialID)
+	cred, err := s.loadCredential(ctx, args.CredentialID, models.OperationRoleOperator)
 	if err != nil {
-		return toolResult{}, fmt.Errorf("credential not found")
-	}
-	if _, err := s.authorizeOperation(ctx, cred.OperationID, models.OperationRoleOperator); err != nil {
 		return toolResult{}, err
 	}
 

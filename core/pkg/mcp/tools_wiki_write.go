@@ -48,11 +48,8 @@ type editWikiDocumentArgs struct {
 }
 
 func handleCreateWikiDocument(ctx context.Context, s *Server, args createWikiDocumentArgs) (toolResult, error) {
-	opID, err := s.resolveOperation(ctx, args.OperationID)
+	opID, err := s.scopedOperation(ctx, args.OperationID, models.OperationRoleOperator)
 	if err != nil {
-		return toolResult{}, err
-	}
-	if _, err := s.authorizeOperation(ctx, opID, models.OperationRoleOperator); err != nil {
 		return toolResult{}, err
 	}
 
@@ -258,11 +255,8 @@ func (s *Server) writeSectionOne(ctx context.Context, id, content string, mode w
 // the page than a genuine intent to change all of them, so it is refused with
 // the count rather than guessed at.
 func handleEditWikiDocument(ctx context.Context, s *Server, args editWikiDocumentArgs) (toolResult, error) {
-	doc, err := s.deps.WikiDocs.WikiDocument(ctx, args.DocumentID)
+	doc, err := s.loadWikiDocument(ctx, args.DocumentID, models.OperationRoleOperator)
 	if err != nil {
-		return toolResult{}, fmt.Errorf("wiki page not found")
-	}
-	if _, err := s.authorizeOperation(ctx, doc.OperationID, models.OperationRoleOperator); err != nil {
 		return toolResult{}, err
 	}
 
@@ -325,11 +319,8 @@ func handleEditWikiDocument(ctx context.Context, s *Server, args editWikiDocumen
 }
 
 func handleUpdateWikiDocument(ctx context.Context, s *Server, args updateWikiDocumentArgs) (toolResult, error) {
-	doc, err := s.deps.WikiDocs.WikiDocument(ctx, args.DocumentID)
+	doc, err := s.loadWikiDocument(ctx, args.DocumentID, models.OperationRoleOperator)
 	if err != nil {
-		return toolResult{}, fmt.Errorf("wiki page not found")
-	}
-	if _, err := s.authorizeOperation(ctx, doc.OperationID, models.OperationRoleOperator); err != nil {
 		return toolResult{}, err
 	}
 
