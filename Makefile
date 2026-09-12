@@ -1,4 +1,4 @@
-.PHONY: infra infra-stop infra-reset services services-stop services-reset seaweedfs-reset swag gqlgen gqlcodegen frontend help
+.PHONY: test infra infra-stop infra-reset services services-stop services-reset seaweedfs-reset swag gqlgen gqlcodegen frontend help
 
 include .env
 export
@@ -40,6 +40,15 @@ seaweedfs-reset: ## Reset only SeaweedFS volumes (clears bucket state; keeps Mon
 swag: ## swag: Generates or updates the Swagger/OpenAPI documentation files.
 	@echo "Generating API documentation"
 	cd core && go run github.com/swaggo/swag/cmd/swag@latest init --parseDependency --parseInternal
+
+test: ## Run Go tests with the race detector (dummy values fill any required env var missing from .env)
+	cd core && \
+	JWT_SECRET_KEY=$(or $(JWT_SECRET_KEY),test) \
+	MONGO_URI=$(or $(MONGO_URI),mongodb://localhost:27017) \
+	MONGO_DATABASE=$(or $(MONGO_DATABASE),test) \
+	RABBITMQ_DEFAULT_USER=$(or $(RABBITMQ_DEFAULT_USER),test) \
+	RABBITMQ_DEFAULT_PASS=$(or $(RABBITMQ_DEFAULT_PASS),test) \
+	go test -race $(or $(PKG),./...)
 
 frontend: ## Start frontend dev server
 	$(MAKE) -C frontend frontend

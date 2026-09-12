@@ -23,9 +23,16 @@ make swag               # regenerate Swagger/OpenAPI docs
 
 # Run Go commands directly (from core/ directory)
 cd core && go build ./...
-cd core && go test ./...
-cd core && go test ./pkg/auth/...   # single package
+make test                          # all Go tests with -race
+make test PKG=./pkg/mcp/...        # single package
 ```
+
+`make test` rather than a bare `go test`: `pkg/environment` validates required
+settings in `init()` and reads `.env` from the working directory, which under
+`go test` is the package directory. Without `JWT_SECRET_KEY`, `MONGO_URI`,
+`MONGO_DATABASE`, `RABBITMQ_DEFAULT_USER` and `RABBITMQ_DEFAULT_PASS` in the
+environment every package that imports it fatals before running a test. The
+target fills in dummies for whichever of the five `.env` does not provide.
 
 The dev container runs air for hot reload on port 8002. GraphQL playground (Altair) is at `GET /api/v1/graphql` in development mode.
 
