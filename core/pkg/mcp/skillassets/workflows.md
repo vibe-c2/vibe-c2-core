@@ -30,37 +30,51 @@ Findings hold the data; the wiki explains it. Both, not one.
 Then write the page that says what it means: which hosts a credential reaches,
 what that implies, what you would do next.
 
+## Finding the right page, and reading only part of it
+
+`search_wiki` returns a `snippet` of the matching text with every hit. Read the
+snippets before opening anything — that is usually enough to tell which of five
+plausible titles is the one you want, and opening the other four to find out is
+the most common way to waste a context window here.
+
+For a page you have chosen, you do not have to take all of it:
+
+- `get_wiki_document` with `outline:true` returns the headings, their nesting,
+  and the size of each section. A 40 KB page costs a few hundred bytes to
+  survey.
+- `get_wiki_document` with `section:"Hosts"` returns that heading and
+  everything nested under it.
+
+Section sizes include their children, so they do not sum to the page size — a
+level-1 section reports the weight of everything beneath it. A full read of a
+large page tells you the outline exists; you do not need to remember the
+threshold.
+
+Two things to hold on to:
+
+- A section is **part** of the page. Change it with `edit_wiki_document`.
+  Passing a section to `update_wiki_document` replaces the whole page with that
+  fragment and deletes everything else.
+- Section text is exact, so it is the cheapest source of `old_text` for the
+  edit you are about to make.
+
 ## Before writing a page from scratch
 
-Check `list_wiki_templates` first. A template carries the structure the
-operator's team already agreed on — what sections a host write-up has, what a
-finding needs to record — and starting from one keeps your pages consistent
-with theirs instead of introducing a second house style.
+Check `list_wiki_templates`. A template carries the structure the operator's
+team already agreed on, and starting from one keeps your pages consistent with
+theirs instead of introducing a second house style.
 
-The listing spans two places: the operation's own templates, and the shared
-ones in the Public wiki, which come back marked `shared`. Public is where a
-team keeps its house templates, so it is often the only place there are any.
+The listing spans the operation's own templates and the shared ones in the
+Public wiki, which come back marked `shared`. Public is where a team keeps its
+house templates, so it is often the only place there are any.
+`create_wiki_document_from_template` copies one into your operation — including
+a shared one, which is the normal way to use them. When no template fits,
+`create_wiki_document` is correct.
 
-`create_wiki_document_from_template` copies that structure and content into a
-new page — including from a shared template into your operation, which is the
-normal way to use one. Fill in the sections afterwards with
-`append_wiki_section` or `update_wiki_document`. When no template fits,
-`create_wiki_document` is correct; the tool says so rather than leaving you
-guessing.
-
-Instantiating a shared template is routine. *Editing* one is not: it is what
-everybody else starts from, and `set_wiki_template` on a Public page changes
-their next page too.
-
-Templates themselves are shared conventions, so treat them as the operator's to
-change:
-
-- Pages carry `isTemplate`. Check it before editing. Rewriting a template
-  silently changes every page made from it afterwards, which is rarely what
-  anyone asked for.
-- `set_wiki_template` exists, but propose it rather than deciding alone.
-  Promoting your own page to a template is a claim about how the whole team
-  should work.
+Templates are shared conventions, so treat them as the operator's to change.
+Pages carry `isTemplate`: check it before editing, because rewriting a template
+changes every page made from it afterwards. `set_wiki_template` exists, but
+propose it rather than deciding alone.
 
 ## What a page can contain
 
@@ -99,16 +113,21 @@ Everything else is ordinary markdown: headings, tables, task lists
 (`- [x]`), code fences, images, and file attachments as
 `[name size](/api/v1/wiki/files/<id>)`.
 
-The thing to watch is `update_wiki_document`, which replaces the whole body.
-Read the page first and put back every construct you are not deliberately
-changing — a checklist you drop takes its answers and the operator's coverage
-with it. `edit_wiki_document` and `append_wiki_section` cannot make that
-mistake, which is the main reason to prefer them.
+## Changing a page
 
-## Changing part of a page
+Four tools, and the first three cannot damage anything they were not aimed at:
 
-`edit_wiki_document` replaces an exact snippet, the way you would edit a source
-file:
+- `edit_wiki_document` replaces an exact snippet. This is the tool for almost
+  every edit.
+- `append_wiki_section` adds to the end.
+- `prepend_wiki_section` adds to the start — a status banner, a summary above
+  existing notes. Reaching for `update_wiki_document` to put one line at the
+  top is the expensive mistake it exists to prevent.
+- `update_wiki_document` replaces the whole body. Read the page first and put
+  back every construct you are not deliberately changing; a checklist you drop
+  takes its answers and the operator's coverage with it.
+
+An edit looks like this:
 
 ```
 document_id: <id>
@@ -116,63 +135,53 @@ old_text:    "| dc-01 | unknown |"
 new_text:    "| dc-01 | Windows Server 2019 |"
 ```
 
-Use it for essentially every edit. Sending the whole body to rewrite one line
-is slow, costs you the entire page in the tool call each time, and gives you a
-fresh chance to mangle something you never meant to touch.
-
 Copy `old_text` out of `get_wiki_document` verbatim — whitespace, list markers
-and all. It has to match exactly and it has to be unique: if the snippet occurs
+and all. It has to match exactly and it has to be unique; if the snippet occurs
 more than once the edit is refused with the count, and the fix is to include a
 line or two either side rather than to pass `replace_all`. `replace_all` is for
 when you genuinely mean every occurrence, like renaming a host throughout.
 
+If it does not match, the refusal says how it differs — whitespace,
+capitalisation, or that you are on the wrong page. Read it before retrying; it
+is usually one character, and guessing costs another round trip.
+
 To answer a checklist question, edit the marker line's `state` and put the
 answer in the body — both in one call, with the item's own text as `old_text`.
 
-`append_wiki_section` is still the right tool for adding to the end, and
-`update_wiki_document` is for a deliberate rewrite of the whole page.
+**The same text on several pages.** `append_wiki_section` and
+`prepend_wiki_section` take `document_ids` as well as `document_id`. One call,
+content sent once, up to 25 pages. The result lists every page and whether it
+was written, because some can fail while others succeed — retry only the
+failures, or you will add the content twice to the pages that worked.
+
+**The operator may be reading the page you are writing to.** That is fine and
+it is the point. Edit, append and prepend all merge, so they cannot overwrite
+what someone is typing. Every write reports `watchers`; if it is non-zero,
+somebody saw it happen and you do not need to announce it.
 
 ## Putting something long on a page
 
 A tool argument holds a megabyte. Whatever you are about to send, send it in
-one call.
-
-This is worth stating because the opposite is a tempting mistake. Faced with a
-22 KB command history, it is natural to assume an argument that size is risky,
-split it into chunks, drop a `__PLACEHOLDER__` in the page and replace it chunk
-by chunk. That costs a round trip per chunk, makes every chunk depend on the
-previous one still being there, and leaves the page visibly half-written if any
-of them fails. Nothing here ever required it: 22 KB is not close to the limit,
-and neither is 500 KB.
+one call — never split a value across several calls with a placeholder to
+stitch them together.
 
 Where it goes depends on what it is:
 
-- **Prose, notes, a write-up** — the page body. `create_wiki_document` takes
-  content up front; `append_wiki_section` adds a section; `edit_wiki_document`
-  changes part of one.
+- **Prose, notes, a write-up** — the page body.
 - **Raw output — a command history, a scan, a config, a dump** — attach it with
   `attach_text_to_wiki_document` and link to it from the page. It is evidence,
   and evidence attaches. A page holding 20 KB of scrollback buries the
-  reasoning that makes it useful, and the operator cannot skim it. You can read
-  it back later with `read_wiki_attachment`.
+  reasoning that makes it useful. You can read it back with
+  `read_wiki_attachment`.
 
-If a body genuinely exceeds 1 MB you will be told so, with the limit named. The
-answer is still not to split it — attach it.
-
-## Trust what a tool returns
-
-Every write reports what it did. Reading the page back to confirm the write
-landed adds a round trip and tells you what the write already told you. Read
-again when you need the *current* state for a decision — before an
-`edit_wiki_document` whose `old_text` has to match, or when the operator may
-have been typing in the same page — not to verify your own work.
+If a body genuinely exceeds 1 MB you will be told so. The answer is still not
+to split it — attach it.
 
 ## Reading what is attached to a page
 
-A page's text is often a summary of something attached to it — a scan export,
-a spreadsheet of accounts, a screenshot of a console. `list_wiki_attachments`
-shows what a page carries, and each entry says whether you can read it, so you
-do not have to spend a call finding out.
+A page's text is often a summary of something attached to it.
+`list_wiki_attachments` shows what a page carries, and each entry says whether
+you can read it, so you do not have to spend a call finding out.
 
 `read_wiki_attachment` handles three shapes:
 
@@ -181,92 +190,57 @@ do not have to spend a call finding out.
   thing worth correlating against hosts and credentials.
 - **Word and Excel** — converted to plain text. You get the words and the cell
   values, not the layout.
-- **Images** — returned as an image you can actually look at. Useful for
-  screenshots and network diagrams.
+- **Images** — returned as an image you can actually look at.
 
-PDFs and other binaries are not readable. That is a real limit, not a
-transient error: say so rather than retrying.
+PDFs and other binaries are not readable. That is a real limit, not a transient
+error: say so rather than retrying.
 
-Long files come back truncated with a note. When you see it, treat what you
-have as the beginning of the file and nothing more — summarising a truncated
-log as though it were complete is worse than saying you only saw part of it.
+Long files come back truncated with a note. Treat what you have as the
+beginning of the file and nothing more — summarising a truncated log as though
+it were complete is worse than saying you only saw part of it.
 
 ## Giving a page an icon
 
-The default is deliberate: leave `emoji` and `icon` unset and the page gets an
-adaptive icon, which shows as a page and becomes a folder on its own once it has
-children. Most pages want exactly that.
+Leave `emoji` and `icon` unset and the page gets an adaptive icon, which shows
+as a page and becomes a folder once it has children. Most pages want exactly
+that.
 
-**Match what is already there.** Every listing — `list_wiki_tree`,
-`search_wiki`, `list_wiki_templates` — returns each page's `emoji` and `icon`,
-so one call shows you the house style. Read it before choosing. A tree where
-host pages all carry `si:linux` and finding pages all carry `ShieldAlert` is a
-convention someone established, and a page that breaks it looks like it came
-from somewhere else — which, from the operator's side, it did.
+**Match what is already there.** Every listing returns each page's `emoji` and
+`icon`, so one `list_wiki_tree` shows you the house style. If most rows have
+neither, the convention is *not to set one*. A page that breaks the convention
+looks like it came from somewhere else — which, from the operator's side, it
+did.
 
-Rows with no `emoji` or `icon` are on the adaptive default. If that is most of
-the tree, the convention is *not to set one*, and the right move is to leave
-yours unset too rather than being the only page with a glyph.
-
-When a page genuinely warrants its own glyph, `icon` and `emoji` are mutually
+When a page genuinely warrants a glyph, `icon` and `emoji` are mutually
 exclusive and `icon` takes one of two forms:
 
-- **A concept icon** — a PascalCase name from the platform's palette, the same
-  set the operator's own picker offers: `FileText`, `Folder`, `Server`,
-  `Database`, `Network`, `Key`, `Lock`, `Shield`, `ShieldAlert`, `Bug`,
-  `Terminal`, `Users`, `Target`, `Flag`, `Search`, `Wrench`, `Zap`, and so on.
+- **A concept icon** — PascalCase from the platform's palette: `FileText`,
+  `Folder`, `Server`, `Database`, `Network`, `Key`, `Lock`, `Shield`,
+  `ShieldAlert`, `Bug`, `Terminal`, `Users`, `Target`, `Flag`, `Search`,
+  `Wrench`, `Zap`, and so on.
 - **A brand logo** — a simple-icons slug behind an `si:` prefix, lowercase:
-  `si:linux`, `si:ubuntu`, `si:debian`, `si:kalilinux`, `si:docker`,
-  `si:kubernetes`, `si:nginx`, `si:postgresql`, `si:python`, `si:git`,
-  `si:wireshark`, `si:openvpn`, `si:cisco`. Reach for one when a page is
-  genuinely about that technology — a host running Alpine, notes on a
-  Kubernetes cluster.
+  `si:linux`, `si:ubuntu`, `si:kalilinux`, `si:docker`, `si:kubernetes`,
+  `si:nginx`, `si:postgresql`, `si:python`, `si:cisco`. Use one when a page is
+  genuinely about that technology. There is **no Windows logo** — simple-icons
+  does not ship one; use `Server` or an emoji.
 
-  There is **no Windows logo**: simple-icons does not ship one. For a Windows
-  host use a concept icon such as `Server`, or an emoji.
-
-- **`emoji`** — any single emoji. Always valid, and the right escape hatch when
-  nothing in either palette fits.
-
-A name outside the palettes is refused rather than quietly ignored, so if you
-are unsure, use an emoji — or reuse whatever a comparable page in the same tree
-already uses, which is the better answer anyway.
-
-`color` is a hex value that tints an icon. It does nothing to an emoji.
-
-Pick for recognition, not decoration. An icon earns its place when an operator
-scanning the tree would find the page faster because of it.
-
-## Working alongside someone
-
-The operator may be reading the page you are writing to. That is fine and it is
-the point.
-
-- `append_wiki_section` merges. It cannot overwrite what they are typing, and
-  they will watch your text appear.
-- `update_wiki_document` replaces the whole body, so read the page first and
-  send back everything you intend to keep.
-- Both tools report `watchers`. If it is non-zero, someone saw it happen and
-  you do not need to announce it.
+A name outside the palettes is refused rather than ignored, so when unsure use
+an emoji, or reuse whatever a comparable page already has. `color` is a hex
+value that tints an icon and does nothing to an emoji.
 
 ## Suggesting work
 
 `create_task` with an honest risk and profit score, and a description that says
 why. A task is how you propose something without doing it.
 
-Link it at the same time. `create_task` takes `wiki_ids` and `credential_ids`,
-and the moment you are writing the task is the moment you still know what it
-came out of — see "Tasks do not stand alone" below.
-
 Leave it unassigned unless you are about to work on it. An unassigned task is a
 suggestion the operator can take or ignore; assigning it to them announces they
-are doing it, which is their call and not yours. When you do start on
-something, `assign_task_to_me` first, so the board shows who is on it.
+are doing it, which is their call. When you do start on something,
+`assign_task_to_me` first, so the board shows who is on it.
 
-When you finish a piece of work, `change_task_stage` to DONE with a `status` and
-a `summary` saying what actually happened — including when the answer was
-"nothing here". A closed task with an empty summary teaches the next person
-nothing.
+When you finish, `change_task_stage` to DONE with a `status` and a `summary`
+saying what actually happened — including when the answer was "nothing here". A
+closed task with an empty summary teaches the next person nothing.
 
 ## Tasks do not stand alone
 
@@ -287,17 +261,16 @@ have to check first.
 Two habits that make this automatic:
 
 - **Work backwards from what you just did.** You created a credential, then a
-  task to use it: link the credential. You wrote a page about a host, then a
-  task to go further on it: link the page. The link is almost always something
-  that was in front of you a moment ago.
+  task to use it: link the credential. The link is almost always something that
+  was in front of you a moment ago.
 - **Read the counts.** Every task view carries `wikiReferenceCount` and
   `credentialReferenceCount`. A zero on a task you are actively working is a
   prompt, not a fact about the world. `get_task` expands both lists with names
   so you can tell a wrong link from a missing one.
 
-The reverse holds too: when you close a task with `change_task_stage`, check
-that what it produced is linked. A DONE task whose credential is not attached
-has lost the only durable pointer between the work and its result.
+The reverse holds when you close a task: check that what it produced is linked.
+A DONE task whose credential is not attached has lost the only durable pointer
+between the work and its result.
 
 ## Whose tasks you can see
 
@@ -308,16 +281,13 @@ You work on one operator's behalf, not on the team's. So:
 - Tasks **another operator has taken** are neither. `find_tasks` leaves them
   out, and reading or changing one by id is refused.
 
-That is narrower than what the operator themselves can see: they can read the
-whole board, because it is shared. Handing you a key is not the same as adding
-you to the team, so their colleagues' work stays theirs.
+That is narrower than what the operator themselves can see. Handing you a key
+is not the same as adding you to the team.
 
-Two consequences worth expecting:
-
-- A page of results can come back smaller than you asked for, with a note
-  saying how many were withheld. Do not read that as an empty board.
-- On a task shared between the operator and a colleague, you may add or remove
-  **only** the operator you act for. The colleague's claim stays put.
+Two consequences worth expecting: a page of results can come back smaller than
+you asked for, with a note saying how many were withheld — do not read that as
+an empty board; and on a task shared between the operator and a colleague, you
+may add or remove **only** the operator you act for.
 
 ## Picking an engagement back up
 

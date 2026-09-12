@@ -312,6 +312,41 @@ func TestSkill_KeepsItsReferencePointers(t *testing.T) {
 	}
 }
 
+// Skill prose is a budget, not a canvas.
+//
+// SKILL.md is loaded in full every time the skill triggers, so a paragraph
+// added here is paid for on every engagement forever. The reference files are
+// loaded on demand and can afford more, but only just — they grow by accretion
+// as tools are added, and nothing else in the process ever asks whether an
+// older section is still earning its place.
+//
+// These ceilings are deliberately close to the current sizes. Crossing one is
+// not a failure, it is a prompt: re-read the file and cut something before
+// raising the number.
+//
+// Only the hand-written files are budgeted. reference/tools.md is generated
+// from the registry, so its size is a consequence of how many tools exist —
+// capping it would pressure whoever adds the next tool to shorten a
+// description, which is the opposite of what this is for.
+func TestSkill_ProseStaysWithinItsBudget(t *testing.T) {
+	budgets := map[string]int{
+		SkillName + "/SKILL.md":               7 * 1024,
+		SkillName + "/reference/workflows.md": 15 * 1024,
+	}
+
+	s := New(Deps{Logger: zap.NewNop()})
+	for _, file := range s.SkillBundle() {
+		budget, ok := budgets[file.Path]
+		if !ok {
+			continue
+		}
+		if len(file.Content) > budget {
+			t.Errorf("%s is %d bytes, over its %d budget — cut something rather than "+
+				"raising the number", file.Path, len(file.Content), budget)
+		}
+	}
+}
+
 // The Public operation is reachable by every authenticated caller and appears
 // in no membership query, so an agent can only learn it exists from the guide
 // or from list_operations. It was usable and undiscoverable for a while, which

@@ -12,15 +12,22 @@ const { markdownToDetachedNodes, markdownToDetachedBlocks, spliceFragment } = __
 // deep-copied out of a scratch doc before it can be inserted into the live
 // one. Copying by hand is where formatting quietly gets lost, so the copy is
 // asserted through a full round-trip rather than by inspecting nodes.
-function insertInto(doc: Doc, markdown: string, mode: "replace" | "append"): string {
+function insertInto(
+  doc: Doc,
+  markdown: string,
+  mode: "replace" | "append" | "prepend",
+): string {
   const fragment = doc.getXmlFragment(Y_FRAGMENT_FIELD);
   const blocks = markdownToDetachedBlocks(markdown);
   doc.transact(() => {
     // Same branch the endpoint takes, so these tests exercise the real write
     // path rather than a second copy of it that can drift.
-    if (mode === "append") {
+    if (mode === "append" || mode === "prepend") {
       if (blocks.length > 0) {
-        fragment.insert(fragment.length, blocks.map((b) => b.node));
+        fragment.insert(
+          mode === "append" ? fragment.length : 0,
+          blocks.map((b) => b.node),
+        );
       }
       return;
     }
@@ -88,6 +95,57 @@ test("empty markdown appends nothing rather than throwing", () => {
   insertInto(doc, "# Kept\n", "replace");
   const out = insertInto(doc, "", "append");
   assert.match(out, /# Kept/);
+  doc.destroy();
+});
+
+// Prepend exists so that putting a line at the top of a page does not require
+// reading the whole body and sending it back through replace — the one mode
+// that can lose a collaborator's work.
+test("prepend preserves existing content and adds before it", () => {
+  const doc = new Doc();
+  insertInto(doc, "# Existing\n\nWritten by the operator.\n", "replace");
+  const out = insertInto(doc, ":::warning\nCredentials rotated.\n:::\n", "prepend");
+
+  assert.match(out, /# Existing/, "prepend destroyed pre-existing content");
+  assert.match(out, /Written by the operator\./, "prepend destroyed pre-existing content");
+  assert.match(out, /Credentials rotated\./);
+  assert.ok(
+    out.indexOf("Credentials rotated") < out.indexOf("Existing"),
+    "prepended content should come before what was already there"
+  );
+  doc.destroy();
+});
+
+test("prepend into an empty document behaves like a write", () => {
+  const doc = new Doc();
+  const out = insertInto(doc, "# First\n\nText.\n", "prepend");
+  assert.match(out, /# First/);
+  assert.match(out, /Text\./);
+  doc.destroy();
+});
+
+test("empty markdown prepends nothing rather than throwing", () => {
+  const doc = new Doc();
+  insertInto(doc, "# Kept\n", "replace");
+  const out = insertInto(doc, "", "prepend");
+  assert.match(out, /# Kept/);
+  doc.destroy();
+});
+
+// Two prepends in a row must stack in the order they were sent, not reverse
+// it — inserting each at index 0 without thinking would put the older banner
+// above the newer one.
+test("successive prepends keep their order", () => {
+  const doc = new Doc();
+  insertInto(doc, "# Body\n", "replace");
+  insertInto(doc, "Older banner.\n", "prepend");
+  const out = insertInto(doc, "Newer banner.\n", "prepend");
+
+  assert.ok(
+    out.indexOf("Newer banner") < out.indexOf("Older banner"),
+    "the most recent prepend should sit at the top"
+  );
+  assert.ok(out.indexOf("Older banner") < out.indexOf("# Body"));
   doc.destroy();
 });
 

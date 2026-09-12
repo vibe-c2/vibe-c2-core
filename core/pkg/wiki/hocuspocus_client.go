@@ -216,6 +216,14 @@ const (
 	// ApplyAppend adds to the end and never touches existing content, so it
 	// cannot race somebody typing above it.
 	ApplyAppend ApplyMode = "append"
+	// ApplyPrepend adds to the beginning, with the same guarantee.
+	//
+	// Worth its own mode rather than leaving callers to do it: without one,
+	// putting a line at the top of a page means reading the whole body and
+	// sending it all back through ApplyReplace — the most expensive call
+	// available, and the only one that can lose a collaborator's work. A
+	// structural addition should not force a full rewrite.
+	ApplyPrepend ApplyMode = "prepend"
 )
 
 type applyMarkdownRequest struct {
@@ -251,7 +259,9 @@ func (c *HocuspocusClient) ApplyMarkdown(ctx context.Context, documentID, markdo
 	if c.internalSecret == "" {
 		return result, fmt.Errorf("apply-markdown: no internal secret configured")
 	}
-	if mode != ApplyReplace && mode != ApplyAppend {
+	switch mode {
+	case ApplyReplace, ApplyAppend, ApplyPrepend:
+	default:
 		return result, fmt.Errorf("apply-markdown: unknown mode %q", mode)
 	}
 

@@ -152,7 +152,7 @@ func TestIdempotency_EveryWriteToolAcceptsAKey(t *testing.T) {
 		createWikiDocumentArgs{},
 		createFromTemplateArgs{},
 		setWikiTemplateArgs{},
-		appendWikiSectionArgs{},
+		sectionWriteArgs{},
 		updateWikiDocumentArgs{},
 		createTimelineEventArgs{},
 	}

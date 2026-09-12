@@ -28,7 +28,13 @@ import { readRawBody, requireSignature } from "./internal-auth.js";
 
 const MAX_MARKDOWN_BYTES = 1024 * 1024; // matches WikiDocument.Content cap
 
-type ApplyMode = "replace" | "append";
+type ApplyMode = "replace" | "append" | "prepend";
+
+const APPLY_MODES: ReadonlySet<string> = new Set<ApplyMode>([
+  "replace",
+  "append",
+  "prepend",
+]);
 
 interface ApplyRequestBody {
   documentId?: string;
@@ -186,7 +192,14 @@ export function setupApplyApi(app: Express, server: Hocuspocus): void {
       }
 
       const { documentId, markdown } = parsed;
-      const mode: ApplyMode = parsed.mode === "append" ? "append" : "replace";
+      // Unknown modes fall back to replace, which is what this did when
+      // "append" was the only alternative. Defaulting an unrecognised mode to
+      // the destructive one is not obviously right, but changing it now would
+      // alter how an older caller behaves, and the Go client validates the
+      // mode before it ever gets here.
+      const mode: ApplyMode = APPLY_MODES.has(parsed.mode ?? "")
+        ? (parsed.mode as ApplyMode)
+        : "replace";
 
       if (typeof documentId !== "string" || documentId === "") {
         res.status(400).json({ error: "documentId field required" });
@@ -218,10 +231,15 @@ export function setupApplyApi(app: Express, server: Hocuspocus): void {
           const blocks = markdownToDetachedBlocks(markdown);
           appliedNodes = blocks.length;
 
-          if (mode === "append") {
+          // Append and prepend differ only in the insertion point. Both are
+          // pure insertions, so neither can disturb what is already in the
+          // fragment — that is what makes them safe while somebody is typing,
+          // and why prepend is worth having rather than making callers
+          // round-trip the whole body through replace.
+          if (mode === "append" || mode === "prepend") {
             if (blocks.length > 0) {
               fragment.insert(
-                fragment.length,
+                mode === "append" ? fragment.length : 0,
                 blocks.map((block) => block.node),
               );
             }

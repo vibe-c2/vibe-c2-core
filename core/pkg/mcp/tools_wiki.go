@@ -47,6 +47,8 @@ type setWikiTemplateArgs struct {
 
 type getWikiDocumentArgs struct {
 	DocumentID string `json:"document_id" jsonschema:"The page's id, from search_wiki or list_wiki_tree."`
+	Outline    bool   `json:"outline,omitempty" jsonschema:"Return the page's heading outline and the size of each section instead of its text. Cheap way to see how a large page is organized before deciding what to read."`
+	Section    string `json:"section,omitempty" jsonschema:"Return only this heading and everything nested under it. Give the heading text as the outline reports it, without the leading #. Ignored when outline is set."`
 }
 
 type createWikiDocumentArgs struct {
@@ -58,10 +60,13 @@ type createWikiDocumentArgs struct {
 	visualIdentity
 }
 
-type appendWikiSectionArgs struct {
+// sectionWriteArgs is shared by append_wiki_section and prepend_wiki_section:
+// the same content, the same targets, only the end it lands on differs.
+type sectionWriteArgs struct {
 	IdempotencyKey
-	DocumentID string `json:"document_id"     jsonschema:"The page to add to."`
-	Content    string `json:"content"         jsonschema:"Markdown to add at the end of the page. Existing content is never touched. Send it whole — the limit is 1 MB, so there is no reason to split it across calls."`
+	DocumentID  string   `json:"document_id,omitempty"  jsonschema:"The page to add to."`
+	DocumentIDs []string `json:"document_ids,omitempty" jsonschema:"Several pages to add the SAME content to, in one call. Use this instead of repeating the call per page — the content travels once rather than once per page."`
+	Content     string   `json:"content"                jsonschema:"Markdown to add. Existing content is never touched. Send it whole — the limit is 1 MB, so there is no reason to split it across calls."`
 }
 
 type updateWikiDocumentArgs struct {
@@ -82,8 +87,10 @@ type editWikiDocumentArgs struct {
 
 func registerWikiTools(s *Server) {
 	register(s, &mcp.Tool{
-		Name:        "search_wiki",
-		Description: "Search the operation's wiki pages by title and body.",
+		Name: "search_wiki",
+		Description: "Search the operation's wiki pages by title and body. Each hit carries a " +
+			"snippet of the matching text, so you can usually tell which page you want " +
+			"without opening any of them.",
 	}, readTool, handleSearchWiki)
 
 	register(s, &mcp.Tool{
@@ -114,8 +121,10 @@ func registerWikiTools(s *Server) {
 	}, writeTool, handleSetWikiTemplate)
 
 	register(s, &mcp.Tool{
-		Name:        "get_wiki_document",
-		Description: "One wiki page's full Markdown body.",
+		Name: "get_wiki_document",
+		Description: "One wiki page as Markdown. By default the whole body; pass outline:true " +
+			"for just its headings and their sizes, or section:\"<heading>\" for one part of " +
+			"it. On a large page, outline then section is far cheaper than reading it whole.",
 	}, readTool, handleGetWikiDocument)
 
 	register(s, &mcp.Tool{
@@ -128,15 +137,25 @@ func registerWikiTools(s *Server) {
 		Name: "append_wiki_section",
 		Description: "Add Markdown to the end of a wiki page without touching what is already " +
 			"there. Prefer this over update_wiki_document: it is safe while the operator is " +
-			"editing the same page, and they will see your text appear as you write it.",
+			"editing the same page, and they will see your text appear as you write it. " +
+			"Pass document_ids to add the same content to several pages in one call.",
 	}, writeTool, handleAppendWikiSection)
+
+	register(s, &mcp.Tool{
+		Name: "prepend_wiki_section",
+		Description: "Add Markdown to the START of a wiki page without touching what is already " +
+			"there — a status banner, a summary above existing notes. Same safety as " +
+			"append_wiki_section, and the reason not to reach for update_wiki_document just " +
+			"to put a line at the top. Pass document_ids for several pages in one call.",
+	}, writeTool, handlePrependWikiSection)
 
 	register(s, &mcp.Tool{
 		Name: "edit_wiki_document",
 		Description: "Change part of a page by replacing an exact snippet, the way you would " +
 			"edit a source file. Send only the text that changes, not the whole page. This is " +
 			"the tool for almost every edit — reach for update_wiki_document only when you are " +
-			"deliberately rewriting a page end to end.",
+			"deliberately rewriting a page end to end. If the snippet does not match, the " +
+			"refusal says how it differs.",
 	}, writeTool, handleEditWikiDocument)
 
 	register(s, &mcp.Tool{
@@ -164,9 +183,14 @@ func handleSearchWiki(ctx context.Context, s *Server, args searchWikiArgs) (tool
 		return toolResult{}, fmt.Errorf("failed to search wiki: %w", err)
 	}
 
-	views := make([]wikiDocView, 0, len(conn.Edges))
+	views := make([]wikiSearchHitView, 0, len(conn.Edges))
 	for _, edge := range conn.Edges {
-		views = append(views, toWikiDocView(edge.Node))
+		views = append(views, wikiSearchHitView{
+			wikiDocView: toWikiDocView(edge.Node),
+			// From the already-loaded search projection, so this costs no
+			// extra I/O — see wiki_snippet.go.
+			Snippet: buildSnippet(edge.Node.Content, args.Search),
+		})
 	}
 
 	result, err := newPage(views, endCursor(conn.PageInfo), totalNote(conn.TotalCount, len(views))...)
@@ -392,18 +416,110 @@ func handleGetWikiDocument(ctx context.Context, s *Server, args getWikiDocumentA
 		return toolResult{}, err
 	}
 
-	body, truncated := truncateBody(s.documentMarkdown(ctx, doc))
+	markdown := s.documentMarkdown(ctx, doc)
+
+	if args.Outline {
+		return outlineResult(doc, markdown), nil
+	}
+	if args.Section != "" {
+		return sectionResult(doc, markdown, args.Section)
+	}
+
+	body, truncated := truncateBody(markdown)
 	view := wikiDocDetailView{
 		wikiDocView: toWikiDocView(doc),
 		Content:     body,
 		UpdatedAt:   formatTime(doc.UpdateAt),
 		Truncated:   truncated,
 	}
+	// Point at the cheaper read rather than waiting to be asked. A page big
+	// enough to notice is a page the agent will read repeatedly, and it has
+	// no way to know the option exists unless a full read says so.
+	if len(markdown) > outlineHintBytes {
+		view.Notes = append(view.Notes, fmt.Sprintf(
+			"This page is %d bytes. To read part of it, call get_wiki_document again with "+
+				"outline:true for its headings, then section:\"<heading>\" for the part you need.",
+			len(markdown)))
+	}
 
 	return toolResult{
 		Payload:     view,
 		OperationID: &doc.OperationID,
 		Summary:     fmt.Sprintf("read wiki page %s", doc.Title),
+	}, nil
+}
+
+// outlineHintBytes is where a full read starts advertising the cheaper one.
+// Set around the point a page stops being something you would read whole.
+const outlineHintBytes = 8 * 1024
+
+func outlineResult(doc *models.WikiDocument, markdown string) toolResult {
+	view := wikiOutlineView{
+		wikiDocView: toWikiDocView(doc),
+		UpdatedAt:   formatTime(doc.UpdateAt),
+		Bytes:       len(markdown),
+		Outline:     buildOutline(markdown),
+	}
+
+	switch {
+	case len(view.Outline) == 0:
+		// Otherwise an empty outline reads as an empty page, and the agent
+		// concludes there is nothing there when the text simply has no
+		// headings to hang an outline on.
+		view.Notes = append(view.Notes,
+			"This page has no headings, so there is nothing to outline and no section to "+
+				"fetch. Read it without outline to get the text.")
+	default:
+		if pre := preambleBytes(markdown); pre > 0 {
+			view.Notes = append(view.Notes, fmt.Sprintf(
+				"%d bytes sit above the first heading and are in no section.", pre))
+		}
+		view.Notes = append(view.Notes,
+			"Section sizes include everything nested underneath, so they do not sum to the "+
+				"page size. Fetch one with section:\"<heading>\".")
+	}
+
+	return toolResult{
+		Payload:     view,
+		OperationID: &doc.OperationID,
+		Summary:     fmt.Sprintf("read the outline of %s", doc.Title),
+	}
+}
+
+func sectionResult(doc *models.WikiDocument, markdown, heading string) (toolResult, error) {
+	text, matches := sliceSection(markdown, heading)
+	if matches == 0 {
+		if available := headingList(markdown); available != "" {
+			return toolResult{}, refuse(
+				"%q has no heading %q. Its headings are: %s.", doc.Title, heading, available)
+		}
+		return toolResult{}, refuse(
+			"%q has no headings at all, so there is no section to fetch. Read it without "+
+				"the section argument.", doc.Title)
+	}
+
+	body, truncated := truncateBody(text)
+	view := wikiDocDetailView{
+		wikiDocView: toWikiDocView(doc),
+		Content:     body,
+		UpdatedAt:   formatTime(doc.UpdateAt),
+		Truncated:   truncated,
+		Section:     heading,
+	}
+	// The dangerous misreading of a section fetch is treating it as the page.
+	// Saying so on every one is cheap; the mistake deletes a page.
+	view.Notes = append(view.Notes,
+		"This is one section, not the whole page. Change it with edit_wiki_document — "+
+			"passing this to update_wiki_document would delete everything else.")
+	if matches > 1 {
+		view.Notes = append(view.Notes, fmt.Sprintf(
+			"%d sections share this heading; this is the first.", matches))
+	}
+
+	return toolResult{
+		Payload:     view,
+		OperationID: &doc.OperationID,
+		Summary:     fmt.Sprintf("read section %q of %s", heading, doc.Title),
 	}, nil
 }
 
@@ -449,25 +565,161 @@ func handleCreateWikiDocument(ctx context.Context, s *Server, args createWikiDoc
 	}, nil
 }
 
-func handleAppendWikiSection(ctx context.Context, s *Server, args appendWikiSectionArgs) (toolResult, error) {
-	doc, err := s.deps.WikiDocs.WikiDocument(ctx, args.DocumentID)
-	if err != nil {
-		return toolResult{}, fmt.Errorf("wiki page not found")
-	}
-	if _, err := s.authorizeOperation(ctx, doc.OperationID, models.OperationRoleOperator); err != nil {
-		return toolResult{}, err
+// maxSectionTargets bounds one multi-page write.
+//
+// Each target is a separate sidecar transaction, so this is a wall-clock and
+// blast-radius limit rather than a payload one. Twenty-five is well above the
+// real cases (stamping a notice across a handful of host pages) and far below
+// "rewrite the whole wiki by accident".
+const maxSectionTargets = 25
+
+// targets resolves the one-or-many document argument into a deduplicated list.
+//
+// Both forms are accepted and merged rather than treated as mutually
+// exclusive. An agent that sends both means the union of them, and refusing
+// that would be pedantry that costs a round trip to correct.
+func (a sectionWriteArgs) targets() ([]string, error) {
+	seen := make(map[string]bool, len(a.DocumentIDs)+1)
+	var ids []string
+	for _, id := range append([]string{a.DocumentID}, a.DocumentIDs...) {
+		id = strings.TrimSpace(id)
+		if id == "" || seen[id] {
+			continue
+		}
+		seen[id] = true
+		ids = append(ids, id)
 	}
 
-	watchers, err := s.writeBody(ctx, doc, args.Content, wiki.ApplyAppend)
+	if len(ids) == 0 {
+		return nil, refuse("give document_id for one page, or document_ids for several.")
+	}
+	if len(ids) > maxSectionTargets {
+		return nil, refuse(
+			"that is %d pages in one call and the limit is %d. Split it into batches — "+
+				"the limit is about how much one call should be able to change at once, "+
+				"not about the size of the content.", len(ids), maxSectionTargets)
+	}
+	return ids, nil
+}
+
+func handleAppendWikiSection(ctx context.Context, s *Server, args sectionWriteArgs) (toolResult, error) {
+	return s.writeSection(ctx, args, wiki.ApplyAppend)
+}
+
+func handlePrependWikiSection(ctx context.Context, s *Server, args sectionWriteArgs) (toolResult, error) {
+	return s.writeSection(ctx, args, wiki.ApplyPrepend)
+}
+
+// writeSection adds the same content to one or more pages.
+//
+// Partial success is reported, not hidden. Each page is a separate
+// transaction, so a permission refusal on the third of five does not undo the
+// first two and pretending otherwise would be a lie the agent then repeats to
+// the operator. The result names every page and what happened to it; the call
+// only fails outright when nothing at all was written.
+func (s *Server) writeSection(ctx context.Context, args sectionWriteArgs, mode wiki.ApplyMode) (toolResult, error) {
+	ids, err := args.targets()
 	if err != nil {
 		return toolResult{}, err
+	}
+	if args.Content == "" {
+		return toolResult{}, refuse("content is required: it is the Markdown to add.")
+	}
+
+	verb := "appended to"
+	if mode == wiki.ApplyPrepend {
+		verb = "prepended to"
+	}
+
+	var (
+		results  []sectionTargetResult
+		opID     *uuid.UUID
+		applied  int
+		failures []error
+	)
+
+	for _, id := range ids {
+		result, docOpID, err := s.writeSectionOne(ctx, id, args.Content, mode)
+		results = append(results, result)
+		if err != nil {
+			failures = append(failures, err)
+			continue
+		}
+		applied++
+		if opID == nil {
+			opID = docOpID
+		}
+	}
+
+	// Nothing landed: this is a failed call, not a report of failures.
+	if applied == 0 {
+		// One target returns its error unwrapped, so a refusal stays typed as
+		// a refusal. The distinction is the difference between the operator
+		// reading "your key cannot do that" and "the platform is broken".
+		if len(ids) == 1 {
+			return toolResult{}, failures[0]
+		}
+		return toolResult{}, fmt.Errorf("none of the %d pages could be written: %w",
+			len(ids), errors.Join(failures...))
+	}
+
+	// One target keeps the original single-page shape. Agents and the skill
+	// have been reading `watchers` off the top level since this tool existed,
+	// and changing that for every caller to serve the batch case would be a
+	// gratuitous break.
+	if len(ids) == 1 {
+		return toolResult{
+			Payload:     appendResultFor(results[0]),
+			OperationID: opID,
+			Summary:     fmt.Sprintf("%s %s", verb, results[0].Title),
+		}, nil
+	}
+
+	payload := sectionWriteResultView{
+		Applied: applied,
+		Failed:  len(ids) - applied,
+		Results: results,
+	}
+	if payload.Failed > 0 {
+		payload.Notes = append(payload.Notes,
+			"Some pages were not written. The ones marked ok were, and re-sending to those "+
+				"would add the content twice — retry only the failures.")
 	}
 
 	return toolResult{
-		Payload:     appendResult(doc, watchers),
-		OperationID: &doc.OperationID,
-		Summary:     fmt.Sprintf("added a section to %s", doc.Title),
+		Payload:     payload,
+		OperationID: opID,
+		Summary:     fmt.Sprintf("%s %d of %d pages", verb, applied, len(ids)),
 	}, nil
+}
+
+// writeSectionOne applies the edit to a single page, reporting the outcome
+// rather than aborting the batch.
+func (s *Server) writeSectionOne(ctx context.Context, id, content string, mode wiki.ApplyMode) (sectionTargetResult, *uuid.UUID, error) {
+	result := sectionTargetResult{ID: id}
+
+	doc, err := s.deps.WikiDocs.WikiDocument(ctx, id)
+	if err != nil {
+		err = fmt.Errorf("wiki page %s not found", id)
+		result.Error = err.Error()
+		return result, nil, err
+	}
+	result.Title = doc.Title
+
+	if _, err := s.authorizeOperation(ctx, doc.OperationID, models.OperationRoleOperator); err != nil {
+		result.Error = err.Error()
+		return result, nil, err
+	}
+
+	watchers, err := s.writeBody(ctx, doc, content, mode)
+	if err != nil {
+		result.Error = err.Error()
+		return result, nil, err
+	}
+
+	result.OK = true
+	result.Watchers = watchers
+	return result, &doc.OperationID, nil
 }
 
 // handleEditWikiDocument replaces an exact snippet.
@@ -505,9 +757,10 @@ func handleEditWikiDocument(ctx context.Context, s *Server, args editWikiDocumen
 	switch {
 	case matches == 0:
 		return toolResult{}, refuse(
-			"that exact text is not on %q. Read it with get_wiki_document and copy the snippet "+
-				"from what it returns — whitespace and list markers have to match exactly.",
-			doc.Title)
+			"that exact text is not on %q.%s Read it with get_wiki_document and copy the "+
+				"snippet from what it returns — whitespace and list markers have to match "+
+				"exactly.",
+			doc.Title, diagnoseNoMatch(body, args.OldText))
 	case matches > 1 && !args.ReplaceAll:
 		return toolResult{}, refuse(
 			"that text appears %d times on %q, so it is ambiguous. Include more of the "+
@@ -596,6 +849,22 @@ func appendResult(doc *models.WikiDocument, watchers int) any {
 	}{wikiDocView: toWikiDocView(doc), Watchers: watchers}
 
 	if watchers > 0 {
+		view.Note = "The operator has this page open and saw your edit appear."
+	}
+	return view
+}
+
+// appendResultFor is the same single-page shape built from a batch row, for
+// the one-target case that keeps the original response.
+func appendResultFor(result sectionTargetResult) any {
+	view := struct {
+		ID       string `json:"id"`
+		Title    string `json:"title"`
+		Watchers int    `json:"watchers"`
+		Note     string `json:"note,omitempty"`
+	}{ID: result.ID, Title: result.Title, Watchers: result.Watchers}
+
+	if result.Watchers > 0 {
 		view.Note = "The operator has this page open and saw your edit appear."
 	}
 	return view

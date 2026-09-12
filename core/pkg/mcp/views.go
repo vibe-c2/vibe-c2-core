@@ -178,6 +178,60 @@ type wikiDocDetailView struct {
 	// Truncated says the body was cut to fit the response budget. Without it
 	// an agent would happily rewrite a page from a partial read.
 	Truncated bool `json:"truncated,omitempty"`
+	// Section names the heading this body was sliced from, when the caller
+	// asked for one. Its presence is the signal that `content` is PART of the
+	// page — which update_wiki_document would otherwise happily treat as the
+	// whole of it and delete everything else.
+	Section string   `json:"section,omitempty"`
+	Notes   []string `json:"notes,omitempty"`
+}
+
+// wikiOutlineView is a page's shape without its text: what headings it has,
+// how deep they nest, and how much sits under each.
+//
+// Separate from wikiDocDetailView rather than an empty `content` on it,
+// because "the body is empty" and "you asked not to be sent the body" are
+// different facts and an agent that confuses them rewrites a page to nothing.
+type wikiOutlineView struct {
+	wikiDocView
+	UpdatedAt string `json:"updatedAt,omitempty"`
+	// Bytes is the whole page, so the agent can weigh one section against it.
+	Bytes   int            `json:"bytes"`
+	Outline []outlineEntry `json:"outline"`
+	Notes   []string       `json:"notes,omitempty"`
+}
+
+// sectionTargetResult is what happened to one page in a multi-page write.
+type sectionTargetResult struct {
+	ID       string `json:"id"`
+	Title    string `json:"title,omitempty"`
+	OK       bool   `json:"ok"`
+	Watchers int    `json:"watchers,omitempty"`
+	Error    string `json:"error,omitempty"`
+}
+
+// sectionWriteResultView reports a write that spanned several pages.
+//
+// Per-page rather than a single count, because the failures are the part the
+// agent has to act on: which page was missed, and why. A bare "3 of 5" would
+// send it re-sending to all five and doubling the content on the three that
+// worked.
+type sectionWriteResultView struct {
+	Applied int                   `json:"applied"`
+	Failed  int                   `json:"failed,omitempty"`
+	Results []sectionTargetResult `json:"results"`
+	Notes   []string              `json:"notes,omitempty"`
+}
+
+// wikiSearchHitView is a search result with the text that matched.
+//
+// Without the snippet a hit is a title, and deciding whether it is the right
+// page costs a full get_wiki_document each — so searching five candidates
+// meant reading five whole pages to discard four. The snippet is the cheapest
+// possible answer to "is this the one".
+type wikiSearchHitView struct {
+	wikiDocView
+	Snippet string `json:"snippet,omitempty"`
 }
 
 type timelineEventView struct {

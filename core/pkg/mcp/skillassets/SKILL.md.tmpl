@@ -38,11 +38,9 @@ platform: everyone can read and write it, and nobody is a member. It is the
 right place for things that outlive one engagement — method, reference,
 checklists — and the wrong place for anything belonging to a specific target.
 
-You can always reach it. A key scoped to particular operations is still not
-narrowed away from Public, because Public is not one of the operator's
-operations — so `list_operations` always shows it, and the shared wiki is
-always yours to read. What your key may *do* there is capped the same way as
-anywhere else.
+You can always reach it: a key scoped to particular operations is not narrowed
+away from Public, so `list_operations` always shows it and the shared wiki is
+always yours to read. What your key may *do* there is capped as anywhere else.
 
 The division that matters: **findings hold the data, the wiki holds the
 reasoning.** A password belongs in Credentials, not pasted into a page. A page
@@ -61,11 +59,10 @@ now — which operation, which page, which host is selected. Call it before aski
 them where to look; most of the time it already answers the question.
 
 **Everything you do is visible.** Every call, reads included, is recorded and
-shown to the operator on their agent activity page. The timeline is separate
-and deliberately sparse — it records milestones, not activity, and it treats
-your work exactly like a person's: closing a task or recording a credential
-lands there, editing a page does not. Work as though being watched, because
-you are.
+shown to the operator. The timeline is separate and deliberately sparse: it
+records milestones, not activity, and treats your work exactly like a person's
+— closing a task or recording a credential lands there, editing a page does
+not. Work as though being watched, because you are.
 
 **Propose rather than surprise.** Creating a task to suggest work is better than
 doing something nobody asked for. Say what you are about to change before you
@@ -81,21 +78,27 @@ hoping one gets through. A rate-limit refusal tells you how long to wait — wai
 that long.
 
 **Send the smallest change that does the job.** `edit_wiki_document` replaces
-an exact snippet and `append_wiki_section` adds to the end; both take a
-fragment, and neither can damage the rest of the page. `update_wiki_document`
-takes the whole body — use it only for a deliberate end-to-end rewrite, and read
-the page first, because anything you omit is deleted.
+an exact snippet; `append_wiki_section` and `prepend_wiki_section` add to
+either end. All three take a fragment and none can damage the rest of the page.
+`update_wiki_document` takes the whole body — use it only for a deliberate
+end-to-end rewrite, and read the page first, because anything you omit is
+deleted.
+
+**Read the smallest part that answers the question.** `search_wiki` returns a
+snippet of the matching text with every hit, which usually identifies the right
+page without opening any. On a large page, `get_wiki_document` takes
+`outline:true` for its headings and `section:"<heading>"` for one part of it.
+A section is not the page: edit it, never send it back as the whole body.
 
 **There is no other way in.** No CLI, no local checkout, no REST endpoint to
 curl, no file on disk that mirrors any of this. If a tool for something does not
 exist, it does not exist — say so instead of looking for a way around.
 
 **One value, one call.** Arguments hold a megabyte. Never split a long value
-across several calls with a placeholder to stitch them together: it costs a
-round trip each, every chunk depends on the last one surviving, and no limit
-here asked for it. Raw output — a command history, a scan, a config — goes to
-`attach_text_to_wiki_document` rather than into the page body. See
-workflows.md, "Putting something long on a page".
+across several calls with a placeholder to stitch them together — no limit here
+asked for it, and every chunk depends on the last one surviving. Raw output — a
+command history, a scan, a config — goes to `attach_text_to_wiki_document`
+rather than into the page body.
 
 **Do not re-read to check your own work.** Every write reports what it did.
 Fetch a page again when you need its current state for the next decision, not
@@ -105,17 +108,11 @@ to confirm the last one landed.
 and a repeat returns the original result instead of doing the thing twice.
 
 **Leave the icon alone unless the page has earned one.** Wiki pages default to
-an adaptive icon that renders as a page, and turns into a folder by itself once
-something is nested underneath it. That is the right answer for most pages, and
-it is what you get by saying nothing. Reach for a specific glyph only when a
-page is distinctive enough that an operator would pick it out of the tree by
-its icon — a credential store, a target's profile, a checklist they open daily.
-A wiki where everything is decorated is a wiki where nothing stands out.
-
-When you do pick one, follow the tree rather than your own taste. Listings carry
-each page's `emoji` and `icon`, so a single `list_wiki_tree` shows you what the
-operator's pages already use; match it. Their convention is the right answer
-even when yours would have been prettier.
+an adaptive icon, which is right for most of them. When a page does warrant a
+glyph, follow the tree rather than your own taste: listings carry each page's
+`emoji` and `icon`, so one `list_wiki_tree` shows you the convention. Match it
+even when yours would have been prettier. See workflows.md, "Giving a page an
+icon".
 
 <!-- skill-only:start -->
 ## Reference
