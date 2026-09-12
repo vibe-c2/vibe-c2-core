@@ -21,8 +21,6 @@ const agentActionCollection = "agent_actions"
 // revisit when volume makes it a problem.
 type IAgentActionRepository interface {
 	Insert(ctx context.Context, action *models.AgentAction) error
-	ListByOperation(ctx context.Context, operationID uuid.UUID, limit int64) ([]models.AgentAction, error)
-	ListByOwner(ctx context.Context, ownerUserID uuid.UUID, limit int64) ([]models.AgentAction, error)
 
 	// QueryWithCursor is the read path behind the agent activity page. Keyset
 	// pagination on occurred_at, matching every other list in the app — an
@@ -99,13 +97,6 @@ func NewAgentActionRepository(db database.Database) IAgentActionRepository {
 func (r *agentActionRepository) Insert(ctx context.Context, action *models.AgentAction) error {
 	_, err := r.coll.InsertOne(ctx, action)
 	return err
-}
-
-func (r *agentActionRepository) ListByOperation(ctx context.Context, operationID uuid.UUID, limit int64) ([]models.AgentAction, error) {
-	actions := make([]models.AgentAction, 0)
-	err := r.coll.Find(ctx, bson.M{"operation_id": operationID}).
-		Sort("-occurred_at").Limit(limit).All(&actions)
-	return actions, err
 }
 
 func (f AgentActionFilter) toBSON() bson.M {
@@ -202,11 +193,4 @@ func (r *agentActionRepository) DistinctAgents(ctx context.Context, ownerUserID 
 		})
 	}
 	return out, nil
-}
-
-func (r *agentActionRepository) ListByOwner(ctx context.Context, ownerUserID uuid.UUID, limit int64) ([]models.AgentAction, error) {
-	actions := make([]models.AgentAction, 0)
-	err := r.coll.Find(ctx, bson.M{"owner_user_id": ownerUserID}).
-		Sort("-occurred_at").Limit(limit).All(&actions)
-	return actions, err
 }

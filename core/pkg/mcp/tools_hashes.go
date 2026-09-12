@@ -105,7 +105,7 @@ func handleGetHash(ctx context.Context, s *Server, args getHashArgs) (toolResult
 	return toolResult{
 		Payload:     toHashView(hash),
 		OperationID: &hash.OperationID,
-		Summary:     "read a hash",
+		Summary:     fmt.Sprintf("read hash %s", hashLabel(hash)),
 	}, nil
 }
 
@@ -146,7 +146,7 @@ func handleCreateHash(ctx context.Context, s *Server, args createHashArgs) (tool
 	return toolResult{
 		Payload:     toHashView(hash),
 		OperationID: &opID,
-		Summary:     "recorded a hash",
+		Summary:     fmt.Sprintf("recorded hash %s", hashLabel(hash)),
 	}, nil
 }
 
@@ -207,7 +207,7 @@ func handleUpdateHash(ctx context.Context, s *Server, args updateHashArgs) (tool
 	return toolResult{
 		Payload:     toHashView(updated),
 		OperationID: &hash.OperationID,
-		Summary:     "updated a hash",
+		Summary:     fmt.Sprintf("updated hash %s", hashLabel(updated)),
 	}, nil
 }
 
@@ -245,11 +245,11 @@ func handleMarkHashCracked(ctx context.Context, s *Server, args markHashCrackedA
 	return toolResult{
 		Payload:     toHashView(updated),
 		OperationID: &hash.OperationID,
-		Summary:     "recorded a cracked hash and its credential",
+		Summary:     fmt.Sprintf("marked hash %s cracked and recorded its credential", hashLabel(updated)),
 	}, nil
 }
 
-// hashLabel is what appears on the timeline. Hash values are long and
+// hashLabel is how a hash is named on the activity rail. Hash values are long and
 // meaningless at a glance, so it matches how the rest of the app names them:
 // truncated, never the whole thing.
 func hashLabel(h *models.Hash) string {

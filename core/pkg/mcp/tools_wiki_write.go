@@ -190,7 +190,7 @@ func (s *Server) writeSection(ctx context.Context, args sectionWriteArgs, mode w
 	// gratuitous break.
 	if len(ids) == 1 {
 		return toolResult{
-			Payload:     appendResultFor(results[0]),
+			Payload:     newWikiWriteResult(wikiDocView{ID: results[0].ID, Title: results[0].Title}, results[0].Watchers),
 			OperationID: opID,
 			Summary:     fmt.Sprintf("%s %s", verb, results[0].Title),
 		}, nil
@@ -298,17 +298,11 @@ func handleEditWikiDocument(ctx context.Context, s *Server, args editWikiDocumen
 	}
 
 	payload := struct {
-		wikiDocView
-		Replacements int    `json:"replacements"`
-		Watchers     int    `json:"watchers"`
-		Note         string `json:"note,omitempty"`
+		wikiWriteResultView
+		Replacements int `json:"replacements"`
 	}{
-		wikiDocView:  toWikiDocView(doc),
-		Replacements: replacements,
-		Watchers:     watchers,
-	}
-	if watchers > 0 {
-		payload.Note = "The operator has this page open and saw your edit appear."
+		wikiWriteResultView: newWikiWriteResult(toWikiDocView(doc), watchers),
+		Replacements:        replacements,
 	}
 
 	return toolResult{
@@ -347,42 +341,10 @@ func handleUpdateWikiDocument(ctx context.Context, s *Server, args updateWikiDoc
 	}
 
 	return toolResult{
-		Payload:     appendResult(doc, watchers),
+		Payload:     newWikiWriteResult(toWikiDocView(doc), watchers),
 		OperationID: &doc.OperationID,
 		Summary:     fmt.Sprintf("rewrote wiki page %s", doc.Title),
 	}, nil
-}
-
-// appendResult tells the agent whether anyone actually watched the edit land.
-// It matters: an edit somebody saw appear needs no announcement, and one that
-// happened to an empty room might be worth mentioning to the operator later.
-func appendResult(doc *models.WikiDocument, watchers int) any {
-	view := struct {
-		wikiDocView
-		Watchers int    `json:"watchers"`
-		Note     string `json:"note,omitempty"`
-	}{wikiDocView: toWikiDocView(doc), Watchers: watchers}
-
-	if watchers > 0 {
-		view.Note = "The operator has this page open and saw your edit appear."
-	}
-	return view
-}
-
-// appendResultFor is the same single-page shape built from a batch row, for
-// the one-target case that keeps the original response.
-func appendResultFor(result sectionTargetResult) any {
-	view := struct {
-		ID       string `json:"id"`
-		Title    string `json:"title"`
-		Watchers int    `json:"watchers"`
-		Note     string `json:"note,omitempty"`
-	}{ID: result.ID, Title: result.Title, Watchers: result.Watchers}
-
-	if result.Watchers > 0 {
-		view.Note = "The operator has this page open and saw your edit appear."
-	}
-	return view
 }
 
 // writeBody applies a Markdown edit to a document through the collaboration

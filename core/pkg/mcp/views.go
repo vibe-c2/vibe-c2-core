@@ -223,6 +223,25 @@ type sectionWriteResultView struct {
 	Notes   []string              `json:"notes,omitempty"`
 }
 
+// wikiWriteResultView is what every single-page write returns.
+//
+// Watchers tells the agent whether anyone actually saw the edit land. It
+// matters: an edit somebody watched appear needs no announcement, and one that
+// happened to an empty room might be worth mentioning to the operator later.
+type wikiWriteResultView struct {
+	wikiDocView
+	Watchers int    `json:"watchers"`
+	Note     string `json:"note,omitempty"`
+}
+
+func newWikiWriteResult(doc wikiDocView, watchers int) wikiWriteResultView {
+	view := wikiWriteResultView{wikiDocView: doc, Watchers: watchers}
+	if watchers > 0 {
+		view.Note = "The operator has this page open and saw your edit appear."
+	}
+	return view
+}
+
 // wikiSearchHitView is a search result with the text that matched.
 //
 // Without the snippet a hit is a title, and deciding whether it is the right

@@ -72,7 +72,6 @@ type FileIngestor interface {
 // validation and event publishing that the GraphQL surface relies on, and
 // duplicating that here is how the two surfaces would drift apart.
 type Deps struct {
-	Operations  resolver.IOperationResolver
 	Hosts       resolver.IHostResolver
 	Credentials resolver.ICredentialResolver
 	Hashes      resolver.IHashResolver
@@ -80,13 +79,12 @@ type Deps struct {
 	WikiDocs    resolver.IWikiDocumentResolver
 	Timeline    resolver.ITimelineResolver
 
-	// Repositories used where no resolver method fits — chiefly listing the
-	// operations a user belongs to, and the wiki write path, which has to go
-	// through Hocuspocus rather than a plain document update.
-	OperationRepo    repository.IOperationRepository
-	WikiDocumentRepo repository.IWikiDocumentRepository
-	WikiFileRepo     repository.IWikiFileRepository
-	AgentActionRepo  repository.IAgentActionRepository
+	// Repositories used where no resolver method fits: listing the operations
+	// a user belongs to, attachments, and the audit trail. Wiki bodies do not
+	// go through a repository at all — see Hocuspocus below.
+	OperationRepo   repository.IOperationRepository
+	WikiFileRepo    repository.IWikiFileRepository
+	AgentActionRepo repository.IAgentActionRepository
 	// Files attaches bytes to a wiki page. The same ingest path the browser
 	// upload uses, so an agent's attachment is indistinguishable from a
 	// person's — same size cap, same type sniffing, same deny-list.
