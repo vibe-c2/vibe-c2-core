@@ -1,4 +1,5 @@
-import { BotIcon, CheckIcon, ShieldOffIcon, TriangleAlertIcon } from "lucide-react"
+import { BotIcon } from "lucide-react"
+import { OutcomeIcon } from "@/components/agent-activity/outcome-icon"
 import {
   Popover,
   PopoverContent,
@@ -85,7 +86,7 @@ function ActivityRow({
         latest ? "bg-accent/40" : "text-muted-foreground",
       )}
     >
-      <OutcomeIcon outcome={event.outcome} write={event.write} />
+      <OutcomeIcon outcome={event.outcome} write={event.write} size="sm" />
       <span className="min-w-0 flex-1">
         <span className="break-words">{event.summary || event.tool}</span>
         <span className="ml-1.5 font-mono text-[10px] text-muted-foreground/70">
@@ -93,25 +94,5 @@ function ActivityRow({
         </span>
       </span>
     </li>
-  )
-}
-
-// Refusals are shown distinctly from failures. An agent hitting the edge of
-// what its key allows is worth an operator noticing — it usually means the key
-// is scoped more narrowly than the work they asked for.
-function OutcomeIcon({ outcome, write }: { outcome: string; write: boolean }) {
-  if (outcome === "refused") {
-    return <ShieldOffIcon className="mt-0.5 size-3 shrink-0 text-amber-600 dark:text-amber-500" />
-  }
-  if (outcome === "error") {
-    return <TriangleAlertIcon className="mt-0.5 size-3 shrink-0 text-destructive" />
-  }
-  return (
-    <CheckIcon
-      className={cn(
-        "mt-0.5 size-3 shrink-0",
-        write ? "text-primary" : "text-muted-foreground/50",
-      )}
-    />
   )
 }

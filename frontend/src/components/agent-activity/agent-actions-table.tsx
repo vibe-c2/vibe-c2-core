@@ -1,14 +1,10 @@
-import {
-  BotIcon,
-  CheckIcon,
-  ShieldOffIcon,
-  TriangleAlertIcon,
-} from "lucide-react"
+import { BotIcon } from "lucide-react"
 import {
   VirtualizedDataTable,
   dataTableRowClass,
 } from "@/components/ui/virtualized-data-table"
 import { FormattedDateTimeText } from "@/components/ui/formatted-date-time-text"
+import { OutcomeIcon } from "@/components/agent-activity/outcome-icon"
 import { cn } from "@/lib/utils"
 import type { AgentActionFieldsFragment } from "@/graphql/gql/graphql"
 
@@ -112,28 +108,6 @@ export function AgentActionsTable({
             <FormattedDateTimeText date={action.occurredAt} />
           </div>
         </div>
-      )}
-    />
-  )
-}
-
-// Refusals render distinctly from failures: one means the agent hit the edge
-// of what its key allows, the other means something broke. Conflating them
-// would send an operator debugging a permission decision.
-function OutcomeIcon({ outcome, write }: { outcome: string; write: boolean }) {
-  if (outcome === "REFUSED") {
-    return (
-      <ShieldOffIcon className="size-4 shrink-0 text-amber-600 dark:text-amber-500" />
-    )
-  }
-  if (outcome === "ERROR") {
-    return <TriangleAlertIcon className="size-4 shrink-0 text-destructive" />
-  }
-  return (
-    <CheckIcon
-      className={cn(
-        "size-4 shrink-0",
-        write ? "text-primary" : "text-muted-foreground/40",
       )}
     />
   )
