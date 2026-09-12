@@ -124,6 +124,7 @@ type IWikiDocumentResolver interface {
 	WikiDocumentParentDocument(ctx context.Context, obj *models.WikiDocument) (*models.WikiDocument, error)
 	WikiDocumentParentDocumentID(ctx context.Context, obj *models.WikiDocument) (*string, error)
 	WikiDocumentHasContent(ctx context.Context, obj *models.WikiDocument) (bool, error)
+	WikiDocumentExcerpt(ctx context.Context, obj *models.WikiDocument, maxLength *int) (string, error)
 	WikiDocumentSourceTemplateID(ctx context.Context, obj *models.WikiDocument) (*string, error)
 	WikiDocumentChildDocuments(ctx context.Context, obj *models.WikiDocument) ([]*models.WikiDocument, error)
 	WikiDocumentChildCount(ctx context.Context, obj *models.WikiDocument) (int, error)

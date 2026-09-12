@@ -223,6 +223,11 @@ func (r *wikiDocumentResolver) HasContent(ctx context.Context, obj *models.WikiD
 	return r.WikiDocumentResolver.WikiDocumentHasContent(ctx, obj)
 }
 
+// Excerpt is the resolver for the excerpt field.
+func (r *wikiDocumentResolver) Excerpt(ctx context.Context, obj *models.WikiDocument, maxLength *int) (string, error) {
+	return r.WikiDocumentResolver.WikiDocumentExcerpt(ctx, obj, maxLength)
+}
+
 // SourceTemplateID is the resolver for the sourceTemplateId field.
 func (r *wikiDocumentResolver) SourceTemplateID(ctx context.Context, obj *models.WikiDocument) (*string, error) {
 	return r.WikiDocumentResolver.WikiDocumentSourceTemplateID(ctx, obj)

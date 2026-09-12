@@ -685,6 +685,7 @@ type ComplexityRoot struct {
 		DeletedAt         func(childComplexity int) int
 		DeletedBy         func(childComplexity int) int
 		Emoji             func(childComplexity int) int
+		Excerpt           func(childComplexity int, maxLength *int) int
 		HasContent        func(childComplexity int) int
 		ID                func(childComplexity int) int
 		Icon              func(childComplexity int) int
@@ -1102,6 +1103,7 @@ type WikiDocumentResolver interface {
 
 	ChildCount(ctx context.Context, obj *models.WikiDocument) (int, error)
 	HasContent(ctx context.Context, obj *models.WikiDocument) (bool, error)
+	Excerpt(ctx context.Context, obj *models.WikiDocument, maxLength *int) (string, error)
 
 	SourceTemplateID(ctx context.Context, obj *models.WikiDocument) (*string, error)
 
@@ -4535,6 +4537,17 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.WikiDocument.Emoji(childComplexity), true
+	case "WikiDocument.excerpt":
+		if e.ComplexityRoot.WikiDocument.Excerpt == nil {
+			break
+		}
+
+		args, err := ec.field_WikiDocument_excerpt_args(ctx, rawArgs)
+		if err != nil {
+			return 0, false
+		}
+
+		return e.ComplexityRoot.WikiDocument.Excerpt(childComplexity, args["maxLength"].(*int)), true
 	case "WikiDocument.hasContent":
 		if e.ComplexityRoot.WikiDocument.HasContent == nil {
 			break
@@ -7456,6 +7469,12 @@ type WikiDocument {
   # page from an empty container ("folder") without fetching the body — used by
   # the create-from-template picker to hide contentless templates.
   hasContent: Boolean!
+  # The opening of the body as plain text, for hover previews and any other
+  # surface that wants a taste of the page without shipping its whole body.
+  # Whitespace is collapsed, the cut lands on a word boundary and is marked
+  # with an ellipsis, and the length is counted in characters (default 280,
+  # capped at 1000). Empty for pages with no body.
+  excerpt(maxLength: Int): String!
   # True when this document is flagged as a reusable template. Any document
   # (in an operation or the Public tree) can be a template; the flag is toggled
   # by anyone with edit access via setWikiDocumentTemplate. Template documents
@@ -10170,6 +10189,17 @@ func (ec *executionContext) field_Subscription_wikiDocumentPresenceChanged_args(
 	return args, nil
 }
 
+func (ec *executionContext) field_WikiDocument_excerpt_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
+	var err error
+	args := map[string]any{}
+	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "maxLength", ec.unmarshalOInt2ᚖint)
+	if err != nil {
+		return nil, err
+	}
+	args["maxLength"] = arg0
+	return args, nil
+}
+
 func (ec *executionContext) field___Directive_args_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
 	var err error
 	args := map[string]any{}
@@ -12463,6 +12493,8 @@ func (ec *executionContext) fieldContext_Credential_backlinks(_ context.Context,
 				return ec.fieldContext_WikiDocument_childCount(ctx, field)
 			case "hasContent":
 				return ec.fieldContext_WikiDocument_hasContent(ctx, field)
+			case "excerpt":
+				return ec.fieldContext_WikiDocument_excerpt(ctx, field)
 			case "isTemplate":
 				return ec.fieldContext_WikiDocument_isTemplate(ctx, field)
 			case "sourceTemplateId":
@@ -13773,6 +13805,8 @@ func (ec *executionContext) fieldContext_Hash_backlinks(_ context.Context, field
 				return ec.fieldContext_WikiDocument_childCount(ctx, field)
 			case "hasContent":
 				return ec.fieldContext_WikiDocument_hasContent(ctx, field)
+			case "excerpt":
+				return ec.fieldContext_WikiDocument_excerpt(ctx, field)
 			case "isTemplate":
 				return ec.fieldContext_WikiDocument_isTemplate(ctx, field)
 			case "sourceTemplateId":
@@ -19788,6 +19822,8 @@ func (ec *executionContext) fieldContext_Mutation_createWikiDocument(ctx context
 				return ec.fieldContext_WikiDocument_childCount(ctx, field)
 			case "hasContent":
 				return ec.fieldContext_WikiDocument_hasContent(ctx, field)
+			case "excerpt":
+				return ec.fieldContext_WikiDocument_excerpt(ctx, field)
 			case "isTemplate":
 				return ec.fieldContext_WikiDocument_isTemplate(ctx, field)
 			case "sourceTemplateId":
@@ -19907,6 +19943,8 @@ func (ec *executionContext) fieldContext_Mutation_updateWikiDocument(ctx context
 				return ec.fieldContext_WikiDocument_childCount(ctx, field)
 			case "hasContent":
 				return ec.fieldContext_WikiDocument_hasContent(ctx, field)
+			case "excerpt":
+				return ec.fieldContext_WikiDocument_excerpt(ctx, field)
 			case "isTemplate":
 				return ec.fieldContext_WikiDocument_isTemplate(ctx, field)
 			case "sourceTemplateId":
@@ -20026,6 +20064,8 @@ func (ec *executionContext) fieldContext_Mutation_reorderWikiDocumentSiblings(ct
 				return ec.fieldContext_WikiDocument_childCount(ctx, field)
 			case "hasContent":
 				return ec.fieldContext_WikiDocument_hasContent(ctx, field)
+			case "excerpt":
+				return ec.fieldContext_WikiDocument_excerpt(ctx, field)
 			case "isTemplate":
 				return ec.fieldContext_WikiDocument_isTemplate(ctx, field)
 			case "sourceTemplateId":
@@ -20204,6 +20244,8 @@ func (ec *executionContext) fieldContext_Mutation_duplicateWikiDocument(ctx cont
 				return ec.fieldContext_WikiDocument_childCount(ctx, field)
 			case "hasContent":
 				return ec.fieldContext_WikiDocument_hasContent(ctx, field)
+			case "excerpt":
+				return ec.fieldContext_WikiDocument_excerpt(ctx, field)
 			case "isTemplate":
 				return ec.fieldContext_WikiDocument_isTemplate(ctx, field)
 			case "sourceTemplateId":
@@ -20323,6 +20365,8 @@ func (ec *executionContext) fieldContext_Mutation_setWikiDocumentTemplate(ctx co
 				return ec.fieldContext_WikiDocument_childCount(ctx, field)
 			case "hasContent":
 				return ec.fieldContext_WikiDocument_hasContent(ctx, field)
+			case "excerpt":
+				return ec.fieldContext_WikiDocument_excerpt(ctx, field)
 			case "isTemplate":
 				return ec.fieldContext_WikiDocument_isTemplate(ctx, field)
 			case "sourceTemplateId":
@@ -20442,6 +20486,8 @@ func (ec *executionContext) fieldContext_Mutation_instantiateTemplate(ctx contex
 				return ec.fieldContext_WikiDocument_childCount(ctx, field)
 			case "hasContent":
 				return ec.fieldContext_WikiDocument_hasContent(ctx, field)
+			case "excerpt":
+				return ec.fieldContext_WikiDocument_excerpt(ctx, field)
 			case "isTemplate":
 				return ec.fieldContext_WikiDocument_isTemplate(ctx, field)
 			case "sourceTemplateId":
@@ -20561,6 +20607,8 @@ func (ec *executionContext) fieldContext_Mutation_restoreWikiDocument(ctx contex
 				return ec.fieldContext_WikiDocument_childCount(ctx, field)
 			case "hasContent":
 				return ec.fieldContext_WikiDocument_hasContent(ctx, field)
+			case "excerpt":
+				return ec.fieldContext_WikiDocument_excerpt(ctx, field)
 			case "isTemplate":
 				return ec.fieldContext_WikiDocument_isTemplate(ctx, field)
 			case "sourceTemplateId":
@@ -20877,6 +20925,8 @@ func (ec *executionContext) fieldContext_Mutation_restoreWikiDocumentBackup(ctx 
 				return ec.fieldContext_WikiDocument_childCount(ctx, field)
 			case "hasContent":
 				return ec.fieldContext_WikiDocument_hasContent(ctx, field)
+			case "excerpt":
+				return ec.fieldContext_WikiDocument_excerpt(ctx, field)
 			case "isTemplate":
 				return ec.fieldContext_WikiDocument_isTemplate(ctx, field)
 			case "sourceTemplateId":
@@ -23801,6 +23851,8 @@ func (ec *executionContext) fieldContext_Query_wikiDocumentsReferencingHash(ctx 
 				return ec.fieldContext_WikiDocument_childCount(ctx, field)
 			case "hasContent":
 				return ec.fieldContext_WikiDocument_hasContent(ctx, field)
+			case "excerpt":
+				return ec.fieldContext_WikiDocument_excerpt(ctx, field)
 			case "isTemplate":
 				return ec.fieldContext_WikiDocument_isTemplate(ctx, field)
 			case "sourceTemplateId":
@@ -24963,6 +25015,8 @@ func (ec *executionContext) fieldContext_Query_wikiDocument(ctx context.Context,
 				return ec.fieldContext_WikiDocument_childCount(ctx, field)
 			case "hasContent":
 				return ec.fieldContext_WikiDocument_hasContent(ctx, field)
+			case "excerpt":
+				return ec.fieldContext_WikiDocument_excerpt(ctx, field)
 			case "isTemplate":
 				return ec.fieldContext_WikiDocument_isTemplate(ctx, field)
 			case "sourceTemplateId":
@@ -25149,6 +25203,8 @@ func (ec *executionContext) fieldContext_Query_wikiDocumentTree(ctx context.Cont
 				return ec.fieldContext_WikiDocument_childCount(ctx, field)
 			case "hasContent":
 				return ec.fieldContext_WikiDocument_hasContent(ctx, field)
+			case "excerpt":
+				return ec.fieldContext_WikiDocument_excerpt(ctx, field)
 			case "isTemplate":
 				return ec.fieldContext_WikiDocument_isTemplate(ctx, field)
 			case "sourceTemplateId":
@@ -25268,6 +25324,8 @@ func (ec *executionContext) fieldContext_Query_wikiTemplates(ctx context.Context
 				return ec.fieldContext_WikiDocument_childCount(ctx, field)
 			case "hasContent":
 				return ec.fieldContext_WikiDocument_hasContent(ctx, field)
+			case "excerpt":
+				return ec.fieldContext_WikiDocument_excerpt(ctx, field)
 			case "isTemplate":
 				return ec.fieldContext_WikiDocument_isTemplate(ctx, field)
 			case "sourceTemplateId":
@@ -25446,6 +25504,8 @@ func (ec *executionContext) fieldContext_Query_wikiDocumentChildren(ctx context.
 				return ec.fieldContext_WikiDocument_childCount(ctx, field)
 			case "hasContent":
 				return ec.fieldContext_WikiDocument_hasContent(ctx, field)
+			case "excerpt":
+				return ec.fieldContext_WikiDocument_excerpt(ctx, field)
 			case "isTemplate":
 				return ec.fieldContext_WikiDocument_isTemplate(ctx, field)
 			case "sourceTemplateId":
@@ -25565,6 +25625,8 @@ func (ec *executionContext) fieldContext_Query_wikiDocumentTreeRevealPath(ctx co
 				return ec.fieldContext_WikiDocument_childCount(ctx, field)
 			case "hasContent":
 				return ec.fieldContext_WikiDocument_hasContent(ctx, field)
+			case "excerpt":
+				return ec.fieldContext_WikiDocument_excerpt(ctx, field)
 			case "isTemplate":
 				return ec.fieldContext_WikiDocument_isTemplate(ctx, field)
 			case "sourceTemplateId":
@@ -25936,6 +25998,8 @@ func (ec *executionContext) fieldContext_Query_wikiDocumentTrashedDescendants(ct
 				return ec.fieldContext_WikiDocument_childCount(ctx, field)
 			case "hasContent":
 				return ec.fieldContext_WikiDocument_hasContent(ctx, field)
+			case "excerpt":
+				return ec.fieldContext_WikiDocument_excerpt(ctx, field)
 			case "isTemplate":
 				return ec.fieldContext_WikiDocument_isTemplate(ctx, field)
 			case "sourceTemplateId":
@@ -26055,6 +26119,8 @@ func (ec *executionContext) fieldContext_Query_wikiDocumentBacklinks(ctx context
 				return ec.fieldContext_WikiDocument_childCount(ctx, field)
 			case "hasContent":
 				return ec.fieldContext_WikiDocument_hasContent(ctx, field)
+			case "excerpt":
+				return ec.fieldContext_WikiDocument_excerpt(ctx, field)
 			case "isTemplate":
 				return ec.fieldContext_WikiDocument_isTemplate(ctx, field)
 			case "sourceTemplateId":
@@ -26174,6 +26240,8 @@ func (ec *executionContext) fieldContext_Query_wikiDocumentsReferencingCredentia
 				return ec.fieldContext_WikiDocument_childCount(ctx, field)
 			case "hasContent":
 				return ec.fieldContext_WikiDocument_hasContent(ctx, field)
+			case "excerpt":
+				return ec.fieldContext_WikiDocument_excerpt(ctx, field)
 			case "isTemplate":
 				return ec.fieldContext_WikiDocument_isTemplate(ctx, field)
 			case "sourceTemplateId":
@@ -29070,6 +29138,8 @@ func (ec *executionContext) fieldContext_Task_wikiReferences(_ context.Context, 
 				return ec.fieldContext_WikiDocument_childCount(ctx, field)
 			case "hasContent":
 				return ec.fieldContext_WikiDocument_hasContent(ctx, field)
+			case "excerpt":
+				return ec.fieldContext_WikiDocument_excerpt(ctx, field)
 			case "isTemplate":
 				return ec.fieldContext_WikiDocument_isTemplate(ctx, field)
 			case "sourceTemplateId":
@@ -31228,6 +31298,8 @@ func (ec *executionContext) fieldContext_WikiDocument_parentDocument(_ context.C
 				return ec.fieldContext_WikiDocument_childCount(ctx, field)
 			case "hasContent":
 				return ec.fieldContext_WikiDocument_hasContent(ctx, field)
+			case "excerpt":
+				return ec.fieldContext_WikiDocument_excerpt(ctx, field)
 			case "isTemplate":
 				return ec.fieldContext_WikiDocument_isTemplate(ctx, field)
 			case "sourceTemplateId":
@@ -31346,6 +31418,8 @@ func (ec *executionContext) fieldContext_WikiDocument_childDocuments(_ context.C
 				return ec.fieldContext_WikiDocument_childCount(ctx, field)
 			case "hasContent":
 				return ec.fieldContext_WikiDocument_hasContent(ctx, field)
+			case "excerpt":
+				return ec.fieldContext_WikiDocument_excerpt(ctx, field)
 			case "isTemplate":
 				return ec.fieldContext_WikiDocument_isTemplate(ctx, field)
 			case "sourceTemplateId":
@@ -31617,6 +31691,47 @@ func (ec *executionContext) fieldContext_WikiDocument_hasContent(_ context.Conte
 	return fc, nil
 }
 
+func (ec *executionContext) _WikiDocument_excerpt(ctx context.Context, field graphql.CollectedField, obj *models.WikiDocument) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_WikiDocument_excerpt,
+		func(ctx context.Context) (any, error) {
+			fc := graphql.GetFieldContext(ctx)
+			return ec.Resolvers.WikiDocument().Excerpt(ctx, obj, fc.Args["maxLength"].(*int))
+		},
+		nil,
+		ec.marshalNString2string,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_WikiDocument_excerpt(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "WikiDocument",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			err = ec.Recover(ctx, r)
+			ec.Error(ctx, err)
+		}
+	}()
+	ctx = graphql.WithFieldContext(ctx, fc)
+	if fc.Args, err = ec.field_WikiDocument_excerpt_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
+		ec.Error(ctx, err)
+		return fc, err
+	}
+	return fc, nil
+}
+
 func (ec *executionContext) _WikiDocument_isTemplate(ctx context.Context, field graphql.CollectedField, obj *models.WikiDocument) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
@@ -31812,6 +31927,8 @@ func (ec *executionContext) fieldContext_WikiDocument_backlinks(_ context.Contex
 				return ec.fieldContext_WikiDocument_childCount(ctx, field)
 			case "hasContent":
 				return ec.fieldContext_WikiDocument_hasContent(ctx, field)
+			case "excerpt":
+				return ec.fieldContext_WikiDocument_excerpt(ctx, field)
 			case "isTemplate":
 				return ec.fieldContext_WikiDocument_isTemplate(ctx, field)
 			case "sourceTemplateId":
@@ -33034,6 +33151,8 @@ func (ec *executionContext) fieldContext_WikiDocumentEdge_node(_ context.Context
 				return ec.fieldContext_WikiDocument_childCount(ctx, field)
 			case "hasContent":
 				return ec.fieldContext_WikiDocument_hasContent(ctx, field)
+			case "excerpt":
+				return ec.fieldContext_WikiDocument_excerpt(ctx, field)
 			case "isTemplate":
 				return ec.fieldContext_WikiDocument_isTemplate(ctx, field)
 			case "sourceTemplateId":
@@ -33384,6 +33503,8 @@ func (ec *executionContext) fieldContext_WikiDocumentEvent_document(_ context.Co
 				return ec.fieldContext_WikiDocument_childCount(ctx, field)
 			case "hasContent":
 				return ec.fieldContext_WikiDocument_hasContent(ctx, field)
+			case "excerpt":
+				return ec.fieldContext_WikiDocument_excerpt(ctx, field)
 			case "isTemplate":
 				return ec.fieldContext_WikiDocument_isTemplate(ctx, field)
 			case "sourceTemplateId":
@@ -33713,6 +33834,8 @@ func (ec *executionContext) fieldContext_WikiDocumentVisit_document(_ context.Co
 				return ec.fieldContext_WikiDocument_childCount(ctx, field)
 			case "hasContent":
 				return ec.fieldContext_WikiDocument_hasContent(ctx, field)
+			case "excerpt":
+				return ec.fieldContext_WikiDocument_excerpt(ctx, field)
 			case "isTemplate":
 				return ec.fieldContext_WikiDocument_isTemplate(ctx, field)
 			case "sourceTemplateId":
@@ -34097,6 +34220,8 @@ func (ec *executionContext) fieldContext_WikiSearchHit_document(_ context.Contex
 				return ec.fieldContext_WikiDocument_childCount(ctx, field)
 			case "hasContent":
 				return ec.fieldContext_WikiDocument_hasContent(ctx, field)
+			case "excerpt":
+				return ec.fieldContext_WikiDocument_excerpt(ctx, field)
 			case "isTemplate":
 				return ec.fieldContext_WikiDocument_isTemplate(ctx, field)
 			case "sourceTemplateId":
@@ -45624,6 +45749,42 @@ func (ec *executionContext) _WikiDocument(ctx context.Context, sel ast.Selection
 					}
 				}()
 				res = ec._WikiDocument_hasContent(ctx, field, obj)
+				if res == graphql.Null {
+					atomic.AddUint32(&fs.Invalids, 1)
+				}
+				return res
+			}
+
+			if field.Deferrable != nil {
+				dfs, ok := deferred[field.Deferrable.Label]
+				di := 0
+				if ok {
+					dfs.AddField(field)
+					di = len(dfs.Values) - 1
+				} else {
+					dfs = graphql.NewFieldSet([]graphql.CollectedField{field})
+					deferred[field.Deferrable.Label] = dfs
+				}
+				dfs.Concurrently(di, func(ctx context.Context) graphql.Marshaler {
+					return innerFunc(ctx, dfs)
+				})
+
+				// don't run the out.Concurrently() call below
+				out.Values[i] = graphql.Null
+				continue
+			}
+
+			out.Concurrently(i, func(ctx context.Context) graphql.Marshaler { return innerFunc(ctx, out) })
+		case "excerpt":
+			field := field
+
+			innerFunc := func(ctx context.Context, fs *graphql.FieldSet) (res graphql.Marshaler) {
+				defer func() {
+					if r := recover(); r != nil {
+						ec.Error(ctx, ec.Recover(ctx, r))
+					}
+				}()
+				res = ec._WikiDocument_excerpt(ctx, field, obj)
 				if res == graphql.Null {
 					atomic.AddUint32(&fs.Invalids, 1)
 				}

@@ -149,6 +149,8 @@ models:
         resolver: true
       hasContent:
         resolver: true
+      excerpt:
+        resolver: true
       sourceTemplateId:
         resolver: true
       childDocuments:

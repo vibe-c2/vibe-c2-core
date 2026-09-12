@@ -8,12 +8,21 @@ import { WikiDocumentChipById } from "@/components/wiki/wiki-document-chip-view"
  *
  * Failure modes (missing id / loading / fetch error / deleted) all render
  * inside the view so the chip footprint stays stable across states.
+ *
+ * Resting the pointer on a loaded chip opens a page preview card — see
+ * wiki-document-hover-preview.tsx. Enabled here and not on the picker or
+ * list chips, because prose is where a reader meets a reference cold.
  */
 export function WikiDocumentChip({ node, selected }: NodeViewProps) {
   const id = (node.attrs.documentId as string | null) ?? ""
   return (
     <NodeViewWrapper as="span" className="wiki-document-chip-wrapper">
-      <WikiDocumentChipById id={id} gateOnViewport selected={selected} />
+      <WikiDocumentChipById
+        id={id}
+        gateOnViewport
+        selected={selected}
+        previewOnHover
+      />
     </NodeViewWrapper>
   )
 }

@@ -54,6 +54,12 @@ type WikiDocument {
   # page from an empty container ("folder") without fetching the body — used by
   # the create-from-template picker to hide contentless templates.
   hasContent: Boolean!
+  # The opening of the body as plain text, for hover previews and any other
+  # surface that wants a taste of the page without shipping its whole body.
+  # Whitespace is collapsed, the cut lands on a word boundary and is marked
+  # with an ellipsis, and the length is counted in characters (default 280,
+  # capped at 1000). Empty for pages with no body.
+  excerpt(maxLength: Int): String!
   # True when this document is flagged as a reusable template. Any document
   # (in an operation or the Public tree) can be a template; the flag is toggled
   # by anyone with edit access via setWikiDocumentTemplate. Template documents

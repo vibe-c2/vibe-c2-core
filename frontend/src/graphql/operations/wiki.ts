@@ -324,6 +324,30 @@ export const WikiDocumentLiteQuery = graphql(`
   }
 `)
 
+// Hover-preview projection for inline /doc chips: the chip fields plus the
+// opening of the body and enough context to place the page. `excerpt` is cut
+// server-side so a preview never ships a whole body, and `ancestors` is the
+// breadcrumb that tells two same-titled pages apart.
+export const WikiDocumentPreviewQuery = graphql(`
+  query WikiDocumentPreview($id: ID!, $excerptLength: Int) {
+    wikiDocument(id: $id) {
+      ...WikiDocumentLiteFields
+      excerpt(maxLength: $excerptLength)
+      hasContent
+      childCount
+      updatedAt
+      ancestors {
+        id
+        title
+        emoji
+        icon
+        color
+        isDeleted
+      }
+    }
+  }
+`)
+
 export const WikiDocumentBacklinksQuery = graphql(`
   query WikiDocumentBacklinks($documentId: ID!) {
     wikiDocumentBacklinks(documentId: $documentId) {

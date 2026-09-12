@@ -17,6 +17,7 @@ import {
   WikiDocumentTrashCountDocument,
   WikiDocumentDocument,
   WikiDocumentLiteDocument,
+  WikiDocumentPreviewDocument,
   WikiDocumentBacklinksDocument,
   WikiRecentDocumentsDocument,
   WikiSearchDocument,
@@ -104,6 +105,10 @@ export const wikiKeys = {
   // Lightweight per-doc projection used by inline /doc chips. Separate from
   // `detail` so chips don't trigger a refetch of the full document body.
   lite: (id: string) => [...wikiKeys.all, "lite", id] as const,
+  // Hover-preview projection for the same chips: lite fields plus an excerpt
+  // of the body. Its own family so opening a preview never refetches the
+  // chip, and a body edit can invalidate previews without touching chips.
+  preview: (id: string) => [...wikiKeys.all, "preview", id] as const,
   backlinks: (documentId: string) =>
     [...wikiKeys.all, "backlinks", documentId] as const,
 }
@@ -414,6 +419,40 @@ export function useWikiDocumentLite(
     enabled: !!documentId && (options?.enabled ?? true),
     staleTime: 30_000,
   })
+}
+
+// Excerpt length requested by the hover preview. About two lines of prose in
+// the card; the server caps the field at 1000 regardless.
+const PREVIEW_EXCERPT_LENGTH = 280
+
+// What the hover preview on a /doc chip shows. Fetched only once the card is
+// about to open (`enabled`), so hovering past a chip costs nothing and a page
+// with fifty chips does not fan out fifty body reads on mount. The staleTime
+// matches the lite query: the wikiDocumentChanged subscription refreshes it
+// when the page actually changes.
+export function useWikiDocumentPreview(
+  documentId: string,
+  options?: { enabled?: boolean },
+) {
+  return useQuery({
+    ...wikiDocumentPreviewOptions(documentId),
+    enabled: !!documentId && (options?.enabled ?? true),
+  })
+}
+
+// Shared by the hook and by the chip's pointer-enter prefetch, so the card
+// usually has its data by the time the open delay elapses and the operator
+// sees content rather than a skeleton.
+export function wikiDocumentPreviewOptions(documentId: string) {
+  return {
+    queryKey: wikiKeys.preview(documentId),
+    queryFn: () =>
+      graphqlClient(WikiDocumentPreviewDocument, {
+        id: documentId,
+        excerptLength: PREVIEW_EXCERPT_LENGTH,
+      }),
+    staleTime: 30_000,
+  }
 }
 
 // Documents that reference this one via inline /doc chips. Trashed referrers
@@ -806,6 +845,7 @@ export function useWikiDocumentChangedSubscription(operationId: string) {
         if (documentId) {
           queryClient.removeQueries({ queryKey: wikiKeys.detail(documentId) })
           queryClient.removeQueries({ queryKey: wikiKeys.lite(documentId) })
+          queryClient.removeQueries({ queryKey: wikiKeys.preview(documentId) })
           queryClient.removeQueries({ queryKey: wikiKeys.backups(documentId) })
           queryClient.removeQueries({ queryKey: wikiKeys.trashedDescendants(documentId) })
         } else {
@@ -822,6 +862,7 @@ export function useWikiDocumentChangedSubscription(operationId: string) {
         // Seed detail cache on create/update so navigating to the doc is instant.
         queryClient.invalidateQueries({ queryKey: wikiKeys.detail(documentId) })
         queryClient.invalidateQueries({ queryKey: wikiKeys.lite(documentId) })
+        queryClient.invalidateQueries({ queryKey: wikiKeys.preview(documentId) })
         // The export dialog renders the body; a body change makes its copy
         // stale even though it is keyed separately from the document itself.
         queryClient.invalidateQueries({ queryKey: wikiKeys.markdown(documentId) })

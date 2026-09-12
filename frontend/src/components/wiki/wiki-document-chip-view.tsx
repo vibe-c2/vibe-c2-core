@@ -1,9 +1,10 @@
-import { forwardRef, type MouseEvent, type ReactNode } from "react"
+import { forwardRef, type MouseEvent, type ReactElement, type ReactNode } from "react"
 
 import "./wiki-chips.css"
 import { Link, useNavigate } from "react-router"
 import { FileTextIcon, LinkIcon, XIcon } from "lucide-react"
 import { DocumentIcon } from "@/components/wiki/document-icon"
+import { WikiDocumentHoverPreview } from "@/components/wiki/wiki-document-hover-preview"
 import { useWikiDocumentLite } from "@/graphql/hooks/wiki"
 import { useInViewport } from "@/hooks/use-in-viewport"
 import { GraphQLRequestError } from "@/lib/graphql-client"
@@ -50,6 +51,12 @@ interface WikiDocumentChipViewProps {
   onRemove?: () => void
   /** Accessible label for the remove button. Falls back to "Remove". */
   removeAriaLabel?: string
+  /**
+   * Open a page preview card after the pointer rests on a loaded chip. On by
+   * default only for chips in prose (the editor NodeView); pickers and lists
+   * that already show the page's context leave it off.
+   */
+  previewOnHover?: boolean
 }
 
 /**
@@ -75,6 +82,7 @@ export const WikiDocumentChipView = forwardRef<
     onClick,
     onRemove,
     removeAriaLabel,
+    previewOnHover = false,
   },
   ref,
 ) {
@@ -145,6 +153,14 @@ export const WikiDocumentChipView = forwardRef<
 
   const isDeleted = !!doc.deletedAt
   const displayTitle = doc.title || "Untitled"
+  // Only a live, loaded page gets a preview: the broken, loading and trashed
+  // branches above already say everything there is to say in the chip.
+  const withPreview = (chip: ReactElement) =>
+    previewOnHover ? (
+      <WikiDocumentHoverPreview id={doc.id}>{chip}</WikiDocumentHoverPreview>
+    ) : (
+      chip
+    )
   const body: ReactNode = (
     <>
       <span className="wiki-document-chip__icon">
@@ -177,7 +193,7 @@ export const WikiDocumentChipView = forwardRef<
   }
 
   if (onClick && !onRemove) {
-    return (
+    return withPreview(
       <button
         ref={ref as React.Ref<HTMLButtonElement>}
         type="button"
@@ -186,12 +202,12 @@ export const WikiDocumentChipView = forwardRef<
         title={displayTitle}
       >
         {body}
-      </button>
+      </button>,
     )
   }
 
   if (renderAsLink) {
-    return (
+    return withPreview(
       <Link
         ref={ref as React.Ref<HTMLAnchorElement>}
         to={`/wiki/${doc.id}`}
@@ -199,7 +215,7 @@ export const WikiDocumentChipView = forwardRef<
         title={displayTitle}
       >
         {body}
-      </Link>
+      </Link>,
     )
   }
 
@@ -222,7 +238,7 @@ export const WikiDocumentChipView = forwardRef<
       }
       navigate(href)
     }
-    return (
+    return withPreview(
       <span
         ref={ref as React.Ref<HTMLSpanElement>}
         role="button"
@@ -244,11 +260,11 @@ export const WikiDocumentChipView = forwardRef<
       >
         {body}
         {removeNode}
-      </span>
+      </span>,
     )
   }
 
-  return (
+  return withPreview(
     <span
       ref={ref as React.Ref<HTMLSpanElement>}
       className={cn("wiki-document-chip", selected && "is-selected")}
@@ -256,7 +272,7 @@ export const WikiDocumentChipView = forwardRef<
     >
       {body}
       {removeNode}
-    </span>
+    </span>,
   )
 })
 
@@ -327,6 +343,7 @@ interface WikiDocumentChipByIdProps {
   onClick?: () => void
   onRemove?: () => void
   removeAriaLabel?: string
+  previewOnHover?: boolean
 }
 
 /**
@@ -342,6 +359,7 @@ export function WikiDocumentChipById({
   onClick,
   onRemove,
   removeAriaLabel,
+  previewOnHover,
 }: WikiDocumentChipByIdProps) {
   const { ref, isVisible } = useInViewport<HTMLElement>()
   const effectivelyVisible = gateOnViewport ? isVisible : true
@@ -367,6 +385,7 @@ export function WikiDocumentChipById({
       onClick={onClick}
       onRemove={onRemove}
       removeAriaLabel={removeAriaLabel}
+      previewOnHover={previewOnHover}
     />
   )
 }
