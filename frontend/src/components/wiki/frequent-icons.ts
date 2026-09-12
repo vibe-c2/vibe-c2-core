@@ -9,6 +9,11 @@ import {
   ALL_LUCIDE_NAMES,
   ICON_LOOKUP,
 } from "@/components/wiki/icon-catalog"
+import {
+  ALL_SIMPLE_ICON_SLUGS,
+  isSimpleIconName,
+  simpleIconSlug,
+} from "@/components/wiki/simple-icon-catalog"
 
 const STORAGE_KEY = "wiki_frequent_icons"
 // Cap on persisted entries — small enough that JSON parse stays cheap, large
@@ -23,6 +28,17 @@ interface FrequentEntry {
   count: number
   /** Tiebreaker when two icons have the same count — most-recent wins. */
   lastUsed: number
+}
+
+// A stored name is either a bare lucide name or a brand icon encoded
+// `si:<slug>`. Both are recorded on pick, so both have to be recognised on
+// read — checking only the lucide catalog silently drops every brand icon a
+// user picks, which is exactly what it did.
+const SIMPLE_SLUGS: ReadonlySet<string> = new Set(ALL_SIMPLE_ICON_SLUGS)
+
+function isRenderable(name: string): boolean {
+  if (isSimpleIconName(name)) return SIMPLE_SLUGS.has(simpleIconSlug(name))
+  return !!ICON_LOOKUP[name] || ALL_LUCIDE_NAMES.has(name)
 }
 
 function load(): FrequentEntry[] {
@@ -80,16 +96,16 @@ export function recordFrequentIconUsage(name: string) {
 }
 
 /**
- * Returns the top frequently-used icon names, filtered to those still
- * resolvable in the current lucide bundle. Stale entries (icon removed
- * from lucide, or renamed) are skipped silently so the picker never tries
- * to render a missing component.
+ * Returns the top frequently-used icon names — lucide and brand alike —
+ * filtered to those still resolvable in the current bundles. Stale entries
+ * (an icon removed or renamed upstream) are skipped silently so the picker
+ * never tries to render a missing component.
  */
 export function loadFrequentIconNames(limit = MAX_DISPLAYED): string[] {
   const entries = sortByFrequency(load())
   const result: string[] = []
   for (const e of entries) {
-    if (!ICON_LOOKUP[e.name] && !ALL_LUCIDE_NAMES.has(e.name)) continue
+    if (!isRenderable(e.name)) continue
     result.push(e.name)
     if (result.length >= limit) break
   }
