@@ -1,8 +1,6 @@
 package mcp
 
 import (
-	"fmt"
-
 	"github.com/vibe-c2/vibe-c2-core/core/pkg/graphql/model"
 )
 
@@ -76,20 +74,4 @@ func toLoginInputs(in []loginArg) []*model.LoginInput {
 		out = append(out, entry)
 	}
 	return out
-}
-
-// optionalInt mirrors optionalString for the score fields, where zero is a
-// legitimate value and "not supplied" has to be distinguishable from it.
-func optionalInt(v, sentinel int) *int {
-	if v == sentinel {
-		return nil
-	}
-	return &v
-}
-
-func validateScore(name string, v int) error {
-	if v < 0 || v > 10 {
-		return fmt.Errorf("%s must be between 0 and 10", name)
-	}
-	return nil
 }

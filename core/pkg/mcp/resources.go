@@ -18,7 +18,7 @@ import (
 // directly. They read through exactly the same authorization as the tools —
 // a resource URI is not a way around the scope list or the role ceiling.
 const (
-	wikiResourceScheme  = "vibe://op/"
+	opResourceScheme    = "vibe://op/"
 	focusResourceURI    = "vibe://session/focus"
 	guideResourceURI    = "vibe://guide"
 	resourceMIMEText    = "text/markdown"
@@ -133,10 +133,10 @@ func textResource(uri, mime, text string) *mcp.ReadResourceResult {
 
 // parseVibeURI splits vibe://op/{operationId}/{kind}/{id}.
 func parseVibeURI(uri string) (uuid.UUID, string, string, error) {
-	if !strings.HasPrefix(uri, wikiResourceScheme) {
+	if !strings.HasPrefix(uri, opResourceScheme) {
 		return uuid.Nil, "", "", fmt.Errorf("unknown resource %q", uri)
 	}
-	rest := strings.TrimPrefix(uri, wikiResourceScheme)
+	rest := strings.TrimPrefix(uri, opResourceScheme)
 
 	var kind, segment string
 	switch {

@@ -1,10 +1,7 @@
 package mcp
 
 import (
-	"fmt"
 	"strings"
-
-	"github.com/google/uuid"
 )
 
 // What an attachment is, for the purpose of reading it.
@@ -90,13 +87,4 @@ func extensionOf(filename string) string {
 		return ""
 	}
 	return filename[i+1:]
-}
-
-// parseUUIDArg keeps id validation messages consistent across tools.
-func parseUUIDArg(value, field string) (uuid.UUID, error) {
-	id, err := uuid.Parse(value)
-	if err != nil {
-		return uuid.Nil, fmt.Errorf("%s %q is not a valid id", field, value)
-	}
-	return id, nil
 }

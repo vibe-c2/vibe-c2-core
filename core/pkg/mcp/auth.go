@@ -59,6 +59,16 @@ func agentFromContext(ctx context.Context) (*gqlctx.AgentInfo, error) {
 	return agent, nil
 }
 
+// agentKeyIDFromContext is the tolerant form of agentFromContext for the
+// audit and replay paths, which need the key even when the call was refused
+// before reaching a handler and must not add an error of their own.
+func agentKeyIDFromContext(ctx context.Context) string {
+	if agent := gqlctx.AuthFromContext(ctx).Agent; agent != nil {
+		return agent.AgentKeyID
+	}
+	return ""
+}
+
 // requireWrites gates every mutating tool. This is a second, independent check
 // on top of the role cap: a key may be operator-capped for reading depth while
 // still being refused writes, and an operator who turns writes off expects

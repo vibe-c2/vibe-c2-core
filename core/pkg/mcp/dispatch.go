@@ -71,10 +71,7 @@ func register[A any](s *Server, tool *mcp.Tool, kind toolKind, fn handlerFunc[A]
 		if keyed, ok := any(args).(idempotent); ok {
 			idemKey = keyed.idempotencyKey()
 		}
-		agentKeyID := ""
-		if agent := gqlctx.AuthFromContext(ctx).Agent; agent != nil {
-			agentKeyID = agent.AgentKeyID
-		}
+		agentKeyID := agentKeyIDFromContext(ctx)
 		if cached, hit := s.replay(ctx, agentKeyID, tool.Name, idemKey); hit {
 			return &mcp.CallToolResult{
 				Content: []mcp.Content{&mcp.TextContent{Text: cached}},

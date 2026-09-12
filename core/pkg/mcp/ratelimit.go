@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/vibe-c2/vibe-c2-core/core/pkg/graphql/gqlctx"
 	"go.uber.org/zap"
 )
 
@@ -116,13 +115,4 @@ func (s *Server) checkRateLimit(ctx context.Context, kind toolKind) error {
 	}
 
 	return nil
-}
-
-// agentKeyIDFromContext is used by the audit path, which needs the key even
-// when the call was refused before reaching a handler.
-func agentKeyIDFromContext(ctx context.Context) string {
-	if agent := gqlctx.AuthFromContext(ctx).Agent; agent != nil {
-		return agent.AgentKeyID
-	}
-	return ""
 }
