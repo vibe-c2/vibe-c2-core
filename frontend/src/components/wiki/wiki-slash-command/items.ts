@@ -43,15 +43,28 @@ export interface SlashItemContext {
   operationId: string
 }
 
+export interface TableSize {
+  rows: number
+  cols: number
+}
+
+export const DEFAULT_TABLE_SIZE: TableSize = { rows: 3, cols: 3 }
+
 export interface SlashItem {
   title: string
   description: string
   keywords: string[]
   icon: LucideIcon
+  /** Items that need one more input before running. The slash menu renders
+   *  the matching picker in place of the list and passes the result through
+   *  to `command`; the picker's default is used when the item is run without
+   *  it (e.g. from a programmatic caller). */
+  picker?: "tableSize"
   command: (props: {
     editor: Editor
     range: Range
     context: SlashItemContext
+    tableSize?: TableSize
   }) => void
 }
 
@@ -202,15 +215,16 @@ export const SLASH_ITEMS: SlashItem[] = [
   ...NOTICE_ITEMS,
   {
     title: "Table",
-    description: "3×3 table with header row",
+    description: "Pick a size, header row included",
     keywords: ["table", "grid", "rows", "columns"],
     icon: TableIcon,
-    command: ({ editor, range }) => {
+    picker: "tableSize",
+    command: ({ editor, range, tableSize = DEFAULT_TABLE_SIZE }) => {
       editor
         .chain()
         .focus()
         .deleteRange(range)
-        .insertTable({ rows: 3, cols: 3, withHeaderRow: true })
+        .insertTable({ rows: tableSize.rows, cols: tableSize.cols, withHeaderRow: true })
         .run()
     },
   },

@@ -1,6 +1,7 @@
 import { forwardRef, useImperativeHandle, useLayoutEffect, useRef, useState } from "react"
 import { cn } from "@/lib/utils"
-import type { SlashItem } from "./items"
+import type { SlashItem, TableSize } from "./items"
+import { TableSizePicker, type TableSizePickerHandle } from "./table-size-picker"
 
 export interface SlashMenuHandle {
   onKeyDown: (event: KeyboardEvent) => boolean
@@ -8,7 +9,7 @@ export interface SlashMenuHandle {
 
 interface SlashMenuProps {
   items: SlashItem[]
-  onSelect: (item: SlashItem) => void
+  onSelect: (item: SlashItem, tableSize?: TableSize) => void
 }
 
 function itemsEqual(a: SlashItem[], b: SlashItem[]): boolean {
@@ -25,7 +26,10 @@ export const SlashMenu = forwardRef<SlashMenuHandle, SlashMenuProps>(function Sl
   ref,
 ) {
   const [selectedIndex, setSelectedIndex] = useState(0)
+  // Item whose picker is showing in place of the list, or null for the list.
+  const [pickerItem, setPickerItem] = useState<SlashItem | null>(null)
   const listRef = useRef<HTMLDivElement>(null)
+  const pickerRef = useRef<TableSizePickerHandle>(null)
 
   // Reset cursor when the result list changes. Done during render via the
   // prev-value pattern (react.dev/reference/react/useState#storing-information-from-previous-renders)
@@ -40,6 +44,16 @@ export const SlashMenu = forwardRef<SlashMenuHandle, SlashMenuProps>(function Sl
   if (!itemsEqual(lastItems, items)) {
     setLastItems(items)
     setSelectedIndex(0)
+    // Typing past the picker (the query changed) drops back to the list.
+    setPickerItem(null)
+  }
+
+  function choose(item: SlashItem) {
+    if (item.picker) {
+      setPickerItem(item)
+      return
+    }
+    onSelect(item)
   }
 
   useLayoutEffect(() => {
@@ -51,6 +65,13 @@ export const SlashMenu = forwardRef<SlashMenuHandle, SlashMenuProps>(function Sl
 
   useImperativeHandle(ref, () => ({
     onKeyDown(event) {
+      if (pickerItem) {
+        if (event.key === "Backspace") {
+          setPickerItem(null)
+          return true
+        }
+        return pickerRef.current?.onKeyDown(event) ?? false
+      }
       if (items.length === 0) return false
       if (event.key === "ArrowDown") {
         setSelectedIndex((i) => (i + 1) % items.length)
@@ -61,12 +82,18 @@ export const SlashMenu = forwardRef<SlashMenuHandle, SlashMenuProps>(function Sl
         return true
       }
       if (event.key === "Enter") {
-        onSelect(items[selectedIndex])
+        choose(items[selectedIndex])
         return true
       }
       return false
     },
   }))
+
+  if (pickerItem?.picker === "tableSize") {
+    return (
+      <TableSizePicker ref={pickerRef} onPick={(size) => onSelect(pickerItem, size)} />
+    )
+  }
 
   if (items.length === 0) {
     return (
@@ -99,7 +126,7 @@ export const SlashMenu = forwardRef<SlashMenuHandle, SlashMenuProps>(function Sl
             onMouseEnter={() => setSelectedIndex(index)}
             onMouseDown={(e) => {
               e.preventDefault()
-              onSelect(item)
+              choose(item)
             }}
           >
             <Icon className="size-4 shrink-0 text-muted-foreground" />

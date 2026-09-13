@@ -7,7 +7,7 @@ import Suggestion, {
 } from "@tiptap/suggestion"
 import { createElement } from "react"
 import { SlashMenu, type SlashMenuHandle } from "./slash-menu"
-import { filterItems, type SlashItem, type SlashItemContext } from "./items"
+import { filterItems, type SlashItem, type SlashItemContext, type TableSize } from "./items"
 
 interface SlashCommandOptions {
   /** Runtime context exposed to slash-item commands (e.g. the current
@@ -135,7 +135,15 @@ function renderSlashMenu() {
         // Read through commandRef so subsequent transactions that update the
         // range can keep onSelect pointing at the fresh command without
         // forcing a React re-render.
-        onSelect: (item) => commandRef.current?.(item),
+        // A picker result rides along by wrapping the item: the suggestion
+        // plugin only knows how to call `item.command(props)`, so the size is
+        // bound into a derived command rather than threaded through the plugin.
+        onSelect: (item, tableSize?: TableSize) =>
+          commandRef.current?.(
+            tableSize
+              ? { ...item, command: (props) => item.command({ ...props, tableSize }) }
+              : item,
+          ),
       }),
     )
     lastItems = props.items
