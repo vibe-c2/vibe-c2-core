@@ -32,6 +32,7 @@ import { WikiDocumentReferenceExtension } from "@/components/wiki/wiki-document-
 import { WikiEditorBubbleMenu } from "@/components/wiki/wiki-editor-bubble-menu"
 import { WikiEditorTableMenu } from "@/components/wiki/wiki-editor-table-menu"
 import { WikiEditorTableContextMenu } from "@/components/wiki/wiki-editor-table-context-menu"
+import { WikiEditorTableHandles } from "@/components/wiki/wiki-editor-table-handles"
 import { WikiEditorToc } from "@/components/wiki/wiki-editor-toc"
 import { WikiLinkPopover, startLinkInsert } from "@/components/wiki/wiki-link-popover"
 import { WikiInlineCodePopover } from "@/components/wiki/wiki-inline-code-popover"
@@ -576,6 +577,7 @@ export function WikiEditor({
       <ConnectionBanner connectionStatus={connectionStatus} isSynced={isSynced} isReady={isReady} />
       {isEditor && <WikiEditorBubbleMenu editor={editor} />}
       {isEditor && <WikiEditorTableMenu editor={editor} />}
+      {isEditor && <WikiEditorTableHandles editor={editor} />}
       {isEditor && <WikiInlineCodePopover editor={editor} />}
       {isEditor && <WikiLinkPopover editor={editor} />}
       {tocVisible && isReady && <WikiEditorToc editor={editor} />}
