@@ -6,7 +6,7 @@ import { useScrambleText } from "@/hooks/use-scramble-text"
 
 const WORDMARK = "Vibe C2"
 
-// Shared frame for the unauthenticated pages (login, enroll): topology
+// Shared frame for the unauthenticated pages (login, enroll): digital-rain
 // background, wordmark that resolves out of scrambled glyphs, theme toggle
 // in the corner. Keeps the two pages from drifting apart visually.
 export function AuthShell({ children }: { children: ReactNode }) {

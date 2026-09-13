@@ -1,10 +1,10 @@
 import { useEffect, useRef } from "react"
-import { createScene, resizeScene, stepScene, type Scene } from "@/lib/topology-scene"
+import { createRain, resizeRain, stepRain, type Rain } from "@/lib/matrix-rain"
 
-// Full-viewport canvas behind the auth pages: a drifting beacon topology of
-// hub and implant nodes with packets pulsing along the edges. Colours are
-// read from the theme tokens so both light and dark mode look intentional,
-// and a radial mask keeps the centre quiet where the card sits.
+// Full-viewport canvas behind the auth pages: restrained digital rain in the
+// theme's monospace face. The ink is read from the foreground token so both
+// themes look intentional, and a horizontal mask keeps the centre band quiet
+// where the card sits, leaving the rain to the outer thirds.
 //
 // Reduced motion: a single static frame is drawn and the loop never starts.
 export function AuthBackground() {
@@ -17,10 +17,12 @@ export function AuthBackground() {
     if (!ctx) return
 
     const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)")
-    let scene: Scene = createScene(window.innerWidth, window.innerHeight)
+    let rain: Rain = createRain(gridCols(window.innerWidth), gridRows(window.innerHeight))
     let ink = readInk(canvas)
+    let font = readFont(canvas)
     let frame = 0
     let last = performance.now()
+    let sinceDraw = 0
 
     function fit() {
       const dpr = window.devicePixelRatio || 1
@@ -29,16 +31,25 @@ export function AuthBackground() {
       canvas!.width = Math.round(w * dpr)
       canvas!.height = Math.round(h * dpr)
       ctx!.setTransform(dpr, 0, 0, dpr, 0, 0)
-      scene = resizeScene(scene, w, h)
+      rain = resizeRain(rain, gridCols(w), gridRows(h))
     }
 
     function draw(now: number) {
-      if (!reduceMotion.matches) {
-        scene = stepScene(scene, now - last)
-      }
+      const dt = now - last
       last = now
-      paint(ctx!, scene, ink)
-      if (!reduceMotion.matches) frame = requestAnimationFrame(draw)
+      if (!reduceMotion.matches) {
+        rain = stepRain(rain, dt)
+        // Redraw at a capped rate: the discrete flicker is part of the look
+        // and it keeps text rendering cheap.
+        sinceDraw += dt
+        if (sinceDraw >= FRAME_MS) {
+          sinceDraw = 0
+          paint(ctx!, rain, ink, font)
+        }
+        frame = requestAnimationFrame(draw)
+        return
+      }
+      paint(ctx!, rain, ink, font)
     }
 
     function restart() {
@@ -50,9 +61,14 @@ export function AuthBackground() {
     // next-themes toggles the `dark` class on <html>; re-read the ink then.
     const themeObserver = new MutationObserver(() => {
       ink = readInk(canvas)
-      if (reduceMotion.matches) paint(ctx, scene, ink)
+      if (reduceMotion.matches) paint(ctx, rain, ink, font)
     })
     themeObserver.observe(document.documentElement, { attributes: true, attributeFilter: ["class"] })
+
+    // Fonts can finish loading after mount; refresh the face once they do.
+    document.fonts?.ready.then(() => {
+      font = readFont(canvas)
+    })
 
     fit()
     restart()
@@ -71,62 +87,55 @@ export function AuthBackground() {
     <canvas
       ref={canvasRef}
       aria-hidden="true"
-      className="pointer-events-none fixed inset-0 -z-10 h-full w-full text-foreground [mask-image:radial-gradient(ellipse_at_center,transparent_18%,black_65%)]"
+      className="pointer-events-none fixed inset-0 -z-10 h-full w-full font-mono text-foreground [mask-image:linear-gradient(to_right,black_0%,transparent_32%,transparent_68%,black_100%)]"
     />
   )
 }
 
-const EDGE_ALPHA = 0.14
-const NODE_ALPHA = 0.45
-const HUB_RING_ALPHA = 0.22
-const PULSE_ALPHA = 0.9
+const CELL_PX = 16 // column pitch and row pitch
+const FONT_PX = 13
+const FRAME_MS = 70 // ~14fps, the classic stepped cadence
+const HEAD_ALPHA = 0.85
+const TRAIL_ALPHA = 0.32 // alpha of the glyph right behind the head
+const TRAIL_FLOOR = 0.02 // alpha at the tail end
 
-// The canvas carries `text-foreground`, so its computed colour is the theme
-// ink. Reading it once per theme change keeps the draw loop allocation-free.
+function gridCols(width: number): number {
+  return Math.ceil(width / CELL_PX)
+}
+
+function gridRows(height: number): number {
+  return Math.ceil(height / CELL_PX)
+}
+
+// The canvas carries `text-foreground` and `font-mono`, so its computed
+// style yields the theme ink and the monospace family without duplicating
+// token values here.
 function readInk(canvas: HTMLCanvasElement): string {
   return getComputedStyle(canvas).color || "currentColor"
 }
 
-function paint(ctx: CanvasRenderingContext2D, scene: Scene, ink: string) {
-  ctx.clearRect(0, 0, scene.width, scene.height)
-  ctx.strokeStyle = ink
+function readFont(canvas: HTMLCanvasElement): string {
+  const family = getComputedStyle(canvas).fontFamily || "monospace"
+  return `${FONT_PX}px ${family}`
+}
+
+function paint(ctx: CanvasRenderingContext2D, rain: Rain, ink: string, font: string) {
+  ctx.clearRect(0, 0, rain.cols * CELL_PX, rain.rows * CELL_PX)
   ctx.fillStyle = ink
+  ctx.font = font
+  ctx.textBaseline = "top"
+  ctx.textAlign = "center"
 
-  ctx.globalAlpha = EDGE_ALPHA
-  ctx.lineWidth = 1
-  ctx.beginPath()
-  for (const e of scene.edges) {
-    const a = scene.nodes[e.from]
-    const b = scene.nodes[e.to]
-    ctx.moveTo(a.x, a.y)
-    ctx.lineTo(b.x, b.y)
-  }
-  ctx.stroke()
-
-  for (const n of scene.nodes) {
-    ctx.globalAlpha = NODE_ALPHA
-    ctx.beginPath()
-    ctx.arc(n.x, n.y, n.radius, 0, Math.PI * 2)
-    ctx.fill()
-    if (n.isHub) {
-      ctx.globalAlpha = HUB_RING_ALPHA
-      ctx.beginPath()
-      ctx.arc(n.x, n.y, n.radius * 2.6, 0, Math.PI * 2)
-      ctx.stroke()
+  rain.columns.forEach((c, col) => {
+    const headRow = Math.floor(c.head)
+    const x = col * CELL_PX + CELL_PX / 2
+    for (let k = 0; k < c.trailRows; k++) {
+      const row = headRow - k
+      if (row < 0 || row >= rain.rows) continue
+      const t = k / c.trailRows
+      ctx.globalAlpha = k === 0 ? HEAD_ALPHA : TRAIL_ALPHA * (1 - t) + TRAIL_FLOOR * t
+      ctx.fillText(c.glyphs[row], x, row * CELL_PX)
     }
-  }
-
-  ctx.globalAlpha = PULSE_ALPHA
-  for (const p of scene.pulses) {
-    const e = scene.edges[p.edge]
-    if (!e) continue
-    const from = scene.nodes[p.towardHub ? e.from : e.to]
-    const to = scene.nodes[p.towardHub ? e.to : e.from]
-    const x = from.x + (to.x - from.x) * p.progress
-    const y = from.y + (to.y - from.y) * p.progress
-    ctx.beginPath()
-    ctx.arc(x, y, 1.6, 0, Math.PI * 2)
-    ctx.fill()
-  }
+  })
   ctx.globalAlpha = 1
 }
