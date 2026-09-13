@@ -1,4 +1,4 @@
-.PHONY: test infra infra-stop infra-reset services services-stop services-reset services-rebuild seaweedfs-reset swag gqlgen gqlcodegen frontend help
+.PHONY: test infra infra-stop infra-reset services services-stop services-reset services-rebuild seaweedfs-reset sso sso-stop swag gqlgen gqlcodegen frontend help
 
 include .env
 export
@@ -30,6 +30,13 @@ services-reset: ## Reset all services and volumes
 services-rebuild: ## Rebuild dev images and restart all services (run after package.json / Dockerfile / go.mod changes)
 	@echo "Rebuilding dev images and restarting all services"
 	docker-compose --profile development up -d --build
+
+sso: ## Start the dev Keycloak (profile sso); set OIDC_ENABLED=true in .env to use it
+	@echo "Starting dev Keycloak on http://keycloak.localhost:8180 (admin/admin; users kc-admin, kc-user, kc-norole)"
+	docker-compose --profile sso up -d keycloak
+
+sso-stop: ## Stop the dev Keycloak
+	docker-compose --profile sso stop keycloak
 
 seaweedfs-reset: ## Reset only SeaweedFS volumes (clears bucket state; keeps Mongo/Redis/RabbitMQ)
 	@echo "Stopping SeaweedFS containers and clearing their volumes"

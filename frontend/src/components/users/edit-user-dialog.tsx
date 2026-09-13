@@ -23,6 +23,10 @@ export function EditUserDialog() {
   const [error, setError] = useState<string | null>(null)
 
   const user = data?.user
+  // SSO accounts are owned by the identity provider: no password here, and
+  // the username follows the provider. Roles stay editable but are re-synced
+  // from the provider on the user's next login.
+  const isSso = user?.authSource === "oidc"
 
   async function handleSubmit(e: FormEvent<HTMLFormElement>) {
     e.preventDefault()
@@ -70,7 +74,9 @@ export function EditUserDialog() {
         <DialogHeader>
           <DialogTitle>Edit User</DialogTitle>
           <DialogDescription>
-            Update user details. Leave password blank to keep it unchanged.
+            {isSso
+              ? "This account signs in through single sign-on. Username and password are managed by the identity provider."
+              : "Update user details. Leave password blank to keep it unchanged."}
           </DialogDescription>
         </DialogHeader>
         {isLoading || !user ? (
@@ -93,21 +99,30 @@ export function EditUserDialog() {
                   type="text"
                   required
                   defaultValue={user.username}
+                  readOnly={isSso}
+                  aria-readonly={isSso}
                 />
               </Field>
-              <Field>
-                <FieldLabel htmlFor="edit-password">
-                  Password
-                </FieldLabel>
-                <Input
-                  id="edit-password"
-                  name="password"
-                  type="password"
-                  placeholder="Leave blank to keep unchanged"
-                />
-              </Field>
+              {!isSso && (
+                <Field>
+                  <FieldLabel htmlFor="edit-password">
+                    Password
+                  </FieldLabel>
+                  <Input
+                    id="edit-password"
+                    name="password"
+                    type="password"
+                    placeholder="Leave blank to keep unchanged"
+                  />
+                </Field>
+              )}
               <Field>
                 <FieldLabel>Roles</FieldLabel>
+                {isSso && (
+                  <p className="text-xs text-muted-foreground">
+                    Roles are re-synced from the identity provider at each sign-in; local changes last until then.
+                  </p>
+                )}
                 <div className="flex gap-4">
                   <label className="flex items-center gap-2 text-sm">
                     <Checkbox

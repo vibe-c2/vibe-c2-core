@@ -18,6 +18,14 @@ func DeriveGraceKey(jwtSecret string) []byte {
 	return h[:]
 }
 
+// DeriveKey returns a 32-byte AES-256 key derived from the JWT secret and a
+// purpose label, so every consumer (grace shadows, the OIDC handshake cookie)
+// gets its own key from the one configured secret.
+func DeriveKey(jwtSecret, purpose string) []byte {
+	h := sha256.Sum256([]byte(purpose + ":" + jwtSecret))
+	return h[:]
+}
+
 // EncryptGrace encrypts plaintext with AES-256-GCM and returns base64.
 func EncryptGrace(key, plaintext []byte) (string, error) {
 	block, err := aes.NewCipher(key)

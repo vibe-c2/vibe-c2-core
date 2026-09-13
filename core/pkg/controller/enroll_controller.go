@@ -91,11 +91,12 @@ func (ctrl *enrollController) Enroll(c *gin.Context) {
 	}
 
 	user := &models.User{
-		UserID:   uuid.New(),
-		Username: req.Username,
-		Password: hashedPassword,
-		Roles:    []string{"admin"},
-		Active:   true,
+		UserID:     uuid.New(),
+		Username:   req.Username,
+		Password:   hashedPassword,
+		Roles:      []string{"admin"},
+		Active:     true,
+		AuthSource: models.AuthSourceLocal,
 	}
 
 	if err := ctrl.userRepo.Create(c.Request.Context(), user); err != nil {

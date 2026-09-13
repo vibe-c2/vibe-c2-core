@@ -162,6 +162,8 @@ Credentials still come from `secrets.values` or `secrets.existingSecret`.
 | `core.image.tag` / `frontend.image.tag` / `hocuspocus.image.tag` | Pin to a specific build; defaults to chart `appVersion` |
 | `core.replicaCount` / `frontend.replicaCount` | Horizontal scale |
 | `secrets.existingSecret` | Read all app secrets from a Secret you manage |
+| `core.config.oidc.*` | Optional OpenID Connect login (Keycloak etc.). Set `enabled` and `issuerUrl`, register `https://<ingress host>/api/v1/auth/oidc/callback` at the provider, and put the client secret in `secrets.values.oidcClientSecret` (key `oidcClientSecret` in an existing Secret) |
+| `core.config.auth.localLoginEnabled` | `false` hides the password form; only valid with `oidc.enabled=true` |
 | `secrets.values.*` | Inline secret values (development only) |
 | `global.storageClass` | StorageClass applied to all PVCs |
 | `mongodb.persistence.size` / `redis.master.persistence.size` / `seaweedfs.*.data.size` | PVC sizing |

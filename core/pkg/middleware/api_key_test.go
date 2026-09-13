@@ -121,6 +121,9 @@ func (f *fakeUserRepo) ExistsByUsername(_ context.Context, _ string) (bool, erro
 func (f *fakeUserRepo) FindByUsername(_ context.Context, _ string) (models.User, error) {
 	return models.User{}, errNotFound
 }
+func (f *fakeUserRepo) FindByOIDCIdentity(_ context.Context, _, _ string) (models.User, error) {
+	return models.User{}, errNotFound
+}
 func (f *fakeUserRepo) Create(_ context.Context, _ *models.User) error { return nil }
 func (f *fakeUserRepo) Count(_ context.Context, _ string) (int64, error) {
 	return int64(len(f.users)), nil

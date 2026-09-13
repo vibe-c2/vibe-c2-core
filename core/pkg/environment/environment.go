@@ -1,12 +1,15 @@
 package environment
 
 import (
+	"errors"
+	"fmt"
 	"log"
 	"os"
 	"strings"
 	"time"
 
 	"github.com/spf13/viper"
+	"github.com/vibe-c2/vibe-c2-core/core/pkg/auth/permissions"
 )
 
 var (
@@ -86,9 +89,42 @@ type EnvironmentSettings struct {
 	AuthRefreshTTL      time.Duration
 	AuthRefreshGraceTTL time.Duration
 	AuthCSRFEnabled     bool
+	// AuthLocalLoginEnabled gates the username/password form and POST /login.
+	// Turning it off is only allowed when OIDC is on (otherwise nobody could
+	// sign in); /enroll is unaffected so a fresh install can still bootstrap.
+	AuthLocalLoginEnabled bool
+
+	// OIDC — optional single sign-on through any OpenID Connect provider
+	// (Keycloak is the reference). Ignored entirely unless Enabled.
+	OIDC OIDCSettings
 
 	// CORS
 	CORSAllowedOrigins []string
+}
+
+// OIDCSettings is the env-driven OIDC/SSO configuration. See .env.example for
+// the per-variable documentation.
+type OIDCSettings struct {
+	Enabled      bool
+	IssuerURL    string // discovery document lives at <IssuerURL>/.well-known/openid-configuration
+	ClientID     string
+	ClientSecret string
+	// The callback URL and the post-login SPA origin are NOT configured:
+	// both are derived from the request that starts the flow (scheme/host,
+	// honouring X-Forwarded-*, and the Referer matched against
+	// CORS_ALLOWED_ORIGINS). Register <public origin>/api/v1/auth/oidc/callback
+	// at the provider.
+	Scopes      []string
+	DisplayName string // label for the SSO button
+
+	UsernameClaim string
+	RolesClaim    string            // dot-path into the merged claims, e.g. realm_access.roles
+	RoleMapping   map[string]string // provider role -> vibe role
+	DefaultRoles  []string          // applied when no mapping matched; empty = deny
+
+	UseUserInfo            bool          // merge /userinfo claims over the ID token claims
+	LinkExistingByUsername bool          // adopt an unlinked local user with the same username
+	HTTPTimeout            time.Duration // discovery, token and userinfo calls
 }
 
 func init() {
@@ -148,6 +184,17 @@ func init() {
 	viper.SetDefault("AUTH_REFRESH_TTL", "168h")
 	viper.SetDefault("AUTH_REFRESH_GRACE_TTL", "10s")
 	viper.SetDefault("AUTH_CSRF_ENABLED", true)
+	viper.SetDefault("AUTH_LOCAL_LOGIN_ENABLED", true)
+	viper.SetDefault("OIDC_ENABLED", false)
+	viper.SetDefault("OIDC_SCOPES", "openid,profile")
+	viper.SetDefault("OIDC_DISPLAY_NAME", "Single sign-on")
+	viper.SetDefault("OIDC_USERNAME_CLAIM", "preferred_username")
+	viper.SetDefault("OIDC_ROLES_CLAIM", "realm_access.roles")
+	viper.SetDefault("OIDC_ROLE_MAPPING", "vibec2-admin:admin,vibec2-user:user")
+	viper.SetDefault("OIDC_DEFAULT_ROLES", "user")
+	viper.SetDefault("OIDC_USE_USERINFO", true)
+	viper.SetDefault("OIDC_LINK_EXISTING_BY_USERNAME", false)
+	viper.SetDefault("OIDC_HTTP_TIMEOUT", "10s")
 	viper.SetDefault("CORS_ALLOWED_ORIGINS", "http://localhost:5173,http://localhost:8080,https://localhost:8443")
 
 	env = &EnvironmentSettings{
@@ -217,10 +264,28 @@ func init() {
 		InstallationID:          viper.GetString("INSTALLATION_ID"),
 
 		// Auth
-		AuthAccessTTL:       parseDurationOrFatal("AUTH_ACCESS_TTL", viper.GetString("AUTH_ACCESS_TTL")),
-		AuthRefreshTTL:      parseDurationOrFatal("AUTH_REFRESH_TTL", viper.GetString("AUTH_REFRESH_TTL")),
-		AuthRefreshGraceTTL: parseDurationOrFatal("AUTH_REFRESH_GRACE_TTL", viper.GetString("AUTH_REFRESH_GRACE_TTL")),
-		AuthCSRFEnabled:     viper.GetBool("AUTH_CSRF_ENABLED"),
+		AuthAccessTTL:         parseDurationOrFatal("AUTH_ACCESS_TTL", viper.GetString("AUTH_ACCESS_TTL")),
+		AuthRefreshTTL:        parseDurationOrFatal("AUTH_REFRESH_TTL", viper.GetString("AUTH_REFRESH_TTL")),
+		AuthRefreshGraceTTL:   parseDurationOrFatal("AUTH_REFRESH_GRACE_TTL", viper.GetString("AUTH_REFRESH_GRACE_TTL")),
+		AuthCSRFEnabled:       viper.GetBool("AUTH_CSRF_ENABLED"),
+		AuthLocalLoginEnabled: viper.GetBool("AUTH_LOCAL_LOGIN_ENABLED"),
+
+		// OIDC
+		OIDC: OIDCSettings{
+			Enabled:                viper.GetBool("OIDC_ENABLED"),
+			IssuerURL:              strings.TrimRight(viper.GetString("OIDC_ISSUER_URL"), "/"),
+			ClientID:               viper.GetString("OIDC_CLIENT_ID"),
+			ClientSecret:           viper.GetString("OIDC_CLIENT_SECRET"),
+			Scopes:                 parseCSV(viper.GetString("OIDC_SCOPES")),
+			DisplayName:            viper.GetString("OIDC_DISPLAY_NAME"),
+			UsernameClaim:          viper.GetString("OIDC_USERNAME_CLAIM"),
+			RolesClaim:             viper.GetString("OIDC_ROLES_CLAIM"),
+			RoleMapping:            parseRoleMapping(viper.GetString("OIDC_ROLE_MAPPING")),
+			DefaultRoles:           parseCSV(viper.GetString("OIDC_DEFAULT_ROLES")),
+			UseUserInfo:            viper.GetBool("OIDC_USE_USERINFO"),
+			LinkExistingByUsername: viper.GetBool("OIDC_LINK_EXISTING_BY_USERNAME"),
+			HTTPTimeout:            parseDurationOrFatal("OIDC_HTTP_TIMEOUT", viper.GetString("OIDC_HTTP_TIMEOUT")),
+		},
 
 		// CORS
 		CORSAllowedOrigins: parseCSV(viper.GetString("CORS_ALLOWED_ORIGINS")),
@@ -239,10 +304,72 @@ func init() {
 			log.Fatalf("Required environment variable %s is not set", name)
 		}
 	}
+
+	if err := validateAuthSettings(env); err != nil {
+		log.Fatalf("Invalid auth configuration: %v", err)
+	}
+}
+
+// validateAuthSettings enforces the cross-field rules for the login surface:
+// OIDC needs its connection parameters, every mapped role must exist, and the
+// local form may only be switched off when SSO can take its place.
+func validateAuthSettings(e *EnvironmentSettings) error {
+	if !e.AuthLocalLoginEnabled && !e.OIDC.Enabled {
+		return errors.New("AUTH_LOCAL_LOGIN_ENABLED=false requires OIDC_ENABLED=true (nobody could sign in)")
+	}
+	if !e.OIDC.Enabled {
+		return nil
+	}
+	required := map[string]string{
+		"OIDC_ISSUER_URL":     e.OIDC.IssuerURL,
+		"OIDC_CLIENT_ID":      e.OIDC.ClientID,
+		"OIDC_CLIENT_SECRET":  e.OIDC.ClientSecret,
+		"OIDC_USERNAME_CLAIM": e.OIDC.UsernameClaim,
+		"OIDC_ROLES_CLAIM":    e.OIDC.RolesClaim,
+	}
+	for name, value := range required {
+		if strings.TrimSpace(value) == "" {
+			return fmt.Errorf("%s is required when OIDC_ENABLED=true", name)
+		}
+	}
+	if u := e.OIDC.IssuerURL; !strings.HasPrefix(u, "http://") && !strings.HasPrefix(u, "https://") {
+		return fmt.Errorf("OIDC_ISSUER_URL %q must be absolute (http:// or https://)", u)
+	}
+	for idpRole, vibeRole := range e.OIDC.RoleMapping {
+		if _, err := permissions.GetPermissionsByRole(vibeRole); err != nil {
+			return fmt.Errorf("OIDC_ROLE_MAPPING: %q maps to unknown role %q", idpRole, vibeRole)
+		}
+	}
+	for _, r := range e.OIDC.DefaultRoles {
+		if _, err := permissions.GetPermissionsByRole(r); err != nil {
+			return fmt.Errorf("OIDC_DEFAULT_ROLES: unknown role %q", r)
+		}
+	}
+	if len(e.OIDC.RoleMapping) == 0 && len(e.OIDC.DefaultRoles) == 0 {
+		return errors.New("OIDC_ROLE_MAPPING and OIDC_DEFAULT_ROLES are both empty: every SSO login would be denied")
+	}
+	return nil
 }
 
 func GetEnvironmentSettings() *EnvironmentSettings {
 	return env
+}
+
+// parseRoleMapping parses "idp-role:vibe-role,idp-role2:vibe-role2" into a
+// map. Whitespace is trimmed, empty entries skipped, later duplicates win.
+// Entries without a colon are ignored so a stray value can't silently map
+// everyone to a role.
+func parseRoleMapping(raw string) map[string]string {
+	out := map[string]string{}
+	for _, entry := range parseCSV(raw) {
+		idpRole, vibeRole, ok := strings.Cut(entry, ":")
+		idpRole, vibeRole = strings.TrimSpace(idpRole), strings.TrimSpace(vibeRole)
+		if !ok || idpRole == "" || vibeRole == "" {
+			continue
+		}
+		out[idpRole] = vibeRole
+	}
+	return out
 }
 
 func parseDurationOrFatal(name, value string) time.Duration {

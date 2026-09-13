@@ -45,6 +45,9 @@ type OperationMemberPayload struct {
 type AuthEventPayload struct {
 	UserID   string
 	Username string
+	// Method is how the user authenticated: "password" or "oidc". Empty on
+	// events that have no login step (logout, refresh).
+	Method string
 }
 
 // --- Typed constructors ---

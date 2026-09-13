@@ -1,0 +1,85 @@
+{
+  "realm": "vibec2",
+  "enabled": true,
+  "displayName": "Vibe C2 (dev)",
+  "sslRequired": "none",
+  "registrationAllowed": false,
+  "loginWithEmailAllowed": true,
+  "accessTokenLifespan": 300,
+  "roles": {
+    "realm": [
+      { "name": "vibec2-admin", "description": "Maps to the Vibe C2 'admin' role" },
+      { "name": "vibec2-user", "description": "Maps to the Vibe C2 'user' role" }
+    ]
+  },
+  "clients": [
+    {
+      "clientId": "vibe-c2",
+      "name": "Vibe C2 core",
+      "enabled": true,
+      "protocol": "openid-connect",
+      "publicClient": false,
+      "secret": "changeme_oidc_client_secret",
+      "standardFlowEnabled": true,
+      "implicitFlowEnabled": false,
+      "directAccessGrantsEnabled": false,
+      "serviceAccountsEnabled": false,
+      "redirectUris": [
+        "http://localhost:8002/api/v1/auth/oidc/callback",
+        "https://localhost:8443/api/v1/auth/oidc/callback"
+      ],
+      "webOrigins": ["http://localhost:5173", "https://localhost:8443"],
+      "attributes": {
+        "pkce.code.challenge.method": "S256",
+        "post.logout.redirect.uris": "+"
+      },
+      "defaultClientScopes": ["profile", "roles"],
+      "protocolMappers": [
+        {
+          "name": "realm roles (id token)",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-usermodel-realm-role-mapper",
+          "consentRequired": false,
+          "config": {
+            "claim.name": "realm_access.roles",
+            "jsonType.label": "String",
+            "multivalued": "true",
+            "id.token.claim": "true",
+            "access.token.claim": "true",
+            "userinfo.token.claim": "true"
+          }
+        }
+      ]
+    }
+  ],
+  "users": [
+    {
+      "username": "kc-admin",
+      "email": "kc-admin@vibec2.local",
+      "firstName": "Keycloak",
+      "lastName": "Admin",
+      "enabled": true,
+      "emailVerified": true,
+      "credentials": [{ "type": "password", "value": "kc-admin", "temporary": false }],
+      "realmRoles": ["vibec2-admin"]
+    },
+    {
+      "username": "kc-user",
+      "email": "kc-user@vibec2.local",
+      "firstName": "Keycloak",
+      "lastName": "User",
+      "enabled": true,
+      "emailVerified": true,
+      "credentials": [{ "type": "password", "value": "kc-user", "temporary": false }],
+      "realmRoles": ["vibec2-user"]
+    },
+    {
+      "username": "kc-norole",
+      "email": "kc-norole@vibec2.local",
+      "enabled": true,
+      "emailVerified": true,
+      "credentials": [{ "type": "password", "value": "kc-norole", "temporary": false }],
+      "realmRoles": []
+    }
+  ]
+}

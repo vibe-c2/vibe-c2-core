@@ -61,6 +61,8 @@ func (s UserSort) Cursor(u *models.User) string {
 type IUserRepository interface {
 	ExistsByUsername(ctx context.Context, username string) (bool, error)
 	FindByUsername(ctx context.Context, username string) (models.User, error)
+	// FindByOIDCIdentity looks up the SSO account linked to (issuer, subject).
+	FindByOIDCIdentity(ctx context.Context, issuer, subject string) (models.User, error)
 	Create(ctx context.Context, user *models.User) error
 
 	Count(ctx context.Context, search string) (int64, error)
@@ -93,6 +95,11 @@ func NewUserRepository(db database.Database) IUserRepository {
 		// sort walks the index backwards); see the credential repository's
 		// index comment for the full rationale.
 		{Key: []string{"username", "_id"}, IndexOptions: new(options.IndexOptions).SetCollation(caseInsensitiveSortCollation)},
+		// One local account per provider subject. Partial so the many local
+		// users without an oidc sub-document don't collide on the null key.
+		{Key: []string{"oidc.issuer", "oidc.subject"}, IndexOptions: new(options.IndexOptions).
+			SetUnique(true).
+			SetPartialFilterExpression(bson.M{"oidc.subject": bson.M{"$exists": true}})},
 	})
 
 	return &userRepository{coll: coll}
@@ -106,6 +113,12 @@ func (r *userRepository) ExistsByUsername(ctx context.Context, username string) 
 func (r *userRepository) FindByUsername(ctx context.Context, username string) (models.User, error) {
 	var user models.User
 	err := r.coll.FindOne(ctx, bson.M{"username": username}).One(&user)
+	return user, err
+}
+
+func (r *userRepository) FindByOIDCIdentity(ctx context.Context, issuer, subject string) (models.User, error) {
+	var user models.User
+	err := r.coll.FindOne(ctx, bson.M{"oidc.issuer": issuer, "oidc.subject": subject}).One(&user)
 	return user, err
 }
 

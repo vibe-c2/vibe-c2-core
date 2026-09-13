@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/vibe-c2/vibe-c2-core/core/pkg/auth"
+	"github.com/vibe-c2/vibe-c2-core/core/pkg/auth/oidc"
 	"github.com/vibe-c2/vibe-c2-core/core/pkg/blob"
 	"github.com/vibe-c2/vibe-c2-core/core/pkg/cache"
 	"github.com/vibe-c2/vibe-c2-core/core/pkg/controller"
@@ -35,11 +36,15 @@ import (
 // authConfig holds the runtime auth configuration. Mirrors the env-driven
 // values so the router can pass the relevant subset to controllers.
 type authConfig struct {
-	accessTTL       time.Duration
-	refreshTTL      time.Duration
-	refreshGraceTTL time.Duration
-	graceKey        []byte // AES-256 key for grace shadow encryption
-	csrfEnabled     bool
+	accessTTL         time.Duration
+	refreshTTL        time.Duration
+	refreshGraceTTL   time.Duration
+	graceKey          []byte // AES-256 key for grace shadow encryption
+	csrfEnabled       bool
+	localLoginEnabled bool
+	// oidcHandshakeKey seals the SSO handshake cookie; derived from the JWT
+	// secret with its own label so it never equals graceKey.
+	oidcHandshakeKey []byte
 }
 
 type Repositories struct {
@@ -73,6 +78,10 @@ type App struct {
 	tokenStore   auth.TokenStore
 	eventBus     eventbus.IEventBus
 	authCfg      authConfig
+	// oidcProvider is nil when OIDC_ENABLED=false. When set, discovery may
+	// still have failed — the provider reports that through Status() and
+	// retries on the next login attempt.
+	oidcProvider *oidc.LazyProvider
 
 	// Wiki integration
 	presenceTracker *wiki.PresenceTracker
@@ -185,13 +194,31 @@ func NewApp() (*App, error) {
 	// want short TTLs to exercise refresh paths set AUTH_ACCESS_TTL in
 	// their compose.
 	authCfg := authConfig{
-		accessTTL:       e.AuthAccessTTL,
-		refreshTTL:      e.AuthRefreshTTL,
-		refreshGraceTTL: e.AuthRefreshGraceTTL,
-		graceKey:        graceKey,
-		csrfEnabled:     e.AuthCSRFEnabled,
+		accessTTL:         e.AuthAccessTTL,
+		refreshTTL:        e.AuthRefreshTTL,
+		refreshGraceTTL:   e.AuthRefreshGraceTTL,
+		graceKey:          graceKey,
+		csrfEnabled:       e.AuthCSRFEnabled,
+		localLoginEnabled: e.AuthLocalLoginEnabled,
+		oidcHandshakeKey:  auth.DeriveKey(e.JWTSecretKey, "oidc-handshake"),
 	}
 	authProvider := auth.NewAuthProvider(e.JWTSecretKey, authCfg.accessTTL)
+
+	// Optional single sign-on. Discovery failure is logged, not fatal: an
+	// identity-provider outage must not take the local break-glass login
+	// down with it. The wrapper retries discovery on the next SSO attempt.
+	var oidcProvider *oidc.LazyProvider
+	if e.OIDC.Enabled {
+		discoverCtx, cancel := context.WithTimeout(ctx, e.OIDC.HTTPTimeout)
+		oidcProvider, err = oidc.NewLazyProvider(discoverCtx, oidcConfigFromEnv(e))
+		cancel()
+		if err != nil {
+			l.Error("oidc: discovery failed at startup; SSO unavailable until it succeeds",
+				zap.String("issuer", e.OIDC.IssuerURL), zap.Error(err))
+		} else {
+			l.Info("oidc: provider discovered", zap.String("issuer", e.OIDC.IssuerURL))
+		}
+	}
 
 	// Initialize event bus
 	bus := eventbus.NewEventBus(l)
@@ -359,6 +386,7 @@ func NewApp() (*App, error) {
 		tokenStore:      tokenStore,
 		eventBus:        bus,
 		authCfg:         authCfg,
+		oidcProvider:    oidcProvider,
 		presenceTracker: presenceTracker,
 		hpClient:        hpClient,
 		backupScheduler: backupScheduler,
@@ -581,4 +609,20 @@ func (a *App) StartServerWithGracefulShutdown() {
 	}
 
 	<-idleConnsClosed
+}
+
+// oidcConfigFromEnv maps the env block onto the oidc package's config.
+func oidcConfigFromEnv(e *environment.EnvironmentSettings) oidc.Config {
+	return oidc.Config{
+		IssuerURL:     e.OIDC.IssuerURL,
+		ClientID:      e.OIDC.ClientID,
+		ClientSecret:  e.OIDC.ClientSecret,
+		Scopes:        e.OIDC.Scopes,
+		UsernameClaim: e.OIDC.UsernameClaim,
+		RolesClaim:    e.OIDC.RolesClaim,
+		RoleMapping:   e.OIDC.RoleMapping,
+		DefaultRoles:  e.OIDC.DefaultRoles,
+		UseUserInfo:   e.OIDC.UseUserInfo,
+		HTTPTimeout:   e.OIDC.HTTPTimeout,
+	}
 }

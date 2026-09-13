@@ -37,6 +37,23 @@ services:
       AUTH_REFRESH_TTL: ${AUTH_REFRESH_TTL:-168h}
       AUTH_REFRESH_GRACE_TTL: ${AUTH_REFRESH_GRACE_TTL:-10s}
       AUTH_CSRF_ENABLED: ${AUTH_CSRF_ENABLED:-true}
+      AUTH_LOCAL_LOGIN_ENABLED: ${AUTH_LOCAL_LOGIN_ENABLED:-true}
+      # OIDC / SSO — all optional; see .env.example. The dev Keycloak
+      # (profile "sso") is reachable as keycloak.localhost:8180 from both the
+      # browser and this container so the issuer URL is the same on both sides.
+      OIDC_ENABLED: ${OIDC_ENABLED:-false}
+      OIDC_ISSUER_URL: ${OIDC_ISSUER_URL:-http://keycloak.localhost:8180/realms/vibec2}
+      OIDC_CLIENT_ID: ${OIDC_CLIENT_ID:-vibe-c2}
+      OIDC_CLIENT_SECRET: ${OIDC_CLIENT_SECRET:-}
+      OIDC_SCOPES: ${OIDC_SCOPES:-openid,profile}
+      OIDC_DISPLAY_NAME: ${OIDC_DISPLAY_NAME:-Keycloak}
+      OIDC_USERNAME_CLAIM: ${OIDC_USERNAME_CLAIM:-preferred_username}
+      OIDC_ROLES_CLAIM: ${OIDC_ROLES_CLAIM:-realm_access.roles}
+      OIDC_ROLE_MAPPING: ${OIDC_ROLE_MAPPING:-vibec2-admin:admin,vibec2-user:user}
+      OIDC_DEFAULT_ROLES: ${OIDC_DEFAULT_ROLES:-user}
+      OIDC_USE_USERINFO: ${OIDC_USE_USERINFO:-true}
+      OIDC_LINK_EXISTING_BY_USERNAME: ${OIDC_LINK_EXISTING_BY_USERNAME:-false}
+      OIDC_HTTP_TIMEOUT: ${OIDC_HTTP_TIMEOUT:-10s}
       CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS:-http://localhost:5173,http://localhost:8080,https://localhost:8443}
       # RabbitMQ — a reachable broker is a hard startup dependency (core exits if
       # it can't connect). Inside the compose network we must route through the
@@ -210,6 +227,38 @@ services:
     networks:
       - vibec2
 
+  # Dev identity provider for the OIDC login. Opt-in (profile "sso"):
+  #   docker compose --profile sso up -d keycloak
+  # Admin console: http://keycloak.localhost:8180 (admin / admin).
+  # The realm import creates client "vibe-c2", realm roles vibec2-admin /
+  # vibec2-user and users kc-admin, kc-user, kc-norole (password = username).
+  # keycloak.localhost resolves to 127.0.0.1 in browsers and via
+  # nss-myhostname on most Linux hosts; add it to /etc/hosts otherwise. The
+  # same name is a network alias here so core-dev reaches the identical
+  # issuer URL — OIDC requires the issuer to match byte-for-byte.
+  keycloak:
+    image: quay.io/keycloak/keycloak:26.2
+    container_name: vibec2-keycloak
+    restart: unless-stopped
+    profiles:
+      - sso
+    command: ["start-dev", "--import-realm", "--http-port=8180"]
+    environment:
+      KC_BOOTSTRAP_ADMIN_USERNAME: admin
+      KC_BOOTSTRAP_ADMIN_PASSWORD: admin
+      KC_HOSTNAME: http://keycloak.localhost:8180
+      KC_HTTP_ENABLED: "true"
+      KC_HEALTH_ENABLED: "true"
+    ports:
+      - "8180:8180"
+    volumes:
+      - ./deploy/keycloak/vibec2-realm.json:/opt/keycloak/data/import/vibec2-realm.json:ro
+      - keycloak_data:/opt/keycloak/data/h2
+    networks:
+      vibec2:
+        aliases:
+          - keycloak.localhost
+
   nginx:
     image: nginx:alpine
     container_name: vibec2-nginx
@@ -232,6 +281,7 @@ services:
       - vibec2
 
 volumes:
+  keycloak_data:
   rabbitmq_data:
   mongodb_data:
   seaweedfs_master_data:

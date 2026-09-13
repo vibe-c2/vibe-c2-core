@@ -225,6 +225,21 @@ definitions:
       error:
         type: string
     type: object
+  responses.OIDCStatus:
+    properties:
+      display_name:
+        type: string
+      enabled:
+        type: boolean
+      login_url:
+        description: LoginURL is the API-relative path that starts the flow.
+        type: string
+      unavailable_reason:
+        description: |-
+          UnavailableReason is set when OIDC is configured but the provider
+          could not be discovered; the SPA shows the button disabled.
+        type: string
+    type: object
   responses.SessionResponse:
     properties:
       permissions:
@@ -244,6 +259,15 @@ definitions:
     properties:
       enrolled:
         type: boolean
+      local_login_enabled:
+        description: |-
+          LocalLoginEnabled is false when the deployment is SSO-only; the SPA
+          then hides the password form.
+        type: boolean
+      oidc:
+        allOf:
+        - $ref: '#/definitions/responses.OIDCStatus'
+        description: OIDC describes the single sign-on option, if any.
     type: object
   responses.SuccessResponse:
     properties:
@@ -256,6 +280,50 @@ info:
   title: VibeC2 Core API
   version: "1.0"
 paths:
+  /auth/oidc/callback:
+    get:
+      description: Provider redirect target. On success sets the usual auth cookies
+        and redirects into the SPA; on failure redirects to the SPA login page with
+        ?error=<code>.
+      parameters:
+      - description: Authorization code
+        in: query
+        name: code
+        type: string
+      - description: State echoed by the provider
+        in: query
+        name: state
+        type: string
+      - description: Provider-side error
+        in: query
+        name: error
+        type: string
+      responses:
+        "302":
+          description: Found
+      summary: Single sign-on callback
+      tags:
+      - Auth
+  /auth/oidc/login:
+    get:
+      description: Seals a handshake (state, nonce, PKCE verifier) into a short-lived
+        httpOnly cookie and redirects the browser to the OpenID provider. Optional
+        return_to is a SPA-relative path to land on afterwards.
+      parameters:
+      - description: SPA-relative path to return to after login
+        in: query
+        name: return_to
+        type: string
+      responses:
+        "302":
+          description: Found
+        "503":
+          description: Service Unavailable
+          schema:
+            $ref: '#/definitions/responses.ErrorResponse'
+      summary: Start single sign-on
+      tags:
+      - Auth
   /channel/sync:
     post:
       consumes:

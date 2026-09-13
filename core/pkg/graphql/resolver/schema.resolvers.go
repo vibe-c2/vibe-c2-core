@@ -133,6 +133,11 @@ func (r *userResolver) ID(ctx context.Context, obj *models.User) (string, error)
 	return r.UserResolver.ID(ctx, obj)
 }
 
+// AuthSource is the resolver for the authSource field.
+func (r *userResolver) AuthSource(ctx context.Context, obj *models.User) (string, error) {
+	return obj.EffectiveAuthSource(), nil
+}
+
 // CreatedAt converts the qmgo DefaultField timestamp to an ISO 8601 string.
 func (r *userResolver) CreatedAt(ctx context.Context, obj *models.User) (string, error) {
 	return r.UserResolver.CreatedAt(ctx, obj)

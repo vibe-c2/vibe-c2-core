@@ -14,18 +14,32 @@ type IStatusController interface {
 	Status(c *gin.Context)
 }
 
+// LoginOptions is the static part of the /status answer: which login
+// surfaces this deployment exposes. OIDCStatus is a func because provider
+// availability can change at runtime (discovery retries).
+type LoginOptions struct {
+	LocalLoginEnabled bool
+	OIDCStatus        func() responses.OIDCStatus
+}
+
 type statusController struct {
 	userRepo repository.IUserRepository
 	log      *zap.Logger
+	opts     LoginOptions
 }
 
 func NewStatusController(
 	userRepo repository.IUserRepository,
 	log *zap.Logger,
+	opts LoginOptions,
 ) IStatusController {
+	if opts.OIDCStatus == nil {
+		opts.OIDCStatus = func() responses.OIDCStatus { return responses.OIDCStatus{} }
+	}
 	return &statusController{
 		userRepo: userRepo,
 		log:      log,
+		opts:     opts,
 	}
 }
 
@@ -49,6 +63,8 @@ func (ctrl *statusController) Status(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, responses.StatusResponse{
-		Enrolled: count > 0,
+		Enrolled:          count > 0,
+		LocalLoginEnabled: ctrl.opts.LocalLoginEnabled,
+		OIDC:              ctrl.opts.OIDCStatus(),
 	})
 }

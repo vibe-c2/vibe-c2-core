@@ -84,11 +84,12 @@ func (r *userResolver) CreateUser(ctx context.Context, input model.CreateUserInp
 	}
 
 	user := &models.User{
-		UserID:   uuid.New(),
-		Username: input.Username,
-		Password: hashedPassword,
-		Roles:    input.Roles,
-		Active:   active,
+		UserID:     uuid.New(),
+		Username:   input.Username,
+		Password:   hashedPassword,
+		Roles:      input.Roles,
+		Active:     active,
+		AuthSource: models.AuthSourceLocal,
 	}
 
 	if err := r.userRepo.Create(ctx, user); err != nil {
@@ -127,6 +128,9 @@ func (r *userResolver) UpdateUser(ctx context.Context, id string, input model.Up
 	// Build a map of only the fields the client wants to change.
 	// This is the "partial update" pattern — null fields are ignored.
 	updates := buildUpdateMap(input)
+	if err := rejectSSOManagedFields(user, updates); err != nil {
+		return nil, err
+	}
 	if len(updates) == 0 {
 		return &user, nil
 	}
@@ -202,6 +206,9 @@ func (r *userResolver) UpdateOwnProfile(ctx context.Context, input model.UpdateU
 	// be able to escalate their own privileges.
 	updates := buildUpdateMap(input)
 	delete(updates, "roles")
+	if err := rejectSSOManagedFields(user, updates); err != nil {
+		return nil, err
+	}
 
 	if len(updates) == 0 {
 		return &user, nil
@@ -440,6 +447,25 @@ func normalizeHiddenIdentities(names []string) []string {
 		}
 	}
 	return out
+}
+
+// rejectSSOManagedFields refuses edits to the fields the identity provider
+// owns on an SSO account. Roles are deliberately not in this list: an admin
+// may still adjust them locally, knowing the next SSO login re-syncs them.
+func rejectSSOManagedFields(user models.User, updates map[string]interface{}) error {
+	if !user.IsSSO() {
+		return nil
+	}
+	if _, ok := updates["password"]; ok {
+		return fmt.Errorf("password is managed by the identity provider for SSO accounts")
+	}
+	if _, ok := updates["username"]; ok {
+		if updates["username"] != user.Username {
+			return fmt.Errorf("username is managed by the identity provider for SSO accounts")
+		}
+		delete(updates, "username")
+	}
+	return nil
 }
 
 // buildUpdateMap converts an UpdateUserInput into a map of field names to values.

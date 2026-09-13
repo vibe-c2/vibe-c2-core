@@ -94,6 +94,13 @@ spec:
                 secretKeyRef:
                   name: {{ $secretName }}
                   key: hocuspocusWebhookSecret
+            {{- if .Values.core.config.oidc.enabled }}
+            - name: OIDC_CLIENT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: {{ $secretName }}
+                  key: oidcClientSecret
+            {{- end }}
           livenessProbe:
             {{- toYaml .Values.core.livenessProbe | nindent 12 }}
           readinessProbe:

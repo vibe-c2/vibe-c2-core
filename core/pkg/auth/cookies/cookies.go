@@ -145,3 +145,44 @@ func cookieAttrs(dev bool) (http.SameSite, bool) {
 	}
 	return http.SameSiteStrictMode, true
 }
+
+// OIDCHandshakeCookie carries the sealed OIDC handshake (state, nonce, PKCE
+// verifier, return path) between the redirect to the provider and the
+// callback. Scoped to the OIDC route prefix so it is never sent anywhere
+// else, and short-lived.
+const (
+	OIDCHandshakeCookie = "oidc_handshake"
+	oidcHandshakePath   = "/api/v1/auth/oidc"
+)
+
+// SetOIDCHandshakeCookie stores the sealed handshake. SameSite is Lax in
+// every environment: the callback is a top-level navigation initiated by the
+// provider, which Strict would strip the cookie from. Lax still blocks
+// cross-site subresource and POST-driven sends.
+func SetOIDCHandshakeCookie(c *gin.Context, sealed string, ttl time.Duration, dev bool) {
+	_, secure := cookieAttrs(dev)
+	http.SetCookie(c.Writer, &http.Cookie{
+		Name:     OIDCHandshakeCookie,
+		Value:    sealed,
+		Path:     oidcHandshakePath,
+		MaxAge:   int(ttl.Seconds()),
+		HttpOnly: true,
+		Secure:   secure,
+		SameSite: http.SameSiteLaxMode,
+	})
+}
+
+// ClearOIDCHandshakeCookie deletes the handshake cookie. Called on every
+// callback outcome so a sealed handshake is single-use.
+func ClearOIDCHandshakeCookie(c *gin.Context, dev bool) {
+	_, secure := cookieAttrs(dev)
+	http.SetCookie(c.Writer, &http.Cookie{
+		Name:     OIDCHandshakeCookie,
+		Value:    "",
+		Path:     oidcHandshakePath,
+		MaxAge:   -1,
+		HttpOnly: true,
+		Secure:   secure,
+		SameSite: http.SameSiteLaxMode,
+	})
+}

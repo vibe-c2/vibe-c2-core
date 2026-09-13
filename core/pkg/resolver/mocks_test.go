@@ -146,6 +146,7 @@ func (m *mockOpRepo) UpdateMemberRoleSafe(ctx context.Context, operationID uuid.
 type mockUserRepo struct {
 	existsByUsernameFn func(ctx context.Context, username string) (bool, error)
 	findByUsernameFn   func(ctx context.Context, username string) (models.User, error)
+	findByOIDCFn       func(ctx context.Context, issuer, subject string) (models.User, error)
 	createFn           func(ctx context.Context, user *models.User) error
 	countFn            func(ctx context.Context, search string) (int64, error)
 	findAllFn          func(ctx context.Context, search string, offset, limit int64) ([]models.User, error)
@@ -161,6 +162,9 @@ func (m *mockUserRepo) ExistsByUsername(ctx context.Context, username string) (b
 }
 func (m *mockUserRepo) FindByUsername(ctx context.Context, username string) (models.User, error) {
 	return m.findByUsernameFn(ctx, username)
+}
+func (m *mockUserRepo) FindByOIDCIdentity(ctx context.Context, issuer, subject string) (models.User, error) {
+	return m.findByOIDCFn(ctx, issuer, subject)
 }
 func (m *mockUserRepo) Create(ctx context.Context, user *models.User) error {
 	return m.createFn(ctx, user)

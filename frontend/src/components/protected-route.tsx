@@ -6,6 +6,7 @@ import { useSessionGuard } from "@/hooks/use-session-guard"
 import { useScopedOperationGuard } from "@/hooks/use-scoped-operation-guard"
 import { useScopedOperationStore } from "@/stores/scoped-operation"
 import { useWikiTreeModeStore } from "@/stores/wiki-tree-mode"
+import { consumeSsoLoginPending, warnIfMultipleSessions } from "@/lib/post-login-check"
 
 export function ProtectedRoute({ permission }: { permission?: string }) {
   const isAuthenticated = useAuthStore((s) => s.isAuthenticated)
@@ -32,6 +33,15 @@ export function ProtectedRoute({ permission }: { permission?: string }) {
       hydrateWikiTreeMode(userId)
     }
   }, [userId, hydrate, hydrateWikiTreeMode])
+
+  // A single sign-on login re-enters the SPA through a full navigation, so
+  // the post-login "other sessions active" check runs here instead of on
+  // the login page. The marker is consumed once.
+  useEffect(() => {
+    if (userId && consumeSsoLoginPending()) {
+      warnIfMultipleSessions()
+    }
+  }, [userId])
 
   // Validate the restored scope and subscribe to real-time changes.
   useScopedOperationGuard()

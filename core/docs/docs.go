@@ -15,6 +15,68 @@ const docTemplate = `{
     "host": "{{.Host}}",
     "basePath": "{{.BasePath}}",
     "paths": {
+        "/auth/oidc/callback": {
+            "get": {
+                "description": "Provider redirect target. On success sets the usual auth cookies and redirects into the SPA; on failure redirects to the SPA login page with ?error=\u003ccode\u003e.",
+                "tags": [
+                    "Auth"
+                ],
+                "summary": "Single sign-on callback",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Authorization code",
+                        "name": "code",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "State echoed by the provider",
+                        "name": "state",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Provider-side error",
+                        "name": "error",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "302": {
+                        "description": "Found"
+                    }
+                }
+            }
+        },
+        "/auth/oidc/login": {
+            "get": {
+                "description": "Seals a handshake (state, nonce, PKCE verifier) into a short-lived httpOnly cookie and redirects the browser to the OpenID provider. Optional return_to is a SPA-relative path to land on afterwards.",
+                "tags": [
+                    "Auth"
+                ],
+                "summary": "Start single sign-on",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "SPA-relative path to return to after login",
+                        "name": "return_to",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "302": {
+                        "description": "Found"
+                    },
+                    "503": {
+                        "description": "Service Unavailable",
+                        "schema": {
+                            "$ref": "#/definitions/responses.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
         "/channel/sync": {
             "post": {
                 "description": "Accepts an inbound.minion_message from a channel module and returns an outbound.minion_message. Payloads are opaque encrypted blobs; core currently returns a no-op outbound payload.",
@@ -1135,6 +1197,25 @@ const docTemplate = `{
                 }
             }
         },
+        "responses.OIDCStatus": {
+            "type": "object",
+            "properties": {
+                "display_name": {
+                    "type": "string"
+                },
+                "enabled": {
+                    "type": "boolean"
+                },
+                "login_url": {
+                    "description": "LoginURL is the API-relative path that starts the flow.",
+                    "type": "string"
+                },
+                "unavailable_reason": {
+                    "description": "UnavailableReason is set when OIDC is configured but the provider\ncould not be discovered; the SPA shows the button disabled.",
+                    "type": "string"
+                }
+            }
+        },
         "responses.SessionResponse": {
             "type": "object",
             "properties": {
@@ -1163,6 +1244,18 @@ const docTemplate = `{
             "properties": {
                 "enrolled": {
                     "type": "boolean"
+                },
+                "local_login_enabled": {
+                    "description": "LocalLoginEnabled is false when the deployment is SSO-only; the SPA\nthen hides the password form.",
+                    "type": "boolean"
+                },
+                "oidc": {
+                    "description": "OIDC describes the single sign-on option, if any.",
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/responses.OIDCStatus"
+                        }
+                    ]
                 }
             }
         },

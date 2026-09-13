@@ -128,7 +128,7 @@ type Documents = {
     "\n  mutation CreateCustomTimelineEvent(\n    $operationId: ID!\n    $input: CreateCustomTimelineEventInput!\n  ) {\n    createCustomTimelineEvent(operationId: $operationId, input: $input) {\n      ...TimelineEventFields\n    }\n  }\n": typeof types.CreateCustomTimelineEventDocument,
     "\n  mutation UpdateCustomTimelineEvent(\n    $id: ID!\n    $input: UpdateCustomTimelineEventInput!\n  ) {\n    updateCustomTimelineEvent(id: $id, input: $input) {\n      ...TimelineEventFields\n    }\n  }\n": typeof types.UpdateCustomTimelineEventDocument,
     "\n  mutation DeleteCustomTimelineEvent($id: ID!) {\n    deleteCustomTimelineEvent(id: $id)\n  }\n": typeof types.DeleteCustomTimelineEventDocument,
-    "\n  fragment UserFields on User {\n    id\n    username\n    roles\n    active\n    createdAt\n    updatedAt\n  }\n": typeof types.UserFieldsFragmentDoc,
+    "\n  fragment UserFields on User {\n    id\n    username\n    roles\n    active\n    authSource\n    createdAt\n    updatedAt\n  }\n": typeof types.UserFieldsFragmentDoc,
     "\n  query Me {\n    me {\n      ...UserFields\n      hiddenIdentities\n    }\n  }\n": typeof types.MeDocument,
     "\n  query User($id: ID!) {\n    user(id: $id) {\n      ...UserFields\n    }\n  }\n": typeof types.UserDocument,
     "\n  query Users(\n    $search: String\n    $sortBy: UserSortField\n    $sortDirection: SortDirection\n    $first: Int\n    $after: String\n  ) {\n    users(\n      search: $search\n      sortBy: $sortBy\n      sortDirection: $sortDirection\n      first: $first\n      after: $after\n    ) {\n      edges {\n        node {\n          ...UserFields\n        }\n        cursor\n      }\n      pageInfo {\n        hasNextPage\n        hasPreviousPage\n        startCursor\n        endCursor\n      }\n      totalCount\n    }\n  }\n": typeof types.UsersDocument,
@@ -297,7 +297,7 @@ const documents: Documents = {
     "\n  mutation CreateCustomTimelineEvent(\n    $operationId: ID!\n    $input: CreateCustomTimelineEventInput!\n  ) {\n    createCustomTimelineEvent(operationId: $operationId, input: $input) {\n      ...TimelineEventFields\n    }\n  }\n": types.CreateCustomTimelineEventDocument,
     "\n  mutation UpdateCustomTimelineEvent(\n    $id: ID!\n    $input: UpdateCustomTimelineEventInput!\n  ) {\n    updateCustomTimelineEvent(id: $id, input: $input) {\n      ...TimelineEventFields\n    }\n  }\n": types.UpdateCustomTimelineEventDocument,
     "\n  mutation DeleteCustomTimelineEvent($id: ID!) {\n    deleteCustomTimelineEvent(id: $id)\n  }\n": types.DeleteCustomTimelineEventDocument,
-    "\n  fragment UserFields on User {\n    id\n    username\n    roles\n    active\n    createdAt\n    updatedAt\n  }\n": types.UserFieldsFragmentDoc,
+    "\n  fragment UserFields on User {\n    id\n    username\n    roles\n    active\n    authSource\n    createdAt\n    updatedAt\n  }\n": types.UserFieldsFragmentDoc,
     "\n  query Me {\n    me {\n      ...UserFields\n      hiddenIdentities\n    }\n  }\n": types.MeDocument,
     "\n  query User($id: ID!) {\n    user(id: $id) {\n      ...UserFields\n    }\n  }\n": types.UserDocument,
     "\n  query Users(\n    $search: String\n    $sortBy: UserSortField\n    $sortDirection: SortDirection\n    $first: Int\n    $after: String\n  ) {\n    users(\n      search: $search\n      sortBy: $sortBy\n      sortDirection: $sortDirection\n      first: $first\n      after: $after\n    ) {\n      edges {\n        node {\n          ...UserFields\n        }\n        cursor\n      }\n      pageInfo {\n        hasNextPage\n        hasPreviousPage\n        startCursor\n        endCursor\n      }\n      totalCount\n    }\n  }\n": types.UsersDocument,
@@ -825,7 +825,7 @@ export function graphql(source: "\n  mutation DeleteCustomTimelineEvent($id: ID!
 /**
  * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
  */
-export function graphql(source: "\n  fragment UserFields on User {\n    id\n    username\n    roles\n    active\n    createdAt\n    updatedAt\n  }\n"): (typeof documents)["\n  fragment UserFields on User {\n    id\n    username\n    roles\n    active\n    createdAt\n    updatedAt\n  }\n"];
+export function graphql(source: "\n  fragment UserFields on User {\n    id\n    username\n    roles\n    active\n    authSource\n    createdAt\n    updatedAt\n  }\n"): (typeof documents)["\n  fragment UserFields on User {\n    id\n    username\n    roles\n    active\n    authSource\n    createdAt\n    updatedAt\n  }\n"];
 /**
  * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
  */

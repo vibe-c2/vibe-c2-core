@@ -6,6 +6,7 @@ export const UserFields = graphql(`
     username
     roles
     active
+    authSource
     createdAt
     updatedAt
   }

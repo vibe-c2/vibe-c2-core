@@ -35,6 +35,9 @@ type AuthControllerConfig struct {
 	RefreshGraceTTL    time.Duration
 	GraceEncryptionKey []byte // 32-byte AES-256 key for grace shadow payloads
 	IsDev              bool
+	// LocalLoginEnabled gates POST /login. When false (SSO-only deployment)
+	// the handler answers 403 before touching the user store.
+	LocalLoginEnabled bool
 }
 
 type authController struct {
@@ -82,6 +85,11 @@ func NewAuthController(
 func (ctrl *authController) Login(c *gin.Context) {
 	log := logger.From(c.Request.Context())
 
+	if !ctrl.cfg.LocalLoginEnabled {
+		c.JSON(http.StatusForbidden, responses.NewErrorResponse("password login is disabled; use single sign-on"))
+		return
+	}
+
 	var req requests.LoginRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, responses.ErrInvalidCredentials)
@@ -97,6 +105,14 @@ func (ctrl *authController) Login(c *gin.Context) {
 
 	if !user.Active {
 		log.Warn("login: inactive account", zap.String("username", req.Username))
+		c.JSON(http.StatusBadRequest, responses.ErrInvalidCredentials)
+		return
+	}
+
+	// SSO accounts have no password; an empty bcrypt hash would fail the
+	// compare anyway, but say so explicitly rather than rely on it.
+	if user.IsSSO() {
+		log.Warn("login: password login attempted on SSO account", zap.String("username", req.Username))
 		c.JSON(http.StatusBadRequest, responses.ErrInvalidCredentials)
 		return
 	}
@@ -119,7 +135,7 @@ func (ctrl *authController) Login(c *gin.Context) {
 
 	log.Info("login: success", zap.String("user_id", user.UserID.String()))
 	ctrl.eventBus.Publish(eventbus.NewAuthLoginEvent(eventbus.UserActor(user.UserID.String()), eventbus.AuthEventPayload{
-		UserID: user.UserID.String(), Username: user.Username,
+		UserID: user.UserID.String(), Username: user.Username, Method: "password",
 	}))
 
 	c.JSON(http.StatusOK, resp)

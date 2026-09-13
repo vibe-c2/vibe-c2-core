@@ -55,6 +55,10 @@ type User {
   username: String!        # Login name (unique)
   roles: [String!]!        # RBAC roles, e.g. ["admin"] or ["user"]
   active: Boolean!         # Whether this account is enabled
+  # How the account authenticates: "local" (username + password) or "oidc"
+  # (single sign-on). SSO accounts have no password and their username and
+  # roles are re-synced from the identity provider on every login.
+  authSource: String!
   createdAt: String!       # ISO 8601 timestamp
   updatedAt: String!       # ISO 8601 timestamp
   # Usernames this operator hides from the host topology Users lens.

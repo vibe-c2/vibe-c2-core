@@ -88,7 +88,14 @@ export function UsersTable({
       }
       renderRow={(user) => (
         <div className={dataTableRowClass(gridCols)}>
-          <div className="font-medium truncate">{user.username}</div>
+          <div className="flex items-center gap-2 min-w-0">
+            <span className="font-medium truncate">{user.username}</span>
+            {user.authSource === "oidc" && (
+              <Badge variant="outline" title="Single sign-on account">
+                SSO
+              </Badge>
+            )}
+          </div>
           <div className="flex gap-1">
             {user.roles.map((role) => (
               <Badge

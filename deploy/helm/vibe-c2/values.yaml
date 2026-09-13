@@ -67,6 +67,9 @@ secrets:
     hocuspocusTicketSecret: ""
     hocuspocusWebhookSecret: ""
 
+    # OIDC client secret. Only required when core.config.oidc.enabled=true.
+    oidcClientSecret: ""
+
 # -----------------------------------------------------------------------------
 # Core API (Go backend)
 # -----------------------------------------------------------------------------
@@ -130,6 +133,30 @@ core:
       refreshTtl: "168h"
       refreshGraceTtl: "10s"
       csrfEnabled: true
+      # false hides the password form and refuses POST /login. Only valid
+      # together with oidc.enabled=true (core refuses to boot otherwise).
+      localLoginEnabled: true
+
+    # Optional single sign-on through any OpenID Connect provider. The
+    # client secret lives in secrets.values.oidcClientSecret. See
+    # docs/oidc-auth-design.md in the core repo for the claim/role model.
+    oidc:
+      enabled: false
+      # e.g. https://keycloak.example.com/realms/vibec2
+      issuerUrl: ""
+      clientId: "vibe-c2"
+      # The callback is derived from the request (ingress sets
+      # X-Forwarded-Proto/Host): register
+      # https://<ingress host>/api/v1/auth/oidc/callback at the provider.
+      scopes: "openid,profile"
+      displayName: "Single sign-on"
+      usernameClaim: "preferred_username"
+      rolesClaim: "realm_access.roles"
+      roleMapping: "vibec2-admin:admin,vibec2-user:user"
+      defaultRoles: "user"
+      useUserinfo: true
+      linkExistingByUsername: false
+      httpTimeout: "10s"
 
   resources:
     requests:

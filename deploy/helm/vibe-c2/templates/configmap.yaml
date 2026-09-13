@@ -67,3 +67,20 @@ data:
   AUTH_REFRESH_TTL: {{ .Values.core.config.auth.refreshTtl | quote }}
   AUTH_REFRESH_GRACE_TTL: {{ .Values.core.config.auth.refreshGraceTtl | quote }}
   AUTH_CSRF_ENABLED: {{ .Values.core.config.auth.csrfEnabled | quote }}
+  AUTH_LOCAL_LOGIN_ENABLED: {{ .Values.core.config.auth.localLoginEnabled | quote }}
+
+  # ----- OIDC / single sign-on (secret lives in the app Secret) -----
+  {{- with .Values.core.config.oidc }}
+  OIDC_ENABLED: {{ .enabled | quote }}
+  OIDC_ISSUER_URL: {{ .issuerUrl | quote }}
+  OIDC_CLIENT_ID: {{ .clientId | quote }}
+  OIDC_SCOPES: {{ .scopes | quote }}
+  OIDC_DISPLAY_NAME: {{ .displayName | quote }}
+  OIDC_USERNAME_CLAIM: {{ .usernameClaim | quote }}
+  OIDC_ROLES_CLAIM: {{ .rolesClaim | quote }}
+  OIDC_ROLE_MAPPING: {{ .roleMapping | quote }}
+  OIDC_DEFAULT_ROLES: {{ .defaultRoles | quote }}
+  OIDC_USE_USERINFO: {{ .useUserinfo | quote }}
+  OIDC_LINK_EXISTING_BY_USERNAME: {{ .linkExistingByUsername | quote }}
+  OIDC_HTTP_TIMEOUT: {{ .httpTimeout | quote }}
+  {{- end }}

@@ -37,10 +37,29 @@ func (a *App) NewRouter() *gin.Engine {
 		RefreshGraceTTL:    a.authCfg.refreshGraceTTL,
 		GraceEncryptionKey: a.authCfg.graceKey,
 		IsDev:              isDev,
+		LocalLoginEnabled:  a.authCfg.localLoginEnabled,
 	}
 	authCtrl := controller.NewAuthController(a.repos.User, a.repos.Session, a.authProvider, a.tokenStore, a.eventBus, a.logger, ctrlCfg)
 	enrollCtrl := controller.NewEnrollController(a.repos.User, a.repos.Session, a.authProvider, a.tokenStore, a.eventBus, a.logger, ctrlCfg)
-	statusCtrl := controller.NewStatusController(a.repos.User, a.logger)
+	statusCtrl := controller.NewStatusController(a.repos.User, a.logger, controller.LoginOptions{
+		LocalLoginEnabled: a.authCfg.localLoginEnabled,
+		OIDCStatus:        a.oidcStatus,
+	})
+
+	// Single sign-on (nil provider = OIDC_ENABLED=false, routes not mounted).
+	var oidcCtrl controller.IOIDCController
+	if a.oidcProvider != nil {
+		oidcCtrl = controller.NewOIDCController(
+			a.oidcProvider, a.repos.User, a.repos.Session, a.authProvider, a.tokenStore, a.eventBus, a.logger,
+			ctrlCfg,
+			controller.OIDCControllerConfig{
+				Claims:                 oidcConfigFromEnv(a.env),
+				AllowedOrigins:         a.env.CORSAllowedOrigins,
+				HandshakeKey:           a.authCfg.oidcHandshakeKey,
+				LinkExistingByUsername: a.env.OIDC.LinkExistingByUsername,
+			},
+		)
+	}
 	channelCtrl := controller.NewChannelController(a.cache, a.moduleGate, a.logger)
 
 	// Resolvers (GraphQL business logic, same pattern as controllers)
@@ -138,6 +157,15 @@ func (a *App) NewRouter() *gin.Engine {
 		v1.GET("/status", statusCtrl.Status)
 		v1.POST("/enroll", enrollCtrl.Enroll)
 		v1.POST("/login", authCtrl.Login)
+
+		// SSO start + provider callback. Both are top-level GET navigations
+		// with no cookie-authenticated state to protect, so they sit outside
+		// AuthN/CSRF; the sealed handshake cookie + state + PKCE bind the
+		// callback to the browser that started the flow.
+		if oidcCtrl != nil {
+			v1.GET("/auth/oidc/login", oidcCtrl.Login)
+			v1.GET("/auth/oidc/callback", oidcCtrl.Callback)
+		}
 
 		// /login/refresh requires the CSRF double-submit cookie (set on
 		// the previous login/refresh) but no JWT — the access cookie may
@@ -263,6 +291,23 @@ func (a *App) NewRouter() *gin.Engine {
 	}
 
 	return r
+}
+
+// oidcStatus is the /status view of the SSO option, evaluated per request
+// because discovery can succeed later than boot.
+func (a *App) oidcStatus() responses.OIDCStatus {
+	if a.oidcProvider == nil {
+		return responses.OIDCStatus{}
+	}
+	st := responses.OIDCStatus{
+		Enabled:     true,
+		DisplayName: a.env.OIDC.DisplayName,
+		LoginURL:    controller.OIDCLoginPath,
+	}
+	if err := a.oidcProvider.Status(); err != nil {
+		st.UnavailableReason = "identity provider unreachable"
+	}
+	return st
 }
 
 func healthcheck(c *gin.Context) {

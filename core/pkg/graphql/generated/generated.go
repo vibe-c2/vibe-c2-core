@@ -639,6 +639,7 @@ type ComplexityRoot struct {
 
 	User struct {
 		Active           func(childComplexity int) int
+		AuthSource       func(childComplexity int) int
 		CreatedAt        func(childComplexity int) int
 		HiddenIdentities func(childComplexity int) int
 		ID               func(childComplexity int) int
@@ -1091,6 +1092,7 @@ type TimelineEventResolver interface {
 type UserResolver interface {
 	ID(ctx context.Context, obj *models.User) (string, error)
 
+	AuthSource(ctx context.Context, obj *models.User) (string, error)
 	CreatedAt(ctx context.Context, obj *models.User) (string, error)
 	UpdatedAt(ctx context.Context, obj *models.User) (string, error)
 }
@@ -4346,6 +4348,12 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.User.Active(childComplexity), true
+	case "User.authSource":
+		if e.ComplexityRoot.User.AuthSource == nil {
+			break
+		}
+
+		return e.ComplexityRoot.User.AuthSource(childComplexity), true
 	case "User.createdAt":
 		if e.ComplexityRoot.User.CreatedAt == nil {
 			break
@@ -6397,6 +6405,10 @@ type User {
   username: String!        # Login name (unique)
   roles: [String!]!        # RBAC roles, e.g. ["admin"] or ["user"]
   active: Boolean!         # Whether this account is enabled
+  # How the account authenticates: "local" (username + password) or "oidc"
+  # (single sign-on). SSO accounts have no password and their username and
+  # roles are re-synced from the identity provider on every login.
+  authSource: String!
   createdAt: String!       # ISO 8601 timestamp
   updatedAt: String!       # ISO 8601 timestamp
   # Usernames this operator hides from the host topology Users lens.
@@ -12401,6 +12413,8 @@ func (ec *executionContext) fieldContext_Credential_createdBy(_ context.Context,
 				return ec.fieldContext_User_roles(ctx, field)
 			case "active":
 				return ec.fieldContext_User_active(ctx, field)
+			case "authSource":
+				return ec.fieldContext_User_authSource(ctx, field)
 			case "createdAt":
 				return ec.fieldContext_User_createdAt(ctx, field)
 			case "updatedAt":
@@ -12787,6 +12801,8 @@ func (ec *executionContext) fieldContext_CredentialComment_author(_ context.Cont
 				return ec.fieldContext_User_roles(ctx, field)
 			case "active":
 				return ec.fieldContext_User_active(ctx, field)
+			case "authSource":
+				return ec.fieldContext_User_authSource(ctx, field)
 			case "createdAt":
 				return ec.fieldContext_User_createdAt(ctx, field)
 			case "updatedAt":
@@ -13713,6 +13729,8 @@ func (ec *executionContext) fieldContext_Hash_createdBy(_ context.Context, field
 				return ec.fieldContext_User_roles(ctx, field)
 			case "active":
 				return ec.fieldContext_User_active(ctx, field)
+			case "authSource":
+				return ec.fieldContext_User_authSource(ctx, field)
 			case "createdAt":
 				return ec.fieldContext_User_createdAt(ctx, field)
 			case "updatedAt":
@@ -14634,6 +14652,8 @@ func (ec *executionContext) fieldContext_Host_createdBy(_ context.Context, field
 				return ec.fieldContext_User_roles(ctx, field)
 			case "active":
 				return ec.fieldContext_User_active(ctx, field)
+			case "authSource":
+				return ec.fieldContext_User_authSource(ctx, field)
 			case "createdAt":
 				return ec.fieldContext_User_createdAt(ctx, field)
 			case "updatedAt":
@@ -15699,6 +15719,8 @@ func (ec *executionContext) fieldContext_Mutation_createUser(ctx context.Context
 				return ec.fieldContext_User_roles(ctx, field)
 			case "active":
 				return ec.fieldContext_User_active(ctx, field)
+			case "authSource":
+				return ec.fieldContext_User_authSource(ctx, field)
 			case "createdAt":
 				return ec.fieldContext_User_createdAt(ctx, field)
 			case "updatedAt":
@@ -15774,6 +15796,8 @@ func (ec *executionContext) fieldContext_Mutation_updateUser(ctx context.Context
 				return ec.fieldContext_User_roles(ctx, field)
 			case "active":
 				return ec.fieldContext_User_active(ctx, field)
+			case "authSource":
+				return ec.fieldContext_User_authSource(ctx, field)
 			case "createdAt":
 				return ec.fieldContext_User_createdAt(ctx, field)
 			case "updatedAt":
@@ -15908,6 +15932,8 @@ func (ec *executionContext) fieldContext_Mutation_updateOwnProfile(ctx context.C
 				return ec.fieldContext_User_roles(ctx, field)
 			case "active":
 				return ec.fieldContext_User_active(ctx, field)
+			case "authSource":
+				return ec.fieldContext_User_authSource(ctx, field)
 			case "createdAt":
 				return ec.fieldContext_User_createdAt(ctx, field)
 			case "updatedAt":
@@ -15983,6 +16009,8 @@ func (ec *executionContext) fieldContext_Mutation_setHiddenIdentities(ctx contex
 				return ec.fieldContext_User_roles(ctx, field)
 			case "active":
 				return ec.fieldContext_User_active(ctx, field)
+			case "authSource":
+				return ec.fieldContext_User_authSource(ctx, field)
 			case "createdAt":
 				return ec.fieldContext_User_createdAt(ctx, field)
 			case "updatedAt":
@@ -21707,6 +21735,8 @@ func (ec *executionContext) fieldContext_OperationMember_user(_ context.Context,
 				return ec.fieldContext_User_roles(ctx, field)
 			case "active":
 				return ec.fieldContext_User_active(ctx, field)
+			case "authSource":
+				return ec.fieldContext_User_authSource(ctx, field)
 			case "createdAt":
 				return ec.fieldContext_User_createdAt(ctx, field)
 			case "updatedAt":
@@ -22408,6 +22438,8 @@ func (ec *executionContext) fieldContext_Query_me(_ context.Context, field graph
 				return ec.fieldContext_User_roles(ctx, field)
 			case "active":
 				return ec.fieldContext_User_active(ctx, field)
+			case "authSource":
+				return ec.fieldContext_User_authSource(ctx, field)
 			case "createdAt":
 				return ec.fieldContext_User_createdAt(ctx, field)
 			case "updatedAt":
@@ -22472,6 +22504,8 @@ func (ec *executionContext) fieldContext_Query_user(ctx context.Context, field g
 				return ec.fieldContext_User_roles(ctx, field)
 			case "active":
 				return ec.fieldContext_User_active(ctx, field)
+			case "authSource":
+				return ec.fieldContext_User_authSource(ctx, field)
 			case "createdAt":
 				return ec.fieldContext_User_createdAt(ctx, field)
 			case "updatedAt":
@@ -26920,6 +26954,8 @@ func (ec *executionContext) fieldContext_Session_user(_ context.Context, field g
 				return ec.fieldContext_User_roles(ctx, field)
 			case "active":
 				return ec.fieldContext_User_active(ctx, field)
+			case "authSource":
+				return ec.fieldContext_User_authSource(ctx, field)
 			case "createdAt":
 				return ec.fieldContext_User_createdAt(ctx, field)
 			case "updatedAt":
@@ -29075,6 +29111,8 @@ func (ec *executionContext) fieldContext_Task_assignees(_ context.Context, field
 				return ec.fieldContext_User_roles(ctx, field)
 			case "active":
 				return ec.fieldContext_User_active(ctx, field)
+			case "authSource":
+				return ec.fieldContext_User_authSource(ctx, field)
 			case "createdAt":
 				return ec.fieldContext_User_createdAt(ctx, field)
 			case "updatedAt":
@@ -29282,6 +29320,8 @@ func (ec *executionContext) fieldContext_Task_createdBy(_ context.Context, field
 				return ec.fieldContext_User_roles(ctx, field)
 			case "active":
 				return ec.fieldContext_User_active(ctx, field)
+			case "authSource":
+				return ec.fieldContext_User_authSource(ctx, field)
 			case "createdAt":
 				return ec.fieldContext_User_createdAt(ctx, field)
 			case "updatedAt":
@@ -29327,6 +29367,8 @@ func (ec *executionContext) fieldContext_Task_lastUpdatedBy(_ context.Context, f
 				return ec.fieldContext_User_roles(ctx, field)
 			case "active":
 				return ec.fieldContext_User_active(ctx, field)
+			case "authSource":
+				return ec.fieldContext_User_authSource(ctx, field)
 			case "createdAt":
 				return ec.fieldContext_User_createdAt(ctx, field)
 			case "updatedAt":
@@ -30161,6 +30203,8 @@ func (ec *executionContext) fieldContext_TimelineEvent_actor(_ context.Context, 
 				return ec.fieldContext_User_roles(ctx, field)
 			case "active":
 				return ec.fieldContext_User_active(ctx, field)
+			case "authSource":
+				return ec.fieldContext_User_authSource(ctx, field)
 			case "createdAt":
 				return ec.fieldContext_User_createdAt(ctx, field)
 			case "updatedAt":
@@ -30736,6 +30780,35 @@ func (ec *executionContext) fieldContext_User_active(_ context.Context, field gr
 	return fc, nil
 }
 
+func (ec *executionContext) _User_authSource(ctx context.Context, field graphql.CollectedField, obj *models.User) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_User_authSource,
+		func(ctx context.Context) (any, error) {
+			return ec.Resolvers.User().AuthSource(ctx, obj)
+		},
+		nil,
+		ec.marshalNString2string,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_User_authSource(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "User",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
 func (ec *executionContext) _User_createdAt(ctx context.Context, field graphql.CollectedField, obj *models.User) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
@@ -30958,6 +31031,8 @@ func (ec *executionContext) fieldContext_UserEdge_node(_ context.Context, field 
 				return ec.fieldContext_User_roles(ctx, field)
 			case "active":
 				return ec.fieldContext_User_active(ctx, field)
+			case "authSource":
+				return ec.fieldContext_User_authSource(ctx, field)
 			case "createdAt":
 				return ec.fieldContext_User_createdAt(ctx, field)
 			case "updatedAt":
@@ -31119,6 +31194,8 @@ func (ec *executionContext) fieldContext_UserEvent_user(_ context.Context, field
 				return ec.fieldContext_User_roles(ctx, field)
 			case "active":
 				return ec.fieldContext_User_active(ctx, field)
+			case "authSource":
+				return ec.fieldContext_User_authSource(ctx, field)
 			case "createdAt":
 				return ec.fieldContext_User_createdAt(ctx, field)
 			case "updatedAt":
@@ -32043,6 +32120,8 @@ func (ec *executionContext) fieldContext_WikiDocument_createdBy(_ context.Contex
 				return ec.fieldContext_User_roles(ctx, field)
 			case "active":
 				return ec.fieldContext_User_active(ctx, field)
+			case "authSource":
+				return ec.fieldContext_User_authSource(ctx, field)
 			case "createdAt":
 				return ec.fieldContext_User_createdAt(ctx, field)
 			case "updatedAt":
@@ -32088,6 +32167,8 @@ func (ec *executionContext) fieldContext_WikiDocument_lastUpdatedBy(_ context.Co
 				return ec.fieldContext_User_roles(ctx, field)
 			case "active":
 				return ec.fieldContext_User_active(ctx, field)
+			case "authSource":
+				return ec.fieldContext_User_authSource(ctx, field)
 			case "createdAt":
 				return ec.fieldContext_User_createdAt(ctx, field)
 			case "updatedAt":
@@ -32220,6 +32301,8 @@ func (ec *executionContext) fieldContext_WikiDocument_deletedBy(_ context.Contex
 				return ec.fieldContext_User_roles(ctx, field)
 			case "active":
 				return ec.fieldContext_User_active(ctx, field)
+			case "authSource":
+				return ec.fieldContext_User_authSource(ctx, field)
 			case "createdAt":
 				return ec.fieldContext_User_createdAt(ctx, field)
 			case "updatedAt":
@@ -32775,6 +32858,8 @@ func (ec *executionContext) fieldContext_WikiDocumentBackup_createdBy(_ context.
 				return ec.fieldContext_User_roles(ctx, field)
 			case "active":
 				return ec.fieldContext_User_active(ctx, field)
+			case "authSource":
+				return ec.fieldContext_User_authSource(ctx, field)
 			case "createdAt":
 				return ec.fieldContext_User_createdAt(ctx, field)
 			case "updatedAt":
@@ -45203,6 +45288,42 @@ func (ec *executionContext) _User(ctx context.Context, sel ast.SelectionSet, obj
 			if out.Values[i] == graphql.Null {
 				atomic.AddUint32(&out.Invalids, 1)
 			}
+		case "authSource":
+			field := field
+
+			innerFunc := func(ctx context.Context, fs *graphql.FieldSet) (res graphql.Marshaler) {
+				defer func() {
+					if r := recover(); r != nil {
+						ec.Error(ctx, ec.Recover(ctx, r))
+					}
+				}()
+				res = ec._User_authSource(ctx, field, obj)
+				if res == graphql.Null {
+					atomic.AddUint32(&fs.Invalids, 1)
+				}
+				return res
+			}
+
+			if field.Deferrable != nil {
+				dfs, ok := deferred[field.Deferrable.Label]
+				di := 0
+				if ok {
+					dfs.AddField(field)
+					di = len(dfs.Values) - 1
+				} else {
+					dfs = graphql.NewFieldSet([]graphql.CollectedField{field})
+					deferred[field.Deferrable.Label] = dfs
+				}
+				dfs.Concurrently(di, func(ctx context.Context) graphql.Marshaler {
+					return innerFunc(ctx, dfs)
+				})
+
+				// don't run the out.Concurrently() call below
+				out.Values[i] = graphql.Null
+				continue
+			}
+
+			out.Concurrently(i, func(ctx context.Context) graphql.Marshaler { return innerFunc(ctx, out) })
 		case "createdAt":
 			field := field
 
