@@ -177,7 +177,7 @@ export function WikiTreeSidebar({
   const scopedOperation = useScopedOperation()
   const sidebarWidth = useWikiStore((s) => s.sidebarWidth)
   const openCreateDialog = useWikiStore((s) => s.openCreateDialog)
-  const openImportOutlineDialog = useWikiStore((s) => s.openImportOutlineDialog)
+  const openImportDialog = useWikiStore((s) => s.openImportDialog)
   const openExportDialog = useWikiStore((s) => s.openExportDialog)
   const openTrashPanel = useWikiStore((s) => s.openTrashPanel)
   const openRecentDocs = useWikiStore((s) => s.openRecentDocs)
@@ -593,13 +593,13 @@ export function WikiTreeSidebar({
                 <Button
                   variant="ghost"
                   size="icon-xs"
-                  onClick={openImportOutlineDialog}
+                  onClick={openImportDialog}
                 />
               }
             >
               <DownloadIcon className="size-3.5" />
             </TooltipTrigger>
-            <TooltipContent>Import markdown</TooltipContent>
+            <TooltipContent>Import wiki</TooltipContent>
           </Tooltip>
         )}
         <Tooltip>

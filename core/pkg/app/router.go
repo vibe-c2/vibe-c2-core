@@ -14,8 +14,6 @@ import (
 	"github.com/vibe-c2/vibe-c2-core/core/pkg/resolver"
 	"github.com/vibe-c2/vibe-c2-core/core/pkg/responses"
 	"github.com/vibe-c2/vibe-c2-core/core/pkg/wiki"
-	"github.com/vibe-c2/vibe-c2-core/core/pkg/wikiexport"
-	"github.com/vibe-c2/vibe-c2-core/core/pkg/wikiimport"
 
 	_ "github.com/vibe-c2/vibe-c2-core/core/docs"
 )
@@ -103,53 +101,18 @@ func (a *App) NewRouter() *gin.Engine {
 
 	// Wiki controller (REST endpoints)
 	wikiCtrl := controller.NewWikiController(a.repos.WikiDocument, a.repos.Operation, a.env.HocuspocusTicketSecret, a.logger)
-	wikiImageCtrl := controller.NewWikiImageController(
-		a.repos.WikiDocument, a.repos.WikiImage, a.repos.Operation,
-		a.imageStore, a.imageProcessor, a.logger,
-		controller.WikiImageControllerConfig{MaxSize: a.env.WikiImageMaxSize},
-	)
-	wikiFileCtrl := controller.NewWikiFileController(
-		a.repos.WikiDocument, a.repos.WikiFile, a.repos.Operation,
+	// Attachment controllers are built in app.go (the transfer pipeline
+	// ingests through them); mount the shared instances.
+	wikiImageCtrl := a.wikiImageCtrl
+	wikiFileCtrl := a.wikiFileCtrl
+
+	// Wiki transfer (export/import as background jobs). The runner and its
+	// pipeline are built in app.go; the controller only stages uploads,
+	// queues jobs and serves status and downloads.
+	wikiTransferCtrl := controller.NewWikiTransferController(
+		a.transferRunner, a.repos.WikiTransferJob, a.repos.Operation, a.repos.WikiDocument,
 		a.fileStore, a.logger,
-		controller.WikiFileControllerConfig{
-			MaxSize:            a.env.WikiFileMaxSize,
-			DeniedContentTypes: a.env.WikiFileDeniedContentTypes,
-		},
-	)
-
-	// Outline-export importer. Reuses the image/file ingest helpers from
-	// the controllers above and delegates markdown→Y.js conversion to the
-	// Hocuspocus sidecar via the existing HocuspocusClient.
-	wikiImportOrch := wikiimport.NewOrchestrator(
-		a.repos.WikiDocument,
-		a.repos.Credential,
-		wikiImageCtrl,
-		wikiFileCtrl,
-		a.hpClient,
-		a.eventBus,
-		a.logger,
-	)
-	wikiImportCtrl := controller.NewWikiImportController(
-		wikiImportOrch, a.repos.Operation, a.logger,
-		controller.WikiImportControllerConfig{MaxZipSize: a.env.WikiImportZipMaxSize},
-	)
-
-	// Outline-flavored markdown exporter. Inverse of the importer above:
-	// renders an operation's wiki (or a subtree) to a zip whose layout
-	// matches the importer's input contract, so the result round-trips.
-	wikiExportOrch := wikiexport.NewOrchestrator(
-		a.repos.WikiDocument,
-		a.repos.WikiImage,
-		a.repos.WikiFile,
-		a.imageStore,
-		a.fileStore,
-		a.hpClient,
-		wikiexport.NewCredentialRepoLookup(a.repos.Credential),
-		a.logger,
-		wikiexport.Config{},
-	)
-	wikiExportCtrl := controller.NewWikiExportController(
-		wikiExportOrch, a.repos.WikiDocument, a.repos.Operation, a.logger,
+		controller.WikiTransferControllerConfig{MaxUploadSize: a.env.WikiImportZipMaxSize},
 	)
 
 	// Wiki webhook handler (Hocuspocus callbacks — internal, HMAC-validated, not behind JWTAuth)
@@ -265,13 +228,14 @@ func (a *App) NewRouter() *gin.Engine {
 		wikiGroup.POST("/files", wikiFileCtrl.Upload)
 		wikiGroup.GET("/files/:id", wikiFileCtrl.Download)
 
-		// Outline-export importer (operator+ only; auth check is inside
-		// the handler since it depends on the operationId query param).
-		wikiGroup.POST("/import/outline", wikiImportCtrl.UploadOutlineExport)
-
-		// Outline-format markdown exporter. Reader+ on the operation;
-		// the GET method is exempt from CSRF by the middleware above.
-		wikiGroup.GET("/export", wikiExportCtrl.Export)
+		// Wiki transfer jobs. Role checks live in the handlers since they
+		// depend on the operation named in the request. GETs bypass CSRF
+		// so the download link works as a plain navigation.
+		wikiGroup.POST("/transfer/exports", wikiTransferCtrl.StartExport)
+		wikiGroup.POST("/transfer/imports", wikiTransferCtrl.StartImport)
+		wikiGroup.GET("/transfer/jobs", wikiTransferCtrl.ListJobs)
+		wikiGroup.GET("/transfer/jobs/:id", wikiTransferCtrl.GetJob)
+		wikiGroup.GET("/transfer/jobs/:id/download", wikiTransferCtrl.Download)
 
 		// GraphQL endpoint — all queries, mutations, and subscriptions.
 		// Authentication is handled by the JWTAuth middleware above (same as REST).

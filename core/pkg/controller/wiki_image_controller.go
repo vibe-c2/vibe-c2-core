@@ -165,6 +165,19 @@ func (wic *WikiImageController) IngestImage(
 	uploaderID uuid.UUID,
 	body io.Reader,
 ) (*models.WikiImage, *wiki.IngestError) {
+	return wic.IngestImageWithID(ctx, doc, uploaderID, body, uuid.New())
+}
+
+// IngestImageWithID is IngestImage with a caller-chosen id. The wiki
+// transfer materialiser allocates attachment ids before the page body is
+// rebased, so the body can reference the blob before it exists.
+func (wic *WikiImageController) IngestImageWithID(
+	ctx context.Context,
+	doc *models.WikiDocument,
+	uploaderID uuid.UUID,
+	body io.Reader,
+	imageID uuid.UUID,
+) (*models.WikiImage, *wiki.IngestError) {
 	raw, err := wiki.ReadAllLimited(body, wic.cfg.MaxSize)
 	if err != nil {
 		return nil, &wiki.IngestError{
@@ -187,7 +200,6 @@ func (wic *WikiImageController) IngestImage(
 		}
 	}
 
-	imageID := uuid.New()
 	key := objectKeyFor(doc.OperationID, doc.DocumentID, imageID, processed.ContentType)
 
 	// Detached timeout so a client disconnect doesn't abort the write
@@ -229,6 +241,20 @@ func (wic *WikiImageController) IngestImage(
 	)
 
 	return img, nil
+}
+
+// DiscardImage hard-deletes an image record and its blob. Used by the wiki
+// transfer materialiser when the page an attachment was ingested for could
+// not be created, so the blob is not left for the sweeper.
+func (wic *WikiImageController) DiscardImage(ctx context.Context, imageID uuid.UUID) error {
+	img, err := wic.imageRepo.FindByID(ctx, imageID)
+	if err != nil {
+		return err
+	}
+	if err := wic.imageRepo.HardDelete(ctx, imageID); err != nil {
+		return err
+	}
+	return wic.store.Delete(ctx, img.ObjectKey)
 }
 
 // Download handles GET /api/v1/wiki/images/:id. The response is streamed from

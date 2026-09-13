@@ -6,6 +6,7 @@ import { setupDisconnectApi } from "./disconnect.js";
 import { setupInternalApi } from "./internal-api.js";
 import { setupApplyApi } from "./apply-markdown.js";
 import { setupExtractApi } from "./extract-text.js";
+import { setupRebaseApi } from "./rebase-api.js";
 
 const port = parseInt(process.env.PORT || "1234", 10);
 const maxActiveRooms = parseInt(process.env.MAX_ACTIVE_ROOMS || "100", 10);
@@ -123,6 +124,9 @@ setupApplyApi(app, server);
 // Office-attachment text extraction for the MCP agent surface. Same raw-body
 // HMAC path as the routes above, so it mounts before express.json() too.
 setupExtractApi(app);
+// Id rebasing + projection for pages the Go transfer materialiser creates.
+// Raw-body HMAC like the routes above.
+setupRebaseApi(app);
 app.use(express.json());
 setupDisconnectApi(app, server);
 

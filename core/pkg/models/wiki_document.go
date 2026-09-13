@@ -121,4 +121,21 @@ type WikiDocument struct {
 	// host" lookup. Hosts are operation-private, so the sidecar drops these on
 	// Public-tree documents (same boundary as credentials/hashes).
 	HostReferences []uuid.UUID `bson:"host_references,omitempty" json:"-"`
+	// ImportOrigin records where a document came from when it was created by
+	// a wiki transfer (bundle or markdown import) rather than authored here.
+	// Nil for every other document. Provenance only: nothing reads it on the
+	// hot path, but it is the hook for "already imported from this bundle"
+	// checks and for answering "where did this page come from" later.
+	ImportOrigin *WikiImportOrigin `bson:"import_origin,omitempty" json:"-"`
+}
+
+// WikiImportOrigin is the provenance stamp on an imported WikiDocument.
+type WikiImportOrigin struct {
+	// BundleID identifies the export run the page came from. For a markdown
+	// import it is a fresh id shared by every page of that import.
+	BundleID uuid.UUID `bson:"bundle_id" json:"bundleId"`
+	// SourceDocumentID is the page's id on the source system. Zero for
+	// foreign markdown, which carries no ids.
+	SourceDocumentID uuid.UUID `bson:"source_document_id,omitempty" json:"sourceDocumentId"`
+	ImportedAt       time.Time `bson:"imported_at" json:"importedAt"`
 }

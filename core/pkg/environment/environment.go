@@ -76,8 +76,10 @@ type EnvironmentSettings struct {
 	WikiSweeperEnabled bool // master switch: when false, neither sweeper starts
 	WikiSweeperDryRun  bool // when true, sweepers log what they would delete but delete nothing
 
-	// Wiki Outline-export importer
-	WikiImportZipMaxSize int64 // bytes; total uncompressed zip cap before parsing
+	// Wiki transfer (export/import jobs)
+	WikiImportZipMaxSize    int64         // bytes; cap on an uploaded import archive
+	WikiTransferArtifactTTL time.Duration // how long finished jobs and their archives are kept
+	InstallationID          string        // optional stable id stamped into exported bundles
 
 	// Auth — durations parsed from Go duration strings (e.g. "15m", "168h").
 	AuthAccessTTL       time.Duration
@@ -140,6 +142,8 @@ func init() {
 	viper.SetDefault("WIKI_SWEEPER_ENABLED", false)
 	viper.SetDefault("WIKI_SWEEPER_DRY_RUN", true)
 	viper.SetDefault("WIKI_IMPORT_ZIP_MAX_SIZE", int64(200*1024*1024))
+	viper.SetDefault("WIKI_TRANSFER_ARTIFACT_TTL", "24h")
+	viper.SetDefault("INSTALLATION_ID", "")
 	viper.SetDefault("AUTH_ACCESS_TTL", "15m")
 	viper.SetDefault("AUTH_REFRESH_TTL", "168h")
 	viper.SetDefault("AUTH_REFRESH_GRACE_TTL", "10s")
@@ -207,8 +211,10 @@ func init() {
 		WikiSweeperEnabled: viper.GetBool("WIKI_SWEEPER_ENABLED"),
 		WikiSweeperDryRun:  viper.GetBool("WIKI_SWEEPER_DRY_RUN"),
 
-		// Wiki Outline import
-		WikiImportZipMaxSize: viper.GetInt64("WIKI_IMPORT_ZIP_MAX_SIZE"),
+		// Wiki transfer
+		WikiImportZipMaxSize:    viper.GetInt64("WIKI_IMPORT_ZIP_MAX_SIZE"),
+		WikiTransferArtifactTTL: parseDurationOrFatal("WIKI_TRANSFER_ARTIFACT_TTL", viper.GetString("WIKI_TRANSFER_ARTIFACT_TTL")),
+		InstallationID:          viper.GetString("INSTALLATION_ID"),
 
 		// Auth
 		AuthAccessTTL:       parseDurationOrFatal("AUTH_ACCESS_TTL", viper.GetString("AUTH_ACCESS_TTL")),

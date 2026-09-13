@@ -1,6 +1,7 @@
 import { Database } from "@hocuspocus/extension-database";
 import { Binary, MongoClient, type Db } from "mongodb";
 import * as Y from "yjs";
+import { extractTextFromFragment } from "./projection.js";
 import {
   collectChecklistCoverage,
   collectCredentialReferenceIds,
@@ -405,22 +406,6 @@ export function createDatabaseExtension(): Database {
       }
     },
   });
-}
-
-/**
- * Recursively extract plain text from a Y.XmlFragment (TipTap document).
- * Block-level elements are separated by newlines.
- */
-function extractTextFromFragment(node: Y.XmlFragment | Y.XmlElement): string {
-  const parts: string[] = [];
-  for (const child of node.toArray()) {
-    if (child instanceof Y.XmlText) {
-      parts.push(child.toString());
-    } else if (child instanceof Y.XmlElement) {
-      parts.push(extractTextFromFragment(child));
-    }
-  }
-  return parts.join("\n").trim();
 }
 
 /**

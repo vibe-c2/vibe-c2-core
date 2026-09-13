@@ -383,3 +383,141 @@ func (c *HocuspocusClient) ExtractText(ctx context.Context, filename, contentTyp
 	}
 	return out, nil
 }
+
+// ChipKind names a kind of inline reference chip for RebaseRequest.
+// Values mirror the segment names in hocuspocus/src/markdown-serializer.ts
+// (`vibe://doc/…`, `vibe://host/…`, `vibe://hash/…`) plus "credential".
+type ChipKind string
+
+const (
+	ChipDoc        ChipKind = "doc"
+	ChipHost       ChipKind = "host"
+	ChipHash       ChipKind = "hash"
+	ChipCredential ChipKind = "credential"
+)
+
+// RebaseRequest describes one page to rebase. Exactly one of ContentState
+// or Markdown is set: native transfers send the stored Y.js bytes, foreign
+// imports send markdown for the sidecar to parse.
+type RebaseRequest struct {
+	ContentState []byte
+	Markdown     string
+	// IDMap maps every source id the body may reference (documents, hosts,
+	// hashes, credentials, images, files) to the id it must carry on the
+	// target. Ids absent from the map are kept unless Drop or
+	// DropUnmappedKinds says otherwise.
+	IDMap map[string]string
+	// Drop lists ids whose chips are lowered to plain label text.
+	Drop []string
+	// DropUnmappedKinds lists chip kinds for which any id absent from IDMap
+	// is lowered to text. A cross-operation import names every kind; a
+	// same-operation import names none.
+	DropUnmappedKinds []ChipKind
+}
+
+// ChecklistCoverage mirrors the sidecar's projection of checklist items.
+type ChecklistCoverage struct {
+	Total    int `json:"total"`
+	Required int `json:"required"`
+	Answered int `json:"answered"`
+}
+
+// RebaseResult is the rebased body plus the full persisted projection the
+// sidecar derived from it — the same fields persistence.ts writes on a
+// collaborative save, so a page created from this result is indexed as if
+// it had been saved in the editor.
+type RebaseResult struct {
+	ContentState         []byte
+	Content              string            `json:"content"`
+	References           []string          `json:"references"`
+	CredentialReferences []string          `json:"credentialReferences"`
+	HashReferences       []string          `json:"hashReferences"`
+	HostReferences       []string          `json:"hostReferences"`
+	ImageReferences      []string          `json:"imageReferences"`
+	FileReferences       []string          `json:"fileReferences"`
+	Checklist            ChecklistCoverage `json:"checklist"`
+	SchemaVersion        int               `json:"schemaVersion"`
+	Unmapped             []string          `json:"unmapped"`
+	Dropped              int               `json:"dropped"`
+	Remapped             int               `json:"remapped"`
+}
+
+type rebaseWireRequest struct {
+	ContentState      string            `json:"contentState,omitempty"`
+	Markdown          *string           `json:"markdown,omitempty"`
+	IDMap             map[string]string `json:"idMap"`
+	Drop              []string          `json:"drop,omitempty"`
+	DropUnmappedKinds []ChipKind        `json:"dropUnmappedKinds,omitempty"`
+}
+
+type rebaseWireResponse struct {
+	RebaseResult
+	ContentState string `json:"contentState"`
+}
+
+// RebaseDocument rewrites every id a page body references and returns the
+// new Y.js state together with its persisted projection.
+//
+// Used by the wiki transfer materialiser for every page it creates. The ids
+// live in ProseMirror node attributes, so the rewrite has to happen on the
+// tree — this is the one place that walks it, and it also derives the
+// reference indexes, so an imported page can never be created unindexed.
+func (c *HocuspocusClient) RebaseDocument(ctx context.Context, req RebaseRequest) (RebaseResult, error) {
+	var out RebaseResult
+	if c.internalSecret == "" {
+		return out, fmt.Errorf("rebase-document: no internal secret configured")
+	}
+
+	wire := rebaseWireRequest{
+		IDMap:             req.IDMap,
+		Drop:              req.Drop,
+		DropUnmappedKinds: req.DropUnmappedKinds,
+	}
+	if wire.IDMap == nil {
+		wire.IDMap = map[string]string{}
+	}
+	if len(req.ContentState) > 0 {
+		wire.ContentState = base64.StdEncoding.EncodeToString(req.ContentState)
+	} else {
+		md := req.Markdown
+		wire.Markdown = &md
+	}
+	body, err := json.Marshal(wire)
+	if err != nil {
+		return out, fmt.Errorf("marshal rebase payload: %w", err)
+	}
+
+	mac := hmac.New(sha256.New, []byte(c.internalSecret))
+	mac.Write(body)
+	signature := "sha256=" + hex.EncodeToString(mac.Sum(nil))
+
+	url := c.baseURL + "/internal/rebase-document"
+	httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewReader(body))
+	if err != nil {
+		return out, fmt.Errorf("build rebase-document request: %w", err)
+	}
+	httpReq.Header.Set("Content-Type", "application/json")
+	httpReq.Header.Set("X-Internal-Signature-256", signature)
+
+	resp, err := c.httpClient.Do(httpReq)
+	if err != nil {
+		return out, fmt.Errorf("call hocuspocus rebase-document: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		errBody, _ := io.ReadAll(io.LimitReader(resp.Body, 4096))
+		return out, fmt.Errorf("rebase-document returned %d: %s", resp.StatusCode, string(errBody))
+	}
+
+	var wireOut rebaseWireResponse
+	if err := json.NewDecoder(io.LimitReader(resp.Body, 16<<20)).Decode(&wireOut); err != nil {
+		return out, fmt.Errorf("read rebase-document response: %w", err)
+	}
+	out = wireOut.RebaseResult
+	out.ContentState, err = base64.StdEncoding.DecodeString(wireOut.ContentState)
+	if err != nil {
+		return out, fmt.Errorf("decode rebased content_state: %w", err)
+	}
+	return out, nil
+}

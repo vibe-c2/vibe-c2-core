@@ -4,11 +4,10 @@
 //     → markdown via serializeWikiDocument               (lift to fence)
 //     → markdown parse via parseOutlineMarkdown          (lower to paragraph + chip)
 //
-// These tests pin the serializer/parser contract that the core export
-// orchestrator (Go: pkg/wikiexport) and import orchestrator (Go:
-// pkg/wikiimport) build on. Any change here must keep both Go packages
-// happy — the fence info-string `vibe-credential` is shared between all
-// three.
+// These tests pin the serializer/parser contract that the core transfer
+// package (Go: pkg/wikitransfer/markdown) builds on. Any change here must
+// keep that package happy — the fence info-string `vibe-credential` is
+// shared between the two sides.
 
 import test from "node:test";
 import assert from "node:assert/strict";

@@ -10,8 +10,8 @@ package wiki
 // the code to decide between skipping a single attachment and aborting the
 // whole import.
 //
-// Lives in pkg/wiki rather than pkg/controller so the import package can
-// reference it without creating an import cycle (controller → wikiimport
+// Lives in pkg/wiki rather than pkg/controller so the transfer package can
+// reference it without creating an import cycle (controller → wikitransfer
 // → controller would otherwise close).
 type IngestError struct {
 	Status  int

@@ -264,7 +264,7 @@ func (r *wikiDocumentRepository) Create(ctx context.Context, doc *models.WikiDoc
 	// legacy callers that don't get one extra parent lookup here. Roots
 	// settle on an empty slice so multikey queries behave correctly.
 	//
-	// Callers using the fallback (e.g., wikiimport orchestrator) MUST insert
+	// Callers using the fallback (e.g., the wiki transfer materialiser) MUST insert
 	// parents before children — the fallback reads the parent's path_ids from
 	// Mongo, so a parent that hasn't been persisted yet would produce a
 	// truncated chain on the child. The orchestrator's depth-first recursion

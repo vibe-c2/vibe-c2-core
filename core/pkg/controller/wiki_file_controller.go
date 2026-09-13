@@ -224,6 +224,20 @@ func (wfc *WikiFileController) IngestFile(
 	filename string,
 	declaredContentType string,
 ) (*models.WikiFile, *wiki.IngestError) {
+	return wfc.IngestFileWithID(ctx, doc, uploaderID, body, filename, declaredContentType, uuid.New())
+}
+
+// IngestFileWithID is IngestFile with a caller-chosen id. See
+// WikiImageController.IngestImageWithID.
+func (wfc *WikiFileController) IngestFileWithID(
+	ctx context.Context,
+	doc *models.WikiDocument,
+	uploaderID uuid.UUID,
+	body io.Reader,
+	filename string,
+	declaredContentType string,
+	fileID uuid.UUID,
+) (*models.WikiFile, *wiki.IngestError) {
 	if filename == "" {
 		return nil, &wiki.IngestError{Status: http.StatusBadRequest, Message: "filename is required"}
 	}
@@ -246,7 +260,6 @@ func (wfc *WikiFileController) IngestFile(
 		}
 	}
 
-	fileID := uuid.New()
 	key := fileObjectKeyFor(doc.OperationID, doc.DocumentID, fileID, filename)
 
 	putCtx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
@@ -285,6 +298,19 @@ func (wfc *WikiFileController) IngestFile(
 	)
 
 	return file, nil
+}
+
+// DiscardFile hard-deletes a file record and its blob. See
+// WikiImageController.DiscardImage.
+func (wfc *WikiFileController) DiscardFile(ctx context.Context, fileID uuid.UUID) error {
+	file, err := wfc.fileRepo.FindByID(ctx, fileID)
+	if err != nil {
+		return err
+	}
+	if err := wfc.fileRepo.HardDelete(ctx, fileID); err != nil {
+		return err
+	}
+	return wfc.store.Delete(ctx, file.ObjectKey)
 }
 
 // Download handles GET /api/v1/wiki/files/:id. Default disposition is

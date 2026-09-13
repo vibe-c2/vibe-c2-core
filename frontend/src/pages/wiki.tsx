@@ -29,7 +29,7 @@ import { CreateWikiDocumentDialog } from "@/components/wiki/create-wiki-document
 import { DeleteWikiDocumentDialog } from "@/components/wiki/delete-wiki-document-dialog"
 import { DuplicateWikiDocumentDialog } from "@/components/wiki/duplicate-wiki-document-dialog"
 import { ExportWikiDialog } from "@/components/wiki/export-wiki-dialog"
-import { ImportOutlineDialog } from "@/components/wiki/import-outline-dialog"
+import { ImportWikiDialog } from "@/components/wiki/import-wiki-dialog"
 import { MoveWikiDocumentDialog } from "@/components/wiki/move-wiki-document-dialog"
 import { PermanentDeleteWikiDocumentDialog } from "@/components/wiki/permanent-delete-wiki-document-dialog"
 import { WikiTrashPanel } from "@/components/wiki/wiki-trash-panel"
@@ -323,7 +323,7 @@ function WikiPageInner({
           owns its own tree fetch (lazy on dialog-open) so the wiki page no
           longer eagerly loads the full tree on every navigation. */}
       <CreateWikiDocumentDialog operationId={operationId} />
-      <ImportOutlineDialog operationId={operationId} />
+      <ImportWikiDialog operationId={operationId} />
       <ExportWikiDialog operationId={operationId} />
       <MoveWikiDocumentDialog operationId={operationId} />
       <DeleteWikiDocumentDialog documentId={documentId} />

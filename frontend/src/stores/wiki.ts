@@ -73,10 +73,10 @@ interface WikiStoreState {
   openCreateDialog: (parentId?: string | null) => void
   closeCreateDialog: () => void
 
-  // Import-from-Outline dialog
-  importOutlineDialogOpen: boolean
-  openImportOutlineDialog: () => void
-  closeImportOutlineDialog: () => void
+  // Import dialog (Vibe bundle or markdown zip)
+  importDialogOpen: boolean
+  openImportDialog: () => void
+  closeImportDialog: () => void
 
   // Export dialog. `target` is null for tree-wide exports, populated for
   // subtree exports triggered from the 3-dots menu on a tree row.
@@ -211,10 +211,10 @@ export const useWikiStore = create<WikiStoreState>((set, get) => ({
   closeCreateDialog: () =>
     set({ createDialogOpen: false, createParentId: null }),
 
-  // Import-from-Outline dialog
-  importOutlineDialogOpen: false,
-  openImportOutlineDialog: () => set({ importOutlineDialogOpen: true }),
-  closeImportOutlineDialog: () => set({ importOutlineDialogOpen: false }),
+  // Import dialog
+  importDialogOpen: false,
+  openImportDialog: () => set({ importDialogOpen: true }),
+  closeImportDialog: () => set({ importDialogOpen: false }),
 
   // Export dialog
   exportDialogOpen: false,

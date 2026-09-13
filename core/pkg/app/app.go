@@ -12,6 +12,7 @@ import (
 	"github.com/vibe-c2/vibe-c2-core/core/pkg/auth"
 	"github.com/vibe-c2/vibe-c2-core/core/pkg/blob"
 	"github.com/vibe-c2/vibe-c2-core/core/pkg/cache"
+	"github.com/vibe-c2/vibe-c2-core/core/pkg/controller"
 	"github.com/vibe-c2/vibe-c2-core/core/pkg/database"
 	"github.com/vibe-c2/vibe-c2-core/core/pkg/environment"
 	"github.com/vibe-c2/vibe-c2-core/core/pkg/eventbus"
@@ -22,6 +23,10 @@ import (
 	"github.com/vibe-c2/vibe-c2-core/core/pkg/modulegate"
 	"github.com/vibe-c2/vibe-c2-core/core/pkg/repository"
 	"github.com/vibe-c2/vibe-c2-core/core/pkg/wiki"
+	"github.com/vibe-c2/vibe-c2-core/core/pkg/wikitransfer"
+	"github.com/vibe-c2/vibe-c2-core/core/pkg/wikitransfer/bundle"
+	transferjob "github.com/vibe-c2/vibe-c2-core/core/pkg/wikitransfer/job"
+	transfermd "github.com/vibe-c2/vibe-c2-core/core/pkg/wikitransfer/markdown"
 
 	"go.uber.org/zap"
 )
@@ -54,6 +59,7 @@ type Repositories struct {
 	AgentKey           repository.IAgentKeyRepository
 	AgentAction        repository.IAgentActionRepository
 	ModuleRegistry     repository.IModuleRegistryRepository
+	WikiTransferJob    repository.IWikiTransferJobRepository
 }
 
 type App struct {
@@ -77,6 +83,12 @@ type App struct {
 	fileStore       blob.ObjectStore
 	fileSweeper     *wiki.FileSweeper
 	sweepersEnabled bool // master switch from WIKI_SWEEPER_ENABLED
+	// transferRunner executes wiki export/import jobs in the background.
+	transferRunner *transferjob.Runner
+	// Attachment upload controllers are built here because the transfer
+	// pipeline ingests through them; the router mounts the same instances.
+	wikiImageCtrl *controller.WikiImageController
+	wikiFileCtrl  *controller.WikiFileController
 
 	// Module-lifecycle control plane (AMQP). A reachable broker is required at
 	// startup, so mqClient and rpcServer are always set on a running app; only
@@ -119,6 +131,7 @@ func NewApp() (*App, error) {
 		WikiDocumentVisit:  repository.NewWikiDocumentVisitRepository(db),
 		WikiImage:          repository.NewWikiImageRepository(db),
 		WikiFile:           repository.NewWikiFileRepository(db),
+		WikiTransferJob:    repository.NewWikiTransferJobRepository(db),
 		Credential:         repository.NewCredentialRepository(db),
 		Hash:               repository.NewHashRepository(db),
 		Host:               repository.NewHostRepository(db),
@@ -220,6 +233,44 @@ func NewApp() (*App, error) {
 		e.WikiFileSweeperInterval, e.WikiFileSweeperGrace, e.WikiSweeperDryRun,
 	)
 
+	// Wiki transfer pipeline: one materialiser shared by both import
+	// formats, one writer per export format, all driven by a background
+	// runner. Attachments go through the same ingest helpers a browser
+	// upload uses, so the controllers are built here rather than in the
+	// router.
+	wikiImageCtrl := controller.NewWikiImageController(
+		repos.WikiDocument, repos.WikiImage, repos.Operation,
+		imageStore, imageProcessor, l,
+		controller.WikiImageControllerConfig{MaxSize: e.WikiImageMaxSize},
+	)
+	wikiFileCtrl := controller.NewWikiFileController(
+		repos.WikiDocument, repos.WikiFile, repos.Operation,
+		fileStore, l,
+		controller.WikiFileControllerConfig{
+			MaxSize:            e.WikiFileMaxSize,
+			DeniedContentTypes: e.WikiFileDeniedContentTypes,
+		},
+	)
+	materialiser := wikitransfer.NewMaterialiser(
+		repos.WikiDocument, repos.Credential, repos.Host, repos.Hash,
+		controller.NewWikiTransferIngestor(wikiImageCtrl, wikiFileCtrl),
+		hpClient, bus, l,
+	)
+	bundleWriter := bundle.NewWriter(
+		repos.WikiImage, repos.WikiFile, imageStore, fileStore,
+		repos.Host, repos.Hash, repos.Credential, hpClient, l,
+		bundle.Config{InstallationID: e.InstallationID},
+	)
+	mdExporter := transfermd.NewExporter(
+		repos.WikiImage, repos.WikiFile, imageStore, fileStore,
+		hpClient, repos.Credential, l, transfermd.Config{},
+	)
+	transferRunner := transferjob.NewRunner(
+		repos.WikiTransferJob, repos.WikiDocument, repos.Operation, fileStore,
+		materialiser, bundleWriter, mdExporter, bus, l,
+		transferjob.Config{ArtifactTTL: e.WikiTransferArtifactTTL},
+	)
+
 	// Registration gate: read-through cache over the module registry, shared by
 	// the data-plane sync controller (reads) and the lifecycle handlers (cache
 	// busting on deregister/death). TTL = heartbeat interval.
@@ -309,6 +360,9 @@ func NewApp() (*App, error) {
 		imageSweeper:    imageSweeper,
 		fileStore:       fileStore,
 		fileSweeper:     fileSweeper,
+		transferRunner:  transferRunner,
+		wikiImageCtrl:   wikiImageCtrl,
+		wikiFileCtrl:    wikiFileCtrl,
 		sweepersEnabled: e.WikiSweeperEnabled,
 		mqClient:        mqClient,
 		rpcServer:       rpcServer,
@@ -435,6 +489,7 @@ func (a *App) StartServer() {
 	a.eventBus.Start()
 	a.backupScheduler.Start()
 	a.startSweepers()
+	a.transferRunner.Start()
 	a.startLifecycle()
 
 	a.logger.Info("Starting server...", zap.String("address", srv.Addr))
@@ -466,6 +521,7 @@ func (a *App) StartServerWithGracefulShutdown() {
 		a.logger.Info("Shutting down server...")
 
 		a.backupScheduler.Stop()
+		a.transferRunner.Stop()
 		a.imageSweeper.Stop()
 		a.fileSweeper.Stop()
 		a.stopLifecycle()

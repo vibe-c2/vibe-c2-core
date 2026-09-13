@@ -1,5 +1,61 @@
 basePath: /api/v1
 definitions:
+  controller.ExportRequest:
+    properties:
+      format:
+        description: Format is "bundle" (default) or "markdown".
+        type: string
+      operationId:
+        type: string
+      rootId:
+        description: RootId scopes the export to one page and its descendants.
+        type: string
+    required:
+    - operationId
+    type: object
+  controller.JobResponse:
+    properties:
+      artifactName:
+        description: ArtifactName is the filename offered on download.
+        type: string
+      artifactSize:
+        type: integer
+      createAt:
+        type: string
+      error:
+        description: Error is the request-level failure message when Status is failed.
+        type: string
+      expiresAt:
+        type: string
+      finishedAt:
+        type: string
+      format:
+        $ref: '#/definitions/models.WikiTransferFormat'
+      id:
+        type: string
+      jobId:
+        type: string
+      kind:
+        $ref: '#/definitions/models.WikiTransferKind'
+      operationId:
+        type: string
+      progress:
+        $ref: '#/definitions/models.WikiTransferProgress'
+      report:
+        items:
+          type: integer
+        type: array
+      request:
+        $ref: '#/definitions/models.WikiTransferRequest'
+      requestedById:
+        type: string
+      startedAt:
+        type: string
+      status:
+        $ref: '#/definitions/models.WikiTransferStatus'
+      updateAt:
+        type: string
+    type: object
   controller.WikiFileUploadResponse:
     properties:
       contentType:
@@ -38,6 +94,62 @@ definitions:
     required:
     - documentId
     type: object
+  models.WikiTransferFormat:
+    enum:
+    - bundle
+    - markdown
+    type: string
+    x-enum-varnames:
+    - WikiTransferBundle
+    - WikiTransferMarkdown
+  models.WikiTransferKind:
+    enum:
+    - export
+    - import
+    type: string
+    x-enum-varnames:
+    - WikiTransferExport
+    - WikiTransferImport
+  models.WikiTransferProgress:
+    properties:
+      done:
+        type: integer
+      total:
+        type: integer
+    type: object
+  models.WikiTransferRequest:
+    properties:
+      holdingPen:
+        description: |-
+          HoldingPen lands an import in import/<timestamp>/ instead of
+          TargetParentID.
+        type: boolean
+      includeCredentials:
+        description: IncludeCredentials embeds credential payloads in an export.
+        type: boolean
+      rootDocumentId:
+        description: RootDocumentID scopes an export to a subtree; nil exports the
+          tree.
+        type: string
+      targetParentId:
+        description: TargetParentID places an import under a page; nil means the root.
+        type: string
+      uploadFilename:
+        description: UploadFilename is the name of the uploaded archive, for display.
+        type: string
+    type: object
+  models.WikiTransferStatus:
+    enum:
+    - queued
+    - running
+    - done
+    - failed
+    type: string
+    x-enum-varnames:
+    - WikiTransferQueued
+    - WikiTransferRunning
+    - WikiTransferDone
+    - WikiTransferFailed
   protocol.InboundMinionMessage:
     properties:
       encrypted_data:
@@ -138,46 +250,6 @@ definitions:
       message:
         type: string
     type: object
-  wikiimport.Report:
-    properties:
-      createdDocs:
-        type: integer
-      credentialsCreated:
-        type: integer
-      credentialsReused:
-        type: integer
-      credentialsSkipped:
-        type: integer
-      credentialsTombstoned:
-        type: integer
-      filesIngested:
-        type: integer
-      imagesIngested:
-        type: integer
-      importParentId:
-        type: string
-      skipped:
-        items:
-          $ref: '#/definitions/wikiimport.SkipRecord'
-        type: array
-      skippedDocs:
-        type: integer
-      timestampParentId:
-        type: string
-      totalDocs:
-        type: integer
-      warnings:
-        items:
-          $ref: '#/definitions/wikiimport.SkipRecord'
-        type: array
-    type: object
-  wikiimport.SkipRecord:
-    properties:
-      path:
-        type: string
-      reason:
-        type: string
-    type: object
 info:
   contact: {}
   description: Command-and-control core backend API.
@@ -207,6 +279,14 @@ paths:
             $ref: '#/definitions/protocol.OutboundMinionMessage'
         "400":
           description: Bad Request
+          schema:
+            $ref: '#/definitions/responses.ErrorResponse'
+        "403":
+          description: instance is not a registered module
+          schema:
+            $ref: '#/definitions/responses.ErrorResponse'
+        "503":
+          description: module registry unavailable
           schema:
             $ref: '#/definitions/responses.ErrorResponse'
       summary: Channel sync (data plane)
@@ -395,46 +475,6 @@ paths:
       summary: Get collaboration ticket
       tags:
       - Wiki
-  /wiki/export:
-    get:
-      description: Streams a zip archive of markdown documents plus referenced attachments.
-        The format matches the import flow so the result can be re-imported via POST
-        /api/v1/wiki/import/outline. Pass `rootId` to limit the export to one document
-        + descendants; omit it to export the whole operation's wiki.
-      parameters:
-      - description: Target operation ID (UUID)
-        in: query
-        name: operationId
-        required: true
-        type: string
-      - description: Subtree root document ID (UUID). Omit for tree-wide export.
-        in: query
-        name: rootId
-        type: string
-      produces:
-      - application/zip
-      responses:
-        "200":
-          description: OK
-          schema:
-            type: file
-        "400":
-          description: Bad Request
-          schema:
-            $ref: '#/definitions/responses.ErrorResponse'
-        "403":
-          description: Forbidden
-          schema:
-            $ref: '#/definitions/responses.ErrorResponse'
-        "404":
-          description: Not Found
-          schema:
-            $ref: '#/definitions/responses.ErrorResponse'
-      security:
-      - BearerAuth: []
-      summary: Export a wiki tree or subtree as an Outline-flavored markdown zip
-      tags:
-      - Wiki
   /wiki/files:
     post:
       consumes:
@@ -573,31 +613,28 @@ paths:
       summary: Fetch a wiki image
       tags:
       - Wiki
-  /wiki/import/outline:
+  /wiki/transfer/exports:
     post:
       consumes:
-      - multipart/form-data
-      description: Imports an Outline (getoutline.com) markdown-format export zip
-        into the target operation. All imported documents land under import/<ISO timestamp>/<collection>/.
-        Requires operator+ role.
+      - application/json
+      description: Queues an export of the operation's wiki (or one subtree) as a
+        native bundle or a markdown zip. Poll the returned job and download the archive
+        when it is done. Viewer+ on the operation; credentials are embedded only when
+        the caller is operator+.
       parameters:
-      - description: Target operation ID (UUID)
-        in: query
-        name: operationId
+      - description: Export request
+        in: body
+        name: body
         required: true
-        type: string
-      - description: Outline markdown export zip
-        in: formData
-        name: file
-        required: true
-        type: file
+        schema:
+          $ref: '#/definitions/controller.ExportRequest'
       produces:
       - application/json
       responses:
-        "200":
-          description: OK
+        "202":
+          description: Accepted
           schema:
-            $ref: '#/definitions/wikiimport.Report'
+            $ref: '#/definitions/controller.JobResponse'
         "400":
           description: Bad Request
           schema:
@@ -606,17 +643,150 @@ paths:
           description: Forbidden
           schema:
             $ref: '#/definitions/responses.ErrorResponse'
-        "413":
-          description: Request Entity Too Large
-          schema:
-            $ref: '#/definitions/responses.ErrorResponse'
-        "502":
-          description: Bad Gateway
+        "409":
+          description: Conflict
           schema:
             $ref: '#/definitions/responses.ErrorResponse'
       security:
       - BearerAuth: []
-      summary: Import an Outline workspace export
+      summary: Start a wiki export job
+      tags:
+      - Wiki
+  /wiki/transfer/imports:
+    post:
+      consumes:
+      - multipart/form-data
+      description: Accepts a native bundle (.vibewiki.zip) or a markdown zip. The
+        format is detected from the archive. Pages land under `targetParentId`, at
+        the root when it is absent, or in import/<timestamp>/ when `holdingPen=true`.
+        Operator+ on the operation.
+      parameters:
+      - description: Target operation ID (UUID)
+        in: query
+        name: operationId
+        required: true
+        type: string
+      - description: Page to import under (UUID). Omit for the root.
+        in: query
+        name: targetParentId
+        type: string
+      - description: Land in import/<timestamp>/ instead of targetParentId
+        in: query
+        name: holdingPen
+        type: boolean
+      - description: Archive
+        in: formData
+        name: file
+        required: true
+        type: file
+      produces:
+      - application/json
+      responses:
+        "202":
+          description: Accepted
+          schema:
+            $ref: '#/definitions/controller.JobResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/responses.ErrorResponse'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/responses.ErrorResponse'
+        "409":
+          description: Conflict
+          schema:
+            $ref: '#/definitions/responses.ErrorResponse'
+        "413":
+          description: Request Entity Too Large
+          schema:
+            $ref: '#/definitions/responses.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Upload an archive and start a wiki import job
+      tags:
+      - Wiki
+  /wiki/transfer/jobs:
+    get:
+      parameters:
+      - description: Operation ID (UUID)
+        in: query
+        name: operationId
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/controller.JobResponse'
+            type: array
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/responses.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: List an operation's wiki transfer jobs
+      tags:
+      - Wiki
+  /wiki/transfer/jobs/{id}:
+    get:
+      parameters:
+      - description: Job ID (UUID)
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/controller.JobResponse'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/responses.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/responses.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Fetch one wiki transfer job
+      tags:
+      - Wiki
+  /wiki/transfer/jobs/{id}/download:
+    get:
+      parameters:
+      - description: Job ID (UUID)
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/zip
+      responses:
+        "200":
+          description: OK
+          schema:
+            type: file
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/responses.ErrorResponse'
+        "409":
+          description: Conflict
+          schema:
+            $ref: '#/definitions/responses.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Download a finished export
       tags:
       - Wiki
 securityDefinitions:

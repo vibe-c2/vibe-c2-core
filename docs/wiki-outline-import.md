@@ -1,3 +1,5 @@
+> **Superseded (2026-09-12).** The Outline importer now lives in `core/pkg/wikitransfer/markdown` and runs through the shared transfer pipeline described in [`wiki-transfer-design.md`](wiki-transfer-design.md). The format details below still apply; the endpoints, holding-pen-only placement and package paths do not.
+
 # Wiki Import — Outline Markdown Export
 
 ## 1. Overview

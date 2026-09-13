@@ -2,7 +2,7 @@
 //
 // This is the inverse of markdown-parser.ts. Whatever this file emits must
 // round-trip back through parseOutlineMarkdown into an equivalent document,
-// so that exports can be re-imported via POST /api/v1/wiki/import/outline.
+// so that exports can be re-imported via POST /api/v1/wiki/transfer/imports.
 //
 // The dialect matches what Outline's markdown export uses:
 //

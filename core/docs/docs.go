@@ -51,6 +51,18 @@ const docTemplate = `{
                         "schema": {
                             "$ref": "#/definitions/responses.ErrorResponse"
                         }
+                    },
+                    "403": {
+                        "description": "instance is not a registered module",
+                        "schema": {
+                            "$ref": "#/definitions/responses.ErrorResponse"
+                        }
+                    },
+                    "503": {
+                        "description": "module registry unavailable",
+                        "schema": {
+                            "$ref": "#/definitions/responses.ErrorResponse"
+                        }
                     }
                 }
             }
@@ -322,64 +334,6 @@ const docTemplate = `{
                 "responses": {}
             }
         },
-        "/wiki/export": {
-            "get": {
-                "security": [
-                    {
-                        "BearerAuth": []
-                    }
-                ],
-                "description": "Streams a zip archive of markdown documents plus referenced attachments. The format matches the import flow so the result can be re-imported via POST /api/v1/wiki/import/outline. Pass ` + "`" + `rootId` + "`" + ` to limit the export to one document + descendants; omit it to export the whole operation's wiki.",
-                "produces": [
-                    "application/zip"
-                ],
-                "tags": [
-                    "Wiki"
-                ],
-                "summary": "Export a wiki tree or subtree as an Outline-flavored markdown zip",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "Target operation ID (UUID)",
-                        "name": "operationId",
-                        "in": "query",
-                        "required": true
-                    },
-                    {
-                        "type": "string",
-                        "description": "Subtree root document ID (UUID). Omit for tree-wide export.",
-                        "name": "rootId",
-                        "in": "query"
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "type": "file"
-                        }
-                    },
-                    "400": {
-                        "description": "Bad Request",
-                        "schema": {
-                            "$ref": "#/definitions/responses.ErrorResponse"
-                        }
-                    },
-                    "403": {
-                        "description": "Forbidden",
-                        "schema": {
-                            "$ref": "#/definitions/responses.ErrorResponse"
-                        }
-                    },
-                    "404": {
-                        "description": "Not Found",
-                        "schema": {
-                            "$ref": "#/definitions/responses.ErrorResponse"
-                        }
-                    }
-                }
-            }
-        },
         "/wiki/files": {
             "post": {
                 "security": [
@@ -588,16 +542,16 @@ const docTemplate = `{
                 "responses": {}
             }
         },
-        "/wiki/import/outline": {
+        "/wiki/transfer/exports": {
             "post": {
                 "security": [
                     {
                         "BearerAuth": []
                     }
                 ],
-                "description": "Imports an Outline (getoutline.com) markdown-format export zip into the target operation. All imported documents land under import/\u003cISO timestamp\u003e/\u003ccollection\u003e/. Requires operator+ role.",
+                "description": "Queues an export of the operation's wiki (or one subtree) as a native bundle or a markdown zip. Poll the returned job and download the archive when it is done. Viewer+ on the operation; credentials are embedded only when the caller is operator+.",
                 "consumes": [
-                    "multipart/form-data"
+                    "application/json"
                 ],
                 "produces": [
                     "application/json"
@@ -605,28 +559,23 @@ const docTemplate = `{
                 "tags": [
                     "Wiki"
                 ],
-                "summary": "Import an Outline workspace export",
+                "summary": "Start a wiki export job",
                 "parameters": [
                     {
-                        "type": "string",
-                        "description": "Target operation ID (UUID)",
-                        "name": "operationId",
-                        "in": "query",
-                        "required": true
-                    },
-                    {
-                        "type": "file",
-                        "description": "Outline markdown export zip",
-                        "name": "file",
-                        "in": "formData",
-                        "required": true
+                        "description": "Export request",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/controller.ExportRequest"
+                        }
                     }
                 ],
                 "responses": {
-                    "200": {
-                        "description": "OK",
+                    "202": {
+                        "description": "Accepted",
                         "schema": {
-                            "$ref": "#/definitions/wikiimport.Report"
+                            "$ref": "#/definitions/controller.JobResponse"
                         }
                     },
                     "400": {
@@ -641,14 +590,220 @@ const docTemplate = `{
                             "$ref": "#/definitions/responses.ErrorResponse"
                         }
                     },
+                    "409": {
+                        "description": "Conflict",
+                        "schema": {
+                            "$ref": "#/definitions/responses.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/wiki/transfer/imports": {
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Accepts a native bundle (.vibewiki.zip) or a markdown zip. The format is detected from the archive. Pages land under ` + "`" + `targetParentId` + "`" + `, at the root when it is absent, or in import/\u003ctimestamp\u003e/ when ` + "`" + `holdingPen=true` + "`" + `. Operator+ on the operation.",
+                "consumes": [
+                    "multipart/form-data"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Wiki"
+                ],
+                "summary": "Upload an archive and start a wiki import job",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Target operation ID (UUID)",
+                        "name": "operationId",
+                        "in": "query",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Page to import under (UUID). Omit for the root.",
+                        "name": "targetParentId",
+                        "in": "query"
+                    },
+                    {
+                        "type": "boolean",
+                        "description": "Land in import/\u003ctimestamp\u003e/ instead of targetParentId",
+                        "name": "holdingPen",
+                        "in": "query"
+                    },
+                    {
+                        "type": "file",
+                        "description": "Archive",
+                        "name": "file",
+                        "in": "formData",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "202": {
+                        "description": "Accepted",
+                        "schema": {
+                            "$ref": "#/definitions/controller.JobResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/responses.ErrorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/responses.ErrorResponse"
+                        }
+                    },
+                    "409": {
+                        "description": "Conflict",
+                        "schema": {
+                            "$ref": "#/definitions/responses.ErrorResponse"
+                        }
+                    },
                     "413": {
                         "description": "Request Entity Too Large",
                         "schema": {
                             "$ref": "#/definitions/responses.ErrorResponse"
                         }
+                    }
+                }
+            }
+        },
+        "/wiki/transfer/jobs": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Wiki"
+                ],
+                "summary": "List an operation's wiki transfer jobs",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Operation ID (UUID)",
+                        "name": "operationId",
+                        "in": "query",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "array",
+                            "items": {
+                                "$ref": "#/definitions/controller.JobResponse"
+                            }
+                        }
                     },
-                    "502": {
-                        "description": "Bad Gateway",
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/responses.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/wiki/transfer/jobs/{id}": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Wiki"
+                ],
+                "summary": "Fetch one wiki transfer job",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Job ID (UUID)",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/controller.JobResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/responses.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/responses.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/wiki/transfer/jobs/{id}/download": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "produces": [
+                    "application/zip"
+                ],
+                "tags": [
+                    "Wiki"
+                ],
+                "summary": "Download a finished export",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Job ID (UUID)",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "file"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/responses.ErrorResponse"
+                        }
+                    },
+                    "409": {
+                        "description": "Conflict",
                         "schema": {
                             "$ref": "#/definitions/responses.ErrorResponse"
                         }
@@ -658,6 +813,89 @@ const docTemplate = `{
         }
     },
     "definitions": {
+        "controller.ExportRequest": {
+            "type": "object",
+            "required": [
+                "operationId"
+            ],
+            "properties": {
+                "format": {
+                    "description": "Format is \"bundle\" (default) or \"markdown\".",
+                    "type": "string"
+                },
+                "operationId": {
+                    "type": "string"
+                },
+                "rootId": {
+                    "description": "RootId scopes the export to one page and its descendants.",
+                    "type": "string"
+                }
+            }
+        },
+        "controller.JobResponse": {
+            "type": "object",
+            "properties": {
+                "artifactName": {
+                    "description": "ArtifactName is the filename offered on download.",
+                    "type": "string"
+                },
+                "artifactSize": {
+                    "type": "integer"
+                },
+                "createAt": {
+                    "type": "string"
+                },
+                "error": {
+                    "description": "Error is the request-level failure message when Status is failed.",
+                    "type": "string"
+                },
+                "expiresAt": {
+                    "type": "string"
+                },
+                "finishedAt": {
+                    "type": "string"
+                },
+                "format": {
+                    "$ref": "#/definitions/models.WikiTransferFormat"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "jobId": {
+                    "type": "string"
+                },
+                "kind": {
+                    "$ref": "#/definitions/models.WikiTransferKind"
+                },
+                "operationId": {
+                    "type": "string"
+                },
+                "progress": {
+                    "$ref": "#/definitions/models.WikiTransferProgress"
+                },
+                "report": {
+                    "type": "array",
+                    "items": {
+                        "type": "integer"
+                    }
+                },
+                "request": {
+                    "$ref": "#/definitions/models.WikiTransferRequest"
+                },
+                "requestedById": {
+                    "type": "string"
+                },
+                "startedAt": {
+                    "type": "string"
+                },
+                "status": {
+                    "$ref": "#/definitions/models.WikiTransferStatus"
+                },
+                "updateAt": {
+                    "type": "string"
+                }
+            }
+        },
         "controller.WikiFileUploadResponse": {
             "type": "object",
             "properties": {
@@ -709,6 +947,79 @@ const docTemplate = `{
                     "type": "integer"
                 }
             }
+        },
+        "models.WikiTransferFormat": {
+            "type": "string",
+            "enum": [
+                "bundle",
+                "markdown"
+            ],
+            "x-enum-varnames": [
+                "WikiTransferBundle",
+                "WikiTransferMarkdown"
+            ]
+        },
+        "models.WikiTransferKind": {
+            "type": "string",
+            "enum": [
+                "export",
+                "import"
+            ],
+            "x-enum-varnames": [
+                "WikiTransferExport",
+                "WikiTransferImport"
+            ]
+        },
+        "models.WikiTransferProgress": {
+            "type": "object",
+            "properties": {
+                "done": {
+                    "type": "integer"
+                },
+                "total": {
+                    "type": "integer"
+                }
+            }
+        },
+        "models.WikiTransferRequest": {
+            "type": "object",
+            "properties": {
+                "holdingPen": {
+                    "description": "HoldingPen lands an import in import/\u003ctimestamp\u003e/ instead of\nTargetParentID.",
+                    "type": "boolean"
+                },
+                "includeCredentials": {
+                    "description": "IncludeCredentials embeds credential payloads in an export.",
+                    "type": "boolean"
+                },
+                "rootDocumentId": {
+                    "description": "RootDocumentID scopes an export to a subtree; nil exports the tree.",
+                    "type": "string"
+                },
+                "targetParentId": {
+                    "description": "TargetParentID places an import under a page; nil means the root.",
+                    "type": "string"
+                },
+                "uploadFilename": {
+                    "description": "UploadFilename is the name of the uploaded archive, for display.",
+                    "type": "string"
+                }
+            }
+        },
+        "models.WikiTransferStatus": {
+            "type": "string",
+            "enum": [
+                "queued",
+                "running",
+                "done",
+                "failed"
+            ],
+            "x-enum-varnames": [
+                "WikiTransferQueued",
+                "WikiTransferRunning",
+                "WikiTransferDone",
+                "WikiTransferFailed"
+            ]
         },
         "protocol.InboundMinionMessage": {
             "type": "object",
@@ -859,67 +1170,6 @@ const docTemplate = `{
             "type": "object",
             "properties": {
                 "message": {
-                    "type": "string"
-                }
-            }
-        },
-        "wikiimport.Report": {
-            "type": "object",
-            "properties": {
-                "createdDocs": {
-                    "type": "integer"
-                },
-                "credentialsCreated": {
-                    "type": "integer"
-                },
-                "credentialsReused": {
-                    "type": "integer"
-                },
-                "credentialsSkipped": {
-                    "type": "integer"
-                },
-                "credentialsTombstoned": {
-                    "type": "integer"
-                },
-                "filesIngested": {
-                    "type": "integer"
-                },
-                "imagesIngested": {
-                    "type": "integer"
-                },
-                "importParentId": {
-                    "type": "string"
-                },
-                "skipped": {
-                    "type": "array",
-                    "items": {
-                        "$ref": "#/definitions/wikiimport.SkipRecord"
-                    }
-                },
-                "skippedDocs": {
-                    "type": "integer"
-                },
-                "timestampParentId": {
-                    "type": "string"
-                },
-                "totalDocs": {
-                    "type": "integer"
-                },
-                "warnings": {
-                    "type": "array",
-                    "items": {
-                        "$ref": "#/definitions/wikiimport.SkipRecord"
-                    }
-                }
-            }
-        },
-        "wikiimport.SkipRecord": {
-            "type": "object",
-            "properties": {
-                "path": {
-                    "type": "string"
-                },
-                "reason": {
                     "type": "string"
                 }
             }
