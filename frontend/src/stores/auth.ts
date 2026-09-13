@@ -10,12 +10,18 @@ interface User {
   permissions: string[]
 }
 
+// Why the last session ended without the user asking for it. The login page
+// reads it once to explain the redirect ("Your session expired"), then clears it.
+export type SignOutReason = "expired" | "revoked"
+
 interface AuthState {
   user: User | null
   isAuthenticated: boolean
   isLoading: boolean
+  signOutReason: SignOutReason | null
   setSession: (response: SessionResponse) => void
-  clearSession: () => void
+  clearSession: (reason?: SignOutReason) => void
+  consumeSignOutReason: () => SignOutReason | null
   logout: () => Promise<void>
   checkAuth: () => Promise<void>
   hasPermission: (permission: string) => boolean
@@ -25,6 +31,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   user: null,
   isAuthenticated: false,
   isLoading: true,
+  signOutReason: null,
 
   setSession: (response) => {
     const user: User = {
@@ -33,11 +40,17 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       roles: response.roles,
       permissions: response.permissions,
     }
-    set({ user, isAuthenticated: true, isLoading: false })
+    set({ user, isAuthenticated: true, isLoading: false, signOutReason: null })
   },
 
-  clearSession: () => {
-    set({ user: null, isAuthenticated: false, isLoading: false })
+  clearSession: (reason) => {
+    set({ user: null, isAuthenticated: false, isLoading: false, signOutReason: reason ?? null })
+  },
+
+  consumeSignOutReason: () => {
+    const reason = get().signOutReason
+    if (reason) set({ signOutReason: null })
+    return reason
   },
 
   logout: async () => {

@@ -96,7 +96,10 @@ export function ProtectedRoute({ permission }: { permission?: string }) {
   }
 
   if (!isAuthenticated) {
-    return <Navigate to="/login" replace />
+    // Carry the intended destination so the login page can send the user
+    // back there (and mention it) instead of always landing on the dashboard.
+    const from = `${location.pathname}${location.search}`
+    return <Navigate to="/login" replace state={{ from }} />
   }
 
   if (permission && !hasPermission(permission)) {

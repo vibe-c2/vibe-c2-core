@@ -31,7 +31,7 @@ export function useSessionGuard() {
       // set directly from the topic, with no dependence on whether Mongo
       // rows happen to be decorated with Redis-side state.
       if (action === "DELETED" && session?.isCurrent) {
-        useAuthStore.getState().clearSession()
+        useAuthStore.getState().clearSession("revoked")
         return
       }
 

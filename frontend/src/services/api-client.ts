@@ -167,7 +167,7 @@ async function refreshSession(): Promise<boolean> {
     // upstream timeout) is transient and must NOT log the user out, otherwise
     // a backend restart causes a mass deauth.
     if (res.status === 401 || res.status === 403) {
-      useAuthStore.getState().clearSession()
+      useAuthStore.getState().clearSession("expired")
       return false
     }
 
