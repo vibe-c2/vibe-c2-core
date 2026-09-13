@@ -1,4 +1,4 @@
-.PHONY: test infra infra-stop infra-reset services services-stop services-reset seaweedfs-reset swag gqlgen gqlcodegen frontend help
+.PHONY: test infra infra-stop infra-reset services services-stop services-reset services-rebuild seaweedfs-reset swag gqlgen gqlcodegen frontend help
 
 include .env
 export
@@ -26,6 +26,10 @@ services-stop: ## Stop all services (infra + core dev container)
 services-reset: ## Reset all services and volumes
 	@echo "Resetting all services"
 	docker-compose --profile development down -v
+
+services-rebuild: ## Rebuild dev images and restart all services (run after package.json / Dockerfile / go.mod changes)
+	@echo "Rebuilding dev images and restarting all services"
+	docker-compose --profile development up -d --build
 
 seaweedfs-reset: ## Reset only SeaweedFS volumes (clears bucket state; keeps Mongo/Redis/RabbitMQ)
 	@echo "Stopping SeaweedFS containers and clearing their volumes"

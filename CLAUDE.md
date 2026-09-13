@@ -16,6 +16,7 @@ make infra-reset        # stop + delete volumes
 make services           # start everything (--profile development)
 make services-stop
 make services-reset
+make services-rebuild   # rebuild dev images, then restart — needed after package.json, go.mod or Dockerfile changes
 
 # Code generation
 make gqlgen             # regenerate GraphQL code from schema
