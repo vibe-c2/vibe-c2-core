@@ -1,4 +1,4 @@
-import type { Editor } from "@tiptap/react"
+import { type Editor, useEditorState } from "@tiptap/react"
 import { BubbleMenu } from "@tiptap/react/menus"
 import { NodeSelection } from "@tiptap/pm/state"
 import {
@@ -29,6 +29,26 @@ interface WikiEditorBubbleMenuProps {
 const HIGHLIGHT_SWATCHES = WIKI_ICON_COLORS.filter((c) => c.value !== "")
 
 export function WikiEditorBubbleMenu({ editor }: WikiEditorBubbleMenuProps) {
+  // The editor does not re-render React on transactions, so isActive()
+  // read at render time goes stale. Subscribe to the mark states instead.
+  const marks = useEditorState({
+    editor,
+    selector: ({ editor: e }) => ({
+      bold: e?.isActive("bold") ?? false,
+      italic: e?.isActive("italic") ?? false,
+      strike: e?.isActive("strike") ?? false,
+      code: e?.isActive("code") ?? false,
+      link: e?.isActive("link") ?? false,
+    }),
+    equalityFn: (a, b) =>
+      !!b &&
+      a.bold === b.bold &&
+      a.italic === b.italic &&
+      a.strike === b.strike &&
+      a.code === b.code &&
+      a.link === b.link,
+  })
+
   if (!editor) return null
 
   return (
@@ -50,32 +70,32 @@ export function WikiEditorBubbleMenu({ editor }: WikiEditorBubbleMenuProps) {
       <BubbleButton
         icon={BoldIcon}
         tooltip="Bold"
-        active={editor.isActive("bold")}
+        active={marks?.bold}
         onClick={() => editor.chain().focus().toggleBold().run()}
       />
       <BubbleButton
         icon={ItalicIcon}
         tooltip="Italic"
-        active={editor.isActive("italic")}
+        active={marks?.italic}
         onClick={() => editor.chain().focus().toggleItalic().run()}
       />
       <BubbleButton
         icon={StrikethroughIcon}
         tooltip="Strikethrough"
-        active={editor.isActive("strike")}
+        active={marks?.strike}
         onClick={() => editor.chain().focus().toggleStrike().run()}
       />
       <BubbleButton
         icon={CodeIcon}
         tooltip="Inline code"
-        active={editor.isActive("code")}
+        active={marks?.code}
         onClick={() => editor.chain().focus().toggleCode().run()}
       />
       <HighlightButton editor={editor} />
       <BubbleButton
         icon={LinkIcon}
         tooltip="Add link (⌘K)"
-        active={editor.isActive("link")}
+        active={marks?.link}
         onClick={() => startLinkInsert(editor)}
       />
     </BubbleMenu>
@@ -119,12 +139,19 @@ function HighlightButton({ editor }: { editor: Editor }) {
   // pick without rebinding the editor's selection — the popover would
   // otherwise stay open and obscure the result the user just applied.
   const [open, setOpen] = useState(false)
-  const active = editor.isActive("wikiHighlight")
-  // getAttributes returns {} when the mark isn't active, so the optional
-  // chain plus empty-string fallback covers both the inactive case and
-  // legacy marks stored without a color attribute.
-  const currentColor =
-    (editor.getAttributes("wikiHighlight").color as string | undefined) ?? ""
+  const highlight = useEditorState({
+    editor,
+    selector: ({ editor: e }) => ({
+      active: e.isActive("wikiHighlight"),
+      // getAttributes returns {} when the mark isn't active, so the optional
+      // chain plus empty-string fallback covers both the inactive case and
+      // legacy marks stored without a color attribute.
+      color: (e.getAttributes("wikiHighlight").color as string | undefined) ?? "",
+    }),
+    equalityFn: (a, b) => !!b && a.active === b.active && a.color === b.color,
+  })
+  const active = highlight.active
+  const currentColor = highlight.color
 
   return (
     <Popover open={open} onOpenChange={setOpen}>
