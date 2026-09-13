@@ -3,6 +3,7 @@ import type { Editor } from "@tiptap/react"
 // Side-effect import so the Table extension's module augmentation is in
 // scope and chain().addRowBefore() & co. are typed.
 import "@tiptap/extension-table"
+import { CellSelection } from "@tiptap/pm/tables"
 import {
   ArrowDownToLineIcon,
   ArrowLeftToLineIcon,
@@ -187,6 +188,12 @@ function moveSelectionIntoCell(
   event: React.SyntheticEvent,
 ) {
   const { view } = editor
+  // A right-click on a cell that is part of a drag-selected range must keep
+  // that range: merge only works on a multi-cell selection, and the menu
+  // is the natural place to reach it after dragging.
+  if (view.state.selection instanceof CellSelection && cell.classList.contains("selectedCell")) {
+    return
+  }
   const domSelection = view.dom.ownerDocument.getSelection()
   const anchorNode = domSelection?.anchorNode ?? null
   if (anchorNode && cell.contains(anchorNode)) return
