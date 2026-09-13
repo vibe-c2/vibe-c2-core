@@ -1,4 +1,4 @@
-import type { Editor } from "@tiptap/react"
+import { type Editor, useEditorState } from "@tiptap/react"
 import { BubbleMenu } from "@tiptap/react/menus"
 // Side-effect import to ensure the Table extension's module augmentation
 // (declare module '@tiptap/core') is loaded in this file's type context so
@@ -25,6 +25,18 @@ interface WikiEditorTableMenuProps {
 }
 
 export function WikiEditorTableMenu({ editor }: WikiEditorTableMenuProps) {
+  // The editor does not re-render React on transactions, so anything read
+  // from editor state at render time goes stale. Subscribe to the two
+  // checks that change with the selection.
+  const cellOps = useEditorState({
+    editor,
+    selector: ({ editor: e }) => ({
+      canMerge: e?.can().mergeCells() ?? false,
+      canSplit: e?.can().splitCell() ?? false,
+    }),
+    equalityFn: (a, b) => !!b && a.canMerge === b.canMerge && a.canSplit === b.canSplit,
+  })
+
   if (!editor) return null
 
   return (
@@ -79,13 +91,13 @@ export function WikiEditorTableMenu({ editor }: WikiEditorTableMenuProps) {
       <TableMenuButton
         icon={CombineIcon}
         tooltip="Merge cells"
-        disabled={!editor.can().mergeCells()}
+        disabled={!cellOps?.canMerge}
         onClick={() => editor.chain().focus().mergeCells().run()}
       />
       <TableMenuButton
         icon={SplitIcon}
         tooltip="Split cell"
-        disabled={!editor.can().splitCell()}
+        disabled={!cellOps?.canSplit}
         onClick={() => editor.chain().focus().splitCell().run()}
       />
       <div className="mx-0.5 h-4 w-px bg-foreground/10" aria-hidden />
