@@ -1,5 +1,5 @@
 import { useEffect, useRef } from "react"
-import { BrowserRouter, Route, Routes } from "react-router"
+import { BrowserRouter, Navigate, Route, Routes } from "react-router"
 import { QueryProvider } from "@/providers/query-provider"
 import { ThemeProvider } from "@/components/theme-provider"
 import { Toaster } from "@/components/ui/sonner"
@@ -8,7 +8,6 @@ import { ConnectivityBanner } from "@/components/connectivity-banner"
 import { AppLayout } from "@/components/layout/app-layout"
 import { LoginPage } from "@/pages/login"
 import { EnrollPage } from "@/pages/enroll"
-import { DashboardPage } from "@/pages/dashboard"
 import { OperationsPage } from "@/pages/operations"
 import { UsersPage } from "@/pages/users"
 import { ModulesPage } from "@/pages/modules"
@@ -53,7 +52,9 @@ function App() {
           <Route path="/enroll" element={<EnrollPage />} />
           <Route element={<ProtectedRoute />}>
             <Route element={<AppLayout />}>
-              <Route index element={<DashboardPage />} />
+              {/* No landing page: Tasks is the working surface and shows a
+                  "pick an operation" prompt when nothing is scoped. */}
+              <Route index element={<Navigate to="/tasks" replace />} />
               <Route path="operations" element={<OperationsPage />} />
               <Route path="users" element={<UsersPage />} />
               <Route path="modules" element={<ModulesPage />} />

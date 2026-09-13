@@ -310,7 +310,7 @@ The subscription `operationEventAdded` pushes one `OperationEvent` per emitted e
 ### 6.1 Route and Navigation
 
 - New route `/timeline` in `App.tsx`, inside `<ProtectedRoute>` + `<AppLayout>`.
-- Operation-scoped: when no operation is selected, redirect to `/operations` (same pattern as `dashboard.tsx:14-17`).
+- Operation-scoped: when no operation is selected, redirect to `/operations`.
 - New entry in `navigationItems` in `frontend/src/navigation.tsx` (the operation-scoped section). Icon: `ClockIcon` or `ActivityIcon` from lucide-react — final choice deferred to implementation.
 
 ### 6.2 Dependencies

@@ -4,7 +4,7 @@ import type { SignOutReason } from "@/stores/auth"
 // why the user is here. Pure so it can be unit-tested without a DOM.
 //
 // Priority: an involuntary sign-out beats a plain "continue to" hint, and a
-// redirect back to the dashboard root is not worth mentioning at all.
+// redirect back to the root route is not worth mentioning at all.
 export function loginNotice(
   reason: SignOutReason | null,
   from: string | null | undefined,

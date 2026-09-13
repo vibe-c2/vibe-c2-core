@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest"
 import { loginNotice } from "./login-notice"
 
 describe("loginNotice", () => {
-  it("returns null for a plain visit to the dashboard", () => {
+  it("returns null for a plain visit to the root route", () => {
     expect(loginNotice(null, null)).toBeNull()
     expect(loginNotice(null, "/")).toBeNull()
     expect(loginNotice(null, "")).toBeNull()

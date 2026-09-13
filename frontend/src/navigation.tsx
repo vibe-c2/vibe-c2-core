@@ -4,7 +4,6 @@ import {
   FileCode2Icon,
   KanbanSquareIcon,
   RouteIcon,
-  LayoutDashboardIcon,
   GemIcon,
   SwordsIcon,
   UsersIcon,
@@ -20,17 +19,6 @@ export interface NavigationItem {
   // The `url` field is ignored for routing-active-state matching in this case.
   externalUrl?: string;
 }
-
-// Operation-scoped entries rendered ABOVE the global block. Hidden until
-// the user picks an operation via the switcher.
-export const navigationItems: NavigationItem[] = [
-  {
-    title: "Dashboard",
-    url: "/",
-    permission: null,
-    icon: LayoutDashboardIcon,
-  },
-];
 
 // Navigation entries that work even when no operation is scoped. Findings
 // has a "global / cross-operation" mode for cross-op credential search; Wiki
