@@ -178,6 +178,8 @@ func (a *App) NewRouter() *gin.Engine {
 			OperationRepo:   a.repos.Operation,
 			WikiFileRepo:    a.repos.WikiFile,
 			AgentActionRepo: a.repos.AgentAction,
+			WikiDocRepo:     a.repos.WikiDocument,
+			CredentialRepo:  a.repos.Credential,
 			Files:           wikiFileCtrl,
 			Cache:           a.cache,
 			Blobs:           a.fileStore,
@@ -187,6 +189,7 @@ func (a *App) NewRouter() *gin.Engine {
 			CallsPerMinute:  a.env.MCPCallsPerMinute,
 			WritesPerMinute: a.env.MCPWritesPerMinute,
 		})
+		a.mcpServer = mcpServer
 		v1.POST("/mcp", mcpServer.Handler())
 		// The other two Streamable HTTP methods, answered rather than left to
 		// the router's 404. A client that probes with GET and sees 404 reads

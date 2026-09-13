@@ -5,8 +5,6 @@ import (
 	"regexp"
 	"strings"
 	"testing"
-
-	"go.uber.org/zap"
 )
 
 // frontendCatalogPath is the operator's own icon picker. The Go palette is a
@@ -196,20 +194,13 @@ func TestVisualIdentity_AdaptiveDefaultOnCreate(t *testing.T) {
 // suggests a name the server refuses teaches the agent something false, and
 // prose is where that is easiest to get wrong and hardest to notice.
 func TestSkillIconExamplesAreAllValid(t *testing.T) {
-	s := New(Deps{Logger: zap.NewNop()})
-	guide := s.GuideText()
-
-	// Backtick-quoted PascalCase words in the icon section. Deliberately
-	// narrow: it looks only between the icon heading and the next one, so
-	// unrelated code spans elsewhere are not dragged in.
-	start := strings.Index(guide, "## Giving a page an icon")
-	if start < 0 {
-		t.Fatal("the guide no longer has an icon section; this check needs updating")
+	// The icon guidance is its own reference file, so the whole file is the
+	// section. Backtick-quoted names only, so prose is not dragged in.
+	icons, ok := findReferenceGuide("icons")
+	if !ok {
+		t.Fatal("the icons reference guide is gone; this check needs updating")
 	}
-	section := guide[start:]
-	if next := strings.Index(section[10:], "\n## "); next >= 0 {
-		section = section[:next+10]
-	}
+	section := icons.Content
 
 	// Both namespaces: PascalCase concept icons and si:-prefixed brand slugs.
 	// Checking only the first would have let a wrong brand slug through, and

@@ -10,63 +10,59 @@ import (
 )
 
 type findHostsArgs struct {
-	OperationID string `json:"operation_id,omitempty" jsonschema:"Operation to search. Defaults to whatever the operator currently has open."`
+	OperationID string `json:"operation_id,omitempty" jsonschema:"Operation id; omit for the operator's current one."`
 	Search      string `json:"search,omitempty"       jsonschema:"Free-text match against hostname and OS."`
-	Limit       int    `json:"limit,omitempty"        jsonschema:"Maximum hosts to return (default 25, maximum 50)."`
-	Cursor      string `json:"cursor,omitempty"       jsonschema:"Continue a previous page using its nextCursor."`
+	Limit       int    `json:"limit,omitempty"        jsonschema:"Page size, max 50."`
+	Cursor      string `json:"cursor,omitempty"       jsonschema:"nextCursor from the previous page."`
 }
 
 type getHostArgs struct {
-	HostID string `json:"host_id" jsonschema:"The host's id, from find_hosts."`
+	HostID string `json:"host_id" jsonschema:"Host id."`
 }
 
 type createHostArgs struct {
 	IdempotencyKey
-	OperationID string         `json:"operation_id,omitempty" jsonschema:"Operation to create the host in. Defaults to whatever the operator currently has open."`
-	Hostname    string         `json:"hostname"               jsonschema:"The host's name."`
-	OS          string         `json:"os,omitempty"           jsonschema:"Free-text OS fingerprint, e.g. 'Windows Server 2019'."`
-	Interfaces  []interfaceArg `json:"interfaces,omitempty"   jsonschema:"Network interfaces. Without these the host cannot be placed on a subnet in the topology view."`
-	Routes      []routeArg     `json:"routes,omitempty"       jsonschema:"Routing table entries."`
-	Logins      []loginArg     `json:"logins,omitempty"       jsonschema:"Observed logins. These draw the edges in the topology users lens."`
+	OperationID string         `json:"operation_id,omitempty" jsonschema:"Operation id; omit for the operator's current one."`
+	Hostname    string         `json:"hostname"               jsonschema:"Host name."`
+	OS          string         `json:"os,omitempty"           jsonschema:"OS fingerprint, e.g. 'Windows Server 2019'."`
+	Interfaces  []interfaceArg `json:"interfaces,omitempty"   jsonschema:"Interfaces; they place the host on a subnet."`
+	Routes      []routeArg     `json:"routes,omitempty"       jsonschema:"Routing table."`
+	Logins      []loginArg     `json:"logins,omitempty"       jsonschema:"Observed logins; they draw the users lens."`
 	visualIdentity
 }
 
 type updateHostArgs struct {
 	IdempotencyKey
-	HostID     string         `json:"host_id"               jsonschema:"The host to update, from find_hosts."`
-	Hostname   string         `json:"hostname,omitempty"    jsonschema:"Rename the host."`
-	OS         string         `json:"os,omitempty"          jsonschema:"Set or correct the OS fingerprint."`
-	Interfaces []interfaceArg `json:"interfaces,omitempty"  jsonschema:"REPLACES the interface list. Call get_host first and send the full set, including any you are not changing."`
-	Routes     []routeArg     `json:"routes,omitempty"      jsonschema:"REPLACES the route list. Send the full set."`
-	Logins     []loginArg     `json:"logins,omitempty"      jsonschema:"REPLACES the login list. Send the full set."`
+	HostID     string         `json:"host_id"               jsonschema:"Host id."`
+	Hostname   string         `json:"hostname,omitempty"    jsonschema:"New name."`
+	OS         string         `json:"os,omitempty"          jsonschema:"New OS fingerprint."`
+	Interfaces []interfaceArg `json:"interfaces,omitempty"  jsonschema:"REPLACES the interface list; send the full set."`
+	Routes     []routeArg     `json:"routes,omitempty"      jsonschema:"REPLACES the route list; send the full set."`
+	Logins     []loginArg     `json:"logins,omitempty"      jsonschema:"REPLACES the login list; send the full set."`
 	visualIdentity
 }
 
 func registerHostTools(s *Server) {
 	register(s, &mcp.Tool{
-		Name: "find_hosts",
-		Description: "Search hosts in an operation. Returns a compact view; call get_host for " +
-			"one host's interfaces, routes and login history.",
+		Name:        "find_hosts",
+		Description: "Search hosts. Compact rows; get_host has interfaces, routes and logins.",
 	}, readTool, handleFindHosts)
 
 	register(s, &mcp.Tool{
-		Name: "get_host",
-		Description: "One host in full: network interfaces, routes, and the login footprints " +
-			"that the topology view draws its edges from.",
+		Name:        "get_host",
+		Description: "One host in full: interfaces, routes and login footprints.",
 	}, readTool, handleGetHost)
 
 	register(s, &mcp.Tool{
 		Name: "create_host",
-		Description: "Record a newly discovered host. Supply interfaces, routes and logins " +
-			"where you know them — they are what the topology view draws the network from, " +
-			"so a host without them appears as an isolated node.",
+		Description: "Record a discovered host. Interfaces, routes and logins are what the " +
+			"topology view draws from; without them the host is an isolated node.",
 	}, writeTool, handleCreateHost)
 
 	register(s, &mcp.Tool{
 		Name: "update_host",
-		Description: "Change a host, typically to fill in network detail discovered later. " +
-			"The interface, route and login lists REPLACE what is stored rather than merging, " +
-			"so read the host first and send back the complete set.",
+		Description: "Change a host. The interface, route and login lists REPLACE what is " +
+			"stored, so read the host first and send the complete set.",
 	}, writeTool, handleUpdateHost)
 }
 

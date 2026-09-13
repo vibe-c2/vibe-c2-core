@@ -49,10 +49,20 @@ func registerResources(s *Server) {
 		Name:  "vibe-c2-guide",
 		Title: "How to work in Vibe C2",
 		URI:   guideResourceURI,
-		Description: "The platform's data model, the full tool surface, and how to work " +
-			"alongside the operator. Read this first if you have not worked here before.",
+		Description: "The data model, the conduct rules and a tool index. Read this first " +
+			"if you have not worked here before; it points at the per-job guides.",
 		MIMEType: resourceMIMEText,
 	}, s.readResource)
+
+	for _, g := range referenceGuides {
+		s.server.AddResource(&mcp.Resource{
+			Name:        "vibe-c2-guide-" + g.Name,
+			Title:       "Guide: " + g.Summary,
+			URI:         guideResourceURI + "/" + g.Name,
+			Description: "How to work here: " + g.Summary + ".",
+			MIMEType:    resourceMIMEText,
+		}, s.readResource)
+	}
 
 	s.server.AddResource(&mcp.Resource{
 		Name:        "operator-focus",
@@ -74,6 +84,12 @@ func (s *Server) readResource(ctx context.Context, req *mcp.ReadResourceRequest)
 		// operation. Gating it would only stop an agent learning how to
 		// behave.
 		return textResource(uri, resourceMIMEText, s.GuideText()), nil
+	}
+	if name, ok := strings.CutPrefix(uri, guideResourceURI+"/"); ok {
+		if g, found := findReferenceGuide(name); found {
+			return textResource(uri, resourceMIMEText, g.Content), nil
+		}
+		return nil, fmt.Errorf("unknown guide %q", uri)
 	}
 
 	if uri == focusResourceURI {

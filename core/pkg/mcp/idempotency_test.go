@@ -2,6 +2,7 @@ package mcp
 
 import (
 	"context"
+	"sync"
 	"testing"
 	"time"
 
@@ -11,7 +12,10 @@ import (
 
 // memCache is a minimal in-memory cache.Cache for exercising the replay path
 // without Redis.
+// memCache is goroutine-safe like the Redis client it stands in for: the
+// rate limiter bumps two counters concurrently.
 type memCache struct {
+	mu       sync.Mutex
 	data     map[string]string
 	counters map[string]int64
 }
@@ -20,14 +24,22 @@ func newMemCache() *memCache {
 	return &memCache{data: map[string]string{}, counters: map[string]int64{}}
 }
 
-func (m *memCache) Get(_ context.Context, key string) (string, error) { return m.data[key], nil }
+func (m *memCache) Get(_ context.Context, key string) (string, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return m.data[key], nil
+}
 
 func (m *memCache) Set(_ context.Context, key string, value any, _ time.Duration) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
 	m.data[key] = value.(string)
 	return nil
 }
 
 func (m *memCache) SetNX(_ context.Context, key string, value any, _ time.Duration) (bool, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
 	if _, exists := m.data[key]; exists {
 		return false, nil
 	}
@@ -36,6 +48,8 @@ func (m *memCache) SetNX(_ context.Context, key string, value any, _ time.Durati
 }
 
 func (m *memCache) IncrWithTTL(_ context.Context, key string, _ time.Duration) (int64, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
 	n := m.counters[key] + 1
 	m.counters[key] = n
 	return n, nil
@@ -45,6 +59,8 @@ func (m *memCache) SetWithTags(context.Context, string, any, []string, time.Dura
 	return nil
 }
 func (m *memCache) Del(_ context.Context, keys ...string) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
 	for _, k := range keys {
 		delete(m.data, k)
 	}
@@ -146,11 +162,10 @@ func TestIdempotency_EveryWriteToolAcceptsAKey(t *testing.T) {
 		addCredentialCommentArgs{},
 		createTaskArgs{},
 		updateTaskArgs{},
-		addTaskWikiReferenceArgs{},
-		taskAssignmentArgs{},
+		linkTaskArgs{},
+		setTaskAssignmentArgs{},
 		changeTaskStageArgs{},
 		createWikiDocumentArgs{},
-		createFromTemplateArgs{},
 		setWikiTemplateArgs{},
 		sectionWriteArgs{},
 		updateWikiDocumentArgs{},

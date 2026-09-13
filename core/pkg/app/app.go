@@ -19,6 +19,7 @@ import (
 	"github.com/vibe-c2/vibe-c2-core/core/pkg/events"
 	"github.com/vibe-c2/vibe-c2-core/core/pkg/lifecycle"
 	"github.com/vibe-c2/vibe-c2-core/core/pkg/logger"
+	"github.com/vibe-c2/vibe-c2-core/core/pkg/mcp"
 	"github.com/vibe-c2/vibe-c2-core/core/pkg/messaging"
 	"github.com/vibe-c2/vibe-c2-core/core/pkg/modulegate"
 	"github.com/vibe-c2/vibe-c2-core/core/pkg/repository"
@@ -76,6 +77,8 @@ type App struct {
 	// Wiki integration
 	presenceTracker *wiki.PresenceTracker
 	hpClient        *wiki.HocuspocusClient
+	// mcpServer is kept so its audit queue can be drained at shutdown.
+	mcpServer       *mcp.Server
 	backupScheduler *wiki.BackupScheduler
 	imageStore      blob.ObjectStore
 	imageProcessor  *wiki.ImageProcessor
@@ -138,7 +141,7 @@ func NewApp() (*App, error) {
 		Task:               repository.NewTaskRepository(db),
 		OperationEvent:     repository.NewOperationEventRepository(db),
 		APIKey:             repository.NewAPIKeyRepository(db),
-		AgentKey:           repository.NewAgentKeyRepository(db),
+		AgentKey:           repository.NewAgentKeyRepository(db), // wrapped with auth-cache eviction below
 		AgentAction:        repository.NewAgentActionRepository(db),
 		ModuleRegistry:     repository.NewModuleRegistryRepository(db),
 	}
@@ -156,6 +159,10 @@ func NewApp() (*App, error) {
 		l.Warn("Failed to initialize Redis cache, continuing without cache", zap.Error(err))
 		c = cache.NewNoopCache()
 	}
+	// Agent-key auth is cached per key for a short TTL; every key mutation
+	// must evict that entry, so the repository is wrapped once the cache
+	// exists.
+	repos.AgentKey = repository.NewAgentKeyRepositoryWithAuthCache(repos.AgentKey, c)
 
 	// Derive the AES-256 key for encrypting grace shadow payloads (used by
 	// both the token store and the auth controller).
@@ -531,6 +538,11 @@ func (a *App) StartServerWithGracefulShutdown() {
 
 		if err := srv.Shutdown(ctxTimeout); err != nil {
 			a.logger.Error("Server forced to shutdown", zap.Error(err))
+		}
+
+		// Flush queued agent audit rows while the database is still open.
+		if a.mcpServer != nil {
+			a.mcpServer.Close()
 		}
 
 		// Drain event bus before closing infrastructure — handlers may need DB/cache.

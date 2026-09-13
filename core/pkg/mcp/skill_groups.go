@@ -12,68 +12,46 @@ package mcp
 var toolGroups = []toolGroup{
 	{
 		Title: "Orientation",
-		Intro: "Where you are and what you can reach. Start here when you do not already know which operation you are working in.",
+		Intro: "Where you are and what you can reach.",
 		Tools: []string{"list_operations", "get_operation_summary", "get_user_focus"},
 	},
 	{
 		Title: "Hosts and the network",
-		Intro: "The topology view is drawn from these records: interfaces place a host on a subnet, routes give reachability, and logins draw the users lens. A host recorded without them is an isolated dot.",
+		Intro: "Interfaces, routes and logins are what the topology view draws from.",
 		Tools: []string{"find_hosts", "get_host", "create_host", "update_host"},
 	},
 	{
 		Title: "Credentials",
-		Intro: "Secret material recovered during the engagement. Returned in full, including plaintext.",
+		Intro: "Recovered secrets, returned in full.",
 		Tools: []string{"find_credentials", "get_credential", "create_credential", "add_credential_comment"},
 	},
 	{
 		Title: "Hashes",
-		Intro: "Captured hashes and what became of them. mark_hash_cracked is what turns a dump into something usable.",
+		Intro: "Captured hashes and what became of them.",
 		Tools: []string{"find_hashes", "get_hash", "create_hash", "import_hashes", "update_hash", "mark_hash_cracked"},
 	},
 	{
 		Title: "Tasks",
 		Intro: "The operator's board. Propose work here rather than doing something nobody asked for. " +
-			"You can see and change tasks assigned to the operator you act for, and unassigned ones; " +
-			"tasks another operator has taken are not yours to read or edit.\n\n" +
-			"A task is only half a record without its references. Every task you create or touch " +
-			"should point at the wiki pages it comes out of or writes up, and at the credentials it " +
-			"needs or produces. Pass `wiki_ids` and `credential_ids` to `create_task` so the links " +
-			"land with the task; use `add_task_wiki_reference` and `add_task_credential_reference` " +
-			"when you learn about the connection later. `get_task` lists what is already linked, and " +
-			"every task view carries `wikiReferenceCount` and `credentialReferenceCount` — a zero " +
-			"there on a task you are working is the cue to go and link something.",
+			"You see tasks assigned to the operator you act for and unassigned ones; tasks another " +
+			"operator has taken are withheld. Link every task to the pages and credentials it " +
+			"relates to (`wiki_ids`/`credential_ids` on `create_task`, or `link_task` later).",
 		Tools: []string{"find_tasks", "get_task", "create_task", "update_task", "change_task_stage",
-			"assign_task_to_me", "unassign_task_from_me", "add_task_wiki_reference",
-			"add_task_credential_reference"},
+			"set_task_assignment", "link_task"},
 	},
 	{
 		Title: "Wiki",
-		Intro: "Engagement notes. Pages are collaboratively edited, so the operator may be reading one while you write to it. " +
-			"Pages can also carry file attachments — the evidence the notes are about.\n\n" +
-			"A page is richer than plain markdown: checklist items (`:::checklist {...}`), notices " +
-			"(`:::warning`), and inline reference chips to hosts, hashes, credentials and other " +
-			"pages. You read and write all of them as markdown, and `update_wiki_document` " +
-			"replaces the whole body — so read a page before rewriting it and put back every " +
-			"construct you are not deliberately changing. See workflows.md, \"What a page can " +
-			"contain\".\n\n" +
-			"Size is not a reason to split anything. A page body can be up to 1 MB in a single " +
-			"call, which is far more than a command history or a scan dump. Send it whole; " +
-			"chunking a long value across several calls costs a round trip each, leaves the " +
-			"page half-written if one fails, and buys nothing.",
+		Intro: "Engagement notes, collaboratively edited, with file attachments. See wiki.md and attachments.md.",
 		Tools: []string{"search_wiki", "list_wiki_tree", "get_wiki_document",
-			"list_wiki_templates", "create_wiki_document_from_template", "set_wiki_template",
-			"create_wiki_document", "append_wiki_section", "prepend_wiki_section",
+			"list_wiki_templates", "set_wiki_template",
+			"create_wiki_document", "add_wiki_section",
 			"edit_wiki_document", "update_wiki_document",
 			"list_wiki_attachments", "read_wiki_attachment",
 			"attach_text_to_wiki_document"},
 	},
 	{
 		Title: "Timeline",
-		Intro: "The shared history of the engagement. Deliberately sparse: it records milestones — " +
-			"a task closed, a credential recovered, a hash cracked — not everything that happened. " +
-			"Your work goes on it under exactly the same rules as a person's, so wiki edits and " +
-			"task bookkeeping do not appear. create_timeline_event is there when something " +
-			"belongs on it that no tool would record on its own.",
+		Intro: "Milestones only: a task closed, a credential recovered, a hash cracked, and whatever you record with create_timeline_event — a DC owned, a foothold lost. Wiki edits and task bookkeeping do not appear.",
 		Tools: []string{"get_timeline", "create_timeline_event"},
 	},
 }

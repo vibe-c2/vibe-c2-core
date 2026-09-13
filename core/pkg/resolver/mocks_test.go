@@ -43,6 +43,15 @@ func (m *mockCredRepo) FindByOperationIDWithCursor(ctx context.Context, opID uui
 func (m *mockCredRepo) CountByOperationID(ctx context.Context, opID uuid.UUID, filter repository.CredentialFilter) (int64, error) {
 	return m.countByOperationIDFn(ctx, opID, filter)
 }
+func (m *mockCredRepo) FindNamesByIDs(ctx context.Context, ids []uuid.UUID) ([]models.Credential, error) {
+	out := make([]models.Credential, 0, len(ids))
+	for _, id := range ids {
+		if c, err := m.findByIDFn(ctx, id); err == nil {
+			out = append(out, models.Credential{CredentialID: c.CredentialID, Name: c.Name})
+		}
+	}
+	return out, nil
+}
 func (m *mockCredRepo) DistinctTagsByOperationID(ctx context.Context, opID uuid.UUID) ([]string, error) {
 	return m.distinctTagsByOperationIDFn(ctx, opID)
 }
@@ -167,6 +176,15 @@ func (m *mockUserRepo) FindWithCursor(ctx context.Context, search string, sort r
 }
 func (m *mockUserRepo) FindByID(ctx context.Context, id uuid.UUID) (models.User, error) {
 	return m.findByIDFn(ctx, id)
+}
+func (m *mockUserRepo) FindByIDs(ctx context.Context, ids []uuid.UUID) ([]models.User, error) {
+	out := make([]models.User, 0, len(ids))
+	for _, id := range ids {
+		if u, err := m.findByIDFn(ctx, id); err == nil {
+			out = append(out, u)
+		}
+	}
+	return out, nil
 }
 func (m *mockUserRepo) FindSuggestions(ctx context.Context, search string, limit int64) ([]models.User, error) {
 	return m.findSuggestionsFn(ctx, search, limit)

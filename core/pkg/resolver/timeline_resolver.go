@@ -41,6 +41,8 @@ type ITimelineResolver interface {
 	Actor(ctx context.Context, obj *models.OperationEvent) (*models.User, error)
 	ActorKind(ctx context.Context, obj *models.OperationEvent) (string, error)
 	ActorLabel(ctx context.Context, obj *models.OperationEvent) (string, error)
+	// ActorLabels is ActorLabel for a page of events in one user lookup.
+	ActorLabels(ctx context.Context, events []*models.OperationEvent) []string
 	OccurredAt(ctx context.Context, obj *models.OperationEvent) (string, error)
 	Metadata(ctx context.Context, obj *models.OperationEvent) (string, error)
 
@@ -544,22 +546,58 @@ func (r *timelineResolver) ActorLabel(ctx context.Context, obj *models.Operation
 			owner = user.Username
 		}
 	}
+	return actorLabel(obj, owner), nil
+}
 
+// ActorLabels resolves the labels for a whole page with one user query.
+//
+// ActorLabel per row is fine for GraphQL, where a dataloader sits in front
+// of it; the MCP timeline tool called it in a loop and paid one lookup per
+// event. Distinct actor ids are fetched together and joined in memory. A
+// lookup failure leaves owners unnamed rather than failing the page.
+func (r *timelineResolver) ActorLabels(ctx context.Context, events []*models.OperationEvent) []string {
+	seen := map[uuid.UUID]bool{}
+	var ids []uuid.UUID
+	for _, e := range events {
+		if e.ActorID != nil && !seen[*e.ActorID] {
+			seen[*e.ActorID] = true
+			ids = append(ids, *e.ActorID)
+		}
+	}
+	names := map[uuid.UUID]string{}
+	if users, err := r.userRepo.FindByIDs(ctx, ids); err == nil {
+		for _, u := range users {
+			names[u.UserID] = u.Username
+		}
+	}
+	labels := make([]string, len(events))
+	for i, e := range events {
+		owner := ""
+		if e.ActorID != nil {
+			owner = names[*e.ActorID]
+		}
+		labels[i] = actorLabel(e, owner)
+	}
+	return labels
+}
+
+// actorLabel renders one event's actor given the owner's username, if any.
+func actorLabel(obj *models.OperationEvent, owner string) string {
 	switch obj.ActorType {
 	case models.EventActorAgent:
 		if obj.ActorName == "" {
-			return owner, nil
+			return owner
 		}
 		if owner == "" {
-			return obj.ActorName, nil
+			return obj.ActorName
 		}
-		return obj.ActorName + " (via " + owner + ")", nil
+		return obj.ActorName + " (via " + owner + ")"
 	case models.EventActorService:
-		return obj.ActorName, nil
+		return obj.ActorName
 	case models.EventActorSystem:
-		return "", nil
+		return ""
 	default:
-		return owner, nil
+		return owner
 	}
 }
 

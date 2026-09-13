@@ -53,11 +53,11 @@ const (
 )
 
 type listWikiAttachmentsArgs struct {
-	DocumentID string `json:"document_id" jsonschema:"The page whose attachments to list, from search_wiki or list_wiki_tree."`
+	DocumentID string `json:"document_id" jsonschema:"Page id."`
 }
 
 type readWikiAttachmentArgs struct {
-	AttachmentID string `json:"attachment_id" jsonschema:"The attachment's id, from list_wiki_attachments."`
+	AttachmentID string `json:"attachment_id" jsonschema:"Attachment id."`
 }
 
 type attachmentView struct {
@@ -74,31 +74,27 @@ type attachmentView struct {
 
 type attachTextArgs struct {
 	IdempotencyKey
-	DocumentID string `json:"document_id" jsonschema:"The page to attach the file to."`
-	Filename   string `json:"filename"    jsonschema:"Name for the file, with an extension: recon.txt, hosts.csv, nginx.conf."`
-	Content    string `json:"content"     jsonschema:"The file's contents, as text. Send the whole thing in one call — the cap is megabytes, not kilobytes."`
+	DocumentID string `json:"document_id" jsonschema:"Page id."`
+	Filename   string `json:"filename"    jsonschema:"With an extension: recon.txt, hosts.csv."`
+	Content    string `json:"content"     jsonschema:"The text, whole, in one call; the cap is megabytes."`
 }
 
 func registerAttachmentTools(s *Server) {
 	register(s, &mcp.Tool{
-		Name: "list_wiki_attachments",
-		Description: "Files attached to a wiki page. Each entry says whether its content can " +
-			"be read and what kind it is, so check here before assuming a page's evidence is " +
-			"only what the page text says.",
+		Name:        "list_wiki_attachments",
+		Description: "Files attached to a page, each marked readable or not.",
 	}, readTool, handleListWikiAttachments)
 
 	register(s, &mcp.Tool{
 		Name: "read_wiki_attachment",
-		Description: "Read an attachment's content. Text, CSV, Markdown and JSON come back " +
-			"directly; Word and Excel documents are converted to plain text; images come back " +
-			"as images you can look at. Large files are truncated and say so.",
+		Description: "Read an attachment: text formats directly, Word and Excel as text, " +
+			"images as images. Large files are truncated and say so.",
 	}, readTool, handleReadWikiAttachment)
 
 	register(s, &mcp.Tool{
 		Name: "attach_text_to_wiki_document",
-		Description: "Attach text to a page as a file — a command history, a scan output, a " +
-			"config, anything long enough that pasting it into the page would bury the notes. " +
-			"One call, whole content, no splitting: the cap is megabytes.",
+		Description: "Attach text to a page as a file: raw output, a scan, a config. Whole " +
+			"content in one call.",
 	}, writeTool, handleAttachTextToWikiDocument)
 }
 

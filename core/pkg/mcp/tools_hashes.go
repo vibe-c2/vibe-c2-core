@@ -11,64 +11,65 @@ import (
 )
 
 type findHashesArgs struct {
-	OperationID string   `json:"operation_id,omitempty" jsonschema:"Operation to search. Defaults to whatever the operator currently has open."`
+	OperationID string   `json:"operation_id,omitempty" jsonschema:"Operation id; omit for the operator's current one."`
 	Search      string   `json:"search,omitempty"       jsonschema:"Free-text match against the hash value."`
+	Status      string   `json:"status,omitempty"       jsonschema:"Only this status: NOT_PROCESSED, QUEUED, CRACKING, CRACKED or FAILED."`
 	Tags        []string `json:"tags,omitempty"         jsonschema:"Only hashes carrying all of these tags."`
-	Limit       int      `json:"limit,omitempty"        jsonschema:"Maximum hashes to return (default 25, maximum 50)."`
-	Cursor      string   `json:"cursor,omitempty"       jsonschema:"Continue a previous page using its nextCursor."`
+	Limit       int      `json:"limit,omitempty"        jsonschema:"Page size, max 50."`
+	Cursor      string   `json:"cursor,omitempty"       jsonschema:"nextCursor from the previous page."`
 }
 
 type getHashArgs struct {
-	HashID string `json:"hash_id" jsonschema:"The hash's id, from find_hashes."`
+	HashID string `json:"hash_id" jsonschema:"Hash id."`
 }
 
 type createHashArgs struct {
 	IdempotencyKey
-	OperationID string   `json:"operation_id,omitempty" jsonschema:"Operation to record the hash in. Defaults to whatever the operator currently has open."`
-	Value       string   `json:"value"                  jsonschema:"The hash itself, in whatever format the tooling produced."`
-	Status      string   `json:"status,omitempty"       jsonschema:"NOT_PROCESSED, QUEUED, CRACKING, CRACKED or FAILED. Defaults to NOT_PROCESSED."`
-	Comment     string   `json:"comment,omitempty"      jsonschema:"Where it came from, and anything the operator should know."`
-	Tags        []string `json:"tags,omitempty"         jsonschema:"Tags, e.g. the host it was dumped from."`
+	OperationID string   `json:"operation_id,omitempty" jsonschema:"Operation id; omit for the operator's current one."`
+	Value       string   `json:"value"                  jsonschema:"The hash, as the tooling produced it."`
+	Status      string   `json:"status,omitempty"       jsonschema:"NOT_PROCESSED (default), QUEUED, CRACKING, CRACKED or FAILED."`
+	Comment     string   `json:"comment,omitempty"      jsonschema:"Where it came from."`
+	Tags        []string `json:"tags,omitempty"         jsonschema:"Tags, e.g. the source host."`
 }
 
 type importHashesArgs struct {
 	IdempotencyKey
-	OperationID string   `json:"operation_id,omitempty" jsonschema:"Operation to import into. Defaults to whatever the operator currently has open."`
-	Text        string   `json:"text"                   jsonschema:"Raw dump text, one hash per line. Duplicates already recorded are skipped rather than added twice."`
-	Comment     string   `json:"comment,omitempty"      jsonschema:"Applied to every hash in the import, e.g. 'secretsdump from dc-01'."`
-	Tags        []string `json:"tags,omitempty"         jsonschema:"Applied to every hash in the import."`
+	OperationID string   `json:"operation_id,omitempty" jsonschema:"Operation id; omit for the operator's current one."`
+	Text        string   `json:"text"                   jsonschema:"Dump text, one hash per line; known ones are skipped."`
+	Comment     string   `json:"comment,omitempty"      jsonschema:"Applied to every imported hash."`
+	Tags        []string `json:"tags,omitempty"         jsonschema:"Applied to every imported hash."`
 }
 
 type updateHashArgs struct {
 	IdempotencyKey
-	HashID  string   `json:"hash_id"           jsonschema:"The hash to update, from find_hashes."`
-	Status  string   `json:"status,omitempty"  jsonschema:"NOT_PROCESSED, QUEUED, CRACKING, CRACKED or FAILED. Use mark_hash_cracked instead when a crack succeeded — it links the credential."`
-	Comment string   `json:"comment,omitempty" jsonschema:"Replace the comment."`
-	Tags    []string `json:"tags,omitempty"    jsonschema:"REPLACES the tag list. Send the full set."`
+	HashID  string   `json:"hash_id"           jsonschema:"Hash id."`
+	Status  string   `json:"status,omitempty"  jsonschema:"NOT_PROCESSED, QUEUED, CRACKING, CRACKED or FAILED. For a successful crack use mark_hash_cracked."`
+	Comment string   `json:"comment,omitempty" jsonschema:"New comment."`
+	Tags    []string `json:"tags,omitempty"    jsonschema:"REPLACES the tag list."`
 }
 
 type markHashCrackedArgs struct {
 	IdempotencyKey
-	HashID string `json:"hash_id"                 jsonschema:"The hash that was cracked."`
+	HashID string `json:"hash_id"                 jsonschema:"Hash id."`
 	// Either link an existing credential or create one. Creating is the usual
 	// case: a crack normally produces a secret nothing has recorded yet.
 	CredentialID string   `json:"credential_id,omitempty" jsonschema:"Link an existing credential instead of creating one."`
-	Name         string   `json:"name,omitempty"          jsonschema:"Name for the new credential, e.g. 'dc-01 Administrator'. Required unless credential_id is given."`
-	Username     string   `json:"username,omitempty"      jsonschema:"Account the recovered secret belongs to."`
-	Password     string   `json:"password,omitempty"      jsonschema:"The recovered plaintext."`
-	Tags         []string `json:"tags,omitempty"        jsonschema:"Tags for the new credential."`
+	Name         string   `json:"name,omitempty"          jsonschema:"Name for the new credential; required without credential_id."`
+	Username     string   `json:"username,omitempty"      jsonschema:"Account name."`
+	Password     string   `json:"password,omitempty"      jsonschema:"Recovered plaintext."`
+	Tags         []string `json:"tags,omitempty"          jsonschema:"Tags for the new credential."`
 }
 
 func registerHashTools(s *Server) {
 	register(s, &mcp.Tool{
 		Name: "find_hashes",
-		Description: "Search captured hashes. Cracked hashes carry the id of the credential " +
-			"they produced.",
+		Description: "Search captured hashes. Long values are clipped in listings; get_hash " +
+			"returns one whole. Cracked hashes carry the id of the credential they produced.",
 	}, readTool, handleFindHashes)
 
 	register(s, &mcp.Tool{
 		Name:        "get_hash",
-		Description: "One hash in full, including the credential it produced if it was cracked.",
+		Description: "One hash with its full value and, if cracked, its credential.",
 	}, readTool, handleGetHash)
 
 	register(s, &mcp.Tool{
@@ -77,23 +78,19 @@ func registerHashTools(s *Server) {
 	}, writeTool, handleCreateHash)
 
 	register(s, &mcp.Tool{
-		Name: "import_hashes",
-		Description: "Import a dump of hashes, one per line. Hashes already recorded in the " +
-			"operation are skipped rather than duplicated, so re-importing a grown dump is safe.",
+		Name:        "import_hashes",
+		Description: "Import a dump, one hash per line. Known hashes are skipped, so re-importing is safe.",
 	}, writeTool, handleImportHashes)
 
 	register(s, &mcp.Tool{
-		Name: "update_hash",
-		Description: "Change a hash's status, comment or tags — for example moving it to " +
-			"CRACKING when you hand it to a cracker, or FAILED when it does not fall.",
+		Name:        "update_hash",
+		Description: "Change a hash's status, comment or tags.",
 	}, writeTool, handleUpdateHash)
 
 	register(s, &mcp.Tool{
 		Name: "mark_hash_cracked",
-		Description: "Record that a hash was cracked, creating the credential it produced and " +
-			"linking the two. This is what closes the loop between a dump and something you " +
-			"can actually use — prefer it over update_hash with status CRACKED, which records " +
-			"the outcome but leaves the plaintext nowhere.",
+		Description: "Record a crack: creates (or links) the credential and marks the hash " +
+			"CRACKED. Prefer it over update_hash, which leaves the plaintext nowhere.",
 	}, writeTool, handleMarkHashCracked)
 }
 
@@ -266,8 +263,17 @@ func handleFindHashes(ctx context.Context, s *Server, args findHashesArgs) (tool
 		return toolResult{}, err
 	}
 
+	status, err := parseHashStatus(args.Status)
+	if err != nil {
+		return toolResult{}, err
+	}
+	var statuses []models.HashStatus
+	if status != nil {
+		statuses = []models.HashStatus{*status}
+	}
+
 	limit := clampPageSize(args.Limit)
-	conn, err := s.deps.Hashes.Hashes(ctx, opID.String(), optionalString(args.Search), nil,
+	conn, err := s.deps.Hashes.Hashes(ctx, opID.String(), optionalString(args.Search), statuses,
 		args.Tags, nil, &limit, optionalString(args.Cursor), nil, nil)
 	if err != nil {
 		return toolResult{}, fmt.Errorf("failed to search hashes: %w", err)
@@ -275,7 +281,7 @@ func handleFindHashes(ctx context.Context, s *Server, args findHashesArgs) (tool
 
 	views := make([]hashView, 0, len(conn.Edges))
 	for _, edge := range conn.Edges {
-		views = append(views, toHashView(edge.Node))
+		views = append(views, toHashListView(edge.Node))
 	}
 
 	result, err := newPage(views, endCursor(conn.PageInfo), totalNote(conn.TotalCount, len(views))...)

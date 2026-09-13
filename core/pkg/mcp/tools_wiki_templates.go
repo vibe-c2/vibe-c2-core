@@ -9,22 +9,13 @@ import (
 )
 
 type listWikiTemplatesArgs struct {
-	OperationID string `json:"operation_id,omitempty" jsonschema:"Operation whose templates to list. Defaults to whatever the operator currently has open."`
-}
-
-type createFromTemplateArgs struct {
-	IdempotencyKey
-	TemplateID  string `json:"template_id"            jsonschema:"The template to instantiate, from list_wiki_templates."`
-	OperationID string `json:"operation_id,omitempty" jsonschema:"Operation to create the page in. Defaults to whatever the operator currently has open. A template from one operation can be instantiated into another."`
-	Title       string `json:"title,omitempty"        jsonschema:"Title for the new page. Defaults to the template's own title."`
-	ParentID    string `json:"parent_id,omitempty"    jsonschema:"Create as a child of this page."`
-	visualIdentity
+	OperationID string `json:"operation_id,omitempty" jsonschema:"Operation id; omit for the operator's current one."`
 }
 
 type setWikiTemplateArgs struct {
 	IdempotencyKey
-	DocumentID string `json:"document_id"  jsonschema:"The page to mark or unmark."`
-	IsTemplate bool   `json:"is_template"  jsonschema:"True to make this page a reusable template, false to turn it back into an ordinary page."`
+	DocumentID string `json:"document_id"  jsonschema:"Page id."`
+	IsTemplate bool   `json:"is_template"  jsonschema:"True to make it a template, false to unmark."`
 }
 
 func handleListWikiTemplates(ctx context.Context, s *Server, args listWikiTemplatesArgs) (toolResult, error) {
@@ -56,18 +47,18 @@ func handleListWikiTemplates(ctx context.Context, s *Server, args listWikiTempla
 // authenticated caller and shared across every operation — but it is a
 // separate operation, so a single-operation listing hid it completely. That
 // left the tool saying "this operation has no templates" to an operator
-// looking straight at a list of them, and it was inconsistent with
-// create_wiki_document_from_template, which has always accepted a template
+// looking straight at a list of them, and it was inconsistent with the
+// template path of create_wiki_document, which has always accepted a template
 // from another operation.
 func (s *Server) collectTemplates(ctx context.Context, opID uuid.UUID) ([]wikiTemplateView, []string, error) {
-	templates, err := s.deps.WikiDocs.WikiTemplates(ctx, opID.String())
+	templates, err := s.wikiSummaries(ctx, opID, true)
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to list templates: %w", err)
 	}
 
 	views := make([]wikiTemplateView, 0, len(templates))
-	for _, doc := range templates {
-		views = append(views, wikiTemplateView{wikiDocView: toWikiDocView(doc)})
+	for i := range templates {
+		views = append(views, wikiTemplateView{wikiDocView: toWikiDocView(&templates[i])})
 	}
 
 	var notes []string
@@ -114,23 +105,22 @@ func (s *Server) publicTemplates(ctx context.Context, opID uuid.UUID) ([]wikiTem
 			"so they are not listed."
 	}
 
-	docs, err := s.deps.WikiDocs.WikiTemplates(ctx, models.PublicOperationID.String())
+	docs, err := s.wikiSummaries(ctx, models.PublicOperationID, true)
 	if err != nil {
 		return nil, "Shared templates in the Public wiki could not be read, so they are not listed."
 	}
 
 	views := make([]wikiTemplateView, 0, len(docs))
-	for _, doc := range docs {
-		views = append(views, wikiTemplateView{wikiDocView: toWikiDocView(doc), Shared: true})
+	for i := range docs {
+		views = append(views, wikiTemplateView{wikiDocView: toWikiDocView(&docs[i]), Shared: true})
 	}
 	return views, ""
 }
 
-func handleCreateFromTemplate(ctx context.Context, s *Server, args createFromTemplateArgs) (toolResult, error) {
-	opID, err := s.scopedOperation(ctx, args.OperationID, models.OperationRoleOperator)
-	if err != nil {
-		return toolResult{}, err
-	}
+// createFromTemplate is create_wiki_document's template path. A template from
+// one operation can be instantiated into another; the caller's own title, if
+// any, overrides the template's.
+func (s *Server) createFromTemplate(ctx context.Context, opID uuid.UUID, args createWikiDocumentArgs) (toolResult, error) {
 	if err := args.validate(); err != nil {
 		return toolResult{}, err
 	}

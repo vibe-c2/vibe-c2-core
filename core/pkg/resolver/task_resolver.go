@@ -135,7 +135,7 @@ func NewTaskResolver(
 // AuthorizeOperationRole helper which handles the Public-operation
 // short-circuit and the app-admin bypass uniformly.
 func (r *taskResolver) authorizeForOperation(ctx context.Context, operationID uuid.UUID, minRole models.OperationRole) error {
-	op, err := r.operationRepo.FindByID(ctx, operationID)
+	op, err := gqlctx.LoadOperation(ctx, r.operationRepo, operationID)
 	if err != nil {
 		return fmt.Errorf("operation not found: %w", err)
 	}

@@ -1,6 +1,8 @@
 package mcp
 
 import (
+	"sync"
+
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
@@ -18,6 +20,12 @@ type Server struct {
 	// tools is the registry the generated skill is built from. Appended to by
 	// register during New; never mutated afterwards.
 	tools []toolDoc
+
+	// audit carries recorded calls to the worker that writes them — see
+	// dispatch.go. Closed by Close.
+	audit     chan auditJob
+	auditDone sync.WaitGroup
+	closeOnce sync.Once
 }
 
 // toolDoc is one tool as the skill describes it.
@@ -38,7 +46,10 @@ func New(deps Deps) *Server {
 		}),
 		deps:   deps,
 		limits: rateLimits{calls: deps.CallsPerMinute, writes: deps.WritesPerMinute},
+		audit:  make(chan auditJob, auditQueueSize),
 	}
+	s.auditDone.Add(1)
+	go s.runAuditWorker()
 
 	registerOperationTools(s)
 	registerHostTools(s)
@@ -64,38 +75,16 @@ func New(deps Deps) *Server {
 // so it is charged per turn and has to stay short. The last line is what makes
 // that affordable: it buys the full guide on demand, in any client, instead of
 // paying for it permanently here.
-const serverInstructions = `You are connected to Vibe C2, a command-and-control platform for
-authorized offensive security engagements, as a delegated agent working alongside a human
-operator.
+const serverInstructions = `You are a delegated agent in Vibe C2, a command-and-control platform for
+authorized offensive security engagements. Your key acts for one human operator and can never do
+more than they can; a refusal is that ceiling, so report it rather than retrying variations.
 
-What you can reach: the knowledge layer of an engagement — hosts, credentials, hashes, tasks,
-wiki pages and the timeline. You cannot reach implant tasking, live sessions, transport
-channels or the module registry, and no tool here will give you access to them.
+You reach the knowledge layer only: hosts, credentials, hashes, tasks, wiki, timeline. There are
+no tools for implants, sessions, channels or modules, and no other way in.
 
-Scope: your key acts on behalf of one operator and can never do more than they can. If a call
-is refused, the operator's own access or your key's ceiling is the reason — say so rather than
-retrying variations.
+Every call, reads included, is recorded and shown to the operator. Tools default to the operation
+the operator has open (get_user_focus shows it). Results are capped: truncated means narrow the
+filter. Arguments hold a megabyte, so never split a value across calls. Prefer edit_wiki_document
+and add_wiki_section over update_wiki_document.
 
-Working alongside: call get_user_focus to see what the operator is looking at right now. Most
-tools take operation_id, but if you omit it they default to the operation the operator
-currently has open, so following along usually needs no argument at all.
-
-Everything you do is visible: every call, reads included, is recorded and shown to the
-operator, and your writes are attributed to you wherever they surface. Work as if being
-watched, because you are.
-
-These tools are the only way in: no CLI, no checkout, no endpoint to curl, no file on disk.
-If a tool for something does not exist, it does not exist.
-
-Results are capped. If a response says it was truncated, narrow the filter rather than
-assuming you have seen everything.
-
-Send the smallest change that does the job: edit_wiki_document for a snippet,
-append_wiki_section to add to the end, update_wiki_document only to rewrite a page end to end.
-
-Small change, not small call. Arguments hold a megabyte, so never split one value across
-several calls. Long output — a history, a scan dump — goes to attach_text_to_wiki_document,
-not into the page. And trust what a write returns rather than re-reading to check it landed.
-
-If you have not worked in this platform before, read the resource vibe://guide first. It
-explains the data model, every tool, and the conventions above in full.`
+New here? Read the resource vibe://guide first; it lists the per-job guides.`

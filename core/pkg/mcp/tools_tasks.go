@@ -3,6 +3,7 @@ package mcp
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	"github.com/google/uuid"
 
@@ -12,122 +13,101 @@ import (
 )
 
 type findTasksArgs struct {
-	OperationID string `json:"operation_id,omitempty" jsonschema:"Operation to search. Defaults to whatever the operator currently has open."`
-	Stage       string `json:"stage,omitempty"        jsonschema:"Restrict to one stage: BACKLOG, TODO, IN_PROCESS or DONE."`
+	OperationID string `json:"operation_id,omitempty" jsonschema:"Operation id; omit for the operator's current one."`
+	Stage       string `json:"stage,omitempty"        jsonschema:"BACKLOG, TODO, IN_PROCESS or DONE."`
 	Search      string `json:"search,omitempty"       jsonschema:"Free-text match against name and description."`
-	Limit       int    `json:"limit,omitempty"        jsonschema:"Maximum tasks to return (default 25, maximum 50)."`
-	Cursor      string `json:"cursor,omitempty"       jsonschema:"Continue a previous page using its nextCursor."`
+	Limit       int    `json:"limit,omitempty"        jsonschema:"Page size, max 50."`
+	Cursor      string `json:"cursor,omitempty"       jsonschema:"nextCursor from the previous page."`
 }
 
 type getTaskArgs struct {
-	TaskID string `json:"task_id" jsonschema:"The task's id, from find_tasks."`
+	TaskID string `json:"task_id" jsonschema:"Task id."`
 }
 
 type createTaskArgs struct {
 	IdempotencyKey
-	OperationID string `json:"operation_id,omitempty" jsonschema:"Operation to create the task in. Defaults to whatever the operator currently has open."`
-	Name        string `json:"name"                   jsonschema:"Short title for the task."`
+	OperationID string `json:"operation_id,omitempty" jsonschema:"Operation id; omit for the operator's current one."`
+	Name        string `json:"name"                   jsonschema:"Short title."`
 	Description string `json:"description,omitempty"  jsonschema:"What needs doing, and why."`
-	RiskScore   int    `json:"risk_score,omitempty"   jsonschema:"How risky this is to attempt, 0-10."`
-	ProfitScore int    `json:"profit_score,omitempty" jsonschema:"How valuable success would be, 0-10."`
-	AssignToMe  bool   `json:"assign_to_me,omitempty" jsonschema:"Assign the task to the operator you act for. Leave it off to propose work without claiming it."`
+	RiskScore   int    `json:"risk_score,omitempty"   jsonschema:"Risk of attempting it, 0-10."`
+	ProfitScore int    `json:"profit_score,omitempty" jsonschema:"Value of success, 0-10."`
+	AssignToMe  bool   `json:"assign_to_me,omitempty" jsonschema:"Assign to the operator you act for; omit to propose without claiming."`
 
-	WikiIDs       []string `json:"wiki_ids,omitempty"       jsonschema:"Wiki pages this task comes out of or writes up, from search_wiki. Link them here rather than leaving the task to stand alone."`
-	CredentialIDs []string `json:"credential_ids,omitempty" jsonschema:"Credentials this task depends on or is meant to produce, from find_credentials."`
+	WikiIDs       []string `json:"wiki_ids,omitempty"       jsonschema:"Wiki pages it comes out of or writes up."`
+	CredentialIDs []string `json:"credential_ids,omitempty" jsonschema:"Credentials it depends on or produces."`
 }
 
-type taskAssignmentArgs struct {
+type setTaskAssignmentArgs struct {
 	IdempotencyKey
-	TaskID string `json:"task_id" jsonschema:"The task, from find_tasks."`
+	TaskID   string `json:"task_id"  jsonschema:"Task id."`
+	Assigned bool   `json:"assigned" jsonschema:"True to put the operator you act for on the task, false to take them off."`
 }
 
 type updateTaskArgs struct {
 	IdempotencyKey
-	TaskID string `json:"task_id"                     jsonschema:"The task to change, from find_tasks."`
-	Name   string `json:"name,omitempty"              jsonschema:"Rename the task."`
+	TaskID string `json:"task_id"                     jsonschema:"Task id."`
+	Name   string `json:"name,omitempty"              jsonschema:"New name."`
 	// Scores use -1 as "leave alone" because 0 is a legitimate score and the
 	// two have to be distinguishable.
-	Description       string `json:"description,omitempty"        jsonschema:"Replace the description."`
-	RiskScore         int    `json:"risk_score,omitempty"         jsonschema:"How risky this is to attempt, 0-10. Omit to leave unchanged."`
-	RiskDescription   string `json:"risk_description,omitempty"   jsonschema:"Why it carries that risk."`
-	ProfitScore       int    `json:"profit_score,omitempty"       jsonschema:"How valuable success would be, 0-10. Omit to leave unchanged."`
-	ProfitDescription string `json:"profit_description,omitempty" jsonschema:"Why it is worth that much."`
+	Description       string `json:"description,omitempty"        jsonschema:"New description."`
+	RiskScore         int    `json:"risk_score,omitempty"         jsonschema:"Risk 0-10; omit to keep."`
+	RiskDescription   string `json:"risk_description,omitempty"   jsonschema:"Why that risk."`
+	ProfitScore       int    `json:"profit_score,omitempty"       jsonschema:"Value 0-10; omit to keep."`
+	ProfitDescription string `json:"profit_description,omitempty" jsonschema:"Why that value."`
 }
 
-type addTaskWikiReferenceArgs struct {
+type linkTaskArgs struct {
 	IdempotencyKey
-	TaskID string `json:"task_id"     jsonschema:"The task to attach the page to."`
-	WikiID string `json:"wiki_id"     jsonschema:"The wiki page to attach, from search_wiki."`
-}
-
-type addTaskCredentialReferenceArgs struct {
-	IdempotencyKey
-	TaskID       string `json:"task_id"       jsonschema:"The task to attach the credential to."`
-	CredentialID string `json:"credential_id" jsonschema:"The credential to attach, from find_credentials."`
+	TaskID        string   `json:"task_id"                  jsonschema:"Task id."`
+	WikiIDs       []string `json:"wiki_ids,omitempty"       jsonschema:"Wiki page ids to link."`
+	CredentialIDs []string `json:"credential_ids,omitempty" jsonschema:"Credential ids to link."`
 }
 
 type changeTaskStageArgs struct {
 	IdempotencyKey
-	TaskID  string `json:"task_id"           jsonschema:"The task to move."`
-	Stage   string `json:"stage"             jsonschema:"Target stage: BACKLOG, TODO, IN_PROCESS or DONE."`
-	Status  string `json:"status,omitempty"  jsonschema:"Required when moving to DONE: SUCCESS or FAIL."`
-	Summary string `json:"summary,omitempty" jsonschema:"What happened. Worth filling in when closing a task."`
+	TaskID  string `json:"task_id"           jsonschema:"Task id."`
+	Stage   string `json:"stage"             jsonschema:"BACKLOG, TODO, IN_PROCESS or DONE."`
+	Status  string `json:"status,omitempty"  jsonschema:"SUCCESS or FAIL; required for DONE."`
+	Summary string `json:"summary,omitempty" jsonschema:"What happened; fill in when closing."`
 }
 
 func registerTaskTools(s *Server) {
 	register(s, &mcp.Tool{
 		Name:        "find_tasks",
-		Description: "Search the operation's task board.",
+		Description: "Search the task board.",
 	}, readTool, handleFindTasks)
 
 	register(s, &mcp.Tool{
 		Name:        "get_task",
-		Description: "One task in full, including its risk and profit rationale.",
+		Description: "One task in full, with its rationale and linked pages and credentials.",
 	}, readTool, handleGetTask)
 
 	register(s, &mcp.Tool{
 		Name: "create_task",
-		Description: "Add a task to the board. Use this to propose work rather than doing " +
-			"something the operator has not asked for. Link the wiki pages and credentials the " +
-			"task came out of or will produce — a task with no references leaves the next person " +
-			"to work out by hand what it meant.",
+		Description: "Add a task to the board, the way to propose work. Link the pages and " +
+			"credentials it relates to.",
 	}, writeTool, handleCreateTask)
 
 	register(s, &mcp.Tool{
-		Name: "assign_task_to_me",
-		Description: "Put the operator you act for on a task's assignee list. Other assignees " +
-			"are left alone — you can only ever add or remove that one operator.",
-	}, writeTool, handleAssignTaskToMe)
+		Name: "set_task_assignment",
+		Description: "Put the operator you act for on a task, or take them off. Other " +
+			"assignees are left alone.",
+	}, writeTool, handleSetTaskAssignment)
 
 	register(s, &mcp.Tool{
-		Name: "unassign_task_from_me",
-		Description: "Take the operator you act for off a task's assignee list, leaving any " +
-			"other assignees in place.",
-	}, writeTool, handleUnassignTaskFromMe)
-
-	register(s, &mcp.Tool{
-		Name: "update_task",
-		Description: "Change a task's name, description or risk/profit scoring. Use " +
-			"change_task_stage to move it between columns.",
+		Name:        "update_task",
+		Description: "Change a task's name, description or risk/profit scoring.",
 	}, writeTool, handleUpdateTask)
 
 	register(s, &mcp.Tool{
-		Name: "add_task_wiki_reference",
-		Description: "Link a wiki page to a task, so the notes and the work that produced them " +
-			"stay connected. Idempotent — linking the same page twice is harmless.",
-	}, writeTool, handleAddTaskWikiReference)
-
-	register(s, &mcp.Tool{
-		Name: "add_task_credential_reference",
-		Description: "Link a credential to a task, so the task carries the access it depends on " +
-			"or the access it produced. Idempotent — linking the same credential twice is " +
+		Name: "link_task",
+		Description: "Link wiki pages and credentials to a task. Idempotent: linking twice is " +
 			"harmless.",
-	}, writeTool, handleAddTaskCredentialReference)
+	}, writeTool, handleLinkTask)
 
 	register(s, &mcp.Tool{
-		Name: "change_task_stage",
-		Description: "Move a task between board columns. Moving to DONE requires a status of " +
-			"SUCCESS or FAIL.",
+		Name:        "change_task_stage",
+		Description: "Move a task between board columns. DONE needs status SUCCESS or FAIL.",
 	}, writeTool, handleChangeTaskStage)
 }
 
@@ -232,33 +212,44 @@ func handleGetTask(ctx context.Context, s *Server, args getTaskArgs) (toolResult
 	}, nil
 }
 
-// namedWikiReferences resolves link targets to titles.
+// namedWikiReferences resolves link targets to titles in one query.
 //
 // A reference whose target cannot be read comes back with its id and no name
 // rather than being dropped: the link genuinely exists on the task, and
 // hiding it would make a real relationship invisible for no benefit. Nothing
 // here is authorized separately — these ids are already on a task the caller
-// was allowed to load, and a title is not the document.
+// was allowed to load, and a title is not the document. The projection
+// returns titles only, so ten references cost one round trip and no bodies.
 func (s *Server) namedWikiReferences(ctx context.Context, ids []uuid.UUID) []referenceView {
-	out := make([]referenceView, 0, len(ids))
-	for _, id := range ids {
-		ref := referenceView{ID: id.String()}
-		if doc, err := s.deps.WikiDocs.WikiDocument(ctx, id.String()); err == nil {
-			ref.Name = doc.Title
+	names := map[uuid.UUID]string{}
+	if s.deps.WikiDocRepo != nil {
+		if docs, err := s.deps.WikiDocRepo.FindTitlesByIDs(ctx, ids); err == nil {
+			for _, d := range docs {
+				names[d.DocumentID] = d.Title
+			}
 		}
-		out = append(out, ref)
 	}
-	return out
+	return namedReferences(ids, names)
 }
 
 func (s *Server) namedCredentialReferences(ctx context.Context, ids []uuid.UUID) []referenceView {
+	names := map[uuid.UUID]string{}
+	if s.deps.CredentialRepo != nil {
+		if creds, err := s.deps.CredentialRepo.FindNamesByIDs(ctx, ids); err == nil {
+			for _, c := range creds {
+				names[c.CredentialID] = c.Name
+			}
+		}
+	}
+	return namedReferences(ids, names)
+}
+
+// namedReferences pairs ids with the names that were found, in the task's
+// own order, leaving unnamed what could not be resolved.
+func namedReferences(ids []uuid.UUID, names map[uuid.UUID]string) []referenceView {
 	out := make([]referenceView, 0, len(ids))
 	for _, id := range ids {
-		ref := referenceView{ID: id.String()}
-		if cred, err := s.deps.Credentials.Credential(ctx, id.String()); err == nil {
-			ref.Name = cred.Name
-		}
-		out = append(out, ref)
+		out = append(out, referenceView{ID: id.String(), Name: names[id]})
 	}
 	return out
 }
@@ -371,53 +362,64 @@ func handleUpdateTask(ctx context.Context, s *Server, args updateTaskArgs) (tool
 	}, nil
 }
 
-func handleAddTaskWikiReference(ctx context.Context, s *Server, args addTaskWikiReferenceArgs) (toolResult, error) {
+// handleLinkTask attaches pages and credentials to a task in one call.
+//
+// Every target has to be readable by this key too, or a link could be used to
+// point at a document or credential the agent is not allowed to open. A
+// target that fails does not fail the rest: the links that stuck are real,
+// and the result names the ones that did not.
+func handleLinkTask(ctx context.Context, s *Server, args linkTaskArgs) (toolResult, error) {
 	task, err := s.loadTaskInScope(ctx, args.TaskID, models.OperationRoleOperator)
 	if err != nil {
 		return toolResult{}, err
 	}
-
-	// The page has to be reachable by this key too, or a link could be used to
-	// point at a document the agent is not allowed to read.
-	doc, err := s.loadWikiDocument(ctx, args.WikiID, models.OperationRoleViewer)
-	if err != nil {
-		return toolResult{}, err
+	if len(args.WikiIDs) == 0 && len(args.CredentialIDs) == 0 {
+		return toolResult{}, refuse("give wiki_ids, credential_ids, or both.")
 	}
 
-	updated, err := s.deps.Tasks.AddTaskWikiReference(ctx, args.TaskID, args.WikiID)
-	if err != nil {
-		return toolResult{}, fmt.Errorf("failed to link the page: %w", err)
+	var notes []string
+	linked := 0
+	updated := task
+	for _, wikiID := range args.WikiIDs {
+		if _, err := s.loadWikiDocument(ctx, wikiID, models.OperationRoleViewer); err != nil {
+			notes = append(notes, fmt.Sprintf("could not link wiki page %s: %v", wikiID, err))
+			continue
+		}
+		next, err := s.deps.Tasks.AddTaskWikiReference(ctx, args.TaskID, wikiID)
+		if err != nil {
+			notes = append(notes, fmt.Sprintf("could not link wiki page %s: %v", wikiID, err))
+			continue
+		}
+		updated = next
+		linked++
 	}
+	for _, credID := range args.CredentialIDs {
+		if _, err := s.loadCredential(ctx, credID, models.OperationRoleViewer); err != nil {
+			notes = append(notes, fmt.Sprintf("could not link credential %s: %v", credID, err))
+			continue
+		}
+		next, err := s.deps.Tasks.AddTaskCredentialReference(ctx, args.TaskID, credID)
+		if err != nil {
+			notes = append(notes, fmt.Sprintf("could not link credential %s: %v", credID, err))
+			continue
+		}
+		updated = next
+		linked++
+	}
+
+	if linked == 0 {
+		return toolResult{}, fmt.Errorf("nothing could be linked: %s", strings.Join(notes, "; "))
+	}
+
+	payload := struct {
+		taskView
+		Notes []string `json:"notes,omitempty"`
+	}{taskView: toTaskView(updated), Notes: notes}
 
 	return toolResult{
-		Payload:     toTaskView(updated),
+		Payload:     payload,
 		OperationID: &task.OperationID,
-		Summary:     fmt.Sprintf("linked %q to task %s", doc.Title, task.Name),
-	}, nil
-}
-
-func handleAddTaskCredentialReference(ctx context.Context, s *Server, args addTaskCredentialReferenceArgs) (toolResult, error) {
-	task, err := s.loadTaskInScope(ctx, args.TaskID, models.OperationRoleOperator)
-	if err != nil {
-		return toolResult{}, err
-	}
-
-	// Readable by this key too — a link must not become a way to point at a
-	// credential the agent could not otherwise open.
-	cred, err := s.loadCredential(ctx, args.CredentialID, models.OperationRoleViewer)
-	if err != nil {
-		return toolResult{}, err
-	}
-
-	updated, err := s.deps.Tasks.AddTaskCredentialReference(ctx, args.TaskID, args.CredentialID)
-	if err != nil {
-		return toolResult{}, fmt.Errorf("failed to link the credential: %w", err)
-	}
-
-	return toolResult{
-		Payload:     toTaskView(updated),
-		OperationID: &task.OperationID,
-		Summary:     fmt.Sprintf("linked credential %q to task %s", cred.Name, task.Name),
+		Summary:     fmt.Sprintf("linked %d reference(s) to task %s", linked, task.Name),
 	}, nil
 }
 
@@ -453,12 +455,8 @@ func handleChangeTaskStage(ctx context.Context, s *Server, args changeTaskStageA
 	}, nil
 }
 
-func handleAssignTaskToMe(ctx context.Context, s *Server, args taskAssignmentArgs) (toolResult, error) {
-	return s.changeOwnAssignment(ctx, args.TaskID, true)
-}
-
-func handleUnassignTaskFromMe(ctx context.Context, s *Server, args taskAssignmentArgs) (toolResult, error) {
-	return s.changeOwnAssignment(ctx, args.TaskID, false)
+func handleSetTaskAssignment(ctx context.Context, s *Server, args setTaskAssignmentArgs) (toolResult, error) {
+	return s.changeOwnAssignment(ctx, args.TaskID, args.Assigned)
 }
 
 // changeOwnAssignment adds or removes the owner, and only the owner. It reads

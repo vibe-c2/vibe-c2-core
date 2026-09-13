@@ -3,6 +3,7 @@ package mcp
 import (
 	"context"
 	"fmt"
+	"sync"
 	"time"
 
 	"go.uber.org/zap"
@@ -85,13 +86,30 @@ func (s *Server) checkRateLimit(ctx context.Context, kind toolKind) error {
 
 	window := time.Now().UTC().Truncate(rateWindow)
 
-	if err := s.bump(ctx, "calls", "tool calls", agent.AgentKeyID, window, s.limits.callsPerWindow()); err != nil {
-		return err
-	}
 	if kind != writeTool {
-		return nil
+		return s.bump(ctx, "calls", "tool calls", agent.AgentKeyID, window, s.limits.callsPerWindow())
 	}
-	return s.bump(ctx, "writes", "writes", agent.AgentKeyID, window, s.limits.writesPerWindow())
+
+	// A write counts against both ceilings. The two counters are independent,
+	// so they are bumped concurrently rather than as two sequential round
+	// trips; the call-limit refusal wins when both trip, matching the order
+	// the sequential version reported them in.
+	var callsErr, writesErr error
+	var wg sync.WaitGroup
+	wg.Add(2)
+	go func() {
+		defer wg.Done()
+		callsErr = s.bump(ctx, "calls", "tool calls", agent.AgentKeyID, window, s.limits.callsPerWindow())
+	}()
+	go func() {
+		defer wg.Done()
+		writesErr = s.bump(ctx, "writes", "writes", agent.AgentKeyID, window, s.limits.writesPerWindow())
+	}()
+	wg.Wait()
+	if callsErr != nil {
+		return callsErr
+	}
+	return writesErr
 }
 
 // bump counts one event in the named window and refuses once it passes limit.

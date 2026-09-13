@@ -306,6 +306,120 @@ func (c *HocuspocusClient) ApplyMarkdown(ctx context.Context, documentID, markdo
 	return result, nil
 }
 
+// editMarkdownRequest is the edit-mode body of /internal/apply-markdown.
+type editMarkdownRequest struct {
+	DocumentID string    `json:"documentId"`
+	Mode       ApplyMode `json:"mode"`
+	OldText    string    `json:"oldText"`
+	NewText    string    `json:"newText"`
+	ReplaceAll bool      `json:"replaceAll"`
+}
+
+// applyEdit is the mode value for EditMarkdown. Not exported alongside the
+// other modes because it takes different arguments and ApplyMarkdown would
+// reject it.
+const applyEdit ApplyMode = "edit"
+
+// EditMarkdownResult reports a snippet edit.
+type EditMarkdownResult struct {
+	Nodes        int `json:"nodes"`
+	Watchers     int `json:"watchers"`
+	Matches      int `json:"matches"`
+	Replacements int `json:"replacements"`
+}
+
+// EditNoMatchError means old_text was not on the page. Diagnosis is a sentence
+// for the agent saying how the snippet most likely differs.
+type EditNoMatchError struct {
+	Diagnosis string
+}
+
+func (e *EditNoMatchError) Error() string { return "snippet not found: " + e.Diagnosis }
+
+// EditAmbiguousError means old_text occurs more than once and replaceAll was
+// not set.
+type EditAmbiguousError struct {
+	Matches int
+}
+
+func (e *EditAmbiguousError) Error() string {
+	return fmt.Sprintf("snippet is ambiguous: %d matches", e.Matches)
+}
+
+// editRefusal is the 409 body the sidecar sends for either refusal.
+type editRefusal struct {
+	Error     string `json:"error"`
+	Matches   int    `json:"matches"`
+	Diagnosis string `json:"diagnosis"`
+}
+
+// EditMarkdown replaces an exact snippet on the live document in one hop.
+//
+// The match runs inside the sidecar against the document as it is right now,
+// not against a rendering of the persisted state, and only the blocks that
+// change are touched. Before this the Go side rendered the whole page, did
+// the replacement, and sent the whole page back through ApplyReplace — two
+// hops, the entire body twice over the wire, and a base that could lag what
+// the operator was typing.
+func (c *HocuspocusClient) EditMarkdown(ctx context.Context, documentID, oldText, newText string, replaceAll bool) (EditMarkdownResult, error) {
+	var result EditMarkdownResult
+
+	if c.internalSecret == "" {
+		return result, fmt.Errorf("apply-markdown: no internal secret configured")
+	}
+
+	body, err := json.Marshal(editMarkdownRequest{
+		DocumentID: documentID,
+		Mode:       applyEdit,
+		OldText:    oldText,
+		NewText:    newText,
+		ReplaceAll: replaceAll,
+	})
+	if err != nil {
+		return result, fmt.Errorf("marshal edit payload: %w", err)
+	}
+
+	mac := hmac.New(sha256.New, []byte(c.internalSecret))
+	mac.Write(body)
+	signature := "sha256=" + hex.EncodeToString(mac.Sum(nil))
+
+	url := c.baseURL + "/internal/apply-markdown"
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewReader(body))
+	if err != nil {
+		return result, fmt.Errorf("build apply-markdown request: %w", err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("X-Internal-Signature-256", signature)
+
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return result, fmt.Errorf("call hocuspocus apply-markdown: %w", err)
+	}
+	defer resp.Body.Close()
+
+	switch resp.StatusCode {
+	case http.StatusOK:
+		if err := json.NewDecoder(io.LimitReader(resp.Body, 4096)).Decode(&result); err != nil {
+			return result, fmt.Errorf("read apply-markdown response: %w", err)
+		}
+		return result, nil
+	case http.StatusRequestEntityTooLarge:
+		return result, ErrMarkdownTooLarge
+	case http.StatusConflict:
+		var refusal editRefusal
+		if err := json.NewDecoder(io.LimitReader(resp.Body, 4096)).Decode(&refusal); err != nil {
+			return result, fmt.Errorf("read apply-markdown refusal: %w", err)
+		}
+		if refusal.Error == "ambiguous" {
+			return result, &EditAmbiguousError{Matches: refusal.Matches}
+		}
+		return result, &EditNoMatchError{Diagnosis: refusal.Diagnosis}
+	}
+
+	errBody, _ := io.ReadAll(io.LimitReader(resp.Body, 4096))
+	return result, fmt.Errorf("apply-markdown returned %d: %s", resp.StatusCode, string(errBody))
+}
+
 type extractTextRequest struct {
 	Filename    string `json:"filename"`
 	ContentType string `json:"contentType"`

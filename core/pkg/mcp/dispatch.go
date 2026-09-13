@@ -164,11 +164,17 @@ type auditEntry struct {
 	duration time.Duration
 }
 
-// record writes the audit row and publishes the live event.
+// record builds the audit row and hands it to the audit worker.
 //
-// Best-effort on purpose: an audit write that fails must not fail the tool the
-// operator's agent is running. The failure is logged loudly instead — a gap in
-// the trace is worth noticing, but not worth breaking the session over.
+// The row and the live event are written off the request path. They were
+// synchronous before, which put a Mongo insert and a bus publish between the
+// handler finishing and the agent seeing its result — on every call, reads
+// included. Both are best-effort by design (a failed audit write must not
+// fail the tool), so nothing about the tool's outcome depends on them and
+// there is no reason for the agent to wait.
+//
+// The action is assembled here, on the request, because it reads the auth
+// context and the request's clock; only the I/O is deferred.
 func (s *Server) record(ctx context.Context, e auditEntry) {
 	auth := gqlctx.AuthFromContext(ctx)
 	agent := auth.Agent
@@ -205,12 +211,71 @@ func (s *Server) record(ctx context.Context, e auditEntry) {
 		action.OwnerUserID = ownerID
 	}
 
-	if err := s.deps.AgentActionRepo.Insert(ctx, action); err != nil {
-		s.deps.Logger.Error("mcp: failed to record agent action",
-			zap.String("tool", e.tool), zap.Error(err))
-	}
+	s.enqueueAudit(auditJob{
+		action:        action,
+		agent:         agent,
+		ownerUsername: auth.Username,
+		summary:       e.result.Summary,
+	})
+}
 
-	s.publishActivity(action, agent, auth.Username, e.result.Summary)
+// auditJob is one recorded call, waiting for the worker.
+type auditJob struct {
+	action        *models.AgentAction
+	agent         *gqlctx.AgentInfo
+	ownerUsername string
+	summary       string
+}
+
+// auditQueueSize bounds how many recorded calls can wait for the worker. At
+// the rate limit's ceiling of 120 calls a minute per key this is minutes of
+// backlog, so it only fills when Mongo is unreachable — and then dropping
+// audit rows with a loud log beats stalling every agent.
+const auditQueueSize = 1024
+
+// auditWriteTimeout bounds one insert. The request context is gone by the
+// time the worker runs, so the worker uses its own.
+const auditWriteTimeout = 5 * time.Second
+
+// enqueueAudit hands a job to the worker, or drops it when the queue is full.
+func (s *Server) enqueueAudit(job auditJob) {
+	select {
+	case s.audit <- job:
+	default:
+		s.deps.Logger.Error("mcp: audit queue full, dropping agent action",
+			zap.String("tool", job.action.Tool))
+	}
+}
+
+// runAuditWorker drains the queue until Close.
+func (s *Server) runAuditWorker() {
+	defer s.auditDone.Done()
+	for job := range s.audit {
+		s.writeAudit(job)
+	}
+}
+
+// writeAudit is the I/O that record used to do inline.
+func (s *Server) writeAudit(job auditJob) {
+	if s.deps.AgentActionRepo != nil {
+		ctx, cancel := context.WithTimeout(context.Background(), auditWriteTimeout)
+		if err := s.deps.AgentActionRepo.Insert(ctx, job.action); err != nil {
+			s.deps.Logger.Error("mcp: failed to record agent action",
+				zap.String("tool", job.action.Tool), zap.Error(err))
+		}
+		cancel()
+	}
+	s.publishActivity(job.action, job.agent, job.ownerUsername, job.summary)
+}
+
+// Close stops accepting audit jobs and waits for the queued ones to be
+// written. Call it during shutdown, after the HTTP server has stopped taking
+// requests and before the database closes.
+func (s *Server) Close() {
+	s.closeOnce.Do(func() {
+		close(s.audit)
+		s.auditDone.Wait()
+	})
 }
 
 // publishActivity pushes the call to the SPA's activity rail. Reads are

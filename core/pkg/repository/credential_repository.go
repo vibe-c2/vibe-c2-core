@@ -2,6 +2,7 @@ package repository
 
 import (
 	"context"
+	"fmt"
 	"time"
 
 	"github.com/google/uuid"
@@ -115,6 +116,9 @@ type ICredentialRepository interface {
 	FindByOperationIDWithCursor(ctx context.Context, opID uuid.UUID, filter CredentialFilter, sort CredentialSort, cursor *pagination.Cursor, limit int64, forward bool) ([]models.Credential, error)
 	CountByOperationID(ctx context.Context, opID uuid.UUID, filter CredentialFilter) (int64, error)
 	DistinctTagsByOperationID(ctx context.Context, opID uuid.UUID) ([]string, error)
+	// FindNamesByIDs returns only credential_id and name for the given ids,
+	// in one round trip. For naming references without loading secrets.
+	FindNamesByIDs(ctx context.Context, ids []uuid.UUID) ([]models.Credential, error)
 
 	// Multi-operation variants — used by the "global / cross-operation" Findings
 	// view where the caller has selected several operations to search across.
@@ -211,6 +215,19 @@ func (r *credentialRepository) findWithCursor(ctx context.Context, base bson.M, 
 	}
 
 	return creds, err
+}
+
+func (r *credentialRepository) FindNamesByIDs(ctx context.Context, ids []uuid.UUID) ([]models.Credential, error) {
+	if len(ids) == 0 {
+		return nil, nil
+	}
+	var creds []models.Credential
+	err := r.coll.Find(ctx, bson.M{"credential_id": bson.M{"$in": ids}}).
+		Select(bson.M{"credential_id": 1, "name": 1}).All(&creds)
+	if err != nil {
+		return nil, fmt.Errorf("find names by ids: %w", err)
+	}
+	return creds, nil
 }
 
 func (r *credentialRepository) CountByOperationID(ctx context.Context, opID uuid.UUID, filter CredentialFilter) (int64, error) {

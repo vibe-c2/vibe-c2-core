@@ -44,6 +44,11 @@ type headingSpan struct {
 	end   int // byte offset just past the subtree
 }
 
+// hasHeadings reports whether an outline of this page would have any entries.
+func hasHeadings(markdown string) bool {
+	return len(parseHeadings(markdown)) > 0
+}
+
 // parseHeadings finds every ATX heading outside a fenced code block.
 //
 // Setext headings (underlined with === or ---) are not recognised. The editor

@@ -106,7 +106,11 @@ func (s *Server) Handler() gin.HandlerFunc {
 			return
 		}
 
-		req := c.Request.WithContext(gqlctx.WithAuthInfo(c.Request.Context(), auth))
+		ctx := gqlctx.WithAuthInfo(c.Request.Context(), auth)
+		// One operation fetch per request, shared by the tool's own check and
+		// the resolver's.
+		ctx = gqlctx.WithOperationMemo(ctx)
+		req := c.Request.WithContext(ctx)
 		streamable.ServeHTTP(c.Writer, req)
 	}
 }

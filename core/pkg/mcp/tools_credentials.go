@@ -11,67 +11,62 @@ import (
 )
 
 type findCredentialsArgs struct {
-	OperationID string   `json:"operation_id,omitempty" jsonschema:"Operation to search. Defaults to whatever the operator currently has open."`
+	OperationID string   `json:"operation_id,omitempty" jsonschema:"Operation id; omit for the operator's current one."`
 	Search      string   `json:"search,omitempty"       jsonschema:"Free-text match against name and username."`
 	Tags        []string `json:"tags,omitempty"         jsonschema:"Only credentials carrying all of these tags."`
-	ValidOnly   bool     `json:"valid_only,omitempty"   jsonschema:"Only credentials currently marked valid."`
-	Limit       int      `json:"limit,omitempty"        jsonschema:"Maximum credentials to return (default 25, maximum 50)."`
-	Cursor      string   `json:"cursor,omitempty"       jsonschema:"Continue a previous page using its nextCursor."`
+	ValidOnly   bool     `json:"valid_only,omitempty"   jsonschema:"Only credentials marked valid."`
+	Limit       int      `json:"limit,omitempty"        jsonschema:"Page size, max 50."`
+	Cursor      string   `json:"cursor,omitempty"       jsonschema:"nextCursor from the previous page."`
 }
 
 type createCredentialArgs struct {
 	IdempotencyKey
-	OperationID string `json:"operation_id,omitempty" jsonschema:"Operation to record the credential in. Defaults to whatever the operator currently has open."`
-	Name        string `json:"name"                   jsonschema:"What this credential is, e.g. 'web-01 local admin'."`
-	Type        string `json:"type"                   jsonschema:"One of PASSWORD, SSH_KEY, API_KEY, TOKEN, HASH, OTHER."`
-	Username    string `json:"username,omitempty"     jsonschema:"Account the credential belongs to."`
-	Password    string `json:"password,omitempty"     jsonschema:"The secret, for PASSWORD and similar types."`
+	OperationID string `json:"operation_id,omitempty" jsonschema:"Operation id; omit for the operator's current one."`
+	Name        string `json:"name"                   jsonschema:"e.g. 'web-01 local admin'"`
+	Type        string `json:"type"                   jsonschema:"PASSWORD, SSH_KEY, API_KEY, TOKEN, HASH or OTHER."`
+	Username    string `json:"username,omitempty"     jsonschema:"Account name."`
+	Password    string `json:"password,omitempty"     jsonschema:"The secret."`
 	Keys        []struct {
-		Name    string `json:"name"    jsonschema:"Label for this key, e.g. 'id_rsa'."`
-		Content string `json:"content" jsonschema:"The key material."`
-	} `json:"keys,omitempty" jsonschema:"Key material, for SSH_KEY and API_KEY credentials."`
+		Name    string `json:"name"    jsonschema:"e.g. id_rsa"`
+		Content string `json:"content" jsonschema:"Key material."`
+	} `json:"keys,omitempty" jsonschema:"Key material for SSH_KEY and API_KEY."`
 	Properties []struct {
-		Name  string `json:"name"  jsonschema:"Field name, e.g. 'domain' or 'port'."`
-		Value string `json:"value" jsonschema:"Field value."`
-	} `json:"properties,omitempty" jsonschema:"Anything else worth recording alongside the credential."`
-	Tags    []string `json:"tags,omitempty"     jsonschema:"Tags, e.g. the host it came from."`
-	IsValid *bool    `json:"is_valid,omitempty" jsonschema:"Whether the credential is known to work. Omit if untested."`
+		Name  string `json:"name"  jsonschema:"e.g. domain, port"`
+		Value string `json:"value"`
+	} `json:"properties,omitempty" jsonschema:"Extra fields."`
+	Tags    []string `json:"tags,omitempty"     jsonschema:"Tags, e.g. the source host."`
+	IsValid *bool    `json:"is_valid,omitempty" jsonschema:"Known to work; omit if untested."`
 }
 
 type getCredentialArgs struct {
-	CredentialID string `json:"credential_id" jsonschema:"The credential's id, from find_credentials."`
+	CredentialID string `json:"credential_id" jsonschema:"Credential id."`
 }
 
 type addCredentialCommentArgs struct {
 	IdempotencyKey
-	CredentialID string `json:"credential_id" jsonschema:"The credential's id, from find_credentials."`
-	Text         string `json:"text"          jsonschema:"The comment to add."`
+	CredentialID string `json:"credential_id" jsonschema:"Credential id."`
+	Text         string `json:"text"          jsonschema:"Comment text."`
 }
 
 func registerCredentialTools(s *Server) {
 	register(s, &mcp.Tool{
-		Name: "find_credentials",
-		Description: "Search credentials harvested during the engagement. Secret material is " +
-			"included in the results.",
+		Name:        "find_credentials",
+		Description: "Search harvested credentials. Secret material is included.",
 	}, readTool, handleFindCredentials)
 
 	register(s, &mcp.Tool{
-		Name: "create_credential",
-		Description: "Record a credential recovered during the engagement — a password, an SSH " +
-			"key, a token. Use this after cracking a hash or finding a secret on a host, so the " +
-			"credential is linked into findings rather than living only in the conversation.",
+		Name:        "create_credential",
+		Description: "Record a recovered credential: a password, an SSH key, a token.",
 	}, writeTool, handleCreateCredential)
 
 	register(s, &mcp.Tool{
-		Name: "get_credential",
-		Description: "One credential in full, including its keys, custom properties and the " +
-			"comment history explaining where it came from and what it opens.",
+		Name:        "get_credential",
+		Description: "One credential in full: keys, properties and comment history.",
 	}, readTool, handleGetCredential)
 
 	register(s, &mcp.Tool{
-		Name: "add_credential_comment",
-		Description: "Append a comment to a credential — where it was found, what it opens, " +
-			"whether it still works.",
+		Name:        "add_credential_comment",
+		Description: "Append a comment to a credential: where found, what it opens, if it works.",
 	}, writeTool, handleAddCredentialComment)
 }
 

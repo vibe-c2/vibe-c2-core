@@ -20,26 +20,151 @@
 import type { Express, Request, Response } from "express";
 import type { Hocuspocus } from "@hocuspocus/server";
 import { XmlElement, XmlFragment, XmlText } from "yjs";
-import { prosemirrorJSONToYDoc } from "y-prosemirror";
+import { prosemirrorJSONToYDoc, yXmlFragmentToProseMirrorRootNode } from "y-prosemirror";
 import { wikiSchema } from "./wiki-schema.js";
 import { parseOutlineMarkdown } from "./markdown-parser.js";
+import { serializeWikiDocument } from "./markdown-serializer.js";
 import { Y_FRAGMENT_FIELD } from "./markdown-to-yjs.js";
 import { readRawBody, requireSignature } from "./internal-auth.js";
 
 const MAX_MARKDOWN_BYTES = 1024 * 1024; // matches WikiDocument.Content cap
 
-type ApplyMode = "replace" | "append" | "prepend";
+type ApplyMode = "replace" | "append" | "prepend" | "edit";
 
 const APPLY_MODES: ReadonlySet<string> = new Set<ApplyMode>([
   "replace",
   "append",
   "prepend",
+  "edit",
 ]);
 
 interface ApplyRequestBody {
   documentId?: string;
   markdown?: string;
   mode?: ApplyMode;
+  // Edit mode only: an exact snippet to replace, and what to put there.
+  oldText?: string;
+  newText?: string;
+  replaceAll?: boolean;
+}
+
+/** Render a live fragment to the same markdown a full read returns. */
+function fragmentToMarkdown(fragment: XmlFragment): string {
+  if (fragment.length === 0) return "";
+  return serializeWikiDocument(yXmlFragmentToProseMirrorRootNode(fragment, wikiSchema));
+}
+
+/** Non-overlapping occurrence count, matching Go's strings.Count. */
+function countOccurrences(haystack: string, needle: string): number {
+  if (needle === "") return 0;
+  let count = 0;
+  let from = 0;
+  for (;;) {
+    const at = haystack.indexOf(needle, from);
+    if (at < 0) return count;
+    count += 1;
+    from = at + needle.length;
+  }
+}
+
+const collapseWhitespace = (s: string): string => s.split(/\s+/).filter(Boolean).join(" ");
+
+function firstContentLine(s: string): string {
+  for (const line of s.split("\n")) {
+    const trimmed = line.trim();
+    if (trimmed !== "") return trimmed;
+  }
+  return "";
+}
+
+function clip(s: string, n: number): string {
+  return s.length <= n ? s : `${s.slice(0, n)}…`;
+}
+
+/**
+ * Why an exact-match edit missed.
+ *
+ * The exact-match rule is deliberate: fuzzy matching succeeds against the
+ * wrong text on a page somebody else may be editing. What was wrong was the
+ * refusal — "not on the page" is true and useless, and an agent given it
+ * re-reads and retries until it converges on a single tab character. Naming
+ * the near miss turns that loop into one corrected retry. Only a diagnostic;
+ * it never relaxes what the edit accepts.
+ */
+function diagnoseNoMatch(body: string, oldText: string): string {
+  if (body === "") return "The page is empty.";
+
+  const spacing = collapseWhitespace(body).includes(collapseWhitespace(oldText));
+  const casing = body.toLowerCase().includes(oldText.toLowerCase());
+  const both = collapseWhitespace(body)
+    .toLowerCase()
+    .includes(collapseWhitespace(oldText).toLowerCase());
+
+  if (spacing) {
+    return (
+      "The text is there but the whitespace differs — indentation, a tab where you" +
+      " sent spaces, or a line broken in a different place."
+    );
+  }
+  if (casing) return "The text is there but the capitalisation differs.";
+  if (both) return "The text is there but both the whitespace and the capitalisation differ.";
+
+  const line = firstContentLine(oldText);
+  if (line !== "" && body.includes(line)) {
+    return (
+      `Its first line (${JSON.stringify(clip(line, 60))}) is on the page, so the snippet` +
+      " starts in the right place and diverges after it."
+    );
+  }
+  return "No part of it is on the page — you may be editing the wrong one.";
+}
+
+/** What an edit did, or why it did nothing. */
+interface EditOutcome {
+  matches: number;
+  replacements: number;
+  nodes: number;
+  /** Set when matches is 0: the likeliest reason, for the agent. */
+  diagnosis?: string;
+  /** Set when the resulting body would exceed the size cap. */
+  tooLarge?: boolean;
+}
+
+/**
+ * Replace an exact snippet inside a live fragment.
+ *
+ * The match runs against markdown rendered from the fragment as it is right
+ * now — the same document the operator is typing into — so the edit is never
+ * computed from a persisted state that lags the live one, and the splice only
+ * touches the blocks that changed. This is what lets edit_wiki_document be a
+ * single hop and a genuine merge rather than a read-modify-replace.
+ */
+function editFragment(
+  fragment: XmlFragment,
+  oldText: string,
+  newText: string,
+  replaceAll: boolean,
+): EditOutcome {
+  const current = fragmentToMarkdown(fragment);
+  const matches = countOccurrences(current, oldText);
+  if (matches === 0) {
+    return { matches: 0, replacements: 0, nodes: 0, diagnosis: diagnoseNoMatch(current, oldText) };
+  }
+  if (matches > 1 && !replaceAll) {
+    return { matches, replacements: 0, nodes: 0 };
+  }
+
+  // Function replacers so `$&` and friends in newText stay literal.
+  const updated = replaceAll
+    ? current.split(oldText).join(newText)
+    : current.replace(oldText, () => newText);
+  if (Buffer.byteLength(updated, "utf8") > MAX_MARKDOWN_BYTES) {
+    return { matches, replacements: 0, nodes: 0, tooLarge: true };
+  }
+
+  const blocks = markdownToDetachedBlocks(updated);
+  spliceFragment(fragment, blocks);
+  return { matches, replacements: replaceAll ? matches : 1, nodes: blocks.length };
 }
 
 // Hocuspocus keys rooms by the name the client connects with; the SPA uses
@@ -191,7 +316,7 @@ export function setupApplyApi(app: Express, server: Hocuspocus): void {
         return;
       }
 
-      const { documentId, markdown } = parsed;
+      const { documentId, markdown, oldText, newText, replaceAll } = parsed;
       // Unknown modes fall back to replace, which is what this did when
       // "append" was the only alternative. Defaulting an unrecognised mode to
       // the destructive one is not obviously right, but changing it now would
@@ -205,13 +330,24 @@ export function setupApplyApi(app: Express, server: Hocuspocus): void {
         res.status(400).json({ error: "documentId field required" });
         return;
       }
-      if (typeof markdown !== "string") {
-        res.status(400).json({ error: "markdown field required" });
-        return;
-      }
-      if (Buffer.byteLength(markdown, "utf8") > MAX_MARKDOWN_BYTES) {
-        res.status(413).json({ error: "markdown exceeds 1 MB" });
-        return;
+      if (mode === "edit") {
+        if (typeof oldText !== "string" || oldText === "") {
+          res.status(400).json({ error: "oldText field required" });
+          return;
+        }
+        if (typeof newText !== "string") {
+          res.status(400).json({ error: "newText field required" });
+          return;
+        }
+      } else {
+        if (typeof markdown !== "string") {
+          res.status(400).json({ error: "markdown field required" });
+          return;
+        }
+        if (Buffer.byteLength(markdown, "utf8") > MAX_MARKDOWN_BYTES) {
+          res.status(413).json({ error: "markdown exceeds 1 MB" });
+          return;
+        }
       }
 
       let connection;
@@ -225,10 +361,18 @@ export function setupApplyApi(app: Express, server: Hocuspocus): void {
         });
 
         let appliedNodes = 0;
+        let edit: EditOutcome | undefined;
 
         await connection.transact((document) => {
           const fragment = document.getXmlFragment(Y_FRAGMENT_FIELD);
-          const blocks = markdownToDetachedBlocks(markdown);
+
+          if (mode === "edit") {
+            edit = editFragment(fragment, oldText as string, newText as string, replaceAll === true);
+            appliedNodes = edit.nodes;
+            return;
+          }
+
+          const blocks = markdownToDetachedBlocks(markdown as string);
           appliedNodes = blocks.length;
 
           // Append and prepend differ only in the insertion point. Both are
@@ -253,6 +397,32 @@ export function setupApplyApi(app: Express, server: Hocuspocus): void {
 
         const connections =
           server.documents.get(roomName(documentId))?.getConnectionsCount() ?? 0;
+
+        if (edit) {
+          // Refusals are 409: the document is fine, the request did not fit
+          // it. They carry what the agent needs to correct itself.
+          if (edit.tooLarge) {
+            res.status(413).json({ error: "markdown exceeds 1 MB" });
+            return;
+          }
+          if (edit.matches === 0) {
+            res.status(409).json({ error: "no_match", matches: 0, diagnosis: edit.diagnosis });
+            return;
+          }
+          if (edit.replacements === 0) {
+            res.status(409).json({ error: "ambiguous", matches: edit.matches });
+            return;
+          }
+          res.status(200).json({
+            ok: true,
+            mode,
+            nodes: appliedNodes,
+            watchers: connections,
+            matches: edit.matches,
+            replacements: edit.replacements,
+          });
+          return;
+        }
 
         res.status(200).json({ ok: true, mode, nodes: appliedNodes, watchers: connections });
       } catch (err) {
@@ -281,4 +451,8 @@ export const __testing = {
   markdownToDetachedBlocks,
   cloneNode,
   spliceFragment,
+  editFragment,
+  diagnoseNoMatch,
+  countOccurrences,
+  fragmentToMarkdown,
 };

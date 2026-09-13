@@ -4,107 +4,88 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/google/uuid"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/vibe-c2/vibe-c2-core/core/pkg/models"
 	"go.uber.org/zap"
 )
 
 type searchWikiArgs struct {
-	OperationID string `json:"operation_id,omitempty" jsonschema:"Operation to search. Defaults to whatever the operator currently has open."`
+	OperationID string `json:"operation_id,omitempty" jsonschema:"Operation id; omit for the operator's current one."`
 	Search      string `json:"search,omitempty"       jsonschema:"Free-text match against title and body."`
-	Limit       int    `json:"limit,omitempty"        jsonschema:"Maximum pages to return (default 25, maximum 50)."`
-	Cursor      string `json:"cursor,omitempty"       jsonschema:"Continue a previous page using its nextCursor."`
+	Limit       int    `json:"limit,omitempty"        jsonschema:"Page size, max 50."`
+	Cursor      string `json:"cursor,omitempty"       jsonschema:"nextCursor from the previous page."`
 }
 
 type listWikiTreeArgs struct {
-	OperationID string `json:"operation_id,omitempty" jsonschema:"Operation whose page tree to list. Defaults to whatever the operator currently has open."`
+	OperationID string `json:"operation_id,omitempty" jsonschema:"Operation id; omit for the operator's current one."`
+	ParentID    string `json:"parent_id,omitempty"    jsonschema:"Only this page's subtree."`
+	Depth       int    `json:"depth,omitempty"        jsonschema:"Levels to include below the root or parent_id; default 2, -1 for all."`
+	Limit       int    `json:"limit,omitempty"        jsonschema:"Page size, max 250."`
+	Cursor      string `json:"cursor,omitempty"       jsonschema:"nextCursor from the previous page."`
 }
 
 type getWikiDocumentArgs struct {
-	DocumentID string `json:"document_id" jsonschema:"The page's id, from search_wiki or list_wiki_tree."`
-	Outline    bool   `json:"outline,omitempty" jsonschema:"Return the page's heading outline and the size of each section instead of its text. Cheap way to see how a large page is organized before deciding what to read."`
-	Section    string `json:"section,omitempty" jsonschema:"Return only this heading and everything nested under it. Give the heading text as the outline reports it, without the leading #. Ignored when outline is set."`
+	DocumentID string `json:"document_id" jsonschema:"Page id."`
+	Outline    bool   `json:"outline,omitempty" jsonschema:"Return headings and section sizes instead of text."`
+	Section    string `json:"section,omitempty" jsonschema:"Return only this heading and what nests under it, as the outline names it."`
+	Full       bool   `json:"full,omitempty"    jsonschema:"Return the whole body even when the page is large. Pages over 8 KB otherwise return their outline."`
 }
 
 func registerWikiTools(s *Server) {
 	register(s, &mcp.Tool{
 		Name: "search_wiki",
-		Description: "Search the operation's wiki pages by title and body. Each hit carries a " +
-			"snippet of the matching text, so you can usually tell which page you want " +
-			"without opening any of them.",
+		Description: "Search wiki pages by title and body. Each hit carries a snippet of the " +
+			"matching text, usually enough to pick the page without opening it.",
 	}, readTool, handleSearchWiki)
 
 	register(s, &mcp.Tool{
 		Name: "list_wiki_tree",
-		Description: "The operation's page tree, titles and parents only. Cheaper than " +
-			"searching when you want to see how the engagement notes are organized.",
+		Description: "The page tree, depth-first: titles, parents, icons and child counts. Two " +
+			"levels by default; pass parent_id to descend or depth:-1 for everything.",
 	}, readTool, handleListWikiTree)
 
 	register(s, &mcp.Tool{
 		Name: "list_wiki_templates",
-		Description: "Reusable page templates you can start from — the operation's own, plus the " +
-			"shared ones in the Public wiki, marked `shared`. Check here before writing a page " +
-			"from scratch: a template carries the structure the operator expects, and starting " +
-			"from one keeps your pages consistent with theirs.",
+		Description: "Page templates to start from: the operation's own plus the shared ones " +
+			"in the Public wiki (marked shared). Check before writing a page from scratch.",
 	}, readTool, handleListWikiTemplates)
 
 	register(s, &mcp.Tool{
-		Name: "create_wiki_document_from_template",
-		Description: "Create a page from a template, copying its structure and content. " +
-			"Prefer this over create_wiki_document whenever a template fits the job.",
-	}, writeTool, handleCreateFromTemplate)
-
-	register(s, &mcp.Tool{
 		Name: "set_wiki_template",
-		Description: "Mark a page as a reusable template, or turn it back into an ordinary " +
-			"page. Templates are a shared convention the operator's whole team works from, so " +
-			"propose this rather than deciding it yourself.",
+		Description: "Mark a page as a reusable template, or unmark it. Templates are a team " +
+			"convention: propose this rather than deciding alone.",
 	}, writeTool, handleSetWikiTemplate)
 
 	register(s, &mcp.Tool{
 		Name: "get_wiki_document",
-		Description: "One wiki page as Markdown. By default the whole body; pass outline:true " +
-			"for just its headings and their sizes, or section:\"<heading>\" for one part of " +
-			"it. On a large page, outline then section is far cheaper than reading it whole.",
+		Description: "One wiki page as Markdown. Small pages return their body; pages over 8 KB " +
+			"return an outline instead, so pass section:\"<heading>\" for the part you need " +
+			"or full:true for everything.",
 	}, readTool, handleGetWikiDocument)
 
 	register(s, &mcp.Tool{
 		Name: "create_wiki_document",
-		Description: "Create a wiki page with Markdown content. Prefer this over rewriting an " +
-			"existing page when you are adding something new.",
+		Description: "Create a wiki page, from Markdown content or from a template " +
+			"(template_id).",
 	}, writeTool, handleCreateWikiDocument)
 
 	register(s, &mcp.Tool{
-		Name: "append_wiki_section",
-		Description: "Add Markdown to the end of a wiki page without touching what is already " +
-			"there. Prefer this over update_wiki_document: it is safe while the operator is " +
-			"editing the same page, and they will see your text appear as you write it. " +
-			"Pass document_ids to add the same content to several pages in one call.",
-	}, writeTool, handleAppendWikiSection)
-
-	register(s, &mcp.Tool{
-		Name: "prepend_wiki_section",
-		Description: "Add Markdown to the START of a wiki page without touching what is already " +
-			"there — a status banner, a summary above existing notes. Same safety as " +
-			"append_wiki_section, and the reason not to reach for update_wiki_document just " +
-			"to put a line at the top. Pass document_ids for several pages in one call.",
-	}, writeTool, handlePrependWikiSection)
+		Name: "add_wiki_section",
+		Description: "Add Markdown to the end (or start) of one or more pages without touching " +
+			"what is there. Safe while the operator is editing the page.",
+	}, writeTool, handleAddWikiSection)
 
 	register(s, &mcp.Tool{
 		Name: "edit_wiki_document",
-		Description: "Change part of a page by replacing an exact snippet, the way you would " +
-			"edit a source file. Send only the text that changes, not the whole page. This is " +
-			"the tool for almost every edit — reach for update_wiki_document only when you are " +
-			"deliberately rewriting a page end to end. If the snippet does not match, the " +
-			"refusal says how it differs.",
+		Description: "Replace an exact snippet on a page, like editing a source file. The tool " +
+			"for almost every edit; a non-matching snippet is refused with what differs.",
 	}, writeTool, handleEditWikiDocument)
 
 	register(s, &mcp.Tool{
 		Name: "update_wiki_document",
-		Description: "Replace a wiki page's whole body. Read the page first and send the " +
-			"complete document back — this replaces rather than merges, so anything you omit " +
-			"is removed. If the operator is editing the page right now, prefer " +
-			"append_wiki_section so you do not overwrite what they are typing.",
+		Description: "Replace a page's whole body. Only for a deliberate end-to-end rewrite: " +
+			"read the page first, because anything omitted is deleted.",
 	}, writeTool, handleUpdateWikiDocument)
 }
 
@@ -148,27 +129,86 @@ func handleListWikiTree(ctx context.Context, s *Server, args listWikiTreeArgs) (
 		return toolResult{}, err
 	}
 
-	tree, err := s.deps.WikiDocs.WikiDocumentTree(ctx, opID.String())
+	offset, err := decodeTreeCursor(args.Cursor)
+	if err != nil {
+		return toolResult{}, err
+	}
+	// JSON cannot tell an omitted depth from 0, so 0 means the default and a
+	// negative value means every level.
+	depth := args.Depth
+	switch {
+	case depth == 0:
+		depth = treeDefaultDepth
+	case depth < 0:
+		depth = 0
+	}
+
+	docs, err := s.wikiSummaries(ctx, opID, false)
 	if err != nil {
 		return toolResult{}, fmt.Errorf("failed to read wiki tree: %w", err)
 	}
 
-	views := make([]wikiDocView, 0, len(tree))
-	for _, doc := range tree {
-		view := toWikiDocView(doc)
-		view.Depth = len(doc.PathIDs)
-		views = append(views, view)
+	var root *uuid.UUID
+	if args.ParentID != "" {
+		id, err := parseUUIDArg(args.ParentID, "parent_id")
+		if err != nil {
+			return toolResult{}, err
+		}
+		found := false
+		for _, d := range docs {
+			if d.DocumentID == id {
+				found = true
+				break
+			}
+		}
+		if !found {
+			return toolResult{}, refuse("parent_id %s is not a page in this operation.", args.ParentID)
+		}
+		root = &id
 	}
 
-	result, err := newPage(views, "")
+	rows, beyondDepth := flattenTree(docs, root, depth)
+	result, err := treePage(rows, offset, clampTreePageSize(args.Limit))
 	if err != nil {
 		return toolResult{}, err
 	}
+	if beyondDepth > 0 {
+		result.Notes = append(result.Notes, fmt.Sprintf(
+			"%d page(s) sit deeper than depth %d and are not shown. Pass parent_id to descend, "+
+				"or depth:-1 for everything.", beyondDepth, depth))
+	}
+
 	return toolResult{
 		Payload:     result,
 		OperationID: &opID,
-		Summary:     fmt.Sprintf("listed %d wiki pages", len(views)),
+		Summary:     fmt.Sprintf("listed %d of %d wiki pages", result.Returned, len(rows)),
 	}, nil
+}
+
+// wikiSummaries lists an operation's active pages without their bodies.
+// Through the projection when the repository is wired, through the resolver
+// otherwise (tests), and authorization has already happened in the caller.
+func (s *Server) wikiSummaries(ctx context.Context, opID uuid.UUID, templatesOnly bool) ([]models.WikiDocument, error) {
+	if s.deps.WikiDocRepo != nil {
+		return s.deps.WikiDocRepo.FindSummariesByOperationID(ctx, opID, templatesOnly)
+	}
+	var (
+		docs []*models.WikiDocument
+		err  error
+	)
+	if templatesOnly {
+		docs, err = s.deps.WikiDocs.WikiTemplates(ctx, opID.String())
+	} else {
+		docs, err = s.deps.WikiDocs.WikiDocumentTree(ctx, opID.String())
+	}
+	if err != nil {
+		return nil, err
+	}
+	out := make([]models.WikiDocument, 0, len(docs))
+	for _, d := range docs {
+		out = append(out, *d)
+	}
+	return out, nil
 }
 
 func handleGetWikiDocument(ctx context.Context, s *Server, args getWikiDocumentArgs) (toolResult, error) {
@@ -185,6 +225,14 @@ func handleGetWikiDocument(ctx context.Context, s *Server, args getWikiDocumentA
 	if args.Section != "" {
 		return sectionResult(doc, markdown, args.Section)
 	}
+	if outlineByDefault(args, markdown) {
+		result := outlineResult(doc, markdown)
+		result.Payload = withNote(result.Payload.(wikiOutlineView), fmt.Sprintf(
+			"Outline returned instead of the body because this page is %d bytes. "+
+				"Fetch one part with section:\"<heading>\", or the whole page with full:true.",
+			len(markdown)))
+		return result, nil
+	}
 
 	body, truncated := truncateBody(markdown)
 	view := wikiDocDetailView{
@@ -193,14 +241,11 @@ func handleGetWikiDocument(ctx context.Context, s *Server, args getWikiDocumentA
 		UpdatedAt:   formatTime(doc.UpdateAt),
 		Truncated:   truncated,
 	}
-	// Point at the cheaper read rather than waiting to be asked. A page big
-	// enough to notice is a page the agent will read repeatedly, and it has
-	// no way to know the option exists unless a full read says so.
-	if len(markdown) > outlineHintBytes {
-		view.Notes = append(view.Notes, fmt.Sprintf(
-			"This page is %d bytes. To read part of it, call get_wiki_document again with "+
-				"outline:true for its headings, then section:\"<heading>\" for the part you need.",
-			len(markdown)))
+	// A big page that reached here has no headings (or full:true was passed),
+	// so the section path cannot help; say so only when it could.
+	if !args.Full && len(markdown) > outlineHintBytes {
+		view.Notes = append(view.Notes,
+			"This page has no headings, so it cannot be read in sections.")
 	}
 
 	return toolResult{
@@ -210,9 +255,29 @@ func handleGetWikiDocument(ctx context.Context, s *Server, args getWikiDocumentA
 	}, nil
 }
 
-// outlineHintBytes is where a full read starts advertising the cheaper one.
+// outlineHintBytes is where a default read switches from body to outline.
 // Set around the point a page stops being something you would read whole.
 const outlineHintBytes = 8 * 1024
+
+// outlineByDefault decides whether a plain read is answered with the outline.
+//
+// A large page with headings is, unless the caller insisted on the body.
+// Sending 40 KB and then suggesting the cheaper read afterwards charged the
+// agent for the advice; this way the default read of a big page costs a few
+// hundred bytes and the agent chooses what to fetch next. A page without
+// headings has no sections to offer, so it is sent whole.
+func outlineByDefault(args getWikiDocumentArgs, markdown string) bool {
+	if args.Full || args.Outline || args.Section != "" {
+		return false
+	}
+	return len(markdown) > outlineHintBytes && hasHeadings(markdown)
+}
+
+// withNote prepends a note so it is the first thing the agent reads.
+func withNote(view wikiOutlineView, note string) wikiOutlineView {
+	view.Notes = append([]string{note}, view.Notes...)
+	return view
+}
 
 func outlineResult(doc *models.WikiDocument, markdown string) toolResult {
 	view := wikiOutlineView{
@@ -236,8 +301,7 @@ func outlineResult(doc *models.WikiDocument, markdown string) toolResult {
 				"%d bytes sit above the first heading and are in no section.", pre))
 		}
 		view.Notes = append(view.Notes,
-			"Section sizes include everything nested underneath, so they do not sum to the "+
-				"page size. Fetch one with section:\"<heading>\".")
+			"Section sizes include nested sections.")
 	}
 
 	return toolResult{
@@ -270,8 +334,7 @@ func sectionResult(doc *models.WikiDocument, markdown, heading string) (toolResu
 	// The dangerous misreading of a section fetch is treating it as the page.
 	// Saying so on every one is cheap; the mistake deletes a page.
 	view.Notes = append(view.Notes,
-		"This is one section, not the whole page. Change it with edit_wiki_document — "+
-			"passing this to update_wiki_document would delete everything else.")
+		"One section, not the whole page: change it with edit_wiki_document, never update_wiki_document.")
 	if matches > 1 {
 		view.Notes = append(view.Notes, fmt.Sprintf(
 			"%d sections share this heading; this is the first.", matches))
@@ -299,9 +362,16 @@ func sectionResult(doc *models.WikiDocument, markdown, heading string) (toolResu
 // the same sidecar that wrote it. Falls back to the projection only for
 // legacy rows that have no CRDT state at all, where degraded text still beats
 // nothing.
+//
+// Rendered text is cached per document against the state's persistence stamp
+// (wiki_markdown_cache.go), so repeated reads of one page cost one sidecar
+// round trip rather than one per read.
 func (s *Server) documentMarkdown(ctx context.Context, doc *models.WikiDocument) string {
 	if len(doc.ContentState) == 0 || s.deps.Hocuspocus == nil {
 		return doc.Content
+	}
+	if markdown, hit := s.cachedMarkdown(ctx, doc); hit {
+		return markdown
 	}
 	markdown, err := s.deps.Hocuspocus.YjsToMarkdown(ctx, doc.ContentState)
 	if err != nil {
@@ -309,5 +379,6 @@ func (s *Server) documentMarkdown(ctx context.Context, doc *models.WikiDocument)
 			zap.String("document_id", doc.DocumentID.String()), zap.Error(err))
 		return doc.Content
 	}
+	s.rememberMarkdown(ctx, doc, markdown)
 	return markdown
 }

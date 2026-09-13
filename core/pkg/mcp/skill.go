@@ -8,7 +8,6 @@ import (
 	"sort"
 	"strings"
 	"text/template"
-	"time"
 )
 
 // The prose lives in real markdown files rather than Go string literals: it is
@@ -17,18 +16,55 @@ import (
 var (
 	//go:embed skillassets/SKILL.md.tmpl
 	skillTemplateSource string
-	//go:embed skillassets/workflows.md
-	workflowsMD string
+	//go:embed skillassets/wiki.md
+	wikiMD string
+	//go:embed skillassets/findings.md
+	findingsMD string
+	//go:embed skillassets/tasks.md
+	tasksMD string
+	//go:embed skillassets/attachments.md
+	attachmentsMD string
+	//go:embed skillassets/icons.md
+	iconsMD string
 
 	skillTemplate = template.Must(template.New("skill").Parse(skillTemplateSource))
 )
 
+// referenceGuide is one on-demand reference file. The same text ships as
+// reference/<Name>.md in the skill and as the resource vibe://guide/<Name>,
+// so a client without a skill mechanism can still load one job's guidance
+// without paying for all of them.
+type referenceGuide struct {
+	Name    string
+	Summary string
+	Content string
+}
+
+// referenceGuides lists the split reference files. One file per job rather
+// than one workflows file: progressive disclosure only works at file
+// granularity, and an agent that wants "how do I edit a page" should not have
+// to load the icon palette to find out.
+var referenceGuides = []referenceGuide{
+	{"wiki", "reading, editing and templating pages", wikiMD},
+	{"findings", "recording hosts, credentials and hashes", findingsMD},
+	{"tasks", "proposing, linking and closing tasks", tasksMD},
+	{"attachments", "reading and adding files on a page", attachmentsMD},
+	{"icons", "when and how to give a page an icon", iconsMD},
+}
+
+// findReferenceGuide returns the guide with that name.
+func findReferenceGuide(name string) (referenceGuide, bool) {
+	for _, g := range referenceGuides {
+		if g.Name == name {
+			return g, true
+		}
+	}
+	return referenceGuide{}, false
+}
+
 type skillTemplateData struct {
-	Name          string
-	Description   string
-	ServerVersion string
-	GeneratedAt   string
-	ToolCount     int
+	Name        string
+	Description string
 }
 
 // Skill generation.
@@ -67,25 +103,29 @@ type SkillFile struct {
 // SkillBundle renders the whole skill.
 func (s *Server) SkillBundle() []SkillFile {
 	groups, ungrouped := groupedTools(s.tools)
-	return []SkillFile{
+	files := []SkillFile{
 		{Path: SkillName + "/SKILL.md", Content: s.renderSkillMD()},
 		{Path: SkillName + "/reference/tools.md", Content: renderToolsReference(groups, ungrouped)},
-		{Path: SkillName + "/reference/workflows.md", Content: workflowsMD},
 	}
+	for _, g := range referenceGuides {
+		files = append(files, SkillFile{Path: SkillName + "/reference/" + g.Name + ".md", Content: g.Content})
+	}
+	return files
 }
 
-// GuideText renders the same content as the skill, flattened into one
-// document, for clients that have no skill mechanism at all.
+// GuideText renders the core of the skill as one document, for clients that
+// have no skill mechanism at all.
 //
 // A skill file is client-side: the operator installs it, and only Claude
 // clients load it. An operator on any other MCP client would otherwise get
 // nothing but the short instructions string — so the same guidance is offered
-// as a resource they can pull on demand. It costs nothing until something
-// reads it, which is what lets it be this long.
+// as a resource they can pull on demand.
 //
+// Core only: the conduct rules and the tool index. The per-job references are
+// separate resources (vibe://guide/<name>), listed at the end, so a first
+// read costs a few thousand tokens rather than everything the platform knows.
 // The frontmatter is stripped: it exists so a skill runtime can decide whether
-// to load the file, and there is no such runtime here — whoever is reading
-// this already decided.
+// to load the file, and whoever is reading this already decided.
 func (s *Server) GuideText() string {
 	groups, ungrouped := groupedTools(s.tools)
 
@@ -93,8 +133,10 @@ func (s *Server) GuideText() string {
 	b.WriteString(stripSkillOnly(stripFrontmatter(s.renderSkillSource())))
 	b.WriteString("\n\n---\n\n")
 	b.WriteString(renderToolsReference(groups, ungrouped))
-	b.WriteString("\n---\n\n")
-	b.WriteString(workflowsMD)
+	b.WriteString("\n---\n\n## Further reading\n\nRead the resource that matches the job.\n\n")
+	for _, g := range referenceGuides {
+		fmt.Fprintf(&b, "- `%s%s` — %s.\n", guideResourceURI+"/", g.Name, g.Summary)
+	}
 	return b.String()
 }
 
@@ -173,11 +215,8 @@ func (s *Server) renderSkillMD() string {
 func (s *Server) renderSkillSource() string {
 	var b strings.Builder
 	if err := skillTemplate.Execute(&b, skillTemplateData{
-		Name:          SkillName,
-		Description:   skillDescription,
-		ServerVersion: serverVersion,
-		GeneratedAt:   time.Now().UTC().Format("2006-01-02"),
-		ToolCount:     len(s.tools),
+		Name:        SkillName,
+		Description: skillDescription,
 	}); err != nil {
 		// Unreachable: the template is embedded and parsed at init, so a
 		// failure here would mean the binary shipped broken.
@@ -186,26 +225,30 @@ func (s *Server) renderSkillSource() string {
 	return b.String()
 }
 
+// renderToolsReference is an index, not a second copy of the schema.
+//
+// The client already holds every tool's full description and argument schema
+// and sends them on every turn; repeating the descriptions here meant an agent
+// that opened the file paid for them twice. What the schema cannot carry is
+// grouping and order, so that is what this file adds: one line per tool, under
+// the heading an agent would look for it.
 func renderToolsReference(groups []renderedGroup, ungrouped []toolDoc) string {
 	var b strings.Builder
 
-	b.WriteString(`# Tool reference
+	b.WriteString(`# Tool index
 
-Grouped by what you are trying to do. Tools marked **write** change the
-operation and appear on the operator's timeline; everything else only reads,
-though reads are recorded too.
+Grouped by job, in the order you usually need them. Tools marked **(write)**
+change the operation; everything else only reads, though reads are recorded
+too. Full descriptions and arguments are in your tool list.
 
 `)
 
 	for _, g := range groups {
 		fmt.Fprintf(&b, "## %s\n\n%s\n\n", g.Title, g.Intro)
 		for _, t := range g.Tools {
-			marker := ""
-			if t.Write {
-				marker = " **(write)**"
-			}
-			fmt.Fprintf(&b, "### `%s`%s\n\n%s\n\n", t.Name, marker, t.Description)
+			b.WriteString(toolIndexLine(t))
 		}
+		b.WriteString("\n")
 	}
 
 	if len(ungrouped) > 0 {
@@ -215,9 +258,30 @@ though reads are recorded too.
 		b.WriteString("## Other\n\nNot yet grouped.\n\n")
 		sort.Slice(ungrouped, func(i, j int) bool { return ungrouped[i].Name < ungrouped[j].Name })
 		for _, t := range ungrouped {
-			fmt.Fprintf(&b, "### `%s`\n\n%s\n\n", t.Name, t.Description)
+			b.WriteString(toolIndexLine(t))
 		}
 	}
 
 	return b.String()
+}
+
+// toolIndexLine is one tool in the index: its name, the write marker, and the
+// first sentence of its description.
+func toolIndexLine(t toolDoc) string {
+	marker := ""
+	if t.Write {
+		marker = " **(write)**"
+	}
+	return fmt.Sprintf("- `%s`%s — %s\n", t.Name, marker, firstSentence(t.Description))
+}
+
+// firstSentence cuts at the first sentence end. Descriptions are written so
+// the first sentence says what the tool does and the rest qualifies it.
+func firstSentence(s string) string {
+	for i := 0; i < len(s); i++ {
+		if s[i] == '.' && (i+1 == len(s) || s[i+1] == ' ') {
+			return s[:i+1]
+		}
+	}
+	return s
 }

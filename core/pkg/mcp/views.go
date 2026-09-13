@@ -103,10 +103,13 @@ type credentialCommentView struct {
 }
 
 type hashView struct {
-	ID      string `json:"id"`
-	Value   string `json:"value"`
-	Status  string `json:"status,omitempty"`
-	Comment string `json:"comment,omitempty"`
+	ID string `json:"id"`
+	// Value is complete on a single-hash read and clipped in listings — see
+	// toHashListView. ValueLength is set only when it was clipped.
+	Value       string `json:"value"`
+	ValueLength int    `json:"valueLength,omitempty"`
+	Status      string `json:"status,omitempty"`
+	Comment     string `json:"comment,omitempty"`
 	// CredentialID links a cracked hash to the credential it produced, which
 	// is most of why an agent looks at hashes at all.
 	CredentialID string   `json:"credentialId,omitempty"`
@@ -335,6 +338,22 @@ func toHashView(h *models.Hash) hashView {
 	}
 	if h.CredentialID != nil {
 		view.CredentialID = h.CredentialID.String()
+	}
+	return view
+}
+
+// maxListHashValueChars is how much of a hash a listing row carries. It keeps
+// NTLM and MD5 (32 hex) whole and clips the multi-kilobyte formats — Kerberos
+// tickets, NetNTLMv2, sha512crypt — that otherwise blow a 50-row page down to
+// a handful of rows. get_hash returns the whole value.
+const maxListHashValueChars = 48
+
+// toHashListView is toHashView with a clipped value, for listings.
+func toHashListView(h *models.Hash) hashView {
+	view := toHashView(h)
+	if len(view.Value) > maxListHashValueChars {
+		view.ValueLength = len(view.Value)
+		view.Value = clipRunes(view.Value, maxListHashValueChars)
 	}
 	return view
 }

@@ -105,6 +105,16 @@ func (f *fakeUserRepo) put(u models.User) {
 	f.users[u.UserID] = u
 }
 
+func (f *fakeUserRepo) FindByIDs(_ context.Context, ids []uuid.UUID) ([]models.User, error) {
+	out := make([]models.User, 0, len(ids))
+	for _, id := range ids {
+		if u, ok := f.users[id]; ok {
+			out = append(out, u)
+		}
+	}
+	return out, nil
+}
+
 func (f *fakeUserRepo) ExistsByUsername(_ context.Context, _ string) (bool, error) {
 	return false, nil
 }

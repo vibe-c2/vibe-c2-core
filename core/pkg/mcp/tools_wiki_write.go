@@ -15,42 +15,50 @@ import (
 
 type createWikiDocumentArgs struct {
 	IdempotencyKey
-	OperationID string `json:"operation_id,omitempty" jsonschema:"Operation to create the page in. Defaults to whatever the operator currently has open."`
-	Title       string `json:"title"                  jsonschema:"Page title."`
-	Content     string `json:"content,omitempty"      jsonschema:"Page body as Markdown. Send it whole — the limit is 1 MB, so there is no reason to split it."`
-	ParentID    string `json:"parent_id,omitempty"    jsonschema:"Create as a child of this page."`
+	OperationID string `json:"operation_id,omitempty" jsonschema:"Operation id; omit for the operator's current one."`
+	Title       string `json:"title,omitempty"        jsonschema:"Page title. Required unless template_id is given."`
+	Content     string `json:"content,omitempty"      jsonschema:"Markdown body, up to 1 MB in one call. Ignored with template_id."`
+	ParentID    string `json:"parent_id,omitempty"    jsonschema:"Parent page id."`
+	TemplateID  string `json:"template_id,omitempty"  jsonschema:"Copy this template's structure and content, from list_wiki_templates."`
 	visualIdentity
 }
 
-// sectionWriteArgs is shared by append_wiki_section and prepend_wiki_section:
-// the same content, the same targets, only the end it lands on differs.
+// sectionWriteArgs is add_wiki_section's input: the same content, one or
+// many targets, and which end it lands on.
 type sectionWriteArgs struct {
 	IdempotencyKey
-	DocumentID  string   `json:"document_id,omitempty"  jsonschema:"The page to add to."`
-	DocumentIDs []string `json:"document_ids,omitempty" jsonschema:"Several pages to add the SAME content to, in one call. Use this instead of repeating the call per page — the content travels once rather than once per page."`
-	Content     string   `json:"content"                jsonschema:"Markdown to add. Existing content is never touched. Send it whole — the limit is 1 MB, so there is no reason to split it across calls."`
+	DocumentID  string   `json:"document_id,omitempty"  jsonschema:"Page id."`
+	DocumentIDs []string `json:"document_ids,omitempty" jsonschema:"Several page ids to add the same content to in one call."`
+	Content     string   `json:"content"                jsonschema:"Markdown to add, whole, up to 1 MB. Existing content is untouched."`
+	Position    string   `json:"position,omitempty"     jsonschema:"end (default) or start."`
 }
 
 type updateWikiDocumentArgs struct {
 	IdempotencyKey
-	DocumentID string `json:"document_id"       jsonschema:"The page to rewrite."`
-	Content    string `json:"content"           jsonschema:"The new body as Markdown. This REPLACES the page, so read it first and send the whole thing back. The limit is 1 MB — send it in one call, never in chunks."`
-	Title      string `json:"title,omitempty"   jsonschema:"Optionally rename the page at the same time."`
+	DocumentID string `json:"document_id"       jsonschema:"Page id."`
+	Content    string `json:"content"           jsonschema:"The complete new body as Markdown, up to 1 MB in one call. Anything omitted is deleted."`
+	Title      string `json:"title,omitempty"   jsonschema:"New title."`
 	visualIdentity
 }
 
 type editWikiDocumentArgs struct {
 	IdempotencyKey
-	DocumentID string `json:"document_id"          jsonschema:"The page to edit, from search_wiki."`
-	OldText    string `json:"old_text"             jsonschema:"The exact text to replace, copied from get_wiki_document. Whitespace matters. Include enough surrounding lines to make it unique."`
-	NewText    string `json:"new_text"             jsonschema:"What to put there instead. An empty string deletes the matched text."`
-	ReplaceAll bool   `json:"replace_all,omitempty" jsonschema:"Replace every occurrence instead of refusing when old_text appears more than once."`
+	DocumentID string `json:"document_id"          jsonschema:"Page id."`
+	OldText    string `json:"old_text"             jsonschema:"Exact text to replace, copied verbatim; must be unique on the page."`
+	NewText    string `json:"new_text"             jsonschema:"Replacement; empty deletes the match."`
+	ReplaceAll bool   `json:"replace_all,omitempty" jsonschema:"Replace every occurrence."`
 }
 
 func handleCreateWikiDocument(ctx context.Context, s *Server, args createWikiDocumentArgs) (toolResult, error) {
 	opID, err := s.scopedOperation(ctx, args.OperationID, models.OperationRoleOperator)
 	if err != nil {
 		return toolResult{}, err
+	}
+	if args.TemplateID != "" {
+		return s.createFromTemplate(ctx, opID, args)
+	}
+	if args.Title == "" {
+		return toolResult{}, refuse("title is required unless template_id is given.")
 	}
 
 	// Create through the resolver so nesting depth, title limits, the ancestor
@@ -123,12 +131,18 @@ func (a sectionWriteArgs) targets() ([]string, error) {
 	return ids, nil
 }
 
-func handleAppendWikiSection(ctx context.Context, s *Server, args sectionWriteArgs) (toolResult, error) {
-	return s.writeSection(ctx, args, wiki.ApplyAppend)
-}
-
-func handlePrependWikiSection(ctx context.Context, s *Server, args sectionWriteArgs) (toolResult, error) {
-	return s.writeSection(ctx, args, wiki.ApplyPrepend)
+// handleAddWikiSection adds to either end of one or more pages. One tool
+// with a position rather than an append and a prepend tool: the two were
+// identical but for the insertion point, and every tool definition is paid
+// for on every turn.
+func handleAddWikiSection(ctx context.Context, s *Server, args sectionWriteArgs) (toolResult, error) {
+	switch strings.ToLower(strings.TrimSpace(args.Position)) {
+	case "", "end":
+		return s.writeSection(ctx, args, wiki.ApplyAppend)
+	case "start":
+		return s.writeSection(ctx, args, wiki.ApplyPrepend)
+	}
+	return toolResult{}, refuse("position must be end or start, not %q.", args.Position)
 }
 
 // writeSection adds the same content to one or more pages.
@@ -250,8 +264,11 @@ func (s *Server) writeSectionOne(ctx context.Context, id, content string, mode w
 // tool call — every time, for every edit. That is slow, expensive, and it puts
 // the entire page at risk of a transcription slip on each pass.
 //
-// The uniqueness rule is the same one a code-editing tool uses, and for the
-// same reason: an ambiguous match is far more likely to be the agent misreading
+// The match and the replacement happen in the sidecar, on the live document,
+// in one transaction: no rendering of the persisted state here, no whole body
+// sent back, and nothing a collaborator typed meanwhile is lost. The
+// uniqueness rule is the same one a code-editing tool uses, and for the same
+// reason: an ambiguous match is far more likely to be the agent misreading
 // the page than a genuine intent to change all of them, so it is refused with
 // the count rather than guessed at.
 func handleEditWikiDocument(ctx context.Context, s *Server, args editWikiDocumentArgs) (toolResult, error) {
@@ -263,46 +280,47 @@ func handleEditWikiDocument(ctx context.Context, s *Server, args editWikiDocumen
 	if args.OldText == "" {
 		return toolResult{}, refuse(
 			"old_text is required: it is the snippet to replace. To add to the end of a page " +
-				"use append_wiki_section instead.")
+				"use add_wiki_section instead.")
 	}
 	if args.OldText == args.NewText {
 		return toolResult{}, refuse("old_text and new_text are identical, so this edit would do nothing.")
 	}
+	if s.deps.Hocuspocus == nil {
+		return toolResult{}, fmt.Errorf("wiki writing is unavailable: the collaboration service is not configured")
+	}
 
-	body := s.documentMarkdown(ctx, doc)
-	matches := strings.Count(body, args.OldText)
-
+	result, err := s.deps.Hocuspocus.EditMarkdown(ctx, doc.DocumentID.String(), args.OldText, args.NewText, args.ReplaceAll)
+	var noMatch *wiki.EditNoMatchError
+	var ambiguous *wiki.EditAmbiguousError
 	switch {
-	case matches == 0:
+	case errors.As(err, &noMatch):
 		return toolResult{}, refuse(
-			"that exact text is not on %q.%s Read it with get_wiki_document and copy the "+
+			"that exact text is not on %q. %s Read it with get_wiki_document and copy the "+
 				"snippet from what it returns — whitespace and list markers have to match "+
 				"exactly.",
-			doc.Title, diagnoseNoMatch(body, args.OldText))
-	case matches > 1 && !args.ReplaceAll:
+			doc.Title, noMatch.Diagnosis)
+	case errors.As(err, &ambiguous):
 		return toolResult{}, refuse(
 			"that text appears %d times on %q, so it is ambiguous. Include more of the "+
 				"surrounding lines to pin down which one you mean, or pass replace_all to "+
-				"change every occurrence.", matches, doc.Title)
+				"change every occurrence.", ambiguous.Matches, doc.Title)
+	case errors.Is(err, wiki.ErrMarkdownTooLarge):
+		return toolResult{}, refuse(
+			"that edit would grow the page past its limit (about 1 MB). Attach the content " +
+				"with attach_text_to_wiki_document instead.")
+	case err != nil:
+		s.deps.Logger.Warn("mcp: failed to apply wiki edit",
+			zap.String("document_id", doc.DocumentID.String()), zap.Error(err))
+		return toolResult{}, fmt.Errorf("failed to save the page: %w", err)
 	}
-
-	replacements := 1
-	if args.ReplaceAll {
-		replacements = matches
-	}
-	updated := strings.Replace(body, args.OldText, args.NewText, replacements)
-
-	watchers, err := s.writeBody(ctx, doc, updated, wiki.ApplyReplace)
-	if err != nil {
-		return toolResult{}, err
-	}
+	s.forgetMarkdown(ctx, doc.DocumentID.String())
 
 	payload := struct {
 		wikiWriteResultView
 		Replacements int `json:"replacements"`
 	}{
-		wikiWriteResultView: newWikiWriteResult(toWikiDocView(doc), watchers),
-		Replacements:        replacements,
+		wikiWriteResultView: newWikiWriteResult(toWikiDocView(doc), result.Watchers),
+		Replacements:        result.Replacements,
 	}
 
 	return toolResult{
@@ -399,5 +417,8 @@ func (s *Server) writeBody(ctx context.Context, doc *models.WikiDocument, body s
 		return 0, fmt.Errorf("failed to save the page: %w", err)
 	}
 
+	// The body changed, so the cached rendering is wrong even though the
+	// persistence stamp will not move until the sidecar's next debounce.
+	s.forgetMarkdown(ctx, doc.DocumentID.String())
 	return result.Watchers, nil
 }

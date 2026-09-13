@@ -71,6 +71,14 @@ type IWikiDocumentRepository interface {
 	CountByOperationID(ctx context.Context, opID uuid.UUID, filter WikiDocumentFilter) (int64, error)
 	FindChildDocuments(ctx context.Context, parentID uuid.UUID) ([]models.WikiDocument, error)
 	FindAllByOperationID(ctx context.Context, opID uuid.UUID) ([]models.WikiDocument, error)
+	// FindSummariesByOperationID is FindAllByOperationID without the body:
+	// content and content_state are projected out, so listing a wiki's
+	// titles does not move every page's CRDT state over the wire. With
+	// templatesOnly it is the template listing, likewise bodiless.
+	FindSummariesByOperationID(ctx context.Context, opID uuid.UUID, templatesOnly bool) ([]models.WikiDocument, error)
+	// FindTitlesByIDs returns only document_id and title for the given ids,
+	// active or trashed, in one round trip. For naming references.
+	FindTitlesByIDs(ctx context.Context, ids []uuid.UUID) ([]models.WikiDocument, error)
 	// FindTemplatesByOperationID returns the active documents flagged
 	// is_template in opID, sorted by title. Backs the create-from-template
 	// picker via the {operation_id, is_template} partial index — cost scales
@@ -488,6 +496,32 @@ func (r *wikiDocumentRepository) FindAllByOperationID(ctx context.Context, opID 
 		"deleted_at":   nil,
 	}).Sort("sort_order", "-createAt").All(&docs)
 	return docs, err
+}
+
+// wikiSummaryProjection drops the two fields that make a document heavy.
+var wikiSummaryProjection = bson.M{"content": 0, "content_state": 0}
+
+func (r *wikiDocumentRepository) FindSummariesByOperationID(ctx context.Context, opID uuid.UUID, templatesOnly bool) ([]models.WikiDocument, error) {
+	filter := bson.M{"operation_id": opID, "deleted_at": nil}
+	if templatesOnly {
+		filter["is_template"] = true
+	}
+	var docs []models.WikiDocument
+	err := r.coll.Find(ctx, filter).Select(wikiSummaryProjection).Sort("sort_order", "-createAt").All(&docs)
+	return docs, err
+}
+
+func (r *wikiDocumentRepository) FindTitlesByIDs(ctx context.Context, ids []uuid.UUID) ([]models.WikiDocument, error) {
+	if len(ids) == 0 {
+		return nil, nil
+	}
+	var docs []models.WikiDocument
+	err := r.coll.Find(ctx, bson.M{"document_id": bson.M{"$in": ids}}).
+		Select(bson.M{"document_id": 1, "title": 1}).All(&docs)
+	if err != nil {
+		return nil, fmt.Errorf("find titles by ids: %w", err)
+	}
+	return docs, nil
 }
 
 func (r *wikiDocumentRepository) FindTemplatesByOperationID(ctx context.Context, opID uuid.UUID) ([]models.WikiDocument, error) {

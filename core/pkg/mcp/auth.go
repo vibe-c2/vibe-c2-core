@@ -3,6 +3,7 @@ package mcp
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
@@ -110,6 +111,12 @@ func (s *Server) resolveOperation(ctx context.Context, explicit string) (uuid.UU
 		return uuid.Nil, err
 	}
 
+	// A key scoped to exactly one operation can only ever land there, so the
+	// focus read would be a Redis round trip to learn nothing.
+	if len(agent.OperationScopes) == 1 {
+		return agent.OperationScopes[0], nil
+	}
+
 	if opID, ok := s.focusOperation(ctx); ok {
 		// Only follow the operator's focus into an operation this key may
 		// actually use; otherwise fall through to the scope rules below and
@@ -119,24 +126,48 @@ func (s *Server) resolveOperation(ctx context.Context, explicit string) (uuid.UU
 		}
 	}
 
-	if len(agent.OperationScopes) == 1 {
-		return agent.OperationScopes[0], nil
-	}
-
 	if len(agent.OperationScopes) == 0 {
 		return uuid.Nil, fmt.Errorf(
 			"no operation_id given and this key is not scoped to one: pass operation_id, or call list_operations to see the options")
 	}
 
+	// Name the candidates rather than sending the agent to list_operations
+	// for them: the scope list is on the key, and a round trip to learn what
+	// this error could have said is a round trip wasted.
 	return uuid.Nil, fmt.Errorf(
-		"no operation_id given and this key is scoped to %d operations: pass operation_id explicitly (call list_operations for the ids)",
-		len(agent.OperationScopes))
+		"no operation_id given and this key is scoped to %d operations; pass one of: %s",
+		len(agent.OperationScopes), s.describeScopes(ctx, agent.OperationScopes))
+}
+
+// maxNamedScopes bounds how many candidates an error spells out.
+const maxNamedScopes = 10
+
+// describeScopes renders "name (id), name (id)" for the key's scopes, ids
+// alone for any that cannot be loaded.
+func (s *Server) describeScopes(ctx context.Context, scopes []uuid.UUID) string {
+	parts := make([]string, 0, len(scopes))
+	for i, id := range scopes {
+		if i == maxNamedScopes {
+			parts = append(parts, fmt.Sprintf("… and %d more (list_operations)", len(scopes)-i))
+			break
+		}
+		if s.deps.OperationRepo != nil {
+			if op, err := gqlctx.LoadOperation(ctx, s.deps.OperationRepo, id); err == nil && op.Name != "" {
+				parts = append(parts, fmt.Sprintf("%s (%s)", op.Name, id))
+				continue
+			}
+		}
+		parts = append(parts, id.String())
+	}
+	return strings.Join(parts, ", ")
 }
 
 // authorizeOperation loads the operation and applies the full check: the
 // owner's membership, intersected with the key's scope list and role ceiling.
 func (s *Server) authorizeOperation(ctx context.Context, opID uuid.UUID, minRole models.OperationRole) (models.Operation, error) {
-	op, err := s.deps.OperationRepo.FindByID(ctx, opID)
+	// Through the request memo: the resolver the tool calls next authorizes
+	// against the same operation, and this way it does not fetch it again.
+	op, err := gqlctx.LoadOperation(ctx, s.deps.OperationRepo, opID)
 	if err != nil {
 		return models.Operation{}, fmt.Errorf("operation not found")
 	}

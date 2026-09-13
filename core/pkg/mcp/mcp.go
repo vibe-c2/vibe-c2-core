@@ -7,7 +7,7 @@
 // The schema has ~570 fields; turning those into ~200 tools would wreck a
 // model's ability to pick the right one and would freeze internal resolver
 // names as a public agent contract. Instead there are roughly twenty
-// task-shaped tools ("find_hosts", "append_wiki_section") that call the same
+// task-shaped tools ("find_hosts", "add_wiki_section") that call the same
 // resolver interfaces the GraphQL layer calls, in-process. No HTTP hop, no
 // token forwarding, and authorization stays exactly where it already lives.
 //
@@ -85,6 +85,12 @@ type Deps struct {
 	OperationRepo   repository.IOperationRepository
 	WikiFileRepo    repository.IWikiFileRepository
 	AgentActionRepo repository.IAgentActionRepository
+	// WikiDocRepo and CredentialRepo serve the projected reads — titles,
+	// tree summaries, counts — that no resolver method offers without also
+	// loading bodies or secrets. Authorization for these calls is done here
+	// (scopedOperation / loadTaskInScope) before the repository is touched.
+	WikiDocRepo    repository.IWikiDocumentRepository
+	CredentialRepo repository.ICredentialRepository
 	// Files attaches bytes to a wiki page. The same ingest path the browser
 	// upload uses, so an agent's attachment is indistinguishable from a
 	// person's — same size cap, same type sniffing, same deny-list.

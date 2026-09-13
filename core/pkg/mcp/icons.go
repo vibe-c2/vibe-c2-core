@@ -176,9 +176,9 @@ func quoteAll(names []string) []string {
 // platform carries. Embedded rather than repeated so the wording, and the
 // mutual exclusivity, stay identical wherever an agent meets it.
 type visualIdentity struct {
-	Emoji string `json:"emoji,omitempty" jsonschema:"A single emoji to show beside this, e.g. 🔑 or 🖥️. Use this when nothing in the icon palette fits — an emoji always works."`
-	Icon  string `json:"icon,omitempty"  jsonschema:"An icon name. Either a PascalCase lucide name from the platform's palette (FileText, Server, Key, ShieldAlert, Network) or a brand logo as an si:-prefixed simple-icons slug (si:linux, si:docker, si:kubernetes, si:python). Mutually exclusive with emoji. Unknown names are refused rather than silently ignored. Leave this and emoji unset on a wiki page unless the page genuinely warrants its own glyph — the default adapts to a page or folder icon on its own."`
-	Color string `json:"color,omitempty" jsonschema:"Hex colour for the icon, e.g. #22c55e. Applies to icon, not emoji."`
+	Emoji string `json:"emoji,omitempty" jsonschema:"One emoji. Usually leave unset."`
+	Icon  string `json:"icon,omitempty"  jsonschema:"Lucide name (Server, Key, ShieldAlert) or si:<slug> brand logo (si:linux). Exclusive with emoji; unknown names are refused. Usually leave unset."`
+	Color string `json:"color,omitempty" jsonschema:"Hex colour for icon."`
 }
 
 // validate checks the icon name and the mutual exclusivity the client assumes.

@@ -13,26 +13,26 @@ import (
 // would be recording hosts for.
 
 type interfaceArg struct {
-	Name      string   `json:"name"                jsonschema:"Interface name, e.g. 'eth0'."`
-	MAC       string   `json:"mac,omitempty"       jsonschema:"Hardware address, if known."`
-	Addresses []string `json:"addresses,omitempty" jsonschema:"Addresses in CIDR form, e.g. '10.0.5.12/24'. The mask is what places the host on a subnet in the topology view, so include it."`
+	Name      string   `json:"name"                jsonschema:"e.g. eth0"`
+	MAC       string   `json:"mac,omitempty"       jsonschema:"Hardware address."`
+	Addresses []string `json:"addresses,omitempty" jsonschema:"CIDR form, e.g. 10.0.5.12/24; the mask places the host on a subnet."`
 }
 
 type routeArg struct {
-	Destination string `json:"destination"         jsonschema:"Destination network in CIDR form. '0.0.0.0/0' is the default route."`
-	Gateway     string `json:"gateway,omitempty"   jsonschema:"Next-hop address."`
-	Interface   string `json:"interface,omitempty" jsonschema:"Interface the traffic leaves by."`
+	Destination string `json:"destination"         jsonschema:"CIDR; 0.0.0.0/0 is the default route."`
+	Gateway     string `json:"gateway,omitempty"   jsonschema:"Next hop."`
+	Interface   string `json:"interface,omitempty" jsonschema:"Egress interface."`
 }
 
 type loginArg struct {
-	User string `json:"user"                jsonschema:"Account name, e.g. 'root' or 'alice'."`
-	From string `json:"from,omitempty"      jsonschema:"Host or IP the session came from. Empty means a local login. This is the edge the topology users lens draws, so fill it in for remote sessions."`
-	TTY  string `json:"tty,omitempty"       jsonschema:"Terminal, e.g. 'pts/0'."`
+	User string `json:"user"                jsonschema:"Account name."`
+	From string `json:"from,omitempty"      jsonschema:"Source host or IP; empty means local. This is the edge the users lens draws."`
+	TTY  string `json:"tty,omitempty"       jsonschema:"e.g. pts/0"`
 	// LastSeen is free text because that is how `last` reports it and how the
 	// model stores it — parsing it into a timestamp would lose information the
 	// operator may want to read verbatim.
-	LastSeen string `json:"last_seen,omitempty" jsonschema:"When the session was seen, as reported by 'last'."`
-	Count    int    `json:"count,omitempty"     jsonschema:"How many sessions this (user, from) pair stands for."`
+	LastSeen string `json:"last_seen,omitempty" jsonschema:"As reported by 'last'."`
+	Count    int    `json:"count,omitempty"     jsonschema:"Sessions this (user, from) pair stands for."`
 }
 
 func toInterfaceInputs(in []interfaceArg) []*model.NetworkInterfaceInput {

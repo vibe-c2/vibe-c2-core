@@ -59,20 +59,53 @@ func encodeResult(v any) ([]byte, error) {
 }
 
 // fit trims a page until its encoded form is within MaxResponseBytes, and says
-// what it dropped. Halving rather than trimming one at a time keeps this
-// O(log n) encodes on a pathological row rather than O(n).
+// what it dropped.
+//
+// Halving finds a size that fits in O(log n) encodes; a binary search between
+// the last failing and first passing sizes then recovers the rows the halving
+// threw away — a page one row over budget used to lose half its rows.
 func fit[T any](p page[T]) (page[T], error) {
 	original := len(p.Items)
-
-	for {
-		encoded, err := encodeResult(p)
+	fits := func(n int) (bool, error) {
+		trial := p
+		trial.Items = p.Items[:n]
+		encoded, err := encodeResult(trial)
 		if err != nil {
-			return p, fmt.Errorf("failed to encode result: %w", err)
+			return false, fmt.Errorf("failed to encode result: %w", err)
 		}
-		if len(encoded) <= MaxResponseBytes || len(p.Items) == 0 {
-			break
+		return len(encoded) <= MaxResponseBytes, nil
+	}
+
+	ok, err := fits(original)
+	if err != nil {
+		return p, err
+	}
+	if !ok {
+		lo, hi := 0, original // lo fits (empty always does), hi does not
+		for n := original / 2; n > 0; n /= 2 {
+			ok, err := fits(n)
+			if err != nil {
+				return p, err
+			}
+			if ok {
+				lo = n
+				break
+			}
+			hi = n
 		}
-		p.Items = p.Items[:len(p.Items)/2]
+		for hi-lo > 1 {
+			mid := (lo + hi) / 2
+			ok, err := fits(mid)
+			if err != nil {
+				return p, err
+			}
+			if ok {
+				lo = mid
+			} else {
+				hi = mid
+			}
+		}
+		p.Items = p.Items[:lo]
 	}
 
 	if len(p.Items) < original {

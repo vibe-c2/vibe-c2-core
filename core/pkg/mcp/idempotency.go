@@ -27,7 +27,7 @@ type idempotent interface {
 // than repeating the field keeps the JSON name and the description identical
 // across every tool that offers it.
 type IdempotencyKey struct {
-	Key string `json:"idempotency_key,omitempty" jsonschema:"Optional. Pass any unique string to make this call safe to retry: repeating it returns the original result instead of performing the action twice."`
+	Key string `json:"idempotency_key,omitempty" jsonschema:"Any unique string; a repeat with the same key returns the first result instead of acting twice."`
 }
 
 func (k IdempotencyKey) idempotencyKey() string { return k.Key }

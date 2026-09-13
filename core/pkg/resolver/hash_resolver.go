@@ -109,7 +109,7 @@ func NewHashResolver(
 }
 
 func (r *hashResolver) authorizeForOperation(ctx context.Context, operationID uuid.UUID, minRole models.OperationRole) error {
-	op, err := r.operationRepo.FindByID(ctx, operationID)
+	op, err := gqlctx.LoadOperation(ctx, r.operationRepo, operationID)
 	if err != nil {
 		return fmt.Errorf("operation not found: %w", err)
 	}

@@ -68,6 +68,9 @@ type IUserRepository interface {
 	FindWithCursor(ctx context.Context, search string, sort UserSort, cursor *pagination.Cursor, limit int64, forward bool) ([]models.User, error)
 
 	FindByID(ctx context.Context, id uuid.UUID) (models.User, error)
+	// FindByIDs loads several users in one round trip; missing ids are
+	// simply absent from the result.
+	FindByIDs(ctx context.Context, ids []uuid.UUID) ([]models.User, error)
 	FindSuggestions(ctx context.Context, search string, limit int64) ([]models.User, error)
 	Update(ctx context.Context, user *models.User, updates map[string]interface{}) error
 	Delete(ctx context.Context, user *models.User) error
@@ -158,6 +161,15 @@ func (r *userRepository) FindByID(ctx context.Context, id uuid.UUID) (models.Use
 	var user models.User
 	err := r.coll.FindOne(ctx, bson.M{"user_id": id}).One(&user)
 	return user, err
+}
+
+func (r *userRepository) FindByIDs(ctx context.Context, ids []uuid.UUID) ([]models.User, error) {
+	if len(ids) == 0 {
+		return nil, nil
+	}
+	var users []models.User
+	err := r.coll.Find(ctx, bson.M{"user_id": bson.M{"$in": ids}}).All(&users)
+	return users, err
 }
 
 func (r *userRepository) FindSuggestions(ctx context.Context, search string, limit int64) ([]models.User, error) {

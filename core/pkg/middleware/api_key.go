@@ -3,6 +3,7 @@ package middleware
 import (
 	"context"
 	"crypto/subtle"
+	"encoding/json"
 	"net/http"
 	"strings"
 	"time"
@@ -38,6 +39,13 @@ const AgentInfoKey = "agentKey"
 // key. Cache key is per-key_id; a SET-with-TTL returning "already exists"
 // suppresses the write.
 const touchDebounceTTL = 60 * time.Second
+
+// agentAuthCacheTTL bounds how long a resolved (agent key, owner) pair is
+// reused without going back to Mongo. Key changes evict immediately through
+// repository.NewAgentKeyRepositoryWithAuthCache; this TTL is the backstop for
+// changes to the owner (deactivation, role edits), which reach agent traffic
+// within this window.
+const agentAuthCacheTTL = 30 * time.Second
 
 // AuthN returns middleware that authenticates the request via either:
 //
@@ -159,23 +167,32 @@ func authenticateAgentKey(
 		return
 	}
 
-	key, err := agentKeys.FindByKeyID(ctx.Request.Context(), keyID)
-	if err != nil {
-		ctx.AbortWithStatusJSON(http.StatusUnauthorized, responses.ErrUnauthorized)
-		return
+	// One cache read stands in for the two Mongo reads below on every MCP
+	// call. The secret is still compared on every request — the cache holds
+	// the hash, not a decision — so a wrong token is refused whether or not
+	// the key is cached.
+	entry, cached := readAgentAuthCache(ctx.Request.Context(), c, keyID)
+	if !cached {
+		key, err := agentKeys.FindByKeyID(ctx.Request.Context(), keyID)
+		if err != nil {
+			ctx.AbortWithStatusJSON(http.StatusUnauthorized, responses.ErrUnauthorized)
+			return
+		}
+		user, err := users.FindByID(ctx.Request.Context(), key.UserID)
+		if err != nil {
+			ctx.AbortWithStatusJSON(http.StatusUnauthorized, responses.ErrUnauthorized)
+			return
+		}
+		entry = repository.NewAgentAuthEntry(key, user)
+		writeAgentAuthCache(ctx.Request.Context(), c, keyID, entry)
 	}
+	key, user := entry.Key, entry.User
 
 	if subtle.ConstantTimeCompare([]byte(key.SecretHash), []byte(secretHash)) != 1 {
 		ctx.AbortWithStatusJSON(http.StatusUnauthorized, responses.ErrUnauthorized)
 		return
 	}
 	if !key.Enabled {
-		ctx.AbortWithStatusJSON(http.StatusUnauthorized, responses.ErrUnauthorized)
-		return
-	}
-
-	user, err := users.FindByID(ctx.Request.Context(), key.UserID)
-	if err != nil {
 		ctx.AbortWithStatusJSON(http.StatusUnauthorized, responses.ErrUnauthorized)
 		return
 	}
@@ -193,6 +210,35 @@ func authenticateAgentKey(
 	go touchLastUsed(c, agentKeys, "agentkey", keyID, log)
 
 	ctx.Next()
+}
+
+// readAgentAuthCache returns the cached (key, owner) pair for a key id.
+func readAgentAuthCache(ctx context.Context, c cache.Cache, keyID string) (repository.AgentAuthEntry, bool) {
+	var entry repository.AgentAuthEntry
+	if c == nil || !c.IsEnabled() {
+		return entry, false
+	}
+	raw, err := c.Get(ctx, repository.AgentAuthCacheKey(keyID))
+	if err != nil || raw == "" {
+		return entry, false
+	}
+	if err := json.Unmarshal([]byte(raw), &entry); err != nil {
+		return entry, false
+	}
+	entry.Restore()
+	return entry, true
+}
+
+// writeAgentAuthCache stores the pair. Best-effort: a miss costs two reads.
+func writeAgentAuthCache(ctx context.Context, c cache.Cache, keyID string, entry repository.AgentAuthEntry) {
+	if c == nil || !c.IsEnabled() {
+		return
+	}
+	encoded, err := json.Marshal(entry)
+	if err != nil {
+		return
+	}
+	_ = c.Set(ctx, repository.AgentAuthCacheKey(keyID), string(encoded), agentAuthCacheTTL)
 }
 
 // lastUsedToucher is the one method both key repositories share. Declared here,

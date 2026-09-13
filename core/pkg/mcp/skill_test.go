@@ -3,10 +3,12 @@ package mcp
 import (
 	"archive/zip"
 	"bytes"
+	"context"
 	"io"
 	"strings"
 	"testing"
 
+	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"go.uber.org/zap"
 )
 
@@ -113,9 +115,11 @@ func TestSkill_ZipLayout(t *testing.T) {
 	}
 
 	want := map[string]bool{
-		SkillName + "/SKILL.md":               false,
-		SkillName + "/reference/tools.md":     false,
-		SkillName + "/reference/workflows.md": false,
+		SkillName + "/SKILL.md":           false,
+		SkillName + "/reference/tools.md": false,
+	}
+	for _, g := range referenceGuides {
+		want[SkillName+"/reference/"+g.Name+".md"] = false
 	}
 	for _, f := range r.File {
 		if _, expected := want[f.Name]; !expected {
@@ -151,7 +155,7 @@ func TestSkill_MarksWriteTools(t *testing.T) {
 		if !tool.Write {
 			continue
 		}
-		heading := "### `" + tool.Name + "` **(write)**"
+		heading := "- `" + tool.Name + "` **(write)**"
 		if !strings.Contains(reference, heading) {
 			t.Errorf("write tool %q is not marked as a write in the skill", tool.Name)
 		}
@@ -176,28 +180,55 @@ func TestGuide_CarriesTheSameContentAsTheSkill(t *testing.T) {
 	s := New(Deps{Logger: zap.NewNop()})
 	guide := s.GuideText()
 
-	// Every tool, same as the skill's reference.
+	// Every tool, same as the skill's index.
 	for _, tool := range s.tools {
 		if !strings.Contains(guide, "`"+tool.Name+"`") {
 			t.Errorf("tool %q is missing from the guide", tool.Name)
 		}
 	}
 
-	// Both reference documents, folded in rather than linked — there is no
-	// file tree here to follow a link through.
 	for _, marker := range []string{
-		"# Tool reference",
-		"# Workflows",
-		"findings hold the data", // the conduct guidance from SKILL.md
+		"# Tool index",
+		"Findings hold the data", // the conduct guidance from SKILL.md
 	} {
 		if !strings.Contains(guide, marker) {
 			t.Errorf("the guide is missing %q", marker)
 		}
 	}
 
+	// The per-job references are separate resources, and the guide has to
+	// say so or a resource reader never finds them.
+	for _, g := range referenceGuides {
+		if !strings.Contains(guide, guideResourceURI+"/"+g.Name) {
+			t.Errorf("the guide does not point at %s/%s", guideResourceURI, g.Name)
+		}
+	}
+
 	// The pointers to sibling files make no sense in a flattened document.
 	if strings.Contains(guide, "reference/tools.md") {
 		t.Error("the guide still points at reference files that do not exist for a resource reader")
+	}
+}
+
+// Each reference file is also served as its own resource, so a client
+// without a skill mechanism can load one job's guidance at a time.
+func TestGuide_ServesEachReferenceAsAResource(t *testing.T) {
+	s := New(Deps{Logger: zap.NewNop()})
+	for _, g := range referenceGuides {
+		res, err := s.readResource(context.Background(), &mcp.ReadResourceRequest{
+			Params: &mcp.ReadResourceParams{URI: guideResourceURI + "/" + g.Name},
+		})
+		if err != nil {
+			t.Fatalf("%s: %v", g.Name, err)
+		}
+		if got := res.Contents[0].Text; got != g.Content {
+			t.Errorf("%s resource does not match the skill file", g.Name)
+		}
+	}
+	if _, err := s.readResource(context.Background(), &mcp.ReadResourceRequest{
+		Params: &mcp.ReadResourceParams{URI: guideResourceURI + "/nope"},
+	}); err == nil {
+		t.Error("an unknown guide name was served")
 	}
 }
 
@@ -239,7 +270,7 @@ func TestStripFrontmatter(t *testing.T) {
 // The instructions string is charged on every turn, so it has to stay short —
 // and it has to point at the guide, which is the only reason it can afford to.
 func TestInstructions_StayShortAndPointAtTheGuide(t *testing.T) {
-	const budget = 2000
+	const budget = 1000
 	if len(serverInstructions) > budget {
 		t.Errorf("instructions are %d chars, over the %d budget — they are carried every turn; "+
 			"move detail into the guide instead", len(serverInstructions), budget)
@@ -301,9 +332,13 @@ func TestSkill_KeepsItsReferencePointers(t *testing.T) {
 	s := New(Deps{Logger: zap.NewNop()})
 	skill := findFile(t, s.SkillBundle(), SkillName+"/SKILL.md")
 
-	for _, want := range []string{"reference/tools.md", "reference/workflows.md"} {
-		if !strings.Contains(skill, want) {
-			t.Errorf("SKILL.md no longer points at %s, so it will never be loaded", want)
+	want := []string{"reference/tools.md"}
+	for _, g := range referenceGuides {
+		want = append(want, "reference/"+g.Name+".md")
+	}
+	for _, path := range want {
+		if !strings.Contains(skill, path) {
+			t.Errorf("SKILL.md no longer points at %s, so it will never be loaded", path)
 		}
 	}
 	// The markers themselves are plumbing and should not reach the reader.
@@ -324,17 +359,18 @@ func TestSkill_KeepsItsReferencePointers(t *testing.T) {
 // not a failure, it is a prompt: re-read the file and cut something before
 // raising the number.
 //
-// Only the hand-written files are budgeted. reference/tools.md is generated
-// from the registry, so its size is a consequence of how many tools exist —
-// capping it would pressure whoever adds the next tool to shorten a
-// description, which is the opposite of what this is for.
+// reference/tools.md is generated from the registry as a one-line index, so
+// it is budgeted per tool rather than in total.
 func TestSkill_ProseStaysWithinItsBudget(t *testing.T) {
+	s := New(Deps{Logger: zap.NewNop()})
 	budgets := map[string]int{
-		SkillName + "/SKILL.md":               7 * 1024,
-		SkillName + "/reference/workflows.md": 15 * 1024,
+		SkillName + "/SKILL.md":           4 * 1024,
+		SkillName + "/reference/tools.md": 1024 + 120*len(s.tools),
+	}
+	for _, g := range referenceGuides {
+		budgets[SkillName+"/reference/"+g.Name+".md"] = 4 * 1024
 	}
 
-	s := New(Deps{Logger: zap.NewNop()})
 	for _, file := range s.SkillBundle() {
 		budget, ok := budgets[file.Path]
 		if !ok {
@@ -369,16 +405,15 @@ func TestGuide_MentionsThePublicOperation(t *testing.T) {
 // Templates are a shared convention. An agent that cannot see them writes a
 // second house style; one that edits them changes everyone's pages.
 func TestGuide_CoversTemplates(t *testing.T) {
-	s := New(Deps{Logger: zap.NewNop()})
-	guide := s.GuideText()
+	guide, _ := findReferenceGuide("wiki")
 
 	for _, want := range []string{
 		"list_wiki_templates",
-		"create_wiki_document_from_template",
+		"template_id",
 		"isTemplate",
 	} {
-		if !strings.Contains(guide, want) {
-			t.Errorf("the guide does not cover %q", want)
+		if !strings.Contains(guide.Content, want) {
+			t.Errorf("the wiki guide does not cover %q", want)
 		}
 	}
 }

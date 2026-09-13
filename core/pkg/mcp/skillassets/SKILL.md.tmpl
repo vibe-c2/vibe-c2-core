@@ -10,113 +10,75 @@ engagements. You reach it through an MCP server as a *delegated agent*: your key
 belongs to a human operator, acts on their behalf, and can never do more than
 they can.
 
-Generated from server version {{.ServerVersion}} on {{.GeneratedAt}}, describing
-{{.ToolCount}} tools. If your tool list does not match this document, the server
-has moved on — trust the tool list.
-
 ## The model
 
-**Operations** are engagements. Almost everything belongs to one, and almost
-every tool takes an `operation_id`. You rarely need to pass it: it defaults to
-whatever the operator currently has open.
+**Operations** are engagements. Almost every tool takes an `operation_id`, and
+you rarely need to pass it: it defaults to whatever the operator has open.
 
 Within an operation:
 
-- **Hosts** are machines. The topology view draws subnets from their interfaces,
-  reachability from their routes, and who-logged-in-from-where from their
-  logins. Recording a hostname alone produces a dot with no edges.
+- **Hosts** are machines. Interfaces place them on subnets, routes give
+  reachability, logins draw who-logged-in-from-where. A hostname alone is a dot
+  with no edges.
 - **Credentials** are recovered secrets. **Hashes** are captured material that
   may become credentials.
-- **Tasks** are the operator's board — what they intend to do.
-- **Wiki** pages are the engagement's notes: method, write-ups, anything worth
-  keeping.
-- **The timeline** is the shared history of the operation — milestones only,
-  not a log of everything that happened.
+- **Tasks** are the operator's board.
+- **Wiki** pages are the engagement's notes.
+- **The timeline** is the shared history: milestones only.
 
-One operation is not like the others. **Public** is shared across the whole
-platform: everyone can read and write it, and nobody is a member. It is the
-right place for things that outlive one engagement — method, reference,
-checklists — and the wrong place for anything belonging to a specific target.
+**Public** is a special operation shared across the platform: everyone reads
+and writes it, nobody is a member, and every key can reach it. It is for things
+that outlive one engagement (method, reference, house templates), never for
+anything about a specific target.
 
-You can always reach it: a key scoped to particular operations is not narrowed
-away from Public, so `list_operations` always shows it and the shared wiki is
-always yours to read. What your key may *do* there is capped as anywhere else.
-
-The division that matters: **findings hold the data, the wiki holds the
-reasoning.** A password belongs in Credentials, not pasted into a page. A page
-explains what that password opened and why it matters.
+**Findings hold the data, the wiki holds the reasoning.** A password belongs in
+Credentials; a page explains what it opened.
 
 ## What you cannot reach
 
 Implant tasking, live sessions, transport channels and the module registry.
-There are no tools for them and there will not be. If a request needs one, say
-so rather than looking for a way around it.
+There are no tools for them. No CLI, checkout, REST endpoint or file mirrors
+any of this either: if a tool does not exist, say so.
 
 ## How to work here
 
-**Look before you ask.** `get_user_focus` tells you where the operator is right
-now — which operation, which page, which host is selected. Call it before asking
-them where to look; most of the time it already answers the question.
-
-**Everything you do is visible.** Every call, reads included, is recorded and
-shown to the operator. The timeline is separate and deliberately sparse: it
-records milestones, not activity, and treats your work exactly like a person's
-— closing a task or recording a credential lands there, editing a page does
-not. Work as though being watched, because you are.
-
-**Propose rather than surprise.** Creating a task to suggest work is better than
-doing something nobody asked for. Say what you are about to change before you
-change it, unless you were told to just do it.
-
-**Results are capped.** When a result says it was truncated, narrow the filter.
-Do not reason as though you have seen everything — you have not, and the
-platform said so.
-
-**Refusals are answers.** If a call is refused, your key's ceiling or the
-operator's own access is the reason. Report it rather than retrying variations
-hoping one gets through. A rate-limit refusal tells you how long to wait — wait
-that long.
-
-**Send the smallest change that does the job.** `edit_wiki_document` replaces
-an exact snippet; `append_wiki_section` and `prepend_wiki_section` add to
-either end. All three take a fragment and none can damage the rest of the page.
-`update_wiki_document` takes the whole body — use it only for a deliberate
-end-to-end rewrite, and read the page first, because anything you omit is
-deleted.
-
-**Read the smallest part that answers the question.** `search_wiki` returns a
-snippet of the matching text with every hit, which usually identifies the right
-page without opening any. On a large page, `get_wiki_document` takes
-`outline:true` for its headings and `section:"<heading>"` for one part of it.
-A section is not the page: edit it, never send it back as the whole body.
-
-**There is no other way in.** No CLI, no local checkout, no REST endpoint to
-curl, no file on disk that mirrors any of this. If a tool for something does not
-exist, it does not exist — say so instead of looking for a way around.
-
-**One value, one call.** Arguments hold a megabyte. Never split a long value
-across several calls with a placeholder to stitch them together — no limit here
-asked for it, and every chunk depends on the last one surviving. Raw output — a
-command history, a scan, a config — goes to `attach_text_to_wiki_document`
-rather than into the page body.
-
-**Do not re-read to check your own work.** Every write reports what it did.
-Fetch a page again when you need its current state for the next decision, not
-to confirm the last one landed.
-
-**Make retries safe.** Every writing tool accepts an `idempotency_key`. Pass one
-and a repeat returns the original result instead of doing the thing twice.
-
-**Leave the icon alone unless the page has earned one.** Wiki pages default to
-an adaptive icon, which is right for most of them. When a page does warrant a
-glyph, follow the tree rather than your own taste: listings carry each page's
-`emoji` and `icon`, so one `list_wiki_tree` shows you the convention. Match it
-even when yours would have been prettier. See workflows.md, "Giving a page an
-icon".
+- **Look before you ask.** `get_user_focus` says which operation, page and
+  record the operator is on, and carries that operation's counts.
+- **Everything you do is visible.** Every call, reads included, is recorded and
+  shown to the operator.
+- **Propose rather than surprise.** Create a task to suggest work; say what you
+  will change before changing it unless told to just do it.
+- **Results are capped.** A truncated result means narrow the filter, not
+  "that is all there is".
+- **Refusals are answers.** Report them; do not retry variations. A rate-limit
+  refusal says how long to wait.
+- **Read the smallest part that answers the question.** `search_wiki` snippets
+  usually identify the page. Pages over 8 KB return an outline by default; take
+  `section:"<heading>"` for one part or `full:true` for everything.
+- **Send the smallest change that does the job.** `edit_wiki_document`
+  replaces an exact snippet; `add_wiki_section` adds to either end. Both are
+  safe while the operator is editing. `update_wiki_document` replaces the whole
+  page: only for a deliberate rewrite, after reading it, because anything you
+  omit is deleted. A section is part of a page, never the whole of it.
+- **One value, one call.** Arguments hold a megabyte. Never split a value
+  across calls. Raw output goes to `attach_text_to_wiki_document`, not the page.
+- **Do not re-read to check your own work.** Writes report what happened.
+- **Make retries safe.** Every write accepts an `idempotency_key`.
+- **Put milestones on the timeline.** A DC owned, a host taken, a login form
+  patched, a foothold lost: `create_timeline_event`, unless a tool already
+  recorded it (closed tasks, credentials and cracks land there on their own).
+  Routine bookkeeping does not belong on it.
+- **Leave icons alone** unless a page has earned one.
 
 <!-- skill-only:start -->
 ## Reference
 
-- `reference/tools.md` — the tool surface, grouped by task.
-- `reference/workflows.md` — how the common jobs fit together.
+Load the one that matches the job.
+
+- `reference/tools.md` — every tool, grouped by task.
+- `reference/wiki.md` — reading, editing and templating pages.
+- `reference/findings.md` — recording hosts, credentials and hashes.
+- `reference/tasks.md` — proposing, linking and closing tasks.
+- `reference/attachments.md` — reading and adding files on a page.
+- `reference/icons.md` — when and how to give a page an icon.
 <!-- skill-only:end -->

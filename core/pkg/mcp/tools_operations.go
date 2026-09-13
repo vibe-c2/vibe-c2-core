@@ -3,41 +3,48 @@ package mcp
 import (
 	"context"
 	"fmt"
+	"sort"
+	"sync"
 
 	"github.com/google/uuid"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/vibe-c2/vibe-c2-core/core/pkg/graphql/gqlctx"
 	"github.com/vibe-c2/vibe-c2-core/core/pkg/models"
+	"github.com/vibe-c2/vibe-c2-core/core/pkg/repository"
 	"go.uber.org/zap"
 )
 
 type listOperationsArgs struct{}
 
 type getOperationSummaryArgs struct {
-	OperationID string `json:"operation_id,omitempty" jsonschema:"Operation to summarize. Defaults to whatever the operator currently has open."`
+	OperationID string `json:"operation_id,omitempty" jsonschema:"Operation id; omit for the operator's current one."`
 }
 
 type operationSummary struct {
-	Operation   operationView `json:"operation"`
-	Hosts       int           `json:"hosts"`
-	Credentials int           `json:"credentials"`
-	Hashes      int           `json:"hashes"`
-	OpenTasks   int           `json:"openTasks"`
-	WikiPages   int           `json:"wikiPages"`
-	Notes       []string      `json:"notes,omitempty"`
+	Operation operationView `json:"operation"`
+	operationCounts
+	Notes []string `json:"notes,omitempty"`
+}
+
+// operationCounts is the shape of an operation in numbers. Shared by
+// get_operation_summary and get_user_focus, so orienting is one call.
+type operationCounts struct {
+	Hosts       int `json:"hosts"`
+	Credentials int `json:"credentials"`
+	Hashes      int `json:"hashes"`
+	OpenTasks   int `json:"openTasks"`
+	WikiPages   int `json:"wikiPages"`
 }
 
 func registerOperationTools(s *Server) {
 	register(s, &mcp.Tool{
-		Name: "list_operations",
-		Description: "List the operations this agent key can act in. Start here when you " +
-			"do not know which operation to work on, or when a tool asks for an operation_id.",
+		Name:        "list_operations",
+		Description: "The operations this key can act in, with your capped role in each.",
 	}, readTool, handleListOperations)
 
 	register(s, &mcp.Tool{
-		Name: "get_operation_summary",
-		Description: "Counts of hosts, credentials, hashes, open tasks and wiki pages for one " +
-			"operation. A cheap way to orient before deciding what to look at in detail.",
+		Name:        "get_operation_summary",
+		Description: "Counts of hosts, credentials, hashes, open tasks and wiki pages.",
 	}, readTool, handleGetOperationSummary)
 }
 
@@ -104,6 +111,98 @@ func handleListOperations(ctx context.Context, s *Server, _ listOperationsArgs) 
 	}, nil
 }
 
+// countOperation gathers the five counts concurrently.
+//
+// Each count is a one-row fetch: the connections carry TotalCount, so this
+// is one query per kind rather than a full listing, and the five run at once
+// rather than back to back. Wiki pages are a count query when the repository
+// is wired, not a tree load.
+//
+// One row, not zero. `first: 0` is rejected by pagination.ParseArgs as "must
+// be positive", and an earlier version swallowed that error and reported the
+// count as 0 — so every count in this summary was silently zero, which an
+// agent would read as "this operation is empty". A failed count must never
+// be indistinguishable from a real one, so each failure is named in a note.
+func (s *Server) countOperation(ctx context.Context, opID uuid.UUID) (operationCounts, []string) {
+	idStr := opID.String()
+	first := 1
+
+	type counter struct {
+		kind string
+		dest *int
+		fn   func() (int, error)
+	}
+	var counts operationCounts
+	counters := []counter{
+		{"hosts", &counts.Hosts, func() (int, error) {
+			conn, err := s.deps.Hosts.Hosts(ctx, idStr, nil, nil, nil, &first, nil, nil, nil)
+			if err != nil {
+				return 0, err
+			}
+			return conn.TotalCount, nil
+		}},
+		{"credentials", &counts.Credentials, func() (int, error) {
+			conn, err := s.deps.Credentials.Credentials(ctx, idStr, nil, nil, nil, nil, nil, nil, nil, &first, nil, nil, nil)
+			if err != nil {
+				return 0, err
+			}
+			return conn.TotalCount, nil
+		}},
+		{"hashes", &counts.Hashes, func() (int, error) {
+			conn, err := s.deps.Hashes.Hashes(ctx, idStr, nil, nil, nil, nil, &first, nil, nil, nil)
+			if err != nil {
+				return 0, err
+			}
+			return conn.TotalCount, nil
+		}},
+		{"open tasks", &counts.OpenTasks, func() (int, error) {
+			done := models.TaskStageDone
+			conn, err := s.deps.Tasks.Tasks(ctx, idStr, nil, []models.TaskStage{done}, nil, nil, nil, nil, nil, &first, nil, nil, nil)
+			if err != nil {
+				return 0, err
+			}
+			return conn.TotalCount, nil
+		}},
+		{"wiki pages", &counts.WikiPages, func() (int, error) {
+			if s.deps.WikiDocRepo != nil {
+				n, err := s.deps.WikiDocRepo.CountByOperationID(ctx, opID, repository.WikiDocumentFilter{})
+				return int(n), err
+			}
+			tree, err := s.deps.WikiDocs.WikiDocumentTree(ctx, idStr)
+			if err != nil {
+				return 0, err
+			}
+			return len(tree), nil
+		}},
+	}
+
+	var (
+		mu    sync.Mutex
+		notes []string
+		wg    sync.WaitGroup
+	)
+	for _, c := range counters {
+		wg.Add(1)
+		go func(c counter) {
+			defer wg.Done()
+			n, err := c.fn()
+			mu.Lock()
+			defer mu.Unlock()
+			if err != nil {
+				s.deps.Logger.Warn("mcp: operation summary count failed",
+					zap.String("kind", c.kind), zap.Error(err))
+				notes = append(notes,
+					fmt.Sprintf("Could not count %s — treat that number as unknown, not zero.", c.kind))
+				return
+			}
+			*c.dest = n
+		}(c)
+	}
+	wg.Wait()
+	sort.Strings(notes)
+	return counts, notes
+}
+
 // cappedRoleFor reports the role the AGENT has, not the owner's — the agent
 // needs to know what it can do, and telling it "admin" when its key is capped
 // to viewer would have it plan work that will be refused.
@@ -134,67 +233,7 @@ func handleGetOperationSummary(ctx context.Context, s *Server, args getOperation
 
 	auth := gqlctx.AuthFromContext(ctx)
 	summary := operationSummary{Operation: toOperationView(&op, cappedRoleFor(auth, &op))}
-	idStr := opID.String()
-
-	// Each count is a one-row fetch: the connections carry TotalCount, so this
-	// is one query per kind rather than a full listing.
-	//
-	// One row, not zero. `first: 0` is rejected by pagination.ParseArgs as
-	// "must be positive", and an earlier version swallowed that error and
-	// reported the count as 0 — so every count in this summary was silently
-	// zero, which an agent would read as "this operation is empty". A failed
-	// count must never be indistinguishable from a real one.
-	const probe = 1
-
-	count := func(kind string, fn func() (int, error)) int {
-		n, err := fn()
-		if err != nil {
-			s.deps.Logger.Warn("mcp: operation summary count failed",
-				zap.String("kind", kind), zap.Error(err))
-			summary.Notes = append(summary.Notes,
-				fmt.Sprintf("Could not count %s — treat that number as unknown, not zero.", kind))
-			return 0
-		}
-		return n
-	}
-
-	first := probe
-	summary.Hosts = count("hosts", func() (int, error) {
-		conn, err := s.deps.Hosts.Hosts(ctx, idStr, nil, nil, nil, &first, nil, nil, nil)
-		if err != nil {
-			return 0, err
-		}
-		return conn.TotalCount, nil
-	})
-	summary.Credentials = count("credentials", func() (int, error) {
-		conn, err := s.deps.Credentials.Credentials(ctx, idStr, nil, nil, nil, nil, nil, nil, nil, &first, nil, nil, nil)
-		if err != nil {
-			return 0, err
-		}
-		return conn.TotalCount, nil
-	})
-	summary.Hashes = count("hashes", func() (int, error) {
-		conn, err := s.deps.Hashes.Hashes(ctx, idStr, nil, nil, nil, nil, &first, nil, nil, nil)
-		if err != nil {
-			return 0, err
-		}
-		return conn.TotalCount, nil
-	})
-	summary.OpenTasks = count("open tasks", func() (int, error) {
-		done := models.TaskStageDone
-		conn, err := s.deps.Tasks.Tasks(ctx, idStr, nil, []models.TaskStage{done}, nil, nil, nil, nil, nil, &first, nil, nil, nil)
-		if err != nil {
-			return 0, err
-		}
-		return conn.TotalCount, nil
-	})
-	summary.WikiPages = count("wiki pages", func() (int, error) {
-		tree, err := s.deps.WikiDocs.WikiDocumentTree(ctx, idStr)
-		if err != nil {
-			return 0, err
-		}
-		return len(tree), nil
-	})
+	summary.operationCounts, summary.Notes = s.countOperation(ctx, opID)
 
 	return toolResult{
 		Payload:     summary,
