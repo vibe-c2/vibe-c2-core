@@ -31,6 +31,7 @@ import { WikiHostReferenceExtension } from "@/components/wiki/wiki-host-referenc
 import { WikiDocumentReferenceExtension } from "@/components/wiki/wiki-document-reference-node"
 import { WikiEditorBubbleMenu } from "@/components/wiki/wiki-editor-bubble-menu"
 import { WikiEditorTableMenu } from "@/components/wiki/wiki-editor-table-menu"
+import { WikiEditorTableContextMenu } from "@/components/wiki/wiki-editor-table-context-menu"
 import { WikiEditorToc } from "@/components/wiki/wiki-editor-toc"
 import { WikiLinkPopover, startLinkInsert } from "@/components/wiki/wiki-link-popover"
 import { WikiInlineCodePopover } from "@/components/wiki/wiki-inline-code-popover"
@@ -647,10 +648,12 @@ export function WikiEditor({
         }}
       >
         {isReady ? (
-          <EditorContent
-            editor={editor}
-            className="prose prose-sm dark:prose-invert max-w-none focus:outline-none"
-          />
+          <WikiEditorTableContextMenu editor={isEditor ? editor : null}>
+            <EditorContent
+              editor={editor}
+              className="prose prose-sm dark:prose-invert max-w-none focus:outline-none"
+            />
+          </WikiEditorTableContextMenu>
         ) : (
           <div aria-busy="true" aria-live="polite" className="flex flex-col gap-3">
             <Skeleton className="h-4 w-3/5" />
