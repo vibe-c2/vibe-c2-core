@@ -650,12 +650,16 @@ export function WikiEditor({
         }}
       >
         {isReady ? (
-          <WikiEditorTableContextMenu editor={isEditor ? editor : null}>
+          <>
             <EditorContent
               editor={editor}
               className="prose prose-sm dark:prose-invert max-w-none focus:outline-none"
             />
-          </WikiEditorTableContextMenu>
+            {/* Renders no wrapper of its own — it attaches a contextmenu
+                listener to the editor DOM and portals its menu. Right-click
+                outside a table is left to the browser. */}
+            <WikiEditorTableContextMenu editor={isEditor ? editor : null} />
+          </>
         ) : (
           <div aria-busy="true" aria-live="polite" className="flex flex-col gap-3">
             <Skeleton className="h-4 w-3/5" />

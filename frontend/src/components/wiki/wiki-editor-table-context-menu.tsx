@@ -1,4 +1,4 @@
-import type { ReactNode } from "react"
+import { useEffect, useState } from "react"
 import type { Editor } from "@tiptap/react"
 // Side-effect import so the Table extension's module augmentation is in
 // scope and chain().addRowBefore() & co. are typed.
@@ -25,127 +25,161 @@ import {
   ContextMenuItem,
   ContextMenuLabel,
   ContextMenuSeparator,
-  ContextMenuTrigger,
 } from "@/components/ui/context-menu"
+import { decideTableContextMenu } from "@/components/wiki/table-context-menu-gate"
 
-interface WikiEditorTableContextMenuProps {
+interface WikiEditorTableMenuProps {
   editor: Editor | null
-  children: ReactNode
 }
 
-// Base UI merges our handler with the trigger's own and calls ours first;
-// preventBaseUIHandler() stops the trigger from opening the menu. The
-// synthetic event type does not declare it, so widen locally.
-type PreventableEvent = { preventBaseUIHandler?: () => void }
+// A virtual anchor at a viewport point. Base UI positions a context menu with
+// `position: fixed`, so client coordinates from the event are exactly right.
+type PointAnchor = { getBoundingClientRect: () => DOMRect }
+
+function pointAnchor(x: number, y: number): PointAnchor {
+  return {
+    getBoundingClientRect: () =>
+      DOMRect.fromRect({ x, y, width: 0, height: 0 }),
+  }
+}
 
 /**
- * Right-click menu for table structure actions. Wraps the editor content so
- * a single trigger covers every table in the document; the handler gates on
- * the click landing inside a <td>/<th>, so right-clicking prose outside a
- * table still gets the browser's native menu.
+ * Right-click menu for table structure actions.
  *
- * Right-click in contentEditable does not reliably move the caret, so the
- * handler also drops the selection into the clicked cell when it isn't
- * already there — the row/column commands act on the selection, and acting
- * on a cell the user didn't click would be surprising.
+ * Controlled-open by design. An earlier version wrapped the whole editor in a
+ * Base UI context-menu trigger and tried to let non-table clicks through with
+ * preventBaseUIHandler(); that failed because the trigger also installs a
+ * document-level `contextmenu` listener which preventDefault()s every click
+ * inside it, suppressing the native browser menu across the entire document
+ * with no way to opt back out. See table-context-menu-gate.ts.
+ *
+ * Instead, nothing wraps the editor. One `contextmenu` listener on the editor
+ * DOM decides per click: only a right-click inside an editable cell is
+ * intercepted (native menu suppressed, our menu opened at the cursor);
+ * everything else is left entirely to the browser.
  */
-export function WikiEditorTableContextMenu({
-  editor,
-  children,
-}: WikiEditorTableContextMenuProps) {
-  if (!editor) return <>{children}</>
+export function WikiEditorTableContextMenu({ editor }: WikiEditorTableMenuProps) {
+  const [open, setOpen] = useState(false)
+  // The anchor is a ref-backed piece of state: we set it synchronously in the
+  // event handler, then open. A plain object is enough for Base UI's
+  // getBoundingClientRect-based positioning.
+  const [anchor, setAnchor] = useState<PointAnchor | null>(null)
 
-  const gate = (event: React.SyntheticEvent & PreventableEvent) => {
-    const cell = findCell(editor, event.target)
-    if (!cell || !editor.isEditable) {
-      event.preventBaseUIHandler?.()
-      return
+  useEffect(() => {
+    if (!editor) return
+    // Capture as a non-null const so the nested handler keeps the narrowed
+    // type; a prop cannot be narrowed across a closure boundary.
+    const ed = editor
+    const dom = ed.view.dom
+
+    function handleContextMenu(event: MouseEvent) {
+      const cell = findCell(ed, event.target)
+      const action = decideTableContextMenu({
+        cellFound: cell !== null,
+        isEditable: ed.isEditable,
+      })
+      if (action === "passthrough") return
+
+      // A table cell in an editable doc: this is ours.
+      event.preventDefault()
+      if (cell) moveSelectionIntoCell(ed, cell, event)
+      setAnchor(pointAnchor(event.clientX, event.clientY))
+      setOpen(true)
     }
-    moveSelectionIntoCell(editor, cell, event)
+
+    dom.addEventListener("contextmenu", handleContextMenu)
+    return () => dom.removeEventListener("contextmenu", handleContextMenu)
+  }, [editor])
+
+  if (!editor) return null
+
+  // editor is non-null past the guard; menu commands close over it directly.
+  const run = (fn: (editor: Editor) => void) => {
+    fn(editor)
+    setOpen(false)
   }
 
   return (
-    <ContextMenu>
-      <ContextMenuTrigger onContextMenu={gate} onTouchStart={gate}>
-        {children}
-      </ContextMenuTrigger>
-      <ContextMenuContent>
-        <ContextMenuGroup>
-          <ContextMenuLabel>Row</ContextMenuLabel>
-          <Item
-            icon={ArrowUpToLineIcon}
-            label="Insert row above"
-            onSelect={() => editor.chain().focus().addRowBefore().run()}
-          />
-          <Item
-            icon={ArrowDownToLineIcon}
-            label="Insert row below"
-            onSelect={() => editor.chain().focus().addRowAfter().run()}
-          />
-          <Item
-            icon={Rows3Icon}
-            label="Delete row"
-            destructive
-            onSelect={() => editor.chain().focus().deleteRow().run()}
-          />
-        </ContextMenuGroup>
-        <ContextMenuSeparator />
-        <ContextMenuGroup>
-          <ContextMenuLabel>Column</ContextMenuLabel>
-          <Item
-            icon={ArrowLeftToLineIcon}
-            label="Insert column left"
-            onSelect={() => editor.chain().focus().addColumnBefore().run()}
-          />
-          <Item
-            icon={ArrowRightToLineIcon}
-            label="Insert column right"
-            onSelect={() => editor.chain().focus().addColumnAfter().run()}
-          />
-          <Item
-            icon={Columns3Icon}
-            label="Delete column"
-            destructive
-            onSelect={() => editor.chain().focus().deleteColumn().run()}
-          />
-        </ContextMenuGroup>
-        <ContextMenuSeparator />
-        <ContextMenuGroup>
-          <ContextMenuLabel>Cells</ContextMenuLabel>
-          <Item
-            icon={CombineIcon}
-            label="Merge cells"
-            disabled={!editor.can().mergeCells()}
-            onSelect={() => editor.chain().focus().mergeCells().run()}
-          />
-          <Item
-            icon={SplitIcon}
-            label="Split cell"
-            disabled={!editor.can().splitCell()}
-            onSelect={() => editor.chain().focus().splitCell().run()}
-          />
-        </ContextMenuGroup>
-        <ContextMenuSeparator />
-        <ContextMenuGroup>
-          <ContextMenuLabel>Table</ContextMenuLabel>
-          <Item
-            icon={PanelTopIcon}
-            label="Toggle header row"
-            onSelect={() => editor.chain().focus().toggleHeaderRow().run()}
-          />
-          <Item
-            icon={PanelLeftIcon}
-            label="Toggle header column"
-            onSelect={() => editor.chain().focus().toggleHeaderColumn().run()}
-          />
-          <Item
-            icon={Trash2Icon}
-            label="Delete table"
-            destructive
-            onSelect={() => editor.chain().focus().deleteTable().run()}
-          />
-        </ContextMenuGroup>
-      </ContextMenuContent>
+    <ContextMenu open={open} onOpenChange={setOpen}>
+      {anchor && (
+        <ContextMenuContent anchor={anchor}>
+          <ContextMenuGroup>
+            <ContextMenuLabel>Row</ContextMenuLabel>
+            <Item
+              icon={ArrowUpToLineIcon}
+              label="Insert row above"
+              onSelect={() => run((e) => e.chain().focus().addRowBefore().run())}
+            />
+            <Item
+              icon={ArrowDownToLineIcon}
+              label="Insert row below"
+              onSelect={() => run((e) => e.chain().focus().addRowAfter().run())}
+            />
+            <Item
+              icon={Rows3Icon}
+              label="Delete row"
+              destructive
+              onSelect={() => run((e) => e.chain().focus().deleteRow().run())}
+            />
+          </ContextMenuGroup>
+          <ContextMenuSeparator />
+          <ContextMenuGroup>
+            <ContextMenuLabel>Column</ContextMenuLabel>
+            <Item
+              icon={ArrowLeftToLineIcon}
+              label="Insert column left"
+              onSelect={() => run((e) => e.chain().focus().addColumnBefore().run())}
+            />
+            <Item
+              icon={ArrowRightToLineIcon}
+              label="Insert column right"
+              onSelect={() => run((e) => e.chain().focus().addColumnAfter().run())}
+            />
+            <Item
+              icon={Columns3Icon}
+              label="Delete column"
+              destructive
+              onSelect={() => run((e) => e.chain().focus().deleteColumn().run())}
+            />
+          </ContextMenuGroup>
+          <ContextMenuSeparator />
+          <ContextMenuGroup>
+            <ContextMenuLabel>Cells</ContextMenuLabel>
+            <Item
+              icon={CombineIcon}
+              label="Merge cells"
+              disabled={!editor.can().mergeCells()}
+              onSelect={() => run((e) => e.chain().focus().mergeCells().run())}
+            />
+            <Item
+              icon={SplitIcon}
+              label="Split cell"
+              disabled={!editor.can().splitCell()}
+              onSelect={() => run((e) => e.chain().focus().splitCell().run())}
+            />
+          </ContextMenuGroup>
+          <ContextMenuSeparator />
+          <ContextMenuGroup>
+            <ContextMenuLabel>Table</ContextMenuLabel>
+            <Item
+              icon={PanelTopIcon}
+              label="Toggle header row"
+              onSelect={() => run((e) => e.chain().focus().toggleHeaderRow().run())}
+            />
+            <Item
+              icon={PanelLeftIcon}
+              label="Toggle header column"
+              onSelect={() => run((e) => e.chain().focus().toggleHeaderColumn().run())}
+            />
+            <Item
+              icon={Trash2Icon}
+              label="Delete table"
+              destructive
+              onSelect={() => run((e) => e.chain().focus().deleteTable().run())}
+            />
+          </ContextMenuGroup>
+        </ContextMenuContent>
+      )}
     </ContextMenu>
   )
 }
@@ -185,7 +219,7 @@ function findCell(editor: Editor, target: EventTarget | null): HTMLElement | nul
 function moveSelectionIntoCell(
   editor: Editor,
   cell: HTMLElement,
-  event: React.SyntheticEvent,
+  event: MouseEvent,
 ) {
   const { view } = editor
   // A right-click on a cell that is part of a drag-selected range must keep
@@ -198,14 +232,7 @@ function moveSelectionIntoCell(
   const anchorNode = domSelection?.anchorNode ?? null
   if (anchorNode && cell.contains(anchorNode)) return
 
-  const native = event.nativeEvent
-  const point =
-    native instanceof MouseEvent
-      ? { left: native.clientX, top: native.clientY }
-      : native instanceof TouchEvent && native.touches.length > 0
-        ? { left: native.touches[0].clientX, top: native.touches[0].clientY }
-        : null
-  const coords = point ? view.posAtCoords(point) : null
+  const coords = view.posAtCoords({ left: event.clientX, top: event.clientY })
   const pos = coords?.pos ?? view.posAtDOM(cell, 0)
   editor.chain().focus().setTextSelection(pos).run()
 }

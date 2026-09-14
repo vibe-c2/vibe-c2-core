@@ -24,11 +24,18 @@ function ContextMenuTrigger({
 
 function ContextMenuContent({
   className,
+  anchor,
   ...props
-}: MenuPrimitive.Popup.Props) {
+}: MenuPrimitive.Popup.Props & {
+  // Explicit anchor for a controlled context menu (no trigger). Base UI's
+  // MenuPositioner prefers an anchor prop over the trigger's own, so passing
+  // a virtual element here places the menu at the cursor. Omit it for the
+  // ordinary trigger-driven usage.
+  anchor?: ContextMenuPrimitive.Positioner.Props["anchor"]
+}) {
   return (
     <ContextMenuPrimitive.Portal>
-      <ContextMenuPrimitive.Positioner className="isolate z-50 outline-none">
+      <ContextMenuPrimitive.Positioner anchor={anchor} className="isolate z-50 outline-none">
         <ContextMenuPrimitive.Popup
           data-slot="context-menu-content"
           className={cn(
