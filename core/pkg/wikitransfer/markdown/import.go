@@ -84,12 +84,14 @@ func buildPage(parsed *ParsedExport, plan *wikitransfer.Plan, tombstones map[uui
 
 // resolveBlob finds the zip entry a markdown link target refers to. The
 // parser keys blobs by their `uploads/…` suffix; the link may be
-// URL-encoded and may carry a trailing title.
+// URL-encoded, may carry a trailing title, and may start with `../`
+// segments when it came from a Vibe markdown export.
 func resolveBlob(parsed *ParsedExport, ref string) (*zip.File, bool) {
-	if f, ok := parsed.AttachmentBlobs[decodeURLPath(ref)]; ok {
+	key := uploadsKey(ref)
+	if f, ok := parsed.AttachmentBlobs[decodeURLPath(key)]; ok {
 		return f, true
 	}
-	f, ok := parsed.AttachmentBlobs[ref]
+	f, ok := parsed.AttachmentBlobs[key]
 	return f, ok
 }
 

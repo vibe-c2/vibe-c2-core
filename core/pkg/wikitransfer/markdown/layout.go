@@ -1,6 +1,9 @@
 // Package markdown is the foreign wiki transfer format: an Outline-flavoured
 // markdown zip that other tools produce and consume. Lossy by design — the
-// native bundle (package bundle) is the lossless one.
+// native bundle (package bundle) is the lossless one. The export is tuned
+// for markdown editors that know nothing about Vibe (Obsidian, VS Code,
+// GitHub): links between pages and to attachments are ordinary relative
+// paths that resolve once the zip is unpacked.
 //
 // The Exporter writes a Scope to this layout and ReadPlan reads it back:
 //
@@ -99,8 +102,9 @@ func buildChildrenFolder(index int, slug string) string {
 // belonging to a specific document. Mirrors the Outline layout
 // `uploads/<userId>/<attId>/<filename>` — we substitute documentId for the
 // userId segment because Vibe attachments are document-scoped, not
-// user-scoped. The importer's matcher keys off the basename + attachment
-// id and doesn't care about the second segment's semantics.
+// user-scoped. The markdown body links to it by the path relative to the
+// document's own folder (see relativeLink); the importer keys blobs off
+// the `uploads/…` suffix and tolerates the `../` prefixes.
 func uploadsZipPath(rootFolder string, docID, attID uuid.UUID, filename string) string {
 	return path.Join(
 		rootFolder,
@@ -109,34 +113,4 @@ func uploadsZipPath(rootFolder string, docID, attID uuid.UUID, filename string) 
 		attID.String(),
 		filename,
 	)
-}
-
-// markdownRelativePath returns the link target the exporter writes into the
-// markdown body for an attachment. The path is the Outline convention:
-// always begins with `uploads/...` regardless of the document's folder
-// depth.
-//
-// The importer's parser matches `](uploads/...)` link targets and looks
-// them up in the attachment blob map by the full zip-internal path
-// (e.g. `<rootFolder>/uploads/<docId>/<attId>/<filename>`). Using the
-// bare `uploads/...` form lets the existing parser pick refs up without
-// changing the matcher, and the round-trip is bit-stable.
-//
-// Trade-off: opening the unzipped folder directly in a markdown viewer
-// won't resolve the image preview from deep child docs, because the
-// real on-disk relative path differs. That's acceptable — the export's
-// primary contract is re-importability, not double-clickable preview.
-//
-// docFolderDepth is accepted (and ignored) so the signature stays stable
-// for future tooling that might want the filesystem-relative form.
-func markdownRelativePath(docFolderDepth int, docID, attID uuid.UUID, filename string) string {
-	_ = docFolderDepth
-	var b strings.Builder
-	b.WriteString("uploads/")
-	b.WriteString(docID.String())
-	b.WriteString("/")
-	b.WriteString(attID.String())
-	b.WriteString("/")
-	b.WriteString(filename)
-	return b.String()
 }

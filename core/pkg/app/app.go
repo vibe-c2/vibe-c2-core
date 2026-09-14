@@ -297,6 +297,7 @@ func NewApp() (*App, error) {
 	)
 	mdExporter := transfermd.NewExporter(
 		repos.WikiImage, repos.WikiFile, imageStore, fileStore,
+		repos.WikiDocument, repos.Host, repos.Hash,
 		hpClient, repos.Credential, l, transfermd.Config{},
 	)
 	transferRunner := transferjob.NewRunner(

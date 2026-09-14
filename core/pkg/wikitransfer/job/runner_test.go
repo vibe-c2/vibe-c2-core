@@ -41,7 +41,7 @@ func newWorld(t *testing.T, ttl time.Duration) *world {
 	blank := transfertest.NewStore()
 	m := wikitransfer.NewMaterialiser(w.docs, nil, nil, nil, w.ingestor, &transfertest.Rebaser{}, nil, zap.NewNop())
 	bw := bundle.NewWriter(images, files, blank, blank, nil, nil, nil, transfertest.Renderer{}, zap.NewNop(), bundle.Config{})
-	me := markdown.NewExporter(images, files, blank, blank, transfertest.Renderer{}, nil, zap.NewNop(), markdown.Config{})
+	me := markdown.NewExporter(images, files, blank, blank, w.docs, nil, nil, transfertest.Renderer{}, nil, zap.NewNop(), markdown.Config{})
 	w.runner = job.NewRunner(w.jobs, w.docs, ops, w.artifacts, m, bw, me, nil, zap.NewNop(), job.Config{ArtifactTTL: ttl, PollInterval: time.Hour})
 	return w
 }

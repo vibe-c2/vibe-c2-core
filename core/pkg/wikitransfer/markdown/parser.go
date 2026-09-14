@@ -468,16 +468,18 @@ func stripLeadingEmoji(s string) (emoji, rest string) {
 // orchestrator to determine which zip blobs need to be ingested per
 // document.
 //
+// Outline writes `uploads/…` regardless of the document's depth; a Vibe
+// markdown export writes the real relative path, `../../uploads/…`. Both
+// are accepted: the returned string is the link target verbatim so the
+// caller can replace it, and uploadsKey strips the relative prefix for
+// the blob lookup.
+//
 // Returns a deduplicated list preserving first-occurrence order.
 func scanAttachmentRefs(body string) []string {
-	targets := scanLinkTargetsWithPrefix(body, "uploads/")
-	if len(targets) == 0 {
-		return nil
-	}
+	var out []string
 	seen := map[string]bool{}
-	out := make([]string, 0, len(targets))
-	for _, t := range targets {
-		if seen[t] {
+	for _, t := range scanLinkTargets(body) {
+		if !strings.HasPrefix(uploadsKey(t), "uploads/") || seen[t] {
 			continue
 		}
 		seen[t] = true
@@ -486,8 +488,23 @@ func scanAttachmentRefs(body string) []string {
 	return out
 }
 
-// scanLinkTargetsWithPrefix finds every `](<target>)` link destination in
-// body where <target> starts with prefix. CommonMark §6.6 allows literal
+// uploadsKey strips the leading `./` and `../` segments from a link
+// target, leaving the `uploads/…` suffix the blob index is keyed by.
+func uploadsKey(target string) string {
+	for {
+		switch {
+		case strings.HasPrefix(target, "./"):
+			target = target[2:]
+		case strings.HasPrefix(target, "../"):
+			target = target[3:]
+		default:
+			return target
+		}
+	}
+}
+
+// scanLinkTargets finds every `](<target>)` link destination in
+// body. CommonMark §6.6 allows literal
 // `(` and `)` inside link destinations as long as they're balanced, so a
 // naïve `[^)]+` regex truncates Outline filenames like
 // "Логин+пароль(2026).docx" at the first inner `)`. This scanner tracks
@@ -496,8 +513,8 @@ func scanAttachmentRefs(body string) []string {
 // The returned string is the link destination verbatim as it appears in
 // body (URL plus any trailing `<space>"title"`), so the orchestrator can
 // pass it directly to strings.ReplaceAll when rewriting.
-func scanLinkTargetsWithPrefix(body, prefix string) []string {
-	needle := "](" + prefix
+func scanLinkTargets(body string) []string {
+	const needle = "]("
 	var out []string
 	i := 0
 	for i < len(body) {

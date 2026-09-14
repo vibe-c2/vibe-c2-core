@@ -108,6 +108,17 @@ from other tools and what we hand to other tools. It stays lossy and we stop
 extending it with Vibe-only metadata; the `vibe:meta` comment and the
 credential fences are grandfathered, nothing else gets added.
 
+**Decision.** The Markdown export is written for editors that know nothing
+about Vibe (Obsidian, VS Code, GitHub), not for re-import — the bundle is
+the round-trip format. Nothing in the archive uses the `vibe://` scheme:
+a page chip becomes `[Title](relative/path.md)` pointing at the page's
+own file in the zip (plain title text when the page is outside the
+export), host and hash chips become their hostname or value as text, and
+attachments are linked by their real relative path (`../uploads/…`) so
+an unpacked zip previews correctly. The foreign importer tolerates such
+an archive as ordinary Markdown: relative page links stay links, `../`
+prefixed upload paths still resolve to their blobs.
+
 **Decision.** The Vibe bundle is the *native* format. It carries
 `content_state` bytes verbatim plus a manifest, and every ID the content
 references. Lossless by construction: the bytes that come out are the bytes

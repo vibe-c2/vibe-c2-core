@@ -6,6 +6,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"strings"
 
 	"github.com/google/uuid"
 	"github.com/vibe-c2/vibe-c2-core/core/pkg/blob"
@@ -44,13 +45,20 @@ func (c Config) withDefaults() Config {
 	return c
 }
 
-// Exporter renders a Scope to the Outline-flavoured markdown zip that
-// ReadPlan reads back. Lossy by design: it is the foreign format.
+// Exporter renders a Scope to a markdown zip for editors that know nothing
+// about Vibe: Obsidian, VS Code, GitHub. Lossy by design — the native
+// bundle (package bundle) is the lossless, re-importable format. Nothing
+// Vibe-specific survives in the output: page chips become relative links
+// to the page's .md file, host and hash chips become their display value,
+// attachments are linked by their real relative path.
 type Exporter struct {
 	imageRepo   repository.IWikiImageRepository
 	fileRepo    repository.IWikiFileRepository
 	imageStore  blob.ObjectStore
 	fileStore   blob.ObjectStore
+	docRepo     repository.IWikiDocumentRepository
+	hostRepo    repository.IHostRepository
+	hashRepo    repository.IHashRepository
 	renderer    Renderer
 	credentials CredentialLookup
 	logger      *zap.Logger
@@ -58,11 +66,15 @@ type Exporter struct {
 }
 
 // NewExporter wires the exporter. credentials may be nil, leaving every
-// credential fence id-only.
+// credential fence id-only. docRepo, hostRepo and hashRepo may be nil;
+// chips they would have resolved are then lowered to their generic label.
 func NewExporter(
 	imageRepo repository.IWikiImageRepository,
 	fileRepo repository.IWikiFileRepository,
 	imageStore, fileStore blob.ObjectStore,
+	docRepo repository.IWikiDocumentRepository,
+	hostRepo repository.IHostRepository,
+	hashRepo repository.IHashRepository,
 	renderer Renderer,
 	credentials CredentialLookup,
 	logger *zap.Logger,
@@ -73,15 +85,21 @@ func NewExporter(
 	}
 	return &Exporter{
 		imageRepo: imageRepo, fileRepo: fileRepo, imageStore: imageStore, fileStore: fileStore,
+		docRepo: docRepo, hostRepo: hostRepo, hashRepo: hashRepo,
 		renderer: renderer, credentials: credentials, logger: logger, cfg: cfg.withDefaults(),
 	}
 }
 
 type exportRun struct {
-	e                *Exporter
-	zw               *zip.Writer
-	scope            *wikitransfer.Scope
-	rootSlug         string
+	e        *Exporter
+	zw       *zip.Writer
+	scope    *wikitransfer.Scope
+	rootSlug string
+	// paths maps every in-scope document to its zip path, decided before
+	// any body is rendered so a page can link forward to a sibling that
+	// has not been written yet.
+	paths            map[uuid.UUID]string
+	titles           map[uuid.UUID]string
 	report           *wikitransfer.ExportReport
 	totalBody        int64
 	totalAttachments int64
@@ -102,9 +120,15 @@ func (e *Exporter) Run(ctx context.Context, zw *zip.Writer, scope *wikitransfer.
 			BundleID: uuid.New(), Format: "markdown", Scope: scope.Label(), RootTitle: scope.Title(), TotalDocs: len(scope.Docs),
 		},
 	}
-	used := map[string]struct{}{"uploads": {}, "report.json": {}}
-	for i, top := range scope.TopLevel {
-		r.writeBranch(ctx, top, r.rootSlug, 0, used, i)
+	placements := planPlacements(scope, r.rootSlug)
+	r.paths = make(map[uuid.UUID]string, len(placements))
+	r.titles = make(map[uuid.UUID]string, len(placements))
+	for _, p := range placements {
+		r.paths[p.doc.DocumentID] = p.path
+		r.titles[p.doc.DocumentID] = p.doc.Title
+	}
+	for _, p := range placements {
+		r.writeDoc(ctx, p.doc, p.path)
 	}
 	if len(scope.TopLevel) == 0 {
 		_, _ = zw.Create(r.rootSlug + "/.gitkeep")
@@ -122,10 +146,40 @@ func (r *exportRun) advance() {
 	}
 }
 
-func (r *exportRun) writeBranch(ctx context.Context, doc models.WikiDocument, folder string, depth int, used map[string]struct{}, siblingIndex int) {
-	slug := uniqueSlug(slugify(doc.Title), used)
-	docPath := folder + "/" + buildDocFilename(siblingIndex, slug)
+// placement is one document and the zip path its markdown lands at.
+type placement struct {
+	doc  models.WikiDocument
+	path string
+}
 
+// planPlacements decides the zip path of every document in scope, parent
+// first, siblings in sort order. The layout is
+//
+//	<rootSlug>/001-<slug>.md          leaf
+//	<rootSlug>/002-<slug>.md          branch
+//	<rootSlug>/002-<slug>/001-<child>.md
+//
+// Slugs are unique among siblings; "uploads" and "report.json" are reserved
+// at the root so a page named like them cannot shadow the attachment folder.
+func planPlacements(scope *wikitransfer.Scope, rootSlug string) []placement {
+	var out []placement
+	var visit func(docs []models.WikiDocument, folder string, used map[string]struct{})
+	visit = func(docs []models.WikiDocument, folder string, used map[string]struct{}) {
+		for i, doc := range docs {
+			slug := uniqueSlug(slugify(doc.Title), used)
+			out = append(out, placement{doc: doc, path: folder + "/" + buildDocFilename(i, slug)})
+			children := scope.ChildrenByParent[doc.DocumentID]
+			if len(children) == 0 {
+				continue
+			}
+			visit(children, folder+"/"+buildChildrenFolder(i, slug), map[string]struct{}{})
+		}
+	}
+	visit(scope.TopLevel, rootSlug, map[string]struct{}{"uploads": {}, "report.json": {}})
+	return out
+}
+
+func (r *exportRun) writeDoc(ctx context.Context, doc models.WikiDocument, docPath string) {
 	body, err := r.e.renderer.YjsToMarkdown(ctx, doc.ContentState)
 	if err != nil {
 		r.report.Skip(docPath, "render_failed: "+err.Error())
@@ -143,6 +197,7 @@ func (r *exportRun) writeBranch(ctx context.Context, doc models.WikiDocument, fo
 	r.report.CredentialsTombstoned += tombstoned
 
 	body = r.streamAttachments(ctx, doc, body, docPath)
+	body = rewriteReferenceLinks(body, r.referenceResolver(ctx, doc, docPath))
 	r.totalBody += int64(len(body))
 
 	full := renderDocMarkdown(doc.Emoji, doc.Title, doc.Icon, doc.Color, body)
@@ -153,20 +208,78 @@ func (r *exportRun) writeBranch(ctx context.Context, doc models.WikiDocument, fo
 	}
 	r.report.ExportedDocs++
 	r.advance()
+}
 
-	children := r.scope.ChildrenByParent[doc.DocumentID]
-	if len(children) == 0 {
-		return
-	}
-	childFolder := folder + "/" + buildChildrenFolder(siblingIndex, slug)
-	childUsed := map[string]struct{}{}
-	for i, child := range children {
-		r.writeBranch(ctx, child, childFolder, depth+1, childUsed, i)
+// referenceResolver renders the chips of one document. A page inside the
+// scope links to its .md file; a page outside it (or a host or hash)
+// becomes plain text carrying the name the reader would have seen in the
+// editor. Anything the repos cannot answer is reported and left to the
+// generic label.
+func (r *exportRun) referenceResolver(ctx context.Context, doc models.WikiDocument, docPath string) referenceResolver {
+	return func(kind string, id uuid.UUID) (referenceTarget, bool) {
+		switch kind {
+		case "doc":
+			return r.resolvePage(ctx, doc, docPath, id)
+		case "host":
+			return r.resolveHost(ctx, doc, docPath, id)
+		case "hash":
+			return r.resolveHash(ctx, doc, docPath, id)
+		}
+		return referenceTarget{}, false
 	}
 }
 
+func (r *exportRun) resolvePage(ctx context.Context, doc models.WikiDocument, docPath string, id uuid.UUID) (referenceTarget, bool) {
+	if target, ok := r.paths[id]; ok {
+		title := strings.TrimSpace(r.titles[id])
+		if title == "" {
+			title = "Untitled"
+		}
+		return referenceTarget{Text: title, Href: relativeLink(docPath, target)}, true
+	}
+	if r.e.docRepo == nil {
+		r.report.Warn(docPath, "page_reference_unresolved: "+id.String())
+		return referenceTarget{}, false
+	}
+	linked, err := r.e.docRepo.FindByID(ctx, id)
+	if err != nil || linked.OperationID != doc.OperationID {
+		r.report.Warn(docPath, "page_reference_unresolved: "+id.String())
+		return referenceTarget{}, false
+	}
+	r.report.Warn(docPath, "page_reference_outside_scope: "+id.String())
+	return referenceTarget{Text: strings.TrimSpace(linked.Title)}, true
+}
+
+func (r *exportRun) resolveHost(ctx context.Context, doc models.WikiDocument, docPath string, id uuid.UUID) (referenceTarget, bool) {
+	if r.e.hostRepo == nil {
+		r.report.Warn(docPath, "host_reference_unresolved: "+id.String())
+		return referenceTarget{}, false
+	}
+	h, err := r.e.hostRepo.FindByID(ctx, id)
+	if err != nil || h.OperationID != doc.OperationID {
+		r.report.Warn(docPath, "host_reference_unresolved: "+id.String())
+		return referenceTarget{}, false
+	}
+	return referenceTarget{Text: strings.TrimSpace(h.Hostname)}, true
+}
+
+func (r *exportRun) resolveHash(ctx context.Context, doc models.WikiDocument, docPath string, id uuid.UUID) (referenceTarget, bool) {
+	if r.e.hashRepo == nil {
+		r.report.Warn(docPath, "hash_reference_unresolved: "+id.String())
+		return referenceTarget{}, false
+	}
+	h, err := r.e.hashRepo.FindByID(ctx, id)
+	if err != nil || h.OperationID != doc.OperationID {
+		r.report.Warn(docPath, "hash_reference_unresolved: "+id.String())
+		return referenceTarget{}, false
+	}
+	return referenceTarget{Text: strings.TrimSpace(h.Value)}, true
+}
+
 // streamAttachments copies every attachment the body references into
-// uploads/<docId>/<attId>/<filename> and rewrites the links. The security
+// uploads/<docId>/<attId>/<filename> and rewrites the links to the path
+// relative to the document's own folder, so an unpacked zip previews in
+// any markdown editor. The security
 // boundary is the operation, not the owning page: a page may legitimately
 // reference an attachment another page uploaded.
 func (r *exportRun) streamAttachments(ctx context.Context, doc models.WikiDocument, body, docPath string) string {
@@ -192,7 +305,7 @@ func (r *exportRun) streamAttachments(ctx context.Context, doc models.WikiDocume
 		if !r.streamBlob(ctx, r.e.imageStore, img.ObjectKey, zipPath, img.SizeBytes, docPath) {
 			continue
 		}
-		imageRel[id] = markdownRelativePath(0, doc.DocumentID, id, filename)
+		imageRel[id] = relativeLink(docPath, zipPath)
 		r.report.ImagesExported++
 	}
 	for _, id := range fileIDs {
@@ -213,7 +326,7 @@ func (r *exportRun) streamAttachments(ctx context.Context, doc models.WikiDocume
 		if !r.streamBlob(ctx, r.e.fileStore, file.ObjectKey, zipPath, file.SizeBytes, docPath) {
 			continue
 		}
-		fileRel[id] = markdownRelativePath(0, doc.DocumentID, id, filename)
+		fileRel[id] = relativeLink(docPath, zipPath)
 		r.report.FilesExported++
 	}
 

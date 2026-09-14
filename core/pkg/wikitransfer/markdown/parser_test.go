@@ -168,6 +168,11 @@ func TestScanAttachmentRefs_BalancedParens(t *testing.T) {
 			want: []string{"uploads/u/a/img (2).png"},
 		},
 		{
+			name: "vibe export writes the real relative path",
+			body: "![alt](../../uploads/d/a/img.png) and [f](./uploads/d/b/f.bin) but not [x](../docs/uploads.md)",
+			want: []string{"../../uploads/d/a/img.png", "./uploads/d/b/f.bin"},
+		},
+		{
 			name: "url-encoded space inside paren group",
 			body: "[x](uploads/u/a/Отчет%20об%20угрозах%20(27.01.2026%2016-59-48).xls)",
 			want: []string{"uploads/u/a/Отчет%20об%20угрозах%20(27.01.2026%2016-59-48).xls"},
