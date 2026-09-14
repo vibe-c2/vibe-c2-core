@@ -354,6 +354,7 @@ type ComplexityRoot struct {
 		SetTaskCredentialReferences   func(childComplexity int, taskID string, credentialIds []string) int
 		SetTaskWikiReferences         func(childComplexity int, taskID string, wikiIds []string) int
 		SetWikiDocumentTemplate       func(childComplexity int, id string, isTemplate bool) int
+		SnoozeSkillUpdate             func(childComplexity int, version int) int
 		TrackWikiDocumentVisit        func(childComplexity int, documentID string) int
 		UpdateAgentKey                func(childComplexity int, id string, input model.UpdateAgentKeyInput) int
 		UpdateCredential              func(childComplexity int, id string, input model.UpdateCredentialInput) int
@@ -463,6 +464,7 @@ type ComplexityRoot struct {
 		Operations                         func(childComplexity int, search *string, sortBy *model.OperationSortField, sortDirection *model.SortDirection, first *int, after *string, last *int, before *string) int
 		Session                            func(childComplexity int, id string) int
 		Sessions                           func(childComplexity int, userID *string, search *string, activeOnly *bool, first *int, after *string, last *int, before *string) int
+		SkillChangelog                     func(childComplexity int) int
 		Task                               func(childComplexity int, id string) int
 		TaskTrash                          func(childComplexity int, operationID string, first *int, after *string, last *int, before *string) int
 		Tasks                              func(childComplexity int, operationID string, stage *models.TaskStage, excludeStages []models.TaskStage, riskScoreMin *int, riskScoreMax *int, profitScoreMin *int, profitScoreMax *int, search *string, first *int, after *string, last *int, before *string) int
@@ -533,6 +535,17 @@ type ComplexityRoot struct {
 		Session   func(childComplexity int) int
 		SessionID func(childComplexity int) int
 		UserID    func(childComplexity int) int
+	}
+
+	SkillChangelog struct {
+		CurrentVersion func(childComplexity int) int
+		Releases       func(childComplexity int) int
+	}
+
+	SkillRelease struct {
+		Date    func(childComplexity int) int
+		Notes   func(childComplexity int) int
+		Version func(childComplexity int) int
 	}
 
 	Subscription struct {
@@ -638,14 +651,17 @@ type ComplexityRoot struct {
 	}
 
 	User struct {
-		Active           func(childComplexity int) int
-		AuthSource       func(childComplexity int) int
-		CreatedAt        func(childComplexity int) int
-		HiddenIdentities func(childComplexity int) int
-		ID               func(childComplexity int) int
-		Roles            func(childComplexity int) int
-		UpdatedAt        func(childComplexity int) int
-		Username         func(childComplexity int) int
+		Active                    func(childComplexity int) int
+		AuthSource                func(childComplexity int) int
+		CreatedAt                 func(childComplexity int) int
+		HiddenIdentities          func(childComplexity int) int
+		ID                        func(childComplexity int) int
+		Roles                     func(childComplexity int) int
+		SkillDownloadedAt         func(childComplexity int) int
+		SkillDownloadedVersion    func(childComplexity int) int
+		SkillUpdateSnoozedVersion func(childComplexity int) int
+		UpdatedAt                 func(childComplexity int) int
+		Username                  func(childComplexity int) int
 	}
 
 	UserConnection struct {
@@ -931,6 +947,7 @@ type MutationResolver interface {
 	RevokeAllMySessions(ctx context.Context) (int, error)
 	AdminRevokeSession(ctx context.Context, id string) (bool, error)
 	AdminRevokeAllUserSessions(ctx context.Context, userID string) (int, error)
+	SnoozeSkillUpdate(ctx context.Context, version int) (*models.User, error)
 	CreateTask(ctx context.Context, input model.CreateTaskInput) (*models.Task, error)
 	UpdateTask(ctx context.Context, id string, input model.UpdateTaskInput) (*models.Task, error)
 	ChangeTaskStage(ctx context.Context, input model.ChangeTaskStageInput) (*models.Task, error)
@@ -999,6 +1016,7 @@ type QueryResolver interface {
 	MySessions(ctx context.Context, activeOnly *bool, first *int, after *string, last *int, before *string) (*model.SessionConnection, error)
 	Sessions(ctx context.Context, userID *string, search *string, activeOnly *bool, first *int, after *string, last *int, before *string) (*model.SessionConnection, error)
 	Session(ctx context.Context, id string) (*models.Session, error)
+	SkillChangelog(ctx context.Context) (*model.SkillChangelog, error)
 	Task(ctx context.Context, id string) (*models.Task, error)
 	Tasks(ctx context.Context, operationID string, stage *models.TaskStage, excludeStages []models.TaskStage, riskScoreMin *int, riskScoreMax *int, profitScoreMin *int, profitScoreMax *int, search *string, first *int, after *string, last *int, before *string) (*model.TaskConnection, error)
 	TaskTrash(ctx context.Context, operationID string, first *int, after *string, last *int, before *string) (*model.TaskConnection, error)
@@ -1095,6 +1113,10 @@ type UserResolver interface {
 	AuthSource(ctx context.Context, obj *models.User) (string, error)
 	CreatedAt(ctx context.Context, obj *models.User) (string, error)
 	UpdatedAt(ctx context.Context, obj *models.User) (string, error)
+
+	SkillDownloadedVersion(ctx context.Context, obj *models.User) (*int, error)
+	SkillDownloadedAt(ctx context.Context, obj *models.User) (*string, error)
+	SkillUpdateSnoozedVersion(ctx context.Context, obj *models.User) (*int, error)
 }
 type WikiDocumentResolver interface {
 	ID(ctx context.Context, obj *models.WikiDocument) (string, error)
@@ -2699,6 +2721,17 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.Mutation.SetWikiDocumentTemplate(childComplexity, args["id"].(string), args["isTemplate"].(bool)), true
+	case "Mutation.snoozeSkillUpdate":
+		if e.ComplexityRoot.Mutation.SnoozeSkillUpdate == nil {
+			break
+		}
+
+		args, err := ec.field_Mutation_snoozeSkillUpdate_args(ctx, rawArgs)
+		if err != nil {
+			return 0, false
+		}
+
+		return e.ComplexityRoot.Mutation.SnoozeSkillUpdate(childComplexity, args["version"].(int)), true
 	case "Mutation.trackWikiDocumentVisit":
 		if e.ComplexityRoot.Mutation.TrackWikiDocumentVisit == nil {
 			break
@@ -3349,6 +3382,12 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.Query.Sessions(childComplexity, args["userId"].(*string), args["search"].(*string), args["activeOnly"].(*bool), args["first"].(*int), args["after"].(*string), args["last"].(*int), args["before"].(*string)), true
+	case "Query.skillChangelog":
+		if e.ComplexityRoot.Query.SkillChangelog == nil {
+			break
+		}
+
+		return e.ComplexityRoot.Query.SkillChangelog(childComplexity), true
 	case "Query.task":
 		if e.ComplexityRoot.Query.Task == nil {
 			break
@@ -3834,6 +3873,38 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.SessionEvent.UserID(childComplexity), true
+
+	case "SkillChangelog.currentVersion":
+		if e.ComplexityRoot.SkillChangelog.CurrentVersion == nil {
+			break
+		}
+
+		return e.ComplexityRoot.SkillChangelog.CurrentVersion(childComplexity), true
+	case "SkillChangelog.releases":
+		if e.ComplexityRoot.SkillChangelog.Releases == nil {
+			break
+		}
+
+		return e.ComplexityRoot.SkillChangelog.Releases(childComplexity), true
+
+	case "SkillRelease.date":
+		if e.ComplexityRoot.SkillRelease.Date == nil {
+			break
+		}
+
+		return e.ComplexityRoot.SkillRelease.Date(childComplexity), true
+	case "SkillRelease.notes":
+		if e.ComplexityRoot.SkillRelease.Notes == nil {
+			break
+		}
+
+		return e.ComplexityRoot.SkillRelease.Notes(childComplexity), true
+	case "SkillRelease.version":
+		if e.ComplexityRoot.SkillRelease.Version == nil {
+			break
+		}
+
+		return e.ComplexityRoot.SkillRelease.Version(childComplexity), true
 
 	case "Subscription.agentActivity":
 		if e.ComplexityRoot.Subscription.AgentActivity == nil {
@@ -4378,6 +4449,24 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.User.Roles(childComplexity), true
+	case "User.skillDownloadedAt":
+		if e.ComplexityRoot.User.SkillDownloadedAt == nil {
+			break
+		}
+
+		return e.ComplexityRoot.User.SkillDownloadedAt(childComplexity), true
+	case "User.skillDownloadedVersion":
+		if e.ComplexityRoot.User.SkillDownloadedVersion == nil {
+			break
+		}
+
+		return e.ComplexityRoot.User.SkillDownloadedVersion(childComplexity), true
+	case "User.skillUpdateSnoozedVersion":
+		if e.ComplexityRoot.User.SkillUpdateSnoozedVersion == nil {
+			break
+		}
+
+		return e.ComplexityRoot.User.SkillUpdateSnoozedVersion(childComplexity), true
 	case "User.updatedAt":
 		if e.ComplexityRoot.User.UpdatedAt == nil {
 			break
@@ -6414,6 +6503,12 @@ type User {
   # Usernames this operator hides from the host topology Users lens.
   # Per-operator, global across operations. Normalized (trimmed, lowercased).
   hiddenIdentities: [String!]!
+  # The agent skill release this operator last downloaded, and when. Null
+  # when they never have — the SPA then shows no update prompt.
+  skillDownloadedVersion: Int
+  skillDownloadedAt: String
+  # The newest release whose update prompt they dismissed. Null when none.
+  skillUpdateSnoozedVersion: Int
 }
 
 # Minimal user info for autocomplete pickers (e.g., adding operation members).
@@ -6817,6 +6912,47 @@ extend type Subscription {
   # Optionally filter by userId.
   sessionChanged(userId: ID): SessionEvent!
     @hasPermission(permission: "session:read")
+}
+`, BuiltIn: false},
+	{Name: "../schema/skill.graphql", Input: `# =============================================================================
+# Agent skill releases
+# =============================================================================
+#
+# The agent skill (GET /api/v1/mcp/skill) is generated from the running
+# server, so an installed copy goes stale whenever the server moves. The server
+# records which release each operator last downloaded; this surface lets the
+# SPA compare that against the current release, show what changed in between,
+# and remember that an operator chose not to be reminded about a release.
+
+# One entry in the skill's version history.
+type SkillRelease {
+  # A plain counter. There is no minor or patch: a copy is current or it is not.
+  version: Int!
+  # Release day, YYYY-MM-DD.
+  date: String!
+  # What changed, one line each, written for the operator deciding whether to
+  # re-download now.
+  notes: [String!]!
+}
+
+type SkillChangelog {
+  # The release this server hands out right now.
+  currentVersion: Int!
+  # Every release, oldest first. Small and static for the life of the process.
+  releases: [SkillRelease!]!
+}
+
+extend type Query {
+  skillChangelog: SkillChangelog! @hasPermission(permission: "*")
+}
+
+extend type Mutation {
+  # snoozeSkillUpdate records that the caller dismissed the update prompt for
+  # this release. The prompt stays hidden until a newer release ships. The
+  # version may not be ahead of the current one, so nobody can silence future
+  # prompts in advance. Scoped to the JWT user.
+  snoozeSkillUpdate(version: Int!): User!
+    @hasPermission(permission: "user:update:own")
 }
 `, BuiltIn: false},
 	{Name: "../schema/subscriptions.graphql", Input: `# =============================================================================
@@ -8656,6 +8792,17 @@ func (ec *executionContext) field_Mutation_setWikiDocumentTemplate_args(ctx cont
 		return nil, err
 	}
 	args["isTemplate"] = arg1
+	return args, nil
+}
+
+func (ec *executionContext) field_Mutation_snoozeSkillUpdate_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
+	var err error
+	args := map[string]any{}
+	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "version", ec.unmarshalNInt2int)
+	if err != nil {
+		return nil, err
+	}
+	args["version"] = arg0
 	return args, nil
 }
 
@@ -12421,6 +12568,12 @@ func (ec *executionContext) fieldContext_Credential_createdBy(_ context.Context,
 				return ec.fieldContext_User_updatedAt(ctx, field)
 			case "hiddenIdentities":
 				return ec.fieldContext_User_hiddenIdentities(ctx, field)
+			case "skillDownloadedVersion":
+				return ec.fieldContext_User_skillDownloadedVersion(ctx, field)
+			case "skillDownloadedAt":
+				return ec.fieldContext_User_skillDownloadedAt(ctx, field)
+			case "skillUpdateSnoozedVersion":
+				return ec.fieldContext_User_skillUpdateSnoozedVersion(ctx, field)
 			}
 			return nil, fmt.Errorf("no field named %q was found under type User", field.Name)
 		},
@@ -12809,6 +12962,12 @@ func (ec *executionContext) fieldContext_CredentialComment_author(_ context.Cont
 				return ec.fieldContext_User_updatedAt(ctx, field)
 			case "hiddenIdentities":
 				return ec.fieldContext_User_hiddenIdentities(ctx, field)
+			case "skillDownloadedVersion":
+				return ec.fieldContext_User_skillDownloadedVersion(ctx, field)
+			case "skillDownloadedAt":
+				return ec.fieldContext_User_skillDownloadedAt(ctx, field)
+			case "skillUpdateSnoozedVersion":
+				return ec.fieldContext_User_skillUpdateSnoozedVersion(ctx, field)
 			}
 			return nil, fmt.Errorf("no field named %q was found under type User", field.Name)
 		},
@@ -13737,6 +13896,12 @@ func (ec *executionContext) fieldContext_Hash_createdBy(_ context.Context, field
 				return ec.fieldContext_User_updatedAt(ctx, field)
 			case "hiddenIdentities":
 				return ec.fieldContext_User_hiddenIdentities(ctx, field)
+			case "skillDownloadedVersion":
+				return ec.fieldContext_User_skillDownloadedVersion(ctx, field)
+			case "skillDownloadedAt":
+				return ec.fieldContext_User_skillDownloadedAt(ctx, field)
+			case "skillUpdateSnoozedVersion":
+				return ec.fieldContext_User_skillUpdateSnoozedVersion(ctx, field)
 			}
 			return nil, fmt.Errorf("no field named %q was found under type User", field.Name)
 		},
@@ -14660,6 +14825,12 @@ func (ec *executionContext) fieldContext_Host_createdBy(_ context.Context, field
 				return ec.fieldContext_User_updatedAt(ctx, field)
 			case "hiddenIdentities":
 				return ec.fieldContext_User_hiddenIdentities(ctx, field)
+			case "skillDownloadedVersion":
+				return ec.fieldContext_User_skillDownloadedVersion(ctx, field)
+			case "skillDownloadedAt":
+				return ec.fieldContext_User_skillDownloadedAt(ctx, field)
+			case "skillUpdateSnoozedVersion":
+				return ec.fieldContext_User_skillUpdateSnoozedVersion(ctx, field)
 			}
 			return nil, fmt.Errorf("no field named %q was found under type User", field.Name)
 		},
@@ -15727,6 +15898,12 @@ func (ec *executionContext) fieldContext_Mutation_createUser(ctx context.Context
 				return ec.fieldContext_User_updatedAt(ctx, field)
 			case "hiddenIdentities":
 				return ec.fieldContext_User_hiddenIdentities(ctx, field)
+			case "skillDownloadedVersion":
+				return ec.fieldContext_User_skillDownloadedVersion(ctx, field)
+			case "skillDownloadedAt":
+				return ec.fieldContext_User_skillDownloadedAt(ctx, field)
+			case "skillUpdateSnoozedVersion":
+				return ec.fieldContext_User_skillUpdateSnoozedVersion(ctx, field)
 			}
 			return nil, fmt.Errorf("no field named %q was found under type User", field.Name)
 		},
@@ -15804,6 +15981,12 @@ func (ec *executionContext) fieldContext_Mutation_updateUser(ctx context.Context
 				return ec.fieldContext_User_updatedAt(ctx, field)
 			case "hiddenIdentities":
 				return ec.fieldContext_User_hiddenIdentities(ctx, field)
+			case "skillDownloadedVersion":
+				return ec.fieldContext_User_skillDownloadedVersion(ctx, field)
+			case "skillDownloadedAt":
+				return ec.fieldContext_User_skillDownloadedAt(ctx, field)
+			case "skillUpdateSnoozedVersion":
+				return ec.fieldContext_User_skillUpdateSnoozedVersion(ctx, field)
 			}
 			return nil, fmt.Errorf("no field named %q was found under type User", field.Name)
 		},
@@ -15940,6 +16123,12 @@ func (ec *executionContext) fieldContext_Mutation_updateOwnProfile(ctx context.C
 				return ec.fieldContext_User_updatedAt(ctx, field)
 			case "hiddenIdentities":
 				return ec.fieldContext_User_hiddenIdentities(ctx, field)
+			case "skillDownloadedVersion":
+				return ec.fieldContext_User_skillDownloadedVersion(ctx, field)
+			case "skillDownloadedAt":
+				return ec.fieldContext_User_skillDownloadedAt(ctx, field)
+			case "skillUpdateSnoozedVersion":
+				return ec.fieldContext_User_skillUpdateSnoozedVersion(ctx, field)
 			}
 			return nil, fmt.Errorf("no field named %q was found under type User", field.Name)
 		},
@@ -16017,6 +16206,12 @@ func (ec *executionContext) fieldContext_Mutation_setHiddenIdentities(ctx contex
 				return ec.fieldContext_User_updatedAt(ctx, field)
 			case "hiddenIdentities":
 				return ec.fieldContext_User_hiddenIdentities(ctx, field)
+			case "skillDownloadedVersion":
+				return ec.fieldContext_User_skillDownloadedVersion(ctx, field)
+			case "skillDownloadedAt":
+				return ec.fieldContext_User_skillDownloadedAt(ctx, field)
+			case "skillUpdateSnoozedVersion":
+				return ec.fieldContext_User_skillUpdateSnoozedVersion(ctx, field)
 			}
 			return nil, fmt.Errorf("no field named %q was found under type User", field.Name)
 		},
@@ -18592,6 +18787,89 @@ func (ec *executionContext) fieldContext_Mutation_adminRevokeAllUserSessions(ctx
 	}()
 	ctx = graphql.WithFieldContext(ctx, fc)
 	if fc.Args, err = ec.field_Mutation_adminRevokeAllUserSessions_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
+		ec.Error(ctx, err)
+		return fc, err
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Mutation_snoozeSkillUpdate(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Mutation_snoozeSkillUpdate,
+		func(ctx context.Context) (any, error) {
+			fc := graphql.GetFieldContext(ctx)
+			return ec.Resolvers.Mutation().SnoozeSkillUpdate(ctx, fc.Args["version"].(int))
+		},
+		func(ctx context.Context, next graphql.Resolver) graphql.Resolver {
+			directive0 := next
+
+			directive1 := func(ctx context.Context) (any, error) {
+				permission, err := ec.unmarshalNString2string(ctx, "user:update:own")
+				if err != nil {
+					var zeroVal *models.User
+					return zeroVal, err
+				}
+				if ec.Directives.HasPermission == nil {
+					var zeroVal *models.User
+					return zeroVal, errors.New("directive hasPermission is not implemented")
+				}
+				return ec.Directives.HasPermission(ctx, nil, directive0, permission)
+			}
+
+			next = directive1
+			return next
+		},
+		ec.marshalNUser2ᚖgithubᚗcomᚋvibeᚑc2ᚋvibeᚑc2ᚑcoreᚋcoreᚋpkgᚋmodelsᚐUser,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_Mutation_snoozeSkillUpdate(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Mutation",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "id":
+				return ec.fieldContext_User_id(ctx, field)
+			case "username":
+				return ec.fieldContext_User_username(ctx, field)
+			case "roles":
+				return ec.fieldContext_User_roles(ctx, field)
+			case "active":
+				return ec.fieldContext_User_active(ctx, field)
+			case "authSource":
+				return ec.fieldContext_User_authSource(ctx, field)
+			case "createdAt":
+				return ec.fieldContext_User_createdAt(ctx, field)
+			case "updatedAt":
+				return ec.fieldContext_User_updatedAt(ctx, field)
+			case "hiddenIdentities":
+				return ec.fieldContext_User_hiddenIdentities(ctx, field)
+			case "skillDownloadedVersion":
+				return ec.fieldContext_User_skillDownloadedVersion(ctx, field)
+			case "skillDownloadedAt":
+				return ec.fieldContext_User_skillDownloadedAt(ctx, field)
+			case "skillUpdateSnoozedVersion":
+				return ec.fieldContext_User_skillUpdateSnoozedVersion(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type User", field.Name)
+		},
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			err = ec.Recover(ctx, r)
+			ec.Error(ctx, err)
+		}
+	}()
+	ctx = graphql.WithFieldContext(ctx, fc)
+	if fc.Args, err = ec.field_Mutation_snoozeSkillUpdate_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
 		ec.Error(ctx, err)
 		return fc, err
 	}
@@ -21743,6 +22021,12 @@ func (ec *executionContext) fieldContext_OperationMember_user(_ context.Context,
 				return ec.fieldContext_User_updatedAt(ctx, field)
 			case "hiddenIdentities":
 				return ec.fieldContext_User_hiddenIdentities(ctx, field)
+			case "skillDownloadedVersion":
+				return ec.fieldContext_User_skillDownloadedVersion(ctx, field)
+			case "skillDownloadedAt":
+				return ec.fieldContext_User_skillDownloadedAt(ctx, field)
+			case "skillUpdateSnoozedVersion":
+				return ec.fieldContext_User_skillUpdateSnoozedVersion(ctx, field)
 			}
 			return nil, fmt.Errorf("no field named %q was found under type User", field.Name)
 		},
@@ -22446,6 +22730,12 @@ func (ec *executionContext) fieldContext_Query_me(_ context.Context, field graph
 				return ec.fieldContext_User_updatedAt(ctx, field)
 			case "hiddenIdentities":
 				return ec.fieldContext_User_hiddenIdentities(ctx, field)
+			case "skillDownloadedVersion":
+				return ec.fieldContext_User_skillDownloadedVersion(ctx, field)
+			case "skillDownloadedAt":
+				return ec.fieldContext_User_skillDownloadedAt(ctx, field)
+			case "skillUpdateSnoozedVersion":
+				return ec.fieldContext_User_skillUpdateSnoozedVersion(ctx, field)
 			}
 			return nil, fmt.Errorf("no field named %q was found under type User", field.Name)
 		},
@@ -22512,6 +22802,12 @@ func (ec *executionContext) fieldContext_Query_user(ctx context.Context, field g
 				return ec.fieldContext_User_updatedAt(ctx, field)
 			case "hiddenIdentities":
 				return ec.fieldContext_User_hiddenIdentities(ctx, field)
+			case "skillDownloadedVersion":
+				return ec.fieldContext_User_skillDownloadedVersion(ctx, field)
+			case "skillDownloadedAt":
+				return ec.fieldContext_User_skillDownloadedAt(ctx, field)
+			case "skillUpdateSnoozedVersion":
+				return ec.fieldContext_User_skillUpdateSnoozedVersion(ctx, field)
 			}
 			return nil, fmt.Errorf("no field named %q was found under type User", field.Name)
 		},
@@ -24395,6 +24691,59 @@ func (ec *executionContext) fieldContext_Query_session(ctx context.Context, fiel
 	if fc.Args, err = ec.field_Query_session_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
 		ec.Error(ctx, err)
 		return fc, err
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Query_skillChangelog(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Query_skillChangelog,
+		func(ctx context.Context) (any, error) {
+			return ec.Resolvers.Query().SkillChangelog(ctx)
+		},
+		func(ctx context.Context, next graphql.Resolver) graphql.Resolver {
+			directive0 := next
+
+			directive1 := func(ctx context.Context) (any, error) {
+				permission, err := ec.unmarshalNString2string(ctx, "*")
+				if err != nil {
+					var zeroVal *model.SkillChangelog
+					return zeroVal, err
+				}
+				if ec.Directives.HasPermission == nil {
+					var zeroVal *model.SkillChangelog
+					return zeroVal, errors.New("directive hasPermission is not implemented")
+				}
+				return ec.Directives.HasPermission(ctx, nil, directive0, permission)
+			}
+
+			next = directive1
+			return next
+		},
+		ec.marshalNSkillChangelog2ᚖgithubᚗcomᚋvibeᚑc2ᚋvibeᚑc2ᚑcoreᚋcoreᚋpkgᚋgraphqlᚋmodelᚐSkillChangelog,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_Query_skillChangelog(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Query",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "currentVersion":
+				return ec.fieldContext_SkillChangelog_currentVersion(ctx, field)
+			case "releases":
+				return ec.fieldContext_SkillChangelog_releases(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type SkillChangelog", field.Name)
+		},
 	}
 	return fc, nil
 }
@@ -26962,6 +27311,12 @@ func (ec *executionContext) fieldContext_Session_user(_ context.Context, field g
 				return ec.fieldContext_User_updatedAt(ctx, field)
 			case "hiddenIdentities":
 				return ec.fieldContext_User_hiddenIdentities(ctx, field)
+			case "skillDownloadedVersion":
+				return ec.fieldContext_User_skillDownloadedVersion(ctx, field)
+			case "skillDownloadedAt":
+				return ec.fieldContext_User_skillDownloadedAt(ctx, field)
+			case "skillUpdateSnoozedVersion":
+				return ec.fieldContext_User_skillUpdateSnoozedVersion(ctx, field)
 			}
 			return nil, fmt.Errorf("no field named %q was found under type User", field.Name)
 		},
@@ -27587,6 +27942,159 @@ func (ec *executionContext) fieldContext_SessionEvent_session(_ context.Context,
 				return ec.fieldContext_Session_updatedAt(ctx, field)
 			}
 			return nil, fmt.Errorf("no field named %q was found under type Session", field.Name)
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _SkillChangelog_currentVersion(ctx context.Context, field graphql.CollectedField, obj *model.SkillChangelog) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_SkillChangelog_currentVersion,
+		func(ctx context.Context) (any, error) {
+			return obj.CurrentVersion, nil
+		},
+		nil,
+		ec.marshalNInt2int,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_SkillChangelog_currentVersion(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "SkillChangelog",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Int does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _SkillChangelog_releases(ctx context.Context, field graphql.CollectedField, obj *model.SkillChangelog) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_SkillChangelog_releases,
+		func(ctx context.Context) (any, error) {
+			return obj.Releases, nil
+		},
+		nil,
+		ec.marshalNSkillRelease2ᚕᚖgithubᚗcomᚋvibeᚑc2ᚋvibeᚑc2ᚑcoreᚋcoreᚋpkgᚋgraphqlᚋmodelᚐSkillReleaseᚄ,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_SkillChangelog_releases(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "SkillChangelog",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "version":
+				return ec.fieldContext_SkillRelease_version(ctx, field)
+			case "date":
+				return ec.fieldContext_SkillRelease_date(ctx, field)
+			case "notes":
+				return ec.fieldContext_SkillRelease_notes(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type SkillRelease", field.Name)
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _SkillRelease_version(ctx context.Context, field graphql.CollectedField, obj *model.SkillRelease) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_SkillRelease_version,
+		func(ctx context.Context) (any, error) {
+			return obj.Version, nil
+		},
+		nil,
+		ec.marshalNInt2int,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_SkillRelease_version(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "SkillRelease",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Int does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _SkillRelease_date(ctx context.Context, field graphql.CollectedField, obj *model.SkillRelease) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_SkillRelease_date,
+		func(ctx context.Context) (any, error) {
+			return obj.Date, nil
+		},
+		nil,
+		ec.marshalNString2string,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_SkillRelease_date(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "SkillRelease",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _SkillRelease_notes(ctx context.Context, field graphql.CollectedField, obj *model.SkillRelease) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_SkillRelease_notes,
+		func(ctx context.Context) (any, error) {
+			return obj.Notes, nil
+		},
+		nil,
+		ec.marshalNString2ᚕstringᚄ,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_SkillRelease_notes(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "SkillRelease",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
 		},
 	}
 	return fc, nil
@@ -29119,6 +29627,12 @@ func (ec *executionContext) fieldContext_Task_assignees(_ context.Context, field
 				return ec.fieldContext_User_updatedAt(ctx, field)
 			case "hiddenIdentities":
 				return ec.fieldContext_User_hiddenIdentities(ctx, field)
+			case "skillDownloadedVersion":
+				return ec.fieldContext_User_skillDownloadedVersion(ctx, field)
+			case "skillDownloadedAt":
+				return ec.fieldContext_User_skillDownloadedAt(ctx, field)
+			case "skillUpdateSnoozedVersion":
+				return ec.fieldContext_User_skillUpdateSnoozedVersion(ctx, field)
 			}
 			return nil, fmt.Errorf("no field named %q was found under type User", field.Name)
 		},
@@ -29328,6 +29842,12 @@ func (ec *executionContext) fieldContext_Task_createdBy(_ context.Context, field
 				return ec.fieldContext_User_updatedAt(ctx, field)
 			case "hiddenIdentities":
 				return ec.fieldContext_User_hiddenIdentities(ctx, field)
+			case "skillDownloadedVersion":
+				return ec.fieldContext_User_skillDownloadedVersion(ctx, field)
+			case "skillDownloadedAt":
+				return ec.fieldContext_User_skillDownloadedAt(ctx, field)
+			case "skillUpdateSnoozedVersion":
+				return ec.fieldContext_User_skillUpdateSnoozedVersion(ctx, field)
 			}
 			return nil, fmt.Errorf("no field named %q was found under type User", field.Name)
 		},
@@ -29375,6 +29895,12 @@ func (ec *executionContext) fieldContext_Task_lastUpdatedBy(_ context.Context, f
 				return ec.fieldContext_User_updatedAt(ctx, field)
 			case "hiddenIdentities":
 				return ec.fieldContext_User_hiddenIdentities(ctx, field)
+			case "skillDownloadedVersion":
+				return ec.fieldContext_User_skillDownloadedVersion(ctx, field)
+			case "skillDownloadedAt":
+				return ec.fieldContext_User_skillDownloadedAt(ctx, field)
+			case "skillUpdateSnoozedVersion":
+				return ec.fieldContext_User_skillUpdateSnoozedVersion(ctx, field)
 			}
 			return nil, fmt.Errorf("no field named %q was found under type User", field.Name)
 		},
@@ -30211,6 +30737,12 @@ func (ec *executionContext) fieldContext_TimelineEvent_actor(_ context.Context, 
 				return ec.fieldContext_User_updatedAt(ctx, field)
 			case "hiddenIdentities":
 				return ec.fieldContext_User_hiddenIdentities(ctx, field)
+			case "skillDownloadedVersion":
+				return ec.fieldContext_User_skillDownloadedVersion(ctx, field)
+			case "skillDownloadedAt":
+				return ec.fieldContext_User_skillDownloadedAt(ctx, field)
+			case "skillUpdateSnoozedVersion":
+				return ec.fieldContext_User_skillUpdateSnoozedVersion(ctx, field)
 			}
 			return nil, fmt.Errorf("no field named %q was found under type User", field.Name)
 		},
@@ -30896,6 +31428,93 @@ func (ec *executionContext) fieldContext_User_hiddenIdentities(_ context.Context
 	return fc, nil
 }
 
+func (ec *executionContext) _User_skillDownloadedVersion(ctx context.Context, field graphql.CollectedField, obj *models.User) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_User_skillDownloadedVersion,
+		func(ctx context.Context) (any, error) {
+			return ec.Resolvers.User().SkillDownloadedVersion(ctx, obj)
+		},
+		nil,
+		ec.marshalOInt2ᚖint,
+		true,
+		false,
+	)
+}
+
+func (ec *executionContext) fieldContext_User_skillDownloadedVersion(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "User",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Int does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _User_skillDownloadedAt(ctx context.Context, field graphql.CollectedField, obj *models.User) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_User_skillDownloadedAt,
+		func(ctx context.Context) (any, error) {
+			return ec.Resolvers.User().SkillDownloadedAt(ctx, obj)
+		},
+		nil,
+		ec.marshalOString2ᚖstring,
+		true,
+		false,
+	)
+}
+
+func (ec *executionContext) fieldContext_User_skillDownloadedAt(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "User",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _User_skillUpdateSnoozedVersion(ctx context.Context, field graphql.CollectedField, obj *models.User) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_User_skillUpdateSnoozedVersion,
+		func(ctx context.Context) (any, error) {
+			return ec.Resolvers.User().SkillUpdateSnoozedVersion(ctx, obj)
+		},
+		nil,
+		ec.marshalOInt2ᚖint,
+		true,
+		false,
+	)
+}
+
+func (ec *executionContext) fieldContext_User_skillUpdateSnoozedVersion(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "User",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Int does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
 func (ec *executionContext) _UserConnection_edges(ctx context.Context, field graphql.CollectedField, obj *model.UserConnection) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
@@ -31039,6 +31658,12 @@ func (ec *executionContext) fieldContext_UserEdge_node(_ context.Context, field 
 				return ec.fieldContext_User_updatedAt(ctx, field)
 			case "hiddenIdentities":
 				return ec.fieldContext_User_hiddenIdentities(ctx, field)
+			case "skillDownloadedVersion":
+				return ec.fieldContext_User_skillDownloadedVersion(ctx, field)
+			case "skillDownloadedAt":
+				return ec.fieldContext_User_skillDownloadedAt(ctx, field)
+			case "skillUpdateSnoozedVersion":
+				return ec.fieldContext_User_skillUpdateSnoozedVersion(ctx, field)
 			}
 			return nil, fmt.Errorf("no field named %q was found under type User", field.Name)
 		},
@@ -31202,6 +31827,12 @@ func (ec *executionContext) fieldContext_UserEvent_user(_ context.Context, field
 				return ec.fieldContext_User_updatedAt(ctx, field)
 			case "hiddenIdentities":
 				return ec.fieldContext_User_hiddenIdentities(ctx, field)
+			case "skillDownloadedVersion":
+				return ec.fieldContext_User_skillDownloadedVersion(ctx, field)
+			case "skillDownloadedAt":
+				return ec.fieldContext_User_skillDownloadedAt(ctx, field)
+			case "skillUpdateSnoozedVersion":
+				return ec.fieldContext_User_skillUpdateSnoozedVersion(ctx, field)
 			}
 			return nil, fmt.Errorf("no field named %q was found under type User", field.Name)
 		},
@@ -32128,6 +32759,12 @@ func (ec *executionContext) fieldContext_WikiDocument_createdBy(_ context.Contex
 				return ec.fieldContext_User_updatedAt(ctx, field)
 			case "hiddenIdentities":
 				return ec.fieldContext_User_hiddenIdentities(ctx, field)
+			case "skillDownloadedVersion":
+				return ec.fieldContext_User_skillDownloadedVersion(ctx, field)
+			case "skillDownloadedAt":
+				return ec.fieldContext_User_skillDownloadedAt(ctx, field)
+			case "skillUpdateSnoozedVersion":
+				return ec.fieldContext_User_skillUpdateSnoozedVersion(ctx, field)
 			}
 			return nil, fmt.Errorf("no field named %q was found under type User", field.Name)
 		},
@@ -32175,6 +32812,12 @@ func (ec *executionContext) fieldContext_WikiDocument_lastUpdatedBy(_ context.Co
 				return ec.fieldContext_User_updatedAt(ctx, field)
 			case "hiddenIdentities":
 				return ec.fieldContext_User_hiddenIdentities(ctx, field)
+			case "skillDownloadedVersion":
+				return ec.fieldContext_User_skillDownloadedVersion(ctx, field)
+			case "skillDownloadedAt":
+				return ec.fieldContext_User_skillDownloadedAt(ctx, field)
+			case "skillUpdateSnoozedVersion":
+				return ec.fieldContext_User_skillUpdateSnoozedVersion(ctx, field)
 			}
 			return nil, fmt.Errorf("no field named %q was found under type User", field.Name)
 		},
@@ -32309,6 +32952,12 @@ func (ec *executionContext) fieldContext_WikiDocument_deletedBy(_ context.Contex
 				return ec.fieldContext_User_updatedAt(ctx, field)
 			case "hiddenIdentities":
 				return ec.fieldContext_User_hiddenIdentities(ctx, field)
+			case "skillDownloadedVersion":
+				return ec.fieldContext_User_skillDownloadedVersion(ctx, field)
+			case "skillDownloadedAt":
+				return ec.fieldContext_User_skillDownloadedAt(ctx, field)
+			case "skillUpdateSnoozedVersion":
+				return ec.fieldContext_User_skillUpdateSnoozedVersion(ctx, field)
 			}
 			return nil, fmt.Errorf("no field named %q was found under type User", field.Name)
 		},
@@ -32866,6 +33515,12 @@ func (ec *executionContext) fieldContext_WikiDocumentBackup_createdBy(_ context.
 				return ec.fieldContext_User_updatedAt(ctx, field)
 			case "hiddenIdentities":
 				return ec.fieldContext_User_hiddenIdentities(ctx, field)
+			case "skillDownloadedVersion":
+				return ec.fieldContext_User_skillDownloadedVersion(ctx, field)
+			case "skillDownloadedAt":
+				return ec.fieldContext_User_skillDownloadedAt(ctx, field)
+			case "skillUpdateSnoozedVersion":
+				return ec.fieldContext_User_skillUpdateSnoozedVersion(ctx, field)
 			}
 			return nil, fmt.Errorf("no field named %q was found under type User", field.Name)
 		},
@@ -41255,6 +41910,13 @@ func (ec *executionContext) _Mutation(ctx context.Context, sel ast.SelectionSet)
 			if out.Values[i] == graphql.Null {
 				out.Invalids++
 			}
+		case "snoozeSkillUpdate":
+			out.Values[i] = ec.OperationContext.RootResolverMiddleware(innerCtx, func(ctx context.Context) (res graphql.Marshaler) {
+				return ec._Mutation_snoozeSkillUpdate(ctx, field)
+			})
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
 		case "createTask":
 			out.Values[i] = ec.OperationContext.RootResolverMiddleware(innerCtx, func(ctx context.Context) (res graphql.Marshaler) {
 				return ec._Mutation_createTask(ctx, field)
@@ -42730,6 +43392,28 @@ func (ec *executionContext) _Query(ctx context.Context, sel ast.SelectionSet) gr
 			}
 
 			out.Concurrently(i, func(ctx context.Context) graphql.Marshaler { return rrm(innerCtx) })
+		case "skillChangelog":
+			field := field
+
+			innerFunc := func(ctx context.Context, fs *graphql.FieldSet) (res graphql.Marshaler) {
+				defer func() {
+					if r := recover(); r != nil {
+						ec.Error(ctx, ec.Recover(ctx, r))
+					}
+				}()
+				res = ec._Query_skillChangelog(ctx, field)
+				if res == graphql.Null {
+					atomic.AddUint32(&fs.Invalids, 1)
+				}
+				return res
+			}
+
+			rrm := func(ctx context.Context) graphql.Marshaler {
+				return ec.OperationContext.RootResolverMiddleware(ctx,
+					func(ctx context.Context) graphql.Marshaler { return innerFunc(ctx, out) })
+			}
+
+			out.Concurrently(i, func(ctx context.Context) graphql.Marshaler { return rrm(innerCtx) })
 		case "task":
 			field := field
 
@@ -43847,6 +44531,99 @@ func (ec *executionContext) _SessionEvent(ctx context.Context, sel ast.Selection
 			}
 		case "session":
 			out.Values[i] = ec._SessionEvent_session(ctx, field, obj)
+		default:
+			panic("unknown field " + strconv.Quote(field.Name))
+		}
+	}
+	out.Dispatch(ctx)
+	if out.Invalids > 0 {
+		return graphql.Null
+	}
+
+	atomic.AddInt32(&ec.Deferred, int32(len(deferred)))
+
+	for label, dfs := range deferred {
+		ec.ProcessDeferredGroup(graphql.DeferredGroup{
+			Label:    label,
+			Path:     graphql.GetPath(ctx),
+			FieldSet: dfs,
+			Context:  ctx,
+		})
+	}
+
+	return out
+}
+
+var skillChangelogImplementors = []string{"SkillChangelog"}
+
+func (ec *executionContext) _SkillChangelog(ctx context.Context, sel ast.SelectionSet, obj *model.SkillChangelog) graphql.Marshaler {
+	fields := graphql.CollectFields(ec.OperationContext, sel, skillChangelogImplementors)
+
+	out := graphql.NewFieldSet(fields)
+	deferred := make(map[string]*graphql.FieldSet)
+	for i, field := range fields {
+		switch field.Name {
+		case "__typename":
+			out.Values[i] = graphql.MarshalString("SkillChangelog")
+		case "currentVersion":
+			out.Values[i] = ec._SkillChangelog_currentVersion(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "releases":
+			out.Values[i] = ec._SkillChangelog_releases(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		default:
+			panic("unknown field " + strconv.Quote(field.Name))
+		}
+	}
+	out.Dispatch(ctx)
+	if out.Invalids > 0 {
+		return graphql.Null
+	}
+
+	atomic.AddInt32(&ec.Deferred, int32(len(deferred)))
+
+	for label, dfs := range deferred {
+		ec.ProcessDeferredGroup(graphql.DeferredGroup{
+			Label:    label,
+			Path:     graphql.GetPath(ctx),
+			FieldSet: dfs,
+			Context:  ctx,
+		})
+	}
+
+	return out
+}
+
+var skillReleaseImplementors = []string{"SkillRelease"}
+
+func (ec *executionContext) _SkillRelease(ctx context.Context, sel ast.SelectionSet, obj *model.SkillRelease) graphql.Marshaler {
+	fields := graphql.CollectFields(ec.OperationContext, sel, skillReleaseImplementors)
+
+	out := graphql.NewFieldSet(fields)
+	deferred := make(map[string]*graphql.FieldSet)
+	for i, field := range fields {
+		switch field.Name {
+		case "__typename":
+			out.Values[i] = graphql.MarshalString("SkillRelease")
+		case "version":
+			out.Values[i] = ec._SkillRelease_version(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "date":
+			out.Values[i] = ec._SkillRelease_date(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "notes":
+			out.Values[i] = ec._SkillRelease_notes(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
 		default:
 			panic("unknown field " + strconv.Quote(field.Name))
 		}
@@ -45401,6 +46178,105 @@ func (ec *executionContext) _User(ctx context.Context, sel ast.SelectionSet, obj
 			if out.Values[i] == graphql.Null {
 				atomic.AddUint32(&out.Invalids, 1)
 			}
+		case "skillDownloadedVersion":
+			field := field
+
+			innerFunc := func(ctx context.Context, _ *graphql.FieldSet) (res graphql.Marshaler) {
+				defer func() {
+					if r := recover(); r != nil {
+						ec.Error(ctx, ec.Recover(ctx, r))
+					}
+				}()
+				res = ec._User_skillDownloadedVersion(ctx, field, obj)
+				return res
+			}
+
+			if field.Deferrable != nil {
+				dfs, ok := deferred[field.Deferrable.Label]
+				di := 0
+				if ok {
+					dfs.AddField(field)
+					di = len(dfs.Values) - 1
+				} else {
+					dfs = graphql.NewFieldSet([]graphql.CollectedField{field})
+					deferred[field.Deferrable.Label] = dfs
+				}
+				dfs.Concurrently(di, func(ctx context.Context) graphql.Marshaler {
+					return innerFunc(ctx, dfs)
+				})
+
+				// don't run the out.Concurrently() call below
+				out.Values[i] = graphql.Null
+				continue
+			}
+
+			out.Concurrently(i, func(ctx context.Context) graphql.Marshaler { return innerFunc(ctx, out) })
+		case "skillDownloadedAt":
+			field := field
+
+			innerFunc := func(ctx context.Context, _ *graphql.FieldSet) (res graphql.Marshaler) {
+				defer func() {
+					if r := recover(); r != nil {
+						ec.Error(ctx, ec.Recover(ctx, r))
+					}
+				}()
+				res = ec._User_skillDownloadedAt(ctx, field, obj)
+				return res
+			}
+
+			if field.Deferrable != nil {
+				dfs, ok := deferred[field.Deferrable.Label]
+				di := 0
+				if ok {
+					dfs.AddField(field)
+					di = len(dfs.Values) - 1
+				} else {
+					dfs = graphql.NewFieldSet([]graphql.CollectedField{field})
+					deferred[field.Deferrable.Label] = dfs
+				}
+				dfs.Concurrently(di, func(ctx context.Context) graphql.Marshaler {
+					return innerFunc(ctx, dfs)
+				})
+
+				// don't run the out.Concurrently() call below
+				out.Values[i] = graphql.Null
+				continue
+			}
+
+			out.Concurrently(i, func(ctx context.Context) graphql.Marshaler { return innerFunc(ctx, out) })
+		case "skillUpdateSnoozedVersion":
+			field := field
+
+			innerFunc := func(ctx context.Context, _ *graphql.FieldSet) (res graphql.Marshaler) {
+				defer func() {
+					if r := recover(); r != nil {
+						ec.Error(ctx, ec.Recover(ctx, r))
+					}
+				}()
+				res = ec._User_skillUpdateSnoozedVersion(ctx, field, obj)
+				return res
+			}
+
+			if field.Deferrable != nil {
+				dfs, ok := deferred[field.Deferrable.Label]
+				di := 0
+				if ok {
+					dfs.AddField(field)
+					di = len(dfs.Values) - 1
+				} else {
+					dfs = graphql.NewFieldSet([]graphql.CollectedField{field})
+					deferred[field.Deferrable.Label] = dfs
+				}
+				dfs.Concurrently(di, func(ctx context.Context) graphql.Marshaler {
+					return innerFunc(ctx, dfs)
+				})
+
+				// don't run the out.Concurrently() call below
+				out.Values[i] = graphql.Null
+				continue
+			}
+
+			out.Concurrently(i, func(ctx context.Context) graphql.Marshaler { return innerFunc(ctx, out) })
 		default:
 			panic("unknown field " + strconv.Quote(field.Name))
 		}
@@ -48840,6 +49716,46 @@ func (ec *executionContext) unmarshalNSessionStatus2githubᚗcomᚋvibeᚑc2ᚋv
 
 func (ec *executionContext) marshalNSessionStatus2githubᚗcomᚋvibeᚑc2ᚋvibeᚑc2ᚑcoreᚋcoreᚋpkgᚋmodelsᚐSessionStatus(ctx context.Context, sel ast.SelectionSet, v models.SessionStatus) graphql.Marshaler {
 	return v
+}
+
+func (ec *executionContext) marshalNSkillChangelog2githubᚗcomᚋvibeᚑc2ᚋvibeᚑc2ᚑcoreᚋcoreᚋpkgᚋgraphqlᚋmodelᚐSkillChangelog(ctx context.Context, sel ast.SelectionSet, v model.SkillChangelog) graphql.Marshaler {
+	return ec._SkillChangelog(ctx, sel, &v)
+}
+
+func (ec *executionContext) marshalNSkillChangelog2ᚖgithubᚗcomᚋvibeᚑc2ᚋvibeᚑc2ᚑcoreᚋcoreᚋpkgᚋgraphqlᚋmodelᚐSkillChangelog(ctx context.Context, sel ast.SelectionSet, v *model.SkillChangelog) graphql.Marshaler {
+	if v == nil {
+		if !graphql.HasFieldError(ctx, graphql.GetFieldContext(ctx)) {
+			graphql.AddErrorf(ctx, "the requested element is null which the schema does not allow")
+		}
+		return graphql.Null
+	}
+	return ec._SkillChangelog(ctx, sel, v)
+}
+
+func (ec *executionContext) marshalNSkillRelease2ᚕᚖgithubᚗcomᚋvibeᚑc2ᚋvibeᚑc2ᚑcoreᚋcoreᚋpkgᚋgraphqlᚋmodelᚐSkillReleaseᚄ(ctx context.Context, sel ast.SelectionSet, v []*model.SkillRelease) graphql.Marshaler {
+	ret := graphql.MarshalSliceConcurrently(ctx, len(v), 0, false, func(ctx context.Context, i int) graphql.Marshaler {
+		fc := graphql.GetFieldContext(ctx)
+		fc.Result = &v[i]
+		return ec.marshalNSkillRelease2ᚖgithubᚗcomᚋvibeᚑc2ᚋvibeᚑc2ᚑcoreᚋcoreᚋpkgᚋgraphqlᚋmodelᚐSkillRelease(ctx, sel, v[i])
+	})
+
+	for _, e := range ret {
+		if e == graphql.Null {
+			return graphql.Null
+		}
+	}
+
+	return ret
+}
+
+func (ec *executionContext) marshalNSkillRelease2ᚖgithubᚗcomᚋvibeᚑc2ᚋvibeᚑc2ᚑcoreᚋcoreᚋpkgᚋgraphqlᚋmodelᚐSkillRelease(ctx context.Context, sel ast.SelectionSet, v *model.SkillRelease) graphql.Marshaler {
+	if v == nil {
+		if !graphql.HasFieldError(ctx, graphql.GetFieldContext(ctx)) {
+			graphql.AddErrorf(ctx, "the requested element is null which the schema does not allow")
+		}
+		return graphql.Null
+	}
+	return ec._SkillRelease(ctx, sel, v)
 }
 
 func (ec *executionContext) unmarshalNString2string(ctx context.Context, v any) (string, error) {

@@ -7,6 +7,7 @@ package resolver
 
 import (
 	"context"
+	"time"
 
 	"github.com/vibe-c2/vibe-c2-core/core/pkg/graphql/generated"
 	"github.com/vibe-c2/vibe-c2-core/core/pkg/graphql/model"
@@ -146,6 +147,35 @@ func (r *userResolver) CreatedAt(ctx context.Context, obj *models.User) (string,
 // UpdatedAt converts the qmgo DefaultField timestamp to an ISO 8601 string.
 func (r *userResolver) UpdatedAt(ctx context.Context, obj *models.User) (string, error) {
 	return r.UserResolver.UpdatedAt(ctx, obj)
+}
+
+// SkillDownloadedVersion is the release of the agent skill this operator
+// last downloaded; nil when they never have.
+func (r *userResolver) SkillDownloadedVersion(ctx context.Context, obj *models.User) (*int, error) {
+	if obj.SkillDownload == nil {
+		return nil, nil
+	}
+	v := obj.SkillDownload.Version
+	return &v, nil
+}
+
+// SkillDownloadedAt is when that download happened, ISO 8601; nil when never.
+func (r *userResolver) SkillDownloadedAt(ctx context.Context, obj *models.User) (*string, error) {
+	if obj.SkillDownload == nil {
+		return nil, nil
+	}
+	at := obj.SkillDownload.DownloadedAt.Format(time.RFC3339)
+	return &at, nil
+}
+
+// SkillUpdateSnoozedVersion is the newest release whose update prompt the
+// operator dismissed; nil when none (the model stores zero).
+func (r *userResolver) SkillUpdateSnoozedVersion(ctx context.Context, obj *models.User) (*int, error) {
+	if obj.SkillUpdateSnoozedVersion == 0 {
+		return nil, nil
+	}
+	v := obj.SkillUpdateSnoozedVersion
+	return &v, nil
 }
 
 // Mutation returns generated.MutationResolver implementation.

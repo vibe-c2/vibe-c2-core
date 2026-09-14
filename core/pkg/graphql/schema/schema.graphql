@@ -64,6 +64,12 @@ type User {
   # Usernames this operator hides from the host topology Users lens.
   # Per-operator, global across operations. Normalized (trimmed, lowercased).
   hiddenIdentities: [String!]!
+  # The agent skill release this operator last downloaded, and when. Null
+  # when they never have — the SPA then shows no update prompt.
+  skillDownloadedVersion: Int
+  skillDownloadedAt: String
+  # The newest release whose update prompt they dismissed. Null when none.
+  skillUpdateSnoozedVersion: Int
 }
 
 # Minimal user info for autocomplete pickers (e.g., adding operation members).

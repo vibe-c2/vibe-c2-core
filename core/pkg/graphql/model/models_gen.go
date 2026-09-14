@@ -338,6 +338,17 @@ type SessionEvent struct {
 	Session   *models.Session `json:"session,omitempty"`
 }
 
+type SkillChangelog struct {
+	CurrentVersion int             `json:"currentVersion"`
+	Releases       []*SkillRelease `json:"releases"`
+}
+
+type SkillRelease struct {
+	Version int      `json:"version"`
+	Date    string   `json:"date"`
+	Notes   []string `json:"notes"`
+}
+
 type Subscription struct {
 }
 

@@ -17,6 +17,9 @@ export const MeQuery = graphql(`
     me {
       ...UserFields
       hiddenIdentities
+      skillDownloadedVersion
+      skillDownloadedAt
+      skillUpdateSnoozedVersion
     }
   }
 `)

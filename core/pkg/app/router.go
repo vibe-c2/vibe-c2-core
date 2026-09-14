@@ -208,6 +208,7 @@ func (a *App) NewRouter() *gin.Engine {
 			AgentActionRepo: a.repos.AgentAction,
 			WikiDocRepo:     a.repos.WikiDocument,
 			CredentialRepo:  a.repos.Credential,
+			UserRepo:        a.repos.User,
 			Files:           wikiFileCtrl,
 			Cache:           a.cache,
 			Blobs:           a.fileStore,

@@ -8,6 +8,8 @@ import (
 	"sort"
 	"strings"
 	"text/template"
+
+	"github.com/vibe-c2/vibe-c2-core/core/pkg/mcp/skillchangelog"
 )
 
 // The prose lives in real markdown files rather than Go string literals: it is
@@ -65,6 +67,11 @@ func findReferenceGuide(name string) (referenceGuide, bool) {
 type skillTemplateData struct {
 	Name        string
 	Description string
+	// Version is stamped into the frontmatter metadata so an operator can
+	// read which release they have installed, and so the update prompt in
+	// the app has something to compare against. The number comes from
+	// package skillchangelog; the golden test keeps it honest.
+	Version int
 }
 
 // Skill generation.
@@ -217,6 +224,7 @@ func (s *Server) renderSkillSource() string {
 	if err := skillTemplate.Execute(&b, skillTemplateData{
 		Name:        SkillName,
 		Description: skillDescription,
+		Version:     skillchangelog.Current(),
 	}); err != nil {
 		// Unreachable: the template is embedded and parsed at init, so a
 		// failure here would mean the binary shipped broken.

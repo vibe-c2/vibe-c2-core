@@ -103,6 +103,8 @@ type Documents = {
     "\n  mutation AdminRevokeAllUserSessions($userId: ID!) {\n    adminRevokeAllUserSessions(userId: $userId)\n  }\n": typeof types.AdminRevokeAllUserSessionsDocument,
     "\n  subscription MySessionChanged {\n    mySessionChanged {\n      action\n      sessionId\n      userId\n      session {\n        ...SessionFields\n      }\n    }\n  }\n": typeof types.MySessionChangedDocument,
     "\n  subscription SessionChanged($userId: ID) {\n    sessionChanged(userId: $userId) {\n      action\n      sessionId\n      userId\n      session {\n        ...SessionFields\n      }\n    }\n  }\n": typeof types.SessionChangedDocument,
+    "\n  query SkillChangelog {\n    skillChangelog {\n      currentVersion\n      releases {\n        version\n        date\n        notes\n      }\n    }\n  }\n": typeof types.SkillChangelogDocument,
+    "\n  mutation SnoozeSkillUpdate($version: Int!) {\n    snoozeSkillUpdate(version: $version) {\n      id\n      skillUpdateSnoozedVersion\n    }\n  }\n": typeof types.SnoozeSkillUpdateDocument,
     "\n  fragment TaskFields on Task {\n    id\n    operationId\n    name\n    description\n    riskScore\n    riskDescription\n    profitScore\n    profitDescription\n    stage\n    status\n    summary\n    assignees {\n      id\n      username\n    }\n    wikiReferences {\n      id\n      title\n      emoji\n    }\n    credentialReferences {\n      id\n      name\n      type\n    }\n    createdBy {\n      id\n      username\n    }\n    lastUpdatedBy {\n      id\n      username\n    }\n    lastUpdatedAt\n    deletedAt\n    doneAt\n    createdAt\n    updatedAt\n  }\n": typeof types.TaskFieldsFragmentDoc,
     "\n  fragment TaskBacklinkFields on Task {\n    id\n    operationId\n    name\n    stage\n    status\n    riskScore\n    profitScore\n    assignees {\n      id\n      username\n    }\n  }\n": typeof types.TaskBacklinkFieldsFragmentDoc,
     "\n  query Task($id: ID!) {\n    task(id: $id) {\n      ...TaskFields\n    }\n  }\n": typeof types.TaskDocument,
@@ -129,7 +131,7 @@ type Documents = {
     "\n  mutation UpdateCustomTimelineEvent(\n    $id: ID!\n    $input: UpdateCustomTimelineEventInput!\n  ) {\n    updateCustomTimelineEvent(id: $id, input: $input) {\n      ...TimelineEventFields\n    }\n  }\n": typeof types.UpdateCustomTimelineEventDocument,
     "\n  mutation DeleteCustomTimelineEvent($id: ID!) {\n    deleteCustomTimelineEvent(id: $id)\n  }\n": typeof types.DeleteCustomTimelineEventDocument,
     "\n  fragment UserFields on User {\n    id\n    username\n    roles\n    active\n    authSource\n    createdAt\n    updatedAt\n  }\n": typeof types.UserFieldsFragmentDoc,
-    "\n  query Me {\n    me {\n      ...UserFields\n      hiddenIdentities\n    }\n  }\n": typeof types.MeDocument,
+    "\n  query Me {\n    me {\n      ...UserFields\n      hiddenIdentities\n      skillDownloadedVersion\n      skillDownloadedAt\n      skillUpdateSnoozedVersion\n    }\n  }\n": typeof types.MeDocument,
     "\n  query User($id: ID!) {\n    user(id: $id) {\n      ...UserFields\n    }\n  }\n": typeof types.UserDocument,
     "\n  query Users(\n    $search: String\n    $sortBy: UserSortField\n    $sortDirection: SortDirection\n    $first: Int\n    $after: String\n  ) {\n    users(\n      search: $search\n      sortBy: $sortBy\n      sortDirection: $sortDirection\n      first: $first\n      after: $after\n    ) {\n      edges {\n        node {\n          ...UserFields\n        }\n        cursor\n      }\n      pageInfo {\n        hasNextPage\n        hasPreviousPage\n        startCursor\n        endCursor\n      }\n      totalCount\n    }\n  }\n": typeof types.UsersDocument,
     "\n  mutation CreateUser($input: CreateUserInput!) {\n    createUser(input: $input) {\n      ...UserFields\n    }\n  }\n": typeof types.CreateUserDocument,
@@ -272,6 +274,8 @@ const documents: Documents = {
     "\n  mutation AdminRevokeAllUserSessions($userId: ID!) {\n    adminRevokeAllUserSessions(userId: $userId)\n  }\n": types.AdminRevokeAllUserSessionsDocument,
     "\n  subscription MySessionChanged {\n    mySessionChanged {\n      action\n      sessionId\n      userId\n      session {\n        ...SessionFields\n      }\n    }\n  }\n": types.MySessionChangedDocument,
     "\n  subscription SessionChanged($userId: ID) {\n    sessionChanged(userId: $userId) {\n      action\n      sessionId\n      userId\n      session {\n        ...SessionFields\n      }\n    }\n  }\n": types.SessionChangedDocument,
+    "\n  query SkillChangelog {\n    skillChangelog {\n      currentVersion\n      releases {\n        version\n        date\n        notes\n      }\n    }\n  }\n": types.SkillChangelogDocument,
+    "\n  mutation SnoozeSkillUpdate($version: Int!) {\n    snoozeSkillUpdate(version: $version) {\n      id\n      skillUpdateSnoozedVersion\n    }\n  }\n": types.SnoozeSkillUpdateDocument,
     "\n  fragment TaskFields on Task {\n    id\n    operationId\n    name\n    description\n    riskScore\n    riskDescription\n    profitScore\n    profitDescription\n    stage\n    status\n    summary\n    assignees {\n      id\n      username\n    }\n    wikiReferences {\n      id\n      title\n      emoji\n    }\n    credentialReferences {\n      id\n      name\n      type\n    }\n    createdBy {\n      id\n      username\n    }\n    lastUpdatedBy {\n      id\n      username\n    }\n    lastUpdatedAt\n    deletedAt\n    doneAt\n    createdAt\n    updatedAt\n  }\n": types.TaskFieldsFragmentDoc,
     "\n  fragment TaskBacklinkFields on Task {\n    id\n    operationId\n    name\n    stage\n    status\n    riskScore\n    profitScore\n    assignees {\n      id\n      username\n    }\n  }\n": types.TaskBacklinkFieldsFragmentDoc,
     "\n  query Task($id: ID!) {\n    task(id: $id) {\n      ...TaskFields\n    }\n  }\n": types.TaskDocument,
@@ -298,7 +302,7 @@ const documents: Documents = {
     "\n  mutation UpdateCustomTimelineEvent(\n    $id: ID!\n    $input: UpdateCustomTimelineEventInput!\n  ) {\n    updateCustomTimelineEvent(id: $id, input: $input) {\n      ...TimelineEventFields\n    }\n  }\n": types.UpdateCustomTimelineEventDocument,
     "\n  mutation DeleteCustomTimelineEvent($id: ID!) {\n    deleteCustomTimelineEvent(id: $id)\n  }\n": types.DeleteCustomTimelineEventDocument,
     "\n  fragment UserFields on User {\n    id\n    username\n    roles\n    active\n    authSource\n    createdAt\n    updatedAt\n  }\n": types.UserFieldsFragmentDoc,
-    "\n  query Me {\n    me {\n      ...UserFields\n      hiddenIdentities\n    }\n  }\n": types.MeDocument,
+    "\n  query Me {\n    me {\n      ...UserFields\n      hiddenIdentities\n      skillDownloadedVersion\n      skillDownloadedAt\n      skillUpdateSnoozedVersion\n    }\n  }\n": types.MeDocument,
     "\n  query User($id: ID!) {\n    user(id: $id) {\n      ...UserFields\n    }\n  }\n": types.UserDocument,
     "\n  query Users(\n    $search: String\n    $sortBy: UserSortField\n    $sortDirection: SortDirection\n    $first: Int\n    $after: String\n  ) {\n    users(\n      search: $search\n      sortBy: $sortBy\n      sortDirection: $sortDirection\n      first: $first\n      after: $after\n    ) {\n      edges {\n        node {\n          ...UserFields\n        }\n        cursor\n      }\n      pageInfo {\n        hasNextPage\n        hasPreviousPage\n        startCursor\n        endCursor\n      }\n      totalCount\n    }\n  }\n": types.UsersDocument,
     "\n  mutation CreateUser($input: CreateUserInput!) {\n    createUser(input: $input) {\n      ...UserFields\n    }\n  }\n": types.CreateUserDocument,
@@ -725,6 +729,14 @@ export function graphql(source: "\n  subscription SessionChanged($userId: ID) {\
 /**
  * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
  */
+export function graphql(source: "\n  query SkillChangelog {\n    skillChangelog {\n      currentVersion\n      releases {\n        version\n        date\n        notes\n      }\n    }\n  }\n"): (typeof documents)["\n  query SkillChangelog {\n    skillChangelog {\n      currentVersion\n      releases {\n        version\n        date\n        notes\n      }\n    }\n  }\n"];
+/**
+ * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
+ */
+export function graphql(source: "\n  mutation SnoozeSkillUpdate($version: Int!) {\n    snoozeSkillUpdate(version: $version) {\n      id\n      skillUpdateSnoozedVersion\n    }\n  }\n"): (typeof documents)["\n  mutation SnoozeSkillUpdate($version: Int!) {\n    snoozeSkillUpdate(version: $version) {\n      id\n      skillUpdateSnoozedVersion\n    }\n  }\n"];
+/**
+ * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
+ */
 export function graphql(source: "\n  fragment TaskFields on Task {\n    id\n    operationId\n    name\n    description\n    riskScore\n    riskDescription\n    profitScore\n    profitDescription\n    stage\n    status\n    summary\n    assignees {\n      id\n      username\n    }\n    wikiReferences {\n      id\n      title\n      emoji\n    }\n    credentialReferences {\n      id\n      name\n      type\n    }\n    createdBy {\n      id\n      username\n    }\n    lastUpdatedBy {\n      id\n      username\n    }\n    lastUpdatedAt\n    deletedAt\n    doneAt\n    createdAt\n    updatedAt\n  }\n"): (typeof documents)["\n  fragment TaskFields on Task {\n    id\n    operationId\n    name\n    description\n    riskScore\n    riskDescription\n    profitScore\n    profitDescription\n    stage\n    status\n    summary\n    assignees {\n      id\n      username\n    }\n    wikiReferences {\n      id\n      title\n      emoji\n    }\n    credentialReferences {\n      id\n      name\n      type\n    }\n    createdBy {\n      id\n      username\n    }\n    lastUpdatedBy {\n      id\n      username\n    }\n    lastUpdatedAt\n    deletedAt\n    doneAt\n    createdAt\n    updatedAt\n  }\n"];
 /**
  * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
@@ -829,7 +841,7 @@ export function graphql(source: "\n  fragment UserFields on User {\n    id\n    
 /**
  * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
  */
-export function graphql(source: "\n  query Me {\n    me {\n      ...UserFields\n      hiddenIdentities\n    }\n  }\n"): (typeof documents)["\n  query Me {\n    me {\n      ...UserFields\n      hiddenIdentities\n    }\n  }\n"];
+export function graphql(source: "\n  query Me {\n    me {\n      ...UserFields\n      hiddenIdentities\n      skillDownloadedVersion\n      skillDownloadedAt\n      skillUpdateSnoozedVersion\n    }\n  }\n"): (typeof documents)["\n  query Me {\n    me {\n      ...UserFields\n      hiddenIdentities\n      skillDownloadedVersion\n      skillDownloadedAt\n      skillUpdateSnoozedVersion\n    }\n  }\n"];
 /**
  * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
  */
