@@ -24,12 +24,12 @@ import (
 //	                     an image)
 //	Hosts               (leaf)
 type exportWorld struct {
-	op                      uuid.UUID
-	network, peering, hosts models.WikiDocument
-	outside                 models.WikiDocument
-	hostID, hashID, imageID uuid.UUID
-	scope                   *wikitransfer.Scope
-	exporter                *Exporter
+	op                       uuid.UUID
+	network, peering, hosts  models.WikiDocument
+	outside, public, foreign models.WikiDocument
+	hostID, hashID, imageID  uuid.UUID
+	scope                    *wikitransfer.Scope
+	exporter                 *Exporter
 }
 
 func newExportWorld(t *testing.T) *exportWorld {
@@ -39,11 +39,15 @@ func newExportWorld(t *testing.T) *exportWorld {
 	w.peering = models.WikiDocument{DocumentID: uuid.New(), OperationID: w.op, Title: "Peering / IX", SortOrder: "a", ParentDocumentID: &w.network.DocumentID}
 	w.hosts = models.WikiDocument{DocumentID: uuid.New(), OperationID: w.op, Title: "Hosts", SortOrder: "b"}
 	w.outside = models.WikiDocument{DocumentID: uuid.New(), OperationID: w.op, Title: "Runbook", SortOrder: "c"}
+	w.public = models.WikiDocument{DocumentID: uuid.New(), OperationID: models.PublicOperationID, Title: "BGP cheat sheet"}
+	w.foreign = models.WikiDocument{DocumentID: uuid.New(), OperationID: uuid.New(), Title: "Other op secret"}
 
 	w.network.ContentState = []byte("Dual [host](vibe://host/" + w.hostID.String() + ") edge peering " +
 		"[page](vibe://doc/" + w.peering.DocumentID.String() + ") and " +
 		"[page](vibe://doc/" + w.hosts.DocumentID.String() + "), see " +
-		"[page](vibe://doc/" + w.outside.DocumentID.String() + "). NTLM [hash](vibe://hash/" + w.hashID.String() + ")\n")
+		"[page](vibe://doc/" + w.outside.DocumentID.String() + "), " +
+		"[page](vibe://doc/" + w.public.DocumentID.String() + "), " +
+		"[page](vibe://doc/" + w.foreign.DocumentID.String() + "). NTLM [hash](vibe://hash/" + w.hashID.String() + ")\n")
 	w.peering.ContentState = []byte("Back to [page](vibe://doc/" + w.hosts.DocumentID.String() + ")\n\n" +
 		"![diagram](/api/v1/wiki/images/" + w.imageID.String() + ")\n")
 	w.hosts.ContentState = []byte("plain\n")
@@ -66,7 +70,7 @@ func newExportWorld(t *testing.T) *exportWorld {
 		ImageID: w.imageID, OperationID: w.op, DocumentID: w.peering.DocumentID,
 		ObjectKey: "img-key", ContentType: "image/png", SizeBytes: 3,
 	})
-	docs := transfertest.NewDocRepo(w.network, w.peering, w.hosts, w.outside)
+	docs := transfertest.NewDocRepo(w.network, w.peering, w.hosts, w.outside, w.public, w.foreign)
 	hostRepo := &transfertest.HostRepo{Hosts: map[uuid.UUID]models.Host{
 		w.hostID: {HostID: w.hostID, OperationID: w.op, Hostname: "in-bgp01"},
 	}}
@@ -119,7 +123,7 @@ func TestExport_ForeignMarkdownLinks(t *testing.T) {
 		t.Fatalf("missing child page; entries: %v", keys(entries))
 	}
 
-	wantNetwork := "Dual in-bgp01 edge peering [Peering / IX](001-network/001-peering-ix.md) and [Hosts](002-hosts.md), see Runbook. NTLM aad3b435b51404ee"
+	wantNetwork := "Dual in-bgp01 edge peering [Peering / IX](001-network/001-peering-ix.md) and [Hosts](002-hosts.md), see Runbook, BGP cheat sheet, page. NTLM aad3b435b51404ee"
 	if !strings.Contains(network, wantNetwork) {
 		t.Errorf("branch body:\n%s\nwant to contain:\n%s", network, wantNetwork)
 	}
@@ -143,8 +147,12 @@ func TestExport_ForeignMarkdownLinks(t *testing.T) {
 	if report.ExportedDocs != 3 || report.ImagesExported != 1 {
 		t.Errorf("report = %+v", report)
 	}
-	if !hasWarning(report, "page_reference_outside_scope: "+w.outside.DocumentID.String()) {
-		t.Errorf("expected outside-scope warning, got %+v", report.Warnings)
+	if !hasWarning(report, "page_reference_outside_scope: "+w.outside.DocumentID.String()) ||
+		!hasWarning(report, "page_reference_outside_scope: "+w.public.DocumentID.String()) {
+		t.Errorf("expected outside-scope warnings, got %+v", report.Warnings)
+	}
+	if !hasWarning(report, "page_reference_unresolved: "+w.foreign.DocumentID.String()) {
+		t.Errorf("a page of another operation must not leak its title, got %+v", report.Warnings)
 	}
 }
 

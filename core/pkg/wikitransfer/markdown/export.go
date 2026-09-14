@@ -242,12 +242,21 @@ func (r *exportRun) resolvePage(ctx context.Context, doc models.WikiDocument, do
 		return referenceTarget{}, false
 	}
 	linked, err := r.e.docRepo.FindByID(ctx, id)
-	if err != nil || linked.OperationID != doc.OperationID {
+	if err != nil || !pageTitleVisibleFrom(doc, linked) {
 		r.report.Warn(docPath, "page_reference_unresolved: "+id.String())
 		return referenceTarget{}, false
 	}
 	r.report.Warn(docPath, "page_reference_outside_scope: "+id.String())
 	return referenceTarget{Text: strings.TrimSpace(linked.Title)}, true
+}
+
+// pageTitleVisibleFrom reports whether an export of `from` may print the
+// title of `linked`. Pages of the same operation qualify, and so do pages
+// of the Public tree, which every authenticated user can read — a chip
+// pointing into it is the common case for an operation page that cites
+// shared reference material.
+func pageTitleVisibleFrom(from, linked models.WikiDocument) bool {
+	return linked.OperationID == from.OperationID || models.IsPublicOperation(linked.OperationID)
 }
 
 func (r *exportRun) resolveHost(ctx context.Context, doc models.WikiDocument, docPath string, id uuid.UUID) (referenceTarget, bool) {
