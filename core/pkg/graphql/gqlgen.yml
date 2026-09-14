@@ -72,6 +72,12 @@ models:
         resolver: true         # field.DefaultField.UpdateAt -> string
       authSource:
         resolver: true         # "" (legacy rows) -> "local"
+      skillDownloadedVersion:
+        resolver: true         # *SkillDownload -> nullable Int
+      skillDownloadedAt:
+        resolver: true         # *SkillDownload -> nullable ISO 8601 string
+      skillUpdateSnoozedVersion:
+        resolver: true         # 0 -> null
 
   # Map the GraphQL "OperationRole" enum to our existing OperationRole type.
   # The Go type implements MarshalGQL/UnmarshalGQL for case conversion.

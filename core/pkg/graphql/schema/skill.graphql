@@ -1,0 +1,40 @@
+# =============================================================================
+# Agent skill releases
+# =============================================================================
+#
+# The agent skill (GET /api/v1/mcp/skill) is generated from the running
+# server, so an installed copy goes stale whenever the server moves. The server
+# records which release each operator last downloaded; this surface lets the
+# SPA compare that against the current release, show what changed in between,
+# and remember that an operator chose not to be reminded about a release.
+
+# One entry in the skill's version history.
+type SkillRelease {
+  # A plain counter. There is no minor or patch: a copy is current or it is not.
+  version: Int!
+  # Release day, YYYY-MM-DD.
+  date: String!
+  # What changed, one line each, written for the operator deciding whether to
+  # re-download now.
+  notes: [String!]!
+}
+
+type SkillChangelog {
+  # The release this server hands out right now.
+  currentVersion: Int!
+  # Every release, oldest first. Small and static for the life of the process.
+  releases: [SkillRelease!]!
+}
+
+extend type Query {
+  skillChangelog: SkillChangelog! @hasPermission(permission: "*")
+}
+
+extend type Mutation {
+  # snoozeSkillUpdate records that the caller dismissed the update prompt for
+  # this release. The prompt stays hidden until a newer release ships. The
+  # version may not be ahead of the current one, so nobody can silence future
+  # prompts in advance. Scoped to the JWT user.
+  snoozeSkillUpdate(version: Int!): User!
+    @hasPermission(permission: "user:update:own")
+}

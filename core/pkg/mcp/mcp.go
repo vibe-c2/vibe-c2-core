@@ -91,6 +91,10 @@ type Deps struct {
 	// (scopedOperation / loadTaskInScope) before the repository is touched.
 	WikiDocRepo    repository.IWikiDocumentRepository
 	CredentialRepo repository.ICredentialRepository
+	// UserRepo records skill downloads against the operator who made them.
+	// Nothing in the tool surface touches it; it exists for the one human
+	// endpoint this package mounts. Nil disables the recording.
+	UserRepo repository.IUserRepository
 	// Files attaches bytes to a wiki page. The same ingest path the browser
 	// upload uses, so an agent's attachment is indistinguishable from a
 	// person's — same size cap, same type sniffing, same deny-list.

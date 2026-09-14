@@ -1,0 +1,378 @@
+==================== vibe-c2/SKILL.md
+---
+name: vibe-c2
+description: Work an offensive security engagement in Vibe C2 — hosts, credentials, hashes, tasks, wiki notes and the operation timeline — through its MCP tools. Use whenever connected to a Vibe C2 MCP endpoint, or when the user mentions an operation, findings, or engagement notes.
+metadata:
+  version: "1"
+---
+
+# Vibe C2
+
+Vibe C2 is a command-and-control platform for authorized offensive security
+engagements. You reach it through an MCP server as a *delegated agent*: your key
+belongs to a human operator, acts on their behalf, and can never do more than
+they can.
+
+## The model
+
+**Operations** are engagements. Almost every tool takes an `operation_id`, and
+you rarely need to pass it: it defaults to whatever the operator has open.
+
+Within an operation:
+
+- **Hosts** are machines. Interfaces place them on subnets, routes give
+  reachability, logins draw who-logged-in-from-where. A hostname alone is a dot
+  with no edges.
+- **Credentials** are recovered secrets. **Hashes** are captured material that
+  may become credentials.
+- **Tasks** are the operator's board.
+- **Wiki** pages are the engagement's notes.
+- **The timeline** is the shared history: milestones only.
+
+**Public** is a special operation shared across the platform: everyone reads
+and writes it, nobody is a member, and every key can reach it. It is for things
+that outlive one engagement (method, reference, house templates), never for
+anything about a specific target.
+
+**Findings hold the data, the wiki holds the reasoning.** A password belongs in
+Credentials; a page explains what it opened.
+
+## What you cannot reach
+
+Implant tasking, live sessions, transport channels and the module registry.
+There are no tools for them, and nothing else mirrors them: if a tool does
+not exist, say so.
+
+## How to work here
+
+- **Look before you ask.** `get_user_focus` says which operation, page and
+  record the operator is on, and carries that operation's counts.
+- **Everything you do is visible.** Every call, reads included, is recorded and
+  shown to the operator.
+- **Propose rather than surprise.** Create a task to suggest work; say what you
+  will change before changing it unless told to just do it.
+- **Results are capped.** A truncated result means narrow the filter, not
+  "that is all there is".
+- **Refusals are answers.** Report them; do not retry variations. A rate-limit
+  refusal says how long to wait.
+- **Read the smallest part that answers the question.** `search_wiki` snippets
+  usually identify the page. Pages over 8 KB return an outline by default; take
+  `section:"<heading>"` for one part or `full:true` for everything.
+- **Send the smallest change that does the job.** `edit_wiki_document`
+  replaces an exact snippet; `add_wiki_section` adds to either end. Both are
+  safe while the operator is editing. `update_wiki_document` replaces the whole
+  page: only for a deliberate rewrite, after reading it, because anything you
+  omit is deleted. A section is part of a page, never the whole of it.
+- **One value, one call.** Arguments hold a megabyte. Never split a value
+  across calls. Raw output goes to `attach_text_to_wiki_document`, not the page.
+- **Do not re-read to check your own work.** Writes report what happened.
+- **Make retries safe.** Every write accepts an `idempotency_key`.
+- **Put milestones on the timeline.** A DC owned, a host taken, a login form
+  patched, a foothold lost: `create_timeline_event`, unless a tool already
+  recorded it (closed tasks, credentials and cracks land there on their own).
+  Routine bookkeeping does not belong on it.
+- **Leave icons alone** unless a page has earned one.
+
+## Reference
+
+Load the one that matches the job.
+
+- `reference/tools.md` — every tool, grouped by task.
+- `reference/wiki.md` — reading, editing and templating pages.
+- `reference/findings.md` — recording hosts, credentials and hashes.
+- `reference/tasks.md` — proposing, linking and closing tasks.
+- `reference/attachments.md` — reading and adding files on a page.
+- `reference/icons.md` — when and how to give a page an icon.
+==================== vibe-c2/reference/tools.md
+# Tool index
+
+Grouped by job, in the order you usually need them. Tools marked **(write)**
+change the operation; everything else only reads, though reads are recorded
+too. Full descriptions and arguments are in your tool list.
+
+## Orientation
+
+Where you are and what you can reach.
+
+- `list_operations` — The operations this key can act in, with your capped role in each.
+- `get_operation_summary` — Counts of hosts, credentials, hashes, open tasks and wiki pages.
+- `get_user_focus` — What the operator is looking at now: operation, page, selected record, plus that operation's counts.
+
+## Hosts and the network
+
+Interfaces, routes and logins are what the topology view draws from.
+
+- `find_hosts` — Search hosts.
+- `get_host` — One host in full: interfaces, routes and login footprints.
+- `create_host` **(write)** — Record a discovered host.
+- `update_host` **(write)** — Change a host.
+
+## Credentials
+
+Recovered secrets, returned in full.
+
+- `find_credentials` — Search harvested credentials.
+- `get_credential` — One credential in full: keys, properties and comment history.
+- `create_credential` **(write)** — Record a recovered credential: a password, an SSH key, a token.
+- `add_credential_comment` **(write)** — Append a comment to a credential: where found, what it opens, if it works.
+
+## Hashes
+
+Captured hashes and what became of them.
+
+- `find_hashes` — Search captured hashes.
+- `get_hash` — One hash with its full value and, if cracked, its credential.
+- `create_hash` **(write)** — Record a single captured hash.
+- `import_hashes` **(write)** — Import a dump, one hash per line.
+- `update_hash` **(write)** — Change a hash's status, comment or tags.
+- `mark_hash_cracked` **(write)** — Record a crack: creates (or links) the credential and marks the hash CRACKED.
+
+## Tasks
+
+The operator's board. Propose work here rather than doing something nobody asked for. You see tasks assigned to the operator you act for and unassigned ones; tasks another operator has taken are withheld. Link every task to the pages and credentials it relates to (`wiki_ids`/`credential_ids` on `create_task`, or `link_task` later).
+
+- `find_tasks` — Search the task board.
+- `get_task` — One task in full, with its rationale and linked pages and credentials.
+- `create_task` **(write)** — Add a task to the board, the way to propose work.
+- `update_task` **(write)** — Change a task's name, description or risk/profit scoring.
+- `change_task_stage` **(write)** — Move a task between board columns.
+- `set_task_assignment` **(write)** — Put the operator you act for on a task, or take them off.
+- `link_task` **(write)** — Link wiki pages and credentials to a task.
+
+## Wiki
+
+Engagement notes, collaboratively edited, with file attachments. See wiki.md and attachments.md.
+
+- `search_wiki` — Search wiki pages by title and body.
+- `list_wiki_tree` — The page tree, depth-first: titles, parents, icons and child counts.
+- `get_wiki_document` — One wiki page as Markdown.
+- `list_wiki_templates` — Page templates to start from: the operation's own plus the shared ones in the Public wiki (marked shared).
+- `set_wiki_template` **(write)** — Mark a page as a reusable template, or unmark it.
+- `create_wiki_document` **(write)** — Create a wiki page, from Markdown content or from a template (template_id).
+- `add_wiki_section` **(write)** — Add Markdown to the end (or start) of one or more pages without touching what is there.
+- `edit_wiki_document` **(write)** — Replace an exact snippet on a page, like editing a source file.
+- `update_wiki_document` **(write)** — Replace a page's whole body.
+- `list_wiki_attachments` — Files attached to a page, each marked readable or not.
+- `read_wiki_attachment` — Read an attachment: text formats directly, Word and Excel as text, images as images.
+- `attach_text_to_wiki_document` **(write)** — Attach text to a page as a file: raw output, a scan, a config.
+
+## Timeline
+
+Milestones only: a task closed, a credential recovered, a hash cracked, and whatever you record with create_timeline_event — a DC owned, a foothold lost. Wiki edits and task bookkeeping do not appear.
+
+- `get_timeline` — The operation's milestones for one day, and who did them.
+- `create_timeline_event` **(write)** — Add a milestone to the timeline: a host owned, a domain controller taken, a login form patched, a foothold lost.
+
+==================== vibe-c2/reference/wiki.md
+# Wiki: reading, editing, templates
+
+## Finding the right page
+
+`search_wiki` returns a `snippet` with every hit. Read the snippets before
+opening anything; opening four wrong pages to find the fifth is the most common
+way to waste a context window here. `list_wiki_tree` shows how the notes are
+organised: two levels by default with a `childCount` per page, `parent_id` to
+descend into one branch, `depth:-1` for everything, and a cursor for a large
+wiki.
+
+## Reading only part of a page
+
+`get_wiki_document` returns the body of a small page. A page over 8 KB comes
+back as an **outline** (headings, nesting, bytes under each) unless you pass
+`full:true`. Then:
+
+- `section:"<heading>"` returns that heading and everything nested under it.
+- Section sizes include their children, so they do not sum to the page size.
+- A section is **part** of the page. Change it with `edit_wiki_document`.
+  Passing it to `update_wiki_document` replaces the whole page with the
+  fragment.
+- Section text is exact, so it is the cheapest source of `old_text`.
+
+## Changing a page
+
+- `edit_wiki_document` replaces an exact snippet. Almost every edit.
+- `add_wiki_section` adds to the end, or to the start with `position:"start"`
+  (a status banner, a summary above the notes). Pass `document_ids` to add the
+  same content to up to 25 pages in one call; the result says which succeeded,
+  so retry only the failures.
+- `update_wiki_document` replaces the whole body. Read the page first and put
+  back every construct you are not deliberately changing.
+
+Copy `old_text` verbatim: whitespace, list markers and all. It must be unique;
+if it occurs more than once the edit is refused with the count, and the fix is
+to include a line either side, not `replace_all`. `replace_all` is for renaming
+something throughout. A refusal says how the snippet differs (whitespace,
+capitalisation, wrong page); read it before retrying.
+
+Edits are applied on the live document, so the operator may be reading or
+typing on the page you write to. Every write reports `watchers`; a non-zero
+count means they saw it.
+
+## What a page can contain
+
+Pages are richer than plain markdown; preserve these constructs.
+
+- **Checklist items** drive a coverage bar the operator watches:
+
+  ```
+  :::checklist {"prompt":"Enumerated SMB shares?","required":true,"state":"answered"}
+  Three shares, one world-readable.
+  :::
+  ```
+
+  The body is the answer; `state` is `answered`, `not_applicable`, `flagged`
+  or absent. To answer one, edit the marker's `state` and write the body in one
+  `edit_wiki_document` call.
+- **Reference chips**: `[host](vibe://host/<id>)`, `[hash](vibe://hash/<id>)`,
+  `[page](vibe://doc/<id>)`. Credentials appear as a `vibe-credential` fenced
+  block.
+- **Notices**: `:::info`, `:::success`, `:::warning`, `:::tip`, closed with `:::`.
+- Attachments as `[name size](/api/v1/wiki/files/<id>)`.
+
+## Templates
+
+Check `list_wiki_templates` before writing a page from scratch. The listing
+spans the operation's own templates and the shared ones in Public (marked
+`shared`), which is usually where the house templates are. Create from one with
+`create_wiki_document` and `template_id`; your `title` overrides the template's.
+
+Pages carry `isTemplate`. Editing a template changes every page made from it
+afterwards, and `set_wiki_template` is a team decision: propose it.
+
+## Long content
+
+Prose goes in the body, whole, in one call (up to 1 MB). Raw output (a command
+history, a scan, a config, a dump) is evidence: attach it with
+`attach_text_to_wiki_document` and link it from the page.
+==================== vibe-c2/reference/findings.md
+# Findings: hosts, credentials, hashes
+
+Findings hold the data; the wiki explains it. Record both.
+
+## Orienting
+
+1. `get_user_focus` settles which operation you are in, what the operator is
+   looking at, and the shape of the operation in numbers. If a count could not
+   be read, treat it as unknown, not zero. `get_operation_summary` gives the
+   same counts for an operation that is not in focus.
+2. Only then go looking.
+
+## Recording
+
+- **A host**: `create_host` with interfaces, routes and logins where known.
+  Without them it cannot appear on the topology graph. `update_host` REPLACES
+  those lists, so read the host first and send the full set.
+- **A recovered secret**: `create_credential`, tagged with the host it came
+  from. Not a wiki page.
+- **A dump**: `import_hashes`. Known hashes are skipped, so re-importing a
+  grown dump is safe.
+- **A crack**: `mark_hash_cracked`, which creates and links the credential.
+  `update_hash` with status CRACKED records the outcome and leaves the
+  plaintext nowhere.
+- **Hash listings clip long values**; `get_hash` returns one whole. Filter with
+  `status` rather than paging through everything.
+
+Then write the page that says what it means: which hosts a credential reaches,
+what that implies, what you would do next.
+
+## Milestones on the timeline
+
+The timeline is the engagement's shared history and it is deliberately
+sparse: milestones, not activity. Some land on their own — closing a task,
+recording a credential, marking a hash cracked. Everything else that changed
+the shape of the engagement is yours to record with `create_timeline_event`:
+
+- a host or a domain controller owned;
+- a foothold gained or lost, a persistence mechanism planted;
+- a target changed, such as a login form patched or a config altered;
+- a credential that opened a new network segment or a new tier;
+- a detection, a lockout, or anything the operator would want to see on the
+  history without reading the notes.
+
+Name it the way the timeline is read later: "Owned DC01 via GPO abuse", not
+"progress". Put the detail in `description`, link the write-up from the wiki,
+and use `occurred_at` when the event happened earlier than now. Do not record
+routine work: reads, wiki edits and task bookkeeping are not milestones.
+
+## Picking an engagement back up
+
+`get_timeline` for the days you were away, then `find_tasks` for what moved.
+Report by theme rather than replaying the log line by line.
+==================== vibe-c2/reference/tasks.md
+# Tasks
+
+## Proposing work
+
+`create_task` with an honest risk and profit score and a description that says
+why. Leave it unassigned unless you are about to work on it: an unassigned task
+is a suggestion, an assigned one announces the operator is doing it. When you
+start on something, `set_task_assignment` with `assigned:true` first.
+
+When you finish, `change_task_stage` to DONE with a `status` and a `summary`
+saying what actually happened, including "nothing here". An empty summary
+teaches the next person nothing.
+
+## Tasks do not stand alone
+
+Link every task to the wiki pages it comes out of or writes up, and to the
+credentials it depends on or produces: `wiki_ids` and `credential_ids` on
+`create_task`, or `link_task` afterwards. Both are idempotent.
+
+Every task view carries `wikiReferenceCount` and `credentialReferenceCount`. A
+zero on a task you are working is a prompt to link something. `get_task`
+expands both lists with names. When you close a task, check that what it
+produced is linked.
+
+## Whose tasks you can see
+
+You act for one operator, not the team. Tasks assigned to that operator and
+unassigned tasks are yours to read and change. Tasks another operator has taken
+are withheld: `find_tasks` leaves them out and says how many, and reading or
+changing one by id is refused. On a shared task you may add or remove only the
+operator you act for.
+==================== vibe-c2/reference/attachments.md
+# Attachments
+
+A page's text is often a summary of something attached to it.
+`list_wiki_attachments` shows what a page carries and whether each file is
+readable, so you do not spend a call finding out.
+
+`read_wiki_attachment` handles three shapes:
+
+- **Text** (`.txt`, `.csv`, `.md`, `.json`, `.log`, configs, scripts):
+  returned as-is.
+- **Word and Excel**: converted to plain text; words and cell values, no
+  layout.
+- **Images**: returned as an image you can look at.
+
+PDFs and other binaries are not readable. That is a limit, not a transient
+error. Long files come back truncated with a note: treat what you have as the
+beginning of the file, never as the whole.
+
+`attach_text_to_wiki_document` adds text as a file: raw output, a scan, a
+config, anything long enough that pasting it into the page would bury the
+notes. Whole content, one call; the cap is megabytes. Link it from the page.
+==================== vibe-c2/reference/icons.md
+# Giving a page an icon
+
+Leave `emoji` and `icon` unset and the page gets an adaptive icon: a page,
+becoming a folder once it has children. Most pages want exactly that.
+
+**Match what is already there.** Listings return each page's `emoji` and
+`icon`; one `list_wiki_tree` shows the house style. If most rows have neither,
+the convention is not to set one.
+
+When a page warrants a glyph, `icon` and `emoji` are mutually exclusive and
+`icon` takes one of two forms:
+
+- **A concept icon**, PascalCase from the platform's palette: `FileText`,
+  `Folder`, `Server`, `Database`, `Network`, `Key`, `Lock`, `Shield`,
+  `ShieldAlert`, `Bug`, `Terminal`, `Users`, `Target`, `Flag`, `Search`,
+  `Wrench`, `Zap`.
+- **A brand logo**, a simple-icons slug behind `si:`: `si:linux`, `si:ubuntu`,
+  `si:kalilinux`, `si:docker`, `si:kubernetes`, `si:nginx`, `si:postgresql`,
+  `si:python`, `si:cisco`. There is no Windows logo; use `Server` or an emoji.
+
+A name outside the palettes is refused. When unsure, use an emoji or reuse what
+a comparable page has. `color` is a hex value that tints an icon and does
+nothing to an emoji.

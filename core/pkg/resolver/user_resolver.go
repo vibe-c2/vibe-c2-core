@@ -11,6 +11,7 @@ import (
 	"github.com/vibe-c2/vibe-c2-core/core/pkg/eventbus"
 	"github.com/vibe-c2/vibe-c2-core/core/pkg/graphql/gqlctx"
 	"github.com/vibe-c2/vibe-c2-core/core/pkg/graphql/model"
+	"github.com/vibe-c2/vibe-c2-core/core/pkg/mcp/skillchangelog"
 	"github.com/vibe-c2/vibe-c2-core/core/pkg/models"
 	"github.com/vibe-c2/vibe-c2-core/core/pkg/pagination"
 	"github.com/vibe-c2/vibe-c2-core/core/pkg/repository"
@@ -25,6 +26,7 @@ type IUserResolver interface {
 	DeleteUser(ctx context.Context, id string) (bool, error)
 	UpdateOwnProfile(ctx context.Context, input model.UpdateUserInput) (*models.User, error)
 	SetHiddenIdentities(ctx context.Context, names []string) (*models.User, error)
+	SnoozeSkillUpdate(ctx context.Context, version int) (*models.User, error)
 
 	// Queries
 	Me(ctx context.Context) (*models.User, error)
@@ -277,6 +279,43 @@ func (r *userResolver) SetHiddenIdentities(ctx context.Context, names []string) 
 		UserID: updated.UserID.String(), Username: updated.Username,
 	}))
 
+	return &updated, nil
+}
+
+// SnoozeSkillUpdate records that the caller dismissed the skill update prompt
+// for a release. The SPA hides the prompt until a newer release ships.
+//
+// The version is capped at the current release: a snooze is "I have seen
+// this one", and nobody has seen a release that does not exist yet. Snoozing
+// backwards is a no-op rather than an error — the newest dismissal wins.
+func (r *userResolver) SnoozeSkillUpdate(ctx context.Context, version int) (*models.User, error) {
+	authInfo := gqlctx.AuthFromContext(ctx)
+	uid, err := uuid.Parse(authInfo.UserID)
+	if err != nil {
+		return nil, fmt.Errorf("invalid user ID in token: %w", err)
+	}
+	if version < 1 || version > skillchangelog.Current() {
+		return nil, fmt.Errorf("skill version %d does not exist (current is %d)", version, skillchangelog.Current())
+	}
+
+	user, err := r.userRepo.FindByID(ctx, uid)
+	if err != nil {
+		return nil, fmt.Errorf("user not found: %w", err)
+	}
+	if version <= user.SkillUpdateSnoozedVersion {
+		return &user, nil
+	}
+
+	if err := r.userRepo.Update(ctx, &user, map[string]interface{}{
+		"skill_update_snoozed_version": version,
+	}); err != nil {
+		return nil, fmt.Errorf("failed to snooze skill update: %w", err)
+	}
+
+	updated, err := r.userRepo.FindByID(ctx, uid)
+	if err != nil {
+		return nil, fmt.Errorf("failed to fetch updated user: %w", err)
+	}
 	return &updated, nil
 }
 

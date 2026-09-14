@@ -2,11 +2,15 @@ package mcp
 
 import (
 	"net/http"
+	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/google/uuid"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/vibe-c2/vibe-c2-core/core/pkg/graphql/gqlctx"
+	"github.com/vibe-c2/vibe-c2-core/core/pkg/mcp/skillchangelog"
 	"github.com/vibe-c2/vibe-c2-core/core/pkg/middleware"
+	"github.com/vibe-c2/vibe-c2-core/core/pkg/models"
 	"github.com/vibe-c2/vibe-c2-core/core/pkg/responses"
 	"go.uber.org/zap"
 )
@@ -31,6 +35,38 @@ func (s *Server) SkillHandler() gin.HandlerFunc {
 			// mid-write, so there is nothing useful to send; log and stop.
 			return
 		}
+		s.recordSkillDownload(c)
+	}
+}
+
+// recordSkillDownload notes which release the caller just received.
+//
+// This is what the update prompt in the app is built on: it compares this
+// record with the current release, and stays silent for anyone who has never
+// downloaded. Recorded after the bytes are written so a failed download does
+// not count, and only logged on failure because the operator already has
+// what they asked for.
+func (s *Server) recordSkillDownload(c *gin.Context) {
+	if s.deps.UserRepo == nil {
+		return
+	}
+	uid, err := uuid.Parse(c.GetString("userID"))
+	if err != nil {
+		s.deps.Logger.Warn("mcp: skill download without a user id; not recorded", zap.Error(err))
+		return
+	}
+	download := models.SkillDownload{
+		Version:      skillchangelog.Current(),
+		DownloadedAt: time.Now().UTC(),
+	}
+	// The repository filters on UserID alone, so a shell user is enough to
+	// address the row without a read first.
+	err = s.deps.UserRepo.Update(c.Request.Context(), &models.User{UserID: uid}, map[string]interface{}{
+		"skill_download": download,
+	})
+	if err != nil {
+		s.deps.Logger.Error("mcp: failed to record skill download",
+			zap.String("user_id", uid.String()), zap.Error(err))
 	}
 }
 

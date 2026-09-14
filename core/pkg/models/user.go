@@ -43,6 +43,21 @@ type User struct {
 	// the graph). Stored normalized (trimmed, lowercased); a nil/absent value
 	// means "nothing hidden" and marshals to an empty GraphQL list.
 	HiddenIdentities []string `bson:"hidden_identities" json:"hidden_identities"`
+	// SkillDownload records the last time this operator downloaded the
+	// generated agent skill, and which release it was. Nil means never: the
+	// app then has nothing to compare and shows no update prompt. Written by
+	// the skill endpoint itself, so it reflects what was actually served.
+	SkillDownload *SkillDownload `bson:"skill_download,omitempty" json:"-"`
+	// SkillUpdateSnoozedVersion is the newest skill release the operator has
+	// dismissed the update prompt for. The prompt stays hidden until a release
+	// newer than this ships. Zero means nothing dismissed.
+	SkillUpdateSnoozedVersion int `bson:"skill_update_snoozed_version,omitempty" json:"-"`
+}
+
+// SkillDownload is one recorded download of the agent skill.
+type SkillDownload struct {
+	Version      int       `bson:"version" json:"version"`
+	DownloadedAt time.Time `bson:"downloaded_at" json:"downloaded_at"`
 }
 
 // IsSSO reports whether the account is owned by an external identity

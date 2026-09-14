@@ -13,6 +13,10 @@ import { AgentKeyCard } from "@/components/keys/agent-key-card"
 import { AgentKeyForm, type AgentKeyFormValues } from "@/components/keys/agent-key-form"
 import { useCreateAgentKey, useMyAgentKeys } from "@/graphql/hooks/agent-keys"
 import { useAgentKeyStore } from "@/stores/agent-keys"
+import { useMe } from "@/graphql/hooks/users"
+import { useMarkSkillDownloaded, useSkillChangelog } from "@/graphql/hooks/skill"
+import { SKILL_DOWNLOAD_URL } from "@/constants/skill"
+import { Badge } from "@/components/ui/badge"
 
 /**
  * Agent keys: delegated credentials for an AI agent working alongside the
@@ -130,12 +134,36 @@ function AgentKeysDialogBody() {
  * avoids holding a zip in memory to hand straight back to it.
  */
 function SkillHint() {
+  const { data: me } = useMe()
+  const { data: changelog } = useSkillChangelog()
+  const markDownloaded = useMarkSkillDownloaded()
+
+  const current = changelog?.skillChangelog.currentVersion
+  const downloaded = me?.me?.skillDownloadedVersion ?? null
+  // Behind only counts once something has been installed — a fresh operator is
+  // not "out of date", they simply have not started.
+  const outdated =
+    current != null && downloaded != null && downloaded < current
+
+  function handleDownload() {
+    // The browser follows the link; the server records the download. Assume it
+    // worked, clear any "outdated" state now, and reconcile shortly after.
+    if (current != null) markDownloaded(current)
+  }
+
   return (
     <div className="rounded-md border bg-muted/30 px-3 py-2.5 space-y-2">
       <div className="flex items-start gap-2">
         <SparklesIcon className="mt-0.5 size-4 shrink-0 text-muted-foreground" />
         <div className="space-y-1">
-          <div className="text-sm font-medium">Teach the agent this app</div>
+          <div className="flex items-center gap-2">
+            <div className="text-sm font-medium">Teach the agent this app</div>
+            {outdated && (
+              <Badge variant="secondary" className="text-[10px]">
+                Update available
+              </Badge>
+            )}
+          </div>
           <p className="text-xs text-muted-foreground">
             A ready-made skill covering the tools, the data model and how to
             work here. Generated from this server, so it always matches the
@@ -147,10 +175,11 @@ function SkillHint() {
       <Button
         size="sm"
         variant="outline"
-        render={<a href="/api/v1/mcp/skill" download />}
+        onClick={handleDownload}
+        render={<a href={SKILL_DOWNLOAD_URL} download />}
       >
         <DownloadIcon className="size-4" />
-        Download skill
+        {outdated ? "Update skill" : "Download skill"}
       </Button>
 
       <details className="text-xs">
@@ -169,8 +198,8 @@ unzip vibe-c2-skill.zip -d .claude/skills/
 unzip vibe-c2-skill.zip -d ~/.claude/skills/`}
           </pre>
           <p className="text-muted-foreground">
-            The agent loads it on its own when the work calls for it. Download
-            it again after the platform is updated to pick up new tools.
+            The agent loads it on its own when the work calls for it. Vibe C2
+            will tell you here when a newer skill is available.
           </p>
         </div>
       </details>

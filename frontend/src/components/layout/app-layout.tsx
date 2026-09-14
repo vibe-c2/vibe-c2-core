@@ -16,6 +16,7 @@ import { StatusRequiredDialog } from "@/components/tasks/status-required-dialog"
 import { ReopenTaskDialog } from "@/components/tasks/reopen-task-dialog"
 import { WikiCommandPalette } from "@/components/wiki/wiki-command-palette"
 import { TaskPickerDialog } from "@/components/tasks/task-picker-dialog"
+import { SkillUpdateDialog } from "@/components/keys/skill-update-dialog"
 
 export function AppLayout() {
   const sidebarOpen = useAppStore((s) => s.sidebarOpen)
@@ -84,6 +85,11 @@ export function AppLayout() {
             button calls openTaskPicker imperatively to attach the current
             document to a task without leaving the wiki page. */}
         <TaskPickerDialog />
+        {/* Prompts a re-download of the agent skill when the server ships a
+            newer release than the operator installed. Global so it can appear
+            on any authed surface on first load; silent for anyone who never
+            downloaded the skill. */}
+        <SkillUpdateDialog />
       </SidebarProvider>
     </TooltipProvider>
   )
