@@ -1,6 +1,6 @@
 import type { ReactNode } from "react"
 import { toast } from "sonner"
-import { LinkIcon, PencilIcon, TrashIcon } from "lucide-react"
+import { CheckCircle2Icon, LinkIcon, PencilIcon, TrashIcon, XCircleIcon } from "lucide-react"
 import {
   ContextMenu,
   ContextMenuContent,
@@ -9,6 +9,7 @@ import {
   ContextMenuTrigger,
 } from "@/components/ui/context-menu"
 import { useTaskStore } from "@/stores/tasks"
+import { useChangeTaskStage } from "@/graphql/hooks/tasks"
 import { buildTaskShareUrl } from "@/components/tasks/task-share-link"
 import type { TaskFieldsFragment } from "@/graphql/gql/graphql"
 
@@ -27,6 +28,24 @@ export function TaskCardContextMenu({
 }: TaskCardContextMenuProps) {
   const openEdit = useTaskStore((s) => s.openEditDialog)
   const openDelete = useTaskStore((s) => s.openDeleteDialog)
+  const changeStage = useChangeTaskStage()
+
+  // A closed task can have its outcome corrected from the board without
+  // opening the dialog. This is an intra-Done status flip, so it keeps the
+  // completion summary and time; we offer only the outcome the task isn't
+  // already at. Not shown for tasks that aren't Done, or that somehow lack a
+  // terminal status.
+  const closedOutcome =
+    task.stage === "DONE" && task.status !== "UNDEFINED" ? task.status : null
+
+  async function setOutcome(status: "SUCCESS" | "FAIL") {
+    try {
+      await changeStage.mutateAsync({ taskId: task.id, stage: "DONE", status })
+      toast.success(status === "SUCCESS" ? "Marked Success" : "Marked Fail")
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to update outcome")
+    }
+  }
 
   async function copyShareLink() {
     try {
@@ -45,6 +64,25 @@ export function TaskCardContextMenu({
           <LinkIcon className="size-4" />
           Copy link
         </ContextMenuItem>
+
+        {closedOutcome === "FAIL" && (
+          <>
+            <ContextMenuSeparator />
+            <ContextMenuItem onClick={() => setOutcome("SUCCESS")}>
+              <CheckCircle2Icon className="size-4" />
+              Mark as Success
+            </ContextMenuItem>
+          </>
+        )}
+        {closedOutcome === "SUCCESS" && (
+          <>
+            <ContextMenuSeparator />
+            <ContextMenuItem onClick={() => setOutcome("FAIL")}>
+              <XCircleIcon className="size-4" />
+              Mark as Fail
+            </ContextMenuItem>
+          </>
+        )}
 
         <ContextMenuSeparator />
 

@@ -42,6 +42,13 @@ var releases = []Release{
 			"First versioned release. The skill now carries its version in the frontmatter, and the app will tell you when a newer one is available.",
 		},
 	},
+	{
+		Version: 2,
+		Date:    "2026-09-14",
+		Notes: []string{
+			"Clarified task outcomes: SUCCESS and FAIL now describe what the engagement gained, not whether the task was finished. A cleanly completed lead that is refuted or fails is a FAIL.",
+		},
+	},
 }
 
 // Releases returns the full history, oldest first. A copy, so callers cannot

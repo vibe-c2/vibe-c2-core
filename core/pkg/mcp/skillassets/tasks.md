@@ -11,6 +11,23 @@ When you finish, `change_task_stage` to DONE with a `status` and a `summary`
 saying what actually happened, including "nothing here". An empty summary
 teaches the next person nothing.
 
+## Success and fail are the engagement's outcome, not the task's
+
+`status` says whether the work advanced the engagement, not whether you
+finished the task. Finishing is what DONE means; the status is the result.
+
+- **SUCCESS** — the engagement gained something: access, a credential, a
+  confirmed vulnerability, a proven path forward.
+- **FAIL** — the lead was a dead end: the technique did not work, the host
+  was not exploitable, the vulnerability was not there.
+
+A task you completed cleanly can still be a FAIL. Investigating "is this host
+vulnerable to CVE-XYZ" and confirming it is **SUCCESS** — it opens a way in.
+Investigating the same and refuting it is **FAIL** — the lead is closed, even
+though you did exactly what was asked. Judge by what the operator gained, not
+by whether you did the work. When unsure which way a result cuts, ask whether
+it brought the engagement closer to its goal or ruled a path out.
+
 ## Tasks do not stand alone
 
 Link every task to the wiki pages it comes out of or writes up, and to the

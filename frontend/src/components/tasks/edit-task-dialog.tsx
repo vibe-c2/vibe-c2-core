@@ -16,9 +16,11 @@ import {
   useSetTaskAssignees,
   useSetTaskWikiReferences,
   useSetTaskCredentialReferences,
+  useChangeTaskStage,
 } from "@/graphql/hooks/tasks";
 import { TaskFormFields } from "@/components/tasks/task-form-fields";
 import { TaskStageControl } from "@/components/tasks/task-stage-control";
+import { TaskOutcomeControl } from "@/components/tasks/task-outcome-control";
 import { useTaskStageTransition } from "@/components/tasks/use-task-stage-transition";
 import {
   emptyTaskFormValues,
@@ -32,7 +34,7 @@ import {
 } from "@/components/tasks/task-relations";
 import { buildTaskShareUrl } from "@/components/tasks/task-share-link";
 import { relativeTime } from "@/lib/relative-time";
-import type { TaskStage } from "@/graphql/gql/graphql";
+import type { TaskStage, TaskStatus } from "@/graphql/gql/graphql";
 
 // Autosave dialog. Each field commits on its own trigger:
 //   - Text inputs: on blur (focus loss)
@@ -56,6 +58,7 @@ export function EditTaskDialog() {
   const setCredRefs = useSetTaskCredentialReferences();
   const { requestStageChange, isPending: stageChanging } =
     useTaskStageTransition();
+  const changeStage = useChangeTaskStage();
 
   const [values, setValues] = useState<TaskFormValues>(emptyTaskFormValues);
   const [relations, setRelations] = useState<TaskRelationsValues>(
@@ -236,7 +239,8 @@ export function EditTaskDialog() {
     setAssignees.isPending ||
     setWikiRefs.isPending ||
     setCredRefs.isPending ||
-    stageChanging;
+    stageChanging ||
+    changeStage.isPending;
 
   // Stage changes route through the shared transition hook, which applies the
   // same DONE-requires-status / reopen-confirm rules as the kanban board.
@@ -248,6 +252,24 @@ export function EditTaskDialog() {
       { id: task.id, name: task.name, stage: task.stage, status: task.status },
       stage,
     );
+  }
+
+  // Flip the outcome of an already-closed task in place. This is not a stage
+  // change and must not route through the reopen flow: the task stays in Done,
+  // keeping its summary and completion time (the server preserves both on an
+  // intra-Done status change). Selecting the current outcome is a no-op.
+  async function handleOutcomeSelect(status: TaskStatus) {
+    if (!task || status === task.status) return;
+    setError(null);
+    try {
+      await changeStage.mutateAsync({
+        taskId: task.id,
+        stage: "DONE",
+        status,
+      });
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to update outcome");
+    }
   }
 
   return (
@@ -289,6 +311,16 @@ export function EditTaskDialog() {
                 value={task.stage}
                 onSelect={handleStageSelect}
                 disabled={stageChanging}
+              />
+            )}
+            {/* Outcome switch for closed tasks: correct Success/Fail without
+                reopening. Only meaningful once the task is Done and carries a
+                terminal status. */}
+            {task?.stage === "DONE" && task.status !== "UNDEFINED" && (
+              <TaskOutcomeControl
+                value={task.status}
+                onSelect={handleOutcomeSelect}
+                disabled={changeStage.isPending}
               />
             )}
             <TaskFormFields
