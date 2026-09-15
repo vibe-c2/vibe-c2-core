@@ -63,6 +63,13 @@ var releases = []Release{
 			"Wiki structure: one subject per page, placed in the tree (Infrastructure → subnet → host) with parent_id, instead of growing one page into a dump. Pages cannot be re-parented, so the parent is chosen at creation.",
 		},
 	},
+	{
+		Version: 5,
+		Date:    "2026-09-15",
+		Notes: []string{
+			"Attachments: attach_text_to_wiki_document and list_wiki_attachments now return a ready `markdown` line; paste it alone in a paragraph to show the file as an attachment card, anywhere on the page including inside a checklist answer.",
+		},
+	},
 }
 
 // Releases returns the full history, oldest first. A copy, so callers cannot

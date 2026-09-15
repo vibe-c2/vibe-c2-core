@@ -524,112 +524,79 @@ const innerParser = new MarkdownParser(wikiSchema, tokenizer, tokens);
 // exactly one link to /api/v1/wiki/files/<uuid> with a wikiFile atom block.
 // Outline serialises its block-level attachments as `[Filename 1234](url)`
 // inside an otherwise-empty paragraph; we restore the block atom here.
+//
+// The sweep descends into containers (checklist items, notices, table
+// cells, list items) rather than stopping at the top level. An agent
+// attaches its evidence to the checklist item it is answering, and a link
+// that only becomes an attachment card at the top of the page is a rule it
+// has no way to learn. The one place a paragraph cannot become a block is
+// the first child of a list item, which the schema pins to a paragraph.
+type JsonNode = Record<string, unknown> & { type: string; content?: JsonNode[] };
+
 function liftFileLinksToBlocks(doc: Node): Node {
-  const replacements: Array<{ pos: number; size: number; node: Node }> = [];
+  const json = doc.toJSON() as JsonNode;
+  if (!Array.isArray(json.content)) return doc;
+  return wikiSchema.nodeFromJSON(liftInChildren(json));
+}
 
-  doc.descendants((node, pos) => {
-    if (node.type !== wikiSchema.nodes.paragraph) return true;
+// Names of container nodes whose first child must stay a paragraph.
+const PARAGRAPH_FIRST_CONTAINERS = new Set(["listItem", "taskItem"]);
 
-    // Outline emits a backslash line on its own to add visual spacing
-    // between adjacent block-level attachments. CommonMark parses
-    // `\<newline>` as a hardBreak, so the paragraph holding the file link
-    // ends up with a leading hardBreak before the linked text. We treat
-    // hardBreaks as ignorable when looking for the "lone file link"
-    // pattern so the second attachment still lifts correctly.
-    const significant: Node[] = [];
-    node.forEach((child) => {
-      if (child.type !== wikiSchema.nodes.hardBreak) significant.push(child);
-    });
-    if (significant.length !== 1) return false;
-    const onlyChild = significant[0];
-    if (!onlyChild.isText) return false;
+function liftInChildren(parent: JsonNode): JsonNode {
+  if (!Array.isArray(parent.content)) return parent;
+  const content = parent.content.map((child, index) => {
+    const pinned = index === 0 && PARAGRAPH_FIRST_CONTAINERS.has(parent.type);
+    if (child.type === "paragraph" && !pinned) {
+      const lifted = fileLinkParagraphToBlock(child);
+      if (lifted) return lifted;
+    }
+    return liftInChildren(child);
+  });
+  return { ...parent, content };
+}
 
-    const linkMark = onlyChild.marks.find(
-      (m) => m.type === wikiSchema.marks.link
-    );
-    if (!linkMark) return false;
-
-    const href = linkMark.attrs.href as string | null;
-    if (!href) return false;
-
-    const match = FILE_HREF_PATTERN.exec(href);
-    if (!match) return false;
-
-    // Outline label format: "<filename> <size>". Split off the trailing
-    // numeric token; if it's absent or non-numeric, treat the whole label
-    // as the filename and report size as 0.
-    const label = onlyChild.text ?? "";
-    const trailingNumberMatch = label.match(/^(.*) (\d+)$/);
-    const filename = trailingNumberMatch ? trailingNumberMatch[1] : label;
-    const size = trailingNumberMatch ? parseInt(trailingNumberMatch[2], 10) : 0;
-
-    const fileNode = wikiSchema.nodes.wikiFile.create({
-      fileId: match[1],
+// The wikiFile JSON for a paragraph holding one file link and nothing else,
+// or null when the paragraph is anything else.
+function fileLinkParagraphToBlock(child: JsonNode): JsonNode | null {
+  const inline = child.content;
+  if (!inline) return null;
+  // Outline emits a backslash line on its own to add visual spacing between
+  // adjacent block-level attachments. CommonMark parses `\<newline>` as a
+  // hardBreak, so the paragraph holding the file link can carry a leading
+  // hardBreak before the linked text; those never block the lift.
+  const significant = inline.filter((c) => c.type !== "hardBreak");
+  if (significant.length !== 1) return null;
+  const t = significant[0];
+  if (t.type !== "text") return null;
+  const marks = t.marks as Array<{ type: string; attrs?: Record<string, unknown> }> | undefined;
+  if (!marks || marks.length !== 1) return null;
+  const linkMark = marks[0];
+  if (linkMark.type !== "link") return null;
+  const href = linkMark.attrs?.href as string | undefined;
+  if (!href) return null;
+  const m = FILE_HREF_PATTERN.exec(href);
+  if (!m) return null;
+  // Outline label format: "<filename> <size>". Split off the trailing
+  // numeric token; if it's absent or non-numeric, treat the whole label
+  // as the filename and report size as 0.
+  const label = (t.text as string) ?? "";
+  const trailing = label.match(/^(.*) (\d+)$/);
+  const filename = trailing ? trailing[1] : label;
+  return {
+    type: "wikiFile",
+    attrs: {
+      fileId: m[1],
       // Canonical relative form, not the href as written. An exported page
       // carries an absolute link so it is useful outside the app; storing
       // that back would bake one deployment's hostname into a document on
       // another, and those links die with that host. The id is what matters
       // and the path is derived from it.
-      url: `/api/v1/wiki/files/${match[1]}`,
+      url: `/api/v1/wiki/files/${m[1]}`,
       filename,
-      size,
+      size: trailing ? parseInt(trailing[2], 10) : 0,
       contentType: guessContentType(filename),
-    });
-
-    // Position+size of the paragraph node itself, not its content.
-    replacements.push({ pos, size: node.nodeSize, node: fileNode });
-    return false;
-  });
-
-  if (replacements.length === 0) return doc;
-
-  // Apply replacements in reverse so later positions stay valid.
-  let json = doc.toJSON() as { content?: unknown[] };
-  if (!Array.isArray(json.content)) return doc;
-
-  // Rebuilding via JSON is easier than tracking ProseMirror positions
-  // through nested replacements. Walk the top-level content array; for
-  // each top-level paragraph that matches, swap in the wikiFile JSON.
-  // Note: we only lift attachments that are top-level paragraphs. Nested
-  // (e.g. inside a list or notice) keep the link mark — Outline's exporter
-  // doesn't emit nested attachments either.
-  const newContent = (json.content as Array<Record<string, unknown>>).map(
-    (child) => {
-      if (child.type !== "paragraph") return child;
-      const inline = child.content as Array<Record<string, unknown>> | undefined;
-      if (!inline) return child;
-      // Strip hardBreak children so a leading `\` line break (see above)
-      // doesn't prevent the lift.
-      const significant = inline.filter((c) => c.type !== "hardBreak");
-      if (significant.length !== 1) return child;
-      const t = significant[0];
-      if (t.type !== "text") return child;
-      const marks = t.marks as Array<{ type: string; attrs?: Record<string, unknown> }> | undefined;
-      if (!marks || marks.length !== 1) return child;
-      const linkMark = marks[0];
-      if (linkMark.type !== "link") return child;
-      const href = linkMark.attrs?.href as string | undefined;
-      if (!href) return child;
-      const m = FILE_HREF_PATTERN.exec(href);
-      if (!m) return child;
-      const label = (t.text as string) ?? "";
-      const trailing = label.match(/^(.*) (\d+)$/);
-      return {
-        type: "wikiFile",
-        attrs: {
-          fileId: m[1],
-          // Canonical relative form — see the sibling lift above for why the
-          // href as written is not kept.
-          url: `/api/v1/wiki/files/${m[1]}`,
-          filename: trailing ? trailing[1] : label,
-          size: trailing ? parseInt(trailing[2], 10) : 0,
-          contentType: guessContentType(trailing ? trailing[1] : label),
-        },
-      };
-    }
-  );
-
-  return wikiSchema.nodeFromJSON({ ...json, content: newContent });
+    },
+  };
 }
 
 function guessContentType(filename: string): string {

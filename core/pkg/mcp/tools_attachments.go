@@ -70,6 +70,36 @@ type attachmentView struct {
 	// and does not assume an unreadable attachment is empty.
 	Readable bool   `json:"readable"`
 	Kind     string `json:"kind"`
+	// Markdown is the line that places this file on a page as an attachment
+	// card. The card only appears when a link to the file stands alone in a
+	// paragraph with the byte count after the name; an agent composing that
+	// by hand from the id and size got it wrong often enough (a bare link, a
+	// "2 KB" label showing as 0 B) that the tool now hands over the exact
+	// line to paste.
+	Markdown string `json:"markdown"`
+}
+
+// attachmentCardMarkdown is the canonical line for an attachment card:
+// `[name size](/api/v1/wiki/files/<id>)`, the shape the Hocuspocus parser
+// lifts into a wikiFile block. Square brackets in the name are escaped so
+// the label survives markdown.
+func attachmentCardMarkdown(id, filename string, sizeBytes int64) string {
+	label := strings.NewReplacer("[", "\\[", "]", "\\]").Replace(filename)
+	return fmt.Sprintf("[%s %d](/api/v1/wiki/files/%s)", label, sizeBytes, id)
+}
+
+// newAttachmentView builds the agent-facing view of one stored file.
+func newAttachmentView(id, filename, contentType string, sizeBytes int64) attachmentView {
+	kind := attachmentKind(filename, contentType)
+	return attachmentView{
+		ID:          id,
+		Filename:    filename,
+		ContentType: contentType,
+		SizeBytes:   sizeBytes,
+		Readable:    kind != attachmentUnsupported,
+		Kind:        string(kind),
+		Markdown:    attachmentCardMarkdown(id, filename, sizeBytes),
+	}
 }
 
 type attachTextArgs struct {
@@ -94,7 +124,8 @@ func registerAttachmentTools(s *Server) {
 	register(s, &mcp.Tool{
 		Name: "attach_text_to_wiki_document",
 		Description: "Attach text to a page as a file: raw output, a scan, a config. Whole " +
-			"content in one call.",
+			"content in one call. The result's markdown line, pasted alone on its own line, " +
+			"shows the file on the page.",
 	}, writeTool, handleAttachTextToWikiDocument)
 }
 
@@ -150,18 +181,12 @@ func handleAttachTextToWikiDocument(ctx context.Context, s *Server, args attachT
 		return toolResult{}, refuse("could not attach %q: %s", filename, ingestErr.Message)
 	}
 
-	kind := attachmentKind(file.Filename, file.ContentType)
+	view := newAttachmentView(file.FileID.String(), file.Filename, file.ContentType, file.SizeBytes)
 	return toolResult{
-		Payload: attachmentView{
-			ID:          file.FileID.String(),
-			Filename:    file.Filename,
-			ContentType: file.ContentType,
-			SizeBytes:   file.SizeBytes,
-			Kind:        string(kind),
-			Readable:    kind != attachmentUnsupported,
-		},
+		Payload:     view,
 		OperationID: &doc.OperationID,
-		Summary:     fmt.Sprintf("attached %s to %s", file.Filename, doc.Title),
+		Summary: fmt.Sprintf("attached %s to %s; paste `markdown` alone on its own line to show it on the page",
+			file.Filename, doc.Title),
 	}, nil
 }
 
@@ -182,15 +207,7 @@ func handleListWikiAttachments(ctx context.Context, s *Server, args listWikiAtta
 		if f.DeletedAt != nil {
 			continue
 		}
-		kind := attachmentKind(f.Filename, f.ContentType)
-		views = append(views, attachmentView{
-			ID:          f.FileID.String(),
-			Filename:    f.Filename,
-			ContentType: f.ContentType,
-			SizeBytes:   f.SizeBytes,
-			Readable:    kind != attachmentUnsupported,
-			Kind:        string(kind),
-		})
+		views = append(views, newAttachmentView(f.FileID.String(), f.Filename, f.ContentType, f.SizeBytes))
 	}
 
 	result, err := newPage(views, "")

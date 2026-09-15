@@ -48,6 +48,60 @@ test("keeps a bare newline inside a paragraph as a hardBreak", () => {
   assert.equal(inline[2].text, "80/tcp open http");
 });
 
+const FILE_ID = "0b8f1c2e-1234-4abc-9def-0123456789ab";
+const FILE_LINK = `[recon.txt 2048](/api/v1/wiki/files/${FILE_ID})`;
+
+function nodeTypes(json: unknown): string[] {
+  const out: string[] = [];
+  const walk = (n: unknown) => {
+    if (!n || typeof n !== "object") return;
+    const rec = n as { type?: string; content?: unknown[] };
+    if (rec.type) out.push(rec.type);
+    rec.content?.forEach(walk);
+  };
+  walk(json);
+  return out;
+}
+
+test("lifts a lone file link inside a checklist answer to a wikiFile block", () => {
+  // An agent attaches evidence to the item it is answering; the card must
+  // appear there, not only at the top level of the page.
+  const md = `:::checklist {"prompt":"Scan?"}\nDone:\n\n${FILE_LINK}\n:::`;
+  const json = decode(markdownToYjsUpdate(md));
+  const item = (json.content as Array<Record<string, unknown>>)[0];
+  assert.equal(item.type, "wikiChecklistItem");
+  const kids = item.content as Array<Record<string, unknown>>;
+  assert.deepEqual(kids.map((k) => k.type), ["paragraph", "wikiFile"]);
+  const attrs = kids[1].attrs as Record<string, unknown>;
+  assert.equal(attrs.fileId, FILE_ID);
+  assert.equal(attrs.filename, "recon.txt");
+  assert.equal(attrs.size, 2048);
+});
+
+test("lifts a file link inside a notice and a table cell", () => {
+  const md = `:::info\n${FILE_LINK}\n:::`;
+  assert.ok(nodeTypes(decode(markdownToYjsUpdate(md))).includes("wikiFile"));
+});
+
+test("leaves a file link that is a list item's first paragraph as a link", () => {
+  // The schema pins a list item's first child to a paragraph, so the link
+  // stays a link there rather than producing an invalid document.
+  const md = `- ${FILE_LINK}`;
+  const types = nodeTypes(decode(markdownToYjsUpdate(md)));
+  assert.ok(!types.includes("wikiFile"), types.join(","));
+  assert.ok(types.includes("listItem"));
+});
+
+test("lifts a file link that follows the first paragraph of a list item", () => {
+  const md = `- Evidence:\n\n  ${FILE_LINK}`;
+  assert.ok(nodeTypes(decode(markdownToYjsUpdate(md))).includes("wikiFile"));
+});
+
+test("does not lift a file link with surrounding text", () => {
+  const md = `Full output: ${FILE_LINK}`;
+  assert.ok(!nodeTypes(decode(markdownToYjsUpdate(md))).includes("wikiFile"));
+});
+
 test("round-trips a heading", () => {
   const md = "## Sub-section";
   const json = decode(markdownToYjsUpdate(md));

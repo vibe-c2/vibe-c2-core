@@ -70,7 +70,8 @@ Pages are richer than plain markdown; preserve these constructs.
   `[page](vibe://doc/<id>)`. Credentials appear as a `vibe-credential` fenced
   block.
 - **Notices**: `:::info`, `:::success`, `:::warning`, `:::tip`, closed with `:::`.
-- Attachments as `[name size](/api/v1/wiki/files/<id>)`.
+- Attachments as `[name bytes](/api/v1/wiki/files/<id>)` alone in a
+  paragraph; `attach_text_to_wiki_document` returns the exact line.
 
 ## Templates
 
@@ -86,4 +87,5 @@ afterwards, and `set_wiki_template` is a team decision: propose it.
 
 Prose goes in the body, whole, in one call (up to 1 MB). Raw output (a command
 history, a scan, a config, a dump) is evidence: attach it with
-`attach_text_to_wiki_document` and link it from the page.
+`attach_text_to_wiki_document` and paste the returned `markdown` line on the
+page. See attachments.md.

@@ -16,6 +16,23 @@ PDFs and other binaries are not readable. That is a limit, not a transient
 error. Long files come back truncated with a note: treat what you have as the
 beginning of the file, never as the whole.
 
+## Adding a file
+
 `attach_text_to_wiki_document` adds text as a file: raw output, a scan, a
 config, anything long enough that pasting it into the page would bury the
-notes. Whole content, one call; the cap is megabytes. Link it from the page.
+notes. Whole content, one call; the cap is megabytes.
+
+Attaching stores the file; it does not put it on the page. The result carries
+`markdown`, the line that does:
+
+```
+[nmap-full.txt 18422](/api/v1/wiki/files/<id>)
+```
+
+Paste that line as written, alone in its own paragraph (a blank line above and
+below), wherever the file belongs: under the heading it supports, or inside the
+checklist answer it is evidence for. The editor shows it as an attachment card
+with the name and size. The card depends on the exact shape: the byte count
+after the name, nothing else in the paragraph. `Full output: [nmap-full.txt](…)`
+is only a link, and a label without the byte count shows as 0 B. To place a
+file that is already on the page, take `markdown` from `list_wiki_attachments`.

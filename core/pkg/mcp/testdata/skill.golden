@@ -3,7 +3,7 @@
 name: vibe-c2
 description: Work an offensive security engagement in Vibe C2 — hosts, credentials, hashes, tasks, wiki notes and the operation timeline — through its MCP tools. Use whenever connected to a Vibe C2 MCP endpoint, or when the user mentions an operation, findings, or engagement notes.
 metadata:
-  version: "4"
+  version: "5"
 ---
 
 # Vibe C2
@@ -274,7 +274,8 @@ Pages are richer than plain markdown; preserve these constructs.
   `[page](vibe://doc/<id>)`. Credentials appear as a `vibe-credential` fenced
   block.
 - **Notices**: `:::info`, `:::success`, `:::warning`, `:::tip`, closed with `:::`.
-- Attachments as `[name size](/api/v1/wiki/files/<id>)`.
+- Attachments as `[name bytes](/api/v1/wiki/files/<id>)` alone in a
+  paragraph; `attach_text_to_wiki_document` returns the exact line.
 
 ## Templates
 
@@ -290,7 +291,8 @@ afterwards, and `set_wiki_template` is a team decision: propose it.
 
 Prose goes in the body, whole, in one call (up to 1 MB). Raw output (a command
 history, a scan, a config, a dump) is evidence: attach it with
-`attach_text_to_wiki_document` and link it from the page.
+`attach_text_to_wiki_document` and paste the returned `markdown` line on the
+page. See attachments.md.
 ==================== vibe-c2/reference/findings.md
 # Findings: hosts, credentials, hashes
 
@@ -413,9 +415,26 @@ PDFs and other binaries are not readable. That is a limit, not a transient
 error. Long files come back truncated with a note: treat what you have as the
 beginning of the file, never as the whole.
 
+## Adding a file
+
 `attach_text_to_wiki_document` adds text as a file: raw output, a scan, a
 config, anything long enough that pasting it into the page would bury the
-notes. Whole content, one call; the cap is megabytes. Link it from the page.
+notes. Whole content, one call; the cap is megabytes.
+
+Attaching stores the file; it does not put it on the page. The result carries
+`markdown`, the line that does:
+
+```
+[nmap-full.txt 18422](/api/v1/wiki/files/<id>)
+```
+
+Paste that line as written, alone in its own paragraph (a blank line above and
+below), wherever the file belongs: under the heading it supports, or inside the
+checklist answer it is evidence for. The editor shows it as an attachment card
+with the name and size. The card depends on the exact shape: the byte count
+after the name, nothing else in the paragraph. `Full output: [nmap-full.txt](…)`
+is only a link, and a label without the byte count shows as 0 B. To place a
+file that is already on the page, take `markdown` from `list_wiki_attachments`.
 ==================== vibe-c2/reference/icons.md
 # Giving a page an icon
 
