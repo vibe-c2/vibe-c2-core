@@ -40,6 +40,10 @@ import { useFocusRestoreWithoutScroll } from "@/hooks/use-focus-restore-without-
 import { PreviewResizeHandle } from "./wiki-file-preview-resize"
 import { isPreviewableImage } from "./wiki-file-preview-image"
 import {
+  detectMediaPreviewKind,
+  type MediaPreviewKind,
+} from "./wiki-file-preview-media"
+import {
   detectInlinePreviewKind,
   useRenderedPreview,
   type InlinePreviewKind,
@@ -58,6 +62,16 @@ const PREVIEW_ALLOWED_CONTENT_TYPES = new Set<string>([
   "image/webp",
   "image/avif",
   "image/bmp",
+  "video/webm",
+  "video/mp4",
+  "video/ogg",
+  "audio/mpeg",
+  "audio/ogg",
+  "audio/wav",
+  "audio/x-wav",
+  "audio/webm",
+  "audio/mp4",
+  "audio/flac",
 ])
 
 /** Types we never serve inline regardless of ?preview=1 — mirrors the backend's
@@ -114,11 +128,16 @@ export function WikiFileCard({ node, editor, getPos }: ReactNodeViewProps): Reac
   const isPdf = contentType === "application/pdf"
   // Images bypass the panel entirely — see the thumbnail/lightbox path below.
   const isImage = isPreviewableImage(contentType, filename) && url !== ""
+  // Video and audio play in the panel through a native element pointed at
+  // the inline URL; nothing is fetched or converted here.
+  const mediaKind: MediaPreviewKind | null =
+    isPdf || isImage ? null : detectMediaPreviewKind(contentType, filename)
   const renderedKind: InlinePreviewKind | null =
-    isPdf || isImage
+    isPdf || isImage || mediaKind !== null
       ? null
       : detectInlinePreviewKind(contentType, filename, attrs.size)
-  const canPreviewInline = (isPdf || renderedKind !== null) && url !== ""
+  const canPreviewInline =
+    (isPdf || mediaKind !== null || renderedKind !== null) && url !== ""
   const previewUrl = url ? `${url}?preview=1` : ""
 
   // The frame is style-isolated, so the converters embed a palette rather than
@@ -358,6 +377,7 @@ export function WikiFileCard({ node, editor, getPos }: ReactNodeViewProps): Reac
         <FilePreviewPanel
           containerRef={previewRef}
           isPdf={isPdf}
+          mediaKind={mediaKind}
           previewUrl={previewUrl}
           filename={filename}
           rendered={rendered}
@@ -374,7 +394,9 @@ interface FilePreviewPanelProps {
    *  the target the resize drag mutates in place. */
   containerRef: RefObject<HTMLDivElement | null>
   isPdf: boolean
-  /** Inline-disposition URL for the PDF iframe (unused for HTML). */
+  /** Video or audio rendered through a native player; null otherwise. */
+  mediaKind: MediaPreviewKind | null
+  /** Inline-disposition URL for the PDF iframe and the media player (unused for HTML). */
   previewUrl: string
   filename: string
   rendered: RenderedPreviewState
@@ -393,6 +415,7 @@ interface FilePreviewPanelProps {
 function FilePreviewPanel({
   containerRef,
   isPdf,
+  mediaKind,
   previewUrl,
   filename,
   rendered,
@@ -403,11 +426,29 @@ function FilePreviewPanel({
   // this to seed the drag. Absent while HTML is still loading or errored, which
   // is exactly when we also hide the handle.
   const frameRef = useRef<HTMLIFrameElement>(null)
-  const hasFrame = isPdf || rendered.content !== null
+  // Media sizes itself to its own aspect ratio, so no drag handle.
+  const hasFrame = mediaKind === null && (isPdf || rendered.content !== null)
 
   return (
     <div className="wiki-file-preview" contentEditable={false} ref={containerRef}>
-      {isPdf ? (
+      {mediaKind === "video" ? (
+        // preload="metadata": duration and first frame only, until played.
+        <video
+          className="wiki-file-preview-media"
+          controls
+          preload="metadata"
+          src={previewUrl}
+          title={filename}
+        />
+      ) : mediaKind === "audio" ? (
+        <audio
+          className="wiki-file-preview-media wiki-file-preview-media--audio"
+          controls
+          preload="metadata"
+          src={previewUrl}
+          title={filename}
+        />
+      ) : isPdf ? (
         <iframe
           ref={frameRef}
           className="wiki-file-preview-frame"

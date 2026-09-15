@@ -1105,6 +1105,21 @@
   background: var(--color-muted, rgba(0, 0, 0, 0.03));
 }
 
+/* Native video/audio player. Video keeps its own aspect ratio under the same
+   height ceiling the frame uses; audio is a one-line control strip. */
+.tiptap .wiki-file-preview-media {
+  display: block;
+  width: 100%;
+  max-height: min(75vh, 720px);
+  background: #000;
+}
+
+.tiptap .wiki-file-preview-media--audio {
+  max-height: none;
+  padding: 8px;
+  background: transparent;
+}
+
 .tiptap .wiki-file-preview-frame {
   display: block;
   width: 100%;

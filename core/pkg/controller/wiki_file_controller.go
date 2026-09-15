@@ -82,6 +82,20 @@ var previewAllowedContentTypes = map[string]bool{
 	"application/pdf": true,
 	"text/plain":      true,
 	"text/markdown":   true,
+	// Video and audio the browser decodes natively. The same argument as the
+	// raster images below applies: nosniff pins the declared type, the CSP
+	// sandboxes any document interpretation, and a lying payload simply
+	// fails to decode. Served with Range support so the player can seek.
+	"video/webm":  true,
+	"video/mp4":   true,
+	"video/ogg":   true,
+	"audio/mpeg":  true,
+	"audio/ogg":   true,
+	"audio/wav":   true,
+	"audio/x-wav": true,
+	"audio/webm":  true,
+	"audio/mp4":   true,
+	"audio/flac":  true,
 	// Raster images. An image attachment is the one case where the browser
 	// already is the renderer, so serving it inline is what makes a thumbnail
 	// and a lightbox possible without a second copy of the bytes.
@@ -367,9 +381,6 @@ func (wfc *WikiFileController) Download(c *gin.Context) {
 	disposition := contentDispositionFor(file.Filename, contentType, preview)
 
 	c.Header("Content-Type", contentType)
-	if info.ContentLength > 0 {
-		c.Header("Content-Length", strconv.FormatInt(info.ContentLength, 10))
-	}
 	c.Header("Content-Disposition", disposition)
 	c.Header("ETag", fileETagFor(file.Checksum))
 	c.Header("Cache-Control", "private, max-age=31536000, immutable")
@@ -377,11 +388,34 @@ func (wfc *WikiFileController) Download(c *gin.Context) {
 	// Defense-in-depth CSP: file downloads should never execute anything.
 	c.Header("Content-Security-Policy", "default-src 'none'; sandbox")
 
-	c.Status(http.StatusOK)
-	if _, err := io.Copy(c.Writer, reader); err != nil {
+	if err := writeFileBody(c.Writer, c.Request, reader, info.ContentLength); err != nil {
 		// Client disconnect; not worth logging as error.
 		wfc.logger.Debug("Stream aborted", zap.Error(err))
 	}
+}
+
+// writeFileBody streams the object, honouring Range requests when the store
+// hands back a seekable body.
+//
+// A <video> element fetches its source in pieces: metadata first, then
+// whatever the user seeks to. Without Range support the browser downloads
+// the whole file before the first frame and seeking restarts from zero. The
+// S3 client's object is an io.ReadSeeker, so http.ServeContent can answer
+// byte ranges (206), HEAD, and If-Range/If-None-Match against the ETag set by
+// the caller. A body that cannot seek is copied whole, as before.
+func writeFileBody(w http.ResponseWriter, r *http.Request, body io.Reader, size int64) error {
+	if rs, ok := body.(io.ReadSeeker); ok {
+		// Zero modtime: no Last-Modified; the ETag already set on w carries
+		// the conditional-request semantics.
+		http.ServeContent(w, r, "", time.Time{}, rs)
+		return nil
+	}
+	if size > 0 {
+		w.Header().Set("Content-Length", strconv.FormatInt(size, 10))
+	}
+	w.WriteHeader(http.StatusOK)
+	_, err := io.Copy(w, body)
+	return err
 }
 
 // callerCanEdit returns true when the caller is app-admin or operator+ in
