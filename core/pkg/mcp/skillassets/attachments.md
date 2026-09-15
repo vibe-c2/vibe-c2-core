@@ -36,3 +36,11 @@ with the name and size. The card depends on the exact shape: the byte count
 after the name, nothing else in the paragraph. `Full output: [nmap-full.txt](…)`
 is only a link, and a label without the byte count shows as 0 B. To place a
 file that is already on the page, take `markdown` from `list_wiki_attachments`.
+
+You cannot tell a card from a link by reading the page back: both come back
+as the same markdown. Two things tell you instead. Every write reports
+`attachmentCards` and, when a file link stayed plain text,
+`fileLinksNotPlaced` with its label and file id: fix it in the same turn with
+`edit_wiki_document`, moving the link onto a line of its own. And
+`list_wiki_attachments` marks each file `placed` or not, from the saved page,
+so it can lag a write by a few seconds.

@@ -84,6 +84,13 @@ var releases = []Release{
 			"Structure guide lists what the page UI already shows (breadcrumb, tree, sub-pages, backlinks, task links, table of contents) so agents stop writing Parent:, Back to, sub-page lists and other links that duplicate it.",
 		},
 	},
+	{
+		Version: 8,
+		Date:    "2026-09-15",
+		Notes: []string{
+			"Attachment feedback: every wiki write reports attachmentCards and fileLinksNotPlaced (file links that stayed plain text), and list_wiki_attachments marks each file placed or not, so an agent can see and fix a link that did not become a card.",
+		},
+	},
 }
 
 // Releases returns the full history, oldest first. A copy, so callers cannot

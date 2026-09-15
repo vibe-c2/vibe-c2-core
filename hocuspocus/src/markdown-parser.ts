@@ -40,7 +40,7 @@ type NoticeVariant = (typeof NOTICE_VARIANTS)[number];
 // re-importing an exported page hands us `https://host/api/v1/wiki/files/…`.
 // Anchoring to the relative form alone would leave that as an inert link and
 // quietly lose the attachment on the way back in.
-const FILE_HREF_PATTERN =
+export const FILE_HREF_PATTERN =
   /^(?:[a-z][a-z0-9+.-]*:\/\/[^/]+)?\/api\/v1\/wiki\/files\/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$/i;
 
 // markdown-it core rule: walk the block-level token stream and replace any

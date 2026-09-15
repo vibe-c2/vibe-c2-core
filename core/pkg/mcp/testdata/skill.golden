@@ -3,7 +3,7 @@
 name: vibe-c2
 description: Work an offensive security engagement in Vibe C2 — hosts, credentials, hashes, tasks, wiki notes and the operation timeline — through its MCP tools. Use whenever connected to a Vibe C2 MCP endpoint, or when the user mentions an operation, findings, or engagement notes.
 metadata:
-  version: "7"
+  version: "8"
 ---
 
 # Vibe C2
@@ -153,7 +153,7 @@ Engagement notes, collaboratively edited, with file attachments. See wiki.md and
 - `edit_wiki_document` **(write)** — Replace an exact snippet on a page, like editing a source file.
 - `update_wiki_document` **(write)** — Replace a page's whole body.
 - `delete_wiki_document` **(write)** — Move a page to the trash, where an admin can restore it.
-- `list_wiki_attachments` — Files attached to a page, each marked readable or not.
+- `list_wiki_attachments` — Files attached to a page, each marked readable or not and whether the page shows it as an attachment card (placed).
 - `read_wiki_attachment` — Read an attachment: text formats directly, Word and Excel as text, images as images.
 - `attach_text_to_wiki_document` **(write)** — Attach text to a page as a file: raw output, a scan, a config.
 
@@ -459,6 +459,14 @@ with the name and size. The card depends on the exact shape: the byte count
 after the name, nothing else in the paragraph. `Full output: [nmap-full.txt](…)`
 is only a link, and a label without the byte count shows as 0 B. To place a
 file that is already on the page, take `markdown` from `list_wiki_attachments`.
+
+You cannot tell a card from a link by reading the page back: both come back
+as the same markdown. Two things tell you instead. Every write reports
+`attachmentCards` and, when a file link stayed plain text,
+`fileLinksNotPlaced` with its label and file id: fix it in the same turn with
+`edit_wiki_document`, moving the link onto a line of its own. And
+`list_wiki_attachments` marks each file `placed` or not, from the saved page,
+so it can lag a write by a few seconds.
 ==================== vibe-c2/reference/icons.md
 # Giving a page an icon
 

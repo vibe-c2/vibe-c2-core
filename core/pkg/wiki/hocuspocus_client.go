@@ -238,6 +238,22 @@ type applyMarkdownRequest struct {
 type ApplyMarkdownResult struct {
 	Nodes    int `json:"nodes"`
 	Watchers int `json:"watchers"`
+	AttachmentAudit
+}
+
+// StrayFileLink is a link to an attachment that stayed an ordinary link
+// instead of becoming an attachment card.
+type StrayFileLink struct {
+	FileID string `json:"fileId"`
+	Label  string `json:"label"`
+}
+
+// AttachmentAudit says how the page's file links stand after a write. The
+// page reads back as the same markdown whether a file is a card or a plain
+// link, so this is the only way an agent learns which one it produced.
+type AttachmentAudit struct {
+	AttachmentCards int             `json:"attachmentCards"`
+	StrayFileLinks  []StrayFileLink `json:"strayFileLinks,omitempty"`
 }
 
 // ApplyMarkdown edits a wiki document as a Y.js transaction on the live
@@ -326,6 +342,7 @@ type EditMarkdownResult struct {
 	Watchers     int `json:"watchers"`
 	Matches      int `json:"matches"`
 	Replacements int `json:"replacements"`
+	AttachmentAudit
 }
 
 // EditNoMatchError means old_text was not on the page. Diagnosis is a sentence

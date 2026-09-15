@@ -81,14 +81,16 @@ func handleCreateWikiDocument(ctx context.Context, s *Server, args createWikiDoc
 		return toolResult{}, fmt.Errorf("failed to create wiki page: %w", err)
 	}
 
+	var written wiki.ApplyMarkdownResult
 	if args.Content != "" {
-		if _, err := s.writeBody(ctx, doc, args.Content, wiki.ApplyReplace); err != nil {
+		var err error
+		if written, err = s.writeBody(ctx, doc, args.Content, wiki.ApplyReplace); err != nil {
 			return toolResult{}, err
 		}
 	}
 
 	return toolResult{
-		Payload:     toWikiDocView(doc),
+		Payload:     newWikiWriteResult(toWikiDocView(doc), written.Watchers, written.AttachmentAudit),
 		OperationID: &opID,
 		Summary:     fmt.Sprintf("created wiki page %s", doc.Title),
 	}, nil
@@ -204,7 +206,7 @@ func (s *Server) writeSection(ctx context.Context, args sectionWriteArgs, mode w
 	// gratuitous break.
 	if len(ids) == 1 {
 		return toolResult{
-			Payload:     newWikiWriteResult(wikiDocView{ID: results[0].ID, Title: results[0].Title}, results[0].Watchers),
+			Payload:     newWikiWriteResult(wikiDocView{ID: results[0].ID, Title: results[0].Title}, results[0].Watchers, results[0].audit),
 			OperationID: opID,
 			Summary:     fmt.Sprintf("%s %s", verb, results[0].Title),
 		}, nil
@@ -246,14 +248,15 @@ func (s *Server) writeSectionOne(ctx context.Context, id, content string, mode w
 		return result, nil, err
 	}
 
-	watchers, err := s.writeBody(ctx, doc, content, mode)
+	written, err := s.writeBody(ctx, doc, content, mode)
 	if err != nil {
 		result.Error = err.Error()
 		return result, nil, err
 	}
 
 	result.OK = true
-	result.Watchers = watchers
+	result.Watchers = written.Watchers
+	result.audit = written.AttachmentAudit
 	return result, &doc.OperationID, nil
 }
 
@@ -319,7 +322,7 @@ func handleEditWikiDocument(ctx context.Context, s *Server, args editWikiDocumen
 		wikiWriteResultView
 		Replacements int `json:"replacements"`
 	}{
-		wikiWriteResultView: newWikiWriteResult(toWikiDocView(doc), result.Watchers),
+		wikiWriteResultView: newWikiWriteResult(toWikiDocView(doc), result.Watchers, result.AttachmentAudit),
 		Replacements:        result.Replacements,
 	}
 
@@ -353,13 +356,13 @@ func handleUpdateWikiDocument(ctx context.Context, s *Server, args updateWikiDoc
 		}
 	}
 
-	watchers, err := s.writeBody(ctx, doc, args.Content, wiki.ApplyReplace)
+	written, err := s.writeBody(ctx, doc, args.Content, wiki.ApplyReplace)
 	if err != nil {
 		return toolResult{}, err
 	}
 
 	return toolResult{
-		Payload:     newWikiWriteResult(toWikiDocView(doc), watchers),
+		Payload:     newWikiWriteResult(toWikiDocView(doc), written.Watchers, written.AttachmentAudit),
 		OperationID: &doc.OperationID,
 		Summary:     fmt.Sprintf("rewrote wiki page %s", doc.Title),
 	}, nil
@@ -380,7 +383,7 @@ func handleUpdateWikiDocument(ctx context.Context, s *Server, args updateWikiDoc
 // which is the entire point of working alongside one. The previous
 // implementation refused that case, which meant the more engaged the operator
 // was with a page, the less the agent could help with it.
-func (s *Server) writeBody(ctx context.Context, doc *models.WikiDocument, body string, mode wiki.ApplyMode) (int, error) {
+func (s *Server) writeBody(ctx context.Context, doc *models.WikiDocument, body string, mode wiki.ApplyMode) (wiki.ApplyMarkdownResult, error) {
 	// Size is checked before anything else: it is true whatever the rest of
 	// the deployment looks like, and it is the more useful thing to say.
 	//
@@ -390,7 +393,7 @@ func (s *Server) writeBody(ctx context.Context, doc *models.WikiDocument, body s
 	// when one chunk fails, and was never necessary — see the note on the
 	// tool descriptions.
 	if len(body) > wiki.MaxMarkdownBytes {
-		return 0, refuse(
+		return wiki.ApplyMarkdownResult{}, refuse(
 			"that body is %d bytes and the limit for one page is %d (about 1 MB). "+
 				"Do not split it across several edits — attach it instead with "+
 				"attach_text_to_wiki_document, which takes the whole thing in one call, "+
@@ -399,14 +402,14 @@ func (s *Server) writeBody(ctx context.Context, doc *models.WikiDocument, body s
 	}
 
 	if s.deps.Hocuspocus == nil {
-		return 0, fmt.Errorf("wiki writing is unavailable: the collaboration service is not configured")
+		return wiki.ApplyMarkdownResult{}, fmt.Errorf("wiki writing is unavailable: the collaboration service is not configured")
 	}
 
 	result, err := s.deps.Hocuspocus.ApplyMarkdown(ctx, doc.DocumentID.String(), body, mode)
 	if errors.Is(err, wiki.ErrMarkdownTooLarge) {
 		// Belt and braces: the check above should have caught this, and will
 		// not if the sidecar's limit is lowered without this one following.
-		return 0, refuse(
+		return wiki.ApplyMarkdownResult{}, refuse(
 			"that body is too large for one page. Attach it instead with " +
 				"attach_text_to_wiki_document, rather than splitting it across several edits.")
 	}
@@ -414,11 +417,11 @@ func (s *Server) writeBody(ctx context.Context, doc *models.WikiDocument, body s
 		s.deps.Logger.Warn("mcp: failed to apply wiki edit",
 			zap.String("document_id", doc.DocumentID.String()),
 			zap.String("mode", string(mode)), zap.Error(err))
-		return 0, fmt.Errorf("failed to save the page: %w", err)
+		return wiki.ApplyMarkdownResult{}, fmt.Errorf("failed to save the page: %w", err)
 	}
 
 	// The body changed, so the cached rendering is wrong even though the
 	// persistence stamp will not move until the sidecar's next debounce.
 	s.forgetMarkdown(ctx, doc.DocumentID.String())
-	return result.Watchers, nil
+	return result, nil
 }

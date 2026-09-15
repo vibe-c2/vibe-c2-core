@@ -23,6 +23,7 @@ import { XmlElement, XmlFragment, XmlText } from "yjs";
 import { prosemirrorJSONToYDoc, yXmlFragmentToProseMirrorRootNode } from "y-prosemirror";
 import { wikiSchema } from "./wiki-schema.js";
 import { parseOutlineMarkdown } from "./markdown-parser.js";
+import { auditAttachments, type AttachmentAudit } from "./attachment-audit.js";
 import { serializeWikiDocument } from "./markdown-serializer.js";
 import { Y_FRAGMENT_FIELD } from "./markdown-to-yjs.js";
 import { readRawBody, requireSignature } from "./internal-auth.js";
@@ -362,9 +363,20 @@ export function setupApplyApi(app: Express, server: Hocuspocus): void {
 
         let appliedNodes = 0;
         let edit: EditOutcome | undefined;
+        // How the page's file links stand after the write. Read inside the
+        // transaction so it describes exactly the state this write produced.
+        let attachments: AttachmentAudit = { attachmentCards: 0, strayFileLinks: [] };
 
         await connection.transact((document) => {
           const fragment = document.getXmlFragment(Y_FRAGMENT_FIELD);
+          try {
+            applyTo(fragment);
+          } finally {
+            attachments = auditAttachments(fragment);
+          }
+        });
+
+        function applyTo(fragment: XmlFragment): void {
 
           if (mode === "edit") {
             edit = editFragment(fragment, oldText as string, newText as string, replaceAll === true);
@@ -393,7 +405,7 @@ export function setupApplyApi(app: Express, server: Hocuspocus): void {
           // One transaction, so collaborators see a single coherent change
           // rather than the document briefly emptying.
           spliceFragment(fragment, blocks);
-        });
+        }
 
         const connections =
           server.documents.get(roomName(documentId))?.getConnectionsCount() ?? 0;
@@ -420,11 +432,12 @@ export function setupApplyApi(app: Express, server: Hocuspocus): void {
             watchers: connections,
             matches: edit.matches,
             replacements: edit.replacements,
+            ...attachments,
           });
           return;
         }
 
-        res.status(200).json({ ok: true, mode, nodes: appliedNodes, watchers: connections });
+        res.status(200).json({ ok: true, mode, nodes: appliedNodes, watchers: connections, ...attachments });
       } catch (err) {
         const message = err instanceof Error ? err.message : "apply failed";
         console.error("apply-markdown error:", err);

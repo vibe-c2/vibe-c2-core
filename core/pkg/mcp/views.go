@@ -2,6 +2,7 @@ package mcp
 
 import (
 	"fmt"
+	"github.com/vibe-c2/vibe-c2-core/core/pkg/wiki"
 	"strings"
 	"time"
 
@@ -211,6 +212,7 @@ type sectionTargetResult struct {
 	OK       bool   `json:"ok"`
 	Watchers int    `json:"watchers,omitempty"`
 	Error    string `json:"error,omitempty"`
+	audit    wiki.AttachmentAudit
 }
 
 // sectionWriteResultView reports a write that spanned several pages.
@@ -233,15 +235,34 @@ type sectionWriteResultView struct {
 // happened to an empty room might be worth mentioning to the operator later.
 type wikiWriteResultView struct {
 	wikiDocView
-	Watchers int    `json:"watchers"`
-	Note     string `json:"note,omitempty"`
+	Watchers int `json:"watchers"`
+	// AttachmentCards is how many files the page shows as attachment cards
+	// after this write; FileLinksNotPlaced lists file links that stayed plain
+	// links. A page reads back as the same markdown either way, so this is
+	// where an agent learns its file line did not become a card.
+	AttachmentCards    int                  `json:"attachmentCards"`
+	FileLinksNotPlaced []wiki.StrayFileLink `json:"fileLinksNotPlaced,omitempty"`
+	Note               string               `json:"note,omitempty"`
 }
 
-func newWikiWriteResult(doc wikiDocView, watchers int) wikiWriteResultView {
-	view := wikiWriteResultView{wikiDocView: doc, Watchers: watchers}
-	if watchers > 0 {
-		view.Note = "The operator has this page open and saw your edit appear."
+func newWikiWriteResult(doc wikiDocView, watchers int, audit wiki.AttachmentAudit) wikiWriteResultView {
+	view := wikiWriteResultView{
+		wikiDocView:        doc,
+		Watchers:           watchers,
+		AttachmentCards:    audit.AttachmentCards,
+		FileLinksNotPlaced: audit.StrayFileLinks,
 	}
+	var notes []string
+	if watchers > 0 {
+		notes = append(notes, "The operator has this page open and saw your edit appear.")
+	}
+	if n := len(audit.StrayFileLinks); n > 0 {
+		notes = append(notes, fmt.Sprintf(
+			"%d file link(s) on the page are plain links, not attachment cards (see fileLinksNotPlaced). "+
+				"A card needs the `[name bytes](/api/v1/wiki/files/<id>)` line alone on its own line, "+
+				"nothing else beside it; edit_wiki_document can move it.", n))
+	}
+	view.Note = strings.Join(notes, " ")
 	return view
 }
 

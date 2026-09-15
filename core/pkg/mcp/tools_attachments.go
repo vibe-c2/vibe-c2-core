@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/google/uuid"
 	"io"
 	"strings"
 	"unicode/utf8"
@@ -77,6 +78,11 @@ type attachmentView struct {
 	// "2 KB" label showing as 0 B) that the tool now hands over the exact
 	// line to paste.
 	Markdown string `json:"markdown"`
+	// Placed says whether the page shows this file as an attachment card.
+	// False for a file that was attached but never put on the page, or whose
+	// link stayed plain text. Read from the saved document, so it can lag a
+	// write by the sidecar's persistence debounce (a few seconds).
+	Placed bool `json:"placed"`
 }
 
 // attachmentCardMarkdown is the canonical line for an attachment card:
@@ -89,9 +95,10 @@ func attachmentCardMarkdown(id, filename string, sizeBytes int64) string {
 }
 
 // newAttachmentView builds the agent-facing view of one stored file.
-func newAttachmentView(id, filename, contentType string, sizeBytes int64) attachmentView {
+func newAttachmentView(id, filename, contentType string, sizeBytes int64, placed bool) attachmentView {
 	kind := attachmentKind(filename, contentType)
 	return attachmentView{
+		Placed:      placed,
 		ID:          id,
 		Filename:    filename,
 		ContentType: contentType,
@@ -111,8 +118,9 @@ type attachTextArgs struct {
 
 func registerAttachmentTools(s *Server) {
 	register(s, &mcp.Tool{
-		Name:        "list_wiki_attachments",
-		Description: "Files attached to a page, each marked readable or not.",
+		Name: "list_wiki_attachments",
+		Description: "Files attached to a page, each marked readable or not and whether the page " +
+			"shows it as an attachment card (placed).",
 	}, readTool, handleListWikiAttachments)
 
 	register(s, &mcp.Tool{
@@ -181,7 +189,7 @@ func handleAttachTextToWikiDocument(ctx context.Context, s *Server, args attachT
 		return toolResult{}, refuse("could not attach %q: %s", filename, ingestErr.Message)
 	}
 
-	view := newAttachmentView(file.FileID.String(), file.Filename, file.ContentType, file.SizeBytes)
+	view := newAttachmentView(file.FileID.String(), file.Filename, file.ContentType, file.SizeBytes, false)
 	return toolResult{
 		Payload:     view,
 		OperationID: &doc.OperationID,
@@ -201,13 +209,17 @@ func handleListWikiAttachments(ctx context.Context, s *Server, args listWikiAtta
 		return toolResult{}, fmt.Errorf("failed to list attachments: %w", err)
 	}
 
+	placed := make(map[uuid.UUID]bool, len(doc.FileReferences))
+	for _, id := range doc.FileReferences {
+		placed[id] = true
+	}
 	views := make([]attachmentView, 0, len(files))
 	for i := range files {
 		f := &files[i]
 		if f.DeletedAt != nil {
 			continue
 		}
-		views = append(views, newAttachmentView(f.FileID.String(), f.Filename, f.ContentType, f.SizeBytes))
+		views = append(views, newAttachmentView(f.FileID.String(), f.Filename, f.ContentType, f.SizeBytes, placed[f.FileID]))
 	}
 
 	result, err := newPage(views, "")
