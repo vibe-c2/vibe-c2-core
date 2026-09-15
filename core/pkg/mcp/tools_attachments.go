@@ -135,6 +135,13 @@ func registerAttachmentTools(s *Server) {
 			"content in one call. The result's markdown line, pasted alone on its own line, " +
 			"shows the file on the page.",
 	}, writeTool, handleAttachTextToWikiDocument)
+
+	register(s, &mcp.Tool{
+		Name: "attach_file_to_wiki_document",
+		Description: "Attach a binary file to a page from base64 bytes, or with as:\"image\" place a " +
+			"screenshot inline. The result's markdown line, pasted alone on its own line, " +
+			"shows it on the page.",
+	}, writeTool, handleAttachFileToWikiDocument)
 }
 
 // handleAttachTextToWikiDocument writes agent-supplied text to a page as an

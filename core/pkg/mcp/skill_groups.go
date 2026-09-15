@@ -47,7 +47,7 @@ var toolGroups = []toolGroup{
 			"create_wiki_document", "add_wiki_section",
 			"edit_wiki_document", "update_wiki_document", "delete_wiki_document",
 			"list_wiki_attachments", "read_wiki_attachment",
-			"attach_text_to_wiki_document"},
+			"attach_text_to_wiki_document", "attach_file_to_wiki_document"},
 	},
 	{
 		Title: "Timeline",

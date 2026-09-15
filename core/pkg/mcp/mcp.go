@@ -99,6 +99,9 @@ type Deps struct {
 	// upload uses, so an agent's attachment is indistinguishable from a
 	// person's — same size cap, same type sniffing, same deny-list.
 	Files FileIngestor
+	// Images places bytes on a wiki page as an inline image, the way a
+	// pasted screenshot is: decoded, re-encoded, dimensions recorded.
+	Images ImageIngestor
 
 	Cache cache.Cache
 	// Blobs is where attachment bytes live. Read-only from here: an agent can

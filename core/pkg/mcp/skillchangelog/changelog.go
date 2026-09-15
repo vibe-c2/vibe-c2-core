@@ -91,6 +91,13 @@ var releases = []Release{
 			"Attachment feedback: every wiki write reports attachmentCards and fileLinksNotPlaced (file links that stayed plain text), and list_wiki_attachments marks each file placed or not, so an agent can see and fix a link that did not become a card.",
 		},
 	},
+	{
+		Version: 9,
+		Date:    "2026-09-15",
+		Notes: []string{
+			"New attach_file_to_wiki_document: binary files from base64, and with as:\"image\" a screenshot placed inline on the page. The result carries the markdown line to paste.",
+		},
+	},
 }
 
 // Releases returns the full history, oldest first. A copy, so callers cannot

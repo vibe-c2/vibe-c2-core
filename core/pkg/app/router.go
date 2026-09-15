@@ -210,6 +210,7 @@ func (a *App) NewRouter() *gin.Engine {
 			CredentialRepo:  a.repos.Credential,
 			UserRepo:        a.repos.User,
 			Files:           wikiFileCtrl,
+			Images:          wikiImageCtrl,
 			Cache:           a.cache,
 			Blobs:           a.fileStore,
 			Hocuspocus:      a.hpClient,

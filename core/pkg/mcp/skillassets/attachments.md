@@ -44,3 +44,17 @@ as the same markdown. Two things tell you instead. Every write reports
 `edit_wiki_document`, moving the link onto a line of its own. And
 `list_wiki_attachments` marks each file `placed` or not, from the saved page,
 so it can lag a write by a few seconds.
+
+## Screenshots and other binary files
+
+`attach_file_to_wiki_document` takes bytes as `content_base64` (a `data:` URL
+is fine) with a filename that says what they are. Two placements:
+
+- `as:"image"` for a screenshot (PNG, JPEG, GIF, WebP): the page shows it as a
+  picture. The result's `markdown` is an image line with a size hint,
+  `![login.png](/api/v1/wiki/images/<id> " =1280x720")`; paste it alone on
+  its own line where the picture belongs.
+- `as:"attachment"` (default) for anything else, a capture or a binary: a
+  file card, placed exactly like a text attachment.
+
+Whole file, one call. The page's upload limits apply and a refusal says which.
