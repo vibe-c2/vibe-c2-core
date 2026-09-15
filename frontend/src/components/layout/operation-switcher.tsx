@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useConnectionNodes } from "@/hooks/use-connection-nodes";
 import { Virtuoso, type VirtuosoHandle } from "react-virtuoso";
 import {
@@ -24,6 +24,7 @@ import {
 import { cn } from "@/lib/utils";
 import { useInfiniteOperations } from "@/graphql/hooks/operations";
 import { useScopedOperationStore } from "@/stores/scoped-operation";
+import { buildPickerRows } from "@/components/layout/operation-picker-rows";
 
 interface OperationTooltipBodyProps {
   name: string;
@@ -34,7 +35,10 @@ interface OperationTooltipBodyProps {
 // way. Stacked rather than inline because a description is a sentence, not a
 // label — the tooltip wraps at its own max-width and the name stays scannable
 // as the first line.
-function OperationTooltipBody({ name, description }: OperationTooltipBodyProps) {
+function OperationTooltipBody({
+  name,
+  description,
+}: OperationTooltipBodyProps) {
   return (
     <span className="flex flex-col gap-0.5 text-left">
       <span className="font-medium">{name}</span>
@@ -47,6 +51,7 @@ function OperationTooltipBody({ name, description }: OperationTooltipBodyProps) 
 
 export function OperationSwitcher() {
   const scopedOperation = useScopedOperationStore((s) => s.scopedOperation);
+  const recentOperations = useScopedOperationStore((s) => s.recentOperations);
   const scopeOperation = useScopedOperationStore((s) => s.scopeOperation);
   const unscopeOperation = useScopedOperationStore((s) => s.unscopeOperation);
 
@@ -85,7 +90,13 @@ export function OperationSwitcher() {
       { enabled: open },
     );
 
-  const operations = useConnectionNodes(data, (p) => p.operations);
+  const loadedOperations = useConnectionNodes(data, (p) => p.operations);
+  const rows = useMemo(
+    () =>
+      buildPickerRows(recentOperations, loadedOperations, !!debouncedSearch),
+    [recentOperations, loadedOperations, debouncedSearch],
+  );
+  const operations = useMemo(() => rows.map((r) => r.op), [rows]);
 
   // Reset search and highlight when popover transitions to open, and reset
   // highlight when operations list reference changes. Done during render via
@@ -118,7 +129,11 @@ export function OperationSwitcher() {
   }, [highlightedIndex]);
 
   function selectOperation(op: (typeof operations)[number]) {
-    scopeOperation({ id: op.id, name: op.name, description: op.description });
+    scopeOperation({
+      id: op.id,
+      name: op.name,
+      description: op.description ?? "",
+    });
     setOpen(false);
   }
 
@@ -261,14 +276,15 @@ export function OperationSwitcher() {
         {!isLoading && operations.length > 0 && (
           <Virtuoso
             ref={virtuosoRef}
-            data={operations}
+            data={rows}
             style={{ height: "256px" }}
             endReached={() => {
               if (hasNextPage && !isFetchingNextPage) fetchNextPage();
             }}
             overscan={100}
             role="listbox"
-            itemContent={(index, op) => {
+            itemContent={(index, row) => {
+              const op = row.op;
               const isActive = scopedOperation?.id === op.id;
 
               return (
@@ -277,53 +293,60 @@ export function OperationSwitcher() {
                 // what guarantees the full value is always reachable.
                 // Only the rows Virtuoso has mounted carry one, so the cost
                 // tracks the viewport rather than the size of the result set.
-                <Tooltip key={op.id}>
-                  <TooltipTrigger
-                    render={
-                      <button
-                        role="option"
-                        aria-selected={index === highlightedIndex}
-                        className={cn(
-                          "flex w-full items-center gap-2 rounded-md px-1.5 py-1.5 text-left text-sm",
-                          index === highlightedIndex
-                            ? "bg-accent text-accent-foreground"
-                            : "hover:bg-accent/50",
-                        )}
-                        onMouseEnter={() => {
-                          scrollOnHighlight.current = false;
-                          setHighlightedIndex(index);
-                        }}
-                        onMouseDown={(e) => {
-                          e.preventDefault();
-                          selectOperation(op);
-                        }}
-                      />
-                    }
-                  >
-                    <SwordsIcon className="size-5 shrink-0 text-muted-foreground" />
-                    <div className="grid flex-1 min-w-0 leading-tight">
-                      <span className="truncate text-sm font-medium">
-                        {op.name}
-                      </span>
-                      {op.description && (
-                        <span className="truncate text-xs text-muted-foreground">
-                          {op.description}
-                        </span>
-                      )}
+                <div key={op.id}>
+                  {row.section && (
+                    <div className="px-1.5 pb-0.5 pt-1.5 text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+                      {row.section}
                     </div>
-                    {isActive && (
-                      <CheckIcon className="size-3.5 shrink-0 text-primary" />
-                    )}
-                  </TooltipTrigger>
-                  {/* To the right of the popover, so it never covers the rows
+                  )}
+                  <Tooltip>
+                    <TooltipTrigger
+                      render={
+                        <button
+                          role="option"
+                          aria-selected={index === highlightedIndex}
+                          className={cn(
+                            "flex w-full items-center gap-2 rounded-md px-1.5 py-1.5 text-left text-sm",
+                            index === highlightedIndex
+                              ? "bg-accent text-accent-foreground"
+                              : "hover:bg-accent/50",
+                          )}
+                          onMouseEnter={() => {
+                            scrollOnHighlight.current = false;
+                            setHighlightedIndex(index);
+                          }}
+                          onMouseDown={(e) => {
+                            e.preventDefault();
+                            selectOperation(op);
+                          }}
+                        />
+                      }
+                    >
+                      <SwordsIcon className="size-5 shrink-0 text-muted-foreground" />
+                      <div className="grid flex-1 min-w-0 leading-tight">
+                        <span className="truncate text-sm font-medium">
+                          {op.name}
+                        </span>
+                        {op.description && (
+                          <span className="truncate text-xs text-muted-foreground">
+                            {op.description}
+                          </span>
+                        )}
+                      </div>
+                      {isActive && (
+                        <CheckIcon className="size-3.5 shrink-0 text-primary" />
+                      )}
+                    </TooltipTrigger>
+                    {/* To the right of the popover, so it never covers the rows
                       above and below the one being read. */}
-                  <TooltipContent side="right" align="center">
-                    <OperationTooltipBody
-                      name={op.name}
-                      description={op.description}
-                    />
-                  </TooltipContent>
-                </Tooltip>
+                    <TooltipContent side="right" align="center">
+                      <OperationTooltipBody
+                        name={op.name}
+                        description={op.description}
+                      />
+                    </TooltipContent>
+                  </Tooltip>
+                </div>
               );
             }}
             components={{

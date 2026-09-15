@@ -50,3 +50,32 @@ describe("scopeOperationForWikiDocument", () => {
     expect(useScopedOperationStore.getState().retainedWikiDocumentId).toBeNull()
   })
 })
+
+describe("recentOperations", () => {
+  beforeEach(() => {
+    memory.clear()
+    useScopedOperationStore.getState().reset()
+    useScopedOperationStore.getState().hydrate("user-1")
+  })
+
+  it("records scoped operations newest first without duplicates", () => {
+    const store = useScopedOperationStore.getState()
+    store.scopeOperation(opA)
+    store.scopeOperation(opB)
+    store.scopeOperationForWikiDocument(opA, "doc-1")
+    expect(
+      useScopedOperationStore.getState().recentOperations.map((o) => o.id),
+    ).toEqual(["op-a", "op-b"])
+  })
+
+  it("persists per user and comes back on hydrate", () => {
+    useScopedOperationStore.getState().scopeOperation(opB)
+    useScopedOperationStore.getState().reset()
+    expect(useScopedOperationStore.getState().recentOperations).toEqual([])
+    useScopedOperationStore.getState().hydrate("user-1")
+    expect(useScopedOperationStore.getState().recentOperations).toEqual([opB])
+    useScopedOperationStore.getState().reset()
+    useScopedOperationStore.getState().hydrate("user-2")
+    expect(useScopedOperationStore.getState().recentOperations).toEqual([])
+  })
+})
