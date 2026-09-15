@@ -1,13 +1,13 @@
-import { ArrowRightLeftIcon } from "lucide-react";
-import { Button } from "@/components/ui/button";
-import { useOperation } from "@/graphql/hooks/operations";
-import { useScopedOperationStore } from "@/stores/scoped-operation";
-import { useWikiTreeModeStore } from "@/stores/wiki-tree-mode";
-import { isPublicOperation } from "@/lib/public-operation";
-import type { WikiDocumentFieldsFragment } from "@/graphql/gql/graphql";
+import { ArrowRightLeftIcon } from "lucide-react"
+import { Button } from "@/components/ui/button"
+import { useOperation } from "@/graphql/hooks/operations"
+import { useScopedOperationStore } from "@/stores/scoped-operation"
+import { useWikiTreeModeStore } from "@/stores/wiki-tree-mode"
+import { isPublicOperation } from "@/lib/public-operation"
+import type { WikiDocumentFieldsFragment } from "@/graphql/gql/graphql"
 
 interface WikiForeignOperationBannerProps {
-  document: WikiDocumentFieldsFragment;
+  document: WikiDocumentFieldsFragment
 }
 
 /**
@@ -24,23 +24,23 @@ interface WikiForeignOperationBannerProps {
 export function WikiForeignOperationBanner({
   document: doc,
 }: WikiForeignOperationBannerProps) {
-  const scoped = useScopedOperationStore((s) => s.scopedOperation);
+  const scoped = useScopedOperationStore((s) => s.scopedOperation)
   const scopeOperationForWikiDocument = useScopedOperationStore(
     (s) => s.scopeOperationForWikiDocument,
-  );
-  const setTreeMode = useWikiTreeModeStore((s) => s.setMode);
+  )
+  const setTreeMode = useWikiTreeModeStore((s) => s.setMode)
 
-  const docOperationId = doc.operationId;
+  const docOperationId = doc.operationId
   const isForeign =
-    !isPublicOperation(docOperationId) && scoped?.id !== docOperationId;
-  const { data } = useOperation(isForeign ? docOperationId : "");
-  const operation = data?.operation;
+    !isPublicOperation(docOperationId) && scoped?.id !== docOperationId
+  const { data } = useOperation(isForeign ? docOperationId : "")
+  const operation = data?.operation
 
-  if (!isForeign) return null;
+  if (!isForeign) return null
 
-  const name = operation?.name ?? "another operation";
+  const name = operation?.name ?? "another operation"
   const onSwitch = () => {
-    if (!operation) return;
+    if (!operation) return
     scopeOperationForWikiDocument(
       {
         id: operation.id,
@@ -48,11 +48,11 @@ export function WikiForeignOperationBanner({
         description: operation.description,
       },
       doc.id,
-    );
+    )
     // The tree follows the scope only in operation mode; a viewer parked on
     // the Public tree would otherwise switch scope and still see Public.
-    setTreeMode("operation");
-  };
+    setTreeMode("operation")
+  }
 
   return (
     <div
@@ -81,5 +81,5 @@ export function WikiForeignOperationBanner({
         Switch to {operation?.name ?? "…"}
       </Button>
     </div>
-  );
+  )
 }

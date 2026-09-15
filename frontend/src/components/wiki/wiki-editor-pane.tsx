@@ -1,19 +1,19 @@
-import { Component, useEffect, type ErrorInfo, type ReactNode } from "react";
-import { Skeleton } from "@/components/ui/skeleton";
-import { Button } from "@/components/ui/button";
-import { useWikiDocument } from "@/graphql/hooks/wiki";
-import { WikiEditorHeader } from "@/components/wiki/wiki-editor-header";
-import { WikiForeignOperationBanner } from "@/components/wiki/wiki-foreign-operation-banner";
-import { WikiDocumentMeta } from "@/components/wiki/wiki-document-meta";
-import { WikiEditor } from "@/components/wiki/wiki-editor";
-import { WikiDocumentFooterLists } from "@/components/wiki/wiki-document-footer-lists";
-import { useWikiStore } from "@/stores/wiki";
-import { cn } from "@/lib/utils";
+import { Component, useEffect, type ErrorInfo, type ReactNode } from "react"
+import { Skeleton } from "@/components/ui/skeleton"
+import { Button } from "@/components/ui/button"
+import { useWikiDocument } from "@/graphql/hooks/wiki"
+import { WikiEditorHeader } from "@/components/wiki/wiki-editor-header"
+import { WikiForeignOperationBanner } from "@/components/wiki/wiki-foreign-operation-banner"
+import { WikiDocumentMeta } from "@/components/wiki/wiki-document-meta"
+import { WikiEditor } from "@/components/wiki/wiki-editor"
+import { WikiDocumentFooterLists } from "@/components/wiki/wiki-document-footer-lists"
+import { useWikiStore } from "@/stores/wiki"
+import { cn } from "@/lib/utils"
 
 interface WikiEditorPaneProps {
-  documentId: string;
-  operationId: string;
-  isEditor: boolean;
+  documentId: string
+  operationId: string
+  isEditor: boolean
 }
 
 export function WikiEditorPane({
@@ -21,29 +21,29 @@ export function WikiEditorPane({
   operationId,
   isEditor,
 }: WikiEditorPaneProps) {
-  const { data, isLoading, error } = useWikiDocument(documentId);
-  const document = data?.wikiDocument;
-  const editorZoomed = useWikiStore((s) => s.editorZoomed);
-  const setEditorZoom = useWikiStore((s) => s.setEditorZoom);
+  const { data, isLoading, error } = useWikiDocument(documentId)
+  const document = data?.wikiDocument
+  const editorZoomed = useWikiStore((s) => s.editorZoomed)
+  const setEditorZoom = useWikiStore((s) => s.setEditorZoom)
 
   // Drop zoom only on full unmount (leaving the wiki page entirely). Switching
   // between docs keeps zoom on so child-list navigation doesn't kick the user
   // out of focus mode.
   useEffect(() => {
-    return () => setEditorZoom(false);
-  }, [setEditorZoom]);
+    return () => setEditorZoom(false)
+  }, [setEditorZoom])
 
   // Esc to exit zoom. Tiptap-internal popovers (slash menu, bubble menu)
   // consume Escape first via stopPropagation, so this only fires when nothing
   // inside the editor is claiming the key.
   useEffect(() => {
-    if (!editorZoomed) return;
+    if (!editorZoomed) return
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") setEditorZoom(false);
-    };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [editorZoomed, setEditorZoom]);
+      if (e.key === "Escape") setEditorZoom(false)
+    }
+    window.addEventListener("keydown", onKey)
+    return () => window.removeEventListener("keydown", onKey)
+  }, [editorZoomed, setEditorZoom])
 
   if (isLoading) {
     return (
@@ -56,7 +56,7 @@ export function WikiEditorPane({
         <Skeleton className="h-4 w-5/6" />
         <Skeleton className="h-4 w-4/6" />
       </div>
-    );
+    )
   }
 
   if (error || !document) {
@@ -64,7 +64,7 @@ export function WikiEditorPane({
       <div className="flex flex-1 flex-col items-center justify-center gap-2 rounded-lg border bg-card text-muted-foreground">
         <p className="text-sm">Document not found</p>
       </div>
-    );
+    )
   }
 
   return (
@@ -98,56 +98,48 @@ export function WikiEditorPane({
         />
       </EditorErrorBoundary>
     </div>
-  );
+  )
 }
 
 // Error boundary — catches editor crashes and shows a recovery UI
 // instead of white-screening the entire wiki page.
 
 interface ErrorBoundaryProps {
-  documentId: string;
-  children: ReactNode;
+  documentId: string
+  children: ReactNode
 }
 
 interface ErrorBoundaryState {
-  error: Error | null;
-  documentId: string;
+  error: Error | null
+  documentId: string
 }
 
-class EditorErrorBoundary extends Component<
-  ErrorBoundaryProps,
-  ErrorBoundaryState
-> {
-  state: ErrorBoundaryState = {
-    error: null,
-    documentId: this.props.documentId,
-  };
+class EditorErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundaryState> {
+  state: ErrorBoundaryState = { error: null, documentId: this.props.documentId }
 
   static getDerivedStateFromProps(
     props: ErrorBoundaryProps,
     state: ErrorBoundaryState,
   ): Partial<ErrorBoundaryState> | null {
     if (props.documentId !== state.documentId) {
-      return { error: null, documentId: props.documentId };
+      return { error: null, documentId: props.documentId }
     }
-    return null;
+    return null
   }
 
   static getDerivedStateFromError(error: Error): Partial<ErrorBoundaryState> {
-    return { error };
+    return { error }
   }
 
   componentDidCatch(error: Error, info: ErrorInfo) {
-    console.error("Wiki editor crashed:", error, info.componentStack);
+    console.error("Wiki editor crashed:", error, info.componentStack)
   }
 
   render() {
     if (this.state.error) {
-      return (
-        <EditorErrorFallback onRetry={() => this.setState({ error: null })} />
-      );
+      return <EditorErrorFallback onRetry={() => this.setState({ error: null })} />
     }
-    return this.props.children;
+    return this.props.children
   }
 }
 
@@ -159,5 +151,5 @@ function EditorErrorFallback({ onRetry }: { onRetry: () => void }) {
         Try again
       </Button>
     </div>
-  );
+  )
 }
