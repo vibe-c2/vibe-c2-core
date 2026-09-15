@@ -3,7 +3,7 @@
 name: vibe-c2
 description: Work an offensive security engagement in Vibe C2 — hosts, credentials, hashes, tasks, wiki notes and the operation timeline — through its MCP tools. Use whenever connected to a Vibe C2 MCP endpoint, or when the user mentions an operation, findings, or engagement notes.
 metadata:
-  version: "5"
+  version: "6"
 ---
 
 # Vibe C2
@@ -152,6 +152,7 @@ Engagement notes, collaboratively edited, with file attachments. See wiki.md and
 - `add_wiki_section` **(write)** — Add Markdown to the end (or start) of one or more pages without touching what is there.
 - `edit_wiki_document` **(write)** — Replace an exact snippet on a page, like editing a source file.
 - `update_wiki_document` **(write)** — Replace a page's whole body.
+- `delete_wiki_document` **(write)** — Move a page to the trash, where an admin can restore it.
 - `list_wiki_attachments` — Files attached to a page, each marked readable or not.
 - `read_wiki_attachment` — Read an attachment: text formats directly, Word and Excel as text, images as images.
 - `attach_text_to_wiki_document` **(write)** — Attach text to a page as a file: raw output, a scan, a config.
@@ -207,11 +208,10 @@ Web applications
 ## Finding the right page
 
 `search_wiki` returns a `snippet` with every hit. Read the snippets before
-opening anything; opening four wrong pages to find the fifth is the most common
-way to waste a context window here. `list_wiki_tree` shows how the notes are
+opening anything; opening wrong pages is the usual way to waste a context
+window here. `list_wiki_tree` shows how the notes are
 organised: two levels by default with a `childCount` per page, `parent_id` to
-descend into one branch, `depth:-1` for everything, and a cursor for a large
-wiki.
+descend into one branch, `depth:-1` for everything.
 
 ## Reading only part of a page
 
@@ -238,13 +238,19 @@ back as an **outline** (headings, nesting, bytes under each) unless you pass
 
 Copy `old_text` verbatim: whitespace, list markers and all. It must be unique;
 if it occurs more than once the edit is refused with the count, and the fix is
-to include a line either side, not `replace_all`. `replace_all` is for renaming
-something throughout. A refusal says how the snippet differs (whitespace,
-capitalisation, wrong page); read it before retrying.
+to include a line either side, not `replace_all`, which is for renaming
+something throughout. A refusal says how the snippet differs; read it before
+retrying.
 
-Edits are applied on the live document, so the operator may be reading or
-typing on the page you write to. Every write reports `watchers`; a non-zero
-count means they saw it.
+Edits land on the live document, so the operator may be reading or typing
+there. Every write reports `watchers`; a non-zero count means they saw it.
+
+## Deleting a page
+
+`delete_wiki_document` moves a page to the trash, where an admin can restore
+it: a page created by mistake, a duplicate you have merged, a stale page the
+operator wants gone. A page with children is refused until you pass
+`with_children:true`, because they go with it. Templates are refused.
 
 ## What a page can contain
 
@@ -266,10 +272,10 @@ Pages are richer than plain markdown; preserve these constructs.
 
   The body is the answer; `state` is `answered`, `not_applicable`, `flagged`
   or absent. To answer one, edit the marker's `state` and write the body in one
-  `edit_wiki_document` call. An operator reads the answer as written: put
-  anything with more than one line (command output, a list of hosts, a
-  config excerpt) in a fenced code block, one line per line, and keep the
-  prose to a sentence above it. Never squash several lines into one.
+  `edit_wiki_document` call. The operator reads the answer as written: put
+  anything with more than one line (command output, hosts, a config excerpt)
+  in a fenced code block, one line per line, a sentence of prose above it.
+  Never squash several lines into one.
 - **Reference chips**: `[host](vibe://host/<id>)`, `[hash](vibe://hash/<id>)`,
   `[page](vibe://doc/<id>)`. Credentials appear as a `vibe-credential` fenced
   block.
@@ -281,18 +287,17 @@ Pages are richer than plain markdown; preserve these constructs.
 
 Check `list_wiki_templates` before writing a page from scratch. The listing
 spans the operation's own templates and the shared ones in Public (marked
-`shared`), which is usually where the house templates are. Create from one with
-`create_wiki_document` and `template_id`; your `title` overrides the template's.
+`shared`). Create from one with `create_wiki_document` and `template_id`;
+your `title` overrides the template's.
 
 Pages carry `isTemplate`. Editing a template changes every page made from it
 afterwards, and `set_wiki_template` is a team decision: propose it.
 
 ## Long content
 
-Prose goes in the body, whole, in one call (up to 1 MB). Raw output (a command
-history, a scan, a config, a dump) is evidence: attach it with
-`attach_text_to_wiki_document` and paste the returned `markdown` line on the
-page. See attachments.md.
+Prose goes in the body, whole, in one call (up to 1 MB). Raw output (a scan,
+a config, a dump) is evidence: `attach_text_to_wiki_document` and paste the
+returned `markdown` line. See attachments.md.
 ==================== vibe-c2/reference/findings.md
 # Findings: hosts, credentials, hashes
 

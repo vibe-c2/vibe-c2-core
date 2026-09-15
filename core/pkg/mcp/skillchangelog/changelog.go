@@ -70,6 +70,13 @@ var releases = []Release{
 			"Attachments: attach_text_to_wiki_document and list_wiki_attachments now return a ready `markdown` line; paste it alone in a paragraph to show the file as an attachment card, anywhere on the page including inside a checklist answer.",
 		},
 	},
+	{
+		Version: 6,
+		Date:    "2026-09-15",
+		Notes: []string{
+			"New delete_wiki_document: moves a page to the trash, where an admin can restore it. A page with children needs with_children:true; templates are refused.",
+		},
+	},
 }
 
 // Releases returns the full history, oldest first. A copy, so callers cannot

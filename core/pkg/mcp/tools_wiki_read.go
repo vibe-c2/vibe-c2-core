@@ -87,6 +87,12 @@ func registerWikiTools(s *Server) {
 		Description: "Replace a page's whole body. Only for a deliberate end-to-end rewrite: " +
 			"read the page first, because anything omitted is deleted.",
 	}, writeTool, handleUpdateWikiDocument)
+
+	register(s, &mcp.Tool{
+		Name: "delete_wiki_document",
+		Description: "Move a page to the trash, where an admin can restore it. A page with " +
+			"children is refused unless with_children:true; templates are refused.",
+	}, writeTool, handleDeleteWikiDocument)
 }
 
 func handleSearchWiki(ctx context.Context, s *Server, args searchWikiArgs) (toolResult, error) {
