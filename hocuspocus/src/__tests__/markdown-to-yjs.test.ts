@@ -97,6 +97,34 @@ test("lifts a file link that follows the first paragraph of a list item", () => 
   assert.ok(nodeTypes(decode(markdownToYjsUpdate(md))).includes("wikiFile"));
 });
 
+test("lifts a file link on its own line under a sentence, no blank line", () => {
+  // "Done:" then the file line with a single newline is how an agent writes
+  // it; markdown keeps both in one paragraph, and the card must still appear.
+  const md = `Done:\n${FILE_LINK}\nMore notes.`;
+  const json = decode(markdownToYjsUpdate(md));
+  const top = json.content as Array<Record<string, unknown>>;
+  assert.deepEqual(top.map((n) => n.type), ["paragraph", "wikiFile", "paragraph"]);
+  const first = top[0].content as Array<Record<string, unknown>>;
+  assert.equal(first[0].text, "Done:");
+  const last = top[2].content as Array<Record<string, unknown>>;
+  assert.equal(last[0].text, "More notes.");
+});
+
+test("lifts two file links on consecutive lines into two cards", () => {
+  const md = `${FILE_LINK}\n${FILE_LINK}`;
+  const json = decode(markdownToYjsUpdate(md));
+  const top = json.content as Array<Record<string, unknown>>;
+  assert.deepEqual(top.map((n) => n.type), ["wikiFile", "wikiFile"]);
+});
+
+test("lifts a file line inside a checklist answer without a blank line", () => {
+  const md = `:::checklist {"prompt":"Scan?"}\nDone:\n${FILE_LINK}\n:::`;
+  const json = decode(markdownToYjsUpdate(md));
+  const item = (json.content as Array<Record<string, unknown>>)[0];
+  const kids = item.content as Array<Record<string, unknown>>;
+  assert.deepEqual(kids.map((k) => k.type), ["paragraph", "wikiFile"]);
+});
+
 test("does not lift a file link with surrounding text", () => {
   const md = `Full output: ${FILE_LINK}`;
   assert.ok(!nodeTypes(decode(markdownToYjsUpdate(md))).includes("wikiFile"));

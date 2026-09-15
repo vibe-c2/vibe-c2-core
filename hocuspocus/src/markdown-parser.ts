@@ -544,34 +544,77 @@ const PARAGRAPH_FIRST_CONTAINERS = new Set(["listItem", "taskItem"]);
 
 function liftInChildren(parent: JsonNode): JsonNode {
   if (!Array.isArray(parent.content)) return parent;
-  const content = parent.content.map((child, index) => {
+  const content = parent.content.flatMap((child, index) => {
     const pinned = index === 0 && PARAGRAPH_FIRST_CONTAINERS.has(parent.type);
     if (child.type === "paragraph" && !pinned) {
-      const lifted = fileLinkParagraphToBlock(child);
+      const lifted = liftFileLinesInParagraph(child);
       if (lifted) return lifted;
     }
-    return liftInChildren(child);
+    return [liftInChildren(child)];
   });
   return { ...parent, content };
 }
 
-// The wikiFile JSON for a paragraph holding one file link and nothing else,
-// or null when the paragraph is anything else.
-function fileLinkParagraphToBlock(child: JsonNode): JsonNode | null {
-  const inline = child.content;
+// Split a paragraph at its hard line breaks and turn every line that is
+// nothing but a file link into a wikiFile block, keeping the other lines as
+// paragraphs around it. Returns null when no line qualifies, so an ordinary
+// paragraph is left exactly as parsed.
+//
+// A single newline is where this matters. An agent writes "Done:" and the
+// file line under it without a blank line between; markdown keeps both in
+// one paragraph, and a rule that only lifts a paragraph consisting of the
+// link alone leaves that as a link. From the agent's side the two shapes
+// are the same instruction, so both produce the card.
+function liftFileLinesInParagraph(paragraph: JsonNode): JsonNode[] | null {
+  const inline = paragraph.content;
   if (!inline) return null;
-  // Outline emits a backslash line on its own to add visual spacing between
-  // adjacent block-level attachments. CommonMark parses `\<newline>` as a
-  // hardBreak, so the paragraph holding the file link can carry a leading
-  // hardBreak before the linked text; those never block the lift.
-  const significant = inline.filter((c) => c.type !== "hardBreak");
+
+  const lines: JsonNode[][] = [[]];
+  for (const node of inline) {
+    if (node.type === "hardBreak") lines.push([]);
+    else lines[lines.length - 1].push(node);
+  }
+  if (!lines.some((line) => fileLinkLineToBlock(line))) return null;
+
+  const out: JsonNode[] = [];
+  let pending: JsonNode[][] = [];
+  const flush = () => {
+    const kept = pending.filter((line) => line.length > 0);
+    if (kept.length > 0) {
+      const content = kept.flatMap((line, i) =>
+        i === 0 ? line : [{ type: "hardBreak" } as JsonNode, ...line],
+      );
+      out.push({ ...paragraph, content });
+    }
+    pending = [];
+  };
+  for (const line of lines) {
+    const block = fileLinkLineToBlock(line);
+    if (block) {
+      flush();
+      out.push(block);
+    } else {
+      pending.push(line);
+    }
+  }
+  flush();
+  return out;
+}
+
+// The wikiFile JSON for a line holding one file link and nothing else, or
+// null when the line is anything else.
+function fileLinkLineToBlock(line: JsonNode[]): JsonNode | null {
+  // Whitespace-only text around the link (a trailing space, an indent) is
+  // not content and never blocks the lift.
+  const significant = line.filter(
+    (c) => !(c.type === "text" && String(c.text ?? "").trim() === "" && !c.marks),
+  );
   if (significant.length !== 1) return null;
   const t = significant[0];
   if (t.type !== "text") return null;
   const marks = t.marks as Array<{ type: string; attrs?: Record<string, unknown> }> | undefined;
-  if (!marks || marks.length !== 1) return null;
-  const linkMark = marks[0];
-  if (linkMark.type !== "link") return null;
+  const linkMark = marks?.find((m) => m.type === "link");
+  if (!linkMark) return null;
   const href = linkMark.attrs?.href as string | undefined;
   if (!href) return null;
   const m = FILE_HREF_PATTERN.exec(href);
@@ -579,7 +622,7 @@ function fileLinkParagraphToBlock(child: JsonNode): JsonNode | null {
   // Outline label format: "<filename> <size>". Split off the trailing
   // numeric token; if it's absent or non-numeric, treat the whole label
   // as the filename and report size as 0.
-  const label = (t.text as string) ?? "";
+  const label = String(t.text ?? "").trim();
   const trailing = label.match(/^(.*) (\d+)$/);
   const filename = trailing ? trailing[1] : label;
   return {
