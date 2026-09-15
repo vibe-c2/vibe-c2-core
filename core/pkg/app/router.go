@@ -221,6 +221,9 @@ func (a *App) NewRouter() *gin.Engine {
 		})
 		a.mcpServer = mcpServer
 		v1.POST("/mcp", mcpServer.Handler())
+		// Raw-bytes form of attach_file_to_wiki_document. Agent-only like
+		// /mcp, and audited as the same tool.
+		v1.POST("/mcp/upload", mcpServer.UploadHandler())
 		// The other two Streamable HTTP methods, answered rather than left to
 		// the router's 404. A client that probes with GET and sees 404 reads
 		// it as "no MCP server here"; 405 + Allow tells it to use POST.

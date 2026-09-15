@@ -98,6 +98,13 @@ var releases = []Release{
 			"New attach_file_to_wiki_document: binary files from base64, and with as:\"image\" a screenshot placed inline on the page. The result carries the markdown line to paste.",
 		},
 	},
+	{
+		Version: 10,
+		Date:    "2026-09-15",
+		Notes: []string{
+			"POST /api/v1/mcp/upload: raw multipart upload with the agent token, the same action and result as attach_file_to_wiki_document without base64 overhead. Preferred for screenshots and binaries.",
+		},
+	},
 }
 
 // Releases returns the full history, oldest first. A copy, so callers cannot

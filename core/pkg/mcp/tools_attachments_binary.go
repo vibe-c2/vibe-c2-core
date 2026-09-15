@@ -77,7 +77,38 @@ func decodeBase64Payload(raw string) ([]byte, error) {
 // an image inline. The text tool covers command output; this one exists for
 // what an agent produces as bytes: a screenshot of a login page, a packet
 // capture, a binary it pulled from a host.
+//
+// Base64 in a JSON argument costs a third more on the wire and a full copy in
+// memory on each side; the multipart endpoint in upload.go takes the same
+// bytes raw and runs this same code. This tool stays for clients that can
+// only speak MCP.
 func handleAttachFileToWikiDocument(ctx context.Context, s *Server, args attachFileArgs) (toolResult, error) {
+	raw, err := decodeBase64Payload(args.ContentBase64)
+	if err != nil {
+		return toolResult{}, refuse(
+			"content_base64 is not valid base64 (%s). Send the file's bytes base64-encoded, whole, in one call, "+
+				"or POST them raw as multipart to /api/v1/mcp/upload.", err)
+	}
+	return attachBytes(ctx, s, attachBytesArgs{
+		DocumentID: args.DocumentID,
+		Filename:   args.Filename,
+		As:         args.As,
+		Raw:        raw,
+	})
+}
+
+// attachBytesArgs is what the tool and the upload endpoint have in common
+// once the bytes are in hand.
+type attachBytesArgs struct {
+	DocumentID string
+	Filename   string
+	As         string
+	Raw        []byte
+}
+
+// attachBytes is the shared body of the base64 tool and the multipart
+// endpoint: authorisation, placement choice, ingest, and the line to paste.
+func attachBytes(ctx context.Context, s *Server, args attachBytesArgs) (toolResult, error) {
 	if s.deps.Files == nil {
 		return toolResult{}, fmt.Errorf("attachments are unavailable: file storage is not configured")
 	}
@@ -102,10 +133,8 @@ func handleAttachFileToWikiDocument(ctx context.Context, s *Server, args attachF
 		return toolResult{}, refuse(
 			"filename is required, with an extension that says what the bytes are: screenshot.png, capture.pcap.")
 	}
-	raw, err := decodeBase64Payload(args.ContentBase64)
-	if err != nil {
-		return toolResult{}, refuse(
-			"content_base64 is not valid base64 (%s). Send the file's bytes base64-encoded, whole, in one call.", err)
+	if len(args.Raw) == 0 {
+		return toolResult{}, refuse("the file is empty; there is nothing to attach.")
 	}
 
 	owner, err := agentOwnerID(ctx)
@@ -114,10 +143,10 @@ func handleAttachFileToWikiDocument(ctx context.Context, s *Server, args attachF
 	}
 
 	if as == "image" {
-		return s.placeInlineImage(ctx, doc, owner, filename, raw)
+		return s.placeInlineImage(ctx, doc, owner, filename, args.Raw)
 	}
 
-	file, ingestErr := s.deps.Files.IngestFile(ctx, doc, owner, bytes.NewReader(raw), filename, "")
+	file, ingestErr := s.deps.Files.IngestFile(ctx, doc, owner, bytes.NewReader(args.Raw), filename, "")
 	if ingestErr != nil {
 		return toolResult{}, refuse("could not attach %q: %s", filename, ingestErr.Message)
 	}
