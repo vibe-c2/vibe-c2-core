@@ -1,0 +1,32 @@
+diff --git a/node_modules/@base-ui/react/internals/useAnchorPositioning.js b/node_modules/@base-ui/react/internals/useAnchorPositioning.js
+index b700595..856fe55 100644
+--- a/node_modules/@base-ui/react/internals/useAnchorPositioning.js
++++ b/node_modules/@base-ui/react/internals/useAnchorPositioning.js
+@@ -313,6 +313,11 @@ function useAnchorPositioningWithHook(params, useFloatingHook) {
+     placement,
+     middleware,
+     strategy: positionMethod,
++    // Patched: position with top/left instead of an inline transform. Firefox
++    // mis-hit-tests text selection inside overflow-clipped content (truncate,
++    // line-clamp, scroll boxes) under a transformed ancestor, so a drag in a
++    // popover flickers between the text and the whole page.
++    transform: false,
+     whileElementsMounted: keepMounted ? undefined : (...args) => (0, _floatingUiReact.autoUpdate)(...args, autoUpdateOptions),
+     nodeId,
+     externalTree
+diff --git a/node_modules/@base-ui/react/internals/useAnchorPositioning.mjs b/node_modules/@base-ui/react/internals/useAnchorPositioning.mjs
+index 9aab405..0c685f7 100644
+--- a/node_modules/@base-ui/react/internals/useAnchorPositioning.mjs
++++ b/node_modules/@base-ui/react/internals/useAnchorPositioning.mjs
+@@ -306,6 +306,11 @@ export function useAnchorPositioningWithHook(params, useFloatingHook) {
+     placement,
+     middleware,
+     strategy: positionMethod,
++    // Patched: position with top/left instead of an inline transform. Firefox
++    // mis-hit-tests text selection inside overflow-clipped content (truncate,
++    // line-clamp, scroll boxes) under a transformed ancestor, so a drag in a
++    // popover flickers between the text and the whole page.
++    transform: false,
+     whileElementsMounted: keepMounted ? undefined : (...args) => autoUpdate(...args, autoUpdateOptions),
+     nodeId,
+     externalTree
