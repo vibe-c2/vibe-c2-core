@@ -56,6 +56,13 @@ var releases = []Release{
 			"Checklist answers: multi-line output (command results, host lists, config excerpts) goes in a fenced code block, one line per line, so the operator reads it as written instead of as one run-together line.",
 		},
 	},
+	{
+		Version: 4,
+		Date:    "2026-09-15",
+		Notes: []string{
+			"Wiki structure: one subject per page, placed in the tree (Infrastructure → subnet → host) with parent_id, instead of growing one page into a dump. Pages cannot be re-parented, so the parent is chosen at creation.",
+		},
+	},
 }
 
 // Releases returns the full history, oldest first. A copy, so callers cannot

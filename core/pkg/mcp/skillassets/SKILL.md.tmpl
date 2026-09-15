@@ -52,24 +52,23 @@ not exist, say so.
   will change before changing it unless told to just do it.
 - **Results are capped.** A truncated result means narrow the filter, not
   "that is all there is".
-- **Refusals are answers.** Report them; do not retry variations. A rate-limit
-  refusal says how long to wait.
+- **Refusals are answers.** Report them; do not retry variations.
 - **Read the smallest part that answers the question.** `search_wiki` snippets
-  usually identify the page. Pages over 8 KB return an outline by default; take
+  usually identify the page. Pages over 8 KB return an outline; take
   `section:"<heading>"` for one part or `full:true` for everything.
+- **One subject, one page, in the tree.** A host, subnet or write-up is a
+  child page (`parent_id`), never a section of a growing dump.
 - **Send the smallest change that does the job.** `edit_wiki_document`
   replaces an exact snippet; `add_wiki_section` adds to either end. Both are
-  safe while the operator is editing. `update_wiki_document` replaces the whole
-  page: only for a deliberate rewrite, after reading it, because anything you
-  omit is deleted. A section is part of a page, never the whole of it.
+  safe while the operator is editing. `update_wiki_document` replaces the
+  whole page: only after reading it, because anything omitted is deleted.
 - **One value, one call.** Arguments hold a megabyte. Never split a value
   across calls. Raw output goes to `attach_text_to_wiki_document`, not the page.
-- **Do not re-read to check your own work.** Writes report what happened.
+- **Do not re-read your own work.** Writes report what happened.
 - **Make retries safe.** Every write accepts an `idempotency_key`.
-- **Put milestones on the timeline.** A DC owned, a host taken, a login form
-  patched, a foothold lost: `create_timeline_event`, unless a tool already
-  recorded it (closed tasks, credentials and cracks land there on their own).
-  Routine bookkeeping does not belong on it.
+- **Put milestones on the timeline.** A DC owned, a host taken, a foothold
+  lost: `create_timeline_event`, unless a tool already recorded it (closed
+  tasks, credentials and cracks land there on their own). Not bookkeeping.
 - **Leave icons alone** unless a page has earned one.
 
 <!-- skill-only:start -->
@@ -78,6 +77,7 @@ not exist, say so.
 Load the one that matches the job.
 
 - `reference/tools.md` — every tool, grouped by task.
+- `reference/structure.md` — one subject per page, placed in the tree.
 - `reference/wiki.md` — reading, editing and templating pages.
 - `reference/findings.md` — recording hosts, credentials and hashes.
 - `reference/tasks.md` — proposing, linking and closing tasks.

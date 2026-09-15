@@ -18,6 +18,8 @@ import (
 var (
 	//go:embed skillassets/SKILL.md.tmpl
 	skillTemplateSource string
+	//go:embed skillassets/structure.md
+	structureMD string
 	//go:embed skillassets/wiki.md
 	wikiMD string
 	//go:embed skillassets/findings.md
@@ -47,6 +49,7 @@ type referenceGuide struct {
 // granularity, and an agent that wants "how do I edit a page" should not have
 // to load the icon palette to find out.
 var referenceGuides = []referenceGuide{
+	{"structure", "one subject per page, placed in the tree", structureMD},
 	{"wiki", "reading, editing and templating pages", wikiMD},
 	{"findings", "recording hosts, credentials and hashes", findingsMD},
 	{"tasks", "proposing, linking and closing tasks", tasksMD},
