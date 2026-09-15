@@ -223,11 +223,17 @@
   z-index: 2;
 }
 
+/* The handle stays inside its cell. prosemirror-tables' stock rule hangs it
+   2px past the right and bottom edges; on the last column or row that pokes
+   out of the tableWrapper, whose `overflow-x: auto` forces `overflow-y` to
+   auto as well, so both scrollbars appear the moment a column boundary is
+   hovered. The scrollbar shifts layout, the pointer leaves the boundary,
+   the handle goes, the scrollbar goes, and it flickers. */
 .tiptap .column-resize-handle {
   background: var(--primary);
-  bottom: -2px;
+  bottom: 0;
   position: absolute;
-  right: -2px;
+  right: 0;
   top: 0;
   width: 3px;
   pointer-events: none;
