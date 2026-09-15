@@ -105,6 +105,13 @@ var releases = []Release{
 			"POST /api/v1/mcp/upload: raw multipart upload with the agent token, the same action and result as attach_file_to_wiki_document without base64 overhead. Preferred for screenshots and binaries.",
 		},
 	},
+	{
+		Version: 11,
+		Date:    "2026-09-15",
+		Notes: []string{
+			"Uploads place themselves on the page: attach_file_to_wiki_document and /mcp/upload add the image or card at the end (or start) of the page by default, and report placed:true. place:\"none\" keeps the old store-only behaviour; an unplaced image is garbage-collected.",
+		},
+	},
 }
 
 // Releases returns the full history, oldest first. A copy, so callers cannot

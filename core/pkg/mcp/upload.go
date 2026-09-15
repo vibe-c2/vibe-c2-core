@@ -31,7 +31,7 @@ const uploadMultipartMemory = 8 << 20
 // and record, and the same JSON result with the markdown line to paste.
 //
 // Fields: documentId, file (with its filename), and optionally as (image or
-// attachment). Errors come back as JSON with the same wording a tool refusal
+// attachment) and place (end, start or none). Errors come back as JSON with the same wording a tool refusal
 // carries, so an agent reads them the same way.
 func (s *Server) UploadHandler() gin.HandlerFunc {
 	return func(c *gin.Context) {
@@ -70,6 +70,7 @@ func (s *Server) UploadHandler() gin.HandlerFunc {
 			DocumentID: docID,
 			Filename:   header.Filename,
 			As:         c.PostForm("as"),
+			Place:      c.PostForm("place"),
 			Raw:        raw,
 		}
 
@@ -80,7 +81,7 @@ func (s *Server) UploadHandler() gin.HandlerFunc {
 		s.record(ctx, auditEntry{
 			tool:     uploadToolName,
 			kind:     writeTool,
-			args:     uploadAuditArgs{DocumentID: docID, Filename: header.Filename, As: args.As, SizeBytes: int64(len(raw))},
+			args:     uploadAuditArgs{DocumentID: docID, Filename: header.Filename, As: args.As, Place: args.Place, SizeBytes: int64(len(raw))},
 			result:   result,
 			err:      err,
 			duration: time.Since(started),
@@ -104,6 +105,7 @@ type uploadAuditArgs struct {
 	DocumentID string `json:"document_id"`
 	Filename   string `json:"filename"`
 	As         string `json:"as,omitempty"`
+	Place      string `json:"place,omitempty"`
 	SizeBytes  int64  `json:"size_bytes"`
 }
 

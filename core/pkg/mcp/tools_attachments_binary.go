@@ -33,6 +33,7 @@ type attachFileArgs struct {
 	Filename      string `json:"filename"           jsonschema:"With an extension: screenshot.png, capture.pcap, report.pdf."`
 	ContentBase64 string `json:"content_base64"     jsonschema:"The file's bytes, base64. A data: URL prefix is accepted."`
 	As            string `json:"as,omitempty"       jsonschema:"image to show it inline on the page (PNG, JPEG, GIF, WebP); attachment (default) for a downloadable file card."`
+	Place         string `json:"place,omitempty"    jsonschema:"Where the file appears on the page: end (default) adds it at the bottom, start at the top, none stores it and returns the markdown line for you to place with edit_wiki_document."`
 }
 
 // inlineImageView is what placing an inline image returns: the id, its
@@ -44,6 +45,32 @@ type inlineImageView struct {
 	Height   int    `json:"height"`
 	Bytes    int64  `json:"sizeBytes"`
 	Markdown string `json:"markdown"`
+	// Placed says whether this call put the image on the page. An image no
+	// page references is garbage-collected after a grace period, so a false
+	// here is a deadline, not a detail.
+	Placed bool `json:"placed"`
+}
+
+// placementView rides alongside the file or image view to say where the
+// line landed, and who saw it.
+type placementView struct {
+	Placement string `json:"placement,omitempty"`
+	Watchers  int    `json:"watchers,omitempty"`
+	Note      string `json:"note,omitempty"`
+}
+
+// placementMode maps the place argument to a write mode. ok is false for an
+// unknown value; place is false for "none".
+func placementMode(place string) (mode wiki.ApplyMode, doPlace bool, ok bool) {
+	switch strings.ToLower(strings.TrimSpace(place)) {
+	case "", "end":
+		return wiki.ApplyAppend, true, true
+	case "start":
+		return wiki.ApplyPrepend, true, true
+	case "none":
+		return "", false, true
+	}
+	return "", false, false
 }
 
 // The empty-payload check is generous with whitespace and data: URL wrappers
@@ -93,6 +120,7 @@ func handleAttachFileToWikiDocument(ctx context.Context, s *Server, args attachF
 		DocumentID: args.DocumentID,
 		Filename:   args.Filename,
 		As:         args.As,
+		Place:      args.Place,
 		Raw:        raw,
 	})
 }
@@ -103,6 +131,7 @@ type attachBytesArgs struct {
 	DocumentID string
 	Filename   string
 	As         string
+	Place      string
 	Raw        []byte
 }
 
@@ -118,6 +147,10 @@ func attachBytes(ctx context.Context, s *Server, args attachBytesArgs) (toolResu
 	case "", "attachment", "image":
 	default:
 		return toolResult{}, refuse("as must be attachment or image, not %q.", args.As)
+	}
+	mode, doPlace, ok := placementMode(args.Place)
+	if !ok {
+		return toolResult{}, refuse("place must be end, start or none, not %q.", args.Place)
 	}
 
 	doc, err := s.loadWikiDocument(ctx, args.DocumentID, models.OperationRoleOperator)
@@ -143,7 +176,7 @@ func attachBytes(ctx context.Context, s *Server, args attachBytesArgs) (toolResu
 	}
 
 	if as == "image" {
-		return s.placeInlineImage(ctx, doc, owner, filename, args.Raw)
+		return s.placeInlineImage(ctx, doc, owner, filename, args.Raw, mode, doPlace)
 	}
 
 	file, ingestErr := s.deps.Files.IngestFile(ctx, doc, owner, bytes.NewReader(args.Raw), filename, "")
@@ -151,19 +184,58 @@ func attachBytes(ctx context.Context, s *Server, args attachBytesArgs) (toolResu
 		return toolResult{}, refuse("could not attach %q: %s", filename, ingestErr.Message)
 	}
 	view := newAttachmentView(file.FileID.String(), file.Filename, file.ContentType, file.SizeBytes, false)
+	if !doPlace {
+		return toolResult{
+			Payload:     view,
+			OperationID: &doc.OperationID,
+			Summary: fmt.Sprintf("attached %s to %s; not on the page yet: paste `markdown` alone on its own line",
+				file.Filename, doc.Title),
+		}, nil
+	}
+	placement, err := s.placeLine(ctx, doc, view.Markdown, mode)
+	if err != nil {
+		return toolResult{}, err
+	}
+	view.Placed = true
 	return toolResult{
-		Payload:     view,
+		Payload: struct {
+			attachmentView
+			placementView
+		}{view, placement},
 		OperationID: &doc.OperationID,
-		Summary: fmt.Sprintf("attached %s to %s; paste `markdown` alone on its own line to show it on the page",
-			file.Filename, doc.Title),
+		Summary:     fmt.Sprintf("attached %s to %s and placed it at the %s", file.Filename, doc.Title, placement.Placement),
 	}, nil
+}
+
+// placeLine writes the card or image line onto the page at the requested end.
+//
+// Placing is the default rather than an option the agent remembers, because
+// the failure was observed: images uploaded and never referenced, which the
+// sweeper then deletes. A refusal here still leaves the file stored, so the
+// message carries the line for the agent to place by hand.
+func (s *Server) placeLine(ctx context.Context, doc *models.WikiDocument, markdown string, mode wiki.ApplyMode) (placementView, error) {
+	written, err := s.writeBody(ctx, doc, markdown, mode)
+	if err != nil {
+		return placementView{}, refuse(
+			"the file is stored but could not be placed on %q (%s). Place it yourself with add_wiki_section or edit_wiki_document, alone on its own line: %s",
+			doc.Title, err.Error(), markdown)
+	}
+	where := "end of the page"
+	if mode == wiki.ApplyPrepend {
+		where = "start of the page"
+	}
+	view := placementView{Placement: where, Watchers: written.Watchers}
+	if written.Watchers > 0 {
+		view.Note = "The operator has this page open and saw it appear."
+	}
+	return view, nil
 }
 
 // placeInlineImage stores the bytes as a wiki image and returns the markdown
 // image line that the page renders as a picture. The line stands alone in
 // its own paragraph, like the attachment card line; the size hint after the
 // path is what keeps the layout stable while the image loads.
-func (s *Server) placeInlineImage(ctx context.Context, doc *models.WikiDocument, owner uuid.UUID, filename string, raw []byte) (toolResult, error) {
+func (s *Server) placeInlineImage(ctx context.Context, doc *models.WikiDocument, owner uuid.UUID, filename string, raw []byte, mode wiki.ApplyMode, doPlace bool) (toolResult, error) {
 	if s.deps.Images == nil {
 		return toolResult{}, fmt.Errorf("inline images are unavailable: image storage is not configured")
 	}
@@ -182,11 +254,26 @@ func (s *Server) placeInlineImage(ctx context.Context, doc *models.WikiDocument,
 		Bytes:    img.SizeBytes,
 		Markdown: inlineImageMarkdown(filename, url, img.Width, img.Height),
 	}
+	if !doPlace {
+		return toolResult{
+			Payload:     view,
+			OperationID: &doc.OperationID,
+			Summary: fmt.Sprintf("stored %s as an image for %s; not on the page yet: paste `markdown` alone on its own line, or it is garbage-collected",
+				filename, doc.Title),
+		}, nil
+	}
+	placement, err := s.placeLine(ctx, doc, view.Markdown, mode)
+	if err != nil {
+		return toolResult{}, err
+	}
+	view.Placed = true
 	return toolResult{
-		Payload:     view,
+		Payload: struct {
+			inlineImageView
+			placementView
+		}{view, placement},
 		OperationID: &doc.OperationID,
-		Summary: fmt.Sprintf("stored %s as an image on %s; paste `markdown` alone on its own line to show it",
-			filename, doc.Title),
+		Summary:     fmt.Sprintf("placed %s as an image at the %s of %s", filename, placement.Placement, doc.Title),
 	}, nil
 }
 

@@ -3,6 +3,8 @@ package mcp
 import (
 	"bytes"
 	"testing"
+
+	"github.com/vibe-c2/vibe-c2-core/core/pkg/wiki"
 )
 
 // The payload decoder accepts what an agent's tooling produces: plain base64,
@@ -47,5 +49,33 @@ func TestInlineImageMarkdown(t *testing.T) {
 	}
 	if got := inlineImageMarkdown("a.png", "/u", 0, 0); got != "![a.png](/u)" {
 		t.Fatalf("no-size form got %q", got)
+	}
+}
+
+// The place argument is lenient about case and whitespace, defaults to the
+// end of the page, and rejects anything it does not know.
+func TestPlacementMode(t *testing.T) {
+	tests := []struct {
+		in      string
+		wantOK  bool
+		place   bool
+		prepend bool
+	}{
+		{"", true, true, false},
+		{"end", true, true, false},
+		{" Start ", true, true, true},
+		{"none", true, false, false},
+		{"middle", false, false, false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.in, func(t *testing.T) {
+			mode, doPlace, ok := placementMode(tt.in)
+			if ok != tt.wantOK || doPlace != tt.place {
+				t.Fatalf("placementMode(%q) = (%q, %v, %v)", tt.in, mode, doPlace, ok)
+			}
+			if tt.place && (mode == "" || (mode == wiki.ApplyPrepend) != tt.prepend) {
+				t.Fatalf("placementMode(%q) mode = %q", tt.in, mode)
+			}
+		})
 	}
 }

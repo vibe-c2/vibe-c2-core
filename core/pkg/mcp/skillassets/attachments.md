@@ -56,15 +56,18 @@ curl -X POST $HOST/api/v1/mcp/upload -H "Authorization: Bearer vca_..." \
   -F documentId=<page id> -F as=image -F file=@login.png
 ```
 
-Fields: `documentId`, `file` (the filename travels with it), and `as`. Use
-the tool with `content_base64` only when you cannot make an HTTP request
-yourself: base64 costs a third more and a copy on each side. Two placements:
+Fields: `documentId`, `file` (the filename travels with it), `as` and
+`place`. Use the tool with `content_base64` only when you cannot make an
+HTTP request yourself: base64 costs a third more and a copy on each side.
 
 - `as:"image"` for a screenshot (PNG, JPEG, GIF, WebP): the page shows it as a
-  picture. The result's `markdown` is an image line with a size hint,
-  `![login.png](/api/v1/wiki/images/<id> " =1280x720")`; paste it alone on
-  its own line where the picture belongs.
-- `as:"attachment"` (default) for anything else, a capture or a binary: a
-  file card, placed exactly like a text attachment.
+  picture. `as:"attachment"` (default) for anything else, a capture or a
+  binary: a file card, like a text attachment.
+- `place` says where on the page: `end` (default) or `start`. The upload
+  is on the page when the call returns; the result says `placed: true`.
+  Pass `place:"none"` only when the picture belongs at a specific spot:
+  then take the result's `markdown` line and put it there with
+  `edit_wiki_document`, alone on its own line, in the same turn. An image
+  no page references is garbage-collected, so never leave one unplaced.
 
 Whole file, one call. The page's upload limits apply and a refusal says which.

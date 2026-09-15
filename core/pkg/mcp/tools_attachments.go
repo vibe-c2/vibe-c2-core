@@ -138,10 +138,10 @@ func registerAttachmentTools(s *Server) {
 
 	register(s, &mcp.Tool{
 		Name: "attach_file_to_wiki_document",
-		Description: "Attach a binary file to a page from base64 bytes, or with as:\"image\" place a " +
-			"screenshot inline. The result's markdown line, pasted alone on its own line, " +
-			"shows it on the page. Prefer POST /api/v1/mcp/upload (multipart, same bearer " +
-			"token, same result) when you can send raw bytes: no base64 overhead.",
+		Description: "Attach a binary file to a page from base64 bytes, or with as:\"image\" a " +
+			"screenshot shown inline. Placed at the end of the page unless place says " +
+			"otherwise. Prefer POST /api/v1/mcp/upload (multipart, same bearer token, same " +
+			"fields and result) when you can send raw bytes: no base64 overhead.",
 	}, writeTool, handleAttachFileToWikiDocument)
 }
 
