@@ -386,6 +386,13 @@ function buildTokenMap() {
       getAttrs: parseImageAttrs,
     },
     hardbreak: { node: "hardBreak" },
+    // A bare newline inside a paragraph keeps its line instead of folding
+    // into a space (prosemirror-markdown's default for softbreak). Markdown
+    // written by an agent — a checklist answer listing three shares, one per
+    // line — is meant to be read as written. Round trips stay stable: the
+    // serializer emits hardBreak as `\\` + newline, which parses back to the
+    // same node.
+    softbreak: { node: "hardBreak" },
 
     // Tables (GFM) — markdown-it default preset emits these tokens.
     table: { block: "table" },

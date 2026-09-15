@@ -48,15 +48,24 @@ Pages are richer than plain markdown; preserve these constructs.
 
 - **Checklist items** drive a coverage bar the operator watches:
 
-  ```
+  ````
   :::checklist {"prompt":"Enumerated SMB shares?","required":true,"state":"answered"}
-  Three shares, one world-readable.
-  :::
+  Three shares, one world-readable:
+
+  ```text
+  IPC$      no access
+  Public    READ
+  Backups   READ, WRITE
   ```
+  :::
+  ````
 
   The body is the answer; `state` is `answered`, `not_applicable`, `flagged`
   or absent. To answer one, edit the marker's `state` and write the body in one
-  `edit_wiki_document` call.
+  `edit_wiki_document` call. An operator reads the answer as written: put
+  anything with more than one line (command output, a list of hosts, a
+  config excerpt) in a fenced code block, one line per line, and keep the
+  prose to a sentence above it. Never squash several lines into one.
 - **Reference chips**: `[host](vibe://host/<id>)`, `[hash](vibe://hash/<id>)`,
   `[page](vibe://doc/<id>)`. Credentials appear as a `vibe-credential` fenced
   block.

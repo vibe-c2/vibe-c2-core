@@ -30,6 +30,24 @@ test("round-trips a simple paragraph", () => {
   assert.equal(inline[0].text, "hello world");
 });
 
+test("keeps a bare newline inside a paragraph as a hardBreak", () => {
+  // An agent answering a checklist item writes one fact per line; folding
+  // those into a single line (CommonMark soft-break behaviour) made the
+  // answer unreadable in the editor.
+  const md = "22/tcp open ssh\n80/tcp open http";
+  const json = decode(markdownToYjsUpdate(md));
+  const content = json.content as Array<Record<string, unknown>>;
+  assert.equal(content.length, 1);
+  assert.equal(content[0].type, "paragraph");
+  const inline = content[0].content as Array<Record<string, unknown>>;
+  assert.deepEqual(
+    inline.map((n) => n.type),
+    ["text", "hardBreak", "text"],
+  );
+  assert.equal(inline[0].text, "22/tcp open ssh");
+  assert.equal(inline[2].text, "80/tcp open http");
+});
+
 test("round-trips a heading", () => {
   const md = "## Sub-section";
   const json = decode(markdownToYjsUpdate(md));

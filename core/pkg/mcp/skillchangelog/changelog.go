@@ -49,6 +49,13 @@ var releases = []Release{
 			"Clarified task outcomes: SUCCESS and FAIL now describe what the engagement gained, not whether the task was finished. A cleanly completed lead that is refuted or fails is a FAIL.",
 		},
 	},
+	{
+		Version: 3,
+		Date:    "2026-09-15",
+		Notes: []string{
+			"Checklist answers: multi-line output (command results, host lists, config excerpts) goes in a fenced code block, one line per line, so the operator reads it as written instead of as one run-together line.",
+		},
+	},
 }
 
 // Releases returns the full history, oldest first. A copy, so callers cannot
