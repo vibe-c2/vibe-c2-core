@@ -77,6 +77,13 @@ var releases = []Release{
 			"New delete_wiki_document: moves a page to the trash, where an admin can restore it. A page with children needs with_children:true; templates are refused.",
 		},
 	},
+	{
+		Version: 7,
+		Date:    "2026-09-15",
+		Notes: []string{
+			"Structure guide lists what the page UI already shows (breadcrumb, tree, sub-pages, backlinks, task links, table of contents) so agents stop writing Parent:, Back to, sub-page lists and other links that duplicate it.",
+		},
+	},
 }
 
 // Releases returns the full history, oldest first. A copy, so callers cannot

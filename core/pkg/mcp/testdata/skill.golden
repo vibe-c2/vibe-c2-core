@@ -3,7 +3,7 @@
 name: vibe-c2
 description: Work an offensive security engagement in Vibe C2 — hosts, credentials, hashes, tasks, wiki notes and the operation timeline — through its MCP tools. Use whenever connected to a Vibe C2 MCP endpoint, or when the user mentions an operation, findings, or engagement notes.
 metadata:
-  version: "6"
+  version: "7"
 ---
 
 # Vibe C2
@@ -200,8 +200,27 @@ Web applications
 - A page cannot be moved to another parent afterwards, so choose the parent
   when you create it. Ask if the branch is unclear.
 - Link across the tree with `vibe://doc/<id>` chips rather than repeating
-  content: the host page links its credentials and the finding that used
-  them; the finding links the hosts it touched.
+  content: the host page links the finding that used its credentials; the
+  finding links the hosts it touched. Link only what the page does not
+  already show (below).
+
+## What the operator already sees
+
+The page is more than its body. Around it the UI shows:
+
+- a breadcrumb of every ancestor, and the tree sidebar with the page's
+  position and siblings;
+- a footer listing its sub-pages, every page that links to it, and the tasks
+  that reference it;
+- a table of contents built from the headings and checklist items;
+- who created and last edited it, and the checklist coverage bar.
+
+So never write `Parent: [...]`, `Back to [...]`, a "Sub-pages" or "Related
+pages" list of the children, "See also" back to a page that links here, or a
+manual table of contents. Each duplicates a control the operator has, goes
+stale when the tree changes, and buries the notes. A link in the body is for
+a relation the tree does not express: the finding a host page came out of,
+the host a credential opened, a page in another branch.
 ==================== vibe-c2/reference/wiki.md
 # Wiki: reading, editing, templates
 
