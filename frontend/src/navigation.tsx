@@ -37,12 +37,6 @@ export const navigationGlobalItems: NavigationItem[] = [
     permission: null,
     icon: GemIcon,
   },
-  {
-    title: "Skills",
-    url: "/skills",
-    permission: null,
-    icon: PackageIcon,
-  },
 ];
 
 // Operation-scoped entries rendered BELOW the global block. Hidden until
@@ -80,6 +74,16 @@ export const navigationAdminItems: NavigationItem[] = [
     url: "/modules",
     permission: Permissions.MODULE_READ,
     icon: BlocksIcon,
+  },
+  // Not an admin entry despite the group it sits in: publishing and
+  // downloading a skill is open to anyone who can sign in. It lives down here
+  // because it is a settings-shaped page an operator visits occasionally, not
+  // somewhere they work.
+  {
+    title: "Skills",
+    url: "/skills",
+    permission: null,
+    icon: PackageIcon,
   },
   {
     title: "API Docs",
