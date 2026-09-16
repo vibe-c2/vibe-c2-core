@@ -170,7 +170,15 @@ services:
     image: chrislusf/seaweedfs:latest
     container_name: vibec2-seaweedfs-volume
     restart: unless-stopped
-    command: volume -mserver=seaweedfs-master:9333 -ip.bind=0.0.0.0 -port=8080
+    # -max is the number of volume slots, not a size. Without it SeaweedFS
+    # derives the ceiling from free disk divided by the 30GB volume size,
+    # which on a modest disk is a handful of slots. Each collection (one per
+    # S3 bucket) eagerly grows 7 volumes on its first write, so three buckets
+    # can exhaust a small ceiling and the next bucket then fails every write
+    # with "no free volumes left" while existing buckets keep working.
+    # Volumes only consume the bytes actually written, so a generous slot
+    # count costs nothing until it is used.
+    command: volume -mserver=seaweedfs-master:9333 -ip.bind=0.0.0.0 -port=8080 -max=${SEAWEEDFS_VOLUME_MAX:-50}
     volumes:
       - seaweedfs_volume_data:/data
     depends_on:
