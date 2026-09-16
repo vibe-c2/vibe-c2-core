@@ -117,11 +117,19 @@ func (s *Service) Publish(ctx context.Context, in PublishInput) (PublishResult, 
 		return PublishResult{}, err
 	}
 
+	// An omitted description means "unchanged", not "blank". Publishing a new
+	// version is usually a `curl` with the name and the file, and losing the
+	// listing text every time somebody does that would be a trap.
+	description := TrimText(in.Description, MaxDescriptionLength)
+	if description == "" {
+		description = skill.Description
+	}
+
 	if err := s.repo.FinishPublish(ctx, skill.SkillID, repository.FinishPublishInput{
 		Version:       version,
 		SizeBytes:     row.SizeBytes,
 		UploadedAt:    row.CreateAt,
-		Description:   TrimText(in.Description, MaxDescriptionLength),
+		Description:   description,
 		OwnerUsername: skill.OwnerUsername,
 	}); err != nil {
 		return PublishResult{}, internal(err, "stored the bundle but could not update %q", name)
@@ -130,7 +138,7 @@ func (s *Service) Publish(ctx context.Context, in PublishInput) (PublishResult, 
 	skill.CurrentVersion = version
 	skill.SizeBytes = row.SizeBytes
 	skill.UploadedAt = row.CreateAt
-	skill.Description = TrimText(in.Description, MaxDescriptionLength)
+	skill.Description = description
 
 	return PublishResult{Skill: skill, Version: row, Claimed: claimed}, nil
 }

@@ -408,3 +408,51 @@ func TestFilename(t *testing.T) {
 		t.Fatalf("Filename = %q", got)
 	}
 }
+
+// A publish that omits the description is a new bundle, not a request to
+// blank the listing text. Publishing a version with `curl -F name -F file` is
+// the common case and must not silently erase it.
+func TestPublish_KeepsTheDescriptionWhenANewVersionOmitsIt(t *testing.T) {
+	repo, store := newFakeRepo(), newFakeStore()
+	svc := newTestService(t, repo, store)
+	ctx := context.Background()
+	owner := uuid.New()
+
+	if _, err := svc.Publish(ctx, publishInput("recon-sweep", owner, "alice", zipBytes(t))); err != nil {
+		t.Fatalf("first publish: %v", err)
+	}
+
+	bare := publishInput("recon-sweep", owner, "alice", zipBytes(t))
+	bare.Description = ""
+	got, err := svc.Publish(ctx, bare)
+	if err != nil {
+		t.Fatalf("second publish: %v", err)
+	}
+	if got.Skill.Description != "sweeps a subnet" {
+		t.Fatalf("description = %q, want the original to survive", got.Skill.Description)
+	}
+	if stored := repo.skills["recon-sweep"].Description; stored != "sweeps a subnet" {
+		t.Fatalf("stored description = %q, want the original to survive", stored)
+	}
+}
+
+// Supplying one still replaces it, which is how an author corrects the text.
+func TestPublish_ReplacesTheDescriptionWhenOneIsGiven(t *testing.T) {
+	repo, store := newFakeRepo(), newFakeStore()
+	svc := newTestService(t, repo, store)
+	ctx := context.Background()
+	owner := uuid.New()
+
+	if _, err := svc.Publish(ctx, publishInput("recon-sweep", owner, "alice", zipBytes(t))); err != nil {
+		t.Fatalf("first publish: %v", err)
+	}
+	updated := publishInput("recon-sweep", owner, "alice", zipBytes(t))
+	updated.Description = "now also checks LDAP signing"
+	got, err := svc.Publish(ctx, updated)
+	if err != nil {
+		t.Fatalf("second publish: %v", err)
+	}
+	if got.Skill.Description != "now also checks LDAP signing" {
+		t.Fatalf("description = %q, want the new text", got.Skill.Description)
+	}
+}
