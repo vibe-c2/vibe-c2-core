@@ -21,6 +21,8 @@ export const SkillRegistryQuery = graphql(`
         downloadedAt
         snoozedVersion
         downloadUrl
+        unpublished
+        canRestore
       }
     }
   }
@@ -56,6 +58,17 @@ export const SnoozeSkillMutation = graphql(`
 export const UnpublishSkillMutation = graphql(`
   mutation UnpublishSkill($name: String!) {
     unpublishSkill(name: $name) {
+      id
+      name
+    }
+  }
+`)
+
+// Brings a retired skill back. Whoever retired it, or an administrator, so an
+// author cannot quietly undo a takedown.
+export const RepublishSkillMutation = graphql(`
+  mutation RepublishSkill($name: String!) {
+    republishSkill(name: $name) {
       id
       name
     }

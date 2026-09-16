@@ -115,6 +115,12 @@ func (f *fakeRepo) FinishPublish(_ context.Context, skillID uuid.UUID, in reposi
 }
 
 func (f *fakeRepo) SetUnpublished(_ context.Context, skillID uuid.UUID, at *time.Time, by *uuid.UUID) error {
+	for _, s := range f.skills {
+		if s.SkillID == skillID {
+			s.UnpublishedAt = at
+			s.UnpublishedBy = by
+		}
+	}
 	return nil
 }
 
@@ -648,5 +654,149 @@ func TestPublish_RollsBackEvenWhenTheCallerHasGoneAway(t *testing.T) {
 	}
 	if len(repo.skills) != 0 {
 		t.Fatalf("the name must be released even though the caller went away, found %d rows", len(repo.skills))
+	}
+}
+
+// --- retiring is not a one-way door ----------------------------------------
+//
+// Reported: an operator published a test skill through the UI, retired it,
+// then could not publish under that name again. The refusal told them to ask
+// an administrator, which they were, and the page offered no way back because
+// retired skills were hidden from everyone.
+
+func TestPublish_OwnerCanPublishOverTheirOwnRetirement(t *testing.T) {
+	repo, store := newFakeRepo(), newFakeStore()
+	svc := newTestService(t, repo, store)
+	ctx := context.Background()
+	owner := uuid.New()
+
+	if _, err := svc.Publish(ctx, publishInput("recon-sweep", owner, "alice", zipBytes(t))); err != nil {
+		t.Fatalf("first publish: %v", err)
+	}
+	// Alice retires her own skill.
+	now := time.Now().UTC()
+	if err := repo.SetUnpublished(ctx, repo.skills["recon-sweep"].SkillID, &now, &owner); err != nil {
+		t.Fatal(err)
+	}
+
+	got, err := svc.Publish(ctx, publishInput("recon-sweep", owner, "alice", zipBytes(t)))
+	if err != nil {
+		t.Fatalf("publishing over your own retirement should restore it, got %v", err)
+	}
+	if got.Version.Version != 2 {
+		t.Errorf("version = %d, want 2", got.Version.Version)
+	}
+	if repo.skills["recon-sweep"].IsUnpublished() {
+		t.Error("publishing should have brought the skill back")
+	}
+}
+
+func TestPublish_DoesNotOverrideAnAdminTakedown(t *testing.T) {
+	repo, store := newFakeRepo(), newFakeStore()
+	svc := newTestService(t, repo, store)
+	ctx := context.Background()
+	owner, admin := uuid.New(), uuid.New()
+
+	if _, err := svc.Publish(ctx, publishInput("recon-sweep", owner, "alice", zipBytes(t))); err != nil {
+		t.Fatalf("first publish: %v", err)
+	}
+	// An administrator takes it down.
+	now := time.Now().UTC()
+	if err := repo.SetUnpublished(ctx, repo.skills["recon-sweep"].SkillID, &now, &admin); err != nil {
+		t.Fatal(err)
+	}
+
+	_, err := svc.Publish(ctx, publishInput("recon-sweep", owner, "alice", zipBytes(t)))
+	if err == nil {
+		t.Fatal("re-uploading must not undo a takedown")
+	}
+	if !strings.Contains(err.Error(), "administrator") {
+		t.Errorf("the refusal should say who to ask, got %q", err.Error())
+	}
+	// The administrator can still publish over it.
+	in := publishInput("recon-sweep", admin, "root", zipBytes(t))
+	in.IsAdmin = true
+	if _, err := svc.Publish(ctx, in); err != nil {
+		t.Fatalf("an administrator should be able to restore, got %v", err)
+	}
+}
+
+func TestCanRestore(t *testing.T) {
+	owner, admin, other := uuid.New(), uuid.New(), uuid.New()
+	now := time.Now().UTC()
+
+	live := models.Skill{OwnerUserID: owner}
+	byOwner := models.Skill{OwnerUserID: owner, UnpublishedAt: &now, UnpublishedBy: &owner}
+	byAdmin := models.Skill{OwnerUserID: owner, UnpublishedAt: &now, UnpublishedBy: &admin}
+
+	tests := []struct {
+		name  string
+		skill models.Skill
+		user  uuid.UUID
+		admin bool
+		want  bool
+	}{
+		{"a live skill needs no restoring", live, other, false, true},
+		{"the owner undoes their own retirement", byOwner, owner, false, true},
+		{"an administrator undoes anything", byAdmin, admin, true, true},
+		{"the author cannot undo a takedown", byAdmin, owner, false, false},
+		{"a stranger cannot restore", byOwner, other, false, false},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := CanRestore(tc.skill, tc.user, tc.admin); got != tc.want {
+				t.Fatalf("CanRestore = %v, want %v", got, tc.want)
+			}
+		})
+	}
+}
+
+// A retired skill hidden from the only person who can bring it back is the
+// dead end that caused the report.
+func TestListFor_ShowsYouYourOwnRetiredSkills(t *testing.T) {
+	repo, store := newFakeRepo(), newFakeStore()
+	svc := newTestService(t, repo, store)
+	ctx := context.Background()
+	owner, other := uuid.New(), uuid.New()
+
+	if _, err := svc.Publish(ctx, publishInput("recon-sweep", owner, "alice", zipBytes(t))); err != nil {
+		t.Fatal(err)
+	}
+	now := time.Now().UTC()
+	if err := repo.SetUnpublished(ctx, repo.skills["recon-sweep"].SkillID, &now, &owner); err != nil {
+		t.Fatal(err)
+	}
+
+	mine, err := svc.ListFor(ctx, owner, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(mine) != 1 || !mine[0].IsUnpublished() {
+		t.Fatalf("the person who retired it should still see it, got %d rows", len(mine))
+	}
+
+	theirs, err := svc.ListFor(ctx, other, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(theirs) != 0 {
+		t.Fatalf("a retired skill stays hidden from everyone else, got %d rows", len(theirs))
+	}
+
+	asAdmin, err := svc.ListFor(ctx, other, true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(asAdmin) != 1 {
+		t.Fatalf("an administrator should see it to act on it, got %d rows", len(asAdmin))
+	}
+
+	// And the plain listing, which is what agents see, still hides it.
+	public, err := svc.List(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(public) != 0 {
+		t.Fatalf("retired skills must stay out of the public listing, got %d", len(public))
 	}
 }

@@ -5,8 +5,10 @@ import {
   PackageIcon,
   ShieldCheckIcon,
   TrashIcon,
+  UndoIcon,
   UploadIcon,
 } from "lucide-react"
+import { toast } from "sonner"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import {
@@ -21,10 +23,11 @@ import {
   VirtualizedDataTable,
   dataTableRowClass,
 } from "@/components/ui/virtualized-data-table"
-import { useMarkSkillDownloaded } from "@/graphql/hooks/skills"
+import { useMarkSkillDownloaded, useRepublishSkill } from "@/graphql/hooks/skills"
 import { useMarkSkillDownloaded as useMarkBuiltinDownloaded } from "@/graphql/hooks/skill"
 import { useSkillStore } from "@/stores/skills"
 import { formatBytes } from "@/lib/skill-upload"
+import { cn } from "@/lib/utils"
 import type { DataTableSort } from "@/lib/data-table-sort"
 import type { SkillRow, SkillSortField } from "@/lib/skill-rows"
 
@@ -51,6 +54,15 @@ export function SkillsTable({
   const openPublishDialog = useSkillStore((s) => s.openPublishDialog)
   const markDownloaded = useMarkSkillDownloaded()
   const markBuiltinDownloaded = useMarkBuiltinDownloaded()
+  const republish = useRepublishSkill()
+
+  function handleRestore(name: string) {
+    republish.mutate(name, {
+      onSuccess: () => toast.success(`Restored ${name}.`),
+      onError: (error) =>
+        toast.error(error instanceof Error ? error.message : `Could not restore ${name}.`),
+    })
+  }
 
   // The two origins record a download in different places: the built-in skill
   // against the user record, a published one against its subscription row.
@@ -111,11 +123,19 @@ export function SkillsTable({
         </>
       }
       renderRow={(skill) => {
-        const canRetire = skill.origin === "community" && (skill.mine || isAdmin)
+        const canRetire =
+          skill.origin === "community" && !skill.unpublished && (skill.mine || isAdmin)
         return (
-          <div className={dataTableRowClass(GRID_COLS)}>
+          <div className={cn(dataTableRowClass(GRID_COLS), skill.unpublished && "opacity-60")}>
             <div className="min-w-0">
-              <div className="truncate font-medium">{skill.name}</div>
+              <div className="flex items-center gap-2">
+                <span className="truncate font-medium">{skill.name}</span>
+                {skill.unpublished && (
+                  <Badge variant="outline" className="shrink-0 text-[10px]">
+                    Retired
+                  </Badge>
+                )}
+              </div>
               {skill.description && (
                 <div className="truncate text-xs text-muted-foreground">
                   {skill.description}
@@ -167,13 +187,23 @@ export function SkillsTable({
                   <EllipsisIcon className="size-4" />
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="end">
-                  <DropdownMenuItem
-                    onClick={() => handleDownload(skill)}
-                    render={<a href={skill.downloadUrl} download />}
-                  >
-                    <DownloadIcon className="size-4" />
-                    {skill.outdated ? "Update" : "Download"}
-                  </DropdownMenuItem>
+                  {skill.unpublished ? (
+                    <DropdownMenuItem
+                      disabled={!skill.canRestore || republish.isPending}
+                      onClick={() => handleRestore(skill.name)}
+                    >
+                      <UndoIcon className="size-4" />
+                      Restore
+                    </DropdownMenuItem>
+                  ) : (
+                    <DropdownMenuItem
+                      onClick={() => handleDownload(skill)}
+                      render={<a href={skill.downloadUrl} download />}
+                    >
+                      <DownloadIcon className="size-4" />
+                      {skill.outdated ? "Update" : "Download"}
+                    </DropdownMenuItem>
+                  )}
                   {skill.origin === "community" && (
                     <DropdownMenuItem
                       onClick={() => openVersionsDialog({ name: skill.name })}
@@ -182,7 +212,7 @@ export function SkillsTable({
                       Version history
                     </DropdownMenuItem>
                   )}
-                  {skill.mine && (
+                  {skill.mine && !skill.unpublished && (
                     <DropdownMenuItem
                       onClick={() => openPublishDialog(skill.name)}
                     >

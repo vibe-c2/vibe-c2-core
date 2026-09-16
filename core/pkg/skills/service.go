@@ -207,7 +207,23 @@ func (s *Service) claimOrLoad(ctx context.Context, name string, in PublishInput)
 				name, existing.OwnerUsername)
 		}
 		if existing.IsUnpublished() {
-			return models.Skill{}, false, forbidden("%q has been retired by an administrator. Ask them to restore it before publishing again.", name)
+			// Retiring unlists a skill; it does not surrender the name. Who
+			// may bring it back depends on who put it away: you can undo
+			// your own decision, and an administrator can undo anyone's.
+			// Without that second rule an author could publish straight over
+			// a takedown, which would make takedowns pointless.
+			if !CanRestore(existing, in.PublisherID, in.IsAdmin) {
+				return models.Skill{}, false, forbidden(
+					"%q was retired by an administrator. Ask them to restore it; publishing will not override a takedown.", name)
+			}
+			// Publishing a new version is a restore. Clearing the flag here
+			// rather than making them do it in two steps: they have just
+			// said what they want by uploading.
+			if err := s.repo.SetUnpublished(ctx, existing.SkillID, nil, nil); err != nil {
+				return models.Skill{}, false, internal(err, "could not restore %q", name)
+			}
+			existing.UnpublishedAt = nil
+			existing.UnpublishedBy = nil
 		}
 		return existing, false, nil
 
@@ -338,7 +354,7 @@ func (s *Service) Lookup(ctx context.Context, name string) (models.Skill, error)
 		return models.Skill{}, internal(err, "could not look up %q", normalized)
 	}
 	if skill.IsUnpublished() {
-		return models.Skill{}, notFound("%q has been retired.", normalized)
+		return models.Skill{}, notFound("%q is retired and is not being handed out. Its owner or an administrator can restore it.", normalized)
 	}
 	if skill.CurrentVersion < 1 {
 		// The name exists because a publish started and never stored a
@@ -348,11 +364,46 @@ func (s *Service) Lookup(ctx context.Context, name string) (models.Skill, error)
 	return skill, nil
 }
 
+// CanRestore reports whether this operator may bring a retired skill back.
+//
+// You can undo what you did: the person who retired it, and any
+// administrator. Deliberately not "the owner", so that an administrator's
+// takedown cannot be reversed by the author simply re-uploading.
+func CanRestore(skill models.Skill, userID uuid.UUID, isAdmin bool) bool {
+	if !skill.IsUnpublished() {
+		return true
+	}
+	if isAdmin {
+		return true
+	}
+	return skill.UnpublishedBy != nil && *skill.UnpublishedBy == userID
+}
+
 // List returns the published skills, newest upload first.
 func (s *Service) List(ctx context.Context) ([]models.Skill, error) {
 	out, err := s.repo.List(ctx, false)
 	if err != nil {
 		return nil, internal(err, "could not list skills")
+	}
+	return out, nil
+}
+
+// ListFor returns what one operator should see: everything published, plus
+// any retired skill they can restore.
+//
+// A retired skill that is invisible to the only person who can bring it back
+// is a dead end — which is exactly what retiring used to be.
+func (s *Service) ListFor(ctx context.Context, viewer uuid.UUID, isAdmin bool) ([]models.Skill, error) {
+	all, err := s.repo.List(ctx, true)
+	if err != nil {
+		return nil, internal(err, "could not list skills")
+	}
+	out := make([]models.Skill, 0, len(all))
+	for _, skill := range all {
+		if skill.IsUnpublished() && !CanRestore(skill, viewer, isAdmin) {
+			continue
+		}
+		out = append(out, skill)
 	}
 	return out, nil
 }

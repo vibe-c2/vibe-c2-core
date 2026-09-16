@@ -544,6 +544,7 @@ type ComplexityRoot struct {
 	}
 
 	Skill struct {
+		CanRestore        func(childComplexity int) int
 		CurrentVersion    func(childComplexity int) int
 		Description       func(childComplexity int) int
 		DownloadURL       func(childComplexity int) int
@@ -556,6 +557,7 @@ type ComplexityRoot struct {
 		OwnerUsername     func(childComplexity int) int
 		SizeBytes         func(childComplexity int) int
 		SnoozedVersion    func(childComplexity int) int
+		Unpublished       func(childComplexity int) int
 		UpdatedAt         func(childComplexity int) int
 	}
 
@@ -3977,6 +3979,12 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 
 		return e.ComplexityRoot.SessionEvent.UserID(childComplexity), true
 
+	case "Skill.canRestore":
+		if e.ComplexityRoot.Skill.CanRestore == nil {
+			break
+		}
+
+		return e.ComplexityRoot.Skill.CanRestore(childComplexity), true
 	case "Skill.currentVersion":
 		if e.ComplexityRoot.Skill.CurrentVersion == nil {
 			break
@@ -4049,6 +4057,12 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.Skill.SnoozedVersion(childComplexity), true
+	case "Skill.unpublished":
+		if e.ComplexityRoot.Skill.Unpublished == nil {
+			break
+		}
+
+		return e.ComplexityRoot.Skill.Unpublished(childComplexity), true
 	case "Skill.updatedAt":
 		if e.ComplexityRoot.Skill.UpdatedAt == nil {
 			break
@@ -7225,6 +7239,13 @@ type Skill {
   snoozedVersion: Int
   # Where to fetch the current bundle.
   downloadUrl: String!
+  # True when the skill is retired: unlisted and not handed out, with its
+  # name and version history kept. Only ever true for a viewer who can
+  # restore it, since a retired skill is hidden from everyone else.
+  unpublished: Boolean!
+  # True when this viewer may bring it back. Whoever retired it, or an
+  # administrator, so an author cannot quietly undo a takedown.
+  canRestore: Boolean!
 }
 
 # SkillVersion is one upload. Versions are never deleted or overwritten, so a
@@ -19330,6 +19351,10 @@ func (ec *executionContext) fieldContext_Mutation_snoozeSkill(ctx context.Contex
 				return ec.fieldContext_Skill_snoozedVersion(ctx, field)
 			case "downloadUrl":
 				return ec.fieldContext_Skill_downloadUrl(ctx, field)
+			case "unpublished":
+				return ec.fieldContext_Skill_unpublished(ctx, field)
+			case "canRestore":
+				return ec.fieldContext_Skill_canRestore(ctx, field)
 			}
 			return nil, fmt.Errorf("no field named %q was found under type Skill", field.Name)
 		},
@@ -19417,6 +19442,10 @@ func (ec *executionContext) fieldContext_Mutation_unpublishSkill(ctx context.Con
 				return ec.fieldContext_Skill_snoozedVersion(ctx, field)
 			case "downloadUrl":
 				return ec.fieldContext_Skill_downloadUrl(ctx, field)
+			case "unpublished":
+				return ec.fieldContext_Skill_unpublished(ctx, field)
+			case "canRestore":
+				return ec.fieldContext_Skill_canRestore(ctx, field)
 			}
 			return nil, fmt.Errorf("no field named %q was found under type Skill", field.Name)
 		},
@@ -19504,6 +19533,10 @@ func (ec *executionContext) fieldContext_Mutation_republishSkill(ctx context.Con
 				return ec.fieldContext_Skill_snoozedVersion(ctx, field)
 			case "downloadUrl":
 				return ec.fieldContext_Skill_downloadUrl(ctx, field)
+			case "unpublished":
+				return ec.fieldContext_Skill_unpublished(ctx, field)
+			case "canRestore":
+				return ec.fieldContext_Skill_canRestore(ctx, field)
 			}
 			return nil, fmt.Errorf("no field named %q was found under type Skill", field.Name)
 		},
@@ -19591,6 +19624,10 @@ func (ec *executionContext) fieldContext_Mutation_transferSkill(ctx context.Cont
 				return ec.fieldContext_Skill_snoozedVersion(ctx, field)
 			case "downloadUrl":
 				return ec.fieldContext_Skill_downloadUrl(ctx, field)
+			case "unpublished":
+				return ec.fieldContext_Skill_unpublished(ctx, field)
+			case "canRestore":
+				return ec.fieldContext_Skill_canRestore(ctx, field)
 			}
 			return nil, fmt.Errorf("no field named %q was found under type Skill", field.Name)
 		},
@@ -29183,6 +29220,64 @@ func (ec *executionContext) fieldContext_Skill_downloadUrl(_ context.Context, fi
 	return fc, nil
 }
 
+func (ec *executionContext) _Skill_unpublished(ctx context.Context, field graphql.CollectedField, obj *model.Skill) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Skill_unpublished,
+		func(ctx context.Context) (any, error) {
+			return obj.Unpublished, nil
+		},
+		nil,
+		ec.marshalNBoolean2bool,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_Skill_unpublished(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Skill",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Boolean does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Skill_canRestore(ctx context.Context, field graphql.CollectedField, obj *model.Skill) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Skill_canRestore,
+		func(ctx context.Context) (any, error) {
+			return obj.CanRestore, nil
+		},
+		nil,
+		ec.marshalNBoolean2bool,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_Skill_canRestore(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Skill",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Boolean does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
 func (ec *executionContext) _SkillChangelog_currentVersion(ctx context.Context, field graphql.CollectedField, obj *model.SkillChangelog) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
@@ -29299,6 +29394,10 @@ func (ec *executionContext) fieldContext_SkillRegistry_skills(_ context.Context,
 				return ec.fieldContext_Skill_snoozedVersion(ctx, field)
 			case "downloadUrl":
 				return ec.fieldContext_Skill_downloadUrl(ctx, field)
+			case "unpublished":
+				return ec.fieldContext_Skill_unpublished(ctx, field)
+			case "canRestore":
+				return ec.fieldContext_Skill_canRestore(ctx, field)
 			}
 			return nil, fmt.Errorf("no field named %q was found under type Skill", field.Name)
 		},
@@ -46186,6 +46285,16 @@ func (ec *executionContext) _Skill(ctx context.Context, sel ast.SelectionSet, ob
 			out.Values[i] = ec._Skill_snoozedVersion(ctx, field, obj)
 		case "downloadUrl":
 			out.Values[i] = ec._Skill_downloadUrl(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "unpublished":
+			out.Values[i] = ec._Skill_unpublished(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "canRestore":
+			out.Values[i] = ec._Skill_canRestore(ctx, field, obj)
 			if out.Values[i] == graphql.Null {
 				out.Invalids++
 			}

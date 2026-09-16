@@ -36,6 +36,13 @@ type Skill {
   snoozedVersion: Int
   # Where to fetch the current bundle.
   downloadUrl: String!
+  # True when the skill is retired: unlisted and not handed out, with its
+  # name and version history kept. Only ever true for a viewer who can
+  # restore it, since a retired skill is hidden from everyone else.
+  unpublished: Boolean!
+  # True when this viewer may bring it back. Whoever retired it, or an
+  # administrator, so an author cannot quietly undo a takedown.
+  canRestore: Boolean!
 }
 
 # SkillVersion is one upload. Versions are never deleted or overwritten, so a

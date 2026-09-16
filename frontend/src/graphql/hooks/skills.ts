@@ -6,6 +6,7 @@ import {
   SkillVersionsDocument,
   SnoozeSkillDocument,
   UnpublishSkillDocument,
+  RepublishSkillDocument,
 } from "@/graphql/gql/graphql"
 
 export const communitySkillKeys = {
@@ -78,6 +79,16 @@ export function useSnoozeSkill() {
     },
     onSettled: () => {
       queryClient.invalidateQueries({ queryKey: communitySkillKeys.registry() })
+    },
+  })
+}
+
+export function useRepublishSkill() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (name: string) => graphqlClient(RepublishSkillDocument, { name }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: communitySkillKeys.all })
     },
   })
 }

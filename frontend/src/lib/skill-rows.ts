@@ -34,6 +34,10 @@ export interface SkillRow {
   downloadUrl: string
   /** True when the caller published it, so they can add a version to it. */
   mine: boolean
+  /** Retired: unlisted and not handed out, name and history kept. */
+  unpublished: boolean
+  /** This viewer may bring it back. */
+  canRestore: boolean
   /** They hold a copy and it is behind. Never true when nothing is installed. */
   outdated: boolean
 }
@@ -54,6 +58,8 @@ export interface CommunitySkillInput {
   mine: boolean
   downloadedVersion?: number | null
   downloadUrl: string
+  unpublished: boolean
+  canRestore: boolean
 }
 
 /** The name the generated skill is published under, and the one nobody else
@@ -85,6 +91,8 @@ export function buildSkillRows(
       updatedAt: null,
       downloadUrl: SKILL_DOWNLOAD_URL,
       mine: false,
+      unpublished: false,
+      canRestore: false,
       outdated: installed != null && installed < builtin.currentVersion,
     })
   }
@@ -103,6 +111,8 @@ export function buildSkillRows(
       updatedAt: skill.updatedAt,
       downloadUrl: skill.downloadUrl,
       mine: skill.mine,
+      unpublished: skill.unpublished,
+      canRestore: skill.canRestore,
       outdated: installed != null && installed < skill.currentVersion,
     })
   }

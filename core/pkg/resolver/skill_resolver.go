@@ -51,7 +51,8 @@ func (r *skillResolver) Registry(ctx context.Context) (*model.SkillRegistry, err
 		return nil, err
 	}
 
-	published, err := r.svc.List(ctx)
+	isAdmin := callerIsAdmin(ctx)
+	published, err := r.svc.ListFor(ctx, viewer, isAdmin)
 	if err != nil {
 		return nil, err
 	}
@@ -63,7 +64,7 @@ func (r *skillResolver) Registry(ctx context.Context) (*model.SkillRegistry, err
 	out := make([]*model.Skill, 0, len(published))
 	for _, skill := range published {
 		sub, hasSub := subscriptions[skill.SkillID]
-		out = append(out, toSkillModel(skill, viewer, sub, hasSub))
+		out = append(out, toSkillModel(skill, viewer, sub, hasSub, isAdmin))
 	}
 
 	return &model.SkillRegistry{
@@ -136,8 +137,16 @@ func (r *skillResolver) SetUnpublished(ctx context.Context, name string, unpubli
 	if err != nil {
 		return nil, fmt.Errorf("there is no skill called %q", normalized)
 	}
-	if skill.OwnerUserID != viewer && !callerIsAdmin(ctx) {
-		return nil, fmt.Errorf("%q belongs to %s", skill.Name, skill.OwnerUsername)
+	isAdmin := callerIsAdmin(ctx)
+	if unpublished {
+		// Retiring is the owner's call, or an administrator's.
+		if skill.OwnerUserID != viewer && !isAdmin {
+			return nil, fmt.Errorf("%q belongs to %s", skill.Name, skill.OwnerUsername)
+		}
+	} else if !skills.CanRestore(skill, viewer, isAdmin) {
+		// Restoring is for whoever retired it, so an author cannot quietly
+		// undo an administrator's takedown.
+		return nil, fmt.Errorf("%q was retired by an administrator; only an administrator can restore it", skill.Name)
 	}
 
 	var at *time.Time
@@ -155,7 +164,7 @@ func (r *skillResolver) SetUnpublished(ctx context.Context, name string, unpubli
 		return nil, fmt.Errorf("failed to re-read %q: %w", normalized, err)
 	}
 	sub, hasSub := r.subscription(ctx, viewer, updated.SkillID)
-	return toSkillModel(updated, viewer, sub, hasSub), nil
+	return toSkillModel(updated, viewer, sub, hasSub, isAdmin), nil
 }
 
 // Transfer hands a claimed name to another operator.
@@ -188,7 +197,7 @@ func (r *skillResolver) reload(ctx context.Context, name string, viewer uuid.UUI
 		return nil, err
 	}
 	sub, hasSub := r.subscription(ctx, viewer, skill.SkillID)
-	return toSkillModel(skill, viewer, sub, hasSub), nil
+	return toSkillModel(skill, viewer, sub, hasSub, callerIsAdmin(ctx)), nil
 }
 
 // subscription reads one row, treating a missing one as "never downloaded"
@@ -201,7 +210,7 @@ func (r *skillResolver) subscription(ctx context.Context, viewer, skillID uuid.U
 	return sub, true
 }
 
-func toSkillModel(skill models.Skill, viewer uuid.UUID, sub models.SkillSubscription, hasSub bool) *model.Skill {
+func toSkillModel(skill models.Skill, viewer uuid.UUID, sub models.SkillSubscription, hasSub bool, isAdmin bool) *model.Skill {
 	out := &model.Skill{
 		ID:             skill.SkillID.String(),
 		Name:           skill.Name,
@@ -213,6 +222,8 @@ func toSkillModel(skill models.Skill, viewer uuid.UUID, sub models.SkillSubscrip
 		SizeBytes:      int(skill.SizeBytes),
 		Mine:           skill.OwnerUserID == viewer,
 		DownloadURL:    "/api/v1/skills/" + skill.Name + "/download",
+		Unpublished:    skill.IsUnpublished(),
+		CanRestore:     skill.IsUnpublished() && skills.CanRestore(skill, viewer, isAdmin),
 	}
 	if hasSub && sub.DownloadedVersion > 0 {
 		downloaded := sub.DownloadedVersion

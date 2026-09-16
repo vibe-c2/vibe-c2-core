@@ -47,10 +47,11 @@ export function RetireSkillDialog() {
             <span className="font-medium text-foreground">
               {selectedSkill?.name}
             </span>
-            . It disappears from this list and can no longer be downloaded. The
-            name stays claimed and every version is kept, so nothing is
-            destroyed and an administrator can put it back. Copies people
-            already downloaded are unaffected.
+            . It stops being listed and can no longer be downloaded. Nothing is
+            destroyed: the name stays yours, every version is kept, and it
+            stays on this page marked Retired so you can restore it or publish
+            a new version over it whenever you like. Copies people already
+            downloaded are unaffected.
           </DialogDescription>
         </DialogHeader>
         {error && (
