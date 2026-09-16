@@ -117,6 +117,7 @@ func (a *App) NewRouter() *gin.Engine {
 	// lifecycle service so the GraphQL deregister and the RPC deregister share one
 	// transition (registry update + gate bust + audit + bus event).
 	moduleRes := resolver.NewModuleResolver(a.repos.ModuleRegistry, a.moduleService)
+	skillRes := resolver.NewSkillResolver(a.skillService, a.repos.Skill, a.repos.SkillSubscription, a.repos.User)
 
 	// Wiki controller (REST endpoints)
 	wikiCtrl := controller.NewWikiController(a.repos.WikiDocument, a.repos.Operation, a.env.HocuspocusTicketSecret, a.logger)
@@ -211,6 +212,7 @@ func (a *App) NewRouter() *gin.Engine {
 			UserRepo:        a.repos.User,
 			Files:           wikiFileCtrl,
 			Images:          wikiImageCtrl,
+			Skills:          a.skillService,
 			Cache:           a.cache,
 			Blobs:           a.fileStore,
 			Hocuspocus:      a.hpClient,
@@ -224,6 +226,11 @@ func (a *App) NewRouter() *gin.Engine {
 		// Raw-bytes form of attach_file_to_wiki_document. Agent-only like
 		// /mcp, and audited as the same tool.
 		v1.POST("/mcp/upload", mcpServer.UploadHandler())
+		// The community skill registry, for agents. Publishing and downloading
+		// move a zip, so both are plain HTTP rather than tool calls; they are
+		// audited under the tool names publish_skill and download_skill.
+		v1.POST("/mcp/skills/upload", mcpServer.PublishSkillHandler())
+		v1.GET("/mcp/skills/download", mcpServer.DownloadSkillHandler())
 		// The other two Streamable HTTP methods, answered rather than left to
 		// the router's 404. A client that probes with GET and sees 404 reads
 		// it as "no MCP server here"; 405 + Allow tells it to use POST.
@@ -244,6 +251,14 @@ func (a *App) NewRouter() *gin.Engine {
 		// RequireHuman because a skill is installed by a person into their own
 		// client — it cannot be delivered over MCP.
 		v1.GET("/mcp/skill", middleware.RBAC(permissions.BasicPermission), mcpServer.SkillHandler())
+
+		// The community skill registry, for operators. Publishing is open to
+		// anyone who can sign in: a name is claimed by whoever takes it first
+		// and only they can publish new versions of it, which is the whole
+		// of the trust model. Listing and the small mutations are GraphQL.
+		skillCtrl := controller.NewSkillController(a.skillService, a.logger)
+		v1.POST("/skills", middleware.RBAC(permissions.BasicPermission), skillCtrl.Publish)
+		v1.GET("/skills/:name/download", middleware.RBAC(permissions.BasicPermission), skillCtrl.Download)
 
 		v1.GET("/login/me", middleware.RBAC(permissions.BasicPermission), authCtrl.Me)
 		v1.POST("/logout", middleware.RBAC(permissions.BasicPermission), authCtrl.Logout)
@@ -284,7 +299,7 @@ func (a *App) NewRouter() *gin.Engine {
 		//                       inside gqlgen; one socket multiplexes every
 		//                       active subscription on the page.
 		gqlHandler := gql.NewHandler(
-			userRes, opRes, sessRes, wikiDocRes, wikiVisitRes, credRes, hashRes, hostRes, taskRes, timelineRes, apiKeyRes, agentKeyRes, focusRes, agentActionRes, moduleRes,
+			userRes, opRes, sessRes, wikiDocRes, wikiVisitRes, credRes, hashRes, hostRes, taskRes, timelineRes, apiKeyRes, agentKeyRes, focusRes, agentActionRes, moduleRes, skillRes,
 			a.eventBus,
 			a.repos.User, a.repos.Operation, a.repos.Session, a.repos.WikiDocument, a.repos.Credential, a.repos.Hash, a.repos.Host, a.repos.Task, a.repos.ModuleRegistry,
 			a.presenceTracker,

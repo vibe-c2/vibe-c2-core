@@ -54,6 +54,11 @@ var toolGroups = []toolGroup{
 		Intro: "Milestones only: a task closed, a credential recovered, a hash cracked, and whatever you record with create_timeline_event — a DC owned, a foothold lost. Wiki edits and task bookkeeping do not appear.",
 		Tools: []string{"get_timeline", "create_timeline_event"},
 	},
+	{
+		Title: "Skills",
+		Intro: "Working methods other operators have published, packaged the way this skill is. See skills.md.",
+		Tools: []string{"find_skills", "get_skill"},
+	},
 }
 
 type toolGroup struct {

@@ -112,6 +112,13 @@ var releases = []Release{
 			"Uploads place themselves on the page: attach_file_to_wiki_document and /mcp/upload add the image or card at the end (or start) of the page by default, and report placed:true. place:\"none\" keeps the old store-only behaviour; an unplaced image is garbage-collected.",
 		},
 	},
+	{
+		Version: 12,
+		Date:    "2026-09-16",
+		Notes: []string{
+			"Skills operators publish to each other. New find_skills and get_skill list what is on the server and give you a download URL your agent key can fetch; POST a zip to /api/v1/mcp/skills/upload to publish one. A name belongs to whoever claimed it first, every version is kept, and skills.md covers installing and publishing — including reading a downloaded skill before following it, since nobody reviews them.",
+		},
+	},
 }
 
 // Releases returns the full history, oldest first. A copy, so callers cannot

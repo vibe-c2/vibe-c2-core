@@ -79,6 +79,11 @@ type EnvironmentSettings struct {
 	WikiSweeperEnabled bool // master switch: when false, neither sweeper starts
 	WikiSweeperDryRun  bool // when true, sweepers log what they would delete but delete nothing
 
+	// Community skills (agent skill bundles published by operators, stored in
+	// SeaweedFS S3 as opaque zips — never unpacked on the server)
+	SkillBucket  string
+	SkillMaxSize int64 // bytes; cap on one uploaded skill bundle
+
 	// Wiki transfer (export/import jobs)
 	WikiImportZipMaxSize    int64         // bytes; cap on an uploaded import archive
 	WikiTransferArtifactTTL time.Duration // how long finished jobs and their archives are kept
@@ -177,6 +182,8 @@ func init() {
 	// DRY_RUN=true and inspect the "would delete" logs → flip DRY_RUN=false.
 	viper.SetDefault("WIKI_SWEEPER_ENABLED", false)
 	viper.SetDefault("WIKI_SWEEPER_DRY_RUN", true)
+	viper.SetDefault("SKILL_BUCKET", "skills")
+	viper.SetDefault("SKILL_MAX_SIZE", int64(10*1024*1024))
 	viper.SetDefault("WIKI_IMPORT_ZIP_MAX_SIZE", int64(200*1024*1024))
 	viper.SetDefault("WIKI_TRANSFER_ARTIFACT_TTL", "24h")
 	viper.SetDefault("INSTALLATION_ID", "")
@@ -257,6 +264,10 @@ func init() {
 		// Wiki attachment garbage collector
 		WikiSweeperEnabled: viper.GetBool("WIKI_SWEEPER_ENABLED"),
 		WikiSweeperDryRun:  viper.GetBool("WIKI_SWEEPER_DRY_RUN"),
+
+		// Community skills
+		SkillBucket:  viper.GetString("SKILL_BUCKET"),
+		SkillMaxSize: viper.GetInt64("SKILL_MAX_SIZE"),
 
 		// Wiki transfer
 		WikiImportZipMaxSize:    viper.GetInt64("WIKI_IMPORT_ZIP_MAX_SIZE"),

@@ -60,6 +60,7 @@ func New(deps Deps) *Server {
 	registerTimelineTools(s)
 	registerAttachmentTools(s)
 	registerFocusTools(s)
+	registerSkillTools(s)
 
 	registerResources(s)
 	registerPrompts(s)

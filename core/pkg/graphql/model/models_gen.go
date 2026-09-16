@@ -338,15 +338,45 @@ type SessionEvent struct {
 	Session   *models.Session `json:"session,omitempty"`
 }
 
+type Skill struct {
+	ID                string  `json:"id"`
+	Name              string  `json:"name"`
+	Description       string  `json:"description"`
+	OwnerUserID       string  `json:"ownerUserId"`
+	OwnerUsername     string  `json:"ownerUsername"`
+	CurrentVersion    int     `json:"currentVersion"`
+	UpdatedAt         string  `json:"updatedAt"`
+	SizeBytes         int     `json:"sizeBytes"`
+	Mine              bool    `json:"mine"`
+	DownloadedVersion *int    `json:"downloadedVersion,omitempty"`
+	DownloadedAt      *string `json:"downloadedAt,omitempty"`
+	SnoozedVersion    *int    `json:"snoozedVersion,omitempty"`
+	DownloadURL       string  `json:"downloadUrl"`
+}
+
 type SkillChangelog struct {
 	CurrentVersion int             `json:"currentVersion"`
 	Releases       []*SkillRelease `json:"releases"`
+}
+
+type SkillRegistry struct {
+	Skills         []*Skill `json:"skills"`
+	MaxUploadBytes int      `json:"maxUploadBytes"`
 }
 
 type SkillRelease struct {
 	Version int      `json:"version"`
 	Date    string   `json:"date"`
 	Notes   []string `json:"notes"`
+}
+
+type SkillVersion struct {
+	Version            int    `json:"version"`
+	UploadedAt         string `json:"uploadedAt"`
+	UploadedByUsername string `json:"uploadedByUsername"`
+	SizeBytes          int    `json:"sizeBytes"`
+	Notes              string `json:"notes"`
+	ViaAgent           bool   `json:"viaAgent"`
 }
 
 type Subscription struct {

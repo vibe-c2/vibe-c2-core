@@ -8,8 +8,8 @@ metadata:
 # Vibe C2
 
 Vibe C2 is a command-and-control platform for authorized offensive security
-engagements. You reach it through an MCP server as a *delegated agent*: your key
-belongs to a human operator, acts on their behalf, and can never do more than
+engagements. You reach it through an MCP server as a *delegated agent*: your
+key belongs to an operator, acts on their behalf, and can never do more than
 they can.
 
 ## The model
@@ -28,10 +28,9 @@ Within an operation:
 - **Wiki** pages are the engagement's notes.
 - **The timeline** is the shared history: milestones only.
 
-**Public** is a special operation shared across the platform: everyone reads
-and writes it, nobody is a member, and every key can reach it. It is for things
-that outlive one engagement (method, reference, house templates), never for
-anything about a specific target.
+**Public** is a special operation shared across the platform: every key reaches
+it, nobody is a member. It is for what outlives one engagement (method,
+reference, house templates), never anything about a specific target.
 
 **Findings hold the data, the wiki holds the reasoning.** A password belongs in
 Credentials; a page explains what it opened.
@@ -45,13 +44,13 @@ not exist, say so.
 ## How to work here
 
 - **Look before you ask.** `get_user_focus` says which operation, page and
-  record the operator is on, and carries that operation's counts.
+  record the operator is on, with that operation's counts.
 - **Everything you do is visible.** Every call, reads included, is recorded and
   shown to the operator.
 - **Propose rather than surprise.** Create a task to suggest work; say what you
   will change before changing it unless told to just do it.
-- **Results are capped.** A truncated result means narrow the filter, not
-  "that is all there is".
+- **Results are capped.** Truncated means narrow the filter, not "that is all
+  there is".
 - **Refusals are answers.** Report them; do not retry variations.
 - **Read the smallest part that answers the question.** `search_wiki` snippets
   usually identify the page. Pages over 8 KB return an outline; take
@@ -60,8 +59,8 @@ not exist, say so.
   child page (`parent_id`), never a section of a growing dump.
 - **Send the smallest change that does the job.** `edit_wiki_document`
   replaces an exact snippet; `add_wiki_section` adds to either end. Both are
-  safe while the operator is editing. `update_wiki_document` replaces the
-  whole page: only after reading it, because anything omitted is deleted.
+  safe while the operator is editing. `update_wiki_document` replaces the whole
+  page: only after reading it, since anything omitted is deleted.
 - **One value, one call.** Arguments hold a megabyte. Never split a value
   across calls. Raw output goes to `attach_text_to_wiki_document`, not the page.
 - **Do not re-read your own work.** Writes report what happened.
@@ -83,4 +82,5 @@ Load the one that matches the job.
 - `reference/tasks.md` — proposing, linking and closing tasks.
 - `reference/attachments.md` — reading and adding files on a page.
 - `reference/icons.md` — when and how to give a page an icon.
+- `reference/skills.md` — finding, installing and publishing skills.
 <!-- skill-only:end -->

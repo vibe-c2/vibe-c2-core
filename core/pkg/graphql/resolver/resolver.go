@@ -47,6 +47,7 @@ type Resolver struct {
 	FocusResolver             resolver.IFocusResolver
 	AgentActionResolver       resolver.IAgentActionResolver
 	ModuleResolver            resolver.IModuleResolver
+	SkillResolver             resolver.ISkillResolver
 
 	// Subscription dependencies — event bus for real-time events,
 	// repos for fetching full entities to include in event payloads.

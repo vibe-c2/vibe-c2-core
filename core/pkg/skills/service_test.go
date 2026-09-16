@@ -1,0 +1,410 @@
+package skills
+
+import (
+	"archive/zip"
+	"bytes"
+	"context"
+	"errors"
+	"io"
+	"testing"
+	"time"
+
+	"github.com/google/uuid"
+	"github.com/qiniu/qmgo"
+	"go.uber.org/zap"
+
+	"github.com/vibe-c2/vibe-c2-core/core/pkg/blob"
+	"github.com/vibe-c2/vibe-c2-core/core/pkg/models"
+	"github.com/vibe-c2/vibe-c2-core/core/pkg/repository"
+)
+
+// --- fakes -----------------------------------------------------------------
+
+type fakeRepo struct {
+	skills   map[string]*models.Skill
+	versions map[uuid.UUID][]models.SkillVersion
+	// failCreateVersion makes the version row fail so the rollback path runs.
+	failCreateVersion bool
+	released          []int
+}
+
+func newFakeRepo() *fakeRepo {
+	return &fakeRepo{skills: map[string]*models.Skill{}, versions: map[uuid.UUID][]models.SkillVersion{}}
+}
+
+func (f *fakeRepo) Create(_ context.Context, skill *models.Skill) error {
+	if _, ok := f.skills[skill.Name]; ok {
+		return errors.New("duplicate key")
+	}
+	copied := *skill
+	f.skills[skill.Name] = &copied
+	return nil
+}
+
+func (f *fakeRepo) FindByName(_ context.Context, name string) (models.Skill, error) {
+	s, ok := f.skills[name]
+	if !ok {
+		return models.Skill{}, qmgo.ErrNoSuchDocuments
+	}
+	return *s, nil
+}
+
+func (f *fakeRepo) FindByID(_ context.Context, id uuid.UUID) (models.Skill, error) {
+	for _, s := range f.skills {
+		if s.SkillID == id {
+			return *s, nil
+		}
+	}
+	return models.Skill{}, qmgo.ErrNoSuchDocuments
+}
+
+func (f *fakeRepo) List(_ context.Context, includeRetired bool) ([]models.Skill, error) {
+	var out []models.Skill
+	for _, s := range f.skills {
+		if !includeRetired && s.IsUnpublished() {
+			continue
+		}
+		out = append(out, *s)
+	}
+	return out, nil
+}
+
+func (f *fakeRepo) ReserveNextVersion(_ context.Context, skillID uuid.UUID) (int, error) {
+	for _, s := range f.skills {
+		if s.SkillID == skillID {
+			s.CurrentVersion++
+			return s.CurrentVersion, nil
+		}
+	}
+	return 0, qmgo.ErrNoSuchDocuments
+}
+
+func (f *fakeRepo) ReleaseVersion(_ context.Context, skillID uuid.UUID, version int) error {
+	for _, s := range f.skills {
+		if s.SkillID == skillID && s.CurrentVersion == version {
+			s.CurrentVersion--
+			f.released = append(f.released, version)
+		}
+	}
+	return nil
+}
+
+func (f *fakeRepo) FinishPublish(_ context.Context, skillID uuid.UUID, in repository.FinishPublishInput) error {
+	for _, s := range f.skills {
+		if s.SkillID == skillID {
+			s.SizeBytes = in.SizeBytes
+			s.UploadedAt = in.UploadedAt
+			s.Description = in.Description
+			return nil
+		}
+	}
+	return qmgo.ErrNoSuchDocuments
+}
+
+func (f *fakeRepo) SetUnpublished(_ context.Context, skillID uuid.UUID, at *time.Time, by *uuid.UUID) error {
+	return nil
+}
+
+func (f *fakeRepo) Transfer(_ context.Context, skillID uuid.UUID, ownerID uuid.UUID, ownerUsername string) error {
+	for _, s := range f.skills {
+		if s.SkillID == skillID {
+			s.OwnerUserID = ownerID
+			s.OwnerUsername = ownerUsername
+		}
+	}
+	return nil
+}
+
+func (f *fakeRepo) CreateVersion(_ context.Context, v *models.SkillVersion) error {
+	if f.failCreateVersion {
+		return errors.New("write failed")
+	}
+	f.versions[v.SkillID] = append(f.versions[v.SkillID], *v)
+	return nil
+}
+
+func (f *fakeRepo) FindVersion(_ context.Context, skillID uuid.UUID, version int) (models.SkillVersion, error) {
+	for _, v := range f.versions[skillID] {
+		if v.Version == version {
+			return v, nil
+		}
+	}
+	return models.SkillVersion{}, qmgo.ErrNoSuchDocuments
+}
+
+func (f *fakeRepo) ListVersions(_ context.Context, skillID uuid.UUID) ([]models.SkillVersion, error) {
+	return f.versions[skillID], nil
+}
+
+type fakeStore struct {
+	objects map[string][]byte
+	deleted []string
+}
+
+func newFakeStore() *fakeStore { return &fakeStore{objects: map[string][]byte{}} }
+
+func (f *fakeStore) Put(_ context.Context, key string, body io.Reader, _ int64, _ string) error {
+	raw, err := io.ReadAll(body)
+	if err != nil {
+		return err
+	}
+	f.objects[key] = raw
+	return nil
+}
+
+func (f *fakeStore) Get(_ context.Context, key string) (io.ReadCloser, blob.ObjectInfo, error) {
+	raw, ok := f.objects[key]
+	if !ok {
+		return nil, blob.ObjectInfo{}, errors.New("not found")
+	}
+	return io.NopCloser(bytes.NewReader(raw)), blob.ObjectInfo{ContentLength: int64(len(raw))}, nil
+}
+
+func (f *fakeStore) Head(_ context.Context, key string) (blob.ObjectInfo, error) {
+	raw, ok := f.objects[key]
+	if !ok {
+		return blob.ObjectInfo{}, errors.New("not found")
+	}
+	return blob.ObjectInfo{ContentLength: int64(len(raw))}, nil
+}
+
+func (f *fakeStore) Delete(_ context.Context, key string) error {
+	delete(f.objects, key)
+	f.deleted = append(f.deleted, key)
+	return nil
+}
+
+// --- helpers ---------------------------------------------------------------
+
+func zipBytes(t *testing.T) []byte {
+	t.Helper()
+	var buf bytes.Buffer
+	w := zip.NewWriter(&buf)
+	f, err := w.Create("my-skill/SKILL.md")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := f.Write([]byte("# a skill\n")); err != nil {
+		t.Fatal(err)
+	}
+	if err := w.Close(); err != nil {
+		t.Fatal(err)
+	}
+	return buf.Bytes()
+}
+
+func newTestService(t *testing.T, repo *fakeRepo, store *fakeStore) *Service {
+	t.Helper()
+	return NewService(repo, nil, store, 1<<20, zap.NewNop())
+}
+
+func publishInput(name string, owner uuid.UUID, ownerName string, raw []byte) PublishInput {
+	return PublishInput{
+		Name:          name,
+		Description:   "sweeps a subnet",
+		Bytes:         raw,
+		PublisherID:   owner,
+		PublisherName: ownerName,
+	}
+}
+
+// --- tests -----------------------------------------------------------------
+
+func TestPublish_ClaimsAName(t *testing.T) {
+	repo, store := newFakeRepo(), newFakeStore()
+	svc := newTestService(t, repo, store)
+	owner := uuid.New()
+
+	got, err := svc.Publish(context.Background(), publishInput("Recon Sweep", owner, "alice", zipBytes(t)))
+	if err != nil {
+		t.Fatalf("Publish returned %v", err)
+	}
+	if !got.Claimed {
+		t.Error("first publish should report the name as claimed")
+	}
+	if got.Skill.Name != "recon-sweep" {
+		t.Errorf("name = %q, want %q", got.Skill.Name, "recon-sweep")
+	}
+	if got.Version.Version != 1 {
+		t.Errorf("version = %d, want 1", got.Version.Version)
+	}
+	if len(store.objects) != 1 {
+		t.Errorf("stored %d objects, want 1", len(store.objects))
+	}
+	if got.Version.Checksum == "" {
+		t.Error("the version row should carry a checksum")
+	}
+}
+
+func TestPublish_SecondVersionKeepsTheFirst(t *testing.T) {
+	repo, store := newFakeRepo(), newFakeStore()
+	svc := newTestService(t, repo, store)
+	owner := uuid.New()
+	ctx := context.Background()
+
+	first, err := svc.Publish(ctx, publishInput("recon-sweep", owner, "alice", zipBytes(t)))
+	if err != nil {
+		t.Fatalf("first publish: %v", err)
+	}
+	second, err := svc.Publish(ctx, publishInput("recon-sweep", owner, "alice", zipBytes(t)))
+	if err != nil {
+		t.Fatalf("second publish: %v", err)
+	}
+
+	if second.Claimed {
+		t.Error("a second publish is not a claim")
+	}
+	if second.Version.Version != 2 {
+		t.Errorf("version = %d, want 2", second.Version.Version)
+	}
+	if len(store.objects) != 2 {
+		t.Errorf("stored %d objects, want both versions kept", len(store.objects))
+	}
+	// The whole point of retention: version 1 is still fetchable.
+	body, _, row, err := svc.Download(ctx, "recon-sweep", 1)
+	if err != nil {
+		t.Fatalf("downloading version 1: %v", err)
+	}
+	body.Close()
+	if row.Version != 1 || row.ObjectKey != first.Version.ObjectKey {
+		t.Errorf("version 1 resolved to %+v, want the original bundle", row)
+	}
+}
+
+func TestPublish_RefusesANameSomebodyElseOwns(t *testing.T) {
+	repo, store := newFakeRepo(), newFakeStore()
+	svc := newTestService(t, repo, store)
+	ctx := context.Background()
+
+	if _, err := svc.Publish(ctx, publishInput("recon-sweep", uuid.New(), "alice", zipBytes(t))); err != nil {
+		t.Fatalf("first publish: %v", err)
+	}
+	_, err := svc.Publish(ctx, publishInput("recon-sweep", uuid.New(), "bob", zipBytes(t)))
+	if err == nil {
+		t.Fatal("publishing to somebody else's name should be refused")
+	}
+	var svcErr *Error
+	if !errors.As(err, &svcErr) || !svcErr.IsPolicy() {
+		t.Fatalf("want a policy error, got %#v", err)
+	}
+	if !bytes.Contains([]byte(svcErr.Message), []byte("alice")) {
+		t.Errorf("the refusal should name the owner, got %q", svcErr.Message)
+	}
+}
+
+func TestPublish_AdminMayPublishToAnyName(t *testing.T) {
+	repo, store := newFakeRepo(), newFakeStore()
+	svc := newTestService(t, repo, store)
+	ctx := context.Background()
+
+	if _, err := svc.Publish(ctx, publishInput("recon-sweep", uuid.New(), "alice", zipBytes(t))); err != nil {
+		t.Fatalf("first publish: %v", err)
+	}
+	in := publishInput("recon-sweep", uuid.New(), "root", zipBytes(t))
+	in.IsAdmin = true
+	if _, err := svc.Publish(ctx, in); err != nil {
+		t.Fatalf("an admin publish should be allowed, got %v", err)
+	}
+}
+
+func TestPublish_RejectsBundlesThatAreNotZips(t *testing.T) {
+	repo, store := newFakeRepo(), newFakeStore()
+	svc := newTestService(t, repo, store)
+
+	_, err := svc.Publish(context.Background(), publishInput("recon-sweep", uuid.New(), "alice", []byte("#!/bin/sh\necho hi\n")))
+	if err == nil {
+		t.Fatal("a non-zip upload should be refused")
+	}
+	var svcErr *Error
+	if !errors.As(err, &svcErr) || !svcErr.IsPolicy() {
+		t.Fatalf("want a policy error, got %#v", err)
+	}
+	if len(repo.skills) != 0 {
+		t.Error("a rejected upload must not claim the name")
+	}
+}
+
+func TestPublish_RejectsAnEmptyUpload(t *testing.T) {
+	svc := newTestService(t, newFakeRepo(), newFakeStore())
+	if _, err := svc.Publish(context.Background(), publishInput("recon-sweep", uuid.New(), "alice", nil)); err == nil {
+		t.Fatal("an empty upload should be refused")
+	}
+}
+
+func TestPublish_EnforcesTheSizeCap(t *testing.T) {
+	repo, store := newFakeRepo(), newFakeStore()
+	svc := NewService(repo, nil, store, 10, zap.NewNop())
+
+	_, err := svc.Publish(context.Background(), publishInput("recon-sweep", uuid.New(), "alice", zipBytes(t)))
+	var svcErr *Error
+	if !errors.As(err, &svcErr) || svcErr.Status != 413 {
+		t.Fatalf("want a 413, got %#v", err)
+	}
+}
+
+func TestPublish_RollsBackWhenTheVersionRowFails(t *testing.T) {
+	repo, store := newFakeRepo(), newFakeStore()
+	repo.failCreateVersion = true
+	svc := newTestService(t, repo, store)
+
+	if _, err := svc.Publish(context.Background(), publishInput("recon-sweep", uuid.New(), "alice", zipBytes(t))); err == nil {
+		t.Fatal("the publish should have failed")
+	}
+	if len(store.objects) != 0 {
+		t.Errorf("the stored bundle should have been deleted, %d left", len(store.objects))
+	}
+	if len(store.deleted) != 1 {
+		t.Errorf("expected exactly one rollback delete, got %d", len(store.deleted))
+	}
+	if got := repo.skills["recon-sweep"].CurrentVersion; got != 0 {
+		t.Errorf("the reserved version should have been released, current is %d", got)
+	}
+	if len(repo.released) != 1 {
+		t.Errorf("expected the version number to be released once, got %d", len(repo.released))
+	}
+}
+
+func TestDownload_DefaultsToTheCurrentVersion(t *testing.T) {
+	repo, store := newFakeRepo(), newFakeStore()
+	svc := newTestService(t, repo, store)
+	ctx := context.Background()
+	owner := uuid.New()
+
+	for i := 0; i < 3; i++ {
+		if _, err := svc.Publish(ctx, publishInput("recon-sweep", owner, "alice", zipBytes(t))); err != nil {
+			t.Fatalf("publish %d: %v", i, err)
+		}
+	}
+	body, _, row, err := svc.Download(ctx, "Recon Sweep", 0)
+	if err != nil {
+		t.Fatalf("Download returned %v", err)
+	}
+	defer body.Close()
+	if row.Version != 3 {
+		t.Errorf("version = %d, want the current 3", row.Version)
+	}
+}
+
+func TestDownload_UnknownNameAndVersion(t *testing.T) {
+	repo, store := newFakeRepo(), newFakeStore()
+	svc := newTestService(t, repo, store)
+	ctx := context.Background()
+
+	if _, _, _, err := svc.Download(ctx, "nothing-here", 0); err == nil {
+		t.Error("an unknown name should be a not-found")
+	}
+	if _, err := svc.Publish(ctx, publishInput("recon-sweep", uuid.New(), "alice", zipBytes(t))); err != nil {
+		t.Fatal(err)
+	}
+	_, _, _, err := svc.Download(ctx, "recon-sweep", 9)
+	var svcErr *Error
+	if !errors.As(err, &svcErr) || svcErr.Status != 404 {
+		t.Fatalf("want a 404 for a missing version, got %#v", err)
+	}
+}
+
+func TestFilename(t *testing.T) {
+	if got := Filename("recon-sweep", 3); got != "recon-sweep-skill-v3.zip" {
+		t.Fatalf("Filename = %q", got)
+	}
+}

@@ -42,6 +42,7 @@ import (
 	"github.com/vibe-c2/vibe-c2-core/core/pkg/models"
 	"github.com/vibe-c2/vibe-c2-core/core/pkg/repository"
 	"github.com/vibe-c2/vibe-c2-core/core/pkg/resolver"
+	"github.com/vibe-c2/vibe-c2-core/core/pkg/skills"
 	"github.com/vibe-c2/vibe-c2-core/core/pkg/wiki"
 	"go.uber.org/zap"
 )
@@ -102,6 +103,12 @@ type Deps struct {
 	// Images places bytes on a wiki page as an inline image, the way a
 	// pasted screenshot is: decoded, re-encoded, dimensions recorded.
 	Images ImageIngestor
+
+	// Skills is the community skill registry: shared agent working methods
+	// that operators publish to each other. Not operation data, so nothing
+	// here is scoped to an engagement; the authorization that matters is that
+	// only the operator who claimed a name publishes new versions of it.
+	Skills *skills.Service
 
 	Cache cache.Cache
 	// Blobs is where attachment bytes live. Read-only from here: an agent can

@@ -24,6 +24,7 @@ import (
 	"github.com/vibe-c2/vibe-c2-core/core/pkg/messaging"
 	"github.com/vibe-c2/vibe-c2-core/core/pkg/modulegate"
 	"github.com/vibe-c2/vibe-c2-core/core/pkg/repository"
+	"github.com/vibe-c2/vibe-c2-core/core/pkg/skills"
 	"github.com/vibe-c2/vibe-c2-core/core/pkg/wiki"
 	"github.com/vibe-c2/vibe-c2-core/core/pkg/wikitransfer"
 	"github.com/vibe-c2/vibe-c2-core/core/pkg/wikitransfer/bundle"
@@ -66,6 +67,8 @@ type Repositories struct {
 	AgentAction        repository.IAgentActionRepository
 	ModuleRegistry     repository.IModuleRegistryRepository
 	WikiTransferJob    repository.IWikiTransferJobRepository
+	Skill              repository.ISkillRepository
+	SkillSubscription  repository.ISkillSubscriptionRepository
 }
 
 type App struct {
@@ -94,6 +97,9 @@ type App struct {
 	imageSweeper    *wiki.ImageSweeper
 	fileStore       blob.ObjectStore
 	fileSweeper     *wiki.FileSweeper
+	// skillService is the community skill registry: publish and download of
+	// operator-authored skill bundles, stored as opaque zips.
+	skillService    *skills.Service
 	sweepersEnabled bool // master switch from WIKI_SWEEPER_ENABLED
 	// transferRunner executes wiki export/import jobs in the background.
 	transferRunner *transferjob.Runner
@@ -144,6 +150,8 @@ func NewApp() (*App, error) {
 		WikiImage:          repository.NewWikiImageRepository(db),
 		WikiFile:           repository.NewWikiFileRepository(db),
 		WikiTransferJob:    repository.NewWikiTransferJobRepository(db),
+		Skill:              repository.NewSkillRepository(db),
+		SkillSubscription:  repository.NewSkillSubscriptionRepository(db),
 		Credential:         repository.NewCredentialRepository(db),
 		Hash:               repository.NewHashRepository(db),
 		Host:               repository.NewHostRepository(db),
@@ -266,6 +274,22 @@ func NewApp() (*App, error) {
 		repos.WikiDocument, repos.WikiFile, fileStore, l,
 		e.WikiFileSweeperInterval, e.WikiFileSweeperGrace, e.WikiSweeperDryRun,
 	)
+
+	// Community skill bundles: a third bucket on the same gateway. Separate
+	// from the wiki buckets because these are not engagement data and should
+	// not share their retention or their sweepers — nothing here is ever
+	// garbage collected, since a version somebody installed must stay
+	// downloadable.
+	skillStore, err := blob.NewS3Store(ctx, blob.S3Config{
+		Endpoint:  e.SeaweedFSS3Endpoint,
+		AccessKey: e.SeaweedFSS3AccessKey,
+		SecretKey: e.SeaweedFSS3SecretKey,
+		Bucket:    e.SkillBucket,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("failed to initialize skill store: %w", err)
+	}
+	skillService := skills.NewService(repos.Skill, repos.SkillSubscription, skillStore, e.SkillMaxSize, l)
 
 	// Wiki transfer pipeline: one materialiser shared by both import
 	// formats, one writer per export format, all driven by a background
@@ -396,6 +420,7 @@ func NewApp() (*App, error) {
 		imageSweeper:    imageSweeper,
 		fileStore:       fileStore,
 		fileSweeper:     fileSweeper,
+		skillService:    skillService,
 		transferRunner:  transferRunner,
 		wikiImageCtrl:   wikiImageCtrl,
 		wikiFileCtrl:    wikiFileCtrl,

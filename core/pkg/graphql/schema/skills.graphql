@@ -1,0 +1,87 @@
+# =============================================================================
+# Community skills
+# =============================================================================
+#
+# Skills operators publish to each other: zip bundles, the same shape as the
+# generated vibe-c2 skill, stored opaquely and never unpacked or rendered by
+# the server. Uploading and downloading are REST (POST /api/v1/skills and
+# GET /api/v1/skills/{name}/download) because both move a file; everything
+# the SPA reads and the small state changes live here.
+#
+# The generated skill is deliberately absent from this surface. It has no
+# stored bundle, its version comes from skillChangelog, and the operator's
+# download and snooze state for it lives on the User. See skill.graphql.
+
+type Skill {
+  id: ID!
+  # The claimed name, normalized to a slug. Unique across the instance.
+  name: String!
+  description: String!
+  # Who claimed the name. Only they publish new versions of it, so this is
+  # the provenance an operator is trusting when they install it.
+  ownerUserId: ID!
+  ownerUsername: String!
+  # The version handed out by default. Counts from 1.
+  currentVersion: Int!
+  # When the current version was published.
+  updatedAt: String!
+  sizeBytes: Int!
+  # True when the caller owns this name.
+  mine: Boolean!
+  # What the caller has downloaded, null when they never have. The prompt to
+  # update compares this against currentVersion.
+  downloadedVersion: Int
+  downloadedAt: String
+  # The newest version the caller dismissed the prompt for.
+  snoozedVersion: Int
+  # Where to fetch the current bundle.
+  downloadUrl: String!
+}
+
+# SkillVersion is one upload. Versions are never deleted or overwritten, so a
+# bad update can be backed out and a changed skill can be compared with what
+# it used to say.
+type SkillVersion {
+  version: Int!
+  uploadedAt: String!
+  uploadedByUsername: String!
+  sizeBytes: Int!
+  # The publisher's one-line description of what changed. Empty when they did
+  # not write one.
+  notes: String!
+  # True when an agent published this version on its owner's behalf.
+  viaAgent: Boolean!
+}
+
+type SkillRegistry {
+  skills: [Skill!]!
+  # The upload cap in bytes, so the SPA can refuse an oversized file before
+  # sending it rather than after.
+  maxUploadBytes: Int!
+}
+
+extend type Query {
+  skillRegistry: SkillRegistry! @hasPermission(permission: "*")
+  skillVersions(name: String!): [SkillVersion!]! @hasPermission(permission: "*")
+}
+
+extend type Mutation {
+  # snoozeSkill records that the caller dismissed the update prompt for this
+  # skill at this version. The prompt returns when something newer ships.
+  snoozeSkill(name: String!, version: Int!): Skill!
+    @hasPermission(permission: "user:update:own")
+
+  # unpublishSkill retires a skill: it stops being listed and downloaded, the
+  # name stays claimed, and the version history is kept. The author or an
+  # administrator may do this; the resolver enforces which, because the
+  # directive cannot express "mine or admin".
+  unpublishSkill(name: String!): Skill! @hasPermission(permission: "*")
+
+  # republishSkill undoes that.
+  republishSkill(name: String!): Skill! @hasPermission(permission: "*")
+
+  # transferSkill hands a name to another operator, for when the author
+  # leaves or a skill changes maintainer. Administrators only.
+  transferSkill(name: String!, userId: ID!): Skill!
+    @hasPermission(permission: "admin")
+}

@@ -30,6 +30,8 @@ var (
 	attachmentsMD string
 	//go:embed skillassets/icons.md
 	iconsMD string
+	//go:embed skillassets/skills.md
+	skillsMD string
 
 	skillTemplate = template.Must(template.New("skill").Parse(skillTemplateSource))
 )
@@ -55,6 +57,7 @@ var referenceGuides = []referenceGuide{
 	{"tasks", "proposing, linking and closing tasks", tasksMD},
 	{"attachments", "reading and adding files on a page", attachmentsMD},
 	{"icons", "when and how to give a page an icon", iconsMD},
+	{"skills", "finding, installing and publishing skills", skillsMD},
 }
 
 // findReferenceGuide returns the guide with that name.
