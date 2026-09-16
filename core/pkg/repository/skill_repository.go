@@ -46,6 +46,11 @@ type ISkillRepository interface {
 	// counter still being that number, so it cannot undo somebody else's
 	// later publish; a no-op otherwise.
 	ReleaseVersion(ctx context.Context, skillID uuid.UUID, version int) error
+	// DeleteIfEmpty removes a skill that has no versions, undoing a claim
+	// whose first upload never completed. Guarded on the counter being back
+	// at zero so it can never delete a name somebody has published under —
+	// including a publish that landed between the failure and this call.
+	DeleteIfEmpty(ctx context.Context, skillID uuid.UUID) error
 
 	// FinishPublish records the metadata that mirrors the new current version
 	// onto the skill row, and refreshes what the publisher supplied.
@@ -111,7 +116,10 @@ func (r *skillRepository) FindByID(ctx context.Context, id uuid.UUID) (models.Sk
 }
 
 func (r *skillRepository) List(ctx context.Context, includeRetired bool) ([]models.Skill, error) {
-	filter := bson.M{}
+	// A row with no versions is a claim whose upload never completed. It is
+	// not a skill yet — nothing can be downloaded from it — so it stays out
+	// of every listing rather than showing as an empty shell.
+	filter := bson.M{"current_version": bson.M{"$gte": 1}}
 	if !includeRetired {
 		filter["unpublished_at"] = bson.M{"$exists": false}
 	}
@@ -142,6 +150,13 @@ func (r *skillRepository) ReleaseVersion(ctx context.Context, skillID uuid.UUID,
 		bson.M{"skill_id": skillID, "current_version": version},
 		bson.M{"$inc": bson.M{"current_version": -1}},
 	)
+}
+
+func (r *skillRepository) DeleteIfEmpty(ctx context.Context, skillID uuid.UUID) error {
+	return r.coll.Remove(ctx, bson.M{
+		"skill_id":        skillID,
+		"current_version": bson.M{"$lte": 0},
+	})
 }
 
 func (r *skillRepository) FinishPublish(ctx context.Context, skillID uuid.UUID, in FinishPublishInput) error {

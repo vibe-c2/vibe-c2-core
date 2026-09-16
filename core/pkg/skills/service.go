@@ -108,12 +108,7 @@ func (s *Service) Publish(ctx context.Context, in PublishInput) (PublishResult, 
 
 	row, err := s.storeVersion(ctx, skill, version, in)
 	if err != nil {
-		// Hand the number back so the next publish does not leave a hole that
-		// makes the current version undownloadable.
-		if relErr := s.repo.ReleaseVersion(ctx, skill.SkillID, version); relErr != nil {
-			s.logger.Error("skills: could not release a reserved version after a failed publish",
-				zap.String("skill", name), zap.Int("version", version), zap.Error(relErr))
-		}
+		s.rollBackFailedPublish(ctx, skill, version, claimed)
 		return PublishResult{}, err
 	}
 
@@ -143,12 +138,56 @@ func (s *Service) Publish(ctx context.Context, in PublishInput) (PublishResult, 
 	return PublishResult{Skill: skill, Version: row, Claimed: claimed}, nil
 }
 
+// rollBackFailedPublish undoes as much of a failed publish as it safely can.
+//
+// The version number goes back so the next attempt does not leave a hole that
+// makes the current version undownloadable. If this call also created the
+// name, the row goes too: a first upload that never stored anything must not
+// leave the name claimed. Without that, one storage outage permanently parks
+// a name on an empty listing entry, and the publisher's obvious next move —
+// retrying under a different name — parks another.
+//
+// Both steps are guarded in the repository against a publish that succeeded in
+// the meantime, so a concurrent upload cannot be undone by this.
+func (s *Service) rollBackFailedPublish(ctx context.Context, skill models.Skill, version int, claimed bool) {
+	if err := s.repo.ReleaseVersion(ctx, skill.SkillID, version); err != nil {
+		s.logger.Error("skills: could not release a reserved version after a failed publish",
+			zap.String("skill", skill.Name), zap.Int("version", version), zap.Error(err))
+		// The counter is still forward, so deleting the row would be refused
+		// anyway. Stop here rather than guess.
+		return
+	}
+	if !claimed {
+		return
+	}
+	if err := s.repo.DeleteIfEmpty(ctx, skill.SkillID); err != nil && !isNotFound(err) {
+		s.logger.Error("skills: could not release a claimed name after a failed publish",
+			zap.String("skill", skill.Name), zap.Error(err))
+	}
+}
+
 // claimOrLoad returns the skill row to publish against, creating it when the
 // name is free and checking ownership when it is not.
 func (s *Service) claimOrLoad(ctx context.Context, name string, in PublishInput) (models.Skill, bool, error) {
 	existing, err := s.repo.FindByName(ctx, name)
 	switch {
 	case err == nil:
+		// A row with no versions is a claim whose upload never completed.
+		// Nobody has published under it, so nobody owns it: whoever gets a
+		// bundle stored first takes the name. This is what makes a storage
+		// outage self-correcting rather than leaving names parked forever.
+		if existing.CurrentVersion < 1 {
+			if existing.OwnerUserID != in.PublisherID {
+				if err := s.repo.Transfer(ctx, existing.SkillID, in.PublisherID, in.PublisherName); err != nil {
+					return models.Skill{}, false, internal(err, "could not claim the name %q", name)
+				}
+				existing.OwnerUserID = in.PublisherID
+				existing.OwnerUsername = in.PublisherName
+			}
+			// Claimed by this call in every sense that matters to the
+			// rollback: if this upload fails too, the row should go.
+			return existing, true, nil
+		}
 		if existing.OwnerUserID != in.PublisherID && !in.IsAdmin {
 			return models.Skill{}, false, forbidden(
 				"%q belongs to %s. Pick a different name; only the operator who claimed a name publishes new versions of it.",
@@ -173,7 +212,7 @@ func (s *Service) claimOrLoad(ctx context.Context, name string, in PublishInput)
 			// insert. The unique index caught it; re-read and let the
 			// ownership check above decide.
 			if raced, findErr := s.repo.FindByName(ctx, name); findErr == nil {
-				if raced.OwnerUserID != in.PublisherID && !in.IsAdmin {
+				if raced.CurrentVersion >= 1 && raced.OwnerUserID != in.PublisherID && !in.IsAdmin {
 					return models.Skill{}, false, forbidden("%q was just claimed by %s. Pick a different name.", name, raced.OwnerUsername)
 				}
 				return raced, false, nil
@@ -195,6 +234,12 @@ func (s *Service) storeVersion(ctx context.Context, skill models.Skill, version 
 	sum := sha256.Sum256(in.Bytes)
 
 	if err := s.store.Put(ctx, key, bytes.NewReader(in.Bytes), int64(len(in.Bytes)), "application/zip"); err != nil {
+		// Carry the object store's own words. "could not store the bundle" is
+		// the same sentence for a missing bucket, a denied write and a full
+		// volume, and the operator reading it is the one who has to tell them
+		// apart. The caller is an authenticated operator, not the public.
+		s.logger.Error("skills: storing a bundle failed",
+			zap.String("skill", skill.Name), zap.String("key", key), zap.Error(err))
 		return models.SkillVersion{}, internal(err, "could not store the bundle for %q", skill.Name)
 	}
 
@@ -281,6 +326,11 @@ func (s *Service) Lookup(ctx context.Context, name string) (models.Skill, error)
 	}
 	if skill.IsUnpublished() {
 		return models.Skill{}, notFound("%q has been retired.", normalized)
+	}
+	if skill.CurrentVersion < 1 {
+		// The name exists because a publish started and never stored a
+		// bundle. Saying "no version 0" would be true and useless.
+		return models.Skill{}, notFound("nothing has been published under %q yet. The name is free to claim.", normalized)
 	}
 	return skill, nil
 }

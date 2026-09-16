@@ -65,6 +65,9 @@ func (m *memSkillRepo) FindByID(_ context.Context, id uuid.UUID) (models.Skill, 
 func (m *memSkillRepo) List(_ context.Context, includeRetired bool) ([]models.Skill, error) {
 	var out []models.Skill
 	for _, s := range m.skills {
+		if s.CurrentVersion < 1 {
+			continue
+		}
 		if !includeRetired && s.IsUnpublished() {
 			continue
 		}
@@ -87,6 +90,15 @@ func (m *memSkillRepo) ReleaseVersion(_ context.Context, id uuid.UUID, version i
 	for _, s := range m.skills {
 		if s.SkillID == id && s.CurrentVersion == version {
 			s.CurrentVersion--
+		}
+	}
+	return nil
+}
+
+func (m *memSkillRepo) DeleteIfEmpty(_ context.Context, skillID uuid.UUID) error {
+	for name, s := range m.skills {
+		if s.SkillID == skillID && s.CurrentVersion <= 0 {
+			delete(m.skills, name)
 		}
 	}
 	return nil
@@ -355,9 +367,12 @@ func TestPublishSkill_HonoursTheWriteGate(t *testing.T) {
 
 func TestPublishSkill_RefusesANameSomebodyElseOwns(t *testing.T) {
 	env := newSkillEnv(t, writeKey(uuid.New()))
-	// Somebody else already holds the name.
+	// Somebody else already holds the name, having actually published under
+	// it. A row with no versions is a different case: nobody owns it, and
+	// TestEmptyClaimsAreInvisibleAndReclaimable covers that.
 	env.repo.skills["recon-sweep"] = &models.Skill{
-		SkillID: uuid.New(), Name: "recon-sweep", OwnerUserID: uuid.New(), OwnerUsername: "bob",
+		SkillID: uuid.New(), Name: "recon-sweep", CurrentVersion: 1,
+		OwnerUserID: uuid.New(), OwnerUsername: "bob",
 	}
 
 	w := postPublish(t, env, map[string]string{"name": "recon-sweep"}, skillZip(t))

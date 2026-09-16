@@ -14,6 +14,7 @@ import (
 	"github.com/vibe-c2/vibe-c2-core/core/pkg/middleware"
 	"github.com/vibe-c2/vibe-c2-core/core/pkg/responses"
 	"github.com/vibe-c2/vibe-c2-core/core/pkg/skills"
+	"go.uber.org/zap"
 )
 
 // The two registry actions an agent performs over plain HTTP rather than as
@@ -245,6 +246,13 @@ func (s *Server) writeToolError(c *gin.Context, err error) {
 		status = svcErr.Status
 	case isRefusal(err):
 		status = http.StatusUnprocessableEntity
+	}
+	if status >= 500 && s.deps.Logger != nil {
+		// A fault an agent hit is a fault nobody is watching for. Without
+		// this the only record of a failed publish is the audit row's
+		// outcome, which says that it broke and not why.
+		s.deps.Logger.Error("mcp: skill registry request failed",
+			zap.String("path", c.FullPath()), zap.Error(err))
 	}
 	c.JSON(status, responses.NewErrorResponse("%s", err.Error()))
 }

@@ -6,6 +6,7 @@ import (
 	"context"
 	"errors"
 	"io"
+	"strings"
 	"testing"
 	"time"
 
@@ -61,6 +62,9 @@ func (f *fakeRepo) FindByID(_ context.Context, id uuid.UUID) (models.Skill, erro
 func (f *fakeRepo) List(_ context.Context, includeRetired bool) ([]models.Skill, error) {
 	var out []models.Skill
 	for _, s := range f.skills {
+		if s.CurrentVersion < 1 {
+			continue
+		}
 		if !includeRetired && s.IsUnpublished() {
 			continue
 		}
@@ -84,6 +88,15 @@ func (f *fakeRepo) ReleaseVersion(_ context.Context, skillID uuid.UUID, version 
 		if s.SkillID == skillID && s.CurrentVersion == version {
 			s.CurrentVersion--
 			f.released = append(f.released, version)
+		}
+	}
+	return nil
+}
+
+func (f *fakeRepo) DeleteIfEmpty(_ context.Context, skillID uuid.UUID) error {
+	for name, s := range f.skills {
+		if s.SkillID == skillID && s.CurrentVersion <= 0 {
+			delete(f.skills, name)
 		}
 	}
 	return nil
@@ -139,11 +152,17 @@ func (f *fakeRepo) ListVersions(_ context.Context, skillID uuid.UUID) ([]models.
 type fakeStore struct {
 	objects map[string][]byte
 	deleted []string
+	// putErr simulates the object store refusing the write: a missing
+	// bucket, a denied key, a full volume.
+	putErr error
 }
 
 func newFakeStore() *fakeStore { return &fakeStore{objects: map[string][]byte{}} }
 
 func (f *fakeStore) Put(_ context.Context, key string, body io.Reader, _ int64, _ string) error {
+	if f.putErr != nil {
+		return f.putErr
+	}
 	raw, err := io.ReadAll(body)
 	if err != nil {
 		return err
@@ -356,11 +375,12 @@ func TestPublish_RollsBackWhenTheVersionRowFails(t *testing.T) {
 	if len(store.deleted) != 1 {
 		t.Errorf("expected exactly one rollback delete, got %d", len(store.deleted))
 	}
-	if got := repo.skills["recon-sweep"].CurrentVersion; got != 0 {
-		t.Errorf("the reserved version should have been released, current is %d", got)
-	}
 	if len(repo.released) != 1 {
 		t.Errorf("expected the version number to be released once, got %d", len(repo.released))
+	}
+	// The name went with it: this call claimed it, and nothing was published.
+	if _, ok := repo.skills["recon-sweep"]; ok {
+		t.Error("a failed first upload must not leave the name claimed")
 	}
 }
 
@@ -454,5 +474,157 @@ func TestPublish_ReplacesTheDescriptionWhenOneIsGiven(t *testing.T) {
 	}
 	if got.Skill.Description != "now also checks LDAP signing" {
 		t.Fatalf("description = %q, want the new text", got.Skill.Description)
+	}
+}
+
+// --- a failing object store -------------------------------------------------
+//
+// Reported from production: the object store rejected every write, and each
+// attempt left the name claimed on an empty listing row. The publisher's
+// obvious next move, retrying under a different name, parked another. Three
+// names were consumed without a single byte being stored.
+
+func TestPublish_AFailedFirstUploadLeavesNoNameBehind(t *testing.T) {
+	repo, store := newFakeRepo(), newFakeStore()
+	store.putErr = errors.New("Access Denied")
+	svc := newTestService(t, repo, store)
+
+	_, err := svc.Publish(context.Background(), publishInput("public-recon", uuid.New(), "alice", zipBytes(t)))
+	if err == nil {
+		t.Fatal("the publish should have failed")
+	}
+	if len(repo.skills) != 0 {
+		t.Fatalf("a failed first upload must not claim the name, found %d rows", len(repo.skills))
+	}
+}
+
+func TestPublish_ReportsWhyTheStoreRefused(t *testing.T) {
+	repo, store := newFakeRepo(), newFakeStore()
+	store.putErr = errors.New("Access Denied")
+	svc := newTestService(t, repo, store)
+
+	_, err := svc.Publish(context.Background(), publishInput("public-recon", uuid.New(), "alice", zipBytes(t)))
+	var svcErr *Error
+	if !errors.As(err, &svcErr) {
+		t.Fatalf("want a service error, got %#v", err)
+	}
+	if svcErr.Status != 500 {
+		t.Errorf("status = %d, want 500: a store failure is a fault, not a refusal", svcErr.Status)
+	}
+	// The operator reading this is the one who has to tell a missing bucket
+	// from a denied write.
+	if !strings.Contains(svcErr.Message, "Access Denied") {
+		t.Fatalf("the message should carry the store's own words, got %q", svcErr.Message)
+	}
+}
+
+// A retry after the store recovers takes the name normally.
+func TestPublish_SucceedsOnRetryAfterTheStoreRecovers(t *testing.T) {
+	repo, store := newFakeRepo(), newFakeStore()
+	store.putErr = errors.New("Access Denied")
+	svc := newTestService(t, repo, store)
+	ctx := context.Background()
+	owner := uuid.New()
+
+	if _, err := svc.Publish(ctx, publishInput("public-recon", owner, "alice", zipBytes(t))); err == nil {
+		t.Fatal("the first publish should have failed")
+	}
+	store.putErr = nil
+	got, err := svc.Publish(ctx, publishInput("public-recon", owner, "alice", zipBytes(t)))
+	if err != nil {
+		t.Fatalf("the retry should succeed, got %v", err)
+	}
+	if got.Version.Version != 1 || !got.Claimed {
+		t.Fatalf("the retry should claim the name at version 1, got %+v", got)
+	}
+}
+
+// A second version failing must NOT delete a name that already has one.
+func TestPublish_AFailedSecondVersionKeepsTheSkill(t *testing.T) {
+	repo, store := newFakeRepo(), newFakeStore()
+	svc := newTestService(t, repo, store)
+	ctx := context.Background()
+	owner := uuid.New()
+
+	if _, err := svc.Publish(ctx, publishInput("recon-sweep", owner, "alice", zipBytes(t))); err != nil {
+		t.Fatalf("first publish: %v", err)
+	}
+	store.putErr = errors.New("Access Denied")
+	if _, err := svc.Publish(ctx, publishInput("recon-sweep", owner, "alice", zipBytes(t))); err == nil {
+		t.Fatal("the second publish should have failed")
+	}
+
+	skill, ok := repo.skills["recon-sweep"]
+	if !ok {
+		t.Fatal("a failed second version must not delete the skill")
+	}
+	if skill.CurrentVersion != 1 {
+		t.Fatalf("current version = %d, want the successful 1", skill.CurrentVersion)
+	}
+	// And version 1 still downloads.
+	store.putErr = nil
+	if _, _, _, err := svc.Download(ctx, "recon-sweep", 0); err != nil {
+		t.Fatalf("version 1 should still be downloadable, got %v", err)
+	}
+}
+
+// --- names parked by the bug above ------------------------------------------
+//
+// Rows already in production have no versions. They must not look like
+// skills, and they must not hold their names hostage.
+
+func TestEmptyClaimsAreInvisibleAndReclaimable(t *testing.T) {
+	repo, store := newFakeRepo(), newFakeStore()
+	svc := newTestService(t, repo, store)
+	ctx := context.Background()
+
+	stranded := uuid.New()
+	repo.skills["public-recon"] = &models.Skill{
+		SkillID: uuid.New(), Name: "public-recon", CurrentVersion: 0,
+		OwnerUserID: stranded, OwnerUsername: "alice",
+	}
+
+	listed, err := svc.List(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(listed) != 0 {
+		t.Errorf("a name with no versions is not a skill; listed %d", len(listed))
+	}
+
+	_, err = svc.Lookup(ctx, "public-recon")
+	var svcErr *Error
+	if !errors.As(err, &svcErr) || svcErr.Status != 404 {
+		t.Fatalf("want a 404 for an empty claim, got %#v", err)
+	}
+	if strings.Contains(svcErr.Message, "version 0") {
+		t.Errorf("the message should not talk about version 0, got %q", svcErr.Message)
+	}
+
+	// Anyone may take it, including somebody other than whoever parked it.
+	got, err := svc.Publish(ctx, publishInput("public-recon", uuid.New(), "bob", zipBytes(t)))
+	if err != nil {
+		t.Fatalf("an empty claim should be re-claimable, got %v", err)
+	}
+	if got.Skill.OwnerUsername != "bob" || got.Version.Version != 1 {
+		t.Fatalf("the name should pass to the first successful publisher, got %+v", got.Skill)
+	}
+}
+
+func TestDownload_SaysNothingHasBeenPublishedYet(t *testing.T) {
+	repo, store := newFakeRepo(), newFakeStore()
+	svc := newTestService(t, repo, store)
+	repo.skills["public-recon"] = &models.Skill{
+		SkillID: uuid.New(), Name: "public-recon", CurrentVersion: 0,
+		OwnerUserID: uuid.New(), OwnerUsername: "alice",
+	}
+
+	_, _, _, err := svc.Download(context.Background(), "public-recon", 0)
+	var svcErr *Error
+	if !errors.As(err, &svcErr) || svcErr.Status != 404 {
+		t.Fatalf("want a 404, got %#v", err)
+	}
+	if strings.Contains(svcErr.Message, "version 0") {
+		t.Fatalf("want a message that explains the state, got %q", svcErr.Message)
 	}
 }

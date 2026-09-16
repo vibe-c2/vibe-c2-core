@@ -44,6 +44,17 @@ func tooLarge(format string, args ...any) *Error {
 	return &Error{Status: http.StatusRequestEntityTooLarge, Message: fmt.Sprintf(format, args...)}
 }
 
+// internal is a fault: something the caller did nothing wrong to cause.
+//
+// The cause is appended to the message rather than only logged. "could not
+// store the bundle" is the same sentence for a missing bucket, a denied write
+// and a full volume, and an operator who sees only that sentence has to guess
+// which. Everyone who can reach these endpoints is an authenticated operator,
+// so there is no audience here to withhold it from.
 func internal(cause error, format string, args ...any) *Error {
-	return &Error{Status: http.StatusInternalServerError, Message: fmt.Sprintf(format, args...), Cause: cause}
+	message := fmt.Sprintf(format, args...)
+	if cause != nil {
+		message = message + ": " + cause.Error()
+	}
+	return &Error{Status: http.StatusInternalServerError, Message: message, Cause: cause}
 }
