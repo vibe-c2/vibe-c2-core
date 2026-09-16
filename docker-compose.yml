@@ -39,6 +39,31 @@ services:
       WIKI_IMAGE_MAX_DIMENSION: ${WIKI_IMAGE_MAX_DIMENSION:-2560}
       WIKI_IMAGE_SWEEPER_INTERVAL: ${WIKI_IMAGE_SWEEPER_INTERVAL:-24h}
       WIKI_IMAGE_SWEEPER_GRACE: ${WIKI_IMAGE_SWEEPER_GRACE:-168h}
+      # Wiki file attachments. These were documented in .env.example but
+      # never listed here, so setting any of them had no effect and the
+      # compiled defaults silently won.
+      WIKI_FILE_BUCKET: ${WIKI_FILE_BUCKET:-wiki-files}
+      WIKI_FILE_MAX_SIZE: ${WIKI_FILE_MAX_SIZE:-52428800}
+      WIKI_FILE_DENIED_CONTENT_TYPES: ${WIKI_FILE_DENIED_CONTENT_TYPES:-}
+      WIKI_FILE_SWEEPER_INTERVAL: ${WIKI_FILE_SWEEPER_INTERVAL:-24h}
+      WIKI_FILE_SWEEPER_GRACE: ${WIKI_FILE_SWEEPER_GRACE:-168h}
+      # The attachment garbage collector's master switch. .env.example
+      # documents a four-step procedure for arming it; without these two
+      # lines, steps three and four did nothing at all.
+      WIKI_SWEEPER_ENABLED: ${WIKI_SWEEPER_ENABLED:-false}
+      WIKI_SWEEPER_DRY_RUN: ${WIKI_SWEEPER_DRY_RUN:-true}
+      # Wiki export/import jobs.
+      WIKI_IMPORT_ZIP_MAX_SIZE: ${WIKI_IMPORT_ZIP_MAX_SIZE:-209715200}
+      WIKI_TRANSFER_ARTIFACT_TTL: ${WIKI_TRANSFER_ARTIFACT_TTL:-24h}
+      INSTALLATION_ID: ${INSTALLATION_ID:-}
+      # Per-agent-key ceilings for the MCP surface.
+      MCP_CALLS_PER_MINUTE: ${MCP_CALLS_PER_MINUTE:-120}
+      MCP_WRITES_PER_MINUTE: ${MCP_WRITES_PER_MINUTE:-30}
+      # Module heartbeat and reaper.
+      MODULE_HEARTBEAT_INTERVAL: ${MODULE_HEARTBEAT_INTERVAL:-30s}
+      MODULE_HEARTBEAT_GRACE_MISSES: ${MODULE_HEARTBEAT_GRACE_MISSES:-3}
+      MODULE_REAPER_INTERVAL: ${MODULE_REAPER_INTERVAL:-15s}
+      MODULE_REAPER_ENABLED: ${MODULE_REAPER_ENABLED:-true}
       AUTH_ACCESS_TTL: ${AUTH_ACCESS_TTL:-15m}
       AUTH_REFRESH_TTL: ${AUTH_REFRESH_TTL:-168h}
       AUTH_REFRESH_GRACE_TTL: ${AUTH_REFRESH_GRACE_TTL:-10s}
