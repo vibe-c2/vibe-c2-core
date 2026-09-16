@@ -3,7 +3,7 @@
 name: vibe-c2
 description: Work an offensive security engagement in Vibe C2 — hosts, credentials, hashes, tasks, wiki notes and the operation timeline — through its MCP tools. Use whenever connected to a Vibe C2 MCP endpoint, or when the user mentions an operation, findings, or engagement notes.
 metadata:
-  version: "13"
+  version: "14"
 ---
 
 # Vibe C2
@@ -26,7 +26,8 @@ Within an operation:
 - **Credentials** are recovered secrets. **Hashes** are captured material that
   may become credentials.
 - **Tasks** are the operator's board.
-- **Wiki** pages are the engagement's notes.
+- **Wiki** pages are what the engagement learned, not a log of how you
+  learned it.
 - **The timeline** is the shared history: milestones only.
 
 **Public** is a special operation shared across the platform: every key reaches
@@ -46,30 +47,29 @@ not exist, say so.
 
 - **Look before you ask.** `get_user_focus` says which operation, page and
   record the operator is on, with that operation's counts.
-- **Everything you do is visible.** Every call, reads included, is recorded and
-  shown to the operator.
+- **Everything you do is visible** to the operator, reads included.
 - **Propose rather than surprise.** Create a task to suggest work; say what you
   will change before changing it unless told to just do it.
 - **Results are capped.** Truncated means narrow the filter, not "that is all
   there is".
 - **Refusals are answers.** Report them; do not retry variations.
-- **Read the smallest part that answers the question.** `search_wiki` snippets
-  usually identify the page. Pages over 8 KB return an outline; take
-  `section:"<heading>"` for one part or `full:true` for everything.
+- **Read the smallest part that answers the question.** Pages over 8 KB
+  return an outline; take `section:` for one part or `full:true` for all.
+- **Pages hold facts, not your working.** Plans, attempts and what they led
+  to go to the operator in the chat, never into a document. A page gets the
+  finding once there is one.
 - **One subject, one page, in the tree.** A host, subnet or write-up is a
   child page (`parent_id`), never a section of a growing dump.
 - **Send the smallest change that does the job.** `edit_wiki_document`
-  replaces an exact snippet; `add_wiki_section` adds to either end. Both are
-  safe while the operator is editing. `update_wiki_document` replaces the whole
+  replaces an exact snippet; `add_wiki_section` adds to either end, both safe
+  while the operator edits. `update_wiki_document` replaces the whole
   page: only after reading it, since anything omitted is deleted.
 - **One value, one call.** Arguments hold a megabyte. Never split a value
   across calls. Raw output goes to `attach_text_to_wiki_document`, not the page.
 - **Do not re-read your own work.** Writes report what happened.
-- **Make retries safe.** Every write accepts an `idempotency_key`.
-- **Put milestones on the timeline.** A DC owned, a host taken, a foothold
-  lost: `create_timeline_event`, unless a tool already recorded it (closed
+- **Put milestones on the timeline.** A DC owned, a foothold lost:
+  `create_timeline_event`, unless a tool already recorded it (closed
   tasks, credentials and cracks land there on their own). Not bookkeeping.
-- **Leave icons alone** unless a page has earned one.
 
 ## Reference
 
@@ -182,7 +182,30 @@ subnet and every host in one body is the wrong shape: the operator cannot find
 anything in it, two people's edits collide on it, and every read costs the
 whole thing.
 
-Build the hierarchy instead, with `parent_id` on `create_wiki_document`:
+## Facts, not process
+
+Before anything about shape: a page records what is **true about its
+subject**. What the host runs, which credential opened it, what a finding
+means, what was tried and did not work. It is read weeks later by somebody
+who was not there and does not care how the knowing happened.
+
+It is not a log of your working. Never grow a page that reads like this:
+
+> Plan: enumerate the subnet. Now scanning. Found three hosts, so updating
+> the plan. Next I will check SMB signing...
+
+Every word of that belongs in the chat with the operator, where they can
+steer you while it still matters. The page gets the outcome once there is
+one: the three hosts as three pages, the signing result as a finding on each.
+
+The test is whether a sentence is still worth reading tomorrow. "I am going
+to check SMB signing" will not be. "SMB signing is disabled on dc01 and
+fs01" will be. If a line only makes sense in the order you did things, it is
+process — say it, do not write it.
+
+## Where a page goes
+
+Build the hierarchy with `parent_id` on `create_wiki_document`:
 
 ```
 Infrastructure

@@ -6,7 +6,30 @@ subnet and every host in one body is the wrong shape: the operator cannot find
 anything in it, two people's edits collide on it, and every read costs the
 whole thing.
 
-Build the hierarchy instead, with `parent_id` on `create_wiki_document`:
+## Facts, not process
+
+Before anything about shape: a page records what is **true about its
+subject**. What the host runs, which credential opened it, what a finding
+means, what was tried and did not work. It is read weeks later by somebody
+who was not there and does not care how the knowing happened.
+
+It is not a log of your working. Never grow a page that reads like this:
+
+> Plan: enumerate the subnet. Now scanning. Found three hosts, so updating
+> the plan. Next I will check SMB signing...
+
+Every word of that belongs in the chat with the operator, where they can
+steer you while it still matters. The page gets the outcome once there is
+one: the three hosts as three pages, the signing result as a finding on each.
+
+The test is whether a sentence is still worth reading tomorrow. "I am going
+to check SMB signing" will not be. "SMB signing is disabled on dc01 and
+fs01" will be. If a line only makes sense in the order you did things, it is
+process — say it, do not write it.
+
+## Where a page goes
+
+Build the hierarchy with `parent_id` on `create_wiki_document`:
 
 ```
 Infrastructure

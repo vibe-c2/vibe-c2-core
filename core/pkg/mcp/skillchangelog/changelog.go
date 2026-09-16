@@ -128,6 +128,14 @@ var releases = []Release{
 			"A published skill can now be removed outright by its owner, so an earlier version is no longer guaranteed to stay downloadable. Publishing still never overwrites one.",
 		},
 	},
+	{
+		Version: 14,
+		Date:    "2026-09-16",
+		Notes: []string{
+			"Wiki pages hold facts, not process. Plans, attempts and what they led to go to the operator in the chat, never into a document; the page gets the finding once there is one. structure.md leads with this and shows what a process dump looks like so it is recognisable.",
+			"Dropped from the brief, to make room and because each is covered elsewhere: the icon default (reference/icons.md), idempotency_key (a described field on every write tool) and the search_wiki snippet hint (reference/wiki.md).",
+		},
+	},
 }
 
 // Releases returns the full history, oldest first. A copy, so callers cannot
