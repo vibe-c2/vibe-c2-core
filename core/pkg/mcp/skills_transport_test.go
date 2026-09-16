@@ -62,18 +62,25 @@ func (m *memSkillRepo) FindByID(_ context.Context, id uuid.UUID) (models.Skill, 
 	return models.Skill{}, qmgo.ErrNoSuchDocuments
 }
 
-func (m *memSkillRepo) List(_ context.Context, includeRetired bool) ([]models.Skill, error) {
+func (m *memSkillRepo) List(_ context.Context) ([]models.Skill, error) {
 	var out []models.Skill
 	for _, s := range m.skills {
 		if s.CurrentVersion < 1 {
 			continue
 		}
-		if !includeRetired && s.IsUnpublished() {
-			continue
-		}
 		out = append(out, *s)
 	}
 	return out, nil
+}
+
+func (m *memSkillRepo) Delete(_ context.Context, skillID uuid.UUID) error {
+	for name, s := range m.skills {
+		if s.SkillID == skillID {
+			delete(m.skills, name)
+			delete(m.versions, skillID)
+		}
+	}
+	return nil
 }
 
 func (m *memSkillRepo) ReserveNextVersion(_ context.Context, id uuid.UUID) (int, error) {
@@ -112,10 +119,6 @@ func (m *memSkillRepo) FinishPublish(_ context.Context, id uuid.UUID, in reposit
 			s.Description = in.Description
 		}
 	}
-	return nil
-}
-
-func (m *memSkillRepo) SetUnpublished(context.Context, uuid.UUID, *time.Time, *uuid.UUID) error {
 	return nil
 }
 

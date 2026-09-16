@@ -26,7 +26,7 @@ const skillMultipartMemory = 8 << 20
 // Uploads are multipart rather than GraphQL for the same reason wiki images
 // and file attachments are: a mutation would have to carry the bytes as a
 // string, and a skill bundle has no business passing through a JSON document.
-// Listing and the small mutations (snooze, retire, reassign) live in GraphQL
+// Listing and the small mutations (snooze, remove, reassign) live in GraphQL
 // where the rest of the SPA's data does.
 type SkillController struct {
 	svc    *skills.Service

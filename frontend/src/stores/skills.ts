@@ -20,7 +20,7 @@ interface SkillStoreState {
   // claiming a new name. The dialog locks the name field in the first case.
   publishTargetName: string | null
   versionsDialogOpen: boolean
-  retireDialogOpen: boolean
+  removeDialogOpen: boolean
 
   setSearch: (search: string) => void
   setOriginFilter: (origin: SkillOriginFilter) => void
@@ -28,7 +28,7 @@ interface SkillStoreState {
   openPublishDialog: (name?: string | null) => void
   setPublishDialogOpen: (open: boolean) => void
   openVersionsDialog: (skill: SelectedSkill) => void
-  openRetireDialog: (skill: SelectedSkill) => void
+  openRemoveDialog: (skill: SelectedSkill) => void
   closeDialogs: () => void
 }
 
@@ -44,7 +44,7 @@ export const useSkillStore = create<SkillStoreState>((set) => ({
   publishDialogOpen: false,
   publishTargetName: null,
   versionsDialogOpen: false,
-  retireDialogOpen: false,
+  removeDialogOpen: false,
 
   setSearch: (search) => set({ search }),
   setOriginFilter: (originFilter) => set({ originFilter }),
@@ -55,14 +55,14 @@ export const useSkillStore = create<SkillStoreState>((set) => ({
     set(open ? { publishDialogOpen: true } : { publishDialogOpen: false, publishTargetName: null }),
   openVersionsDialog: (skill) =>
     set({ versionsDialogOpen: true, selectedSkill: skill }),
-  openRetireDialog: (skill) =>
-    set({ retireDialogOpen: true, selectedSkill: skill }),
+  openRemoveDialog: (skill) =>
+    set({ removeDialogOpen: true, selectedSkill: skill }),
   closeDialogs: () =>
     set({
       publishDialogOpen: false,
       publishTargetName: null,
       versionsDialogOpen: false,
-      retireDialogOpen: false,
+      removeDialogOpen: false,
       selectedSkill: null,
     }),
 }))

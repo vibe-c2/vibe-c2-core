@@ -16,14 +16,9 @@ func (r *mutationResolver) SnoozeSkill(ctx context.Context, name string, version
 	return r.SkillResolver.Snooze(ctx, name, version)
 }
 
-// UnpublishSkill is the resolver for the unpublishSkill field.
-func (r *mutationResolver) UnpublishSkill(ctx context.Context, name string) (*model.Skill, error) {
-	return r.SkillResolver.SetUnpublished(ctx, name, true)
-}
-
-// RepublishSkill is the resolver for the republishSkill field.
-func (r *mutationResolver) RepublishSkill(ctx context.Context, name string) (*model.Skill, error) {
-	return r.SkillResolver.SetUnpublished(ctx, name, false)
+// RemoveSkill is the resolver for the removeSkill field.
+func (r *mutationResolver) RemoveSkill(ctx context.Context, name string) (*model.Skill, error) {
+	return r.SkillResolver.Remove(ctx, name)
 }
 
 // TransferSkill is the resolver for the transferSkill field.

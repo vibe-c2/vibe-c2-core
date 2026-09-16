@@ -9,29 +9,29 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog"
-import { useUnpublishSkill } from "@/graphql/hooks/skills"
+import { useRemoveSkill } from "@/graphql/hooks/skills"
 import { useSkillStore } from "@/stores/skills"
 
-export function RetireSkillDialog() {
-  const { retireDialogOpen, selectedSkill, closeDialogs } = useSkillStore()
-  const unpublish = useUnpublishSkill()
+export function RemoveSkillDialog() {
+  const { removeDialogOpen, selectedSkill, closeDialogs } = useSkillStore()
+  const remove = useRemoveSkill()
   const [error, setError] = useState<string | null>(null)
 
-  async function handleRetire() {
+  async function handleRemove() {
     if (!selectedSkill) return
     setError(null)
     try {
-      await unpublish.mutateAsync(selectedSkill.name)
-      toast.success(`Retired ${selectedSkill.name}`)
+      await remove.mutateAsync(selectedSkill.name)
+      toast.success(`Removed ${selectedSkill.name}`)
       closeDialogs()
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to retire the skill")
+      setError(err instanceof Error ? err.message : "Failed to remove the skill")
     }
   }
 
   return (
     <Dialog
-      open={retireDialogOpen}
+      open={removeDialogOpen}
       onOpenChange={(open) => {
         if (!open) {
           closeDialogs()
@@ -41,17 +41,15 @@ export function RetireSkillDialog() {
     >
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>Retire Skill</DialogTitle>
+          <DialogTitle>Remove Skill</DialogTitle>
           <DialogDescription>
-            Stop handing out{" "}
+            Delete{" "}
             <span className="font-medium text-foreground">
               {selectedSkill?.name}
-            </span>
-            . It stops being listed and can no longer be downloaded. Nothing is
-            destroyed: the name stays yours, every version is kept, and it
-            stays on this page marked Retired so you can restore it or publish
-            a new version over it whenever you like. Copies people already
-            downloaded are unaffected.
+            </span>{" "}
+            and every version of it. The bundles are deleted, the history goes,
+            and the name becomes available for anyone to claim. This cannot be
+            undone. Copies people already downloaded are unaffected.
           </DialogDescription>
         </DialogHeader>
         {error && (
@@ -65,10 +63,10 @@ export function RetireSkillDialog() {
           </Button>
           <Button
             variant="destructive"
-            onClick={handleRetire}
-            disabled={unpublish.isPending}
+            onClick={handleRemove}
+            disabled={remove.isPending}
           >
-            {unpublish.isPending ? "Retiring..." : "Retire"}
+            {remove.isPending ? "Removing..." : "Remove"}
           </Button>
         </DialogFooter>
       </DialogContent>

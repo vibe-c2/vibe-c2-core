@@ -206,25 +206,6 @@ func (s *Service) claimOrLoad(ctx context.Context, name string, in PublishInput)
 				"%q belongs to %s. Pick a different name; only the operator who claimed a name publishes new versions of it.",
 				name, existing.OwnerUsername)
 		}
-		if existing.IsUnpublished() {
-			// Retiring unlists a skill; it does not surrender the name. Who
-			// may bring it back depends on who put it away: you can undo
-			// your own decision, and an administrator can undo anyone's.
-			// Without that second rule an author could publish straight over
-			// a takedown, which would make takedowns pointless.
-			if !CanRestore(existing, in.PublisherID, in.IsAdmin) {
-				return models.Skill{}, false, forbidden(
-					"%q was retired by an administrator. Ask them to restore it; publishing will not override a takedown.", name)
-			}
-			// Publishing a new version is a restore. Clearing the flag here
-			// rather than making them do it in two steps: they have just
-			// said what they want by uploading.
-			if err := s.repo.SetUnpublished(ctx, existing.SkillID, nil, nil); err != nil {
-				return models.Skill{}, false, internal(err, "could not restore %q", name)
-			}
-			existing.UnpublishedAt = nil
-			existing.UnpublishedBy = nil
-		}
 		return existing, false, nil
 
 	case isNotFound(err):
@@ -353,9 +334,6 @@ func (s *Service) Lookup(ctx context.Context, name string) (models.Skill, error)
 		}
 		return models.Skill{}, internal(err, "could not look up %q", normalized)
 	}
-	if skill.IsUnpublished() {
-		return models.Skill{}, notFound("%q is retired and is not being handed out. Its owner or an administrator can restore it.", normalized)
-	}
 	if skill.CurrentVersion < 1 {
 		// The name exists because a publish started and never stored a
 		// bundle. Saying "no version 0" would be true and useless.
@@ -364,48 +342,62 @@ func (s *Service) Lookup(ctx context.Context, name string) (models.Skill, error)
 	return skill, nil
 }
 
-// CanRestore reports whether this operator may bring a retired skill back.
-//
-// You can undo what you did: the person who retired it, and any
-// administrator. Deliberately not "the owner", so that an administrator's
-// takedown cannot be reversed by the author simply re-uploading.
-func CanRestore(skill models.Skill, userID uuid.UUID, isAdmin bool) bool {
-	if !skill.IsUnpublished() {
-		return true
-	}
-	if isAdmin {
-		return true
-	}
-	return skill.UnpublishedBy != nil && *skill.UnpublishedBy == userID
-}
-
-// List returns the published skills, newest upload first.
+// List returns the skills, newest upload first.
 func (s *Service) List(ctx context.Context) ([]models.Skill, error) {
-	out, err := s.repo.List(ctx, false)
+	out, err := s.repo.List(ctx)
 	if err != nil {
 		return nil, internal(err, "could not list skills")
 	}
 	return out, nil
 }
 
-// ListFor returns what one operator should see: everything published, plus
-// any retired skill they can restore.
+// Remove deletes a skill outright: every stored bundle, every version row,
+// everyone's record of having downloaded it, and the name itself.
 //
-// A retired skill that is invisible to the only person who can bring it back
-// is a dead end — which is exactly what retiring used to be.
-func (s *Service) ListFor(ctx context.Context, viewer uuid.UUID, isAdmin bool) ([]models.Skill, error) {
-	all, err := s.repo.List(ctx, true)
+// There is no soft form of this. An earlier design unlisted a skill instead,
+// keeping the name and history, and it was a trap: the only people who could
+// undo it could not see it. Removing means removing, and the name goes back
+// into circulation for whoever claims it next.
+//
+// The owner or an administrator. Bundles go first so a failure part-way
+// leaves the skill still listed and the operation repeatable, rather than a
+// name that is gone with bytes still on disk.
+func (s *Service) Remove(ctx context.Context, name string, userID uuid.UUID, isAdmin bool) (models.Skill, error) {
+	skill, err := s.Lookup(ctx, name)
 	if err != nil {
-		return nil, internal(err, "could not list skills")
+		return models.Skill{}, err
 	}
-	out := make([]models.Skill, 0, len(all))
-	for _, skill := range all {
-		if skill.IsUnpublished() && !CanRestore(skill, viewer, isAdmin) {
-			continue
+	if skill.OwnerUserID != userID && !isAdmin {
+		return models.Skill{}, forbidden("%q belongs to %s; only they or an administrator can remove it.", skill.Name, skill.OwnerUsername)
+	}
+
+	versions, err := s.repo.ListVersions(ctx, skill.SkillID)
+	if err != nil {
+		return models.Skill{}, internal(err, "could not read the versions of %q", skill.Name)
+	}
+	for _, version := range versions {
+		if delErr := s.store.Delete(ctx, version.ObjectKey); delErr != nil {
+			// Logged rather than fatal: the operator asked for this to be
+			// gone, and refusing because one blob resisted would leave them
+			// stuck. The key is recorded so the bytes can still be found.
+			s.logger.Error("skills: could not delete a stored bundle",
+				zap.String("skill", skill.Name), zap.Int("version", version.Version),
+				zap.String("key", version.ObjectKey), zap.Error(delErr))
 		}
-		out = append(out, skill)
 	}
-	return out, nil
+
+	if err := s.repo.Delete(ctx, skill.SkillID); err != nil {
+		return models.Skill{}, internal(err, "could not remove %q", skill.Name)
+	}
+	if s.subs != nil {
+		if err := s.subs.DeleteBySkill(ctx, skill.SkillID); err != nil {
+			// Nobody is prompted about a skill that no longer exists, so a
+			// leftover subscription is untidy rather than harmful.
+			s.logger.Warn("skills: could not clear subscriptions for a removed skill",
+				zap.String("skill", skill.Name), zap.Error(err))
+		}
+	}
+	return skill, nil
 }
 
 // Versions returns a skill's history, newest first.

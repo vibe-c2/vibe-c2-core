@@ -20,8 +20,6 @@ function community(
     mine: false,
     downloadedVersion: null,
     downloadUrl: "/api/v1/skills/recon-sweep/download",
-    unpublished: false,
-    canRestore: false,
     ...overrides,
   }
 }
@@ -59,22 +57,6 @@ describe("buildSkillRows", () => {
   it("treats a newer installed copy as current", () => {
     const rows = buildSkillRows({ currentVersion: 12, installedVersion: 13 }, [])
     expect(rows[0].outdated).toBe(false)
-  })
-})
-
-describe("retired skills", () => {
-  it("carries the retired state and who may undo it", () => {
-    const rows = buildSkillRows({ currentVersion: 12, installedVersion: 12 }, [
-      community({ unpublished: true, canRestore: true }),
-    ])
-    const retired = rows.find((r) => r.origin === "community")!
-    expect(retired.unpublished).toBe(true)
-    expect(retired.canRestore).toBe(true)
-  })
-
-  it("never marks the built-in skill retired", () => {
-    const rows = buildSkillRows({ currentVersion: 12, installedVersion: 12 }, [])
-    expect(rows[0].unpublished).toBe(false)
   })
 })
 

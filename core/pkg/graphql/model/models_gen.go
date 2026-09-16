@@ -352,8 +352,6 @@ type Skill struct {
 	DownloadedAt      *string `json:"downloadedAt,omitempty"`
 	SnoozedVersion    *int    `json:"snoozedVersion,omitempty"`
 	DownloadURL       string  `json:"downloadUrl"`
-	Unpublished       bool    `json:"unpublished"`
-	CanRestore        bool    `json:"canRestore"`
 }
 
 type SkillChangelog struct {

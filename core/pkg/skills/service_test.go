@@ -59,18 +59,25 @@ func (f *fakeRepo) FindByID(_ context.Context, id uuid.UUID) (models.Skill, erro
 	return models.Skill{}, qmgo.ErrNoSuchDocuments
 }
 
-func (f *fakeRepo) List(_ context.Context, includeRetired bool) ([]models.Skill, error) {
+func (f *fakeRepo) List(_ context.Context) ([]models.Skill, error) {
 	var out []models.Skill
 	for _, s := range f.skills {
 		if s.CurrentVersion < 1 {
 			continue
 		}
-		if !includeRetired && s.IsUnpublished() {
-			continue
-		}
 		out = append(out, *s)
 	}
 	return out, nil
+}
+
+func (f *fakeRepo) Delete(_ context.Context, skillID uuid.UUID) error {
+	for name, s := range f.skills {
+		if s.SkillID == skillID {
+			delete(f.skills, name)
+			delete(f.versions, skillID)
+		}
+	}
+	return nil
 }
 
 func (f *fakeRepo) ReserveNextVersion(_ context.Context, skillID uuid.UUID) (int, error) {
@@ -112,16 +119,6 @@ func (f *fakeRepo) FinishPublish(_ context.Context, skillID uuid.UUID, in reposi
 		}
 	}
 	return qmgo.ErrNoSuchDocuments
-}
-
-func (f *fakeRepo) SetUnpublished(_ context.Context, skillID uuid.UUID, at *time.Time, by *uuid.UUID) error {
-	for _, s := range f.skills {
-		if s.SkillID == skillID {
-			s.UnpublishedAt = at
-			s.UnpublishedBy = by
-		}
-	}
-	return nil
 }
 
 func (f *fakeRepo) Transfer(_ context.Context, skillID uuid.UUID, ownerID uuid.UUID, ownerUsername string) error {
@@ -657,146 +654,150 @@ func TestPublish_RollsBackEvenWhenTheCallerHasGoneAway(t *testing.T) {
 	}
 }
 
-// --- retiring is not a one-way door ----------------------------------------
+// --- removing a skill ------------------------------------------------------
 //
-// Reported: an operator published a test skill through the UI, retired it,
-// then could not publish under that name again. The refusal told them to ask
-// an administrator, which they were, and the page offered no way back because
-// retired skills were hidden from everyone.
+// Retiring used to unlist a skill while keeping its name and history, and it
+// was a trap: the only people who could undo it could not see it. Remove
+// deletes everything and frees the name.
 
-func TestPublish_OwnerCanPublishOverTheirOwnRetirement(t *testing.T) {
+func TestRemove_DeletesTheSkillItsVersionsAndItsBundles(t *testing.T) {
 	repo, store := newFakeRepo(), newFakeStore()
-	svc := newTestService(t, repo, store)
+	svc := NewService(repo, &fakeSubs{}, store, 1<<20, zap.NewNop())
+	ctx := context.Background()
+	owner := uuid.New()
+
+	for i := 0; i < 3; i++ {
+		if _, err := svc.Publish(ctx, publishInput("recon-sweep", owner, "alice", zipBytes(t))); err != nil {
+			t.Fatalf("publish %d: %v", i, err)
+		}
+	}
+	if len(store.objects) != 3 {
+		t.Fatalf("expected three stored bundles, got %d", len(store.objects))
+	}
+
+	removed, err := svc.Remove(ctx, "Recon Sweep", owner, false)
+	if err != nil {
+		t.Fatalf("Remove returned %v", err)
+	}
+	if removed.Name != "recon-sweep" {
+		t.Errorf("removed %q", removed.Name)
+	}
+	if len(store.objects) != 0 {
+		t.Errorf("every bundle should be gone, %d left", len(store.objects))
+	}
+	if _, ok := repo.skills["recon-sweep"]; ok {
+		t.Error("the skill row should be gone")
+	}
+	if len(repo.versions[removed.SkillID]) != 0 {
+		t.Error("the version rows should be gone")
+	}
+}
+
+func TestRemove_FreesTheNameForAnyone(t *testing.T) {
+	repo, store := newFakeRepo(), newFakeStore()
+	svc := NewService(repo, &fakeSubs{}, store, 1<<20, zap.NewNop())
 	ctx := context.Background()
 	owner := uuid.New()
 
 	if _, err := svc.Publish(ctx, publishInput("recon-sweep", owner, "alice", zipBytes(t))); err != nil {
-		t.Fatalf("first publish: %v", err)
+		t.Fatal(err)
 	}
-	// Alice retires her own skill.
-	now := time.Now().UTC()
-	if err := repo.SetUnpublished(ctx, repo.skills["recon-sweep"].SkillID, &now, &owner); err != nil {
+	if _, err := svc.Remove(ctx, "recon-sweep", owner, false); err != nil {
 		t.Fatal(err)
 	}
 
-	got, err := svc.Publish(ctx, publishInput("recon-sweep", owner, "alice", zipBytes(t)))
+	// Somebody else takes the name, from scratch.
+	got, err := svc.Publish(ctx, publishInput("recon-sweep", uuid.New(), "bob", zipBytes(t)))
 	if err != nil {
-		t.Fatalf("publishing over your own retirement should restore it, got %v", err)
+		t.Fatalf("the name should be free, got %v", err)
 	}
-	if got.Version.Version != 2 {
-		t.Errorf("version = %d, want 2", got.Version.Version)
+	if !got.Claimed || got.Version.Version != 1 {
+		t.Fatalf("expected a fresh claim at version 1, got %+v", got)
 	}
-	if repo.skills["recon-sweep"].IsUnpublished() {
-		t.Error("publishing should have brought the skill back")
+	if got.Skill.OwnerUsername != "bob" {
+		t.Errorf("owner = %q, want bob", got.Skill.OwnerUsername)
 	}
 }
 
-func TestPublish_DoesNotOverrideAnAdminTakedown(t *testing.T) {
+func TestRemove_IsRefusedForSomebodyElsesSkill(t *testing.T) {
 	repo, store := newFakeRepo(), newFakeStore()
-	svc := newTestService(t, repo, store)
+	svc := NewService(repo, &fakeSubs{}, store, 1<<20, zap.NewNop())
 	ctx := context.Background()
-	owner, admin := uuid.New(), uuid.New()
 
-	if _, err := svc.Publish(ctx, publishInput("recon-sweep", owner, "alice", zipBytes(t))); err != nil {
-		t.Fatalf("first publish: %v", err)
-	}
-	// An administrator takes it down.
-	now := time.Now().UTC()
-	if err := repo.SetUnpublished(ctx, repo.skills["recon-sweep"].SkillID, &now, &admin); err != nil {
+	if _, err := svc.Publish(ctx, publishInput("recon-sweep", uuid.New(), "alice", zipBytes(t))); err != nil {
 		t.Fatal(err)
 	}
 
-	_, err := svc.Publish(ctx, publishInput("recon-sweep", owner, "alice", zipBytes(t)))
-	if err == nil {
-		t.Fatal("re-uploading must not undo a takedown")
+	_, err := svc.Remove(ctx, "recon-sweep", uuid.New(), false)
+	var svcErr *Error
+	if !errors.As(err, &svcErr) || svcErr.Status != 403 {
+		t.Fatalf("want a 403, got %#v", err)
 	}
-	if !strings.Contains(err.Error(), "administrator") {
-		t.Errorf("the refusal should say who to ask, got %q", err.Error())
+	if !strings.Contains(svcErr.Message, "alice") {
+		t.Errorf("the refusal should name the owner, got %q", svcErr.Message)
 	}
-	// The administrator can still publish over it.
-	in := publishInput("recon-sweep", admin, "root", zipBytes(t))
-	in.IsAdmin = true
-	if _, err := svc.Publish(ctx, in); err != nil {
-		t.Fatalf("an administrator should be able to restore, got %v", err)
+	if _, ok := repo.skills["recon-sweep"]; !ok {
+		t.Error("a refused removal must not delete anything")
 	}
 }
 
-func TestCanRestore(t *testing.T) {
-	owner, admin, other := uuid.New(), uuid.New(), uuid.New()
-	now := time.Now().UTC()
-
-	live := models.Skill{OwnerUserID: owner}
-	byOwner := models.Skill{OwnerUserID: owner, UnpublishedAt: &now, UnpublishedBy: &owner}
-	byAdmin := models.Skill{OwnerUserID: owner, UnpublishedAt: &now, UnpublishedBy: &admin}
-
-	tests := []struct {
-		name  string
-		skill models.Skill
-		user  uuid.UUID
-		admin bool
-		want  bool
-	}{
-		{"a live skill needs no restoring", live, other, false, true},
-		{"the owner undoes their own retirement", byOwner, owner, false, true},
-		{"an administrator undoes anything", byAdmin, admin, true, true},
-		{"the author cannot undo a takedown", byAdmin, owner, false, false},
-		{"a stranger cannot restore", byOwner, other, false, false},
-	}
-	for _, tc := range tests {
-		t.Run(tc.name, func(t *testing.T) {
-			if got := CanRestore(tc.skill, tc.user, tc.admin); got != tc.want {
-				t.Fatalf("CanRestore = %v, want %v", got, tc.want)
-			}
-		})
-	}
-}
-
-// A retired skill hidden from the only person who can bring it back is the
-// dead end that caused the report.
-func TestListFor_ShowsYouYourOwnRetiredSkills(t *testing.T) {
+func TestRemove_AdminMayRemoveAnySkill(t *testing.T) {
 	repo, store := newFakeRepo(), newFakeStore()
-	svc := newTestService(t, repo, store)
+	svc := NewService(repo, &fakeSubs{}, store, 1<<20, zap.NewNop())
 	ctx := context.Background()
-	owner, other := uuid.New(), uuid.New()
+
+	if _, err := svc.Publish(ctx, publishInput("recon-sweep", uuid.New(), "alice", zipBytes(t))); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := svc.Remove(ctx, "recon-sweep", uuid.New(), true); err != nil {
+		t.Fatalf("an administrator should be able to remove, got %v", err)
+	}
+	if len(repo.skills) != 0 {
+		t.Error("the skill should be gone")
+	}
+}
+
+func TestRemove_ClearsWhoDownloadedIt(t *testing.T) {
+	repo, store, subs := newFakeRepo(), newFakeStore(), &fakeSubs{}
+	svc := NewService(repo, subs, store, 1<<20, zap.NewNop())
+	ctx := context.Background()
+	owner := uuid.New()
 
 	if _, err := svc.Publish(ctx, publishInput("recon-sweep", owner, "alice", zipBytes(t))); err != nil {
 		t.Fatal(err)
 	}
-	now := time.Now().UTC()
-	if err := repo.SetUnpublished(ctx, repo.skills["recon-sweep"].SkillID, &now, &owner); err != nil {
+	if _, err := svc.Remove(ctx, "recon-sweep", owner, false); err != nil {
 		t.Fatal(err)
 	}
+	// Otherwise operators keep being prompted about a skill that is gone.
+	if subs.clearedFor == uuid.Nil {
+		t.Error("removal should clear the download records")
+	}
+}
 
-	mine, err := svc.ListFor(ctx, owner, false)
-	if err != nil {
-		t.Fatal(err)
+func TestRemove_UnknownName(t *testing.T) {
+	svc := NewService(newFakeRepo(), &fakeSubs{}, newFakeStore(), 1<<20, zap.NewNop())
+	_, err := svc.Remove(context.Background(), "nothing-here", uuid.New(), true)
+	var svcErr *Error
+	if !errors.As(err, &svcErr) || svcErr.Status != 404 {
+		t.Fatalf("want a 404, got %#v", err)
 	}
-	if len(mine) != 1 || !mine[0].IsUnpublished() {
-		t.Fatalf("the person who retired it should still see it, got %d rows", len(mine))
-	}
+}
 
-	theirs, err := svc.ListFor(ctx, other, false)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if len(theirs) != 0 {
-		t.Fatalf("a retired skill stays hidden from everyone else, got %d rows", len(theirs))
-	}
+// fakeSubs records the one call Remove makes into the subscription store.
+type fakeSubs struct{ clearedFor uuid.UUID }
 
-	asAdmin, err := svc.ListFor(ctx, other, true)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if len(asAdmin) != 1 {
-		t.Fatalf("an administrator should see it to act on it, got %d rows", len(asAdmin))
-	}
-
-	// And the plain listing, which is what agents see, still hides it.
-	public, err := svc.List(ctx)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if len(public) != 0 {
-		t.Fatalf("retired skills must stay out of the public listing, got %d", len(public))
-	}
+func (f *fakeSubs) RecordDownload(context.Context, uuid.UUID, uuid.UUID, int, time.Time) error {
+	return nil
+}
+func (f *fakeSubs) Snooze(context.Context, uuid.UUID, uuid.UUID, int) error { return nil }
+func (f *fakeSubs) FindByUser(context.Context, uuid.UUID) ([]models.SkillSubscription, error) {
+	return nil, nil
+}
+func (f *fakeSubs) Find(context.Context, uuid.UUID, uuid.UUID) (models.SkillSubscription, error) {
+	return models.SkillSubscription{}, qmgo.ErrNoSuchDocuments
+}
+func (f *fakeSubs) DeleteBySkill(_ context.Context, skillID uuid.UUID) error {
+	f.clearedFor = skillID
+	return nil
 }

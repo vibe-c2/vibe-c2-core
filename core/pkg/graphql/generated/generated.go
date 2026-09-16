@@ -341,8 +341,8 @@ type ComplexityRoot struct {
 		RegenerateMyAPIKey            func(childComplexity int) int
 		RemoveModule                  func(childComplexity int, instance string) int
 		RemoveOperationMember         func(childComplexity int, operationID string, userID string) int
+		RemoveSkill                   func(childComplexity int, name string) int
 		ReorderWikiDocumentSiblings   func(childComplexity int, input model.ReorderWikiDocumentSiblingsInput) int
-		RepublishSkill                func(childComplexity int, name string) int
 		RestoreTask                   func(childComplexity int, id string) int
 		RestoreWikiDocument           func(childComplexity int, id string, cascade *bool) int
 		RestoreWikiDocumentBackup     func(childComplexity int, documentID string, backupID string) int
@@ -359,7 +359,6 @@ type ComplexityRoot struct {
 		SnoozeSkillUpdate             func(childComplexity int, version int) int
 		TrackWikiDocumentVisit        func(childComplexity int, documentID string) int
 		TransferSkill                 func(childComplexity int, name string, userID string) int
-		UnpublishSkill                func(childComplexity int, name string) int
 		UpdateAgentKey                func(childComplexity int, id string, input model.UpdateAgentKeyInput) int
 		UpdateCredential              func(childComplexity int, id string, input model.UpdateCredentialInput) int
 		UpdateCredentialComment       func(childComplexity int, credentialID string, commentID string, text string) int
@@ -544,7 +543,6 @@ type ComplexityRoot struct {
 	}
 
 	Skill struct {
-		CanRestore        func(childComplexity int) int
 		CurrentVersion    func(childComplexity int) int
 		Description       func(childComplexity int) int
 		DownloadURL       func(childComplexity int) int
@@ -557,7 +555,6 @@ type ComplexityRoot struct {
 		OwnerUsername     func(childComplexity int) int
 		SizeBytes         func(childComplexity int) int
 		SnoozedVersion    func(childComplexity int) int
-		Unpublished       func(childComplexity int) int
 		UpdatedAt         func(childComplexity int) int
 	}
 
@@ -987,8 +984,7 @@ type MutationResolver interface {
 	AdminRevokeAllUserSessions(ctx context.Context, userID string) (int, error)
 	SnoozeSkillUpdate(ctx context.Context, version int) (*models.User, error)
 	SnoozeSkill(ctx context.Context, name string, version int) (*model.Skill, error)
-	UnpublishSkill(ctx context.Context, name string) (*model.Skill, error)
-	RepublishSkill(ctx context.Context, name string) (*model.Skill, error)
+	RemoveSkill(ctx context.Context, name string) (*model.Skill, error)
 	TransferSkill(ctx context.Context, name string, userID string) (*model.Skill, error)
 	CreateTask(ctx context.Context, input model.CreateTaskInput) (*models.Task, error)
 	UpdateTask(ctx context.Context, id string, input model.UpdateTaskInput) (*models.Task, error)
@@ -2627,6 +2623,17 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.Mutation.RemoveOperationMember(childComplexity, args["operationId"].(string), args["userId"].(string)), true
+	case "Mutation.removeSkill":
+		if e.ComplexityRoot.Mutation.RemoveSkill == nil {
+			break
+		}
+
+		args, err := ec.field_Mutation_removeSkill_args(ctx, rawArgs)
+		if err != nil {
+			return 0, false
+		}
+
+		return e.ComplexityRoot.Mutation.RemoveSkill(childComplexity, args["name"].(string)), true
 	case "Mutation.reorderWikiDocumentSiblings":
 		if e.ComplexityRoot.Mutation.ReorderWikiDocumentSiblings == nil {
 			break
@@ -2638,17 +2645,6 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.Mutation.ReorderWikiDocumentSiblings(childComplexity, args["input"].(model.ReorderWikiDocumentSiblingsInput)), true
-	case "Mutation.republishSkill":
-		if e.ComplexityRoot.Mutation.RepublishSkill == nil {
-			break
-		}
-
-		args, err := ec.field_Mutation_republishSkill_args(ctx, rawArgs)
-		if err != nil {
-			return 0, false
-		}
-
-		return e.ComplexityRoot.Mutation.RepublishSkill(childComplexity, args["name"].(string)), true
 	case "Mutation.restoreTask":
 		if e.ComplexityRoot.Mutation.RestoreTask == nil {
 			break
@@ -2820,17 +2816,6 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.Mutation.TransferSkill(childComplexity, args["name"].(string), args["userId"].(string)), true
-	case "Mutation.unpublishSkill":
-		if e.ComplexityRoot.Mutation.UnpublishSkill == nil {
-			break
-		}
-
-		args, err := ec.field_Mutation_unpublishSkill_args(ctx, rawArgs)
-		if err != nil {
-			return 0, false
-		}
-
-		return e.ComplexityRoot.Mutation.UnpublishSkill(childComplexity, args["name"].(string)), true
 	case "Mutation.updateAgentKey":
 		if e.ComplexityRoot.Mutation.UpdateAgentKey == nil {
 			break
@@ -3979,12 +3964,6 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 
 		return e.ComplexityRoot.SessionEvent.UserID(childComplexity), true
 
-	case "Skill.canRestore":
-		if e.ComplexityRoot.Skill.CanRestore == nil {
-			break
-		}
-
-		return e.ComplexityRoot.Skill.CanRestore(childComplexity), true
 	case "Skill.currentVersion":
 		if e.ComplexityRoot.Skill.CurrentVersion == nil {
 			break
@@ -4057,12 +4036,6 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.Skill.SnoozedVersion(childComplexity), true
-	case "Skill.unpublished":
-		if e.ComplexityRoot.Skill.Unpublished == nil {
-			break
-		}
-
-		return e.ComplexityRoot.Skill.Unpublished(childComplexity), true
 	case "Skill.updatedAt":
 		if e.ComplexityRoot.Skill.UpdatedAt == nil {
 			break
@@ -7239,13 +7212,6 @@ type Skill {
   snoozedVersion: Int
   # Where to fetch the current bundle.
   downloadUrl: String!
-  # True when the skill is retired: unlisted and not handed out, with its
-  # name and version history kept. Only ever true for a viewer who can
-  # restore it, since a retired skill is hidden from everyone else.
-  unpublished: Boolean!
-  # True when this viewer may bring it back. Whoever retired it, or an
-  # administrator, so an author cannot quietly undo a takedown.
-  canRestore: Boolean!
 }
 
 # SkillVersion is one upload. Versions are never deleted or overwritten, so a
@@ -7281,14 +7247,12 @@ extend type Mutation {
   snoozeSkill(name: String!, version: Int!): Skill!
     @hasPermission(permission: "user:update:own")
 
-  # unpublishSkill retires a skill: it stops being listed and downloaded, the
-  # name stays claimed, and the version history is kept. The author or an
-  # administrator may do this; the resolver enforces which, because the
-  # directive cannot express "mine or admin".
-  unpublishSkill(name: String!): Skill! @hasPermission(permission: "*")
-
-  # republishSkill undoes that.
-  republishSkill(name: String!): Skill! @hasPermission(permission: "*")
+  # removeSkill deletes a skill outright: every stored bundle, every version,
+  # everyone's record of having downloaded it, and the name, which goes back
+  # into circulation. There is no undo. The author or an administrator may do
+  # this; the resolver enforces which, because the directive cannot express
+  # "mine or admin".
+  removeSkill(name: String!): Skill! @hasPermission(permission: "*")
 
   # transferSkill hands a name to another operator, for when the author
   # leaves or a skill changes maintainer. Administrators only.
@@ -8969,6 +8933,17 @@ func (ec *executionContext) field_Mutation_removeOperationMember_args(ctx contex
 	return args, nil
 }
 
+func (ec *executionContext) field_Mutation_removeSkill_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
+	var err error
+	args := map[string]any{}
+	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "name", ec.unmarshalNString2string)
+	if err != nil {
+		return nil, err
+	}
+	args["name"] = arg0
+	return args, nil
+}
+
 func (ec *executionContext) field_Mutation_reorderWikiDocumentSiblings_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
 	var err error
 	args := map[string]any{}
@@ -8977,17 +8952,6 @@ func (ec *executionContext) field_Mutation_reorderWikiDocumentSiblings_args(ctx 
 		return nil, err
 	}
 	args["input"] = arg0
-	return args, nil
-}
-
-func (ec *executionContext) field_Mutation_republishSkill_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
-	var err error
-	args := map[string]any{}
-	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "name", ec.unmarshalNString2string)
-	if err != nil {
-		return nil, err
-	}
-	args["name"] = arg0
 	return args, nil
 }
 
@@ -9198,17 +9162,6 @@ func (ec *executionContext) field_Mutation_transferSkill_args(ctx context.Contex
 		return nil, err
 	}
 	args["userId"] = arg1
-	return args, nil
-}
-
-func (ec *executionContext) field_Mutation_unpublishSkill_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
-	var err error
-	args := map[string]any{}
-	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "name", ec.unmarshalNString2string)
-	if err != nil {
-		return nil, err
-	}
-	args["name"] = arg0
 	return args, nil
 }
 
@@ -19351,10 +19304,6 @@ func (ec *executionContext) fieldContext_Mutation_snoozeSkill(ctx context.Contex
 				return ec.fieldContext_Skill_snoozedVersion(ctx, field)
 			case "downloadUrl":
 				return ec.fieldContext_Skill_downloadUrl(ctx, field)
-			case "unpublished":
-				return ec.fieldContext_Skill_unpublished(ctx, field)
-			case "canRestore":
-				return ec.fieldContext_Skill_canRestore(ctx, field)
 			}
 			return nil, fmt.Errorf("no field named %q was found under type Skill", field.Name)
 		},
@@ -19373,15 +19322,15 @@ func (ec *executionContext) fieldContext_Mutation_snoozeSkill(ctx context.Contex
 	return fc, nil
 }
 
-func (ec *executionContext) _Mutation_unpublishSkill(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
+func (ec *executionContext) _Mutation_removeSkill(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
 		ec.OperationContext,
 		field,
-		ec.fieldContext_Mutation_unpublishSkill,
+		ec.fieldContext_Mutation_removeSkill,
 		func(ctx context.Context) (any, error) {
 			fc := graphql.GetFieldContext(ctx)
-			return ec.Resolvers.Mutation().UnpublishSkill(ctx, fc.Args["name"].(string))
+			return ec.Resolvers.Mutation().RemoveSkill(ctx, fc.Args["name"].(string))
 		},
 		func(ctx context.Context, next graphql.Resolver) graphql.Resolver {
 			directive0 := next
@@ -19408,7 +19357,7 @@ func (ec *executionContext) _Mutation_unpublishSkill(ctx context.Context, field 
 	)
 }
 
-func (ec *executionContext) fieldContext_Mutation_unpublishSkill(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+func (ec *executionContext) fieldContext_Mutation_removeSkill(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
 	fc = &graphql.FieldContext{
 		Object:     "Mutation",
 		Field:      field,
@@ -19442,10 +19391,6 @@ func (ec *executionContext) fieldContext_Mutation_unpublishSkill(ctx context.Con
 				return ec.fieldContext_Skill_snoozedVersion(ctx, field)
 			case "downloadUrl":
 				return ec.fieldContext_Skill_downloadUrl(ctx, field)
-			case "unpublished":
-				return ec.fieldContext_Skill_unpublished(ctx, field)
-			case "canRestore":
-				return ec.fieldContext_Skill_canRestore(ctx, field)
 			}
 			return nil, fmt.Errorf("no field named %q was found under type Skill", field.Name)
 		},
@@ -19457,98 +19402,7 @@ func (ec *executionContext) fieldContext_Mutation_unpublishSkill(ctx context.Con
 		}
 	}()
 	ctx = graphql.WithFieldContext(ctx, fc)
-	if fc.Args, err = ec.field_Mutation_unpublishSkill_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
-		ec.Error(ctx, err)
-		return fc, err
-	}
-	return fc, nil
-}
-
-func (ec *executionContext) _Mutation_republishSkill(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
-	return graphql.ResolveField(
-		ctx,
-		ec.OperationContext,
-		field,
-		ec.fieldContext_Mutation_republishSkill,
-		func(ctx context.Context) (any, error) {
-			fc := graphql.GetFieldContext(ctx)
-			return ec.Resolvers.Mutation().RepublishSkill(ctx, fc.Args["name"].(string))
-		},
-		func(ctx context.Context, next graphql.Resolver) graphql.Resolver {
-			directive0 := next
-
-			directive1 := func(ctx context.Context) (any, error) {
-				permission, err := ec.unmarshalNString2string(ctx, "*")
-				if err != nil {
-					var zeroVal *model.Skill
-					return zeroVal, err
-				}
-				if ec.Directives.HasPermission == nil {
-					var zeroVal *model.Skill
-					return zeroVal, errors.New("directive hasPermission is not implemented")
-				}
-				return ec.Directives.HasPermission(ctx, nil, directive0, permission)
-			}
-
-			next = directive1
-			return next
-		},
-		ec.marshalNSkill2ᚖgithubᚗcomᚋvibeᚑc2ᚋvibeᚑc2ᚑcoreᚋcoreᚋpkgᚋgraphqlᚋmodelᚐSkill,
-		true,
-		true,
-	)
-}
-
-func (ec *executionContext) fieldContext_Mutation_republishSkill(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
-	fc = &graphql.FieldContext{
-		Object:     "Mutation",
-		Field:      field,
-		IsMethod:   true,
-		IsResolver: true,
-		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
-			switch field.Name {
-			case "id":
-				return ec.fieldContext_Skill_id(ctx, field)
-			case "name":
-				return ec.fieldContext_Skill_name(ctx, field)
-			case "description":
-				return ec.fieldContext_Skill_description(ctx, field)
-			case "ownerUserId":
-				return ec.fieldContext_Skill_ownerUserId(ctx, field)
-			case "ownerUsername":
-				return ec.fieldContext_Skill_ownerUsername(ctx, field)
-			case "currentVersion":
-				return ec.fieldContext_Skill_currentVersion(ctx, field)
-			case "updatedAt":
-				return ec.fieldContext_Skill_updatedAt(ctx, field)
-			case "sizeBytes":
-				return ec.fieldContext_Skill_sizeBytes(ctx, field)
-			case "mine":
-				return ec.fieldContext_Skill_mine(ctx, field)
-			case "downloadedVersion":
-				return ec.fieldContext_Skill_downloadedVersion(ctx, field)
-			case "downloadedAt":
-				return ec.fieldContext_Skill_downloadedAt(ctx, field)
-			case "snoozedVersion":
-				return ec.fieldContext_Skill_snoozedVersion(ctx, field)
-			case "downloadUrl":
-				return ec.fieldContext_Skill_downloadUrl(ctx, field)
-			case "unpublished":
-				return ec.fieldContext_Skill_unpublished(ctx, field)
-			case "canRestore":
-				return ec.fieldContext_Skill_canRestore(ctx, field)
-			}
-			return nil, fmt.Errorf("no field named %q was found under type Skill", field.Name)
-		},
-	}
-	defer func() {
-		if r := recover(); r != nil {
-			err = ec.Recover(ctx, r)
-			ec.Error(ctx, err)
-		}
-	}()
-	ctx = graphql.WithFieldContext(ctx, fc)
-	if fc.Args, err = ec.field_Mutation_republishSkill_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
+	if fc.Args, err = ec.field_Mutation_removeSkill_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
 		ec.Error(ctx, err)
 		return fc, err
 	}
@@ -19624,10 +19478,6 @@ func (ec *executionContext) fieldContext_Mutation_transferSkill(ctx context.Cont
 				return ec.fieldContext_Skill_snoozedVersion(ctx, field)
 			case "downloadUrl":
 				return ec.fieldContext_Skill_downloadUrl(ctx, field)
-			case "unpublished":
-				return ec.fieldContext_Skill_unpublished(ctx, field)
-			case "canRestore":
-				return ec.fieldContext_Skill_canRestore(ctx, field)
 			}
 			return nil, fmt.Errorf("no field named %q was found under type Skill", field.Name)
 		},
@@ -29220,64 +29070,6 @@ func (ec *executionContext) fieldContext_Skill_downloadUrl(_ context.Context, fi
 	return fc, nil
 }
 
-func (ec *executionContext) _Skill_unpublished(ctx context.Context, field graphql.CollectedField, obj *model.Skill) (ret graphql.Marshaler) {
-	return graphql.ResolveField(
-		ctx,
-		ec.OperationContext,
-		field,
-		ec.fieldContext_Skill_unpublished,
-		func(ctx context.Context) (any, error) {
-			return obj.Unpublished, nil
-		},
-		nil,
-		ec.marshalNBoolean2bool,
-		true,
-		true,
-	)
-}
-
-func (ec *executionContext) fieldContext_Skill_unpublished(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
-	fc = &graphql.FieldContext{
-		Object:     "Skill",
-		Field:      field,
-		IsMethod:   false,
-		IsResolver: false,
-		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
-			return nil, errors.New("field of type Boolean does not have child fields")
-		},
-	}
-	return fc, nil
-}
-
-func (ec *executionContext) _Skill_canRestore(ctx context.Context, field graphql.CollectedField, obj *model.Skill) (ret graphql.Marshaler) {
-	return graphql.ResolveField(
-		ctx,
-		ec.OperationContext,
-		field,
-		ec.fieldContext_Skill_canRestore,
-		func(ctx context.Context) (any, error) {
-			return obj.CanRestore, nil
-		},
-		nil,
-		ec.marshalNBoolean2bool,
-		true,
-		true,
-	)
-}
-
-func (ec *executionContext) fieldContext_Skill_canRestore(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
-	fc = &graphql.FieldContext{
-		Object:     "Skill",
-		Field:      field,
-		IsMethod:   false,
-		IsResolver: false,
-		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
-			return nil, errors.New("field of type Boolean does not have child fields")
-		},
-	}
-	return fc, nil
-}
-
 func (ec *executionContext) _SkillChangelog_currentVersion(ctx context.Context, field graphql.CollectedField, obj *model.SkillChangelog) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
@@ -29394,10 +29186,6 @@ func (ec *executionContext) fieldContext_SkillRegistry_skills(_ context.Context,
 				return ec.fieldContext_Skill_snoozedVersion(ctx, field)
 			case "downloadUrl":
 				return ec.fieldContext_Skill_downloadUrl(ctx, field)
-			case "unpublished":
-				return ec.fieldContext_Skill_unpublished(ctx, field)
-			case "canRestore":
-				return ec.fieldContext_Skill_canRestore(ctx, field)
 			}
 			return nil, fmt.Errorf("no field named %q was found under type Skill", field.Name)
 		},
@@ -43519,16 +43307,9 @@ func (ec *executionContext) _Mutation(ctx context.Context, sel ast.SelectionSet)
 			if out.Values[i] == graphql.Null {
 				out.Invalids++
 			}
-		case "unpublishSkill":
+		case "removeSkill":
 			out.Values[i] = ec.OperationContext.RootResolverMiddleware(innerCtx, func(ctx context.Context) (res graphql.Marshaler) {
-				return ec._Mutation_unpublishSkill(ctx, field)
-			})
-			if out.Values[i] == graphql.Null {
-				out.Invalids++
-			}
-		case "republishSkill":
-			out.Values[i] = ec.OperationContext.RootResolverMiddleware(innerCtx, func(ctx context.Context) (res graphql.Marshaler) {
-				return ec._Mutation_republishSkill(ctx, field)
+				return ec._Mutation_removeSkill(ctx, field)
 			})
 			if out.Values[i] == graphql.Null {
 				out.Invalids++
@@ -46285,16 +46066,6 @@ func (ec *executionContext) _Skill(ctx context.Context, sel ast.SelectionSet, ob
 			out.Values[i] = ec._Skill_snoozedVersion(ctx, field, obj)
 		case "downloadUrl":
 			out.Values[i] = ec._Skill_downloadUrl(ctx, field, obj)
-			if out.Values[i] == graphql.Null {
-				out.Invalids++
-			}
-		case "unpublished":
-			out.Values[i] = ec._Skill_unpublished(ctx, field, obj)
-			if out.Values[i] == graphql.Null {
-				out.Invalids++
-			}
-		case "canRestore":
-			out.Values[i] = ec._Skill_canRestore(ctx, field, obj)
 			if out.Values[i] == graphql.Null {
 				out.Invalids++
 			}

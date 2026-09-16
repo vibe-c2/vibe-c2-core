@@ -32,10 +32,8 @@ type ISkillRepository interface {
 	Create(ctx context.Context, skill *models.Skill) error
 	FindByName(ctx context.Context, name string) (models.Skill, error)
 	FindByID(ctx context.Context, id uuid.UUID) (models.Skill, error)
-	// List returns every published skill, newest upload first. Unpublished
-	// ones are excluded unless includeRetired is set, which only the admin
-	// surfaces ask for.
-	List(ctx context.Context, includeRetired bool) ([]models.Skill, error)
+	// List returns every skill, newest upload first.
+	List(ctx context.Context) ([]models.Skill, error)
 
 	// ReserveNextVersion atomically increments the counter and returns the
 	// number the caller now owns. Two concurrent publishes of the same skill
@@ -55,8 +53,9 @@ type ISkillRepository interface {
 	// FinishPublish records the metadata that mirrors the new current version
 	// onto the skill row, and refreshes what the publisher supplied.
 	FinishPublish(ctx context.Context, skillID uuid.UUID, in FinishPublishInput) error
-	// SetUnpublished retires or restores a skill.
-	SetUnpublished(ctx context.Context, skillID uuid.UUID, at *time.Time, by *uuid.UUID) error
+	// Delete removes a skill and every version row it owns. The bundles are
+	// the caller's to clean up first: this is the point of no return.
+	Delete(ctx context.Context, skillID uuid.UUID) error
 	// Transfer moves ownership of a name to another operator.
 	Transfer(ctx context.Context, skillID uuid.UUID, ownerID uuid.UUID, ownerUsername string) error
 
@@ -115,16 +114,12 @@ func (r *skillRepository) FindByID(ctx context.Context, id uuid.UUID) (models.Sk
 	return skill, err
 }
 
-func (r *skillRepository) List(ctx context.Context, includeRetired bool) ([]models.Skill, error) {
+func (r *skillRepository) List(ctx context.Context) ([]models.Skill, error) {
 	// A row with no versions is a claim whose upload never completed. It is
 	// not a skill yet — nothing can be downloaded from it — so it stays out
 	// of every listing rather than showing as an empty shell.
-	filter := bson.M{"current_version": bson.M{"$gte": 1}}
-	if !includeRetired {
-		filter["unpublished_at"] = bson.M{"$exists": false}
-	}
 	var out []models.Skill
-	err := r.coll.Find(ctx, filter).Sort("-uploaded_at").All(&out)
+	err := r.coll.Find(ctx, bson.M{"current_version": bson.M{"$gte": 1}}).Sort("-uploaded_at").All(&out)
 	return out, err
 }
 
@@ -172,17 +167,13 @@ func (r *skillRepository) FinishPublish(ctx context.Context, skillID uuid.UUID, 
 	)
 }
 
-func (r *skillRepository) SetUnpublished(ctx context.Context, skillID uuid.UUID, at *time.Time, by *uuid.UUID) error {
-	if at == nil {
-		return r.coll.UpdateOne(ctx,
-			bson.M{"skill_id": skillID},
-			bson.M{"$unset": bson.M{"unpublished_at": "", "unpublished_by": ""}},
-		)
+func (r *skillRepository) Delete(ctx context.Context, skillID uuid.UUID) error {
+	// Versions first: a skill row without its versions is recoverable by
+	// deleting it again, whereas orphaned version rows are invisible.
+	if _, err := r.versions.RemoveAll(ctx, bson.M{"skill_id": skillID}); err != nil {
+		return err
 	}
-	return r.coll.UpdateOne(ctx,
-		bson.M{"skill_id": skillID},
-		bson.M{"$set": bson.M{"unpublished_at": *at, "unpublished_by": by}},
-	)
+	return r.coll.Remove(ctx, bson.M{"skill_id": skillID})
 }
 
 func (r *skillRepository) Transfer(ctx context.Context, skillID uuid.UUID, ownerID uuid.UUID, ownerUsername string) error {

@@ -10,7 +10,7 @@ import { SkillsToolbar } from "@/components/skills/skills-toolbar"
 import { SkillsTable } from "@/components/skills/skills-table"
 import { PublishSkillDialog } from "@/components/skills/publish-skill-dialog"
 import { SkillVersionsDialog } from "@/components/skills/skill-versions-dialog"
-import { RetireSkillDialog } from "@/components/skills/retire-skill-dialog"
+import { RemoveSkillDialog } from "@/components/skills/remove-skill-dialog"
 import {
   buildSkillRows,
   filterSkillRows,
@@ -42,7 +42,7 @@ export function SkillsPage() {
   const setPublishDialogOpen = useSkillStore((s) => s.setPublishDialogOpen)
 
   // The wildcard role, the same check the wiki trash panel makes. An admin can
-  // retire any skill; an author can retire their own.
+  // remove any skill; an author can remove their own.
   const isAdmin = useAuthStore(
     (state) => state.user?.roles.includes("admin") ?? false,
   )
@@ -79,7 +79,7 @@ export function SkillsPage() {
         maxUploadBytes={registry?.skillRegistry.maxUploadBytes ?? 0}
       />
       <SkillVersionsDialog />
-      <RetireSkillDialog />
+      <RemoveSkillDialog />
     </div>
   )
 }

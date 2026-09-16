@@ -36,13 +36,6 @@ type Skill {
   snoozedVersion: Int
   # Where to fetch the current bundle.
   downloadUrl: String!
-  # True when the skill is retired: unlisted and not handed out, with its
-  # name and version history kept. Only ever true for a viewer who can
-  # restore it, since a retired skill is hidden from everyone else.
-  unpublished: Boolean!
-  # True when this viewer may bring it back. Whoever retired it, or an
-  # administrator, so an author cannot quietly undo a takedown.
-  canRestore: Boolean!
 }
 
 # SkillVersion is one upload. Versions are never deleted or overwritten, so a
@@ -78,14 +71,12 @@ extend type Mutation {
   snoozeSkill(name: String!, version: Int!): Skill!
     @hasPermission(permission: "user:update:own")
 
-  # unpublishSkill retires a skill: it stops being listed and downloaded, the
-  # name stays claimed, and the version history is kept. The author or an
-  # administrator may do this; the resolver enforces which, because the
-  # directive cannot express "mine or admin".
-  unpublishSkill(name: String!): Skill! @hasPermission(permission: "*")
-
-  # republishSkill undoes that.
-  republishSkill(name: String!): Skill! @hasPermission(permission: "*")
+  # removeSkill deletes a skill outright: every stored bundle, every version,
+  # everyone's record of having downloaded it, and the name, which goes back
+  # into circulation. There is no undo. The author or an administrator may do
+  # this; the resolver enforces which, because the directive cannot express
+  # "mine or admin".
+  removeSkill(name: String!): Skill! @hasPermission(permission: "*")
 
   # transferSkill hands a name to another operator, for when the author
   # leaves or a skill changes maintainer. Administrators only.

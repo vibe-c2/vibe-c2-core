@@ -18,8 +18,8 @@ import (
 // The name is claimed by whoever publishes it first. Only OwnerUserID may
 // publish a new version of it, which is the whole trust model: an operator who
 // installed "recon-sweep" once knows that every later version of that name
-// came from the same person. An admin can reassign or retire a name, for
-// takedowns and for when someone leaves.
+// came from the same person. The owner or an admin can remove a skill
+// outright, which deletes its versions and bundles and frees the name.
 //
 // Deliberately not operation-scoped. A working method is not engagement data.
 type Skill struct {
@@ -39,15 +39,7 @@ type Skill struct {
 	// SizeBytes and UploadedAt mirror the current version, for listings.
 	SizeBytes  int64     `bson:"size_bytes" json:"sizeBytes"`
 	UploadedAt time.Time `bson:"uploaded_at" json:"uploadedAt"`
-	// UnpublishedAt retires the skill without destroying history: it stops
-	// being listed or downloaded, the name stays claimed, and the version rows
-	// and blobs remain for anyone auditing what was once distributed.
-	UnpublishedAt *time.Time `bson:"unpublished_at,omitempty" json:"unpublishedAt,omitempty"`
-	UnpublishedBy *uuid.UUID `bson:"unpublished_by,omitempty" json:"unpublishedBy,omitempty"`
 }
-
-// IsUnpublished reports whether the skill has been retired.
-func (s Skill) IsUnpublished() bool { return s.UnpublishedAt != nil }
 
 // SkillVersion is one upload. Rows are written once and never updated: they
 // are the record of what was distributed under a name at a point in time.

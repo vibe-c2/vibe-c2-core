@@ -21,7 +21,7 @@ type ISkillResolver interface {
 	Registry(ctx context.Context) (*model.SkillRegistry, error)
 	Versions(ctx context.Context, name string) ([]*model.SkillVersion, error)
 	Snooze(ctx context.Context, name string, version int) (*model.Skill, error)
-	SetUnpublished(ctx context.Context, name string, unpublished bool) (*model.Skill, error)
+	Remove(ctx context.Context, name string) (*model.Skill, error)
 	Transfer(ctx context.Context, name string, userID string) (*model.Skill, error)
 }
 
@@ -51,8 +51,7 @@ func (r *skillResolver) Registry(ctx context.Context) (*model.SkillRegistry, err
 		return nil, err
 	}
 
-	isAdmin := callerIsAdmin(ctx)
-	published, err := r.svc.ListFor(ctx, viewer, isAdmin)
+	published, err := r.svc.List(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -64,7 +63,7 @@ func (r *skillResolver) Registry(ctx context.Context) (*model.SkillRegistry, err
 	out := make([]*model.Skill, 0, len(published))
 	for _, skill := range published {
 		sub, hasSub := subscriptions[skill.SkillID]
-		out = append(out, toSkillModel(skill, viewer, sub, hasSub, isAdmin))
+		out = append(out, toSkillModel(skill, viewer, sub, hasSub))
 	}
 
 	return &model.SkillRegistry{
@@ -119,52 +118,21 @@ func (r *skillResolver) Snooze(ctx context.Context, name string, version int) (*
 	return r.reload(ctx, skill.Name, viewer)
 }
 
-// SetUnpublished retires or restores a skill. The author or an administrator
-// may do it; the schema directive can only check that somebody is signed in,
-// so the "mine or admin" half is enforced here.
-func (r *skillResolver) SetUnpublished(ctx context.Context, name string, unpublished bool) (*model.Skill, error) {
+// Remove deletes a skill and everything it owns. The owner or an
+// administrator; the service enforces which.
+func (r *skillResolver) Remove(ctx context.Context, name string) (*model.Skill, error) {
 	viewer, err := callerID(ctx)
 	if err != nil {
 		return nil, err
 	}
-	// A retired skill is invisible to Lookup, so restoring one has to read
-	// through the repository rather than the service.
-	normalized, err := skills.NormalizeName(name)
-	if err != nil {
-		return nil, fmt.Errorf("there is no skill called %q", name)
-	}
-	skill, err := r.repo.FindByName(ctx, normalized)
-	if err != nil {
-		return nil, fmt.Errorf("there is no skill called %q", normalized)
-	}
 	isAdmin := callerIsAdmin(ctx)
-	if unpublished {
-		// Retiring is the owner's call, or an administrator's.
-		if skill.OwnerUserID != viewer && !isAdmin {
-			return nil, fmt.Errorf("%q belongs to %s", skill.Name, skill.OwnerUsername)
-		}
-	} else if !skills.CanRestore(skill, viewer, isAdmin) {
-		// Restoring is for whoever retired it, so an author cannot quietly
-		// undo an administrator's takedown.
-		return nil, fmt.Errorf("%q was retired by an administrator; only an administrator can restore it", skill.Name)
-	}
-
-	var at *time.Time
-	var by *uuid.UUID
-	if unpublished {
-		now := time.Now().UTC()
-		at, by = &now, &viewer
-	}
-	if err := r.repo.SetUnpublished(ctx, skill.SkillID, at, by); err != nil {
-		return nil, fmt.Errorf("failed to update %q: %w", skill.Name, err)
-	}
-
-	updated, err := r.repo.FindByName(ctx, normalized)
+	removed, err := r.svc.Remove(ctx, name, viewer, isAdmin)
 	if err != nil {
-		return nil, fmt.Errorf("failed to re-read %q: %w", normalized, err)
+		return nil, err
 	}
-	sub, hasSub := r.subscription(ctx, viewer, updated.SkillID)
-	return toSkillModel(updated, viewer, sub, hasSub, isAdmin), nil
+	// Returned so the caller can confirm what went, by name and id. There is
+	// no subscription left to decorate it with.
+	return toSkillModel(removed, viewer, models.SkillSubscription{}, false), nil
 }
 
 // Transfer hands a claimed name to another operator.
@@ -197,7 +165,7 @@ func (r *skillResolver) reload(ctx context.Context, name string, viewer uuid.UUI
 		return nil, err
 	}
 	sub, hasSub := r.subscription(ctx, viewer, skill.SkillID)
-	return toSkillModel(skill, viewer, sub, hasSub, callerIsAdmin(ctx)), nil
+	return toSkillModel(skill, viewer, sub, hasSub), nil
 }
 
 // subscription reads one row, treating a missing one as "never downloaded"
@@ -210,7 +178,7 @@ func (r *skillResolver) subscription(ctx context.Context, viewer, skillID uuid.U
 	return sub, true
 }
 
-func toSkillModel(skill models.Skill, viewer uuid.UUID, sub models.SkillSubscription, hasSub bool, isAdmin bool) *model.Skill {
+func toSkillModel(skill models.Skill, viewer uuid.UUID, sub models.SkillSubscription, hasSub bool) *model.Skill {
 	out := &model.Skill{
 		ID:             skill.SkillID.String(),
 		Name:           skill.Name,
@@ -222,8 +190,6 @@ func toSkillModel(skill models.Skill, viewer uuid.UUID, sub models.SkillSubscrip
 		SizeBytes:      int(skill.SizeBytes),
 		Mine:           skill.OwnerUserID == viewer,
 		DownloadURL:    "/api/v1/skills/" + skill.Name + "/download",
-		Unpublished:    skill.IsUnpublished(),
-		CanRestore:     skill.IsUnpublished() && skills.CanRestore(skill, viewer, isAdmin),
 	}
 	if hasSub && sub.DownloadedVersion > 0 {
 		downloaded := sub.DownloadedVersion
