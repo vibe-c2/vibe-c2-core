@@ -11,6 +11,7 @@ import { EnrollPage } from "@/pages/enroll"
 import { OperationsPage } from "@/pages/operations"
 import { UsersPage } from "@/pages/users"
 import { ModulesPage } from "@/pages/modules"
+import { SkillsPage } from "@/pages/skills"
 import { WikiPage } from "@/pages/wiki"
 import { WikiPrintPage } from "@/pages/wiki-print"
 import { FindingsPage } from "@/pages/findings"
@@ -58,6 +59,7 @@ function App() {
               <Route path="operations" element={<OperationsPage />} />
               <Route path="users" element={<UsersPage />} />
               <Route path="modules" element={<ModulesPage />} />
+              <Route path="skills" element={<SkillsPage />} />
               <Route path="wiki" element={<WikiPage />} />
               <Route path="wiki/:documentId" element={<WikiPage />} />
               <Route path="findings" element={<FindingsPage />} />

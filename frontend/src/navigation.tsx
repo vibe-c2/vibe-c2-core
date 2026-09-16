@@ -3,6 +3,7 @@ import {
   BookOpenIcon,
   FileCode2Icon,
   KanbanSquareIcon,
+  PackageIcon,
   RouteIcon,
   GemIcon,
   SwordsIcon,
@@ -35,6 +36,12 @@ export const navigationGlobalItems: NavigationItem[] = [
     url: "/findings",
     permission: null,
     icon: GemIcon,
+  },
+  {
+    title: "Skills",
+    url: "/skills",
+    permission: null,
+    icon: PackageIcon,
   },
 ];
 

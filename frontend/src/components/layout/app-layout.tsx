@@ -17,6 +17,7 @@ import { ReopenTaskDialog } from "@/components/tasks/reopen-task-dialog"
 import { WikiCommandPalette } from "@/components/wiki/wiki-command-palette"
 import { TaskPickerDialog } from "@/components/tasks/task-picker-dialog"
 import { SkillUpdateDialog } from "@/components/keys/skill-update-dialog"
+import { CommunitySkillUpdateDialog } from "@/components/skills/community-skill-update-dialog"
 
 export function AppLayout() {
   const sidebarOpen = useAppStore((s) => s.sidebarOpen)
@@ -90,6 +91,7 @@ export function AppLayout() {
             on any authed surface on first load; silent for anyone who never
             downloaded the skill. */}
         <SkillUpdateDialog />
+      <CommunitySkillUpdateDialog />
       </SidebarProvider>
     </TooltipProvider>
   )
