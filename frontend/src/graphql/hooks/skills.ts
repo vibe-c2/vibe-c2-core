@@ -1,11 +1,13 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { graphqlClient } from "@/lib/graphql-client"
+import { useSubscription } from "@/hooks/use-subscription"
 import type { SkillRegistryQuery as SkillRegistryQueryResult } from "@/graphql/gql/graphql"
 import {
   SkillRegistryDocument,
   SkillVersionsDocument,
   SnoozeSkillDocument,
   RemoveSkillDocument,
+  SkillChangedDocument,
 } from "@/graphql/gql/graphql"
 
 export const communitySkillKeys = {
@@ -13,6 +15,23 @@ export const communitySkillKeys = {
   registry: () => [...communitySkillKeys.all, "registry"] as const,
   versions: (name: string) =>
     [...communitySkillKeys.all, "versions", name] as const,
+}
+
+/**
+ * Keeps the listing current while the page is open.
+ *
+ * Skills arrive from outside this browser: an agent publishing on its owner's
+ * behalf, or another operator. Without this the page only changed on reload,
+ * which is how an agent could upload a skill and leave no visible trace.
+ */
+export function useSkillChangedSubscription() {
+  const queryClient = useQueryClient()
+
+  useSubscription(SkillChangedDocument, undefined, {
+    onData: () => {
+      queryClient.invalidateQueries({ queryKey: communitySkillKeys.all })
+    },
+  })
 }
 
 export function useSkillRegistry() {

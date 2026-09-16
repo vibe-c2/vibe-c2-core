@@ -345,6 +345,23 @@ func NewTaskHardDeletedEvent(actor Actor, p TaskEventPayload) Event {
 
 // --- Module lifecycle event payloads ---
 
+// SkillEventPayload is the payload for the community skill registry topics.
+// Primitives only, like the other payloads; subscribers refetch the listing.
+type SkillEventPayload struct {
+	SkillID string
+	Name    string
+	// Version is the one just published, or zero for a removal.
+	Version int
+}
+
+func NewSkillPublishedEvent(actor Actor, p SkillEventPayload) Event {
+	return NewEvent(TopicSkillPublished, actor, p)
+}
+
+func NewSkillRemovedEvent(actor Actor, p SkillEventPayload) Event {
+	return NewEvent(TopicSkillRemoved, actor, p)
+}
+
 // ModuleEventPayload is the payload for every module lifecycle topic. Carries
 // primitives only (no models import); subscribers refetch the full row via the
 // module registry repository. Status reflects the row state *after* the

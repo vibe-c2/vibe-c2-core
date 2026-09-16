@@ -432,6 +432,32 @@ func toHostEvent(event eventbus.Event) *model.HostEvent {
 	return evt
 }
 
+// skillTopics is the list of community skill registry topics for the
+// skillChanged subscription.
+var skillTopics = []eventbus.Topic{
+	eventbus.TopicSkillPublished,
+	eventbus.TopicSkillRemoved,
+}
+
+// toSkillEvent converts an event bus Event to a GraphQL SkillEvent. A new
+// version of an existing skill is an update; a first publish is a creation.
+// The client refetches either way, so action is advisory.
+func toSkillEvent(event eventbus.Event) *model.SkillEvent {
+	action := model.EventActionCreated
+	if event.Topic == eventbus.TopicSkillRemoved {
+		action = model.EventActionDeleted
+	}
+	evt := &model.SkillEvent{Action: action}
+	if p, ok := event.Payload.(eventbus.SkillEventPayload); ok {
+		evt.SkillID = p.SkillID
+		evt.Name = p.Name
+		if event.Topic == eventbus.TopicSkillPublished && p.Version > 1 {
+			evt.Action = model.EventActionUpdated
+		}
+	}
+	return evt
+}
+
 // moduleTopics is the list of module lifecycle event bus topics for the admin
 // moduleChanged subscription.
 var moduleTopics = []eventbus.Topic{

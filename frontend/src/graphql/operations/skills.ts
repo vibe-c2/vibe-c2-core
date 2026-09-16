@@ -61,3 +61,16 @@ export const RemoveSkillMutation = graphql(`
     }
   }
 `)
+
+// Real-time registry changes: a skill published, a new version, a removal.
+// The payload is thin on purpose; the page refetches, because the part that
+// differs per viewer is whether they hold the current version.
+export const SkillChangedSubscription = graphql(`
+  subscription SkillChanged {
+    skillChanged {
+      action
+      skillId
+      name
+    }
+  }
+`)

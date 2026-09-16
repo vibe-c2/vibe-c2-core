@@ -7,7 +7,10 @@ package resolver
 
 import (
 	"context"
+	"fmt"
 
+	"github.com/vibe-c2/vibe-c2-core/core/pkg/eventbus"
+	"github.com/vibe-c2/vibe-c2-core/core/pkg/graphql/gqlctx"
 	"github.com/vibe-c2/vibe-c2-core/core/pkg/graphql/model"
 )
 
@@ -34,4 +37,38 @@ func (r *queryResolver) SkillRegistry(ctx context.Context) (*model.SkillRegistry
 // SkillVersions is the resolver for the skillVersions field.
 func (r *queryResolver) SkillVersions(ctx context.Context, name string) ([]*model.SkillVersion, error) {
 	return r.SkillResolver.Versions(ctx, name)
+}
+
+// SkillChanged is the resolver for the skillChanged field.
+//
+// Instance-wide, like the registry: a skill is a shared working method, not
+// operation data, so there is no membership filter and authorization is the
+// @hasPermission directive. Clients refetch the listing on every event
+// because the interesting per-viewer part, whether they have the current
+// version, is not in the payload.
+func (r *subscriptionResolver) SkillChanged(ctx context.Context) (<-chan *model.SkillEvent, error) {
+	auth := gqlctx.AuthFromContext(ctx)
+	if auth.UserID == "" {
+		return nil, fmt.Errorf("unauthorized")
+	}
+
+	ch := make(chan *model.SkillEvent, 1)
+
+	unsubscribe := r.EventBus.Subscribe(
+		skillTopics,
+		func(_ context.Context, event eventbus.Event) {
+			select {
+			case ch <- toSkillEvent(event):
+			case <-ctx.Done():
+			}
+		},
+	)
+
+	go func() {
+		<-ctx.Done()
+		unsubscribe()
+		close(ch)
+	}()
+
+	return ch, nil
 }

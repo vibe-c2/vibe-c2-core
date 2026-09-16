@@ -359,6 +359,12 @@ type SkillChangelog struct {
 	Releases       []*SkillRelease `json:"releases"`
 }
 
+type SkillEvent struct {
+	Action  EventAction `json:"action"`
+	SkillID string      `json:"skillId"`
+	Name    string      `json:"name"`
+}
+
 type SkillRegistry struct {
 	Skills         []*Skill `json:"skills"`
 	MaxUploadBytes int      `json:"maxUploadBytes"`

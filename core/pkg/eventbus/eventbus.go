@@ -93,6 +93,12 @@ const (
 	// real-time Modules admin page; subscribers refetch the changed row via
 	// the module registry repository. "registered" covers both first
 	// registration and revival of a previously dead/deregistered instance.
+	// Community skill registry. Not operation-scoped: a skill is a working
+	// method shared across the instance, so every signed-in operator sees
+	// these.
+	TopicSkillPublished Topic = "skill.published"
+	TopicSkillRemoved   Topic = "skill.removed"
+
 	TopicModuleRegistered   Topic = "module.registered"
 	TopicModuleDeregistered Topic = "module.deregistered"
 	TopicModuleDead         Topic = "module.dead"

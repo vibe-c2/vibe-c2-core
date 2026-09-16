@@ -109,6 +109,7 @@ type Documents = {
     "\n  query SkillVersions($name: String!) {\n    skillVersions(name: $name) {\n      version\n      uploadedAt\n      uploadedByUsername\n      sizeBytes\n      notes\n      viaAgent\n    }\n  }\n": typeof types.SkillVersionsDocument,
     "\n  mutation SnoozeSkill($name: String!, $version: Int!) {\n    snoozeSkill(name: $name, version: $version) {\n      id\n      snoozedVersion\n    }\n  }\n": typeof types.SnoozeSkillDocument,
     "\n  mutation RemoveSkill($name: String!) {\n    removeSkill(name: $name) {\n      id\n      name\n    }\n  }\n": typeof types.RemoveSkillDocument,
+    "\n  subscription SkillChanged {\n    skillChanged {\n      action\n      skillId\n      name\n    }\n  }\n": typeof types.SkillChangedDocument,
     "\n  fragment TaskFields on Task {\n    id\n    operationId\n    name\n    description\n    riskScore\n    riskDescription\n    profitScore\n    profitDescription\n    stage\n    status\n    summary\n    assignees {\n      id\n      username\n    }\n    wikiReferences {\n      id\n      title\n      emoji\n    }\n    credentialReferences {\n      id\n      name\n      type\n    }\n    createdBy {\n      id\n      username\n    }\n    lastUpdatedBy {\n      id\n      username\n    }\n    lastUpdatedAt\n    deletedAt\n    doneAt\n    createdAt\n    updatedAt\n  }\n": typeof types.TaskFieldsFragmentDoc,
     "\n  fragment TaskBacklinkFields on Task {\n    id\n    operationId\n    name\n    stage\n    status\n    riskScore\n    profitScore\n    assignees {\n      id\n      username\n    }\n  }\n": typeof types.TaskBacklinkFieldsFragmentDoc,
     "\n  query Task($id: ID!) {\n    task(id: $id) {\n      ...TaskFields\n    }\n  }\n": typeof types.TaskDocument,
@@ -284,6 +285,7 @@ const documents: Documents = {
     "\n  query SkillVersions($name: String!) {\n    skillVersions(name: $name) {\n      version\n      uploadedAt\n      uploadedByUsername\n      sizeBytes\n      notes\n      viaAgent\n    }\n  }\n": types.SkillVersionsDocument,
     "\n  mutation SnoozeSkill($name: String!, $version: Int!) {\n    snoozeSkill(name: $name, version: $version) {\n      id\n      snoozedVersion\n    }\n  }\n": types.SnoozeSkillDocument,
     "\n  mutation RemoveSkill($name: String!) {\n    removeSkill(name: $name) {\n      id\n      name\n    }\n  }\n": types.RemoveSkillDocument,
+    "\n  subscription SkillChanged {\n    skillChanged {\n      action\n      skillId\n      name\n    }\n  }\n": types.SkillChangedDocument,
     "\n  fragment TaskFields on Task {\n    id\n    operationId\n    name\n    description\n    riskScore\n    riskDescription\n    profitScore\n    profitDescription\n    stage\n    status\n    summary\n    assignees {\n      id\n      username\n    }\n    wikiReferences {\n      id\n      title\n      emoji\n    }\n    credentialReferences {\n      id\n      name\n      type\n    }\n    createdBy {\n      id\n      username\n    }\n    lastUpdatedBy {\n      id\n      username\n    }\n    lastUpdatedAt\n    deletedAt\n    doneAt\n    createdAt\n    updatedAt\n  }\n": types.TaskFieldsFragmentDoc,
     "\n  fragment TaskBacklinkFields on Task {\n    id\n    operationId\n    name\n    stage\n    status\n    riskScore\n    profitScore\n    assignees {\n      id\n      username\n    }\n  }\n": types.TaskBacklinkFieldsFragmentDoc,
     "\n  query Task($id: ID!) {\n    task(id: $id) {\n      ...TaskFields\n    }\n  }\n": types.TaskDocument,
@@ -758,6 +760,10 @@ export function graphql(source: "\n  mutation SnoozeSkill($name: String!, $versi
  * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
  */
 export function graphql(source: "\n  mutation RemoveSkill($name: String!) {\n    removeSkill(name: $name) {\n      id\n      name\n    }\n  }\n"): (typeof documents)["\n  mutation RemoveSkill($name: String!) {\n    removeSkill(name: $name) {\n      id\n      name\n    }\n  }\n"];
+/**
+ * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
+ */
+export function graphql(source: "\n  subscription SkillChanged {\n    skillChanged {\n      action\n      skillId\n      name\n    }\n  }\n"): (typeof documents)["\n  subscription SkillChanged {\n    skillChanged {\n      action\n      skillId\n      name\n    }\n  }\n"];
 /**
  * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
  */

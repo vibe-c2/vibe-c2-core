@@ -115,7 +115,7 @@ func (s *Server) PublishSkillHandler() gin.HandlerFunc {
 						Checksum:    published.Version.Checksum,
 						DownloadURL: skillDownloadPath + "?name=" + published.Skill.Name,
 						Note: "Everyone on this server can download it, and it is attributed to you. " +
-							"Earlier versions stay downloadable.",
+							"Publishing never overwrites an earlier version; its owner can remove the whole skill.",
 					},
 					Summary: verb + " the skill " + published.Skill.Name,
 				}, nil

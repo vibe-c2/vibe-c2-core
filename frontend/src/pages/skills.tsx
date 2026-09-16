@@ -2,7 +2,10 @@ import { useMemo } from "react"
 import { PackageIcon } from "lucide-react"
 import { useMe } from "@/graphql/hooks/users"
 import { useSkillChangelog } from "@/graphql/hooks/skill"
-import { useSkillRegistry } from "@/graphql/hooks/skills"
+import {
+  useSkillChangedSubscription,
+  useSkillRegistry,
+} from "@/graphql/hooks/skills"
 import { useSkillStore } from "@/stores/skills"
 import { useAuthStore } from "@/stores/auth"
 import { usePageMetadata } from "@/hooks/use-page-metadata"
@@ -32,6 +35,10 @@ export function SkillsPage() {
     title: "Skills",
     icon: { kind: "lucide", component: PackageIcon },
   })
+
+  // A skill can appear or vanish without anyone touching this browser: an
+  // agent publishing under its owner's key, or another operator.
+  useSkillChangedSubscription()
 
   const search = useSkillStore((s) => s.search)
   const originFilter = useSkillStore((s) => s.originFilter)

@@ -15,6 +15,7 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/vibe-c2/vibe-c2-core/core/pkg/blob"
+	"github.com/vibe-c2/vibe-c2-core/core/pkg/eventbus"
 	"github.com/vibe-c2/vibe-c2-core/core/pkg/models"
 	"github.com/vibe-c2/vibe-c2-core/core/pkg/repository"
 )
@@ -800,4 +801,97 @@ func (f *fakeSubs) Find(context.Context, uuid.UUID, uuid.UUID) (models.SkillSubs
 func (f *fakeSubs) DeleteBySkill(_ context.Context, skillID uuid.UUID) error {
 	f.clearedFor = skillID
 	return nil
+}
+
+// --- announcing changes -----------------------------------------------------
+//
+// The registry changes from outside any one browser: an agent publishing under
+// its owner's key, or another operator removing something. Open pages find out
+// through these events, so a missing one looks exactly like the bug that
+// prompted them — the page only updating on reload.
+
+type fakeBus struct{ published []eventbus.Event }
+
+func (f *fakeBus) Publish(event eventbus.Event) { f.published = append(f.published, event) }
+func (f *fakeBus) Subscribe([]eventbus.Topic, eventbus.Handler, ...eventbus.Filter) func() {
+	return func() {}
+}
+func (f *fakeBus) Start()               {}
+func (f *fakeBus) Stop(context.Context) {}
+
+func (f *fakeBus) topics() []eventbus.Topic {
+	out := make([]eventbus.Topic, 0, len(f.published))
+	for _, e := range f.published {
+		out = append(out, e.Topic)
+	}
+	return out
+}
+
+func TestPublish_AnnouncesTheChange(t *testing.T) {
+	repo, store, bus := newFakeRepo(), newFakeStore(), &fakeBus{}
+	svc := NewService(repo, &fakeSubs{}, store, 1<<20, zap.NewNop()).WithEventBus(bus)
+	owner := uuid.New()
+
+	if _, err := svc.Publish(context.Background(), publishInput("recon-sweep", owner, "alice", zipBytes(t))); err != nil {
+		t.Fatal(err)
+	}
+
+	if len(bus.published) != 1 || bus.published[0].Topic != eventbus.TopicSkillPublished {
+		t.Fatalf("expected one publish event, got %v", bus.topics())
+	}
+	payload, ok := bus.published[0].Payload.(eventbus.SkillEventPayload)
+	if !ok {
+		t.Fatalf("unexpected payload %T", bus.published[0].Payload)
+	}
+	if payload.Name != "recon-sweep" || payload.Version != 1 {
+		t.Fatalf("payload = %+v", payload)
+	}
+}
+
+func TestPublish_AttributesAnAgentUploadToItsOwner(t *testing.T) {
+	repo, store, bus := newFakeRepo(), newFakeStore(), &fakeBus{}
+	svc := NewService(repo, &fakeSubs{}, store, 1<<20, zap.NewNop()).WithEventBus(bus)
+	owner, key := uuid.New(), uuid.New()
+
+	in := publishInput("recon-sweep", owner, "alice", zipBytes(t))
+	in.ViaAgentKeyID = &key
+	if _, err := svc.Publish(context.Background(), in); err != nil {
+		t.Fatal(err)
+	}
+
+	actor := bus.published[0].Actor
+	if actor.Type != eventbus.ActorAgent {
+		t.Errorf("actor type = %q, want agent", actor.Type)
+	}
+	if actor.OnBehalfOf != owner.String() {
+		t.Errorf("an agent's event must stay linked to its owner, got %q", actor.OnBehalfOf)
+	}
+}
+
+func TestRemove_AnnouncesTheChange(t *testing.T) {
+	repo, store, bus := newFakeRepo(), newFakeStore(), &fakeBus{}
+	svc := NewService(repo, &fakeSubs{}, store, 1<<20, zap.NewNop()).WithEventBus(bus)
+	ctx := context.Background()
+	owner := uuid.New()
+
+	if _, err := svc.Publish(ctx, publishInput("recon-sweep", owner, "alice", zipBytes(t))); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := svc.Remove(ctx, "recon-sweep", owner, false); err != nil {
+		t.Fatal(err)
+	}
+
+	want := []eventbus.Topic{eventbus.TopicSkillPublished, eventbus.TopicSkillRemoved}
+	got := bus.topics()
+	if len(got) != len(want) || got[0] != want[0] || got[1] != want[1] {
+		t.Fatalf("topics = %v, want %v", got, want)
+	}
+}
+
+// A registry with no bus attached still works; nobody is simply told.
+func TestService_WorksWithoutAnEventBus(t *testing.T) {
+	svc := NewService(newFakeRepo(), &fakeSubs{}, newFakeStore(), 1<<20, zap.NewNop())
+	if _, err := svc.Publish(context.Background(), publishInput("recon-sweep", uuid.New(), "alice", zipBytes(t))); err != nil {
+		t.Fatalf("publishing without a bus should work, got %v", err)
+	}
 }

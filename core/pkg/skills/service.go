@@ -16,6 +16,7 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/vibe-c2/vibe-c2-core/core/pkg/blob"
+	"github.com/vibe-c2/vibe-c2-core/core/pkg/eventbus"
 	"github.com/vibe-c2/vibe-c2-core/core/pkg/models"
 	"github.com/vibe-c2/vibe-c2-core/core/pkg/repository"
 )
@@ -42,6 +43,40 @@ type Service struct {
 	store   blob.ObjectStore
 	maxSize int64
 	logger  *zap.Logger
+	// bus announces registry changes so open pages update without a reload.
+	// Optional: a nil bus simply means nobody is told.
+	bus eventbus.IEventBus
+}
+
+// WithEventBus attaches the bus the registry announces changes on. Separate
+// from the constructor so the many call sites that do not care keep a short
+// signature.
+func (s *Service) WithEventBus(bus eventbus.IEventBus) *Service {
+	s.bus = bus
+	return s
+}
+
+// announce publishes a registry change. Best effort and non-blocking on the
+// caller's behalf: a publish that succeeded must not fail because nobody was
+// listening.
+func (s *Service) announce(event eventbus.Event) {
+	if s.bus == nil {
+		return
+	}
+	s.bus.Publish(event)
+}
+
+// actorFor describes who caused a registry change, keeping an agent's action
+// attributed to the person whose key it holds.
+func actorFor(userID uuid.UUID, viaAgentKey *uuid.UUID) eventbus.Actor {
+	if viaAgentKey != nil {
+		return eventbus.Actor{
+			ID:         viaAgentKey.String(),
+			Type:       eventbus.ActorAgent,
+			OnBehalfOf: userID.String(),
+		}
+	}
+	return eventbus.Actor{ID: userID.String(), Type: eventbus.ActorUser}
 }
 
 func NewService(repo repository.ISkillRepository, subs repository.ISkillSubscriptionRepository, store blob.ObjectStore, maxSize int64, logger *zap.Logger) *Service {
@@ -138,6 +173,11 @@ func (s *Service) Publish(ctx context.Context, in PublishInput) (PublishResult, 
 	skill.SizeBytes = row.SizeBytes
 	skill.UploadedAt = row.CreateAt
 	skill.Description = description
+
+	s.announce(eventbus.NewSkillPublishedEvent(
+		actorFor(in.PublisherID, in.ViaAgentKeyID),
+		eventbus.SkillEventPayload{SkillID: skill.SkillID.String(), Name: skill.Name, Version: version},
+	))
 
 	return PublishResult{Skill: skill, Version: row, Claimed: claimed}, nil
 }
@@ -397,6 +437,11 @@ func (s *Service) Remove(ctx context.Context, name string, userID uuid.UUID, isA
 				zap.String("skill", skill.Name), zap.Error(err))
 		}
 	}
+
+	s.announce(eventbus.NewSkillRemovedEvent(
+		eventbus.Actor{ID: userID.String(), Type: eventbus.ActorUser},
+		eventbus.SkillEventPayload{SkillID: skill.SkillID.String(), Name: skill.Name},
+	))
 	return skill, nil
 }
 

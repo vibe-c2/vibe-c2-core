@@ -563,6 +563,12 @@ type ComplexityRoot struct {
 		Releases       func(childComplexity int) int
 	}
 
+	SkillEvent struct {
+		Action  func(childComplexity int) int
+		Name    func(childComplexity int) int
+		SkillID func(childComplexity int) int
+	}
+
 	SkillRegistry struct {
 		MaxUploadBytes func(childComplexity int) int
 		Skills         func(childComplexity int) int
@@ -596,6 +602,7 @@ type ComplexityRoot struct {
 		OperationChanged            func(childComplexity int, operationID *string) int
 		OperationMemberChanged      func(childComplexity int, operationID *string) int
 		SessionChanged              func(childComplexity int, userID *string) int
+		SkillChanged                func(childComplexity int) int
 		TaskChanged                 func(childComplexity int, operationID string) int
 		TimelineEventAdded          func(childComplexity int, operationID string) int
 		UserChanged                 func(childComplexity int) int
@@ -1109,6 +1116,7 @@ type SubscriptionResolver interface {
 	ModuleChanged(ctx context.Context) (<-chan *model.ModuleEvent, error)
 	MySessionChanged(ctx context.Context) (<-chan *model.SessionEvent, error)
 	SessionChanged(ctx context.Context, userID *string) (<-chan *model.SessionEvent, error)
+	SkillChanged(ctx context.Context) (<-chan *model.SkillEvent, error)
 	TaskChanged(ctx context.Context, operationID string) (<-chan *model.TaskEvent, error)
 	TimelineEventAdded(ctx context.Context, operationID string) (<-chan *models.OperationEvent, error)
 	WikiDocumentChanged(ctx context.Context, operationID string) (<-chan *model.WikiDocumentEvent, error)
@@ -4056,6 +4064,25 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 
 		return e.ComplexityRoot.SkillChangelog.Releases(childComplexity), true
 
+	case "SkillEvent.action":
+		if e.ComplexityRoot.SkillEvent.Action == nil {
+			break
+		}
+
+		return e.ComplexityRoot.SkillEvent.Action(childComplexity), true
+	case "SkillEvent.name":
+		if e.ComplexityRoot.SkillEvent.Name == nil {
+			break
+		}
+
+		return e.ComplexityRoot.SkillEvent.Name(childComplexity), true
+	case "SkillEvent.skillId":
+		if e.ComplexityRoot.SkillEvent.SkillID == nil {
+			break
+		}
+
+		return e.ComplexityRoot.SkillEvent.SkillID(childComplexity), true
+
 	case "SkillRegistry.maxUploadBytes":
 		if e.ComplexityRoot.SkillRegistry.MaxUploadBytes == nil {
 			break
@@ -4242,6 +4269,12 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.Subscription.SessionChanged(childComplexity, args["userId"].(*string)), true
+	case "Subscription.skillChanged":
+		if e.ComplexityRoot.Subscription.SkillChanged == nil {
+			break
+		}
+
+		return e.ComplexityRoot.Subscription.SkillChanged(childComplexity), true
 	case "Subscription.taskChanged":
 		if e.ComplexityRoot.Subscription.TaskChanged == nil {
 			break
@@ -7258,6 +7291,21 @@ extend type Mutation {
   # leaves or a skill changes maintainer. Administrators only.
   transferSkill(name: String!, userId: ID!): Skill!
     @hasPermission(permission: "admin")
+}
+
+# SkillEvent announces a change to the registry. The payload is deliberately
+# thin: every client refetches the listing, because what changed for one
+# operator (their own download state) is not what changed for another.
+type SkillEvent {
+  action: EventAction!
+  skillId: ID!
+  name: String!
+}
+
+extend type Subscription {
+  # Real-time registry changes: a skill published, a new version, a removal.
+  # Instance-wide, like the registry itself, so anyone signed in receives them.
+  skillChanged: SkillEvent! @hasPermission(permission: "*")
 }
 `, BuiltIn: false},
 	{Name: "../schema/subscriptions.graphql", Input: `# =============================================================================
@@ -29136,6 +29184,93 @@ func (ec *executionContext) fieldContext_SkillChangelog_releases(_ context.Conte
 	return fc, nil
 }
 
+func (ec *executionContext) _SkillEvent_action(ctx context.Context, field graphql.CollectedField, obj *model.SkillEvent) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_SkillEvent_action,
+		func(ctx context.Context) (any, error) {
+			return obj.Action, nil
+		},
+		nil,
+		ec.marshalNEventAction2githubᚗcomᚋvibeᚑc2ᚋvibeᚑc2ᚑcoreᚋcoreᚋpkgᚋgraphqlᚋmodelᚐEventAction,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_SkillEvent_action(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "SkillEvent",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type EventAction does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _SkillEvent_skillId(ctx context.Context, field graphql.CollectedField, obj *model.SkillEvent) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_SkillEvent_skillId,
+		func(ctx context.Context) (any, error) {
+			return obj.SkillID, nil
+		},
+		nil,
+		ec.marshalNID2string,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_SkillEvent_skillId(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "SkillEvent",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type ID does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _SkillEvent_name(ctx context.Context, field graphql.CollectedField, obj *model.SkillEvent) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_SkillEvent_name,
+		func(ctx context.Context) (any, error) {
+			return obj.Name, nil
+		},
+		nil,
+		ec.marshalNString2string,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_SkillEvent_name(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "SkillEvent",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
 func (ec *executionContext) _SkillRegistry_skills(ctx context.Context, field graphql.CollectedField, obj *model.SkillRegistry) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
@@ -30308,6 +30443,61 @@ func (ec *executionContext) fieldContext_Subscription_sessionChanged(ctx context
 	if fc.Args, err = ec.field_Subscription_sessionChanged_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
 		ec.Error(ctx, err)
 		return fc, err
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Subscription_skillChanged(ctx context.Context, field graphql.CollectedField) (ret func(ctx context.Context) graphql.Marshaler) {
+	return graphql.ResolveFieldStream(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Subscription_skillChanged,
+		func(ctx context.Context) (any, error) {
+			return ec.Resolvers.Subscription().SkillChanged(ctx)
+		},
+		func(ctx context.Context, next graphql.Resolver) graphql.Resolver {
+			directive0 := next
+
+			directive1 := func(ctx context.Context) (any, error) {
+				permission, err := ec.unmarshalNString2string(ctx, "*")
+				if err != nil {
+					var zeroVal *model.SkillEvent
+					return zeroVal, err
+				}
+				if ec.Directives.HasPermission == nil {
+					var zeroVal *model.SkillEvent
+					return zeroVal, errors.New("directive hasPermission is not implemented")
+				}
+				return ec.Directives.HasPermission(ctx, nil, directive0, permission)
+			}
+
+			next = directive1
+			return next
+		},
+		ec.marshalNSkillEvent2ᚖgithubᚗcomᚋvibeᚑc2ᚋvibeᚑc2ᚑcoreᚋcoreᚋpkgᚋgraphqlᚋmodelᚐSkillEvent,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_Subscription_skillChanged(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Subscription",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "action":
+				return ec.fieldContext_SkillEvent_action(ctx, field)
+			case "skillId":
+				return ec.fieldContext_SkillEvent_skillId(ctx, field)
+			case "name":
+				return ec.fieldContext_SkillEvent_name(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type SkillEvent", field.Name)
+		},
 	}
 	return fc, nil
 }
@@ -46136,6 +46326,55 @@ func (ec *executionContext) _SkillChangelog(ctx context.Context, sel ast.Selecti
 	return out
 }
 
+var skillEventImplementors = []string{"SkillEvent"}
+
+func (ec *executionContext) _SkillEvent(ctx context.Context, sel ast.SelectionSet, obj *model.SkillEvent) graphql.Marshaler {
+	fields := graphql.CollectFields(ec.OperationContext, sel, skillEventImplementors)
+
+	out := graphql.NewFieldSet(fields)
+	deferred := make(map[string]*graphql.FieldSet)
+	for i, field := range fields {
+		switch field.Name {
+		case "__typename":
+			out.Values[i] = graphql.MarshalString("SkillEvent")
+		case "action":
+			out.Values[i] = ec._SkillEvent_action(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "skillId":
+			out.Values[i] = ec._SkillEvent_skillId(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "name":
+			out.Values[i] = ec._SkillEvent_name(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		default:
+			panic("unknown field " + strconv.Quote(field.Name))
+		}
+	}
+	out.Dispatch(ctx)
+	if out.Invalids > 0 {
+		return graphql.Null
+	}
+
+	atomic.AddInt32(&ec.Deferred, int32(len(deferred)))
+
+	for label, dfs := range deferred {
+		ec.ProcessDeferredGroup(graphql.DeferredGroup{
+			Label:    label,
+			Path:     graphql.GetPath(ctx),
+			FieldSet: dfs,
+			Context:  ctx,
+		})
+	}
+
+	return out
+}
+
 var skillRegistryImplementors = []string{"SkillRegistry"}
 
 func (ec *executionContext) _SkillRegistry(ctx context.Context, sel ast.SelectionSet, obj *model.SkillRegistry) graphql.Marshaler {
@@ -46332,6 +46571,8 @@ func (ec *executionContext) _Subscription(ctx context.Context, sel ast.Selection
 		return ec._Subscription_mySessionChanged(ctx, fields[0])
 	case "sessionChanged":
 		return ec._Subscription_sessionChanged(ctx, fields[0])
+	case "skillChanged":
+		return ec._Subscription_skillChanged(ctx, fields[0])
 	case "taskChanged":
 		return ec._Subscription_taskChanged(ctx, fields[0])
 	case "timelineEventAdded":
@@ -51406,6 +51647,20 @@ func (ec *executionContext) marshalNSkillChangelog2ᚖgithubᚗcomᚋvibeᚑc2�
 		return graphql.Null
 	}
 	return ec._SkillChangelog(ctx, sel, v)
+}
+
+func (ec *executionContext) marshalNSkillEvent2githubᚗcomᚋvibeᚑc2ᚋvibeᚑc2ᚑcoreᚋcoreᚋpkgᚋgraphqlᚋmodelᚐSkillEvent(ctx context.Context, sel ast.SelectionSet, v model.SkillEvent) graphql.Marshaler {
+	return ec._SkillEvent(ctx, sel, &v)
+}
+
+func (ec *executionContext) marshalNSkillEvent2ᚖgithubᚗcomᚋvibeᚑc2ᚋvibeᚑc2ᚑcoreᚋcoreᚋpkgᚋgraphqlᚋmodelᚐSkillEvent(ctx context.Context, sel ast.SelectionSet, v *model.SkillEvent) graphql.Marshaler {
+	if v == nil {
+		if !graphql.HasFieldError(ctx, graphql.GetFieldContext(ctx)) {
+			graphql.AddErrorf(ctx, "the requested element is null which the schema does not allow")
+		}
+		return graphql.Null
+	}
+	return ec._SkillEvent(ctx, sel, v)
 }
 
 func (ec *executionContext) marshalNSkillRegistry2githubᚗcomᚋvibeᚑc2ᚋvibeᚑc2ᚑcoreᚋcoreᚋpkgᚋgraphqlᚋmodelᚐSkillRegistry(ctx context.Context, sel ast.SelectionSet, v model.SkillRegistry) graphql.Marshaler {

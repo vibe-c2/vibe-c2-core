@@ -289,7 +289,7 @@ func NewApp() (*App, error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed to initialize skill store: %w", err)
 	}
-	skillService := skills.NewService(repos.Skill, repos.SkillSubscription, skillStore, e.SkillMaxSize, l)
+	skillService := skills.NewService(repos.Skill, repos.SkillSubscription, skillStore, e.SkillMaxSize, l).WithEventBus(bus)
 
 	// Wiki transfer pipeline: one materialiser shared by both import
 	// formats, one writer per export format, all driven by a background

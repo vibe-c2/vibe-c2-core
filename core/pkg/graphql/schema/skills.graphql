@@ -83,3 +83,18 @@ extend type Mutation {
   transferSkill(name: String!, userId: ID!): Skill!
     @hasPermission(permission: "admin")
 }
+
+# SkillEvent announces a change to the registry. The payload is deliberately
+# thin: every client refetches the listing, because what changed for one
+# operator (their own download state) is not what changed for another.
+type SkillEvent {
+  action: EventAction!
+  skillId: ID!
+  name: String!
+}
+
+extend type Subscription {
+  # Real-time registry changes: a skill published, a new version, a removal.
+  # Instance-wide, like the registry itself, so anyone signed in receives them.
+  skillChanged: SkillEvent! @hasPermission(permission: "*")
+}

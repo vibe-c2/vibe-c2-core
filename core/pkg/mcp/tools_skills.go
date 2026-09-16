@@ -149,7 +149,8 @@ func handleGetSkill(ctx context.Context, s *Server, args getSkillArgs) (toolResu
 	if view.Mine {
 		view.HowToUpdate = fmt.Sprintf(
 			"POST multipart/form-data to %s with fields name=%s, file=<the zip>, and optionally description and notes. "+
-				"Publishing adds a version; earlier ones stay downloadable.",
+				"Publishing adds a version and never overwrites an earlier one, though "+
+				"its owner can remove the whole skill.",
 			skillUploadPath, skill.Name)
 	}
 
