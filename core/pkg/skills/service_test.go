@@ -628,3 +628,25 @@ func TestDownload_SaysNothingHasBeenPublishedYet(t *testing.T) {
 		t.Fatalf("want a message that explains the state, got %q", svcErr.Message)
 	}
 }
+
+// A slow storage failure is exactly when a client gives up or a proxy times
+// out, cancelling the request context. Observed in a reproduction: the upload
+// was abandoned at the proxy and left a reserved version with no bundle,
+// because the rollback ran on the dead context and did nothing.
+func TestPublish_RollsBackEvenWhenTheCallerHasGoneAway(t *testing.T) {
+	repo, store := newFakeRepo(), newFakeStore()
+	store.putErr = errors.New("no free volumes left")
+	svc := newTestService(t, repo, store)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	// Cancel before the call: the handler's context is already dead by the
+	// time the store gives up.
+	cancel()
+
+	if _, err := svc.Publish(ctx, publishInput("public-recon", uuid.New(), "alice", zipBytes(t))); err == nil {
+		t.Fatal("the publish should have failed")
+	}
+	if len(repo.skills) != 0 {
+		t.Fatalf("the name must be released even though the caller went away, found %d rows", len(repo.skills))
+	}
+}

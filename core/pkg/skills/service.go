@@ -20,6 +20,10 @@ import (
 	"github.com/vibe-c2/vibe-c2-core/core/pkg/repository"
 )
 
+// rollbackTimeout bounds the compensating writes after a failed publish.
+// They run on their own context, so they need their own deadline.
+const rollbackTimeout = 10 * time.Second
+
 // DefaultMaxSize is the cap when none is configured. A skill is prose and a
 // little structure; ten megabytes is already generous, and the ceiling exists
 // mainly so the zip check below can hold the whole bundle in memory.
@@ -150,6 +154,15 @@ func (s *Service) Publish(ctx context.Context, in PublishInput) (PublishResult, 
 // Both steps are guarded in the repository against a publish that succeeded in
 // the meantime, so a concurrent upload cannot be undone by this.
 func (s *Service) rollBackFailedPublish(ctx context.Context, skill models.Skill, version int, claimed bool) {
+	// Detached from the request. The failure that brings us here is usually a
+	// slow one, and a slow failure is exactly when the client gives up or a
+	// proxy times out — which cancels the request context. Rolling back on it
+	// would then do nothing, leaving behind the very row this exists to
+	// remove. Observed: an upload abandoned at the proxy left a reserved
+	// version with no bundle.
+	ctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), rollbackTimeout)
+	defer cancel()
+
 	if err := s.repo.ReleaseVersion(ctx, skill.SkillID, version); err != nil {
 		s.logger.Error("skills: could not release a reserved version after a failed publish",
 			zap.String("skill", skill.Name), zap.Int("version", version), zap.Error(err))
