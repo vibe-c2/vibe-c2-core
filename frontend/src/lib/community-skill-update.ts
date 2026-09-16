@@ -14,6 +14,8 @@ export interface CommunitySkill {
   updatedAt: string
   downloadedVersion?: number | null
   snoozedVersion?: number | null
+  /** The caller published it. They do not need telling what they just did. */
+  mine?: boolean
 }
 
 export interface OutdatedSkill {
@@ -56,13 +58,16 @@ export function findOutdatedSkills(skills: CommunitySkill[]): OutdatedSkill[] {
  *
  * Separate from findOutdatedSkills because the two drive different things. A
  * dismissed skill keeps its badge on the page, which is a fact the operator
- * can act on when they choose; only an undismissed one opens a dialog.
+ * can act on when they choose; only an undismissed one opens a dialog. A
+ * skill the caller published themselves is excluded for the same reason:
+ * their copy really is behind, so the row still says so, but announcing an
+ * upload to the person who just made it is noise.
  */
 export function findSkillsToPromptFor(skills: CommunitySkill[]): OutdatedSkill[] {
-  const undismissed = skills.filter(
-    (skill) => !isSnoozed(skill) && isOutdated(skill),
+  const worthInterrupting = skills.filter(
+    (skill) => !skill.mine && !isSnoozed(skill) && isOutdated(skill),
   )
-  return findOutdatedSkills(undismissed)
+  return findOutdatedSkills(worthInterrupting)
 }
 
 function isOutdated(skill: CommunitySkill): boolean {

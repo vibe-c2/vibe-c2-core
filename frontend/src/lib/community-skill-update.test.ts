@@ -15,6 +15,7 @@ function skill(overrides: Partial<CommunitySkill> = {}): CommunitySkill {
     updatedAt: "2026-09-16T10:00:00Z",
     downloadedVersion: 1,
     snoozedVersion: null,
+    mine: false,
     ...overrides,
   }
 }
@@ -76,6 +77,14 @@ describe("findSkillsToPromptFor", () => {
     ])
     expect(prompts).toHaveLength(1)
     expect(prompts[0].currentVersion).toBe(3)
+  })
+
+  it("does not announce an upload to the operator who made it", () => {
+    expect(findSkillsToPromptFor([skill({ mine: true })])).toEqual([])
+  })
+
+  it("still reports their own stale copy on the page", () => {
+    expect(findOutdatedSkills([skill({ mine: true })])).toHaveLength(1)
   })
 
   it("returns nothing for an empty registry", () => {
