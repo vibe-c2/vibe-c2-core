@@ -164,12 +164,23 @@ services:
     image: redis:7-alpine
     container_name: vibec2-redis
     restart: unless-stopped
+    # REDIS_PASSWORD reached the app but never the server, so setting it did
+    # not harden Redis — it broke the app, whose AUTH was then refused with
+    # "no password is set for the default user". Empty keeps the previous
+    # open behaviour; set it in .env and both sides now agree.
+    command: redis-server --requirepass "${REDIS_PASSWORD:-}"
+    environment:
+      REDIS_PASSWORD: ${REDIS_PASSWORD:-}
     ports:
       - "6379:6379"
     volumes:
       - redis_data:/data
     healthcheck:
-      test: redis-cli ping
+      test:
+        [
+          "CMD-SHELL",
+          "if [ -n \"$$REDIS_PASSWORD\" ]; then redis-cli -a \"$$REDIS_PASSWORD\" --no-auth-warning ping; else redis-cli ping; fi",
+        ]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -260,6 +271,10 @@ services:
       HOCUSPOCUS_WEBHOOK_SECRET: ${HOCUSPOCUS_WEBHOOK_SECRET}
       HOCUSPOCUS_WEBHOOK_URL: http://core-dev:8002/api/v1/internal/wiki/webhook
       HOCUSPOCUS_DEBOUNCE_MS: ${HOCUSPOCUS_DEBOUNCE_MS:-2000}
+      # Collaboration capacity limits. Read by the sidecar but never passed,
+      # so the compiled defaults were the only reachable values.
+      MAX_ACTIVE_ROOMS: ${MAX_ACTIVE_ROOMS:-100}
+      MAX_CLIENTS_PER_ROOM: ${MAX_CLIENTS_PER_ROOM:-20}
       PORT: 1234
     volumes:
       - ./hocuspocus/src:/app/src
