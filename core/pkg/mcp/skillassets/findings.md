@@ -16,7 +16,14 @@ Findings hold the data; the wiki explains it. Record both.
   Without them it cannot appear on the topology graph. `update_host` REPLACES
   those lists, so read the host first and send the full set.
 - **A recovered secret**: `create_credential`, tagged with the host it came
-  from. Not a wiki page.
+  from. Not a wiki page. `is_valid` is a plain yes or no with no "untested" in
+  between: leaving it off stores false, and the operator's view labels that
+  **Invalid**. A credential you have not tried yet therefore reads to everyone
+  else as one that does not work, so come back and set `is_valid:true` the
+  moment you use it successfully.
+- **A correction**: `update_credential` changes only the fields you send and
+  leaves the rest alone. `keys`, `properties` and `tags` are the exception —
+  sending one replaces that whole list, and sending `[]` clears it.
 - **A dump**: `import_hashes`. Known hashes are skipped, so re-importing a
   grown dump is safe.
 - **A crack**: `mark_hash_cracked`, which creates and links the credential.

@@ -119,6 +119,15 @@ var releases = []Release{
 			"Skills operators publish to each other. New find_skills and get_skill list what is on the server and give you a download URL your agent key can fetch; POST a zip to /api/v1/mcp/skills/upload to publish one. A name belongs to whoever claimed it first, every version is kept, and skills.md covers installing and publishing — including reading a downloaded skill before following it, since nobody reviews them.",
 		},
 	},
+	{
+		Version: 13,
+		Date:    "2026-09-16",
+		Notes: []string{
+			"New update_credential: correct a credential you or anyone else recorded. Send only the fields that change; keys, properties and tags replace the whole list when sent, and clear it when sent empty.",
+			"is_valid is a yes or no with no \"untested\" in between, and the operator's view labels false as Invalid. A credential recorded before you try it therefore reads as broken, so set is_valid:true once you have actually used it.",
+			"A published skill can now be removed outright by its owner, so an earlier version is no longer guaranteed to stay downloadable. Publishing still never overwrites one.",
+		},
+	},
 }
 
 // Releases returns the full history, oldest first. A copy, so callers cannot

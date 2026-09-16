@@ -23,7 +23,8 @@ var toolGroups = []toolGroup{
 	{
 		Title: "Credentials",
 		Intro: "Recovered secrets, returned in full.",
-		Tools: []string{"find_credentials", "get_credential", "create_credential", "add_credential_comment"},
+		Tools: []string{"find_credentials", "get_credential", "create_credential",
+			"update_credential", "add_credential_comment"},
 	},
 	{
 		Title: "Hashes",

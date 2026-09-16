@@ -3,7 +3,7 @@
 name: vibe-c2
 description: Work an offensive security engagement in Vibe C2 — hosts, credentials, hashes, tasks, wiki notes and the operation timeline — through its MCP tools. Use whenever connected to a Vibe C2 MCP endpoint, or when the user mentions an operation, findings, or engagement notes.
 metadata:
-  version: "12"
+  version: "13"
 ---
 
 # Vibe C2
@@ -114,6 +114,7 @@ Recovered secrets, returned in full.
 - `find_credentials` — Search harvested credentials.
 - `get_credential` — One credential in full: keys, properties and comment history.
 - `create_credential` **(write)** — Record a recovered credential: a password, an SSH key, a token.
+- `update_credential` **(write)** — Correct a credential you or somebody else recorded.
 - `add_credential_comment` **(write)** — Append a comment to a credential: where found, what it opens, if it works.
 
 ## Hashes
@@ -344,7 +345,14 @@ Findings hold the data; the wiki explains it. Record both.
   Without them it cannot appear on the topology graph. `update_host` REPLACES
   those lists, so read the host first and send the full set.
 - **A recovered secret**: `create_credential`, tagged with the host it came
-  from. Not a wiki page.
+  from. Not a wiki page. `is_valid` is a plain yes or no with no "untested" in
+  between: leaving it off stores false, and the operator's view labels that
+  **Invalid**. A credential you have not tried yet therefore reads to everyone
+  else as one that does not work, so come back and set `is_valid:true` the
+  moment you use it successfully.
+- **A correction**: `update_credential` changes only the fields you send and
+  leaves the rest alone. `keys`, `properties` and `tags` are the exception —
+  sending one replaces that whole list, and sending `[]` clears it.
 - **A dump**: `import_hashes`. Known hashes are skipped, so re-importing a
   grown dump is safe.
 - **A crack**: `mark_hash_cracked`, which creates and links the credential.
@@ -580,5 +588,5 @@ write it for somebody deciding whether to re-download today.
 
 A name belongs to whoever published it first. If the name is taken, the upload
 is refused and names the owner: pick a different one rather than working
-around it. Publishing to a name you own adds a version. Earlier versions are
-never deleted or overwritten.
+around it. Publishing to a name you own adds a version and never overwrites an
+earlier one, though its owner can remove the whole skill.

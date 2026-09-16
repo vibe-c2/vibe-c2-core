@@ -51,5 +51,5 @@ write it for somebody deciding whether to re-download today.
 
 A name belongs to whoever published it first. If the name is taken, the upload
 is refused and names the owner: pick a different one rather than working
-around it. Publishing to a name you own adds a version. Earlier versions are
-never deleted or overwritten.
+around it. Publishing to a name you own adds a version and never overwrites an
+earlier one, though its owner can remove the whole skill.
