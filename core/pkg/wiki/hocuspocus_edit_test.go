@@ -89,11 +89,17 @@ func TestEditMarkdown_MapsSidecarAnswers(t *testing.T) {
 			defer srv.Close()
 
 			c := NewHocuspocusClient(srv.URL, "secret", zap.NewNop())
-			res, err := c.EditMarkdown(context.Background(), "doc-1", "old", "new", true)
+			res, err := c.EditMarkdown(context.Background(), "doc-1", "old", "new", true, "user-1")
 			tc.check(t, res, err)
 
 			if got.Mode != applyEdit || got.OldText != "old" || got.NewText != "new" || !got.ReplaceAll {
 				t.Errorf("request body not as sent: %+v", got)
+			}
+			// The sidecar stamps last_updated_at only for an attributed save,
+			// and the wiki's recently-updated list is sorted on that field.
+			// Dropping the user here makes an agent's edit invisible there.
+			if got.UserID != "user-1" {
+				t.Errorf("userId = %q, want the editing operator", got.UserID)
 			}
 		})
 	}

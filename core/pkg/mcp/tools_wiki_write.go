@@ -292,7 +292,10 @@ func handleEditWikiDocument(ctx context.Context, s *Server, args editWikiDocumen
 		return toolResult{}, fmt.Errorf("wiki writing is unavailable: the collaboration service is not configured")
 	}
 
-	result, err := s.deps.Hocuspocus.EditMarkdown(ctx, doc.DocumentID.String(), args.OldText, args.NewText, args.ReplaceAll)
+	// Attributed to the key's owner, not to the key: a document records which
+	// person last changed it, and an agent acts for one.
+	result, err := s.deps.Hocuspocus.EditMarkdown(
+		ctx, doc.DocumentID.String(), args.OldText, args.NewText, args.ReplaceAll, viewerID(ctx))
 	var noMatch *wiki.EditNoMatchError
 	var ambiguous *wiki.EditAmbiguousError
 	switch {
@@ -405,7 +408,7 @@ func (s *Server) writeBody(ctx context.Context, doc *models.WikiDocument, body s
 		return wiki.ApplyMarkdownResult{}, fmt.Errorf("wiki writing is unavailable: the collaboration service is not configured")
 	}
 
-	result, err := s.deps.Hocuspocus.ApplyMarkdown(ctx, doc.DocumentID.String(), body, mode)
+	result, err := s.deps.Hocuspocus.ApplyMarkdown(ctx, doc.DocumentID.String(), body, mode, viewerID(ctx))
 	if errors.Is(err, wiki.ErrMarkdownTooLarge) {
 		// Belt and braces: the check above should have caught this, and will
 		// not if the sidecar's limit is lowered without this one following.

@@ -26,6 +26,7 @@ import { parseOutlineMarkdown } from "./markdown-parser.js";
 import { auditAttachments, type AttachmentAudit } from "./attachment-audit.js";
 import { serializeWikiDocument } from "./markdown-serializer.js";
 import { Y_FRAGMENT_FIELD } from "./markdown-to-yjs.js";
+import { WIKI_SCHEMA_VERSION } from "./wiki-schema-version.js";
 import { readRawBody, requireSignature } from "./internal-auth.js";
 
 const MAX_MARKDOWN_BYTES = 1024 * 1024; // matches WikiDocument.Content cap
@@ -47,6 +48,12 @@ interface ApplyRequestBody {
   oldText?: string;
   newText?: string;
   replaceAll?: boolean;
+  // The operator this edit is made on behalf of. An agent key belongs to a
+  // person, and the document should record that person as its last editor —
+  // without it the save lands with no attribution and the page never enters
+  // the "recently updated" list, which is sorted on a field only attributed
+  // saves set.
+  userId?: string;
 }
 
 /** Render a live fragment to the same markdown a full read returns. */
@@ -359,6 +366,15 @@ export function setupApplyApi(app: Express, server: Hocuspocus): void {
         connection = await server.openDirectConnection(roomName(documentId), {
           // Marks the edit as ours in onStoreDocument and in awareness.
           agent: true,
+          // Read back in persistence.ts, which stamps last_updated_by_id and
+          // last_updated_at only when it knows who edited. A browser gets
+          // this from onAuthenticate; an API edit has to carry it.
+          userId: parsed.userId,
+          // This content is parsed into the current wiki schema, so it is
+          // current-schema content. Without saying so it defaults to 0, and
+          // persistence.ts treats every shrinking write as a stale browser
+          // tab: the edit is discarded while the caller is told it applied.
+          schemaVersion: WIKI_SCHEMA_VERSION,
         });
 
         let appliedNodes = 0;

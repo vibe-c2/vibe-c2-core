@@ -17,16 +17,17 @@
 import type { Express, Request, Response } from "express";
 import { readRawBody, requireSignature } from "./internal-auth.js";
 import { rebaseDocument, type ChipKind, type RebaseRequest } from "./rebase-document.js";
+import { WIKI_SCHEMA_VERSION } from "./wiki-schema-version.js";
 
 // Markdown bodies are capped at 1 MB by the editor; Y.js state can be a few
 // times larger. 4 MB of base64 plus the map is a generous envelope.
 const MAX_INPUT_BYTES = 6 * 1024 * 1024;
 
-// The schema version stamped on state this route produces. Mirrors
-// WIKI_SCHEMA_VERSION in frontend/src/components/wiki/wiki-schema-version.ts:
-// the bytes are built from the current wikiSchema, so they are current-schema
-// content and must be guarded as such by the stale-client check.
-export const REBASE_SCHEMA_VERSION = 1;
+// The schema version stamped on state this route produces: the bytes are built
+// from the current wikiSchema, so they are current-schema content and must be
+// guarded as such by the stale-client check. Re-exported under the old name so
+// existing references keep working.
+export const REBASE_SCHEMA_VERSION = WIKI_SCHEMA_VERSION;
 
 const VALID_KINDS = new Set<ChipKind>(["doc", "host", "hash", "credential"]);
 

@@ -230,6 +230,11 @@ type applyMarkdownRequest struct {
 	DocumentID string    `json:"documentId"`
 	Markdown   string    `json:"markdown"`
 	Mode       ApplyMode `json:"mode"`
+	// UserID is the operator the edit is made on behalf of. The sidecar
+	// stamps attribution only when it knows who edited, and the wiki's
+	// recently-updated list is sorted on a field only attributed saves set —
+	// so omitting this makes the edit invisible to that list.
+	UserID string `json:"userId,omitempty"`
 }
 
 // ApplyMarkdownResult reports what the sidecar did. Watchers is how many
@@ -269,7 +274,7 @@ type AttachmentAudit struct {
 //
 // The sidecar loads the document when nobody has it open, so this is the write
 // path in both cases and there is only one behaviour to reason about.
-func (c *HocuspocusClient) ApplyMarkdown(ctx context.Context, documentID, markdown string, mode ApplyMode) (ApplyMarkdownResult, error) {
+func (c *HocuspocusClient) ApplyMarkdown(ctx context.Context, documentID, markdown string, mode ApplyMode, userID string) (ApplyMarkdownResult, error) {
 	var result ApplyMarkdownResult
 
 	if c.internalSecret == "" {
@@ -285,6 +290,7 @@ func (c *HocuspocusClient) ApplyMarkdown(ctx context.Context, documentID, markdo
 		DocumentID: documentID,
 		Markdown:   markdown,
 		Mode:       mode,
+		UserID:     userID,
 	})
 	if err != nil {
 		return result, fmt.Errorf("marshal apply payload: %w", err)
@@ -329,6 +335,8 @@ type editMarkdownRequest struct {
 	OldText    string    `json:"oldText"`
 	NewText    string    `json:"newText"`
 	ReplaceAll bool      `json:"replaceAll"`
+	// See applyMarkdownRequest.UserID.
+	UserID string `json:"userId,omitempty"`
 }
 
 // applyEdit is the mode value for EditMarkdown. Not exported alongside the
@@ -378,7 +386,7 @@ type editRefusal struct {
 // the replacement, and sent the whole page back through ApplyReplace — two
 // hops, the entire body twice over the wire, and a base that could lag what
 // the operator was typing.
-func (c *HocuspocusClient) EditMarkdown(ctx context.Context, documentID, oldText, newText string, replaceAll bool) (EditMarkdownResult, error) {
+func (c *HocuspocusClient) EditMarkdown(ctx context.Context, documentID, oldText, newText string, replaceAll bool, userID string) (EditMarkdownResult, error) {
 	var result EditMarkdownResult
 
 	if c.internalSecret == "" {
@@ -391,6 +399,7 @@ func (c *HocuspocusClient) EditMarkdown(ctx context.Context, documentID, oldText
 		OldText:    oldText,
 		NewText:    newText,
 		ReplaceAll: replaceAll,
+		UserID:     userID,
 	})
 	if err != nil {
 		return result, fmt.Errorf("marshal edit payload: %w", err)
