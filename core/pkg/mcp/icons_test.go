@@ -139,10 +139,86 @@ func TestIconPaletteMatchesTheFrontendCatalog(t *testing.T) {
 	}
 	for name := range ours {
 		if !frontend[name] {
-			t.Errorf("%q is in the agent palette but not in the picker — "+
-				"an agent could store it and it would never render", name)
+			t.Errorf("%q is suggested as house style but is not in the picker — "+
+				"an agent following the suggestion would look unlike every human-made page", name)
 		}
 	}
+}
+
+// The validator's job is to know what the client can render, and the client
+// reads that from the installed packages. These files are a copy of that walk,
+// so this repeats it and fails when the copy has gone stale — a bump that adds
+// icons the operator can pick and the agent is refused for is exactly the
+// divergence that sent an agent looking for "the closest writable glyph".
+func TestIconListsMatchTheInstalledPackages(t *testing.T) {
+	t.Run("lucide", func(t *testing.T) {
+		installed, err := os.ReadDir("../../../frontend/node_modules/lucide-react/dist/esm/icons")
+		if err != nil {
+			t.Skipf("lucide-react not installed (%v); skipping the drift check", err)
+		}
+		want := map[string]bool{}
+		for _, entry := range installed {
+			if name, ok := strings.CutSuffix(entry.Name(), ".mjs"); ok {
+				want[kebabToPascal(name)] = true
+			}
+		}
+		assertListCovers(t, "lucide.txt", lucideNameList, want)
+	})
+
+	t.Run("simple-icons", func(t *testing.T) {
+		installed, err := os.ReadDir("../../../frontend/node_modules/simple-icons/icons")
+		if err != nil {
+			t.Skipf("simple-icons not installed (%v); skipping the drift check", err)
+		}
+		want := map[string]bool{}
+		for _, entry := range installed {
+			if slug, ok := strings.CutSuffix(entry.Name(), ".svg"); ok {
+				want[slug] = true
+			}
+		}
+		assertListCovers(t, "simple-icons.txt", simpleIconSlugList, want)
+	})
+}
+
+func assertListCovers(t *testing.T, file, list string, want map[string]bool) {
+	t.Helper()
+	if len(want) == 0 {
+		t.Fatalf("read no icons out of the installed package; the drift check needs updating")
+	}
+	have := map[string]bool{}
+	for _, name := range strings.Split(list, "\n") {
+		if name = strings.TrimSpace(name); name != "" {
+			have[name] = true
+		}
+	}
+	missing, extra := 0, 0
+	for name := range want {
+		if !have[name] {
+			if missing++; missing <= 5 {
+				t.Errorf("%s is missing %q, which the operator's picker offers", file, name)
+			}
+		}
+	}
+	for name := range have {
+		if !want[name] {
+			if extra++; extra <= 5 {
+				t.Errorf("%s has %q, which the package no longer ships; it would store and never render", file, name)
+			}
+		}
+	}
+	if missing > 5 || extra > 5 {
+		t.Errorf("%s: %d missing and %d stale in total; regenerate it (see iconassets/README.md)", file, missing, extra)
+	}
+}
+
+func kebabToPascal(s string) string {
+	parts := strings.Split(s, "-")
+	for i, part := range parts {
+		if part != "" {
+			parts[i] = strings.ToUpper(part[:1]) + part[1:]
+		}
+	}
+	return strings.Join(parts, "")
 }
 
 // Creating a wiki page with no icon must store the adaptive default, not an
@@ -323,6 +399,32 @@ func TestSimpleIconPaletteMatchesTheFrontendCatalog(t *testing.T) {
 		if !frontend[slug] {
 			t.Errorf("%q is in the agent palette but not in the picker — "+
 				"an agent could store it and it would never render", slug)
+		}
+	}
+}
+
+// The house palette only works as a suggestion if every name in it validates.
+// It is maintained by hand against the picker; the full lists are generated,
+// and a curated name the generated list lacks would be suggested and refused.
+func TestCuratedPalettesAreAccepted(t *testing.T) {
+	for _, name := range curatedIcons {
+		if err := validateIcon(name); err != nil {
+			t.Errorf("curated icon %q is refused: %v", name, err)
+		}
+	}
+	for _, slug := range curatedSimpleIconSlugs {
+		if err := validateIcon(SimpleIconPrefix + slug); err != nil {
+			t.Errorf("curated brand %q is refused: %v", slug, err)
+		}
+	}
+}
+
+// The gap this replaced: an icon the operator's picker offers that the agent
+// was refused for. LetterText is the one a production agent hit.
+func TestValidateIcon_AcceptsUncuratedNames(t *testing.T) {
+	for _, name := range []string{"LetterText", "ServerCog", "SquareTerminal", "si:splunk", "si:elastic"} {
+		if err := validateIcon(name); err != nil {
+			t.Errorf("validateIcon(%q) = %v, want nil: the client renders it and the picker offers it", name, err)
 		}
 	}
 }

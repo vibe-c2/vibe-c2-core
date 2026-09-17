@@ -1,11 +1,37 @@
 package mcp
 
 import (
+	_ "embed"
 	"strconv"
 	"strings"
 )
 
-// The icon palette an agent may choose from.
+// Every icon the client can render, and the house palette inside it.
+//
+// The two are not the same thing, and conflating them was a bug. The client
+// resolves ANY lucide name and ANY simple-icons slug: the curated ones are
+// imported directly, everything else lazily by name, and the operator's picker
+// searches the full set. An agent validated against the curated subset alone
+// was refused for names its operator could pick from the same picker — which
+// is how a page ended up with the nearest writable glyph instead of the one it
+// was told to match.
+//
+// So membership of the full set is what validateIcon enforces, and the curated
+// list below is what it suggests. Names still have to be real: the refusal
+// exists because an unknown name lands in the database, resolves to nothing on
+// the client, and shows the operator a page with no icon and no error anywhere.
+//
+// The full sets are generated from the frontend's own dependencies; see
+// iconassets/README.md. icons_test.go regenerates and fails on drift whenever
+// node_modules is present.
+//
+//go:embed iconassets/lucide.txt
+var lucideNameList string
+
+//go:embed iconassets/simple-icons.txt
+var simpleIconSlugList string
+
+// The house palette: what a refusal suggests and what the guide teaches.
 //
 // Icons are stored as PascalCase lucide names — "FileText", not "file-text".
 // That convention is invisible from the tool schema, so getting it wrong is
@@ -18,12 +44,10 @@ import (
 // refusal an agent can read and correct beats a write that quietly did less
 // than it claimed.
 //
-// The list mirrors the curated catalog the operator's own icon picker offers
-// first, rather than all ~2000 lucide icons. Two reasons: these names are
-// stable, where the full set churns with every lucide release — a dependency
-// bump broke the client catalog once already — and a shared palette makes an
-// agent's pages look like the rest of the wiki instead of arbitrary. An
-// operator who wants something outside it can still set it by hand.
+// These mirror the catalog the operator's picker offers first. They are the
+// names a refusal suggests and the ones icons.md teaches, because a shared
+// palette makes an agent's pages look like the rest of the wiki rather than
+// arbitrary. They are a preference, not a limit.
 //
 // icons_test.go parses the frontend catalog and fails if the two drift.
 var curatedIcons = []string{
@@ -69,12 +93,10 @@ var curatedIcons = []string{
 // "si:linux" or "si:docker". A separate namespace from the lucide palette
 // above, and the client dispatches on the prefix.
 //
-// Same curated-subset reasoning: this mirrors the groups the operator's picker
-// offers rather than all ~3000 brands, and those four groups happen to be
-// exactly what a security engagement names — operating systems, cloud and
-// infrastructure, dev and data, network and security. A wiki page about a
-// Windows domain controller or a Kubernetes cluster can now say so at a
-// glance; the long tail of consumer brands would only be noise here.
+// Curated for the same reason as the lucide names above, and around the same
+// four groups a security engagement actually names: operating systems, cloud
+// and infrastructure, dev and data, network and security. Any other slug the
+// package ships is accepted too; these are the ones worth suggesting.
 var curatedSimpleIconSlugs = []string{
 	// Operating systems
 	"linux", "ubuntu", "debian", "archlinux", "fedora", "redhat",
@@ -101,24 +123,28 @@ const SimpleIconPrefix = "si:"
 // name, so it has to be permitted explicitly.
 const AdaptiveIconName = "Adaptive"
 
-// iconSet is the lookup built from curatedIcons, plus the adaptive default.
-var iconSet = func() map[string]struct{} {
-	set := make(map[string]struct{}, len(curatedIcons)+1)
-	for _, name := range curatedIcons {
+// iconSet is every lucide name the client can render, plus the adaptive
+// default, which is ours rather than lucide's and so has to be added by hand.
+var iconSet = newIconSet(lucideNameList, AdaptiveIconName)
+
+// simpleIconSet is every brand slug the client can render, keyed bare.
+var simpleIconSet = newIconSet(simpleIconSlugList)
+
+// newIconSet turns an embedded newline-separated list into a lookup, ignoring
+// blank lines so the files stay easy to regenerate and diff.
+func newIconSet(list string, extra ...string) map[string]struct{} {
+	lines := strings.Split(list, "\n")
+	set := make(map[string]struct{}, len(lines)+len(extra))
+	for _, name := range lines {
+		if name = strings.TrimSpace(name); name != "" {
+			set[name] = struct{}{}
+		}
+	}
+	for _, name := range extra {
 		set[name] = struct{}{}
 	}
-	set[AdaptiveIconName] = struct{}{}
 	return set
-}()
-
-// simpleIconSet is the brand-logo lookup, keyed on the bare slug.
-var simpleIconSet = func() map[string]struct{} {
-	set := make(map[string]struct{}, len(curatedSimpleIconSlugs))
-	for _, slug := range curatedSimpleIconSlugs {
-		set[slug] = struct{}{}
-	}
-	return set
-}()
+}
 
 // iconExamples are the names the refusal below suggests. Held as a variable
 // so a test can assert every one is actually in the palette — the first draft
@@ -130,12 +156,13 @@ var iconExamples = []string{"FileText", "Server", "Key", "ShieldAlert", "Network
 // the palette for the same reason as iconExamples.
 var simpleIconExamples = []string{"si:linux", "si:docker", "si:kubernetes", "si:python"}
 
-// validateIcon checks a caller-supplied icon name.
+// validateIcon checks a caller-supplied icon name against what the client can
+// actually render.
 //
-// The error names a few real options rather than all 136: a model that has
-// just guessed wrong needs a nudge toward the right shape, and pasting the
-// whole palette into an error message would cost more context than the
-// document it was trying to create.
+// The error names a few real options rather than the two thousand there are: a
+// model that has just guessed wrong needs a nudge toward the shape and the
+// house style, and pasting the whole set into an error message would cost more
+// context than the document it was trying to create.
 func validateIcon(name string) error {
 	if name == "" {
 		return nil
@@ -148,9 +175,9 @@ func validateIcon(name string) error {
 			return nil
 		}
 		return refuse(
-			"brand icon %q is not one this platform has. Brand icons are simple-icons slugs "+
-				"under the %q prefix, such as %s. Use a palette icon or an emoji if the brand "+
-				"you want is not there.",
+			"there is no brand icon %q. Brand icons are simple-icons slugs under the %q "+
+				"prefix, spelled as that package spells them (lowercase, no spaces or dots): "+
+				"%s. Use a concept icon or an emoji if the brand has no mark.",
 			name, SimpleIconPrefix, strings.Join(quoteAll(simpleIconExamples), ", "))
 	}
 
@@ -158,9 +185,9 @@ func validateIcon(name string) error {
 		return nil
 	}
 	return refuse(
-		"icon %q is not one this platform has. Icons are PascalCase lucide names such as %s, "+
-			"or %q for the default page glyph. Use the emoji field instead if you want "+
-			"something outside the palette.",
+		"there is no icon %q. Any lucide icon works, spelled PascalCase as lucide spells it "+
+			"(%s, %q for the default page glyph) — so this is a misspelling or an invented "+
+			"name, not a missing feature. Use the emoji field if no icon fits.",
 		name, strings.Join(quoteAll(iconExamples), ", "), AdaptiveIconName)
 }
 
@@ -177,7 +204,7 @@ func quoteAll(names []string) []string {
 // mutual exclusivity, stay identical wherever an agent meets it.
 type visualIdentity struct {
 	Emoji string `json:"emoji,omitempty" jsonschema:"One emoji. Usually leave unset."`
-	Icon  string `json:"icon,omitempty"  jsonschema:"Lucide name (Server, Key) or si:<slug> logo. Exclusive with emoji; unknown names refused. Palette: reference/icons.md. Usually leave unset."`
+	Icon  string `json:"icon,omitempty"  jsonschema:"Any lucide name, PascalCase (Server, Key), or si:<slug> logo. Exclusive with emoji; misspellings refused. See reference/icons.md. Usually leave unset."`
 	Color string `json:"color,omitempty" jsonschema:"Hex colour for icon."`
 }
 

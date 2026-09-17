@@ -167,6 +167,14 @@ var releases = []Release{
 			"add_wiki_section is for a subject the page does not cover yet. Its description said only that it appends without touching what is there, which read as an invitation to append.",
 		},
 	},
+	{
+		Version: 19,
+		Date:    "2026-09-17",
+		Notes: []string{
+			"Any lucide icon name and any simple-icons brand slug is accepted, which is exactly what the operator's own icon picker offers. The validator previously knew only a 140-name house palette, so an agent asked to match an icon its operator had set was refused and had to settle for a near miss.",
+			"A refused icon now means a misspelled or invented name, not a missing one: retry with the right spelling rather than choosing a different glyph. icons.md still names the house shortlist, now as the preference it is.",
+		},
+	},
 }
 
 // Releases returns the full history, oldest first. A copy, so callers cannot
