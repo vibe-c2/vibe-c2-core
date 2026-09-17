@@ -18,7 +18,14 @@ import {
 } from "./wiki-file-preview-document"
 
 /** Formats we render ourselves into the sandboxed frame. */
-export type InlinePreviewKind = "html" | "docx" | "xlsx" | "text" | "markdown" | "csv"
+export type InlinePreviewKind =
+  | "html"
+  | "docx"
+  | "xlsx"
+  | "text"
+  | "markdown"
+  | "csv"
+  | "json"
 
 /** HTML types we preview by fetching the bytes and rendering them in a
  *  sandboxed <iframe srcdoc>. These stay in the backend's dangerous-types list —
@@ -37,6 +44,14 @@ const CSV_CONTENT_TYPES = new Set<string>([
   "text/csv",
   "application/csv",
   "text/tab-separated-values",
+])
+
+/** JSON. application/json is the registered type; the others turn up from
+ *  older tooling and from JSON-LD documents, which are still JSON. */
+const JSON_CONTENT_TYPES = new Set<string>([
+  "application/json",
+  "text/json",
+  "application/ld+json",
 ])
 
 /** Markdown has a registered type, but plenty of tools still label .md files
@@ -77,6 +92,7 @@ const EXTENSION_KINDS: Record<string, InlinePreviewKind> = {
   markdown: "markdown",
   csv: "csv",
   tsv: "csv",
+  json: "json",
 }
 
 function extensionOf(filename: string): string {
@@ -119,6 +135,7 @@ function kindFromContentType(contentType: string): InlinePreviewKind | undefined
   if (contentType === DOCX_CONTENT_TYPE) return "docx"
   if (contentType === XLSX_CONTENT_TYPE) return "xlsx"
   if (CSV_CONTENT_TYPES.has(contentType)) return "csv"
+  if (JSON_CONTENT_TYPES.has(contentType)) return "json"
   if (MARKDOWN_CONTENT_TYPES.has(contentType)) return "markdown"
   // text/plain is checked last and deliberately does not short-circuit the
   // extension fallback: sniffers routinely label .md and .csv as text/plain,
@@ -207,7 +224,7 @@ async function renderByKind(
     return { bodyHtml: withPreviewCsp(await res.text()), verbatim: true }
   }
 
-  if (kind === "text" || kind === "markdown" || kind === "csv") {
+  if (kind === "text" || kind === "markdown" || kind === "csv" || kind === "json") {
     return renderTextual(await res.text(), kind)
   }
 
@@ -230,8 +247,16 @@ async function renderByKind(
 
 async function renderTextual(
   text: string,
-  kind: "text" | "markdown" | "csv",
+  kind: "text" | "markdown" | "csv" | "json",
 ): Promise<PreviewBody> {
+  if (kind === "json") {
+    // No wrapConversionError: invalid JSON is not a conversion failure here.
+    // The renderer shows it verbatim with a notice, because a truncated
+    // capture is precisely the file someone needs to look at.
+    const { renderJsonPreview } = await import("./wiki-file-preview-json")
+    return renderJsonPreview(text)
+  }
+
   if (kind === "csv") {
     const { renderCsvPreview } = await import("./wiki-file-preview-csv")
     return wrapConversionError(

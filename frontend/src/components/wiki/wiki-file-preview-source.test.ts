@@ -19,6 +19,14 @@ describe("detectInlinePreviewKind", () => {
     expect(detectInlinePreviewKind("application/xhtml+xml", "r.xhtml", SMALL)).toBe("html")
   })
 
+  it("recognises json by content type and by extension", () => {
+    expect(detectInlinePreviewKind("application/json", "scan.json", SMALL)).toBe("json")
+    expect(detectInlinePreviewKind("application/ld+json", "graph.json", SMALL)).toBe("json")
+    // Sniffers routinely call a JSON file plain text; the extension rescues it
+    // from the raw-text renderer it would otherwise land in.
+    expect(detectInlinePreviewKind("text/plain", "scan.json", SMALL)).toBe("json")
+  })
+
   it("falls back to the extension when sniffing lands on a generic type", () => {
     // docx and xlsx are ZIP containers, so a sniffer can legitimately report
     // application/zip. Losing the preview for that reason would be a poor trade.

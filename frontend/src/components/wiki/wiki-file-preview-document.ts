@@ -26,6 +26,10 @@ const THEME_COLORS = {
     headerBg: "#f4f4f5",
     stripe: "#fafafa",
     accent: "#3f3f46",
+    jsonKey: "#1d4ed8",
+    jsonString: "#15803d",
+    jsonNumber: "#b45309",
+    jsonLiteral: "#a21caf",
   },
   dark: {
     bg: "#18181b",
@@ -35,6 +39,10 @@ const THEME_COLORS = {
     headerBg: "#27272a",
     stripe: "#1f1f23",
     accent: "#d4d4d8",
+    jsonKey: "#93c5fd",
+    jsonString: "#86efac",
+    jsonNumber: "#fcd34d",
+    jsonLiteral: "#f0abfc",
   },
 } as const
 
@@ -105,6 +113,12 @@ blockquote {
 }
 pre, code { font-family: ui-monospace, "Geist Mono", SFMono-Regular, monospace; font-size: 0.92em; }
 pre { overflow-x: auto; padding: 12px; background: ${c.headerBg}; border-radius: 6px; }
+/* JSON tokens. Colour is the only signal, so each stays legible against the
+   pre background in both themes rather than relying on weight or background. */
+.json-key { color: ${c.jsonKey}; }
+.json-string { color: ${c.jsonString}; }
+.json-number { color: ${c.jsonNumber}; }
+.json-boolean, .json-null { color: ${c.jsonLiteral}; }
 hr { border: 0; border-top: 1px solid ${c.border}; margin: 1.6em 0; }
 
 /* Tables: shared by docx tables and the sheet renderer. Wrapped in a scroll
