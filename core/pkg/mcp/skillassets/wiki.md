@@ -3,10 +3,9 @@
 ## Finding the right page
 
 `search_wiki` returns a `snippet` with every hit. Read the snippets before
-opening anything; opening wrong pages is the usual way to waste a context
-window. `list_wiki_tree` shows how the notes are organised: two levels by
-default with a `childCount` per page, `parent_id` to descend into one branch,
-`depth:-1` for everything.
+opening anything; opening wrong pages wastes the context window.
+`list_wiki_tree` shows how the notes are organised: two levels by default with
+a `childCount` per page, `parent_id` to descend, `depth:-1` for everything.
 
 ## Reading only part of a page
 
@@ -31,19 +30,24 @@ back as an **outline** (headings, nesting, bytes under each) unless you pass
   back every construct you are not deliberately changing.
 
 Copy `old_text` verbatim: whitespace, list markers and all. It must be unique;
-if it occurs more than once the edit is refused with the count, and the fix is
-a line either side, not `replace_all`, which is for renaming throughout. A
-refusal says how the snippet differs; read it before retrying.
+if it occurs more than once the fix is a line either side, not `replace_all`,
+which is for renaming throughout. A refusal says how the snippet differs.
 
-Edits land on the live document, so the operator may be reading or typing
-there. Every write reports `watchers`; a non-zero count means they saw it.
+Edits land on the live document; every write reports `watchers`, and a
+non-zero count means the operator saw it.
+
+## Moving a page
+
+`move_wiki_document` files a page under a different parent, taking everything
+below it; omit `parent_id` for the top level. Never rebuild a page somewhere
+else and trash the original: that loses its history, its attachments and every
+link pointing at it.
 
 ## Deleting a page
 
 `delete_wiki_document` moves a page to the trash, where an admin can restore
-it: a page made by mistake, a duplicate you merged, a stale page. A page with
-children is refused until you pass `with_children:true`, because they go with
-it. Templates are refused.
+it. A page with children is refused until you pass `with_children:true`,
+because they go with it. Templates are refused.
 
 ## What a page can contain
 
@@ -53,11 +57,10 @@ Pages are richer than plain markdown; preserve these constructs.
 
   ````
   :::checklist {"prompt":"Enumerated SMB shares?","required":true,"state":"answered"}
-  Three shares, one world-readable:
+  Two shares, one writable:
 
   ```text
   IPC$      no access
-  Public    READ
   Backups   READ, WRITE
   ```
   :::
@@ -65,9 +68,8 @@ Pages are richer than plain markdown; preserve these constructs.
 
   The body is the answer; `state` is `answered`, `not_applicable`, `flagged`
   or absent. To answer one, edit the marker's `state` and write the body in one
-  `edit_wiki_document` call. The operator reads the answer as written: anything
-  multi-line goes in a fenced code block, one line per line, prose above it.
-  Never squash several lines into one.
+  `edit_wiki_document` call. The operator reads the answer as written:
+  anything multi-line goes in a fenced code block, never squashed into a line.
 - **Reference chips**: `[host](vibe://host/<id>)`, `[hash](vibe://hash/<id>)`,
   `[page](vibe://doc/<id>)`. Credentials appear as a `vibe-credential` fenced
   block.
@@ -77,10 +79,10 @@ Pages are richer than plain markdown; preserve these constructs.
 
 ## Templates
 
-Check `list_wiki_templates` before writing a page from scratch. The listing
-spans the operation's own templates and the shared ones in Public (marked
-`shared`). Create from one with `create_wiki_document` and `template_id`;
-your `title` overrides the template's.
+Check `list_wiki_templates` before writing a page from scratch. It spans the
+operation's own templates and the shared ones in Public (marked `shared`).
+Create from one with `create_wiki_document` and `template_id`; your `title`
+overrides the template's.
 
 Pages carry `isTemplate`. Editing one changes every page made from it
 afterwards, and `set_wiki_template` is a team decision: propose it.

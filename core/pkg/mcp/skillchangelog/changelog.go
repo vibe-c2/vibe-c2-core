@@ -152,6 +152,13 @@ var releases = []Release{
 			"attach_text_to_wiki_document is now for a real file format somebody would open on its own, or a dump so long it would bury the page. The previous wording sent all raw output to an attachment, which is why pages ended up carrying .txt files they did not need.",
 		},
 	},
+	{
+		Version: 17,
+		Date:    "2026-09-17",
+		Notes: []string{
+			"move_wiki_document files a page under a different parent, taking everything below it; omit parent_id for the top level. Until now there was no way to reparent a page, so reorganising meant rebuilding pages under the new parent and trashing the originals, which threw away their history, their attachments and every link pointing at them.",
+		},
+	},
 }
 
 // Releases returns the full history, oldest first. A copy, so callers cannot

@@ -428,3 +428,127 @@ func (s *Server) writeBody(ctx context.Context, doc *models.WikiDocument, body s
 	s.forgetMarkdown(ctx, doc.DocumentID.String())
 	return result, nil
 }
+
+// moveWikiDocumentArgs is move_wiki_document's input. A move is nothing but a
+// new parent, so parent_id carries the whole meaning: naming a page puts it
+// under that page, omitting it puts the page at the top level. There is no
+// separate "to root" flag because there is no third thing a move can mean.
+type moveWikiDocumentArgs struct {
+	IdempotencyKey
+	DocumentID string `json:"document_id"         jsonschema:"Page id to move."`
+	ParentID   string `json:"parent_id,omitempty" jsonschema:"Page it moves under. Omit to move it to the top level."`
+}
+
+// moveWikiDocumentView reports where the page ended up, including how many
+// pages travelled with it. The subtree moving is the part an agent is most
+// likely to have misjudged, so it is in the result rather than implied.
+type moveWikiDocumentView struct {
+	wikiDocView
+	// ParentTitle is empty when the page now sits at the top level.
+	ParentTitle string `json:"parentTitle,omitempty"`
+	// Descendants is how many pages moved with it. Zero for a leaf.
+	Descendants int `json:"descendants"`
+}
+
+// handleMoveWikiDocument reparents a page.
+//
+// Without this an agent that organised pages under the wrong parent had one
+// way out: create them again in the right place and trash the originals. That
+// loses the history, the attachments and every link pointing at the old ids,
+// and it is what production agents were actually doing.
+//
+// The refusals below duplicate checks the resolver already makes. They are
+// here because the resolver's wording is written for a UI that has already
+// made the mistake impossible — the move dialog hides the page's own subtree —
+// whereas an agent picks a parent id out of a tree listing and needs to be
+// told which rule it hit and what to do instead.
+func handleMoveWikiDocument(ctx context.Context, s *Server, args moveWikiDocumentArgs) (toolResult, error) {
+	doc, err := s.loadWikiDocument(ctx, args.DocumentID, models.OperationRoleOperator)
+	if err != nil {
+		return toolResult{}, err
+	}
+	if doc.DeletedAt != nil {
+		return toolResult{}, refuse("%q is in the trash; an admin restores it before it can be moved.", doc.Title)
+	}
+
+	var parent *models.WikiDocument
+	if args.ParentID != "" {
+		if args.ParentID == args.DocumentID {
+			return toolResult{}, refuse("a page cannot be moved under itself.")
+		}
+		parent, err = s.loadWikiDocument(ctx, args.ParentID, models.OperationRoleOperator)
+		if err != nil {
+			return toolResult{}, err
+		}
+		if parent.OperationID != doc.OperationID {
+			return toolResult{}, refuse(
+				"%q belongs to a different operation; a page cannot move between operations. Copy the content into a new page there instead.",
+				parent.Title)
+		}
+		if parent.DeletedAt != nil {
+			return toolResult{}, refuse("%q is in the trash, so nothing can be filed under it.", parent.Title)
+		}
+		if wikiParentIsBelow(parent, doc.DocumentID) {
+			return toolResult{}, refuse(
+				"%q already sits under %q, so moving %q there would detach the branch. Pick a parent outside it, or omit parent_id for the top level.",
+				parent.Title, doc.Title, doc.Title)
+		}
+	}
+
+	if sameWikiParent(doc.ParentDocumentID, parent) {
+		return toolResult{}, refuse("%q is already there.", doc.Title)
+	}
+
+	descendants, err := s.countWikiDescendants(ctx, doc)
+	if err != nil {
+		return toolResult{}, err
+	}
+
+	// An empty parent_id reaches the resolver as a pointer to an empty
+	// string, which is how it spells "move to the top level"; a nil pointer
+	// would mean "leave the parent alone" and move nothing.
+	updated, err := s.deps.WikiDocs.UpdateWikiDocument(ctx, args.DocumentID, model.UpdateWikiDocumentInput{
+		ParentDocumentID: &args.ParentID,
+	})
+	if err != nil {
+		return toolResult{}, fmt.Errorf("failed to move wiki page: %w", err)
+	}
+
+	view := moveWikiDocumentView{wikiDocView: toWikiDocView(updated), Descendants: descendants}
+	where := "to the top level"
+	if parent != nil {
+		view.ParentTitle = parent.Title
+		where = "under " + parent.Title
+	}
+	summary := fmt.Sprintf("moved %s %s", doc.Title, where)
+	if descendants > 0 {
+		summary = fmt.Sprintf("moved %s and the %d page(s) under it %s", doc.Title, descendants, where)
+	}
+	return toolResult{
+		Payload:     view,
+		OperationID: &doc.OperationID,
+		Summary:     summary,
+	}, nil
+}
+
+// sameWikiParent reports whether doc's current parent is already the one
+// asked for, treating a nil parent and a nil target as the top level.
+func sameWikiParent(current *uuid.UUID, target *models.WikiDocument) bool {
+	if current == nil {
+		return target == nil
+	}
+	return target != nil && *current == target.DocumentID
+}
+
+// wikiParentIsBelow reports whether the candidate parent sits inside docID's
+// own subtree, which is the one move that would detach the branch from the
+// tree. path_ids is the ancestor chain the server maintains on every page, so
+// the answer is a scan of a short slice rather than a walk upward.
+func wikiParentIsBelow(parent *models.WikiDocument, docID uuid.UUID) bool {
+	for _, ancestorID := range parent.PathIDs {
+		if ancestorID == docID {
+			return true
+		}
+	}
+	return false
+}

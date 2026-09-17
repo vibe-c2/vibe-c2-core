@@ -89,6 +89,13 @@ func registerWikiTools(s *Server) {
 	}, writeTool, handleUpdateWikiDocument)
 
 	register(s, &mcp.Tool{
+		Name: "move_wiki_document",
+		Description: "File a page under a different parent, with everything below it. Omit " +
+			"parent_id to move it to the top level. Reorganise with this; never recreate a " +
+			"page elsewhere and trash the original.",
+	}, writeTool, handleMoveWikiDocument)
+
+	register(s, &mcp.Tool{
 		Name: "delete_wiki_document",
 		Description: "Move a page to the trash, where an admin can restore it. A page with " +
 			"children is refused unless with_children:true; templates are refused.",

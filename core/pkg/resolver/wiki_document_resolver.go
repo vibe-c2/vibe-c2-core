@@ -445,6 +445,17 @@ func (r *wikiDocumentResolver) UpdateWikiDocument(ctx context.Context, id string
 			if newParentUID == doc.DocumentID {
 				return nil, fmt.Errorf("cannot make a document its own parent")
 			}
+			// ...including under its own descendant, which would detach the
+			// whole subtree from the tree and leave a parent cycle behind it.
+			// The candidate parent's path_ids is its materialized ancestor
+			// chain, so the check is a scan of a short slice rather than a
+			// walk upward. The move dialog hides the subtree client-side; this
+			// is the same rule where it cannot be bypassed.
+			for _, ancestorID := range parent.PathIDs {
+				if ancestorID == doc.DocumentID {
+					return nil, fmt.Errorf("cannot move a document under its own descendant")
+				}
+			}
 			// Check nesting depth
 			depth, err := r.docRepo.NestingDepth(ctx, newParentUID)
 			if err != nil {

@@ -169,6 +169,7 @@ func TestIdempotency_EveryWriteToolAcceptsAKey(t *testing.T) {
 		setWikiTemplateArgs{},
 		sectionWriteArgs{},
 		updateWikiDocumentArgs{},
+		moveWikiDocumentArgs{},
 		createTimelineEventArgs{},
 	}
 	for _, args := range writeArgs {
