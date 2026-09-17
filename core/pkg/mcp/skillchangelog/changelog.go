@@ -136,6 +136,14 @@ var releases = []Release{
 			"Dropped from the brief, to make room and because each is covered elsewhere: the icon default (reference/icons.md), idempotency_key (a described field on every write tool) and the search_wiki snippet hint (reference/wiki.md).",
 		},
 	},
+	{
+		Version: 15,
+		Date:    "2026-09-17",
+		Notes: []string{
+			"Read the URL and token for the HTTP endpoints out of your MCP client's config at the time of use, never from memory. A token belongs to one server, and a machine used on several projects has several.",
+			"A 401 from /mcp/upload or the skills endpoints means a stale or foreign token, not a broken endpoint. Re-read the config and retry rather than falling back to content_base64.",
+		},
+	},
 }
 
 // Releases returns the full history, oldest first. A copy, so callers cannot

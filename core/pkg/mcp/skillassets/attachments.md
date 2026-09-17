@@ -47,18 +47,28 @@ so it can lag a write by a few seconds.
 
 ## Screenshots and other binary files
 
-Send raw bytes to the upload endpoint with the same bearer token you use
-for MCP; it is the multipart form of `attach_file_to_wiki_document`, audited
-under that name, and returns the same result:
+Send raw bytes to the upload endpoint; it is the multipart form of
+`attach_file_to_wiki_document`, audited under that name, and returns the same
+result:
 
 ```
-curl -X POST $HOST/api/v1/mcp/upload -H "Authorization: Bearer vca_..." \
+curl -X POST $URL/api/v1/mcp/upload -H "Authorization: Bearer $TOKEN" \
   -F documentId=<page id> -F as=image -F file=@login.png
 ```
 
+**Read the URL and token out of your MCP client's config now. Never use ones
+you remember.** They are the server address and `Authorization` header
+configured for this connection, in `.mcp.json`, `.cursor/mcp.json` or your
+client's equivalent. A token belongs to one server, and a machine used on
+several projects has several: the one in your head is probably last project's.
+
+A `401` means exactly that — stale or foreign token. Re-read the config and
+retry. It does not mean the endpoint is unavailable, and it is not a reason to
+fall back to base64.
+
 Fields: `documentId`, `file` (the filename travels with it), `as` and
-`place`. Use the tool with `content_base64` only when you cannot make an
-HTTP request yourself: base64 costs a third more and a copy on each side.
+`place`. Use the tool with `content_base64` only when you genuinely cannot
+make an HTTP request: base64 costs a third more and a copy on each side.
 
 - `as:"image"` for a screenshot (PNG, JPEG, GIF, WebP): the page shows it as a
   picture. `as:"attachment"` (default) for anything else, a capture or a

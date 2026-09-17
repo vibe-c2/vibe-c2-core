@@ -3,7 +3,7 @@
 name: vibe-c2
 description: Work an offensive security engagement in Vibe C2 — hosts, credentials, hashes, tasks, wiki notes and the operation timeline — through its MCP tools. Use whenever connected to a Vibe C2 MCP endpoint, or when the user mentions an operation, findings, or engagement notes.
 metadata:
-  version: "14"
+  version: "15"
 ---
 
 # Vibe C2
@@ -509,18 +509,28 @@ so it can lag a write by a few seconds.
 
 ## Screenshots and other binary files
 
-Send raw bytes to the upload endpoint with the same bearer token you use
-for MCP; it is the multipart form of `attach_file_to_wiki_document`, audited
-under that name, and returns the same result:
+Send raw bytes to the upload endpoint; it is the multipart form of
+`attach_file_to_wiki_document`, audited under that name, and returns the same
+result:
 
 ```
-curl -X POST $HOST/api/v1/mcp/upload -H "Authorization: Bearer vca_..." \
+curl -X POST $URL/api/v1/mcp/upload -H "Authorization: Bearer $TOKEN" \
   -F documentId=<page id> -F as=image -F file=@login.png
 ```
 
+**Read the URL and token out of your MCP client's config now. Never use ones
+you remember.** They are the server address and `Authorization` header
+configured for this connection, in `.mcp.json`, `.cursor/mcp.json` or your
+client's equivalent. A token belongs to one server, and a machine used on
+several projects has several: the one in your head is probably last project's.
+
+A `401` means exactly that — stale or foreign token. Re-read the config and
+retry. It does not mean the endpoint is unavailable, and it is not a reason to
+fall back to base64.
+
 Fields: `documentId`, `file` (the filename travels with it), `as` and
-`place`. Use the tool with `content_base64` only when you cannot make an
-HTTP request yourself: base64 costs a third more and a copy on each side.
+`place`. Use the tool with `content_base64` only when you genuinely cannot
+make an HTTP request: base64 costs a third more and a copy on each side.
 
 - `as:"image"` for a screenshot (PNG, JPEG, GIF, WebP): the page shows it as a
   picture. `as:"attachment"` (default) for anything else, a capture or a
@@ -569,13 +579,17 @@ descriptions, never bundles.
 
 ## Installing one
 
-`get_skill` returns a `downloadUrl`. Fetch it with the same agent key you use
-for tool calls and unzip it into your skills directory:
+`get_skill` returns a `downloadUrl`. Fetch it with your agent key and unzip it
+into your skills directory:
 
 ```
-curl -sS -H "Authorization: Bearer $VIBE_C2_AGENT_KEY" \
-  "$VIBE_C2_URL/api/v1/mcp/skills/download?name=recon-sweep" -o skill.zip
+curl -sS -H "Authorization: Bearer $TOKEN" \
+  "$URL/api/v1/mcp/skills/download?name=recon-sweep" -o skill.zip
 ```
+
+Take the URL and token from your MCP client's config, the same place this
+connection is configured, rather than from memory — see attachments.md. A
+`401` is a stale or foreign token, not a broken endpoint.
 
 Add `&version=N` for an older one; without it you get the current version. A
 newly unzipped skill is picked up when your client next starts a session, not
@@ -597,11 +611,11 @@ server can download it, so it is their call what goes out under it.
 Zip the skill directory, then POST it as multipart form data:
 
 ```
-curl -sS -H "Authorization: Bearer $VIBE_C2_AGENT_KEY" \
+curl -sS -H "Authorization: Bearer $TOKEN" \
   -F name=recon-sweep -F file=@skill.zip \
   -F "description=Sweeps a subnet for SMB signing and logs it to the wiki" \
   -F "notes=Skips hosts already recorded" \
-  "$VIBE_C2_URL/api/v1/mcp/skills/upload"
+  "$URL/api/v1/mcp/skills/upload"
 ```
 
 `name` is normalized to a slug, so "Recon Sweep" and `recon-sweep` are the

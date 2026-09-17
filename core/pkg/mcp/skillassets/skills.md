@@ -9,13 +9,17 @@ descriptions, never bundles.
 
 ## Installing one
 
-`get_skill` returns a `downloadUrl`. Fetch it with the same agent key you use
-for tool calls and unzip it into your skills directory:
+`get_skill` returns a `downloadUrl`. Fetch it with your agent key and unzip it
+into your skills directory:
 
 ```
-curl -sS -H "Authorization: Bearer $VIBE_C2_AGENT_KEY" \
-  "$VIBE_C2_URL/api/v1/mcp/skills/download?name=recon-sweep" -o skill.zip
+curl -sS -H "Authorization: Bearer $TOKEN" \
+  "$URL/api/v1/mcp/skills/download?name=recon-sweep" -o skill.zip
 ```
+
+Take the URL and token from your MCP client's config, the same place this
+connection is configured, rather than from memory — see attachments.md. A
+`401` is a stale or foreign token, not a broken endpoint.
 
 Add `&version=N` for an older one; without it you get the current version. A
 newly unzipped skill is picked up when your client next starts a session, not
@@ -37,11 +41,11 @@ server can download it, so it is their call what goes out under it.
 Zip the skill directory, then POST it as multipart form data:
 
 ```
-curl -sS -H "Authorization: Bearer $VIBE_C2_AGENT_KEY" \
+curl -sS -H "Authorization: Bearer $TOKEN" \
   -F name=recon-sweep -F file=@skill.zip \
   -F "description=Sweeps a subnet for SMB signing and logs it to the wiki" \
   -F "notes=Skips hosts already recorded" \
-  "$VIBE_C2_URL/api/v1/mcp/skills/upload"
+  "$URL/api/v1/mcp/skills/upload"
 ```
 
 `name` is normalized to a slug, so "Recon Sweep" and `recon-sweep` are the
