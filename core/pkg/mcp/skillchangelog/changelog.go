@@ -159,6 +159,14 @@ var releases = []Release{
 			"move_wiki_document files a page under a different parent, taking everything below it; omit parent_id for the top level. Until now there was no way to reparent a page, so reorganising meant rebuilding pages under the new parent and trashing the originals, which threw away their history, their attachments and every link pointing at them.",
 		},
 	},
+	{
+		Version: 18,
+		Date:    "2026-09-17",
+		Notes: []string{
+			"A new fact joins the section that already covers its kind. A port found on Shodan goes in the services table with the rest, not under a second heading named after the tool that found it: two sections on one subject mean the operator has to read both to know what the host runs. structure.md has the rule as \"where a fact goes\", next to where a page goes.",
+			"add_wiki_section is for a subject the page does not cover yet. Its description said only that it appends without touching what is there, which read as an invitation to append.",
+		},
+	},
 }
 
 // Releases returns the full history, oldest first. A copy, so callers cannot

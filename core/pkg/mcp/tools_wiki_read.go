@@ -72,8 +72,10 @@ func registerWikiTools(s *Server) {
 
 	register(s, &mcp.Tool{
 		Name: "add_wiki_section",
-		Description: "Add Markdown to the end (or start) of one or more pages without touching " +
-			"what is there. Safe while the operator is editing the page.",
+		Description: "Add a section for a subject the page does not cover yet. If a section " +
+			"already covers it, put the new facts in that one with edit_wiki_document " +
+			"instead: a second heading on the same subject splits it in two. Adds at the " +
+			"end, or the start with position:\"start\"; safe while the operator edits.",
 	}, writeTool, handleAddWikiSection)
 
 	register(s, &mcp.Tool{

@@ -16,42 +16,42 @@ back as an **outline** (headings, nesting, bytes under each) unless you pass
 - `section:"<heading>"` returns that heading and everything nested under it.
 - Section sizes include their children, so they do not sum to the page.
 - A section is **part** of the page. Change it with `edit_wiki_document`.
-  Passing it to `update_wiki_document` replaces the whole page with the
-  fragment.
+  Passing it to `update_wiki_document` replaces the page with the fragment.
 - Section text is exact, so it is the cheapest source of `old_text`.
 
 ## Changing a page
 
 - `edit_wiki_document` replaces an exact snippet. Almost every edit.
-- `add_wiki_section` adds to the end, or to the start with `position:"start"`.
-  Pass `document_ids` to add the same content to up to 25 pages in one call;
+- `add_wiki_section` adds to the end, or to the start with `position:"start"`,
+  for a subject the page lacks; enrich one it already has with
+  `edit_wiki_document` instead. Pass `document_ids` to add the same content to up to 25 pages in one call;
   the result says which succeeded, so retry only the failures.
 - `update_wiki_document` replaces the whole body. Read the page first and put
-  back every construct you are not deliberately changing.
+  back every construct you are not changing.
 
 Copy `old_text` verbatim: whitespace, list markers and all. It must be unique;
 if it occurs more than once the fix is a line either side, not `replace_all`,
-which is for renaming throughout. A refusal says how the snippet differs.
+which is for renaming throughout. A refusal says how it differs.
 
 Edits land on the live document; every write reports `watchers`, and a
 non-zero count means the operator saw it.
 
 ## Moving a page
 
-`move_wiki_document` files a page under a different parent, taking everything
+`move_wiki_document` files a page under a different parent, with everything
 below it; omit `parent_id` for the top level. Never rebuild a page somewhere
-else and trash the original: that loses its history, its attachments and every
-link pointing at it.
+else and trash the original: that loses its history, its attachments and
+every link to it.
 
 ## Deleting a page
 
 `delete_wiki_document` moves a page to the trash, where an admin can restore
-it. A page with children is refused until you pass `with_children:true`,
-because they go with it. Templates are refused.
+it. A page with children is refused until you pass `with_children:true`.
+Templates are refused.
 
 ## What a page can contain
 
-Pages are richer than plain markdown; preserve these constructs.
+Pages are richer than markdown; preserve these constructs.
 
 - **Checklist items** drive a coverage bar the operator watches:
 
