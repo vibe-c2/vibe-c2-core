@@ -26,10 +26,11 @@ const THEME_COLORS = {
     headerBg: "#f4f4f5",
     stripe: "#fafafa",
     accent: "#3f3f46",
-    jsonKey: "#1d4ed8",
-    jsonString: "#15803d",
-    jsonNumber: "#b45309",
-    jsonLiteral: "#a21caf",
+    codeKey: "#1d4ed8",
+    codeString: "#15803d",
+    codeNumber: "#b45309",
+    codeLiteral: "#a21caf",
+    codeComment: "#71717a",
   },
   dark: {
     bg: "#18181b",
@@ -39,10 +40,11 @@ const THEME_COLORS = {
     headerBg: "#27272a",
     stripe: "#1f1f23",
     accent: "#d4d4d8",
-    jsonKey: "#93c5fd",
-    jsonString: "#86efac",
-    jsonNumber: "#fcd34d",
-    jsonLiteral: "#f0abfc",
+    codeKey: "#93c5fd",
+    codeString: "#86efac",
+    codeNumber: "#fcd34d",
+    codeLiteral: "#f0abfc",
+    codeComment: "#a1a1aa",
   },
 } as const
 
@@ -113,12 +115,16 @@ blockquote {
 }
 pre, code { font-family: ui-monospace, "Geist Mono", SFMono-Regular, monospace; font-size: 0.92em; }
 pre { overflow-x: auto; padding: 12px; background: ${c.headerBg}; border-radius: 6px; }
-/* JSON tokens. Colour is the only signal, so each stays legible against the
-   pre background in both themes rather than relying on weight or background. */
-.json-key { color: ${c.jsonKey}; }
-.json-string { color: ${c.jsonString}; }
-.json-number { color: ${c.jsonNumber}; }
-.json-boolean, .json-null { color: ${c.jsonLiteral}; }
+/* Structured-data tokens, shared by the JSON and YAML renderers. Colour is the
+   only signal, so each stays legible against the pre background in both themes
+   rather than relying on weight or background. */
+.json-key, .yaml-key { color: ${c.codeKey}; }
+.json-string, .yaml-string { color: ${c.codeString}; }
+.json-number, .yaml-number { color: ${c.codeNumber}; }
+.json-boolean, .json-null, .yaml-boolean, .yaml-null { color: ${c.codeLiteral}; }
+.yaml-comment { color: ${c.codeComment}; font-style: italic; }
+.yaml-anchor { color: ${c.codeLiteral}; }
+.yaml-marker { color: ${c.muted}; }
 hr { border: 0; border-top: 1px solid ${c.border}; margin: 1.6em 0; }
 
 /* Tables: shared by docx tables and the sheet renderer. Wrapped in a scroll

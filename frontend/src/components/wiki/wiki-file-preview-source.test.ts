@@ -27,6 +27,15 @@ describe("detectInlinePreviewKind", () => {
     expect(detectInlinePreviewKind("text/plain", "scan.json", SMALL)).toBe("json")
   })
 
+  it("recognises yaml by content type and by extension", () => {
+    expect(detectInlinePreviewKind("application/yaml", "compose.yaml", SMALL)).toBe("yaml")
+    expect(detectInlinePreviewKind("text/x-yaml", "compose.yaml", SMALL)).toBe("yaml")
+    // Sniffers routinely call YAML plain text, and .yml is the commoner
+    // spelling in the wild.
+    expect(detectInlinePreviewKind("text/plain", "docker-compose.yml", SMALL)).toBe("yaml")
+    expect(detectInlinePreviewKind("text/plain", "playbook.yaml", SMALL)).toBe("yaml")
+  })
+
   it("falls back to the extension when sniffing lands on a generic type", () => {
     // docx and xlsx are ZIP containers, so a sniffer can legitimately report
     // application/zip. Losing the preview for that reason would be a poor trade.

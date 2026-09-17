@@ -26,6 +26,7 @@ export type InlinePreviewKind =
   | "markdown"
   | "csv"
   | "json"
+  | "yaml"
 
 /** HTML types we preview by fetching the bytes and rendering them in a
  *  sandboxed <iframe srcdoc>. These stay in the backend's dangerous-types list —
@@ -52,6 +53,15 @@ const JSON_CONTENT_TYPES = new Set<string>([
   "application/json",
   "text/json",
   "application/ld+json",
+])
+
+/** YAML. application/yaml is the registered type as of 2024; the x- spellings
+ *  predate it and are still what most tooling emits. */
+const YAML_CONTENT_TYPES = new Set<string>([
+  "application/yaml",
+  "text/yaml",
+  "application/x-yaml",
+  "text/x-yaml",
 ])
 
 /** Markdown has a registered type, but plenty of tools still label .md files
@@ -93,6 +103,8 @@ const EXTENSION_KINDS: Record<string, InlinePreviewKind> = {
   csv: "csv",
   tsv: "csv",
   json: "json",
+  yaml: "yaml",
+  yml: "yaml",
 }
 
 function extensionOf(filename: string): string {
@@ -136,6 +148,7 @@ function kindFromContentType(contentType: string): InlinePreviewKind | undefined
   if (contentType === XLSX_CONTENT_TYPE) return "xlsx"
   if (CSV_CONTENT_TYPES.has(contentType)) return "csv"
   if (JSON_CONTENT_TYPES.has(contentType)) return "json"
+  if (YAML_CONTENT_TYPES.has(contentType)) return "yaml"
   if (MARKDOWN_CONTENT_TYPES.has(contentType)) return "markdown"
   // text/plain is checked last and deliberately does not short-circuit the
   // extension fallback: sniffers routinely label .md and .csv as text/plain,
@@ -224,7 +237,13 @@ async function renderByKind(
     return { bodyHtml: withPreviewCsp(await res.text()), verbatim: true }
   }
 
-  if (kind === "text" || kind === "markdown" || kind === "csv" || kind === "json") {
+  if (
+    kind === "text" ||
+    kind === "markdown" ||
+    kind === "csv" ||
+    kind === "json" ||
+    kind === "yaml"
+  ) {
     return renderTextual(await res.text(), kind)
   }
 
@@ -247,8 +266,15 @@ async function renderByKind(
 
 async function renderTextual(
   text: string,
-  kind: "text" | "markdown" | "csv" | "json",
+  kind: "text" | "markdown" | "csv" | "json" | "yaml",
 ): Promise<PreviewBody> {
+  if (kind === "yaml") {
+    // Nothing to fail: the file is highlighted where it stands rather than
+    // parsed, so there is no conversion error to wrap.
+    const { renderYamlPreview } = await import("./wiki-file-preview-yaml")
+    return renderYamlPreview(text)
+  }
+
   if (kind === "json") {
     // No wrapConversionError: invalid JSON is not a conversion failure here.
     // The renderer shows it verbatim with a notice, because a truncated
