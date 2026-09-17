@@ -11,7 +11,7 @@ import (
 
 type findHostsArgs struct {
 	OperationID string `json:"operation_id,omitempty" jsonschema:"Operation id; omit for the operator's current one."`
-	Search      string `json:"search,omitempty"       jsonschema:"Free-text match against hostname and OS."`
+	Search      string `json:"search,omitempty"       jsonschema:"Free-text match against hostname, description and OS."`
 	Limit       int    `json:"limit,omitempty"        jsonschema:"Page size, max 50."`
 	Cursor      string `json:"cursor,omitempty"       jsonschema:"nextCursor from the previous page."`
 }
@@ -24,7 +24,8 @@ type createHostArgs struct {
 	IdempotencyKey
 	OperationID string         `json:"operation_id,omitempty" jsonschema:"Operation id; omit for the operator's current one."`
 	Hostname    string         `json:"hostname"               jsonschema:"Host name."`
-	OS          string         `json:"os,omitempty"           jsonschema:"OS fingerprint, e.g. 'Windows Server 2019'."`
+	Description string         `json:"description,omitempty"  jsonschema:"What this machine is to the engagement: its role, why it matters. A sentence or two."`
+	OS          string         `json:"os,omitempty"           jsonschema:"OS fingerprint ONLY, e.g. 'Windows Server 2019'. Anything else belongs in description."`
 	Interfaces  []interfaceArg `json:"interfaces,omitempty"   jsonschema:"Interfaces; they place the host on a subnet."`
 	Routes      []routeArg     `json:"routes,omitempty"       jsonschema:"Routing table."`
 	Logins      []loginArg     `json:"logins,omitempty"       jsonschema:"Observed logins; they draw the users lens."`
@@ -33,12 +34,13 @@ type createHostArgs struct {
 
 type updateHostArgs struct {
 	IdempotencyKey
-	HostID     string         `json:"host_id"               jsonschema:"Host id."`
-	Hostname   string         `json:"hostname,omitempty"    jsonschema:"New name."`
-	OS         string         `json:"os,omitempty"          jsonschema:"New OS fingerprint."`
-	Interfaces []interfaceArg `json:"interfaces,omitempty"  jsonschema:"REPLACES the interface list; send the full set."`
-	Routes     []routeArg     `json:"routes,omitempty"      jsonschema:"REPLACES the route list; send the full set."`
-	Logins     []loginArg     `json:"logins,omitempty"      jsonschema:"REPLACES the login list; send the full set."`
+	HostID      string         `json:"host_id"               jsonschema:"Host id."`
+	Hostname    string         `json:"hostname,omitempty"    jsonschema:"New name."`
+	Description string         `json:"description,omitempty" jsonschema:"New description: what this machine is to the engagement."`
+	OS          string         `json:"os,omitempty"          jsonschema:"New OS fingerprint ONLY; anything else belongs in description."`
+	Interfaces  []interfaceArg `json:"interfaces,omitempty"  jsonschema:"REPLACES the interface list; send the full set."`
+	Routes      []routeArg     `json:"routes,omitempty"      jsonschema:"REPLACES the route list; send the full set."`
+	Logins      []loginArg     `json:"logins,omitempty"      jsonschema:"REPLACES the login list; send the full set."`
 	visualIdentity
 }
 
@@ -121,14 +123,15 @@ func handleCreateHost(ctx context.Context, s *Server, args createHostArgs) (tool
 	emoji, icon, color := args.apply()
 
 	host, err := s.deps.Hosts.CreateHost(ctx, opID.String(), model.CreateHostInput{
-		Hostname:   args.Hostname,
-		Os:         optionalString(args.OS),
-		Emoji:      emoji,
-		Icon:       icon,
-		Color:      color,
-		Interfaces: toInterfaceInputs(args.Interfaces),
-		Routes:     toRouteInputs(args.Routes),
-		Logins:     toLoginInputs(args.Logins),
+		Hostname:    args.Hostname,
+		Description: optionalString(args.Description),
+		Os:          optionalString(args.OS),
+		Emoji:       emoji,
+		Icon:        icon,
+		Color:       color,
+		Interfaces:  toInterfaceInputs(args.Interfaces),
+		Routes:      toRouteInputs(args.Routes),
+		Logins:      toLoginInputs(args.Logins),
 	})
 	if err != nil {
 		return toolResult{}, fmt.Errorf("failed to create host: %w", err)
@@ -152,11 +155,12 @@ func handleUpdateHost(ctx context.Context, s *Server, args updateHostArgs) (tool
 	emoji, icon, color := args.apply()
 
 	input := model.UpdateHostInput{
-		Hostname: optionalString(args.Hostname),
-		Os:       optionalString(args.OS),
-		Emoji:    emoji,
-		Icon:     icon,
-		Color:    color,
+		Hostname:    optionalString(args.Hostname),
+		Description: optionalString(args.Description),
+		Os:          optionalString(args.OS),
+		Emoji:       emoji,
+		Icon:        icon,
+		Color:       color,
 	}
 	// Nil and empty mean different things to the resolver: nil leaves the list
 	// alone, empty clears it. Only send a list the caller actually supplied.

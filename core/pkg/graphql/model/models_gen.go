@@ -108,14 +108,15 @@ type CreateHashInput struct {
 }
 
 type CreateHostInput struct {
-	Hostname   string                   `json:"hostname"`
-	Interfaces []*NetworkInterfaceInput `json:"interfaces,omitempty"`
-	Routes     []*RouteInput            `json:"routes,omitempty"`
-	Logins     []*LoginInput            `json:"logins,omitempty"`
-	Os         *string                  `json:"os,omitempty"`
-	Emoji      *string                  `json:"emoji,omitempty"`
-	Icon       *string                  `json:"icon,omitempty"`
-	Color      *string                  `json:"color,omitempty"`
+	Hostname    string                   `json:"hostname"`
+	Description *string                  `json:"description,omitempty"`
+	Interfaces  []*NetworkInterfaceInput `json:"interfaces,omitempty"`
+	Routes      []*RouteInput            `json:"routes,omitempty"`
+	Logins      []*LoginInput            `json:"logins,omitempty"`
+	Os          *string                  `json:"os,omitempty"`
+	Emoji       *string                  `json:"emoji,omitempty"`
+	Icon        *string                  `json:"icon,omitempty"`
+	Color       *string                  `json:"color,omitempty"`
 }
 
 type CreateOperationInput struct {
@@ -467,14 +468,15 @@ type UpdateHashInput struct {
 }
 
 type UpdateHostInput struct {
-	Hostname   *string                  `json:"hostname,omitempty"`
-	Interfaces []*NetworkInterfaceInput `json:"interfaces,omitempty"`
-	Routes     []*RouteInput            `json:"routes,omitempty"`
-	Logins     []*LoginInput            `json:"logins,omitempty"`
-	Os         *string                  `json:"os,omitempty"`
-	Emoji      *string                  `json:"emoji,omitempty"`
-	Icon       *string                  `json:"icon,omitempty"`
-	Color      *string                  `json:"color,omitempty"`
+	Hostname    *string                  `json:"hostname,omitempty"`
+	Description *string                  `json:"description,omitempty"`
+	Interfaces  []*NetworkInterfaceInput `json:"interfaces,omitempty"`
+	Routes      []*RouteInput            `json:"routes,omitempty"`
+	Logins      []*LoginInput            `json:"logins,omitempty"`
+	Os          *string                  `json:"os,omitempty"`
+	Emoji       *string                  `json:"emoji,omitempty"`
+	Icon        *string                  `json:"icon,omitempty"`
+	Color       *string                  `json:"color,omitempty"`
 }
 
 type UpdateOperationInput struct {

@@ -239,6 +239,7 @@ type ComplexityRoot struct {
 		Color       func(childComplexity int) int
 		CreatedAt   func(childComplexity int) int
 		CreatedBy   func(childComplexity int) int
+		Description func(childComplexity int) int
 		Emoji       func(childComplexity int) int
 		Hostname    func(childComplexity int) int
 		ID          func(childComplexity int) int
@@ -1948,6 +1949,12 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.Host.CreatedBy(childComplexity), true
+	case "Host.description":
+		if e.ComplexityRoot.Host.Description == nil {
+			break
+		}
+
+		return e.ComplexityRoot.Host.Description(childComplexity), true
 	case "Host.emoji":
 		if e.ComplexityRoot.Host.Emoji == nil {
 			break
@@ -6478,6 +6485,10 @@ type Host {
   # avoid a DB round-trip per row.
   operation: Operation!
   hostname: String!
+  # What the machine is to the engagement — its role, why it matters, what is
+  # notable about it. Distinct from ` + "`" + `os` + "`" + `, which is only a fingerprint. Empty
+  # string when unset.
+  description: String!
   interfaces: [NetworkInterface!]!
   routes: [Route!]!
   logins: [Login!]!
@@ -6538,6 +6549,7 @@ input LoginInput {
 
 input CreateHostInput {
   hostname: String!
+  description: String
   interfaces: [NetworkInterfaceInput!]
   routes: [RouteInput!]
   logins: [LoginInput!]
@@ -6551,6 +6563,7 @@ input CreateHostInput {
 # leave it unchanged; pass interfaces/routes/logins to replace the whole list.
 input UpdateHostInput {
   hostname: String
+  description: String
   interfaces: [NetworkInterfaceInput!]
   routes: [RouteInput!]
   logins: [LoginInput!]
@@ -14961,6 +14974,35 @@ func (ec *executionContext) fieldContext_Host_hostname(_ context.Context, field 
 	return fc, nil
 }
 
+func (ec *executionContext) _Host_description(ctx context.Context, field graphql.CollectedField, obj *models.Host) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Host_description,
+		func(ctx context.Context) (any, error) {
+			return obj.Description, nil
+		},
+		nil,
+		ec.marshalNString2string,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_Host_description(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Host",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
 func (ec *executionContext) _Host_interfaces(ctx context.Context, field graphql.CollectedField, obj *models.Host) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
@@ -15438,6 +15480,8 @@ func (ec *executionContext) fieldContext_HostEdge_node(_ context.Context, field 
 				return ec.fieldContext_Host_operation(ctx, field)
 			case "hostname":
 				return ec.fieldContext_Host_hostname(ctx, field)
+			case "description":
+				return ec.fieldContext_Host_description(ctx, field)
 			case "interfaces":
 				return ec.fieldContext_Host_interfaces(ctx, field)
 			case "routes":
@@ -15613,6 +15657,8 @@ func (ec *executionContext) fieldContext_HostEvent_host(_ context.Context, field
 				return ec.fieldContext_Host_operation(ctx, field)
 			case "hostname":
 				return ec.fieldContext_Host_hostname(ctx, field)
+			case "description":
+				return ec.fieldContext_Host_description(ctx, field)
 			case "interfaces":
 				return ec.fieldContext_Host_interfaces(ctx, field)
 			case "routes":
@@ -18705,6 +18751,8 @@ func (ec *executionContext) fieldContext_Mutation_createHost(ctx context.Context
 				return ec.fieldContext_Host_operation(ctx, field)
 			case "hostname":
 				return ec.fieldContext_Host_hostname(ctx, field)
+			case "description":
+				return ec.fieldContext_Host_description(ctx, field)
 			case "interfaces":
 				return ec.fieldContext_Host_interfaces(ctx, field)
 			case "routes":
@@ -18794,6 +18842,8 @@ func (ec *executionContext) fieldContext_Mutation_updateHost(ctx context.Context
 				return ec.fieldContext_Host_operation(ctx, field)
 			case "hostname":
 				return ec.fieldContext_Host_hostname(ctx, field)
+			case "description":
+				return ec.fieldContext_Host_description(ctx, field)
 			case "interfaces":
 				return ec.fieldContext_Host_interfaces(ctx, field)
 			case "routes":
@@ -24952,6 +25002,8 @@ func (ec *executionContext) fieldContext_Query_host(ctx context.Context, field g
 				return ec.fieldContext_Host_operation(ctx, field)
 			case "hostname":
 				return ec.fieldContext_Host_hostname(ctx, field)
+			case "description":
+				return ec.fieldContext_Host_description(ctx, field)
 			case "interfaces":
 				return ec.fieldContext_Host_interfaces(ctx, field)
 			case "routes":
@@ -38534,7 +38586,7 @@ func (ec *executionContext) unmarshalInputCreateHostInput(ctx context.Context, o
 		asMap[k] = v
 	}
 
-	fieldsInOrder := [...]string{"hostname", "interfaces", "routes", "logins", "os", "emoji", "icon", "color"}
+	fieldsInOrder := [...]string{"hostname", "description", "interfaces", "routes", "logins", "os", "emoji", "icon", "color"}
 	for _, k := range fieldsInOrder {
 		v, ok := asMap[k]
 		if !ok {
@@ -38548,6 +38600,13 @@ func (ec *executionContext) unmarshalInputCreateHostInput(ctx context.Context, o
 				return it, err
 			}
 			it.Hostname = data
+		case "description":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("description"))
+			data, err := ec.unmarshalOString2ᚖstring(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.Description = data
 		case "interfaces":
 			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("interfaces"))
 			data, err := ec.unmarshalONetworkInterfaceInput2ᚕᚖgithubᚗcomᚋvibeᚑc2ᚋvibeᚑc2ᚑcoreᚋcoreᚋpkgᚋgraphqlᚋmodelᚐNetworkInterfaceInputᚄ(ctx, v)
@@ -39559,7 +39618,7 @@ func (ec *executionContext) unmarshalInputUpdateHostInput(ctx context.Context, o
 		asMap[k] = v
 	}
 
-	fieldsInOrder := [...]string{"hostname", "interfaces", "routes", "logins", "os", "emoji", "icon", "color"}
+	fieldsInOrder := [...]string{"hostname", "description", "interfaces", "routes", "logins", "os", "emoji", "icon", "color"}
 	for _, k := range fieldsInOrder {
 		v, ok := asMap[k]
 		if !ok {
@@ -39573,6 +39632,13 @@ func (ec *executionContext) unmarshalInputUpdateHostInput(ctx context.Context, o
 				return it, err
 			}
 			it.Hostname = data
+		case "description":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("description"))
+			data, err := ec.unmarshalOString2ᚖstring(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.Description = data
 		case "interfaces":
 			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("interfaces"))
 			data, err := ec.unmarshalONetworkInterfaceInput2ᚕᚖgithubᚗcomᚋvibeᚑc2ᚋvibeᚑc2ᚑcoreᚋcoreᚋpkgᚋgraphqlᚋmodelᚐNetworkInterfaceInputᚄ(ctx, v)
@@ -42560,6 +42626,11 @@ func (ec *executionContext) _Host(ctx context.Context, sel ast.SelectionSet, obj
 			out.Concurrently(i, func(ctx context.Context) graphql.Marshaler { return innerFunc(ctx, out) })
 		case "hostname":
 			out.Values[i] = ec._Host_hostname(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				atomic.AddUint32(&out.Invalids, 1)
+			}
+		case "description":
+			out.Values[i] = ec._Host_description(ctx, field, obj)
 			if out.Values[i] == graphql.Null {
 				atomic.AddUint32(&out.Invalids, 1)
 			}

@@ -60,13 +60,18 @@ type Login struct {
 // this data, so the graph can never go stale relative to its hosts.
 type Host struct {
 	field.DefaultField `bson:",inline"`
-	HostID             uuid.UUID   `bson:"host_id"       json:"host_id"`
-	OperationID        uuid.UUID   `bson:"operation_id"  json:"operation_id"`
-	Hostname           string      `bson:"hostname"      json:"hostname"`
-	Interfaces         []Interface `bson:"interfaces"    json:"interfaces"`
-	Routes             []Route     `bson:"routes"        json:"routes"`
-	Logins             []Login     `bson:"logins"        json:"logins"`
-	OS                 string      `bson:"os"            json:"os"` // free-text fingerprint, e.g. "Windows Server 2019"
+	HostID             uuid.UUID `bson:"host_id"       json:"host_id"`
+	OperationID        uuid.UUID `bson:"operation_id"  json:"operation_id"`
+	Hostname           string    `bson:"hostname"      json:"hostname"`
+	// Description is what this machine IS to the engagement — "primary domain
+	// controller, holds the PKI role", "jump box the team pivots through" —
+	// where OS is only its fingerprint. Without somewhere to say it, that
+	// sentence was being written into OS, which is how this field came about.
+	Description string      `bson:"description"   json:"description"`
+	Interfaces  []Interface `bson:"interfaces"    json:"interfaces"`
+	Routes      []Route     `bson:"routes"        json:"routes"`
+	Logins      []Login     `bson:"logins"        json:"logins"`
+	OS          string      `bson:"os"            json:"os"` // free-text fingerprint, e.g. "Windows Server 2019"
 	// Visual identity, same triple as WikiDocument: an emoji glyph OR a lucide
 	// icon name, plus an optional color for the icon variant. When emoji and
 	// icon are both empty the frontend derives a glyph from the OS field

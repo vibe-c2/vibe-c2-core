@@ -6,7 +6,8 @@ import type { TopoNode, Topology } from "@/lib/topology/derive"
 // (stable for cycling with Enter).
 //
 // Case-insensitive substring across everything an operator might paste:
-// hostnames, OS strings, interface names, addresses, CIDRs, gateway IPs.
+// hostnames, descriptions, OS strings, interface names, addresses, CIDRs,
+// gateway IPs.
 // Substring (not prefix) so "0.5." finds 10.0.5.x without anchoring games.
 //
 // Wrapping the query in double quotes opts into whole-token matching — the
@@ -49,6 +50,7 @@ function haystack(n: TopoNode): string[] {
       return [
         n.host.hostname,
         n.host.os ?? "",
+        n.host.description ?? "",
         ...n.host.interfaces.flatMap((i) => [i.name, ...i.addresses]),
       ]
     case "subnet":

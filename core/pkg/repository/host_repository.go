@@ -16,7 +16,7 @@ const hostCollection = "hosts"
 
 // HostFilter bundles optional list filters for hosts. Kept deliberately small:
 // a single free-text Search matched case-insensitively against the hostname,
-// OS string, and any interface address. Topology views fetch the whole host
+// OS string, the description, and any interface address. Topology views fetch the whole host
 // set, so there is no per-field / tag / status filtering to mirror here.
 type HostFilter struct {
 	Search string
@@ -173,6 +173,7 @@ func buildHostFilter(opID uuid.UUID, f HostFilter) bson.M {
 		q["$or"] = bson.A{
 			bson.M{"hostname": rx},
 			bson.M{"os": rx},
+			bson.M{"description": rx},
 			// Regex against an array field matches if any element matches —
 			// finds a host by any of its interface addresses.
 			bson.M{"interfaces.addresses": rx},

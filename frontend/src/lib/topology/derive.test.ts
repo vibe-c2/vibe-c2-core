@@ -31,6 +31,7 @@ function host(
     id,
     operationId: "op1",
     hostname,
+    description: "",
     os: "",
     emoji: "",
     icon: "",

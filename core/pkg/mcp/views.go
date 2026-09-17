@@ -30,12 +30,13 @@ type operationView struct {
 }
 
 type hostView struct {
-	ID         string   `json:"id"`
-	Hostname   string   `json:"hostname"`
-	OS         string   `json:"os,omitempty"`
-	Addresses  []string `json:"addresses,omitempty"`
-	LoginCount int      `json:"loginCount,omitempty"`
-	UpdatedAt  string   `json:"updatedAt,omitempty"`
+	ID          string   `json:"id"`
+	Hostname    string   `json:"hostname"`
+	Description string   `json:"description,omitempty"`
+	OS          string   `json:"os,omitempty"`
+	Addresses   []string `json:"addresses,omitempty"`
+	LoginCount  int      `json:"loginCount,omitempty"`
+	UpdatedAt   string   `json:"updatedAt,omitempty"`
 }
 
 type hostDetailView struct {
@@ -299,12 +300,13 @@ func toOperationView(op *models.Operation, myRole string) operationView {
 
 func toHostView(h *models.Host) hostView {
 	return hostView{
-		ID:         h.HostID.String(),
-		Hostname:   h.Hostname,
-		OS:         h.OS,
-		Addresses:  hostAddresses(h),
-		LoginCount: len(h.Logins),
-		UpdatedAt:  formatTime(h.UpdateAt),
+		ID:          h.HostID.String(),
+		Hostname:    h.Hostname,
+		Description: h.Description,
+		OS:          h.OS,
+		Addresses:   hostAddresses(h),
+		LoginCount:  len(h.Logins),
+		UpdatedAt:   formatTime(h.UpdateAt),
 	}
 }
 

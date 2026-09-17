@@ -124,6 +124,7 @@ func (r *hostResolver) CreateHost(ctx context.Context, operationID string, input
 		Interfaces:  interfaces,
 		Routes:      routes,
 		Logins:      logins,
+		Description: strings.TrimSpace(strDeref(input.Description)),
 		OS:          strings.TrimSpace(strDeref(input.Os)),
 		Emoji:       strings.TrimSpace(strDeref(input.Emoji)),
 		Icon:        strings.TrimSpace(strDeref(input.Icon)),
@@ -191,6 +192,9 @@ func (r *hostResolver) UpdateHost(ctx context.Context, id string, input model.Up
 			return nil, err
 		}
 		updates["logins"] = logins
+	}
+	if input.Description != nil {
+		updates["description"] = strings.TrimSpace(*input.Description)
 	}
 	if input.Os != nil {
 		updates["os"] = strings.TrimSpace(*input.Os)

@@ -11,6 +11,7 @@ export const HostFields = graphql(`
     id
     operationId
     hostname
+    description
     os
     emoji
     icon

@@ -77,7 +77,10 @@ export const WikiHostChipView = forwardRef<HTMLElement, WikiHostChipViewProps>(
     }
 
     const label = host.hostname || "Unnamed host"
-    const title = host.os ? `${label}\n${host.os}` : label
+    // Hover is the only place the chip can say anything beyond the name, so
+    // it carries both lines when both exist: what the machine is, then what
+    // it runs.
+    const title = [label, host.description, host.os].filter(Boolean).join("\n")
 
     return (
       <button

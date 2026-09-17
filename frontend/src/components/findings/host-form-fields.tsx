@@ -126,6 +126,24 @@ export function HostFormFields({
         </Field>
       </div>
 
+      {/* Full width under the pair above: OS is a fingerprint that sorts and
+          filters, this is the sentence about what the machine is for. Keeping
+          them apart is the point of the field — without it the role ends up
+          appended to the OS string, where it sorts under nothing. */}
+      <Field>
+        <FieldLabel htmlFor={`${idPrefix}-description`}>
+          Description
+        </FieldLabel>
+        <Textarea
+          id={`${idPrefix}-description`}
+          name="description"
+          rows={2}
+          value={values.description}
+          onChange={(e) => patch({ description: e.target.value })}
+          placeholder="Primary domain controller — holds the PKI role, reachable from the DMZ jump box"
+        />
+      </Field>
+
       <Field>
         <FieldLabel>Network interfaces</FieldLabel>
         <HostInterfacesEditor

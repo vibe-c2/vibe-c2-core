@@ -75,7 +75,7 @@ export function HostFormDialog({ operationId }: HostFormDialogProps) {
           <DialogTitle>{selected ? "Edit host" : "Add host"}</DialogTitle>
           <DialogDescription>
             {selected
-              ? "Update hostname, OS, interfaces, and routes."
+              ? "Update hostname, description, OS, interfaces, and routes."
               : "Record a discovered machine — its interfaces and routes describe where it sits on the target network."}
           </DialogDescription>
         </DialogHeader>
@@ -141,6 +141,7 @@ function HostForm({
     // last interface/route impossible.
     const input = {
       hostname: values.hostname.trim(),
+      description: values.description.trim(),
       os: values.os.trim(),
       // Always sent (never omitted) for the same reason as the lists:
       // empty string = "clear back to the OS-derived default", and an

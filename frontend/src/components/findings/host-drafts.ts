@@ -44,6 +44,7 @@ export interface LoginDraft {
 
 export interface HostFormValues {
   hostname: string
+  description: string
   os: string
   // Visual identity triple (see DocumentIconValue): emoji XOR lucide icon
   // name, plus an optional color. All empty = OS-derived default glyph.
@@ -60,6 +61,7 @@ export function hostFormValuesFromWire(
 ): HostFormValues {
   return {
     hostname: host.hostname,
+    description: host.description,
     os: host.os,
     emoji: host.emoji,
     icon: host.icon,
@@ -103,6 +105,7 @@ export function loginToDraft(l: {
 export function emptyHostFormValues(): HostFormValues {
   return {
     hostname: "",
+    description: "",
     os: "",
     emoji: "",
     icon: "",

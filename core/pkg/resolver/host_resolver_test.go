@@ -80,10 +80,11 @@ func TestCreateHost_Success_PopulatesCreatedByAndNormalizes(t *testing.T) {
 	r := newHostResolver(hostRepo, opRepo)
 
 	input := model.CreateHostInput{
-		Hostname: "  DC01  ",
-		Os:       strptr("Windows Server 2019"),
-		Icon:     strptr("  Castle  "),
-		Color:    strptr("oklch(0.6 0.1 240)"),
+		Hostname:    "  DC01  ",
+		Description: strptr("  Primary domain controller, holds the PKI role.  "),
+		Os:          strptr("Windows Server 2019"),
+		Icon:        strptr("  Castle  "),
+		Color:       strptr("oklch(0.6 0.1 240)"),
 		Interfaces: []*model.NetworkInterfaceInput{
 			{Name: "eth0", Mac: strptr("00:11:22:33:44:55"), Addresses: []string{"10.0.5.12/24", "  "}},
 		},
@@ -125,6 +126,14 @@ func TestCreateHost_Success_PopulatesCreatedByAndNormalizes(t *testing.T) {
 	}
 	if host.Emoji != "" {
 		t.Errorf("Emoji = %q, want empty (not provided)", host.Emoji)
+	}
+	// Description is the field that exists so a sentence stops being written
+	// into OS; the two must land separately and both trimmed.
+	if host.Description != "Primary domain controller, holds the PKI role." {
+		t.Errorf("Description = %q, want it trimmed and stored on its own", host.Description)
+	}
+	if host.OS != "Windows Server 2019" {
+		t.Errorf("OS = %q, want the fingerprint untouched by the description", host.OS)
 	}
 }
 
@@ -236,6 +245,46 @@ func TestUpdateHost_PartialUpdateOnlyTouchesProvidedFields(t *testing.T) {
 	}
 	if _, ok := capturedUpdates["emoji"]; ok {
 		t.Error("emoji was not provided and must not appear in the update set")
+	}
+	if _, ok := capturedUpdates["description"]; ok {
+		t.Error("description was not provided and must not appear in the update set")
+	}
+}
+
+// Setting one of the pair must leave the other alone: an agent correcting a
+// description should not blank the OS fingerprint, or vice versa.
+func TestUpdateHost_DescriptionAndOSAreIndependent(t *testing.T) {
+	caller := uuid.New()
+	opID := uuid.New()
+	hostID := uuid.New()
+	existing := models.Host{HostID: hostID, OperationID: opID, Hostname: "dc01", OS: "linux"}
+
+	var capturedUpdates map[string]interface{}
+	hostRepo := &mockHostRepo{
+		findByIDFn: func(_ context.Context, _ uuid.UUID) (models.Host, error) { return existing, nil },
+		updateFn: func(_ context.Context, _ *models.Host, updates map[string]interface{}) error {
+			capturedUpdates = updates
+			return nil
+		},
+	}
+	opRepo := &mockOpRepo{
+		findByIDFn: func(_ context.Context, id uuid.UUID) (models.Operation, error) {
+			return memberOp(id, caller, models.OperationRoleOperator), nil
+		},
+	}
+	r := newHostResolver(hostRepo, opRepo)
+
+	_, err := r.UpdateHost(newCallerCtx(caller), hostID.String(), model.UpdateHostInput{
+		Description: strptr("  Jump box the team pivots through.  "),
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if got := capturedUpdates["description"]; got != "Jump box the team pivots through." {
+		t.Errorf("description = %v, want it trimmed in the update set", got)
+	}
+	if _, ok := capturedUpdates["os"]; ok {
+		t.Error("os was not provided and must not appear in the update set")
 	}
 }
 

@@ -24,10 +24,11 @@ func TestBuildHostFilter_OperationOnly(t *testing.T) {
 	}
 }
 
-// TestBuildHostFilter_SearchSpansHostnameOsAndAddresses verifies the search
-// term fans out across the three searchable fields, including the array-valued
-// interfaces.addresses path used to find a host by any of its IPs.
-func TestBuildHostFilter_SearchSpansHostnameOsAndAddresses(t *testing.T) {
+// TestBuildHostFilter_SearchSpansHostnameDescriptionOsAndAddresses verifies
+// the search term fans out across every searchable field, including the
+// array-valued interfaces.addresses path used to find a host by any of its IPs
+// and the description, where the machine's role is written.
+func TestBuildHostFilter_SearchSpansHostnameDescriptionOsAndAddresses(t *testing.T) {
 	opID := uuid.New()
 	f := buildHostFilter(opID, HostFilter{Search: "10.0.5"})
 
@@ -35,8 +36,8 @@ func TestBuildHostFilter_SearchSpansHostnameOsAndAddresses(t *testing.T) {
 	if !ok {
 		t.Fatalf("$or missing or wrong type: %T", f["$or"])
 	}
-	if len(or) != 3 {
-		t.Fatalf("expected 3 $or branches (hostname, os, interfaces.addresses), got %d", len(or))
+	if len(or) != 4 {
+		t.Fatalf("expected 4 $or branches (hostname, os, description, interfaces.addresses), got %d", len(or))
 	}
 
 	fields := map[string]bool{}
@@ -49,7 +50,7 @@ func TestBuildHostFilter_SearchSpansHostnameOsAndAddresses(t *testing.T) {
 			fields[k] = true
 		}
 	}
-	for _, want := range []string{"hostname", "os", "interfaces.addresses"} {
+	for _, want := range []string{"hostname", "os", "description", "interfaces.addresses"} {
 		if !fields[want] {
 			t.Errorf("search did not cover field %q", want)
 		}

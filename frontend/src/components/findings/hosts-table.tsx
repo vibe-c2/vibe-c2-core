@@ -43,7 +43,9 @@ interface HostsTableProps {
 }
 
 // The Hosts tab is scoped-only, so there is no Operation column variant.
-const GRID_COLS = "grid-cols-[2fr_1.5fr_2.5fr_70px_70px_140px]"
+// Description sits next to OS because the two are read together and were,
+// until it existed, written into one another.
+const GRID_COLS = "grid-cols-[1.6fr_1.2fr_1.8fr_2fr_60px_60px_130px]"
 
 // Cap inline IP badges so a many-homed host can't blow up the row height;
 // the full list lives in the cell's title tooltip.
@@ -84,6 +86,7 @@ export function HostsTable({
             sort={sort}
             onSortChange={onSortChange}
           />
+          <div>Description</div>
           <div>IP addresses</div>
           <div className="text-center" title="Interfaces">
             <NetworkIcon className="mx-auto size-3.5" />
@@ -137,6 +140,12 @@ export function HostsTable({
               </div>
               <div className="truncate text-muted-foreground" title={h.os}>
                 {h.os || "—"}
+              </div>
+              <div
+                className="truncate text-muted-foreground"
+                title={h.description}
+              >
+                {h.description || "—"}
               </div>
               <div
                 className="flex flex-wrap gap-1 overflow-hidden"

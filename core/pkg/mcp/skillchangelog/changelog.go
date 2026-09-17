@@ -175,6 +175,14 @@ var releases = []Release{
 			"A refused icon now means a misspelled or invented name, not a missing one: retry with the right spelling rather than choosing a different glyph. icons.md still names the house shortlist, now as the preference it is.",
 		},
 	},
+	{
+		Version: 20,
+		Date:    "2026-09-17",
+		Notes: []string{
+			"Hosts have a description: what the machine is to the engagement, the domain controller holding the PKI role or the jump box the team pivots through. os is the fingerprint and nothing else. Agents were writing the role into os for want of anywhere else to put it, and the operator sorts and filters on that column, so a sentence in it sorted under nothing.",
+			"find_hosts search covers the description as well as the hostname and OS.",
+		},
+	},
 }
 
 // Releases returns the full history, oldest first. A copy, so callers cannot
