@@ -177,7 +177,7 @@ func quoteAll(names []string) []string {
 // mutual exclusivity, stay identical wherever an agent meets it.
 type visualIdentity struct {
 	Emoji string `json:"emoji,omitempty" jsonschema:"One emoji. Usually leave unset."`
-	Icon  string `json:"icon,omitempty"  jsonschema:"Lucide name (Server, Key, ShieldAlert) or si:<slug> brand logo (si:linux). Exclusive with emoji; unknown names are refused. Usually leave unset."`
+	Icon  string `json:"icon,omitempty"  jsonschema:"Lucide name (Server, Key) or si:<slug> logo. Exclusive with emoji; unknown names refused. Palette: reference/icons.md. Usually leave unset."`
 	Color string `json:"color,omitempty" jsonschema:"Hex colour for icon."`
 }
 

@@ -27,7 +27,11 @@ type idempotent interface {
 // than repeating the field keeps the JSON name and the description identical
 // across every tool that offers it.
 type IdempotencyKey struct {
-	Key string `json:"idempotency_key,omitempty" jsonschema:"Any unique string; a repeat with the same key returns the first result instead of acting twice."`
+	// The wording is terse because it is repeated into the schema of every
+	// write tool, and that schema is sent to the model on every turn. What an
+	// agent needs is what to pass and why; the mechanism is not worth 23
+	// copies of a sentence.
+	Key string `json:"idempotency_key,omitempty" jsonschema:"Any unique string makes a retry safe."`
 }
 
 func (k IdempotencyKey) idempotencyKey() string { return k.Key }
