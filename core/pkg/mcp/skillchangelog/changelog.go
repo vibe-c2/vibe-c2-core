@@ -183,6 +183,14 @@ var releases = []Release{
 			"find_hosts search covers the description as well as the hostname and OS.",
 		},
 	},
+	{
+		Version: 21,
+		Date:    "2026-09-17",
+		Notes: []string{
+			"Vibe C2 is multiplayer: operators share an operation from their own computers, and your filesystem is not one of them. A page that says \"see /tmp/scan.txt for the full report\" has recorded nothing for anybody who reads it. Paste the content into the page or attach the file.",
+			"structure.md carries the same premise where it says who reads a page: weeks later, on another machine, by somebody who was not there.",
+		},
+	},
 }
 
 // Releases returns the full history, oldest first. A copy, so callers cannot

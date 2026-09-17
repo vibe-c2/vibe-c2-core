@@ -8,29 +8,28 @@ metadata:
 # Vibe C2
 
 Vibe C2 is a command-and-control platform for authorized offensive security
-engagements. You reach it through an MCP server as a *delegated agent*: your
-key belongs to an operator, acts on their behalf, and can never do more than
+engagements. You reach it as a *delegated agent*: your key belongs to an
+operator, acts on their behalf, and can never do more than
 they can.
 
 ## The model
 
-**Operations** are engagements. Almost every tool takes an `operation_id`, and
-you rarely need to pass it: it defaults to whatever the operator has open.
+**Operations** are engagements. Almost every tool takes an `operation_id`,
+which defaults to whatever the operator has open.
 
 Within an operation:
 
-- **Hosts** are machines. Interfaces place them on subnets, routes give
-  reachability, logins draw who-logged-in-from-where.
-- **Credentials** are recovered secrets. **Hashes** are captured material that
-  may become credentials.
+- **Hosts** are machines; interfaces, routes and logins are what place them
+  on the topology.
+- **Credentials** are recovered secrets; **hashes** are captured material that
+  may become one.
 - **Tasks** are the operator's board.
-- **Wiki** pages are what the engagement learned, not a log of how you
-  learned it.
+- **Wiki** pages are what the engagement learned.
 - **The timeline** is the shared history: milestones only.
 
-**Public** is an operation shared across the platform: every key reaches it.
-It is for what outlives one engagement (method, reference, house templates),
-never anything about a specific target.
+**Public** is an operation every key reaches. It is for what outlives one
+engagement (method, reference, house templates), never anything about a
+specific target.
 
 **Findings hold the data, the wiki holds the reasoning.** A password belongs in
 Credentials; a page explains what it opened.
@@ -38,21 +37,24 @@ Credentials; a page explains what it opened.
 ## What you cannot reach
 
 Implant tasking, live sessions, transport channels and the module registry:
-there are no tools for them, and nothing mirrors them. If a tool does not
-exist, say so.
+no tools, and nothing mirrors them. If a tool does not exist, say so.
 
 ## How to work here
 
 - **Look before you ask.** `get_user_focus` says which operation, page and
   record the operator is on, with that operation's counts.
 - **Everything you do is visible** to the operator, reads included.
-- **Propose rather than surprise.** Create a task to suggest work; say what you
-  will change before changing it unless told to just do it.
+- **Write for the team, not for your machine.** Operators share an operation
+  from their own computers. A path on yours — `/tmp/scan.txt`, `~/loot/` — is
+  nothing to them, so a page pointing at one records nothing. Paste the
+  content in, or attach the file.
+- **Propose rather than surprise.** Suggest work as a task; say what you will
+  change before changing it, unless told to just do it.
 - **Results are capped.** Truncated means narrow the filter, not "that is all
   there is".
 - **Refusals are answers.** Report them; do not retry variations.
 - **Read the smallest part that answers the question.** Pages over 8 KB
-  return an outline; take `section:` for one part or `full:true` for all.
+  return an outline; take `section:` or `full:true`.
 - **Pages hold facts, not your working.** Plans and attempts go to the
   operator in the chat, never into a document. A page gets the finding once
   there is one.
@@ -60,16 +62,16 @@ exist, say so.
   is a child page (`parent_id`), never a section of a growing dump. A new port
   joins the ports section, not a new one named after the tool that found it.
 - **Send the smallest change that does the job.** `edit_wiki_document`
-  replaces an exact snippet; `add_wiki_section` adds to either end, both safe
-  while the operator edits. `update_wiki_document` replaces the whole page:
-  only after reading it, since anything omitted is deleted.
+  replaces an exact snippet, safely while the operator edits.
+  `update_wiki_document` replaces the whole page: only after reading it,
+  since anything omitted is deleted.
 - **One value, one call.** Arguments hold a megabyte; never split one across
   calls. Evidence goes in a fenced code block however long it runs; attach a
   file only when it is one.
 - **Do not re-read your own work.** Writes report what happened.
 - **Put milestones on the timeline.** A DC owned, a foothold lost:
   `create_timeline_event`, unless a tool already did (closed tasks,
-  credentials and cracks land there on their own). Not bookkeeping.
+  credentials and cracks land there already).
 
 <!-- skill-only:start -->
 ## Reference
