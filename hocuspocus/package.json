@@ -10,7 +10,8 @@
     "test": "node --test --import tsx 'src/__tests__/*.ts'",
     "start": "node dist/index.js",
     "backfill-references": "tsx src/backfill-references.ts",
-    "audit-references": "tsx src/audit-references.ts"
+    "audit-references": "tsx src/audit-references.ts",
+    "backfill-search-text": "tsx src/backfill-search-text.ts"
   },
   "dependencies": {
     "@hocuspocus/extension-database": "^2.15.0",

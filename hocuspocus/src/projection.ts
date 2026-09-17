@@ -36,6 +36,12 @@ export interface BodyProjection {
 /**
  * Recursively extract plain text from a Y.XmlFragment (TipTap document).
  * Block-level elements are separated by newlines.
+ *
+ * Atom nodes carry their words in attributes rather than as child text, so a
+ * plain walk skips them. An attachment card is the case that matters: a page
+ * whose body is four files projected to an empty string, which made the page
+ * unfindable by the name of any file on it. Their filenames are emitted here
+ * so the search index covers them.
  */
 export function extractTextFromFragment(
   node: Y.XmlFragment | Y.XmlElement,
@@ -45,10 +51,30 @@ export function extractTextFromFragment(
     if (child instanceof Y.XmlText) {
       parts.push(child.toString());
     } else if (child instanceof Y.XmlElement) {
+      const searchable = searchableAttrText(child);
+      if (searchable !== "") parts.push(searchable);
       parts.push(extractTextFromFragment(child));
     }
   }
-  return parts.join("\n").trim();
+  return parts.filter((part) => part !== "").join("\n").trim();
+}
+
+/**
+ * The words an atom node contributes to the text projection.
+ *
+ * Deliberately narrow: a filename and an image's alt text are what somebody
+ * would type into search. URLs, ids, sizes and content types are not — they
+ * would bloat the index and match nothing anyone looks for.
+ */
+function searchableAttrText(node: Y.XmlElement): string {
+  switch (node.nodeName) {
+    case "wikiFile":
+      return String(node.getAttribute("filename") ?? "").trim();
+    case "image":
+      return String(node.getAttribute("alt") ?? "").trim();
+    default:
+      return "";
+  }
 }
 
 /**
