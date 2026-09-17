@@ -131,9 +131,11 @@ func registerAttachmentTools(s *Server) {
 
 	register(s, &mcp.Tool{
 		Name: "attach_text_to_wiki_document",
-		Description: "Attach text to a page as a file: raw output, a scan, a config. Whole " +
-			"content in one call. The result's markdown line, pasted alone on its own line, " +
-			"shows the file on the page.",
+		Description: "Attach text as a file. Prefer a fenced code block in the page for " +
+			"command output, configs and logs: it reads inline and is searchable, an " +
+			"attachment is neither. Use this for a real file format, or a dump too long " +
+			"for a page. The result's markdown line, pasted alone on its own line, shows " +
+			"the file on the page.",
 	}, writeTool, handleAttachTextToWikiDocument)
 
 	register(s, &mcp.Tool{

@@ -1,6 +1,5 @@
 # Attachments
 
-A page's text is often a summary of something attached to it.
 `list_wiki_attachments` shows what a page carries and whether each file is
 readable, so you do not spend a call finding out.
 
@@ -18,9 +17,16 @@ beginning of the file, never as the whole.
 
 ## Adding a file
 
-`attach_text_to_wiki_document` adds text as a file: raw output, a scan, a
-config, anything long enough that pasting it into the page would bury the
-notes. Whole content, one call; the cap is megabytes.
+**Text usually does not want to be a file.** Command output, a config
+excerpt, a log extract: put it in a fenced code block in the page, however
+many lines it runs to. A code block reads inline and is searchable; an
+attachment is stored as bytes, so only its filename is indexed and nothing
+inside it can be found.
+
+`attach_text_to_wiki_document` is for the rest: a real file format somebody
+would open on its own (JSON, YAML, CSV), or a dump so long it would bury the
+page — thousands of lines, not dozens. Whole content, one call; the cap is
+megabytes.
 
 Attaching stores the file; it does not put it on the page. The result carries
 `markdown`, the line that does:
@@ -30,12 +36,11 @@ Attaching stores the file; it does not put it on the page. The result carries
 ```
 
 Paste that line as written, alone in its own paragraph (a blank line above and
-below), wherever the file belongs: under the heading it supports, or inside the
-checklist answer it is evidence for. The editor shows it as an attachment card
-with the name and size. The card depends on the exact shape: the byte count
-after the name, nothing else in the paragraph. `Full output: [nmap-full.txt](…)`
-is only a link, and a label without the byte count shows as 0 B. To place a
-file that is already on the page, take `markdown` from `list_wiki_attachments`.
+below), wherever the file belongs. The card depends on that exact shape: the
+byte count after the name, nothing else in the paragraph.
+`Full output: [nmap-full.txt](…)` is only a link, and a label without the byte
+count shows as 0 B. To place a file already on the page, take `markdown` from
+`list_wiki_attachments`.
 
 You cannot tell a card from a link by reading the page back: both come back
 as the same markdown. Two things tell you instead. Every write reports

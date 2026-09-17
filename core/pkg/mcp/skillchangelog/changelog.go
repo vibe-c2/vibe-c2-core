@@ -144,6 +144,14 @@ var releases = []Release{
 			"A 401 from /mcp/upload or the skills endpoints means a stale or foreign token, not a broken endpoint. Re-read the config and retry rather than falling back to content_base64.",
 		},
 	},
+	{
+		Version: 16,
+		Date:    "2026-09-17",
+		Notes: []string{
+			"Evidence belongs in a fenced code block on the page, however many lines it runs to: command output, configs, logs. A code block reads inline and its text is searchable; an attachment is stored as bytes, so only its filename is indexed and nothing inside it can be found.",
+			"attach_text_to_wiki_document is now for a real file format somebody would open on its own, or a dump so long it would bury the page. The previous wording sent all raw output to an attachment, which is why pages ended up carrying .txt files they did not need.",
+		},
+	},
 }
 
 // Releases returns the full history, oldest first. A copy, so callers cannot

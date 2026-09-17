@@ -61,14 +61,15 @@ not exist, say so.
   child page (`parent_id`), never a section of a growing dump.
 - **Send the smallest change that does the job.** `edit_wiki_document`
   replaces an exact snippet; `add_wiki_section` adds to either end, both safe
-  while the operator edits. `update_wiki_document` replaces the whole
-  page: only after reading it, since anything omitted is deleted.
-- **One value, one call.** Arguments hold a megabyte. Never split a value
-  across calls. Raw output goes to `attach_text_to_wiki_document`, not the page.
+  while the operator edits. `update_wiki_document` replaces the whole page:
+  only after reading it, since anything omitted is deleted.
+- **One value, one call.** Arguments hold a megabyte; never split one across
+  calls. Evidence goes in a fenced code block however long it runs; attach a
+  file only when it is one.
 - **Do not re-read your own work.** Writes report what happened.
 - **Put milestones on the timeline.** A DC owned, a foothold lost:
-  `create_timeline_event`, unless a tool already recorded it (closed
-  tasks, credentials and cracks land there on their own). Not bookkeeping.
+  `create_timeline_event`, unless a tool already did (closed tasks,
+  credentials and cracks land there on their own). Not bookkeeping.
 
 <!-- skill-only:start -->
 ## Reference
