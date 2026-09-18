@@ -3,7 +3,7 @@
 name: vibe-c2
 description: Work an offensive security engagement in Vibe C2 — hosts, credentials, hashes, tasks, wiki notes and the operation timeline — through its MCP tools. Use whenever connected to a Vibe C2 MCP endpoint, or when the user mentions an operation, findings, or engagement notes.
 metadata:
-  version: "21"
+  version: "22"
 ---
 
 # Vibe C2
@@ -274,10 +274,10 @@ the finding a host page came out of, a page in another branch.
 
 ## Finding the right page
 
-`search_wiki` returns a `snippet` with every hit. Read the snippets before
-opening anything; opening wrong pages wastes the context window.
+`search_wiki` returns a `snippet` with every hit. Read them before opening
+anything; opening wrong pages wastes the context window.
 `list_wiki_tree` shows how the notes are organised: two levels by default with
-a `childCount` per page, `parent_id` to descend, `depth:-1` for everything.
+a `childCount` per page, `parent_id` to descend, `depth:-1` for all.
 
 ## Reading only part of a page
 
@@ -286,7 +286,7 @@ back as an **outline** (headings, nesting, bytes under each) unless you pass
 `full:true`. Then:
 
 - `section:"<heading>"` returns that heading and everything nested under it.
-- Section sizes include their children, so they do not sum to the page.
+- Section sizes include children, so they do not sum to the page.
 - A section is **part** of the page. Change it with `edit_wiki_document`.
   Passing it to `update_wiki_document` replaces the page with the fragment.
 - Section text is exact, so it is the cheapest source of `old_text`.
@@ -294,41 +294,40 @@ back as an **outline** (headings, nesting, bytes under each) unless you pass
 ## Changing a page
 
 - `edit_wiki_document` replaces an exact snippet. Almost every edit.
-- `add_wiki_section` adds to the end, or to the start with `position:"start"`,
-  for a subject the page lacks; enrich one it already has with
-  `edit_wiki_document` instead. Pass `document_ids` to add the same content to up to 25 pages in one call;
-  the result says which succeeded, so retry only the failures.
+- `add_wiki_section` adds to the end, or the start with `position:"start"`,
+  for a subject the page lacks; enrich one it has with `edit_wiki_document`
+  instead. `document_ids` adds the same content to up to 25 pages at once; the
+  result says which succeeded, so retry only the failures.
 - `update_wiki_document` replaces the whole body. Read the page first and put
   back every construct you are not changing.
 
-Copy `old_text` verbatim: whitespace, list markers and all. It must be unique;
-if it occurs more than once the fix is a line either side, not `replace_all`,
-which is for renaming throughout. A refusal says how it differs.
+Copy `old_text` verbatim, whitespace and list markers included. It must be
+unique; if it occurs more than once, add a line either side rather than
+`replace_all`, which is for renaming throughout.
 
-Edits land on the live document; every write reports `watchers`, and a
-non-zero count means the operator saw it.
+Edits land on the live document; a write's `watchers` count says whether the
+operator saw it.
 
 ## Moving a page
 
 `move_wiki_document` files a page under a different parent, with everything
-below it; omit `parent_id` for the top level. Never rebuild a page somewhere
-else and trash the original: that loses its history, its attachments and
-every link to it.
+below it; omit `parent_id` for the top level. Never rebuild a page elsewhere
+and trash the original: that loses its history, attachments and links.
 
 ## Deleting a page
 
 `delete_wiki_document` moves a page to the trash, where an admin can restore
-it. A page with children is refused until you pass `with_children:true`.
-Templates are refused.
+it. A page with children is refused until you pass `with_children:true`;
+templates are refused outright.
 
 ## What a page can contain
 
-Pages are richer than markdown; preserve these constructs.
+Preserve these constructs.
 
 - **Checklist items** drive a coverage bar the operator watches:
 
   ````
-  :::checklist {"prompt":"Enumerated SMB shares?","required":true,"state":"answered"}
+  :::checklist {"prompt":"SMB shares enumerated?","required":true,"state":"answered"}
   Two shares, one writable:
 
   ```text
@@ -339,25 +338,27 @@ Pages are richer than markdown; preserve these constructs.
   ````
 
   The body is the answer; `state` is `answered`, `not_applicable`, `flagged`
-  or absent. To answer one, edit the marker's `state` and write the body in one
-  `edit_wiki_document` call. The operator reads the answer as written:
-  anything multi-line goes in a fenced code block, never squashed into a line.
+  or absent. Edit the marker's `state` and write the body in one
+  `edit_wiki_document` call. Anything multi-line goes in a fenced code block,
+  never squashed into a line.
 - **Reference chips**: `[host](vibe://host/<id>)`, `[hash](vibe://hash/<id>)`,
-  `[page](vibe://doc/<id>)`. Credentials appear as a `vibe-credential` fenced
-  block.
+  `[page](vibe://doc/<id>)`.
+- **A credential** is a block, not a link: there is no `vibe://credential/`,
+  and it cannot sit in a table cell. Fence it with the info-string
+  `vibe-credential` and a JSON body, `{"id": "<uuid>"}`. Anything that is not
+  valid JSON — a bare uuid — stays an ordinary code block, silently.
 - **Notices**: `:::info`, `:::success`, `:::warning`, `:::tip`, closed with `:::`.
 - Attachments as `[name bytes](/api/v1/wiki/files/<id>)` alone in a
   paragraph; `attach_text_to_wiki_document` returns the exact line.
 
 ## Templates
 
-Check `list_wiki_templates` before writing a page from scratch. It spans the
-operation's own templates and the shared ones in Public (marked `shared`).
-Create from one with `create_wiki_document` and `template_id`; your `title`
-overrides the template's.
+Check `list_wiki_templates` before writing a page from scratch. It spans this
+operation's templates and the shared ones in Public (marked `shared`). Create
+from one with `create_wiki_document` and `template_id`; your `title` wins.
 
-Pages carry `isTemplate`. Editing one changes every page made from it
-afterwards, and `set_wiki_template` is a team decision: propose it.
+Editing a page with `isTemplate` changes every page made from it afterwards;
+`set_wiki_template` is a team decision: propose it.
 
 ## Long content
 
@@ -365,7 +366,7 @@ Prose goes in the body, whole, in one call (up to 1 MB). So does evidence: a
 scan, a config, a log belongs in a fenced code block, however many lines it
 runs to. A code block reads inline and is searchable; an attachment is
 neither. Attach a file only when it is one (JSON, CSV, a PDF, an image), or
-when text is so long it would bury the page. See attachments.md.
+when it would bury the page. See attachments.md.
 ==================== vibe-c2/reference/findings.md
 # Findings: hosts, credentials, hashes
 
@@ -374,9 +375,9 @@ Findings hold the data; the wiki explains it. Record both.
 ## Orienting
 
 1. `get_user_focus` settles which operation you are in, what the operator is
-   looking at, and the shape of the operation in numbers. If a count could not
-   be read, treat it as unknown, not zero. `get_operation_summary` gives the
-   same counts for an operation that is not in focus.
+   looking at, and its shape in numbers. A count that could not be read is
+   unknown, not zero. `get_operation_summary` gives the same counts for an
+   operation that is not in focus.
 2. Only then go looking.
 
 ## Recording
@@ -391,10 +392,9 @@ Findings hold the data; the wiki explains it. Record both.
   under nothing.
 - **A recovered secret**: `create_credential`, tagged with the host it came
   from. Not a wiki page. `is_valid` is a plain yes or no with no "untested" in
-  between: leaving it off stores false, and the operator's view labels that
-  **Invalid**. A credential you have not tried yet therefore reads to everyone
-  else as one that does not work, so come back and set `is_valid:true` the
-  moment you use it successfully.
+  between: leaving it off stores false, which the operator's view labels
+  **Invalid**. An untried credential therefore reads to everyone else as one
+  that does not work, so set `is_valid:true` the moment you use it.
 - **A correction**: `update_credential` changes only the fields you send and
   leaves the rest alone. `keys`, `properties` and `tags` are the exception —
   sending one replaces that whole list, and sending `[]` clears it.
@@ -403,11 +403,35 @@ Findings hold the data; the wiki explains it. Record both.
 - **A crack**: `mark_hash_cracked`, which creates and links the credential.
   `update_hash` with status CRACKED records the outcome and leaves the
   plaintext nowhere.
-- **Hash listings clip long values**; `get_hash` returns one whole. Filter with
+- **Hash listings clip long values**; `get_hash` returns one whole. Filter on
   `status` rather than paging through everything.
 
 Then write the page that says what it means: which hosts a credential reaches,
 what that implies, what you would do next.
+
+## Putting a credential on a page
+
+Never retype the secret. Reference the record, so the page keeps showing its
+current username, validity and comments:
+
+````
+```vibe-credential
+{"id": "<credential-uuid>"}
+```
+````
+
+Three things that look right and are not:
+
+- **A bare uuid in the fence.** The body must parse as JSON with a string
+  `id`. Anything else stays an ordinary code block: no error, and it looks
+  right in the markdown you sent.
+- **`[credential](vibe://credential/<id>)`.** That scheme covers hosts,
+  hashes and pages only; for a credential it renders as a plain link.
+- **A credential in a table.** The fence is a block and cannot sit in a cell.
+  Put those rows in prose, or list the credentials under the table.
+
+Copy a fence off another page only after checking it renders there; a broken
+one propagates.
 
 ## Milestones on the timeline
 

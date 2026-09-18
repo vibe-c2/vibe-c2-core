@@ -191,6 +191,15 @@ var releases = []Release{
 			"structure.md carries the same premise where it says who reads a page: weeks later, on another machine, by somebody who was not there.",
 		},
 	},
+	{
+		Version: 22,
+		Date:    "2026-09-18",
+		Notes: []string{
+			"A credential chip is a fence with the info-string vibe-credential whose body is JSON carrying the id. The guides named the fence but never showed the body, so agents tried a bare uuid, then a vibe://credential/ link that does not exist. findings.md now has the shape and the three near-misses; wiki.md says a credential is a block, not one of the vibe:// chips.",
+			"A malformed vibe-credential fence is refused before the write lands, with the shape that works. It used to be accepted and rendered as an ordinary code block, with nothing anywhere saying the chip had not been made.",
+			"The block cannot sit in a table cell, and no vibe://credential/ link exists. Chips are hosts, hashes and pages only.",
+		},
+	},
 }
 
 // Releases returns the full history, oldest first. A copy, so callers cannot

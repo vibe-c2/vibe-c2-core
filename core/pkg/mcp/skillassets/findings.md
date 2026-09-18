@@ -5,9 +5,9 @@ Findings hold the data; the wiki explains it. Record both.
 ## Orienting
 
 1. `get_user_focus` settles which operation you are in, what the operator is
-   looking at, and the shape of the operation in numbers. If a count could not
-   be read, treat it as unknown, not zero. `get_operation_summary` gives the
-   same counts for an operation that is not in focus.
+   looking at, and its shape in numbers. A count that could not be read is
+   unknown, not zero. `get_operation_summary` gives the same counts for an
+   operation that is not in focus.
 2. Only then go looking.
 
 ## Recording
@@ -22,10 +22,9 @@ Findings hold the data; the wiki explains it. Record both.
   under nothing.
 - **A recovered secret**: `create_credential`, tagged with the host it came
   from. Not a wiki page. `is_valid` is a plain yes or no with no "untested" in
-  between: leaving it off stores false, and the operator's view labels that
-  **Invalid**. A credential you have not tried yet therefore reads to everyone
-  else as one that does not work, so come back and set `is_valid:true` the
-  moment you use it successfully.
+  between: leaving it off stores false, which the operator's view labels
+  **Invalid**. An untried credential therefore reads to everyone else as one
+  that does not work, so set `is_valid:true` the moment you use it.
 - **A correction**: `update_credential` changes only the fields you send and
   leaves the rest alone. `keys`, `properties` and `tags` are the exception —
   sending one replaces that whole list, and sending `[]` clears it.
@@ -34,11 +33,35 @@ Findings hold the data; the wiki explains it. Record both.
 - **A crack**: `mark_hash_cracked`, which creates and links the credential.
   `update_hash` with status CRACKED records the outcome and leaves the
   plaintext nowhere.
-- **Hash listings clip long values**; `get_hash` returns one whole. Filter with
+- **Hash listings clip long values**; `get_hash` returns one whole. Filter on
   `status` rather than paging through everything.
 
 Then write the page that says what it means: which hosts a credential reaches,
 what that implies, what you would do next.
+
+## Putting a credential on a page
+
+Never retype the secret. Reference the record, so the page keeps showing its
+current username, validity and comments:
+
+````
+```vibe-credential
+{"id": "<credential-uuid>"}
+```
+````
+
+Three things that look right and are not:
+
+- **A bare uuid in the fence.** The body must parse as JSON with a string
+  `id`. Anything else stays an ordinary code block: no error, and it looks
+  right in the markdown you sent.
+- **`[credential](vibe://credential/<id>)`.** That scheme covers hosts,
+  hashes and pages only; for a credential it renders as a plain link.
+- **A credential in a table.** The fence is a block and cannot sit in a cell.
+  Put those rows in prose, or list the credentials under the table.
+
+Copy a fence off another page only after checking it renders there; a broken
+one propagates.
 
 ## Milestones on the timeline
 

@@ -288,6 +288,11 @@ func handleEditWikiDocument(ctx context.Context, s *Server, args editWikiDocumen
 	if args.OldText == args.NewText {
 		return toolResult{}, refuse("old_text and new_text are identical, so this edit would do nothing.")
 	}
+	// Inserting a chip into an existing page goes through here rather than
+	// writeBody, so the same guard applies to the replacement text.
+	if err := checkCredentialFences(args.NewText); err != nil {
+		return toolResult{}, err
+	}
 	if s.deps.Hocuspocus == nil {
 		return toolResult{}, fmt.Errorf("wiki writing is unavailable: the collaboration service is not configured")
 	}
@@ -402,6 +407,13 @@ func (s *Server) writeBody(ctx context.Context, doc *models.WikiDocument, body s
 				"attach_text_to_wiki_document, which takes the whole thing in one call, "+
 				"and link to it from the page.",
 			len(body), wiki.MaxMarkdownBytes)
+	}
+
+	// A credential fence the renderer cannot parse is left as a code block
+	// with no error anywhere, so it is caught here rather than discovered on
+	// the page later. See credential_fence.go.
+	if err := checkCredentialFences(body); err != nil {
+		return wiki.ApplyMarkdownResult{}, err
 	}
 
 	if s.deps.Hocuspocus == nil {
