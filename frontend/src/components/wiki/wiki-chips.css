@@ -155,6 +155,13 @@
 }
 
 .wiki-credential-chip__validity--invalid {
+  color: var(--destructive);
+  opacity: 0.8;
+}
+
+/* Untested. Neutral on purpose: it is the state every credential starts in,
+   so it must not read as a failure the way the old not-valid icon did. */
+.wiki-credential-chip__validity--unknown {
   color: var(--muted-foreground);
   opacity: 0.7;
 }

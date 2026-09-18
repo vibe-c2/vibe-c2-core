@@ -86,7 +86,7 @@ type CreateCredentialInput struct {
 	Password   *string                    `json:"password,omitempty"`
 	Keys       []*CredentialKeyInput      `json:"keys,omitempty"`
 	Properties []*CredentialPropertyInput `json:"properties,omitempty"`
-	IsValid    *bool                      `json:"isValid,omitempty"`
+	Validity   *models.CredentialValidity `json:"validity,omitempty"`
 	Tags       []string                   `json:"tags,omitempty"`
 }
 
@@ -446,7 +446,7 @@ type UpdateCredentialInput struct {
 	Password   *string                    `json:"password,omitempty"`
 	Keys       []*CredentialKeyInput      `json:"keys,omitempty"`
 	Properties []*CredentialPropertyInput `json:"properties,omitempty"`
-	IsValid    *bool                      `json:"isValid,omitempty"`
+	Validity   *models.CredentialValidity `json:"validity,omitempty"`
 	Tags       []string                   `json:"tags,omitempty"`
 }
 

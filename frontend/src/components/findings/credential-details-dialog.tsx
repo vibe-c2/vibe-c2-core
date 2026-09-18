@@ -1,14 +1,12 @@
 import { type FormEvent, useState } from "react"
 import { toast } from "sonner"
 import {
-  CheckCircle2Icon,
   CheckIcon,
   CopyIcon,
   KeyIcon,
   LinkIcon,
   PencilIcon,
   TrashIcon,
-  XCircleIcon,
 } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -31,6 +29,10 @@ import {
   useDeleteCredentialComment,
   useCredentialSourceHashes,
 } from "@/graphql/hooks/credentials"
+import {
+  CredentialValidityIcon,
+  credentialValidity,
+} from "@/components/findings/credential-validity-utils"
 import { credentialTypeLabel } from "@/components/findings/credential-type-utils"
 import { truncateHashValue } from "@/components/findings/hash-status-utils"
 import { CredentialBacklinkList } from "@/components/findings/credential-backlink-list"
@@ -108,17 +110,19 @@ export function CredentialDetailsDialog() {
                 <Badge variant="outline">
                   {credentialTypeLabel(credential.type)}
                 </Badge>
-                {credential.isValid ? (
-                  <Badge variant="secondary" className="gap-1">
-                    <CheckCircle2Icon className="size-3" />
-                    Valid
-                  </Badge>
-                ) : (
-                  <Badge variant="ghost" className="gap-1">
-                    <XCircleIcon className="size-3" />
-                    Invalid
-                  </Badge>
-                )}
+                <Badge
+                  variant={
+                    credential.validity === "VALID" ? "secondary" : "ghost"
+                  }
+                  className="gap-1"
+                  title={credentialValidity(credential.validity).description}
+                >
+                  <CredentialValidityIcon
+                    validity={credential.validity}
+                    className="size-3"
+                  />
+                  {credentialValidity(credential.validity).label}
+                </Badge>
                 <Button
                   variant="outline"
                   size="sm"

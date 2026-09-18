@@ -4,6 +4,7 @@ import type {
   CredentialType,
   CredentialSearchField,
   CredentialSortField,
+  CredentialValidity,
 } from "@/graphql/gql/graphql"
 import type { DataTableSort } from "@/lib/data-table-sort"
 
@@ -20,8 +21,8 @@ export interface CredentialFilters {
   searchFields: CredentialSearchField[]
   type: CredentialType | null
   tags: string[]
-  // null = both, true = valid only (default), false = invalid only.
-  validOnly: boolean | null
+  // Which validity states the list shows. Empty = every state.
+  validity: CredentialValidity[]
 }
 
 // The active column sort for the credentials table. Field values are the
@@ -52,7 +53,7 @@ interface CredentialStoreState {
   setType: (type: CredentialType | null) => void
   setTags: (tags: string[]) => void
   toggleTag: (tag: string) => void
-  setValidOnly: (validOnly: boolean | null) => void
+  setValidity: (validity: CredentialValidity[]) => void
   setSort: (sort: CredentialSort) => void
   resetFilters: () => void
 
@@ -66,15 +67,21 @@ interface CredentialStoreState {
   closeDetailsPanel: () => void
 }
 
-// Default filter set — matches the requirement that the table hides invalid
-// credentials by default. The frontend never sends `false` for validOnly
-// unless the user opts in to "only invalid"; null = show both.
+// Default filter set — everything except the credentials somebody has
+// established do not work. UNKNOWN is deliberately included: it is the state
+// every freshly recorded credential is in, and the boolean this replaced hid
+// exactly those.
+export const DEFAULT_CREDENTIAL_VALIDITY: CredentialValidity[] = [
+  "UNKNOWN",
+  "VALID",
+]
+
 const defaultFilters: CredentialFilters = {
   search: "",
   searchFields: [],
   type: null,
   tags: [],
-  validOnly: true,
+  validity: DEFAULT_CREDENTIAL_VALIDITY,
 }
 
 // Matches the server default (and the historical order): newest first.
@@ -111,8 +118,8 @@ export const useCredentialStore = create<CredentialStoreState>()(
           : [...filters.tags, tag]
         set({ filters: { ...filters, tags: nextTags } })
       },
-      setValidOnly: (validOnly) =>
-        set((s) => ({ filters: { ...s.filters, validOnly } })),
+      setValidity: (validity) =>
+        set((s) => ({ filters: { ...s.filters, validity } })),
       setSort: (sort) => set({ sort }),
       resetFilters: () => set({ filters: defaultFilters }),
 
@@ -135,21 +142,26 @@ export const useCredentialStore = create<CredentialStoreState>()(
     {
       name: "vibe-c2:credentials",
       storage: createJSONStorage(() => localStorage),
-      // Only persist the validOnly toggle — search/tags/type are session-scoped
+      // Only persist the validity filter — search/tags/type are session-scoped
       // and dialog state is transient. Custom merge layers the persisted slice
       // onto the default filters so missing fields fall back to defaults.
+      // State persisted before validity replaced the validOnly boolean has no
+      // `validity` array, so it falls through to the default rather than
+      // carrying a stale shape forward.
       partialize: (state) => ({
-        filters: { validOnly: state.filters.validOnly },
+        filters: { validity: state.filters.validity },
       }),
       merge: (persisted, current) => {
         const p = persisted as
-          | { filters?: { validOnly?: boolean | null } }
+          | { filters?: { validity?: CredentialValidity[] } }
           | undefined
         return {
           ...current,
           filters: {
             ...current.filters,
-            ...(p?.filters ?? {}),
+            ...(Array.isArray(p?.filters?.validity)
+              ? { validity: p.filters.validity }
+              : {}),
           },
         }
       },

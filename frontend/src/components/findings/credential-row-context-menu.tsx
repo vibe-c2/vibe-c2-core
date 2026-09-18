@@ -1,14 +1,12 @@
 import type { ReactElement, ReactNode } from "react"
 import { toast } from "sonner"
 import {
-  CheckCircle2Icon,
   CopyIcon,
   KeyIcon,
   LinkIcon,
   PencilIcon,
   TagIcon,
   TrashIcon,
-  XCircleIcon,
 } from "lucide-react"
 import {
   ContextMenu,
@@ -23,9 +21,17 @@ import {
   ContextMenuTrigger,
 } from "@/components/ui/context-menu"
 import { useCredentialStore } from "@/stores/credentials"
+import {
+  CREDENTIAL_VALIDITIES,
+  CredentialValidityIcon,
+  credentialValidity,
+} from "@/components/findings/credential-validity-utils"
 import { useUpdateCredential } from "@/graphql/hooks/credentials"
 import { buildCredentialShareUrl } from "@/components/findings/credential-share-link"
-import type { CredentialFieldsFragment } from "@/graphql/gql/graphql"
+import type {
+  CredentialFieldsFragment,
+  CredentialValidity,
+} from "@/graphql/gql/graphql"
 
 interface CredentialRowContextMenuProps {
   credential: CredentialFieldsFragment
@@ -71,15 +77,13 @@ export function CredentialRowContextMenu({
     }
   }
 
-  async function toggleValidity() {
+  async function setValidity(validity: CredentialValidity) {
     try {
       await updateCredential.mutateAsync({
         id: credential.id,
-        input: { isValid: !credential.isValid },
+        input: { validity },
       })
-      toast.success(
-        credential.isValid ? "Marked as invalid" : "Marked as valid",
-      )
+      toast.success(`Marked as ${credentialValidity(validity).label.toLowerCase()}`)
     } catch (err) {
       toast.error(
         err instanceof Error ? err.message : "Failed to update credential",
@@ -91,19 +95,17 @@ export function CredentialRowContextMenu({
     <ContextMenu>
       <ContextMenuTrigger render={triggerRender}>{children}</ContextMenuTrigger>
       <ContextMenuContent>
-        <ContextMenuItem onClick={toggleValidity}>
-          {credential.isValid ? (
-            <>
-              <XCircleIcon className="size-4" />
-              Mark as invalid
-            </>
-          ) : (
-            <>
-              <CheckCircle2Icon className="size-4" />
-              Mark as valid
-            </>
-          )}
-        </ContextMenuItem>
+        {/* One item per state the credential is not already in. A toggle
+            would do here when there were two states; with three, offering
+            both alternatives is the only way to reach either in one click. */}
+        {CREDENTIAL_VALIDITIES.filter((v) => v !== credential.validity).map(
+          (v) => (
+            <ContextMenuItem key={v} onClick={() => setValidity(v)}>
+              <CredentialValidityIcon validity={v} />
+              Mark as {credentialValidity(v).label.toLowerCase()}
+            </ContextMenuItem>
+          ),
+        )}
 
         <ContextMenuSeparator />
 

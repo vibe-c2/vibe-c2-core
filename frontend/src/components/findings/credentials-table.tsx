@@ -1,7 +1,5 @@
 import {
   MessageSquareIcon,
-  CheckCircle2Icon,
-  XCircleIcon,
   KeyIcon,
   LinkIcon,
   SwordsIcon,
@@ -15,6 +13,10 @@ import { SortableHeader } from "@/components/ui/sortable-header"
 import { FormattedDateTimeText } from "@/components/ui/formatted-date-time-text"
 import { useCredentialStore, type CredentialSort } from "@/stores/credentials"
 import { credentialTypeLabel } from "@/components/findings/credential-type-utils"
+import {
+  CredentialValidityIcon,
+  credentialValidity,
+} from "@/components/findings/credential-validity-utils"
 import { CredentialRowContextMenu } from "@/components/findings/credential-row-context-menu"
 import type { CredentialFieldsFragment } from "@/graphql/gql/graphql"
 
@@ -117,12 +119,8 @@ export function CredentialsTable({
             onClick={() => openDetails({ id: cred.id, name: cred.name })}
             className={dataTableRowClass(gridCols, "cursor-pointer")}
           >
-            <div title={cred.isValid ? "Valid" : "Invalid"}>
-              {cred.isValid ? (
-                <CheckCircle2Icon className="size-4 text-emerald-600 dark:text-emerald-400" />
-              ) : (
-                <XCircleIcon className="size-4 text-muted-foreground/60" />
-              )}
+            <div title={credentialValidity(cred.validity).description}>
+              <CredentialValidityIcon validity={cred.validity} />
             </div>
             <div className="min-w-0 truncate font-medium" title={cred.name}>
               {cred.name}

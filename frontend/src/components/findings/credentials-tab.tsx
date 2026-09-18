@@ -51,7 +51,7 @@ function ScopedCredentialsTab({ operationId }: { operationId: string }) {
     searchFields: filters.searchFields,
     type: filters.type,
     tags: filters.tags,
-    validOnly: filters.validOnly,
+    validity: filters.validity,
     sortBy: sort.field,
     sortDirection: sort.direction,
   })
@@ -115,7 +115,7 @@ function GlobalCredentialsTab() {
       searchFields: filters.searchFields,
       type: filters.type,
       tags: filters.tags,
-      validOnly: filters.validOnly,
+      validity: filters.validity,
       sortBy: sort.field,
       sortDirection: sort.direction,
     },

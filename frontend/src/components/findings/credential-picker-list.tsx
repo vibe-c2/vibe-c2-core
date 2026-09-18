@@ -73,7 +73,7 @@ export function CredentialPickerList({
     useInfiniteCredentials({
       operationId,
       search: debounced || null,
-      validOnly: null,
+      validity: null,
       first: 20,
     });
 

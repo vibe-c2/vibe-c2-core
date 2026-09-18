@@ -8,7 +8,6 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog"
-import { Switch } from "@/components/ui/switch"
 import { useCredentialStore } from "@/stores/credentials"
 import {
   useCredential,
@@ -19,6 +18,7 @@ import {
   CredentialFormFields,
   type CredentialFormValues,
 } from "@/components/findings/credential-form-fields"
+import { CredentialValiditySelect } from "@/components/findings/credential-validity-utils"
 import {
   keyDraftsFromWire,
   keyDraftsToInputs,
@@ -86,7 +86,7 @@ function EditCredentialForm({ credential, onSaved }: EditCredentialFormProps) {
     password: credential.password,
     keys: keyDraftsFromWire(credential.keys),
     properties: propertyDraftsFromWire(credential.properties),
-    isValid: credential.isValid,
+    validity: credential.validity,
     tags: credential.tags,
   })
   const [error, setError] = useState<string | null>(null)
@@ -104,7 +104,7 @@ function EditCredentialForm({ credential, onSaved }: EditCredentialFormProps) {
           password: values.password,
           keys: keyDraftsToInputs(values.keys),
           properties: propertyDraftsToInputs(values.properties),
-          isValid: values.isValid,
+          validity: values.validity,
           tags: values.tags,
         },
       })
@@ -137,15 +137,11 @@ function EditCredentialForm({ credential, onSaved }: EditCredentialFormProps) {
         />
       </div>
       <DialogFooter className="mt-4 flex-row items-center justify-between sm:justify-between">
-        <label className="flex cursor-pointer items-center gap-2 text-sm">
-          <Switch
-            checked={values.isValid}
-            onCheckedChange={(checked) =>
-              setValues((v) => ({ ...v, isValid: checked }))
-            }
-          />
-          <span>Mark as valid</span>
-        </label>
+        <CredentialValiditySelect
+          id="edit-cred-validity"
+          value={values.validity}
+          onValueChange={(validity) => setValues((v) => ({ ...v, validity }))}
+        />
         <Button
           type="submit"
           disabled={updateCredential.isPending || !values.name.trim()}

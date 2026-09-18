@@ -29,7 +29,7 @@ export const CredentialFields = graphql(`
       name
       value
     }
-    isValid
+    validity
     tags
     comments {
       ...CredentialCommentFields
@@ -74,7 +74,7 @@ export const CredentialsQuery = graphql(`
     $searchFields: [CredentialSearchField!]
     $type: CredentialType
     $tags: [String!]
-    $validOnly: Boolean
+    $validity: [CredentialValidity!]
     $sortBy: CredentialSortField
     $sortDirection: SortDirection
     $first: Int
@@ -86,7 +86,7 @@ export const CredentialsQuery = graphql(`
       searchFields: $searchFields
       type: $type
       tags: $tags
-      validOnly: $validOnly
+      validity: $validity
       sortBy: $sortBy
       sortDirection: $sortDirection
       first: $first
@@ -154,7 +154,7 @@ export const MyCredentialsQuery = graphql(`
     $searchFields: [CredentialSearchField!]
     $type: CredentialType
     $tags: [String!]
-    $validOnly: Boolean
+    $validity: [CredentialValidity!]
     $sortBy: CredentialSortField
     $sortDirection: SortDirection
     $first: Int
@@ -166,7 +166,7 @@ export const MyCredentialsQuery = graphql(`
       searchFields: $searchFields
       type: $type
       tags: $tags
-      validOnly: $validOnly
+      validity: $validity
       sortBy: $sortBy
       sortDirection: $sortDirection
       first: $first

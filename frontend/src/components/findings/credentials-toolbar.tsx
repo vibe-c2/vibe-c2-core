@@ -30,7 +30,10 @@ import {
 import { SearchInput } from "@/components/ui/search-input"
 import { Switch } from "@/components/ui/switch"
 import { TagFilterPanel } from "@/components/findings/tag-filter-panel"
-import { useCredentialStore } from "@/stores/credentials"
+import {
+  useCredentialStore,
+  DEFAULT_CREDENTIAL_VALIDITY,
+} from "@/stores/credentials"
 import { useCredentialExport } from "@/hooks/use-credential-export"
 import {
   useCredentialTags,
@@ -64,7 +67,7 @@ export function CredentialsToolbar({ mode }: CredentialsToolbarProps) {
   const setType = useCredentialStore((s) => s.setType)
   const toggleTag = useCredentialStore((s) => s.toggleTag)
   const setTags = useCredentialStore((s) => s.setTags)
-  const setValidOnly = useCredentialStore((s) => s.setValidOnly)
+  const setValidity = useCredentialStore((s) => s.setValidity)
   const openCreate = useCredentialStore((s) => s.openCreateDialog)
 
   // Each branch only fetches when its mode is active; the other hook stays
@@ -84,12 +87,14 @@ export function CredentialsToolbar({ mode }: CredentialsToolbarProps) {
       : tagsData.myCredentialTags
   }, [tagsData])
 
-  // Toggle semantics: switch ON = hide invalid (default), switch OFF = show
-  // both. We deliberately don't expose "only invalid" here to keep the
-  // toolbar simple; the backend still accepts that mode if ever needed.
-  const showInvalid = filters.validOnly === null
+  // Toggle semantics: switch OFF (default) shows untested and valid
+  // credentials, switch ON adds the ones known not to work. Untested is never
+  // on the hidden side of this switch — that conflation is exactly what the
+  // three-state validity replaced. An empty list means every state, so the
+  // filter does not have to be restated when a fourth state never arrives.
+  const showInvalid = filters.validity.length === 0
   function onShowInvalidChange(next: boolean) {
-    setValidOnly(next ? null : true)
+    setValidity(next ? [] : DEFAULT_CREDENTIAL_VALIDITY)
   }
 
   // Search-field toggle semantics. The store keeps an empty list as the

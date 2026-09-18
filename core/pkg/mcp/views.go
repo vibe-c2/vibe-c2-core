@@ -82,7 +82,7 @@ type credentialView struct {
 	Type     string   `json:"type"`
 	Username string   `json:"username,omitempty"`
 	Password string   `json:"password,omitempty"`
-	IsValid  bool     `json:"isValid"`
+	Validity string   `json:"validity"`
 	Tags     []string `json:"tags,omitempty"`
 }
 
@@ -346,7 +346,7 @@ func toCredentialView(c *models.Credential) credentialView {
 		Type:     string(c.Type),
 		Username: c.Username,
 		Password: c.Password,
-		IsValid:  c.IsValid,
+		Validity: string(c.Validity),
 		Tags:     c.Tags,
 	}
 }

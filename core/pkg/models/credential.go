@@ -34,6 +34,31 @@ func (t CredentialType) IsValid() bool {
 	return false
 }
 
+// CredentialValidity records whether the credential has actually been used
+// against the target. It is deliberately three-state: before this existed the
+// field was a bool, so "nobody has tried it yet" and "tried it, it failed"
+// were the same value — and since the list hides what does not work, every
+// freshly recorded credential disappeared from the default view.
+type CredentialValidity string
+
+const (
+	// CredentialValidityUnknown is the default: recorded but not yet tried.
+	CredentialValidityUnknown CredentialValidity = "UNKNOWN"
+	CredentialValidityValid   CredentialValidity = "VALID"
+	CredentialValidityInvalid CredentialValidity = "INVALID"
+)
+
+// IsValid reports whether the validity matches one of the known enum members.
+func (v CredentialValidity) IsValid() bool {
+	switch v {
+	case CredentialValidityUnknown,
+		CredentialValidityValid,
+		CredentialValidityInvalid:
+		return true
+	}
+	return false
+}
+
 // CredentialComment is an operator note attached to a credential.
 // Stored as an embedded sub-document within Credential (not a separate collection).
 type CredentialComment struct {
@@ -80,7 +105,7 @@ type Credential struct {
 	Password           string               `bson:"password"      json:"password"`
 	Keys               []CredentialKey      `bson:"keys"          json:"keys"`
 	Properties         []CredentialProperty `bson:"properties"    json:"properties"`
-	IsValid            bool                 `bson:"is_valid"      json:"is_valid"`
+	Validity           CredentialValidity   `bson:"validity"      json:"validity"`
 	Tags               []string             `bson:"tags"          json:"tags"`
 	Comments           []CredentialComment  `bson:"comments"      json:"comments"`
 	CreatedByID        uuid.UUID            `bson:"created_by_id" json:"created_by_id"`

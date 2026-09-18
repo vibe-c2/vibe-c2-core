@@ -214,6 +214,7 @@ func handleMarkHashCracked(ctx context.Context, s *Server, args markHashCrackedA
 		return toolResult{}, err
 	}
 
+	crackedValidity := models.CredentialValidityValid
 	input := model.MarkHashCrackedInput{}
 	switch {
 	case args.CredentialID != "":
@@ -227,7 +228,7 @@ func handleMarkHashCracked(ctx context.Context, s *Server, args markHashCrackedA
 			Tags:     args.Tags,
 			// A cracked hash is a working secret by definition, so record it
 			// as valid rather than leaving the operator to confirm it.
-			IsValid: boolPtr(true),
+			Validity: &crackedValidity,
 		}
 	default:
 		return toolResult{}, fmt.Errorf(

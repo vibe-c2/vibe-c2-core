@@ -200,6 +200,15 @@ var releases = []Release{
 			"The block cannot sit in a table cell, and no vibe://credential/ link exists. Chips are hosts, hashes and pages only.",
 		},
 	},
+	{
+		Version: 23,
+		Date:    "2026-09-18",
+		Notes: []string{
+			"A credential's validity is three-state: UNKNOWN, VALID, INVALID. The boolean it replaces could not say \"nobody has tried this yet\", so an untested credential was stored as false and the operator's list, which hides what does not work, hid it. create_credential and update_credential now take validity, and it defaults to UNKNOWN.",
+			"find_credentials takes validity as a list of states to include, replacing valid_only. Omit it for everything.",
+			"Existing credentials are migrated on deploy: a true becomes VALID, a false becomes UNKNOWN rather than INVALID, since the old guidance had agents set true the moment a credential worked and left everything untried on false.",
+		},
+	},
 }
 
 // Releases returns the full history, oldest first. A copy, so callers cannot

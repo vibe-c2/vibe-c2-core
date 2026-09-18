@@ -21,10 +21,10 @@ Findings hold the data; the wiki explains it. Record both.
   PKI". The operator sorts and filters on `os`, so a sentence in it sorts
   under nothing.
 - **A recovered secret**: `create_credential`, tagged with the host it came
-  from. Not a wiki page. `is_valid` is a plain yes or no with no "untested" in
-  between: leaving it off stores false, which the operator's view labels
-  **Invalid**. An untried credential therefore reads to everyone else as one
-  that does not work, so set `is_valid:true` the moment you use it.
+  from. Not a wiki page. `validity` stays UNKNOWN until somebody tries it:
+  say VALID once you have used it, INVALID once the target refused it. Never
+  claim VALID for one you merely found — UNKNOWN is a real answer and nothing
+  hides it.
 - **A correction**: `update_credential` changes only the fields you send and
   leaves the rest alone. `keys`, `properties` and `tags` are the exception —
   sending one replaces that whole list, and sending `[]` clears it.

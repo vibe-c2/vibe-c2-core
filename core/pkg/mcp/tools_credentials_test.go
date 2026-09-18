@@ -1,6 +1,7 @@
 package mcp
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/vibe-c2/vibe-c2-core/core/pkg/models"
@@ -9,17 +10,17 @@ import (
 func strPtr(s string) *string { return &s }
 
 // The reported case: an agent recorded credentials that read as Invalid and
-// had no way to say otherwise. Flipping validity must not disturb anything.
+// had no way to say otherwise. Settling validity must not disturb anything.
 func TestUpdateCredential_MarkingValidTouchesNothingElse(t *testing.T) {
 	input, err := buildUpdateCredentialInput(updateCredentialArgs{
 		CredentialID: "id",
-		IsValid:      boolPtr(true),
+		Validity:     strPtr("VALID"),
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if input.IsValid == nil || !*input.IsValid {
-		t.Fatal("is_valid should have been set to true")
+	if input.Validity == nil || *input.Validity != models.CredentialValidityValid {
+		t.Fatal("validity should have been set to VALID")
 	}
 	if input.Name != nil || input.Username != nil || input.Password != nil {
 		t.Error("omitted scalars must stay nil so the resolver leaves them alone")
@@ -130,21 +131,55 @@ func TestUpdateCredential_NormalisesTheType(t *testing.T) {
 }
 
 func TestSummarizeCredentialUpdate(t *testing.T) {
-	cred := &models.Credential{Name: "web-01 local admin"}
 	tests := []struct {
-		name string
-		args updateCredentialArgs
-		want string
+		name     string
+		validity models.CredentialValidity
+		args     updateCredentialArgs
+		want     string
 	}{
-		{"validity leads when it changed", updateCredentialArgs{IsValid: boolPtr(true)}, "marked the credential \"web-01 local admin\" as working"},
-		{"and says so when it did not work", updateCredentialArgs{IsValid: boolPtr(false)}, "marked the credential \"web-01 local admin\" as not working"},
-		{"otherwise it is a plain update", updateCredentialArgs{Name: strPtr("x")}, "updated the credential \"web-01 local admin\""},
+		{"validity leads when it changed", models.CredentialValidityValid, updateCredentialArgs{Validity: strPtr("VALID")}, "marked the credential \"web-01 local admin\" as working"},
+		{"and says so when it did not work", models.CredentialValidityInvalid, updateCredentialArgs{Validity: strPtr("INVALID")}, "marked the credential \"web-01 local admin\" as not working"},
+		{"untested is its own answer, not a failure", models.CredentialValidityUnknown, updateCredentialArgs{Validity: strPtr("UNKNOWN")}, "marked the credential \"web-01 local admin\" as untested"},
+		{"otherwise it is a plain update", models.CredentialValidityUnknown, updateCredentialArgs{Name: strPtr("x")}, "updated the credential \"web-01 local admin\""},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
+			cred := &models.Credential{Name: "web-01 local admin", Validity: tc.validity}
 			if got := summarizeCredentialUpdate(cred, tc.args); got != tc.want {
 				t.Fatalf("got %q, want %q", got, tc.want)
 			}
 		})
+	}
+}
+
+// An unrecognised state is refused by name rather than silently becoming one
+// of the three — a wrong validity is a wrong claim about the target.
+func TestUpdateCredential_RefusesAnUnknownValidity(t *testing.T) {
+	_, err := buildUpdateCredentialInput(updateCredentialArgs{
+		CredentialID: "id",
+		Validity:     strPtr("MAYBE"),
+	})
+	if err == nil {
+		t.Fatal("expected a refusal for an unrecognised validity")
+	}
+	if !isRefusal(err) {
+		t.Fatalf("expected a refusal, got %v", err)
+	}
+	if !strings.Contains(err.Error(), "UNKNOWN, VALID, INVALID") {
+		t.Fatalf("refusal should name the three states, got %q", err.Error())
+	}
+}
+
+// The enum arrives in whatever case the agent typed it.
+func TestUpdateCredential_NormalisesTheValidity(t *testing.T) {
+	input, err := buildUpdateCredentialInput(updateCredentialArgs{
+		CredentialID: "id",
+		Validity:     strPtr("  invalid "),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if input.Validity == nil || *input.Validity != models.CredentialValidityInvalid {
+		t.Fatalf("validity = %v, want INVALID", input.Validity)
 	}
 }

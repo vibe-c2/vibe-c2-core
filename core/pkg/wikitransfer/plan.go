@@ -116,9 +116,13 @@ type CredentialPayload struct {
 	Password   string               `json:"password"`
 	Keys       []CredentialKey      `json:"keys"`
 	Properties []CredentialProperty `json:"properties"`
-	IsValid    bool                 `json:"isValid"`
-	Tags       []string             `json:"tags"`
-	Deleted    bool                 `json:"deleted"`
+	Validity   string               `json:"validity"`
+	// LegacyIsValid carries the boolean this field used to be, so a bundle
+	// exported before validity became three-state still imports. Written by
+	// nothing; read only when Validity is empty. See buildCredential.
+	LegacyIsValid bool     `json:"isValid,omitempty"`
+	Tags          []string `json:"tags"`
+	Deleted       bool     `json:"deleted"`
 }
 
 // CredentialKey is one key material entry of a credential payload.

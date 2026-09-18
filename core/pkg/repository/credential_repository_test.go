@@ -24,23 +24,27 @@ func TestBuildCredentialFilter_OperationOnly(t *testing.T) {
 	}
 }
 
-// TestBuildCredentialFilter_TypeAndValid verifies that the type and is_valid
-// constraints land on the right BSON keys when present.
-func TestBuildCredentialFilter_TypeAndValid(t *testing.T) {
+// TestBuildCredentialFilter_TypeAndValidity verifies that the type and
+// validity constraints land on the right BSON keys when present.
+func TestBuildCredentialFilter_TypeAndValidity(t *testing.T) {
 	opID := uuid.New()
 	pwd := models.CredentialTypePassword
-	valid := true
 
 	f := buildCredentialFilter(opID, CredentialFilter{
-		Type:      &pwd,
-		ValidOnly: &valid,
+		Type:     &pwd,
+		Validity: []models.CredentialValidity{models.CredentialValidityValid},
 	})
 
 	if f["type"] != pwd {
 		t.Fatalf("type filter missing or wrong: got %v", f["type"])
 	}
-	if f["is_valid"] != true {
-		t.Fatalf("is_valid filter missing or wrong: got %v", f["is_valid"])
+	got, ok := f["validity"].(bson.M)
+	if !ok {
+		t.Fatalf("expected validity filter to be bson.M, got %T", f["validity"])
+	}
+	in, ok := got["$in"].([]models.CredentialValidity)
+	if !ok || len(in) != 1 || in[0] != models.CredentialValidityValid {
+		t.Fatalf("expected validity $in [VALID], got %v", got["$in"])
 	}
 }
 
@@ -178,33 +182,43 @@ func TestBuildCredentialFilter_SearchFieldsIgnoredWithoutSearch(t *testing.T) {
 	}
 }
 
-// TestBuildCredentialFilter_ValidOnlyFalseSelectsInvalid verifies that passing
-// ValidOnly=false produces a filter for is_valid=false (invalid-only), not a
-// missing filter. This is the path the UI uses when the user toggles to
-// "only invalid" if that mode is ever exposed.
-func TestBuildCredentialFilter_ValidOnlyFalseSelectsInvalid(t *testing.T) {
+// TestBuildCredentialFilter_ValiditySelectsSeveralStates verifies that a
+// multi-state filter becomes one $in rather than several keys. This is the
+// UI's default: everything except the credentials known not to work.
+func TestBuildCredentialFilter_ValiditySelectsSeveralStates(t *testing.T) {
 	opID := uuid.New()
-	invalid := false
 
-	f := buildCredentialFilter(opID, CredentialFilter{ValidOnly: &invalid})
+	f := buildCredentialFilter(opID, CredentialFilter{
+		Validity: []models.CredentialValidity{
+			models.CredentialValidityUnknown,
+			models.CredentialValidityValid,
+		},
+	})
 
-	if got, ok := f["is_valid"]; !ok {
-		t.Fatalf("expected is_valid filter present")
-	} else if got != false {
-		t.Fatalf("expected is_valid=false, got %v", got)
+	got, ok := f["validity"].(bson.M)
+	if !ok {
+		t.Fatalf("expected validity filter to be bson.M, got %T", f["validity"])
+	}
+	in, ok := got["$in"].([]models.CredentialValidity)
+	if !ok || len(in) != 2 {
+		t.Fatalf("expected two states in $in, got %v", got["$in"])
+	}
+	if in[0] != models.CredentialValidityUnknown || in[1] != models.CredentialValidityValid {
+		t.Fatalf("expected [UNKNOWN VALID], got %v", in)
 	}
 }
 
-// TestBuildCredentialFilter_NilValidOnlyShowsBoth verifies that when ValidOnly
-// is nil the filter does not constrain is_valid — both valid and invalid are
-// returned. This is the "Show invalid" toggle's "on" state.
-func TestBuildCredentialFilter_NilValidOnlyShowsBoth(t *testing.T) {
+// TestBuildCredentialFilter_EmptyValidityShowsEverything verifies that an
+// empty validity list does not constrain the field. Untested credentials in
+// particular must not fall out of an unfiltered list — the boolean this
+// replaced hid them by default, which is what made it worth replacing.
+func TestBuildCredentialFilter_EmptyValidityShowsEverything(t *testing.T) {
 	opID := uuid.New()
 
-	f := buildCredentialFilter(opID, CredentialFilter{ValidOnly: nil})
+	f := buildCredentialFilter(opID, CredentialFilter{Validity: nil})
 
-	if _, ok := f["is_valid"]; ok {
-		t.Fatalf("did not expect is_valid filter when ValidOnly is nil")
+	if _, ok := f["validity"]; ok {
+		t.Fatalf("did not expect a validity filter when none was requested")
 	}
 }
 

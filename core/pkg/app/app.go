@@ -377,6 +377,14 @@ func NewApp() (*App, error) {
 		l.Info("task done_at backfill complete", zap.Int64("rows", n))
 	}
 
+	// Give every pre-three-state credential a validity. See
+	// BackfillValidity for why a legacy false becomes UNKNOWN.
+	if n, err := repos.Credential.BackfillValidity(ctx); err != nil {
+		l.Warn("credential validity backfill failed", zap.Error(err))
+	} else if n > 0 {
+		l.Info("credential validity backfill complete", zap.Int64("rows", n))
+	}
+
 	// Subscribe to operation membership changes for wiki role enforcement.
 	// When a user is removed from an operation or demoted below operator,
 	// disconnect their active Hocuspocus WebSocket connections.

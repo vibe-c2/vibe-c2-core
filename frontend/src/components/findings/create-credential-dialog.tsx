@@ -8,7 +8,6 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { Switch } from "@/components/ui/switch";
 import { useCredentialStore } from "@/stores/credentials";
 import {
   useCreateCredential,
@@ -19,6 +18,7 @@ import {
   CredentialFormFields,
   type CredentialFormValues,
 } from "@/components/findings/credential-form-fields";
+import { CredentialValiditySelect } from "@/components/findings/credential-validity-utils";
 import { keyDraftsToInputs } from "@/components/findings/credential-key-drafts";
 import { propertyDraftsToInputs } from "@/components/findings/credential-property-drafts";
 import {
@@ -33,7 +33,7 @@ const emptyValues: CredentialFormValues = {
   password: "",
   keys: [],
   properties: [],
-  isValid: false,
+  validity: "UNKNOWN",
   tags: [],
 };
 
@@ -99,7 +99,7 @@ export function CreateCredentialDialog({
           password: values.password || null,
           keys: keyDraftsToInputs(values.keys),
           properties: propertyDraftsToInputs(values.properties),
-          isValid: values.isValid,
+          validity: values.validity,
           tags: values.tags,
         },
       });
@@ -157,15 +157,13 @@ export function CreateCredentialDialog({
             tagSuggestionsLoading={tagSuggestionsLoading}
           />
           <DialogFooter className="mt-4 flex-row items-center justify-between sm:justify-between">
-            <label className="flex cursor-pointer items-center gap-2 text-sm">
-              <Switch
-                checked={values.isValid}
-                onCheckedChange={(checked) =>
-                  setValues((v) => ({ ...v, isValid: checked }))
-                }
-              />
-              <span>Mark as valid</span>
-            </label>
+            <CredentialValiditySelect
+              id="create-cred-validity"
+              value={values.validity}
+              onValueChange={(validity) =>
+                setValues((v) => ({ ...v, validity }))
+              }
+            />
             <Button
               type="submit"
               disabled={

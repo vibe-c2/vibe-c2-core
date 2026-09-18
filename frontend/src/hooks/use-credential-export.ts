@@ -6,6 +6,7 @@ import {
   MyCredentialsDocument,
   type CredentialType,
   type CredentialSearchField,
+  type CredentialValidity,
 } from "@/graphql/gql/graphql"
 import { useCredentialStore } from "@/stores/credentials"
 import { useOperation } from "@/graphql/hooks/operations"
@@ -34,7 +35,7 @@ type Filters = {
   searchFields: CredentialSearchField[] | null
   type: CredentialType | null
   tags: string[] | null
-  validOnly: boolean | null
+  validity: CredentialValidity[]
 }
 
 export type ExportFormat = "json" | "csv"
@@ -72,7 +73,7 @@ export function useCredentialExport(mode: FindingsMode) {
           filters.searchFields.length > 0 ? filters.searchFields : null,
         type: filters.type,
         tags: filters.tags.length > 0 ? filters.tags : null,
-        validOnly: filters.validOnly,
+        validity: filters.validity,
       }
 
       try {

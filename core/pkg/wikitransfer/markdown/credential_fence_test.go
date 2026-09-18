@@ -48,7 +48,7 @@ func TestHydrateCredentialFences_HydratesSameOpCredential(t *testing.T) {
 			Type:         models.CredentialTypePassword,
 			Username:     "admin",
 			Password:     "hunter2",
-			IsValid:      true,
+			Validity:     models.CredentialValidityValid,
 		},
 	}}
 	body := "```vibe-credential\n{\n  \"id\": \"" + credID.String() + "\"\n}\n```"

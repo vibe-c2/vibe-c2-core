@@ -7,7 +7,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
-import type { CredentialType } from "@/graphql/gql/graphql"
+import type { CredentialType, CredentialValidity } from "@/graphql/gql/graphql"
 import {
   CREDENTIAL_TYPES,
   credentialTypeLabel,
@@ -25,7 +25,7 @@ export interface CredentialFormValues {
   password: string
   keys: KeyDraft[]
   properties: PropertyDraft[]
-  isValid: boolean
+  validity: CredentialValidity
   tags: string[]
 }
 

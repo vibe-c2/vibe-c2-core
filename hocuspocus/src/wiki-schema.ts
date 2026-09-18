@@ -399,7 +399,7 @@ export const wikiSchema = new Schema({
     //
     // payload is the verbatim JSON object carried in the fence body. Keys:
     //   { id, name?, type?, username?, password?, keys?, properties?,
-    //     isValid?, tags?, deleted? }
+    //     validity?, tags?, deleted? }
     // The core import orchestrator uses payload to resolve-or-create the
     // credential in the target operation and then rewrites the chip's id
     // to the final value before applying the Y.js update.

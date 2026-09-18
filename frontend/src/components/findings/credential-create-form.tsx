@@ -1,7 +1,6 @@
 import { type FormEvent, useState } from "react"
 import { ArrowLeftIcon } from "lucide-react"
 import { Button } from "@/components/ui/button"
-import { Switch } from "@/components/ui/switch"
 import {
   useCreateCredential,
   useCredentialTags,
@@ -10,6 +9,7 @@ import {
   CredentialFormFields,
   type CredentialFormValues,
 } from "@/components/findings/credential-form-fields"
+import { CredentialValiditySelect } from "@/components/findings/credential-validity-utils"
 import type { CredentialFieldsFragment } from "@/graphql/gql/graphql"
 import { keyDraftsToInputs } from "@/components/findings/credential-key-drafts"
 import { propertyDraftsToInputs } from "@/components/findings/credential-property-drafts"
@@ -41,7 +41,7 @@ const emptyFormValues: CredentialFormValues = {
   password: "",
   keys: [],
   properties: [],
-  isValid: false,
+  validity: "UNKNOWN",
   tags: [],
 }
 
@@ -76,7 +76,7 @@ export function CredentialCreateForm({
           password: values.password || null,
           keys: keyDraftsToInputs(values.keys),
           properties: propertyDraftsToInputs(values.properties),
-          isValid: values.isValid,
+          validity: values.validity,
           tags: values.tags,
         },
       })
@@ -118,15 +118,11 @@ export function CredentialCreateForm({
             <ArrowLeftIcon className="size-3.5" />
             Back
           </Button>
-          <label className="flex cursor-pointer items-center gap-2 text-sm">
-            <Switch
-              checked={values.isValid}
-              onCheckedChange={(checked) =>
-                setValues((v) => ({ ...v, isValid: checked }))
-              }
-            />
-            <span>Mark as valid</span>
-          </label>
+          <CredentialValiditySelect
+            id="cred-validity"
+            value={values.validity}
+            onValueChange={(validity) => setValues((v) => ({ ...v, validity }))}
+          />
         </div>
         <Button
           type="submit"

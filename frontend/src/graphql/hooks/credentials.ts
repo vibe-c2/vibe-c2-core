@@ -12,6 +12,7 @@ import type {
   CredentialType,
   CredentialSearchField,
   CredentialSortField,
+  CredentialValidity,
   SortDirection,
 } from "@/graphql/gql/graphql"
 import {
@@ -39,8 +40,8 @@ export type CredentialListParams = {
   searchFields?: CredentialSearchField[] | null
   type?: CredentialType | null
   tags?: string[] | null
-  // validOnly: true hides invalid (default), null shows both, false shows only invalid.
-  validOnly?: boolean | null
+  // Validity states to include. Empty/omitted = every state.
+  validity?: CredentialValidity[] | null
   // Column sort; omitted = server default (CREATED_AT DESC). Cursors are
   // sort-specific, but the params live in the query key, so changing the
   // sort naturally starts a fresh query from page one.
@@ -58,7 +59,7 @@ export type MyCredentialListParams = {
   searchFields?: CredentialSearchField[] | null
   type?: CredentialType | null
   tags?: string[] | null
-  validOnly?: boolean | null
+  validity?: CredentialValidity[] | null
   sortBy?: CredentialSortField | null
   sortDirection?: SortDirection | null
   first?: number
@@ -115,7 +116,10 @@ export function useInfiniteCredentials(params: CredentialListParams) {
             : null,
         type: params.type ?? null,
         tags: params.tags && params.tags.length > 0 ? params.tags : null,
-        validOnly: params.validOnly ?? null,
+        validity:
+          params.validity && params.validity.length > 0
+            ? params.validity
+            : null,
         sortBy: params.sortBy ?? null,
         sortDirection: params.sortDirection ?? null,
         first: params.first ?? 20,
@@ -184,7 +188,10 @@ export function useInfiniteMyCredentials(
             : null,
         type: params.type ?? null,
         tags: params.tags && params.tags.length > 0 ? params.tags : null,
-        validOnly: params.validOnly ?? null,
+        validity:
+          params.validity && params.validity.length > 0
+            ? params.validity
+            : null,
         sortBy: params.sortBy ?? null,
         sortDirection: params.sortDirection ?? null,
         first: params.first ?? 20,

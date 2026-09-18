@@ -14,7 +14,7 @@ type findCredentialsArgs struct {
 	OperationID string   `json:"operation_id,omitempty" jsonschema:"Operation id; omit for the operator's current one."`
 	Search      string   `json:"search,omitempty"       jsonschema:"Free-text match against name and username."`
 	Tags        []string `json:"tags,omitempty"         jsonschema:"Only credentials carrying all of these tags."`
-	ValidOnly   bool     `json:"valid_only,omitempty"   jsonschema:"Only credentials marked valid."`
+	Validity    []string `json:"validity,omitempty"     jsonschema:"Only these states: UNKNOWN, VALID, INVALID. Omit for all."`
 	Limit       int      `json:"limit,omitempty"        jsonschema:"Page size, max 50."`
 	Cursor      string   `json:"cursor,omitempty"       jsonschema:"nextCursor from the previous page."`
 }
@@ -34,8 +34,8 @@ type createCredentialArgs struct {
 		Name  string `json:"name"  jsonschema:"e.g. domain, port"`
 		Value string `json:"value"`
 	} `json:"properties,omitempty" jsonschema:"Extra fields."`
-	Tags    []string `json:"tags,omitempty"     jsonschema:"Tags, e.g. the source host."`
-	IsValid *bool    `json:"is_valid,omitempty" jsonschema:"Known to work; omit if untested."`
+	Tags     []string `json:"tags,omitempty"     jsonschema:"Tags, e.g. the source host."`
+	Validity string   `json:"validity,omitempty" jsonschema:"VALID if you have used it, INVALID if it was rejected. Omit for UNKNOWN: recorded, untried."`
 }
 
 type getCredentialArgs struct {
@@ -61,8 +61,8 @@ type updateCredentialArgs struct {
 		Name  string `json:"name"  jsonschema:"e.g. domain, port"`
 		Value string `json:"value"`
 	} `json:"properties,omitempty" jsonschema:"Replaces every property. Omit to leave them; send [] to clear them."`
-	Tags    []string `json:"tags,omitempty"     jsonschema:"Replaces every tag. Omit to leave them; send [] to clear them."`
-	IsValid *bool    `json:"is_valid,omitempty" jsonschema:"true once you have used it successfully; false if it did not work."`
+	Tags     []string `json:"tags,omitempty"     jsonschema:"Replaces every tag. Omit to leave them; send [] to clear them."`
+	Validity *string  `json:"validity,omitempty" jsonschema:"VALID once you have used it, INVALID once it has been rejected, UNKNOWN to withdraw a claim."`
 }
 
 type addCredentialCommentArgs struct {
@@ -85,8 +85,8 @@ func registerCredentialTools(s *Server) {
 	register(s, &mcp.Tool{
 		Name: "update_credential",
 		Description: "Correct a credential you or somebody else recorded. Send only the fields " +
-			"that change; anything omitted is left alone. Mark it working with is_valid:true once " +
-			"you have actually used it.",
+			"that change; anything omitted is left alone. Set validity:\"VALID\" once you have " +
+			"actually used it, \"INVALID\" once the target rejected it.",
 	}, writeTool, handleUpdateCredential)
 
 	register(s, &mcp.Tool{
@@ -107,13 +107,13 @@ func handleFindCredentials(ctx context.Context, s *Server, args findCredentialsA
 	}
 
 	limit := clampPageSize(args.Limit)
-	var validOnly *bool
-	if args.ValidOnly {
-		validOnly = &args.ValidOnly
+	validity, err := parseCredentialValidities(args.Validity)
+	if err != nil {
+		return toolResult{}, err
 	}
 
 	conn, err := s.deps.Credentials.Credentials(ctx, opID.String(), optionalString(args.Search),
-		nil, nil, args.Tags, validOnly, nil, nil, &limit, optionalString(args.Cursor), nil, nil)
+		nil, nil, args.Tags, validity, nil, nil, &limit, optionalString(args.Cursor), nil, nil)
 	if err != nil {
 		return toolResult{}, fmt.Errorf("failed to search credentials: %w", err)
 	}
@@ -152,7 +152,13 @@ func handleCreateCredential(ctx context.Context, s *Server, args createCredentia
 		Username: optionalString(args.Username),
 		Password: optionalString(args.Password),
 		Tags:     args.Tags,
-		IsValid:  args.IsValid,
+	}
+	if args.Validity != "" {
+		validity, err := parseCredentialValidity(args.Validity)
+		if err != nil {
+			return toolResult{}, err
+		}
+		input.Validity = &validity
 	}
 	for _, k := range args.Keys {
 		input.Keys = append(input.Keys, &model.CredentialKeyInput{Name: k.Name, Content: k.Content})
@@ -186,7 +192,13 @@ func buildUpdateCredentialInput(args updateCredentialArgs) (model.UpdateCredenti
 		Username: args.Username,
 		Password: args.Password,
 		Tags:     args.Tags,
-		IsValid:  args.IsValid,
+	}
+	if args.Validity != nil {
+		validity, err := parseCredentialValidity(*args.Validity)
+		if err != nil {
+			return input, err
+		}
+		input.Validity = &validity
 	}
 	if args.Type != nil {
 		credType := models.CredentialType(upperTrim(*args.Type))
@@ -213,16 +225,38 @@ func buildUpdateCredentialInput(args updateCredentialArgs) (model.UpdateCredenti
 	return input, nil
 }
 
-// handleUpdateCredential applies a partial change to an existing credential.
-//
-// The common case is correcting is_valid. A credential is recorded before
-// anyone has tried it, which stores false, and the operator's view labels
-// that "Invalid" — so a pile of untested credentials reads as a pile of
-// broken ones until somebody goes back and says otherwise. Without this tool
-// an agent could create that situation and not fix it.
 // upperTrim normalises an enum the agent typed.
 func upperTrim(v string) string { return strings.ToUpper(strings.TrimSpace(v)) }
 
+// parseCredentialValidity accepts the enum in whatever case the agent typed
+// and refuses anything else by name, rather than quietly picking a state on
+// its behalf — validity is a claim about the target, so a guess is worse than
+// a refusal.
+func parseCredentialValidity(v string) (models.CredentialValidity, error) {
+	validity := models.CredentialValidity(upperTrim(v))
+	if !validity.IsValid() {
+		return "", refuse("validity %q is not one of UNKNOWN, VALID, INVALID", v)
+	}
+	return validity, nil
+}
+
+func parseCredentialValidities(vs []string) ([]models.CredentialValidity, error) {
+	out := make([]models.CredentialValidity, 0, len(vs))
+	for _, v := range vs {
+		validity, err := parseCredentialValidity(v)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, validity)
+	}
+	return out, nil
+}
+
+// handleUpdateCredential applies a partial change to an existing credential.
+//
+// The common case is settling validity. A credential is recorded before
+// anyone has tried it and stays UNKNOWN until somebody does; this is how an
+// agent says which way it went once it has.
 func handleUpdateCredential(ctx context.Context, s *Server, args updateCredentialArgs) (toolResult, error) {
 	cred, err := s.loadCredential(ctx, args.CredentialID, models.OperationRoleOperator)
 	if err != nil {
@@ -250,12 +284,15 @@ func handleUpdateCredential(ctx context.Context, s *Server, args updateCredentia
 // rail. Validity leads when it changed, because that is the fact other people
 // act on.
 func summarizeCredentialUpdate(cred *models.Credential, args updateCredentialArgs) string {
-	if args.IsValid != nil {
-		state := "not working"
-		if *args.IsValid {
-			state = "working"
+	if args.Validity != nil {
+		switch cred.Validity {
+		case models.CredentialValidityValid:
+			return fmt.Sprintf("marked the credential %q as working", cred.Name)
+		case models.CredentialValidityInvalid:
+			return fmt.Sprintf("marked the credential %q as not working", cred.Name)
+		default:
+			return fmt.Sprintf("marked the credential %q as untested", cred.Name)
 		}
-		return fmt.Sprintf("marked the credential %q as %s", cred.Name, state)
 	}
 	return fmt.Sprintf("updated the credential %q", cred.Name)
 }

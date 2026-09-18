@@ -55,7 +55,7 @@ type ICredentialResolver interface {
 
 	// Queries
 	Credential(ctx context.Context, id string) (*models.Credential, error)
-	Credentials(ctx context.Context, operationID string, search *string, searchFields []model.CredentialSearchField, typeArg *models.CredentialType, tags []string, validOnly *bool, sortBy *model.CredentialSortField, sortDirection *model.SortDirection, first *int, after *string, last *int, before *string) (*model.CredentialConnection, error)
+	Credentials(ctx context.Context, operationID string, search *string, searchFields []model.CredentialSearchField, typeArg *models.CredentialType, tags []string, validity []models.CredentialValidity, sortBy *model.CredentialSortField, sortDirection *model.SortDirection, first *int, after *string, last *int, before *string) (*model.CredentialConnection, error)
 	CredentialTags(ctx context.Context, operationID string) ([]string, error)
 
 	// Cross-operation queries — power the "global" Findings page. See
@@ -63,7 +63,7 @@ type ICredentialResolver interface {
 	//   nil   ⇒ caller's full membership set
 	//   []    ⇒ explicit empty, returns empty result
 	//   [...] ⇒ resolver authorizes each id (viewer role minimum)
-	MyCredentials(ctx context.Context, operationIDs []string, search *string, searchFields []model.CredentialSearchField, typeArg *models.CredentialType, tags []string, validOnly *bool, sortBy *model.CredentialSortField, sortDirection *model.SortDirection, first *int, after *string, last *int, before *string) (*model.CredentialConnection, error)
+	MyCredentials(ctx context.Context, operationIDs []string, search *string, searchFields []model.CredentialSearchField, typeArg *models.CredentialType, tags []string, validity []models.CredentialValidity, sortBy *model.CredentialSortField, sortDirection *model.SortDirection, first *int, after *string, last *int, before *string) (*model.CredentialConnection, error)
 	MyCredentialTags(ctx context.Context, operationIDs []string) ([]string, error)
 
 	// Field resolvers for Credential type
@@ -167,6 +167,15 @@ func (r *credentialResolver) CreateCredential(ctx context.Context, operationID s
 		return nil, err
 	}
 
+	// Omitted means nobody has tried it yet, which is what UNKNOWN says.
+	validity := models.CredentialValidityUnknown
+	if input.Validity != nil {
+		if !input.Validity.IsValid() {
+			return nil, fmt.Errorf("invalid credential validity: %s", *input.Validity)
+		}
+		validity = *input.Validity
+	}
+
 	cred := &models.Credential{
 		CredentialID: uuid.New(),
 		OperationID:  opUID,
@@ -176,7 +185,7 @@ func (r *credentialResolver) CreateCredential(ctx context.Context, operationID s
 		Password:     strDeref(input.Password),
 		Keys:         normalizeCredentialKeys(input.Keys),
 		Properties:   properties,
-		IsValid:      boolDeref(input.IsValid, false),
+		Validity:     validity,
 		Tags:         normalizeTags(input.Tags),
 		Comments:     []models.CredentialComment{},
 		CreatedByID:  callerUID,
@@ -244,8 +253,11 @@ func (r *credentialResolver) UpdateCredential(ctx context.Context, id string, in
 		}
 		updates["properties"] = properties
 	}
-	if input.IsValid != nil {
-		updates["is_valid"] = *input.IsValid
+	if input.Validity != nil {
+		if !input.Validity.IsValid() {
+			return nil, fmt.Errorf("invalid credential validity: %s", *input.Validity)
+		}
+		updates["validity"] = *input.Validity
 	}
 	if input.Tags != nil {
 		updates["tags"] = normalizeTags(input.Tags)
@@ -543,7 +555,7 @@ func (r *credentialResolver) Credential(ctx context.Context, id string) (*models
 
 // Credentials returns a cursor-paginated list of credentials for an operation.
 // Requires at least viewer role in the operation.
-func (r *credentialResolver) Credentials(ctx context.Context, operationID string, search *string, searchFields []model.CredentialSearchField, typeArg *models.CredentialType, tags []string, validOnly *bool, sortBy *model.CredentialSortField, sortDirection *model.SortDirection, first *int, after *string, last *int, before *string) (*model.CredentialConnection, error) {
+func (r *credentialResolver) Credentials(ctx context.Context, operationID string, search *string, searchFields []model.CredentialSearchField, typeArg *models.CredentialType, tags []string, validity []models.CredentialValidity, sortBy *model.CredentialSortField, sortDirection *model.SortDirection, first *int, after *string, last *int, before *string) (*model.CredentialConnection, error) {
 	opUID, err := uuid.Parse(operationID)
 	if err != nil {
 		return nil, fmt.Errorf("invalid operation ID: %w", err)
@@ -570,7 +582,7 @@ func (r *credentialResolver) Credentials(ctx context.Context, operationID string
 
 	filter := repository.CredentialFilter{
 		Tags:         normalizeTags(tags),
-		ValidOnly:    validOnly,
+		Validity:     validity,
 		SearchFields: searchFieldsMapped,
 	}
 	if search != nil {
@@ -705,7 +717,7 @@ func (r *credentialResolver) resolveAccessibleOperationIDs(ctx context.Context, 
 // MyCredentials returns a cursor-paginated list of credentials across the
 // caller's accessible operations. See the GraphQL schema doc for the
 // operationIDs semantics. The pagination shape mirrors Credentials exactly.
-func (r *credentialResolver) MyCredentials(ctx context.Context, operationIDs []string, search *string, searchFields []model.CredentialSearchField, typeArg *models.CredentialType, tags []string, validOnly *bool, sortBy *model.CredentialSortField, sortDirection *model.SortDirection, first *int, after *string, last *int, before *string) (*model.CredentialConnection, error) {
+func (r *credentialResolver) MyCredentials(ctx context.Context, operationIDs []string, search *string, searchFields []model.CredentialSearchField, typeArg *models.CredentialType, tags []string, validity []models.CredentialValidity, sortBy *model.CredentialSortField, sortDirection *model.SortDirection, first *int, after *string, last *int, before *string) (*model.CredentialConnection, error) {
 	opUIDs, err, ok := r.resolveAccessibleOperationIDs(ctx, operationIDs)
 	if err != nil {
 		return nil, err
@@ -737,7 +749,7 @@ func (r *credentialResolver) MyCredentials(ctx context.Context, operationIDs []s
 
 	filter := repository.CredentialFilter{
 		Tags:         normalizeTags(tags),
-		ValidOnly:    validOnly,
+		Validity:     validity,
 		SearchFields: searchFieldsMapped,
 	}
 	if search != nil {

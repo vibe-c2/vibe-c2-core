@@ -105,8 +105,11 @@ type CredentialFilter struct {
 	Type *models.CredentialType
 	// Tags, if non-empty, requires every listed tag to be present ($all).
 	Tags []string
-	// ValidOnly: nil = both, true = isValid=true only, false = isValid=false only.
-	ValidOnly *bool
+	// Validity, if non-empty, restricts to credentials in one of these
+	// states. Empty means every state — the caller decides what the default
+	// view hides, since "not yet tried" and "known not to work" are both
+	// real answers and only the second is worth hiding.
+	Validity []models.CredentialValidity
 }
 
 // ICredentialRepository defines the interface for Credential database operations.
@@ -138,6 +141,10 @@ type ICredentialRepository interface {
 	Delete(ctx context.Context, c *models.Credential) error
 	DeleteByOperationID(ctx context.Context, operationID uuid.UUID) error
 
+	// BackfillValidity stamps the three-state validity field on credentials
+	// that predate it. Returns the number of rows touched.
+	BackfillValidity(ctx context.Context) (int64, error)
+
 	// Embedded comment operations
 	AddComment(ctx context.Context, credentialID uuid.UUID, comment models.CredentialComment) error
 	UpdateComment(ctx context.Context, credentialID, commentID uuid.UUID, text string, updatedAt time.Time) error
@@ -156,7 +163,7 @@ func NewCredentialRepository(db database.Database) ICredentialRepository {
 		{Key: []string{"operation_id"}},
 		{Key: []string{"operation_id", "tags"}},
 		{Key: []string{"operation_id", "type"}},
-		{Key: []string{"operation_id", "is_valid"}},
+		{Key: []string{"operation_id", "validity"}},
 		{Key: []string{"operation_id", "-createAt", "-_id"}}, // Supports cursor-based pagination
 		// Collated indexes backing the name / username column sorts. The
 		// collation must match caseInsensitiveSortCollation exactly or Mongo won't
@@ -341,15 +348,15 @@ func buildCredentialFilterMulti(opIDs []uuid.UUID, f CredentialFilter) bson.M {
 	return applyCredentialFilter(bson.M{"operation_id": bson.M{"$in": opIDs}}, f)
 }
 
-// applyCredentialFilter layers Type / ValidOnly / Tags / Search constraints
+// applyCredentialFilter layers Type / Validity / Tags / Search constraints
 // on top of a base filter (operation predicate). Shared between the single-op
 // and multi-op builders.
 func applyCredentialFilter(q bson.M, f CredentialFilter) bson.M {
 	if f.Type != nil {
 		q["type"] = *f.Type
 	}
-	if f.ValidOnly != nil {
-		q["is_valid"] = *f.ValidOnly
+	if len(f.Validity) > 0 {
+		q["validity"] = bson.M{"$in": f.Validity}
 	}
 	if len(f.Tags) > 0 {
 		q["tags"] = bson.M{"$all": f.Tags}
@@ -368,4 +375,43 @@ func applyCredentialFilter(q bson.M, f CredentialFilter) bson.M {
 	}
 
 	return q
+}
+
+// BackfillValidity stamps `validity` on credentials written before the field
+// existed, where the state was a bool named `is_valid`.
+//
+// `true` becomes VALID. `false` becomes UNKNOWN, not INVALID: the bool could
+// not say "nobody has tried this yet", and the agent guidance of the time told
+// agents to set it true the moment a credential worked — so a false row is
+// overwhelmingly untested rather than known-bad. Calling the untested ones
+// INVALID would both hide them and assert something false about them, which is
+// the failure this field was split up to fix. The handful of genuinely bad
+// ones resurface as UNKNOWN and an operator re-marks them in one click.
+//
+// Idempotent: it only matches rows that have no `validity` yet, so subsequent
+// boots update nothing.
+func (r *credentialRepository) BackfillValidity(ctx context.Context) (int64, error) {
+	var n int64
+	for _, step := range []struct {
+		legacy bool
+		to     models.CredentialValidity
+	}{
+		{true, models.CredentialValidityValid},
+		{false, models.CredentialValidityUnknown},
+	} {
+		res, err := r.coll.UpdateAll(ctx,
+			bson.M{"validity": nil, "is_valid": step.legacy},
+			bson.M{
+				"$set":   bson.M{"validity": step.to},
+				"$unset": bson.M{"is_valid": ""},
+			},
+		)
+		if err != nil {
+			return n, fmt.Errorf("backfill validity: %s: %w", step.to, err)
+		}
+		if res != nil {
+			n += res.ModifiedCount
+		}
+	}
+	return n, nil
 }

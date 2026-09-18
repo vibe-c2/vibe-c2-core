@@ -219,6 +219,11 @@ models:
     model:
       - github.com/vibe-c2/vibe-c2-core/core/pkg/models.CredentialType
 
+  # Map the GraphQL "CredentialValidity" enum to our existing Go type.
+  CredentialValidity:
+    model:
+      - github.com/vibe-c2/vibe-c2-core/core/pkg/models.CredentialValidity
+
   # Map the GraphQL "Credential" type to our existing Go model.
   # Field resolvers bridge UUID->string, timestamp->RFC3339, and the
   # createdBy lookup that fetches the User by CreatedByID.

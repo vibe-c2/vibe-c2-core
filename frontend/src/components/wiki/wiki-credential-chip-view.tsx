@@ -1,7 +1,13 @@
 import { forwardRef, useMemo, type ReactNode } from "react"
 
 import "./wiki-chips.css"
-import { CheckCircle2Icon, KeyIcon, XCircleIcon, XIcon } from "lucide-react"
+import {
+  CheckCircle2Icon,
+  CircleDashedIcon,
+  KeyIcon,
+  XCircleIcon,
+  XIcon,
+} from "lucide-react"
 import { CredentialRowContextMenu } from "@/components/findings/credential-row-context-menu"
 import { useCredential } from "@/graphql/hooks/credentials"
 import { useCredentialStore } from "@/stores/credentials"
@@ -9,7 +15,25 @@ import { useInViewport } from "@/hooks/use-in-viewport"
 import { GraphQLRequestError } from "@/lib/graphql-client"
 import { useSha1Hashes } from "@/lib/sha1"
 import { cn } from "@/lib/utils"
-import type { CredentialFieldsFragment } from "@/graphql/gql/graphql"
+import type {
+  CredentialFieldsFragment,
+  CredentialValidity,
+} from "@/graphql/gql/graphql"
+
+// The chip paints its own validity glyph rather than reusing the findings
+// helper: its colours come from the chip's CSS custom properties so they stay
+// legible against the chip background in both themes.
+const VALIDITY_ICON: Record<CredentialValidity, typeof CheckCircle2Icon> = {
+  UNKNOWN: CircleDashedIcon,
+  VALID: CheckCircle2Icon,
+  INVALID: XCircleIcon,
+}
+
+const VALIDITY_ICON_CLASS: Record<CredentialValidity, string> = {
+  UNKNOWN: "wiki-credential-chip__validity--unknown",
+  VALID: "wiki-credential-chip__validity--valid",
+  INVALID: "wiki-credential-chip__validity--invalid",
+}
 
 // Short prefix length used to render a key's SHA-1 in the chip body. Mirrors
 // the editor chip — see wiki-credential-chip-view.css notes for why 12.
@@ -148,6 +172,8 @@ export const WikiCredentialChipView = forwardRef<
     hashes: keyHashes,
   })
 
+  const ValidityIcon = VALIDITY_ICON[cred.validity] ?? VALIDITY_ICON.UNKNOWN
+
   const body: ReactNode = (
     <>
       <KeyIcon className="size-3.5 wiki-credential-chip__icon" />
@@ -168,17 +194,22 @@ export const WikiCredentialChipView = forwardRef<
           </span>
         )
       })}
-      {cred.isValid ? (
-        <CheckCircle2Icon className="wiki-credential-chip__validity wiki-credential-chip__validity--valid size-3" />
-      ) : (
-        <XCircleIcon className="wiki-credential-chip__validity wiki-credential-chip__validity--invalid size-3" />
-      )}
+      <ValidityIcon
+        className={cn(
+          "wiki-credential-chip__validity size-3",
+          VALIDITY_ICON_CLASS[cred.validity],
+        )}
+      />
     </>
   )
 
+  // Only a credential somebody established does not work gets the muted
+  // treatment. An untested one keeps the normal chip accent — greying it
+  // was the boolean's doing, and it made every freshly recorded credential
+  // look broken on the page.
   const className = cn(
     "wiki-credential-chip",
-    !cred.isValid && "wiki-credential-chip--invalid",
+    cred.validity === "INVALID" && "wiki-credential-chip--invalid",
     selected && "is-selected",
   )
 

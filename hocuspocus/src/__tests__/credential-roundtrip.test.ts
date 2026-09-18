@@ -71,7 +71,7 @@ test("serializer hydrates payload via the resolver callback", () => {
     name: "prod-ssh",
     username: "root",
     password: "hunter2",
-    isValid: true,
+    validity: "VALID",
   }));
   assert.match(md, /"name": "prod-ssh"/);
   assert.match(md, /"username": "root"/);

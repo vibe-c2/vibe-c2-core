@@ -140,7 +140,7 @@ func buildCredentialFence(c *models.Credential) string {
 		Password:   c.Password,
 		Keys:       toFenceKeys(c.Keys),
 		Properties: toFenceProperties(c.Properties),
-		IsValid:    c.IsValid,
+		Validity:   string(c.Validity),
 		Tags:       append([]string(nil), c.Tags...),
 	}
 	enc, err := json.MarshalIndent(payload, "", "  ")
@@ -179,7 +179,7 @@ type credentialFencePayload struct {
 	Password   string          `json:"password,omitempty"`
 	Keys       []fenceKey      `json:"keys,omitempty"`
 	Properties []fenceProperty `json:"properties,omitempty"`
-	IsValid    bool            `json:"isValid"`
+	Validity   string          `json:"validity"`
 	Tags       []string        `json:"tags,omitempty"`
 }
 

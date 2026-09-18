@@ -96,6 +96,17 @@ func buildCredential(p CredentialPayload, operationID, callerID uuid.UUID) *mode
 	for i, prop := range p.Properties {
 		props[i] = models.CredentialProperty{Name: prop.Name, Value: prop.Value}
 	}
+	// A bundle written before validity existed only says true/false. A legacy
+	// false meant "not marked working", which is untested far more often than
+	// known-bad — the same reading the startup backfill takes.
+	validity := models.CredentialValidity(p.Validity)
+	if !validity.IsValid() {
+		validity = models.CredentialValidityUnknown
+		if p.LegacyIsValid {
+			validity = models.CredentialValidityValid
+		}
+	}
+
 	return &models.Credential{
 		CredentialID: uuid.New(),
 		OperationID:  operationID,
@@ -105,7 +116,7 @@ func buildCredential(p CredentialPayload, operationID, callerID uuid.UUID) *mode
 		Password:     p.Password,
 		Keys:         keys,
 		Properties:   props,
-		IsValid:      p.IsValid,
+		Validity:     validity,
 		Tags:         append([]string(nil), p.Tags...),
 		CreatedByID:  callerID,
 	}
@@ -129,7 +140,7 @@ func PayloadFromCredential(c models.Credential) CredentialPayload {
 		Password:   c.Password,
 		Keys:       keys,
 		Properties: props,
-		IsValid:    c.IsValid,
+		Validity:   string(c.Validity),
 		Tags:       append([]string(nil), c.Tags...),
 	}
 }
