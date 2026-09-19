@@ -5,6 +5,7 @@ import { createDatabaseExtension, debounceMs } from "./persistence.js";
 import { setupDisconnectApi } from "./disconnect.js";
 import { setupInternalApi } from "./internal-api.js";
 import { setupApplyApi } from "./apply-markdown.js";
+import { setupDrawingApi } from "./apply-drawing.js";
 import { setupExtractApi } from "./extract-text.js";
 import { setupRebaseApi } from "./rebase-api.js";
 
@@ -121,6 +122,11 @@ setupInternalApi(app);
 // verifies an HMAC over the exact bytes Go signed. Takes the server so it can
 // edit live documents rather than only convert markdown.
 setupApplyApi(app, server);
+// The drawing equivalent: reads and edits a page's Excalidraw scene through a
+// server-side seat in the same room, so an agent works alongside whoever has
+// the canvas open rather than around them. Same raw-body HMAC path, so it
+// mounts before express.json() too.
+setupDrawingApi(app, server);
 // Office-attachment text extraction for the MCP agent surface. Same raw-body
 // HMAC path as the routes above, so it mounts before express.json() too.
 setupExtractApi(app);

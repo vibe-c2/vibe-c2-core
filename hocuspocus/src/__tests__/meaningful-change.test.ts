@@ -33,6 +33,8 @@ function emptyDerived(
     checklist_total: 0,
     checklist_required: 0,
     checklist_answered: 0,
+    drawing_element_count: 0,
+    drawing_version_sum: 0,
     ...overrides,
   };
 }

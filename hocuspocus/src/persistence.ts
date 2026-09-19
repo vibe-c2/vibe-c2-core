@@ -3,6 +3,11 @@ import { Binary, MongoClient, type Db } from "mongodb";
 import * as Y from "yjs";
 import { extractTextFromFragment } from "./projection.js";
 import {
+  deriveDrawingProjection,
+  EMPTY_DRAWING_PROJECTION,
+  type DrawingProjection,
+} from "./drawing-projection.js";
+import {
   collectChecklistCoverage,
   collectCredentialReferenceIds,
   collectDocReferenceIds,
@@ -164,6 +169,35 @@ export function createDatabaseExtension(): Database {
       const ydoc = new Y.Doc();
       Y.applyUpdate(ydoc, state);
 
+      // The stored row is read first, because its `kind` decides which body to
+      // derive. Reading it later — after assuming prose — is what made every
+      // drawing take the legacy-textarea branch and project an empty string.
+      //
+      // The same read backs the meaningful-change and stale-client guards
+      // below, so this is one query, not an extra one.
+      const existing = await collection.findOne(
+        { document_id: uuidToBinary(docId) },
+        {
+          projection: {
+            kind: 1,
+            content: 1,
+            references: 1,
+            credential_references: 1,
+            hash_references: 1,
+            host_references: 1,
+            image_references: 1,
+            file_references: 1,
+            checklist_total: 1,
+            checklist_required: 1,
+            checklist_answered: 1,
+            drawing_element_count: 1,
+            drawing_version_sum: 1,
+            content_state_schema_version: 1,
+          },
+        },
+      );
+      const isDrawing = existing?.kind === "drawing";
+
       const xmlFragment = ydoc.getXmlFragment("default");
       let markdown: string;
       let referenceBinaries: Binary[] = [];
@@ -185,7 +219,19 @@ export function createDatabaseExtension(): Database {
         required: 0,
         answered: 0,
       };
-      if (xmlFragment.length > 0) {
+      // A drawing's body is an Excalidraw scene under its own root key, and
+      // its "default" fragment is empty forever. Walking it would take the
+      // legacy-textarea branch below and project nothing at all — no search
+      // text, no image index, and no signal that anything had changed.
+      let drawing: DrawingProjection = EMPTY_DRAWING_PROJECTION;
+      if (isDrawing) {
+        drawing = deriveDrawingProjection(ydoc);
+        markdown = drawing.content;
+        // Attachment liveness is the one index a drawing does populate: an
+        // image on a canvas is a wiki image like any other, and without this
+        // the sweeper reclaims its blob once the grace period elapses.
+        imageReferenceBinaries = idsToBinaries(drawing.imageReferences);
+      } else if (xmlFragment.length > 0) {
         markdown = extractTextFromFragment(xmlFragment);
         referenceBinaries = idsToBinaries(collectDocReferenceIds(xmlFragment));
         credentialReferenceBinaries = idsToBinaries(
@@ -255,25 +301,6 @@ export function createDatabaseExtension(): Database {
       // visible document identical, which is precisely the case we must treat
       // as "unchanged". content_state is still re-persisted below regardless,
       // so a one-time normalization settles permanently after the first open.
-      const existing = await collection.findOne(
-        { document_id: uuidToBinary(docId) },
-        {
-          projection: {
-            content: 1,
-            references: 1,
-            credential_references: 1,
-            hash_references: 1,
-            host_references: 1,
-            image_references: 1,
-            file_references: 1,
-            checklist_total: 1,
-            checklist_required: 1,
-            checklist_answered: 1,
-            content_state_schema_version: 1,
-          },
-        },
-      );
-
       // The meaningful projection of this save — every field whose change
       // counts as a real edit. Built once and reused by the stale-client guard
       // and the meaningful-change check below (and mirrored into `updates`).
@@ -288,6 +315,8 @@ export function createDatabaseExtension(): Database {
         checklist_total: checklistCoverage.total,
         checklist_required: checklistCoverage.required,
         checklist_answered: checklistCoverage.answered,
+        drawing_element_count: drawing.elementCount,
+        drawing_version_sum: drawing.versionSum,
       };
 
       // Destructive-write guard for a tab that connected *before* a deploy. The
@@ -305,7 +334,15 @@ export function createDatabaseExtension(): Database {
         typeof existing?.content_state_schema_version === "number"
           ? existing.content_state_schema_version
           : 0;
+      //
+      // Drawings are exempt. The guard exists because an old editor's reduced
+      // ProseMirror schema silently prunes node types it does not know, and a
+      // drawing has no ProseMirror schema to be behind — while erasing shapes
+      // is an ordinary edit whose projection legitimately shrinks. Applying it
+      // here would discard real work whenever somebody cleared a canvas from a
+      // tab opened before a deploy.
       if (
+        !isDrawing &&
         clientSchemaVersion < storedSchemaVersion &&
         projectionShrinks(existing, derived)
       ) {
@@ -356,6 +393,11 @@ export function createDatabaseExtension(): Database {
         checklist_total: checklistCoverage.total,
         checklist_required: checklistCoverage.required,
         checklist_answered: checklistCoverage.answered,
+        // Scene shape, for drawings. Both are 0 on a prose page, which is what
+        // `hasContent` and the backup summary rely on to tell the two apart
+        // without loading the body.
+        drawing_element_count: drawing.elementCount,
+        drawing_version_sum: drawing.versionSum,
       };
 
       // Authorship + updateAt are stamped ONLY for real edits. An open-time
@@ -456,6 +498,12 @@ export interface DerivedProjection {
   checklist_total: number;
   checklist_required: number;
   checklist_answered: number;
+  /** Drawing scene shape. Always 0 for a prose page. These exist because a
+   * drawing's *text* does not move when a box is dragged across the canvas —
+   * without them every drawing edit reads as an open-time no-op and the page
+   * is never attributed or marked updated. */
+  drawing_element_count: number;
+  drawing_version_sum: number;
 }
 
 /**
@@ -490,7 +538,9 @@ export function isMeaningfulChange(
     !binarySetEqual(existing.file_references, derived.file_references) ||
     (existing.checklist_total ?? 0) !== derived.checklist_total ||
     (existing.checklist_required ?? 0) !== derived.checklist_required ||
-    (existing.checklist_answered ?? 0) !== derived.checklist_answered
+    (existing.checklist_answered ?? 0) !== derived.checklist_answered ||
+    (existing.drawing_element_count ?? 0) !== derived.drawing_element_count ||
+    (existing.drawing_version_sum ?? 0) !== derived.drawing_version_sum
   );
 }
 

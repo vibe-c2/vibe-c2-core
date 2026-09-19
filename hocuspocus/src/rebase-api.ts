@@ -17,6 +17,7 @@
 import type { Express, Request, Response } from "express";
 import { readRawBody, requireSignature } from "./internal-auth.js";
 import { rebaseDocument, type ChipKind, type RebaseRequest } from "./rebase-document.js";
+import { rebaseDrawing } from "./rebase-drawing.js";
 import { WIKI_SCHEMA_VERSION } from "./wiki-schema-version.js";
 
 // Markdown bodies are capped at 1 MB by the editor; Y.js state can be a few
@@ -92,6 +93,63 @@ export function parseRebaseRequest(
 }
 
 export function setupRebaseApi(app: Express): void {
+  // POST /internal/rebase-drawing — the same job for a drawing page.
+  //
+  // Separate from /internal/rebase-document rather than a mode of it: the two
+  // share no input (one takes markdown or a ProseMirror tree, the other a
+  // scene), no remapping rules (chips versus image fileIds) and no output
+  // projection. Folding them together would be one route with two disjoint
+  // halves and a flag deciding which is live.
+  //
+  //   Request  { contentState: <base64>, idMap: { "<source uuid>": "<target uuid>" } }
+  //   Response { contentState: <base64>, content, imageReferences,
+  //              elementCount, versionSum, unmapped, remapped }
+  app.post(
+    "/internal/rebase-drawing",
+    readRawBody(MAX_INPUT_BYTES),
+    (req: Request, res: Response) => {
+      const rawBody = requireSignature(req, res);
+      if (!rawBody) return;
+
+      let body: { contentState?: unknown; idMap?: unknown };
+      try {
+        body = JSON.parse(rawBody.toString("utf8"));
+      } catch {
+        res.status(400).json({ error: "malformed JSON" });
+        return;
+      }
+
+      if (typeof body.contentState !== "string" || body.contentState === "") {
+        res.status(400).json({ error: "contentState is required" });
+        return;
+      }
+      if (body.idMap !== undefined && !isStringMap(body.idMap)) {
+        res.status(400).json({ error: "idMap must be an object of strings" });
+        return;
+      }
+
+      try {
+        const result = rebaseDrawing({
+          contentState: new Uint8Array(Buffer.from(body.contentState, "base64")),
+          idMap: (body.idMap as Record<string, string>) ?? {},
+        });
+        res.status(200).json({
+          contentState: Buffer.from(result.contentState).toString("base64"),
+          content: result.content,
+          imageReferences: result.imageReferences,
+          elementCount: result.elementCount,
+          versionSum: result.versionSum,
+          unmapped: result.unmapped,
+          remapped: result.remapped,
+        });
+      } catch (err) {
+        const message = err instanceof Error ? err.message : "rebase failed";
+        console.error("rebase-drawing error:", err);
+        res.status(422).json({ error: message });
+      }
+    },
+  );
+
   app.post(
     "/internal/rebase-document",
     readRawBody(MAX_INPUT_BYTES),
