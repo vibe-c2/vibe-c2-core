@@ -65,6 +65,7 @@ func ReadPlan(zr *zip.Reader) (*wikitransfer.Plan, error) {
 			Icon:             d.Icon,
 			Color:            d.Color,
 			SortOrder:        d.SortOrder,
+			Kind:             d.Kind.Or(),
 			IsTemplate:       d.IsTemplate,
 			SourceTemplateID: d.SourceTemplateID,
 			HostRefs:         d.References.Hosts,

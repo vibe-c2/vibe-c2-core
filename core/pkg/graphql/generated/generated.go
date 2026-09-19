@@ -750,6 +750,7 @@ type ComplexityRoot struct {
 		ID                func(childComplexity int) int
 		Icon              func(childComplexity int) int
 		IsTemplate        func(childComplexity int) int
+		Kind              func(childComplexity int) int
 		LastBackupAt      func(childComplexity int) int
 		LastUpdatedAt     func(childComplexity int) int
 		LastUpdatedBy     func(childComplexity int) int
@@ -780,6 +781,7 @@ type ComplexityRoot struct {
 		Description   func(childComplexity int) int
 		DocumentID    func(childComplexity int) int
 		ID            func(childComplexity int) int
+		Kind          func(childComplexity int) int
 		Title         func(childComplexity int) int
 		Trigger       func(childComplexity int) int
 	}
@@ -4928,6 +4930,12 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.WikiDocument.IsTemplate(childComplexity), true
+	case "WikiDocument.kind":
+		if e.ComplexityRoot.WikiDocument.Kind == nil {
+			break
+		}
+
+		return e.ComplexityRoot.WikiDocument.Kind(childComplexity), true
 	case "WikiDocument.lastBackupAt":
 		if e.ComplexityRoot.WikiDocument.LastBackupAt == nil {
 			break
@@ -5074,6 +5082,12 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.WikiDocumentBackup.ID(childComplexity), true
+	case "WikiDocumentBackup.kind":
+		if e.ComplexityRoot.WikiDocumentBackup.Kind == nil {
+			break
+		}
+
+		return e.ComplexityRoot.WikiDocumentBackup.Kind(childComplexity), true
 	case "WikiDocumentBackup.title":
 		if e.ComplexityRoot.WikiDocumentBackup.Title == nil {
 			break
@@ -7960,6 +7974,18 @@ enum WikiDocumentBackupTrigger {
   MANUAL
 }
 
+# What a page's body is. DOCUMENT is prose — a ProseMirror tree in the Y.js
+# room's "default" fragment, projected to the Markdown ` + "`" + `content` + "`" + ` field below.
+# DRAWING is an Excalidraw scene in the same room under its own root key, and
+# has no Markdown body: ` + "`" + `content` + "`" + ` is always empty for one, so read ` + "`" + `kind` + "`" + `
+# rather than inferring emptiness from ` + "`" + `content` + "`" + ` or ` + "`" + `hasContent` + "`" + `.
+#
+# Pages created before drawings existed report DOCUMENT.
+enum WikiDocumentKind {
+  DOCUMENT
+  DRAWING
+}
+
 enum PresenceAction {
   JOINED
   LEFT
@@ -7986,16 +8012,21 @@ type WikiDocument {
   parentDocumentId: ID
   childDocuments: [WikiDocument!]!
   title: String!
+  # What this page's body is. Branch on this before treating ` + "`" + `content` + "`" + `,
+  # ` + "`" + `excerpt` + "`" + ` or ` + "`" + `hasContent` + "`" + ` as meaningful — a DRAWING carries none of them.
+  kind: WikiDocumentKind!
   content: String!
   emoji: String!
   color: String!
   icon: String!
   sortOrder: String!
   childCount: Int!
-  # True when the document's derived Markdown body has any non-whitespace
-  # content. Server-computed from ` + "`" + `content` + "`" + ` so callers can cheaply tell a real
-  # page from an empty container ("folder") without fetching the body — used by
-  # the create-from-template picker to hide contentless templates.
+  # True when this page has a body at all, so callers can cheaply tell a real
+  # page from an empty container ("folder") without fetching it — used by the
+  # create-from-template picker to hide contentless templates. Kind-aware: for
+  # a DOCUMENT it means the derived Markdown has non-whitespace content, and
+  # for a DRAWING it means the scene has at least one element. Computing it
+  # from ` + "`" + `content` + "`" + ` alone would report every drawing as empty forever.
   hasContent: Boolean!
   # The opening of the body as plain text, for hover previews and any other
   # surface that wants a taste of the page without shipping its whole body.
@@ -8100,11 +8131,16 @@ type WikiDocumentBackup {
   id: ID!
   documentId: ID!
   title: String!
+  # The document's kind at the moment of the snapshot. Branch on it before
+  # diffing ` + "`" + `content` + "`" + ` — for a DRAWING both sides of any such diff are empty,
+  # so a text diff would report "no changes" however much the scene moved.
+  kind: WikiDocumentKind!
   content: String!
   trigger: WikiDocumentBackupTrigger!
   description: String!
   # Byte length of the content at backup time. Server-computed so the list
   # query can surface size without shipping full content for every row.
+  # Reports the CRDT state's size for a DRAWING, whose Markdown is always empty.
   contentLength: Int!
   # Null for AUTO (system-created) backups and safety backups whose originating user was deleted.
   createdBy: User
@@ -8181,6 +8217,10 @@ type WikiDocumentVisitConnection {
 input CreateWikiDocumentInput {
   parentDocumentId: ID
   title: String!
+  # Defaults to DOCUMENT. A DRAWING page starts empty and is filled in by the
+  # canvas over the collaborative session, so passing ` + "`" + `content` + "`" + ` with it is
+  # refused rather than silently dropped.
+  kind: WikiDocumentKind
   content: String
   emoji: String
   color: String
@@ -13080,6 +13120,8 @@ func (ec *executionContext) fieldContext_Credential_backlinks(_ context.Context,
 				return ec.fieldContext_WikiDocument_childDocuments(ctx, field)
 			case "title":
 				return ec.fieldContext_WikiDocument_title(ctx, field)
+			case "kind":
+				return ec.fieldContext_WikiDocument_kind(ctx, field)
 			case "content":
 				return ec.fieldContext_WikiDocument_content(ctx, field)
 			case "emoji":
@@ -14408,6 +14450,8 @@ func (ec *executionContext) fieldContext_Hash_backlinks(_ context.Context, field
 				return ec.fieldContext_WikiDocument_childDocuments(ctx, field)
 			case "title":
 				return ec.fieldContext_WikiDocument_title(ctx, field)
+			case "kind":
+				return ec.fieldContext_WikiDocument_kind(ctx, field)
 			case "content":
 				return ec.fieldContext_WikiDocument_content(ctx, field)
 			case "emoji":
@@ -20846,6 +20890,8 @@ func (ec *executionContext) fieldContext_Mutation_createWikiDocument(ctx context
 				return ec.fieldContext_WikiDocument_childDocuments(ctx, field)
 			case "title":
 				return ec.fieldContext_WikiDocument_title(ctx, field)
+			case "kind":
+				return ec.fieldContext_WikiDocument_kind(ctx, field)
 			case "content":
 				return ec.fieldContext_WikiDocument_content(ctx, field)
 			case "emoji":
@@ -20967,6 +21013,8 @@ func (ec *executionContext) fieldContext_Mutation_updateWikiDocument(ctx context
 				return ec.fieldContext_WikiDocument_childDocuments(ctx, field)
 			case "title":
 				return ec.fieldContext_WikiDocument_title(ctx, field)
+			case "kind":
+				return ec.fieldContext_WikiDocument_kind(ctx, field)
 			case "content":
 				return ec.fieldContext_WikiDocument_content(ctx, field)
 			case "emoji":
@@ -21088,6 +21136,8 @@ func (ec *executionContext) fieldContext_Mutation_reorderWikiDocumentSiblings(ct
 				return ec.fieldContext_WikiDocument_childDocuments(ctx, field)
 			case "title":
 				return ec.fieldContext_WikiDocument_title(ctx, field)
+			case "kind":
+				return ec.fieldContext_WikiDocument_kind(ctx, field)
 			case "content":
 				return ec.fieldContext_WikiDocument_content(ctx, field)
 			case "emoji":
@@ -21268,6 +21318,8 @@ func (ec *executionContext) fieldContext_Mutation_duplicateWikiDocument(ctx cont
 				return ec.fieldContext_WikiDocument_childDocuments(ctx, field)
 			case "title":
 				return ec.fieldContext_WikiDocument_title(ctx, field)
+			case "kind":
+				return ec.fieldContext_WikiDocument_kind(ctx, field)
 			case "content":
 				return ec.fieldContext_WikiDocument_content(ctx, field)
 			case "emoji":
@@ -21389,6 +21441,8 @@ func (ec *executionContext) fieldContext_Mutation_setWikiDocumentTemplate(ctx co
 				return ec.fieldContext_WikiDocument_childDocuments(ctx, field)
 			case "title":
 				return ec.fieldContext_WikiDocument_title(ctx, field)
+			case "kind":
+				return ec.fieldContext_WikiDocument_kind(ctx, field)
 			case "content":
 				return ec.fieldContext_WikiDocument_content(ctx, field)
 			case "emoji":
@@ -21510,6 +21564,8 @@ func (ec *executionContext) fieldContext_Mutation_instantiateTemplate(ctx contex
 				return ec.fieldContext_WikiDocument_childDocuments(ctx, field)
 			case "title":
 				return ec.fieldContext_WikiDocument_title(ctx, field)
+			case "kind":
+				return ec.fieldContext_WikiDocument_kind(ctx, field)
 			case "content":
 				return ec.fieldContext_WikiDocument_content(ctx, field)
 			case "emoji":
@@ -21631,6 +21687,8 @@ func (ec *executionContext) fieldContext_Mutation_restoreWikiDocument(ctx contex
 				return ec.fieldContext_WikiDocument_childDocuments(ctx, field)
 			case "title":
 				return ec.fieldContext_WikiDocument_title(ctx, field)
+			case "kind":
+				return ec.fieldContext_WikiDocument_kind(ctx, field)
 			case "content":
 				return ec.fieldContext_WikiDocument_content(ctx, field)
 			case "emoji":
@@ -21864,6 +21922,8 @@ func (ec *executionContext) fieldContext_Mutation_createWikiDocumentBackup(ctx c
 				return ec.fieldContext_WikiDocumentBackup_documentId(ctx, field)
 			case "title":
 				return ec.fieldContext_WikiDocumentBackup_title(ctx, field)
+			case "kind":
+				return ec.fieldContext_WikiDocumentBackup_kind(ctx, field)
 			case "content":
 				return ec.fieldContext_WikiDocumentBackup_content(ctx, field)
 			case "trigger":
@@ -21949,6 +22009,8 @@ func (ec *executionContext) fieldContext_Mutation_restoreWikiDocumentBackup(ctx 
 				return ec.fieldContext_WikiDocument_childDocuments(ctx, field)
 			case "title":
 				return ec.fieldContext_WikiDocument_title(ctx, field)
+			case "kind":
+				return ec.fieldContext_WikiDocument_kind(ctx, field)
 			case "content":
 				return ec.fieldContext_WikiDocument_content(ctx, field)
 			case "emoji":
@@ -24899,6 +24961,8 @@ func (ec *executionContext) fieldContext_Query_wikiDocumentsReferencingHash(ctx 
 				return ec.fieldContext_WikiDocument_childDocuments(ctx, field)
 			case "title":
 				return ec.fieldContext_WikiDocument_title(ctx, field)
+			case "kind":
+				return ec.fieldContext_WikiDocument_kind(ctx, field)
 			case "content":
 				return ec.fieldContext_WikiDocument_content(ctx, field)
 			case "emoji":
@@ -26244,6 +26308,8 @@ func (ec *executionContext) fieldContext_Query_wikiDocument(ctx context.Context,
 				return ec.fieldContext_WikiDocument_childDocuments(ctx, field)
 			case "title":
 				return ec.fieldContext_WikiDocument_title(ctx, field)
+			case "kind":
+				return ec.fieldContext_WikiDocument_kind(ctx, field)
 			case "content":
 				return ec.fieldContext_WikiDocument_content(ctx, field)
 			case "emoji":
@@ -26432,6 +26498,8 @@ func (ec *executionContext) fieldContext_Query_wikiDocumentTree(ctx context.Cont
 				return ec.fieldContext_WikiDocument_childDocuments(ctx, field)
 			case "title":
 				return ec.fieldContext_WikiDocument_title(ctx, field)
+			case "kind":
+				return ec.fieldContext_WikiDocument_kind(ctx, field)
 			case "content":
 				return ec.fieldContext_WikiDocument_content(ctx, field)
 			case "emoji":
@@ -26553,6 +26621,8 @@ func (ec *executionContext) fieldContext_Query_wikiTemplates(ctx context.Context
 				return ec.fieldContext_WikiDocument_childDocuments(ctx, field)
 			case "title":
 				return ec.fieldContext_WikiDocument_title(ctx, field)
+			case "kind":
+				return ec.fieldContext_WikiDocument_kind(ctx, field)
 			case "content":
 				return ec.fieldContext_WikiDocument_content(ctx, field)
 			case "emoji":
@@ -26733,6 +26803,8 @@ func (ec *executionContext) fieldContext_Query_wikiDocumentChildren(ctx context.
 				return ec.fieldContext_WikiDocument_childDocuments(ctx, field)
 			case "title":
 				return ec.fieldContext_WikiDocument_title(ctx, field)
+			case "kind":
+				return ec.fieldContext_WikiDocument_kind(ctx, field)
 			case "content":
 				return ec.fieldContext_WikiDocument_content(ctx, field)
 			case "emoji":
@@ -26854,6 +26926,8 @@ func (ec *executionContext) fieldContext_Query_wikiDocumentTreeRevealPath(ctx co
 				return ec.fieldContext_WikiDocument_childDocuments(ctx, field)
 			case "title":
 				return ec.fieldContext_WikiDocument_title(ctx, field)
+			case "kind":
+				return ec.fieldContext_WikiDocument_kind(ctx, field)
 			case "content":
 				return ec.fieldContext_WikiDocument_content(ctx, field)
 			case "emoji":
@@ -27227,6 +27301,8 @@ func (ec *executionContext) fieldContext_Query_wikiDocumentTrashedDescendants(ct
 				return ec.fieldContext_WikiDocument_childDocuments(ctx, field)
 			case "title":
 				return ec.fieldContext_WikiDocument_title(ctx, field)
+			case "kind":
+				return ec.fieldContext_WikiDocument_kind(ctx, field)
 			case "content":
 				return ec.fieldContext_WikiDocument_content(ctx, field)
 			case "emoji":
@@ -27348,6 +27424,8 @@ func (ec *executionContext) fieldContext_Query_wikiDocumentBacklinks(ctx context
 				return ec.fieldContext_WikiDocument_childDocuments(ctx, field)
 			case "title":
 				return ec.fieldContext_WikiDocument_title(ctx, field)
+			case "kind":
+				return ec.fieldContext_WikiDocument_kind(ctx, field)
 			case "content":
 				return ec.fieldContext_WikiDocument_content(ctx, field)
 			case "emoji":
@@ -27469,6 +27547,8 @@ func (ec *executionContext) fieldContext_Query_wikiDocumentsReferencingCredentia
 				return ec.fieldContext_WikiDocument_childDocuments(ctx, field)
 			case "title":
 				return ec.fieldContext_WikiDocument_title(ctx, field)
+			case "kind":
+				return ec.fieldContext_WikiDocument_kind(ctx, field)
 			case "content":
 				return ec.fieldContext_WikiDocument_content(ctx, field)
 			case "emoji":
@@ -27651,6 +27731,8 @@ func (ec *executionContext) fieldContext_Query_wikiDocumentBackup(ctx context.Co
 				return ec.fieldContext_WikiDocumentBackup_documentId(ctx, field)
 			case "title":
 				return ec.fieldContext_WikiDocumentBackup_title(ctx, field)
+			case "kind":
+				return ec.fieldContext_WikiDocumentBackup_kind(ctx, field)
 			case "content":
 				return ec.fieldContext_WikiDocumentBackup_content(ctx, field)
 			case "trigger":
@@ -31315,6 +31397,8 @@ func (ec *executionContext) fieldContext_Task_wikiReferences(_ context.Context, 
 				return ec.fieldContext_WikiDocument_childDocuments(ctx, field)
 			case "title":
 				return ec.fieldContext_WikiDocument_title(ctx, field)
+			case "kind":
+				return ec.fieldContext_WikiDocument_kind(ctx, field)
 			case "content":
 				return ec.fieldContext_WikiDocument_content(ctx, field)
 			case "emoji":
@@ -33631,6 +33715,8 @@ func (ec *executionContext) fieldContext_WikiDocument_parentDocument(_ context.C
 				return ec.fieldContext_WikiDocument_childDocuments(ctx, field)
 			case "title":
 				return ec.fieldContext_WikiDocument_title(ctx, field)
+			case "kind":
+				return ec.fieldContext_WikiDocument_kind(ctx, field)
 			case "content":
 				return ec.fieldContext_WikiDocument_content(ctx, field)
 			case "emoji":
@@ -33751,6 +33837,8 @@ func (ec *executionContext) fieldContext_WikiDocument_childDocuments(_ context.C
 				return ec.fieldContext_WikiDocument_childDocuments(ctx, field)
 			case "title":
 				return ec.fieldContext_WikiDocument_title(ctx, field)
+			case "kind":
+				return ec.fieldContext_WikiDocument_kind(ctx, field)
 			case "content":
 				return ec.fieldContext_WikiDocument_content(ctx, field)
 			case "emoji":
@@ -33830,6 +33918,35 @@ func (ec *executionContext) fieldContext_WikiDocument_title(_ context.Context, f
 		IsResolver: false,
 		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
 			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _WikiDocument_kind(ctx context.Context, field graphql.CollectedField, obj *models.WikiDocument) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_WikiDocument_kind,
+		func(ctx context.Context) (any, error) {
+			return obj.Kind, nil
+		},
+		nil,
+		ec.marshalNWikiDocumentKind2githubᚗcomᚋvibeᚑc2ᚋvibeᚑc2ᚑcoreᚋcoreᚋpkgᚋmodelsᚐWikiDocumentKind,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_WikiDocument_kind(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "WikiDocument",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type WikiDocumentKind does not have child fields")
 		},
 	}
 	return fc, nil
@@ -34260,6 +34377,8 @@ func (ec *executionContext) fieldContext_WikiDocument_backlinks(_ context.Contex
 				return ec.fieldContext_WikiDocument_childDocuments(ctx, field)
 			case "title":
 				return ec.fieldContext_WikiDocument_title(ctx, field)
+			case "kind":
+				return ec.fieldContext_WikiDocument_kind(ctx, field)
 			case "content":
 				return ec.fieldContext_WikiDocument_content(ctx, field)
 			case "emoji":
@@ -34998,6 +35117,35 @@ func (ec *executionContext) fieldContext_WikiDocumentBackup_title(_ context.Cont
 	return fc, nil
 }
 
+func (ec *executionContext) _WikiDocumentBackup_kind(ctx context.Context, field graphql.CollectedField, obj *models.WikiDocumentBackup) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_WikiDocumentBackup_kind,
+		func(ctx context.Context) (any, error) {
+			return obj.Kind, nil
+		},
+		nil,
+		ec.marshalNWikiDocumentKind2githubᚗcomᚋvibeᚑc2ᚋvibeᚑc2ᚑcoreᚋcoreᚋpkgᚋmodelsᚐWikiDocumentKind,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_WikiDocumentBackup_kind(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "WikiDocumentBackup",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type WikiDocumentKind does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
 func (ec *executionContext) _WikiDocumentBackup_content(ctx context.Context, field graphql.CollectedField, obj *models.WikiDocumentBackup) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
@@ -35329,6 +35477,8 @@ func (ec *executionContext) fieldContext_WikiDocumentBackupEdge_node(_ context.C
 				return ec.fieldContext_WikiDocumentBackup_documentId(ctx, field)
 			case "title":
 				return ec.fieldContext_WikiDocumentBackup_title(ctx, field)
+			case "kind":
+				return ec.fieldContext_WikiDocumentBackup_kind(ctx, field)
 			case "content":
 				return ec.fieldContext_WikiDocumentBackup_content(ctx, field)
 			case "trigger":
@@ -35516,6 +35666,8 @@ func (ec *executionContext) fieldContext_WikiDocumentEdge_node(_ context.Context
 				return ec.fieldContext_WikiDocument_childDocuments(ctx, field)
 			case "title":
 				return ec.fieldContext_WikiDocument_title(ctx, field)
+			case "kind":
+				return ec.fieldContext_WikiDocument_kind(ctx, field)
 			case "content":
 				return ec.fieldContext_WikiDocument_content(ctx, field)
 			case "emoji":
@@ -35868,6 +36020,8 @@ func (ec *executionContext) fieldContext_WikiDocumentEvent_document(_ context.Co
 				return ec.fieldContext_WikiDocument_childDocuments(ctx, field)
 			case "title":
 				return ec.fieldContext_WikiDocument_title(ctx, field)
+			case "kind":
+				return ec.fieldContext_WikiDocument_kind(ctx, field)
 			case "content":
 				return ec.fieldContext_WikiDocument_content(ctx, field)
 			case "emoji":
@@ -36199,6 +36353,8 @@ func (ec *executionContext) fieldContext_WikiDocumentVisit_document(_ context.Co
 				return ec.fieldContext_WikiDocument_childDocuments(ctx, field)
 			case "title":
 				return ec.fieldContext_WikiDocument_title(ctx, field)
+			case "kind":
+				return ec.fieldContext_WikiDocument_kind(ctx, field)
 			case "content":
 				return ec.fieldContext_WikiDocument_content(ctx, field)
 			case "emoji":
@@ -36585,6 +36741,8 @@ func (ec *executionContext) fieldContext_WikiSearchHit_document(_ context.Contex
 				return ec.fieldContext_WikiDocument_childDocuments(ctx, field)
 			case "title":
 				return ec.fieldContext_WikiDocument_title(ctx, field)
+			case "kind":
+				return ec.fieldContext_WikiDocument_kind(ctx, field)
 			case "content":
 				return ec.fieldContext_WikiDocument_content(ctx, field)
 			case "emoji":
@@ -38892,7 +39050,7 @@ func (ec *executionContext) unmarshalInputCreateWikiDocumentInput(ctx context.Co
 		asMap[k] = v
 	}
 
-	fieldsInOrder := [...]string{"parentDocumentId", "title", "content", "emoji", "color", "icon", "sortOrder"}
+	fieldsInOrder := [...]string{"parentDocumentId", "title", "kind", "content", "emoji", "color", "icon", "sortOrder"}
 	for _, k := range fieldsInOrder {
 		v, ok := asMap[k]
 		if !ok {
@@ -38913,6 +39071,13 @@ func (ec *executionContext) unmarshalInputCreateWikiDocumentInput(ctx context.Co
 				return it, err
 			}
 			it.Title = data
+		case "kind":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("kind"))
+			data, err := ec.unmarshalOWikiDocumentKind2ᚖgithubᚗcomᚋvibeᚑc2ᚋvibeᚑc2ᚑcoreᚋcoreᚋpkgᚋmodelsᚐWikiDocumentKind(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.Kind = data
 		case "content":
 			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("content"))
 			data, err := ec.unmarshalOString2ᚖstring(ctx, v)
@@ -48647,6 +48812,11 @@ func (ec *executionContext) _WikiDocument(ctx context.Context, sel ast.Selection
 			if out.Values[i] == graphql.Null {
 				atomic.AddUint32(&out.Invalids, 1)
 			}
+		case "kind":
+			out.Values[i] = ec._WikiDocument_kind(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				atomic.AddUint32(&out.Invalids, 1)
+			}
 		case "content":
 			out.Values[i] = ec._WikiDocument_content(ctx, field, obj)
 			if out.Values[i] == graphql.Null {
@@ -49386,6 +49556,11 @@ func (ec *executionContext) _WikiDocumentBackup(ctx context.Context, sel ast.Sel
 			out.Concurrently(i, func(ctx context.Context) graphql.Marshaler { return innerFunc(ctx, out) })
 		case "title":
 			out.Values[i] = ec._WikiDocumentBackup_title(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				atomic.AddUint32(&out.Invalids, 1)
+			}
+		case "kind":
+			out.Values[i] = ec._WikiDocumentBackup_kind(ctx, field, obj)
 			if out.Values[i] == graphql.Null {
 				atomic.AddUint32(&out.Invalids, 1)
 			}
@@ -52456,6 +52631,16 @@ func (ec *executionContext) marshalNWikiDocumentEvent2ᚖgithubᚗcomᚋvibeᚑc
 	return ec._WikiDocumentEvent(ctx, sel, v)
 }
 
+func (ec *executionContext) unmarshalNWikiDocumentKind2githubᚗcomᚋvibeᚑc2ᚋvibeᚑc2ᚑcoreᚋcoreᚋpkgᚋmodelsᚐWikiDocumentKind(ctx context.Context, v any) (models.WikiDocumentKind, error) {
+	var res models.WikiDocumentKind
+	err := res.UnmarshalGQL(v)
+	return res, graphql.ErrorOnPath(ctx, err)
+}
+
+func (ec *executionContext) marshalNWikiDocumentKind2githubᚗcomᚋvibeᚑc2ᚋvibeᚑc2ᚑcoreᚋcoreᚋpkgᚋmodelsᚐWikiDocumentKind(ctx context.Context, sel ast.SelectionSet, v models.WikiDocumentKind) graphql.Marshaler {
+	return v
+}
+
 func (ec *executionContext) marshalNWikiDocumentPresence2githubᚗcomᚋvibeᚑc2ᚋvibeᚑc2ᚑcoreᚋcoreᚋpkgᚋgraphqlᚋmodelᚐWikiDocumentPresence(ctx context.Context, sel ast.SelectionSet, v model.WikiDocumentPresence) graphql.Marshaler {
 	return ec._WikiDocumentPresence(ctx, sel, &v)
 }
@@ -53541,6 +53726,22 @@ func (ec *executionContext) unmarshalOWikiDocumentBackupTrigger2ᚖgithubᚗcom�
 }
 
 func (ec *executionContext) marshalOWikiDocumentBackupTrigger2ᚖgithubᚗcomᚋvibeᚑc2ᚋvibeᚑc2ᚑcoreᚋcoreᚋpkgᚋmodelsᚐWikiDocumentBackupTrigger(ctx context.Context, sel ast.SelectionSet, v *models.WikiDocumentBackupTrigger) graphql.Marshaler {
+	if v == nil {
+		return graphql.Null
+	}
+	return v
+}
+
+func (ec *executionContext) unmarshalOWikiDocumentKind2ᚖgithubᚗcomᚋvibeᚑc2ᚋvibeᚑc2ᚑcoreᚋcoreᚋpkgᚋmodelsᚐWikiDocumentKind(ctx context.Context, v any) (*models.WikiDocumentKind, error) {
+	if v == nil {
+		return nil, nil
+	}
+	var res = new(models.WikiDocumentKind)
+	err := res.UnmarshalGQL(v)
+	return res, graphql.ErrorOnPath(ctx, err)
+}
+
+func (ec *executionContext) marshalOWikiDocumentKind2ᚖgithubᚗcomᚋvibeᚑc2ᚋvibeᚑc2ᚑcoreᚋcoreᚋpkgᚋmodelsᚐWikiDocumentKind(ctx context.Context, sel ast.SelectionSet, v *models.WikiDocumentKind) graphql.Marshaler {
 	if v == nil {
 		return graphql.Null
 	}

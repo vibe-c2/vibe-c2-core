@@ -103,6 +103,7 @@ func (s *BackupScheduler) backupDocument(ctx context.Context, doc *models.WikiDo
 		DocumentID:   doc.DocumentID,
 		OperationID:  doc.OperationID,
 		Title:        doc.Title,
+		Kind:         doc.Kind,
 		Content:      doc.Content,
 		ContentState: doc.ContentState,
 		Trigger:      models.WikiDocumentBackupTriggerAuto,

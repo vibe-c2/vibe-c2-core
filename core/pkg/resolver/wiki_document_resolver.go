@@ -267,6 +267,19 @@ func (r *wikiDocumentResolver) CreateWikiDocument(ctx context.Context, operation
 		return nil, fmt.Errorf("title exceeds maximum length of %d characters", maxTitleLength)
 	}
 
+	// A drawing's body is an Excalidraw scene written by the canvas over the
+	// collaborative session, never Markdown handed to this mutation. Refuse the
+	// combination rather than dropping the content silently — a caller that
+	// sent prose for a drawing has misunderstood something, and an empty page
+	// appearing instead would hide that.
+	kind := models.WikiDocumentKindDocument
+	if input.Kind != nil {
+		kind = input.Kind.Or()
+	}
+	if kind.IsDrawing() && input.Content != nil && *input.Content != "" {
+		return nil, fmt.Errorf("a drawing page cannot be created with Markdown content")
+	}
+
 	// Validate content size
 	content := ""
 	if input.Content != nil {
@@ -350,6 +363,7 @@ func (r *wikiDocumentResolver) CreateWikiDocument(ctx context.Context, operation
 		PathIDs:          pathIDs,
 		Title:            input.Title,
 		TitleLower:       strings.ToLower(input.Title),
+		Kind:             kind,
 		Content:          content,
 		Emoji:            emoji,
 		Color:            color,
@@ -863,14 +877,20 @@ func (r *wikiDocumentResolver) DuplicateWikiDocument(ctx context.Context, id str
 		PathIDs:          siblingPath,
 		Title:            rootTitle,
 		TitleLower:       strings.ToLower(rootTitle),
-		Content:          source.Content,
-		ContentState:     source.ContentState,
-		Emoji:            source.Emoji,
-		Color:            source.Color,
-		Icon:             source.Icon,
-		CreatedByID:      callerUID,
-		LastUpdatedByID:  &callerUID,
-		LastUpdatedAt:    &now,
+		// Kind travels with the body. ContentState is copied byte-for-byte, so
+		// a drawing's scene arrives intact — but without the kind the copy
+		// would be read as an empty prose page.
+		Kind:                source.Kind,
+		Content:             source.Content,
+		ContentState:        source.ContentState,
+		DrawingElementCount: source.DrawingElementCount,
+		DrawingVersionSum:   source.DrawingVersionSum,
+		Emoji:               source.Emoji,
+		Color:               source.Color,
+		Icon:                source.Icon,
+		CreatedByID:         callerUID,
+		LastUpdatedByID:     &callerUID,
+		LastUpdatedAt:       &now,
 	}
 
 	if err := r.docRepo.Create(ctx, rootDup); err != nil {
@@ -905,21 +925,24 @@ func (r *wikiDocumentResolver) DuplicateWikiDocument(ctx context.Context, id str
 			for _, child := range children {
 				newID := uuid.New()
 				newChild := &models.WikiDocument{
-					DocumentID:       newID,
-					OperationID:      child.OperationID,
-					ParentDocumentID: &parentID,
-					PathIDs:          append([]uuid.UUID(nil), newParentPath...),
-					Title:            child.Title,
-					TitleLower:       child.TitleLower,
-					Content:          child.Content,
-					ContentState:     child.ContentState,
-					Emoji:            child.Emoji,
-					Color:            child.Color,
-					Icon:             child.Icon,
-					SortOrder:        child.SortOrder,
-					CreatedByID:      callerUID,
-					LastUpdatedByID:  &callerUID,
-					LastUpdatedAt:    &now,
+					DocumentID:          newID,
+					OperationID:         child.OperationID,
+					ParentDocumentID:    &parentID,
+					PathIDs:             append([]uuid.UUID(nil), newParentPath...),
+					Title:               child.Title,
+					TitleLower:          child.TitleLower,
+					Kind:                child.Kind,
+					Content:             child.Content,
+					ContentState:        child.ContentState,
+					DrawingElementCount: child.DrawingElementCount,
+					DrawingVersionSum:   child.DrawingVersionSum,
+					Emoji:               child.Emoji,
+					Color:               child.Color,
+					Icon:                child.Icon,
+					SortOrder:           child.SortOrder,
+					CreatedByID:         callerUID,
+					LastUpdatedByID:     &callerUID,
+					LastUpdatedAt:       &now,
 				}
 
 				if err := r.docRepo.Create(ctx, newChild); err != nil {
@@ -1105,6 +1128,10 @@ func (r *wikiDocumentResolver) InstantiateTemplate(ctx context.Context, template
 		// Copy both content projections. Content (Markdown) makes the instance
 		// searchable before anyone opens it; ContentState (Y.js bytes) is the
 		// editable CRDT seed. append(nil, …) so neither aliases the template.
+		// Kind comes along too: a drawing template forks into a drawing, and
+		// for one of those the Markdown copy above is an empty string doing
+		// nothing — the scene rides entirely in ContentState.
+		Kind:         template.Kind,
 		Content:      template.Content,
 		ContentState: append([]byte(nil), template.ContentState...),
 		Emoji:        instanceEmoji,
@@ -1120,9 +1147,15 @@ func (r *wikiDocumentResolver) InstantiateTemplate(ctx context.Context, template
 		ChecklistTotal:    template.ChecklistTotal,
 		ChecklistRequired: template.ChecklistRequired,
 		ChecklistAnswered: template.ChecklistAnswered,
-		CreatedByID:       callerUID,
-		LastUpdatedByID:   &callerUID,
-		LastUpdatedAt:     &now,
+		// Same reasoning for a drawing template: the instance is a byte-copy of
+		// the scene, so it has exactly the same elements. Copying the counts
+		// means hasContent is right before the sidecar ever reprojects — without
+		// it a forked drawing reads as an empty page until somebody opens it.
+		DrawingElementCount: template.DrawingElementCount,
+		DrawingVersionSum:   template.DrawingVersionSum,
+		CreatedByID:         callerUID,
+		LastUpdatedByID:     &callerUID,
+		LastUpdatedAt:       &now,
 	}
 
 	if err := r.docRepo.Create(ctx, instance); err != nil {
@@ -1478,6 +1511,7 @@ func (r *wikiDocumentResolver) CreateWikiDocumentBackup(ctx context.Context, doc
 		DocumentID:   doc.DocumentID,
 		OperationID:  doc.OperationID,
 		Title:        doc.Title,
+		Kind:         doc.Kind,
 		Content:      doc.Content,
 		ContentState: doc.ContentState,
 		Trigger:      models.WikiDocumentBackupTriggerManual,
@@ -1846,6 +1880,14 @@ func (r *wikiDocumentResolver) WikiDocumentMarkdown(ctx context.Context, id stri
 	}
 	if err := r.authorizeForOperation(ctx, doc.OperationID, models.OperationRoleViewer); err != nil {
 		return "", err
+	}
+
+	// A drawing has no Markdown body. Rendering its CRDT state would walk an
+	// empty ProseMirror fragment and hand back "", which reads as "this page
+	// is blank" rather than "you asked the wrong question of this page" — so
+	// say so instead. Callers that want a drawing export go through the canvas.
+	if doc.Kind.IsDrawing() {
+		return "", fmt.Errorf("%q is a drawing, not a Markdown page", doc.Title)
 	}
 
 	// A document that has never been opened in the editor has no CRDT state.
@@ -2470,11 +2512,20 @@ func (r *wikiDocumentResolver) WikiDocumentParentDocumentID(ctx context.Context,
 	return &s, nil
 }
 
-// WikiDocumentHasContent reports whether the document's derived Markdown body
-// holds any non-whitespace text. Computed from the already-loaded Content field
-// (no extra I/O) so the create-from-template picker can hide empty "folder"
-// documents without fetching every body.
+// WikiDocumentHasContent reports whether the document has a body at all.
+// Computed from already-loaded fields (no extra I/O) so the
+// create-from-template picker can hide empty "folder" documents without
+// fetching every body.
+//
+// Kind-aware by necessity: a drawing's body lives entirely in the CRDT state
+// and never reaches the Markdown Content field, so the prose test would report
+// every finished diagram as empty — which would hide drawing templates from
+// the picker and render "This page is empty" over a full canvas in the hover
+// preview.
 func (r *wikiDocumentResolver) WikiDocumentHasContent(ctx context.Context, obj *models.WikiDocument) (bool, error) {
+	if obj.Kind.IsDrawing() {
+		return obj.DrawingElementCount > 0, nil
+	}
 	return strings.TrimSpace(obj.Content) != "", nil
 }
 
@@ -2704,7 +2755,15 @@ func (r *wikiDocumentResolver) WikiDocumentBackupDocumentID(ctx context.Context,
 	return obj.DocumentID.String(), nil
 }
 
+// WikiDocumentBackupContentLength sizes a snapshot for the backup list.
+//
+// A drawing's Markdown is always empty, so measuring Content would report
+// every scene — however elaborate — as 0 bytes. Fall back to the CRDT state,
+// which is where a drawing's body actually lives.
 func (r *wikiDocumentResolver) WikiDocumentBackupContentLength(ctx context.Context, obj *models.WikiDocumentBackup) (int, error) {
+	if obj.Kind.IsDrawing() {
+		return len(obj.ContentState), nil
+	}
 	return len(obj.Content), nil
 }
 
@@ -2732,6 +2791,7 @@ func (r *wikiDocumentResolver) createSafetyBackup(ctx context.Context, doc *mode
 		DocumentID:   doc.DocumentID,
 		OperationID:  doc.OperationID,
 		Title:        doc.Title,
+		Kind:         doc.Kind,
 		Content:      doc.Content,
 		ContentState: doc.ContentState,
 		Trigger:      models.WikiDocumentBackupTriggerAuto,

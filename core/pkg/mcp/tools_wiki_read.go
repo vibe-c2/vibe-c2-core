@@ -232,6 +232,14 @@ func handleGetWikiDocument(ctx context.Context, s *Server, args getWikiDocumentA
 		return toolResult{}, err
 	}
 
+	// Refused rather than answered with an empty body: every option this tool
+	// offers (outline, section, full) is a way of slicing prose, and a page
+	// that came back blank would read as an empty page rather than as the
+	// wrong tool for the job.
+	if err := requireProse(doc, "read as Markdown"); err != nil {
+		return toolResult{}, err
+	}
+
 	markdown := s.documentMarkdown(ctx, doc)
 
 	if args.Outline {
@@ -382,6 +390,15 @@ func sectionResult(doc *models.WikiDocument, markdown, heading string) (toolResu
 // (wiki_markdown_cache.go), so repeated reads of one page cost one sidecar
 // round trip rather than one per read.
 func (s *Server) documentMarkdown(ctx context.Context, doc *models.WikiDocument) string {
+	// A drawing has no Markdown body. Rendering its state anyway would walk an
+	// empty ProseMirror fragment, spend a sidecar round trip to be told so, and
+	// occupy a cache slot with the empty string. Callers that reach a drawing
+	// here are read paths (search snippets, excerpts) for which "no text" is
+	// the correct answer; the tools that must refuse outright do so through
+	// requireProse before getting this far.
+	if doc.Kind.IsDrawing() {
+		return ""
+	}
 	if len(doc.ContentState) == 0 || s.deps.Hocuspocus == nil {
 		return doc.Content
 	}

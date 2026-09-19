@@ -22,6 +22,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/vibe-c2/vibe-c2-core/core/pkg/models"
 )
 
 // Format is the manifest discriminator.
@@ -90,6 +91,11 @@ type Document struct {
 	SourceTemplateID *uuid.UUID `json:"sourceTemplateId"`
 	CreatedAt        time.Time  `json:"createdAt"`
 	UpdatedAt        *time.Time `json:"updatedAt"`
+	// Kind is what the body at ContentStateFile actually is. Absent on bundles
+	// written before drawings existed, which resolve to "document" — so this
+	// also distinguishes "a page with no body" from "a page whose body is not
+	// Markdown", which ContentStateFile alone cannot.
+	Kind models.WikiDocumentKind `json:"kind,omitempty"`
 	// ContentStateFile is empty for a page with no body.
 	ContentStateFile  string     `json:"contentStateFile"`
 	ContentStateBytes int64      `json:"contentStateBytes"`

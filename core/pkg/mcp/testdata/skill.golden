@@ -3,7 +3,7 @@
 name: vibe-c2
 description: Work an offensive security engagement in Vibe C2 — hosts, credentials, hashes, tasks, wiki notes and the operation timeline — through its MCP tools. Use whenever connected to a Vibe C2 MCP endpoint, or when the user mentions an operation, findings, or engagement notes.
 metadata:
-  version: "24"
+  version: "25"
 ---
 
 # Vibe C2
@@ -50,8 +50,8 @@ no tools, and nothing mirrors them. If a tool does not exist, say so.
 - **Results are capped.** Truncated means narrow the filter, not "that is all
   there is".
 - **Refusals are answers.** Report them; do not retry variations.
-- **Read the smallest part that answers the question.** Pages over 8 KB
-  return an outline; take `section:` or `full:true`.
+- **Read the smallest part that answers.** Pages over 8 KB return an
+  outline; take `section:` or `full:true`.
 - **Pages hold facts, not your working.** Plans and attempts go to the
   operator in the chat, not into a document; a page gets the finding once
   there is one. Nor does anything true only on your machine or only today:
@@ -75,13 +75,12 @@ no tools, and nothing mirrors them. If a tool does not exist, say so.
 
 ## Reference
 
-Load the one that matches the job.
-
 - `reference/tools.md` — every tool, grouped by task.
 - `reference/structure.md` — one subject per page, placed in the tree.
 - `reference/wiki.md` — reading, editing and templating pages.
 - `reference/findings.md` — recording hosts, credentials and hashes.
 - `reference/tasks.md` — proposing, linking and closing tasks.
+- `reference/drawings.md` — editing a drawing page.
 - `reference/attachments.md` — reading and adding files on a page.
 - `reference/icons.md` — when and how to give a page an icon.
 - `reference/skills.md` — finding, installing and publishing skills.
@@ -144,7 +143,7 @@ The operator's board. Propose work here rather than doing something nobody asked
 
 ## Wiki
 
-Engagement notes, collaboratively edited, with file attachments. See wiki.md and attachments.md.
+Engagement notes, collaboratively edited, with file attachments. Some pages are drawings instead of prose. See wiki.md, drawings.md and attachments.md.
 
 - `search_wiki` — Search wiki pages by title and body.
 - `list_wiki_tree` — The page tree, depth-first: titles, parents, icons and child counts.
@@ -157,6 +156,8 @@ Engagement notes, collaboratively edited, with file attachments. See wiki.md and
 - `update_wiki_document` **(write)** — Replace a page's whole body.
 - `move_wiki_document` **(write)** — File a page under a different parent, with everything below it.
 - `delete_wiki_document` **(write)** — Move a page to the trash, where an admin can restore it.
+- `get_wiki_drawing` — Read a drawing page's canvas: every shape with its id, position and label.
+- `edit_wiki_drawing` **(write)** — Draw on a drawing page.
 - `list_wiki_attachments` — Files attached to a page, each marked readable or not and whether the page shows it as an attachment card (placed).
 - `read_wiki_attachment` — Read an attachment: text formats directly, Word and Excel as text, images as images.
 - `attach_text_to_wiki_document` **(write)** — Attach text as a file.
@@ -505,6 +506,71 @@ unassigned tasks are yours to read and change. Tasks another operator has taken
 are withheld: `find_tasks` leaves them out and says how many, and reading or
 changing one by id is refused. On a shared task you may add or remove only the
 operator you act for.
+==================== vibe-c2/reference/drawings.md
+# Drawings: reading and editing a canvas
+
+Some wiki pages are drawings rather than prose — an Excalidraw canvas for
+network maps, attack paths, infrastructure sketches. A drawing has no Markdown
+body at all. `get_wiki_document` and the Markdown write tools refuse one, and
+the drawing tools refuse a prose page; both refusals name the tool that works.
+
+## Reading
+
+`get_wiki_drawing` lists every shape with its id, kind, position and label.
+Read before editing: edits address shapes by these ids. `view:"full"` returns
+the complete element JSON and is rarely what you want — the default view is
+what you compose edits from.
+
+## Drawing
+
+`edit_wiki_drawing` changes the canvas.
+
+- `mode:"add"` (default) puts new shapes on it.
+- `mode:"update"` changes existing shapes by id.
+- `mode:"delete"` erases them, by `element_ids`.
+- `mode:"replace"` swaps the whole scene in one transaction.
+
+Elements are Excalidraw's own shape, and only `type` is required: `rectangle`,
+`ellipse`, `diamond`, `text`, `arrow`, `line`, `freedraw`, `image`, `frame`.
+Position, size, colour and the rest are optional and filled in for you.
+
+Do not send `seed` or `versionNonce`. They are generated, and a fixed seed
+makes every shape you draw wobble identically — visibly machine-made, in a
+tool whose whole look is that it is not.
+
+```json
+{"type": "rectangle", "x": 100, "y": 200, "width": 160, "height": 80}
+{"type": "text", "x": 120, "y": 230, "text": "Domain Controller"}
+{"type": "arrow", "x": 260, "y": 240, "width": 140, "height": 0}
+```
+
+A labelled box is two elements, the way Excalidraw models it: the shape, and a
+`text` element whose `containerId` is the shape's id. Without the
+`containerId` the words are a note that happens to sit on top of a box, and
+moving the box leaves them behind.
+
+An arrow is drawn from its points, not its box. Give it `width`/`height` and
+the points are derived; give explicit `points` when it should bend.
+
+## Working alongside the operator
+
+Edits land on the live canvas. They merge as the operator draws rather than
+overwriting, and appear on their screen as they land — `watchers` on the
+result says whether anyone was in fact looking.
+
+An `update` or `delete` matching no shape changes nothing and says so, rather
+than creating one. That almost always means the ids came from a read taken
+before somebody else edited the canvas: read it again.
+
+## Creating one
+
+`create_wiki_document` with `kind:"drawing"`, then draw on it. Passing
+`content` with that kind is refused — there is nowhere for Markdown to go on a
+canvas.
+
+Propose a drawing rather than assuming one: a diagram is a claim about how
+something is laid out, and a wrong one is harder to correct than a wrong
+paragraph.
 ==================== vibe-c2/reference/attachments.md
 # Attachments
 

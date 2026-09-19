@@ -16,6 +16,12 @@ import (
 // Markdown (Content). The Go backend reads Content for search, backups, and
 // GraphQL. ContentState is written by the Hocuspocus sidecar and never
 // exposed via GraphQL.
+//
+// What that CRDT state *holds* depends on Kind. A prose page (the default, and
+// every page that existed before Kind did) keeps a ProseMirror tree; a drawing
+// page keeps an Excalidraw scene and has no Markdown body at all. Both live in
+// the same room and persist through the same bytes, so Kind — not the presence
+// of content — is what tells a caller which one it is holding.
 type WikiDocument struct {
 	field.DefaultField `bson:",inline"`
 	DocumentID         uuid.UUID  `bson:"document_id" json:"documentId"`
@@ -33,10 +39,17 @@ type WikiDocument struct {
 	// prefix search without the `$options:"i"` caveat (case-insensitive regex
 	// only uses an index for anchored, non-i patterns). Populated on Create
 	// and on every title update — never exposed via GraphQL.
-	TitleLower     string     `bson:"title_lower" json:"-"`
-	Content        string     `bson:"content" json:"content"`              // Markdown — derived by Hocuspocus from Y.js state
-	ContentState   []byte     `bson:"content_state,omitempty" json:"-"`    // Y.js binary state — written by Hocuspocus
-	ContentStateAt *time.Time `bson:"content_state_at,omitempty" json:"-"` // when Hocuspocus last persisted
+	TitleLower string `bson:"title_lower" json:"-"`
+	// Kind is what this page's body is: prose (the default) or an Excalidraw
+	// drawing. Absent on every row written before drawings existed, which is
+	// why it is `omitempty` and why the zero value resolves to "document" —
+	// see WikiDocumentKind.Or(). Everything that writes Markdown into a body
+	// must refuse a non-document kind; everything that reads a body as Markdown
+	// must say what the page is rather than returning an empty string.
+	Kind           WikiDocumentKind `bson:"kind,omitempty" json:"kind"`
+	Content        string           `bson:"content" json:"content"`              // Markdown — derived by Hocuspocus from Y.js state
+	ContentState   []byte           `bson:"content_state,omitempty" json:"-"`    // Y.js binary state — written by Hocuspocus
+	ContentStateAt *time.Time       `bson:"content_state_at,omitempty" json:"-"` // when Hocuspocus last persisted
 	// ContentStateSchemaVersion is the editor schema version of the client that
 	// last persisted ContentState. The sidecar stamps it (monotonic, never
 	// lowered) on every meaningful content edit; legacy rows have it absent → 0.
@@ -114,6 +127,18 @@ type WikiDocument struct {
 	ChecklistTotal    int `bson:"checklist_total" json:"checklistTotal"`
 	ChecklistRequired int `bson:"checklist_required" json:"checklistRequired"`
 	ChecklistAnswered int `bson:"checklist_answered" json:"checklistAnswered"`
+	// DrawingElementCount and DrawingVersionSum are the drawing equivalent of
+	// the checklist counters above: projected by the Hocuspocus sidecar from
+	// the page's Excalidraw scene, zero for every prose page, and never written
+	// by Go. ElementCount is the live (non-deleted) element total, which is what
+	// tells a real drawing from a blank canvas. VersionSum adds up those
+	// elements' versions — it is not a checksum, it exists so that moving a
+	// shape registers as a change at all. A drawing's text does not move when a
+	// box is dragged, so without it the sidecar's meaningful-change check reads
+	// every drawing edit as an open-time no-op and the page is never attributed
+	// or marked updated.
+	DrawingElementCount int `bson:"drawing_element_count" json:"drawingElementCount"`
+	DrawingVersionSum   int `bson:"drawing_version_sum" json:"-"`
 	// HostReferences lists the host IDs that this document cites inline via the
 	// /host slash command (wikiHostReference nodes). Same rewrite semantics as
 	// CredentialReferences — populated by the Hocuspocus sidecar on every

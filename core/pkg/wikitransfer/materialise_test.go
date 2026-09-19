@@ -386,3 +386,74 @@ func TestEnsureHoldingPen_ReusesRootCreatesTimestamp(t *testing.T) {
 		t.Errorf("timestamp folder = %+v", ts)
 	}
 }
+
+// A drawing page must take the scene route, not the prose one.
+//
+// RebaseDocument rebuilds the CRDT from a ProseMirror tree, so a scene sent
+// through it loses its root key entirely: the page lands, the import reports
+// success, and the canvas is blank. Nothing about that failure is visible
+// until somebody opens the page — which is why this asserts on the route
+// taken, not only on the outcome.
+func TestMaterialise_DrawingTakesTheSceneRoute(t *testing.T) {
+	h := newHarness()
+	sourceOp, targetOp, caller := uuid.New(), uuid.New(), uuid.New()
+	sourceImage := uuid.New()
+
+	plan := &wikitransfer.Plan{
+		BundleID:          uuid.New(),
+		SourceOperationID: sourceOp,
+		Pages: []*wikitransfer.Page{{
+			SourceID:     uuid.New(),
+			Title:        "Attack path",
+			Kind:         models.WikiDocumentKindDrawing,
+			SortOrder:    "a",
+			ContentState: []byte("element " + sourceImage.String()),
+			Attachments:  []uuid.UUID{sourceImage},
+		}},
+		Attachments: map[uuid.UUID]*wikitransfer.Attachment{
+			sourceImage: blobAttachment(sourceImage, wikitransfer.AttachmentImage, "topology.png", "PNG"),
+		},
+	}
+
+	report, err := h.m.Run(context.Background(), plan, wikitransfer.Target{OperationID: targetOp, CallerID: caller}, nil)
+	if err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+	if report.CreatedDocs != 1 || report.SkippedDocs != 0 {
+		t.Fatalf("created=%d skipped=%d (%v)", report.CreatedDocs, report.SkippedDocs, report.Skipped)
+	}
+
+	if len(h.rebaser.DrawingCalls) != 1 {
+		t.Fatalf("drawing rebases = %d, want 1", len(h.rebaser.DrawingCalls))
+	}
+	if len(h.rebaser.Calls) != 0 {
+		t.Fatalf("the scene went through the prose rebase: %d call(s)", len(h.rebaser.Calls))
+	}
+
+	doc, ok := h.docs.ByTitle("Attack path")
+	if !ok {
+		t.Fatal("drawing not created")
+	}
+	if !doc.Kind.IsDrawing() {
+		t.Fatalf("kind = %q, want drawing — it would open in the prose editor", doc.Kind)
+	}
+	if len(doc.ContentState) == 0 {
+		t.Fatal("the scene did not survive the import")
+	}
+	if doc.DrawingElementCount == 0 {
+		t.Error("element count not projected: the page will report as empty")
+	}
+
+	// The image id has to move with the page. Left alone it points at a blob
+	// in the source installation: an empty frame on the canvas, and an
+	// attachment index entry for something that is not there.
+	if len(doc.ImageReferences) != 1 {
+		t.Fatalf("image refs = %v", doc.ImageReferences)
+	}
+	if doc.ImageReferences[0] == sourceImage {
+		t.Error("image id was not rebased onto the target's ingested blob")
+	}
+	if _, ok := h.ingestor.Images[doc.ImageReferences[0]]; !ok {
+		t.Error("image not ingested under the id the scene now references")
+	}
+}

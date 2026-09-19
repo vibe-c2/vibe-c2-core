@@ -148,13 +148,14 @@ type CreateUserInput struct {
 }
 
 type CreateWikiDocumentInput struct {
-	ParentDocumentID *string `json:"parentDocumentId,omitempty"`
-	Title            string  `json:"title"`
-	Content          *string `json:"content,omitempty"`
-	Emoji            *string `json:"emoji,omitempty"`
-	Color            *string `json:"color,omitempty"`
-	Icon             *string `json:"icon,omitempty"`
-	SortOrder        *string `json:"sortOrder,omitempty"`
+	ParentDocumentID *string                  `json:"parentDocumentId,omitempty"`
+	Title            string                   `json:"title"`
+	Kind             *models.WikiDocumentKind `json:"kind,omitempty"`
+	Content          *string                  `json:"content,omitempty"`
+	Emoji            *string                  `json:"emoji,omitempty"`
+	Color            *string                  `json:"color,omitempty"`
+	Icon             *string                  `json:"icon,omitempty"`
+	SortOrder        *string                  `json:"sortOrder,omitempty"`
 }
 
 type CredentialConnection struct {

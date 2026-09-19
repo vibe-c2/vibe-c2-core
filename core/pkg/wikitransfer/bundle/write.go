@@ -180,6 +180,7 @@ func (r *writeRun) writeDocument(ctx context.Context, doc models.WikiDocument, d
 		Icon:             doc.Icon,
 		Color:            doc.Color,
 		SortOrder:        doc.SortOrder,
+		Kind:             doc.Kind.Or(),
 		IsTemplate:       doc.IsTemplate,
 		SourceTemplateID: doc.SourceTemplateID,
 		CreatedAt:        doc.CreateAt,

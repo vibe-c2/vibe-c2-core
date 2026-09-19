@@ -40,13 +40,18 @@ func (t *WikiDocumentBackupTrigger) UnmarshalGQL(v interface{}) error {
 // or as safety snapshots before destructive operations (delete, restore).
 type WikiDocumentBackup struct {
 	field.DefaultField `bson:",inline"`
-	BackupID           uuid.UUID                 `bson:"backup_id" json:"backupId"`
-	DocumentID         uuid.UUID                 `bson:"document_id" json:"documentId"`
-	OperationID        uuid.UUID                 `bson:"operation_id" json:"operationId"`
-	Title              string                    `bson:"title" json:"title"`
-	Content            string                    `bson:"content" json:"content"`
-	ContentState       []byte                    `bson:"content_state,omitempty" json:"-"` // Y.js binary state snapshot — enables lossless restore
-	Trigger            WikiDocumentBackupTrigger `bson:"trigger" json:"trigger"`
-	Description        string                    `bson:"description" json:"description"` // user-provided label for manual, system label for safety backups
-	CreatedByID        uuid.UUID                 `bson:"created_by_id" json:"createdById"`
+	BackupID           uuid.UUID `bson:"backup_id" json:"backupId"`
+	DocumentID         uuid.UUID `bson:"document_id" json:"documentId"`
+	OperationID        uuid.UUID `bson:"operation_id" json:"operationId"`
+	Title              string    `bson:"title" json:"title"`
+	// Kind mirrors the document's kind at the moment of the snapshot, so a
+	// backup can be summarised and previewed without loading the live document
+	// (whose kind could since have differed). Absent on pre-drawing backups,
+	// which resolve to "document" — see WikiDocumentKind.Or().
+	Kind         WikiDocumentKind          `bson:"kind,omitempty" json:"kind"`
+	Content      string                    `bson:"content" json:"content"`
+	ContentState []byte                    `bson:"content_state,omitempty" json:"-"` // Y.js binary state snapshot — enables lossless restore
+	Trigger      WikiDocumentBackupTrigger `bson:"trigger" json:"trigger"`
+	Description  string                    `bson:"description" json:"description"` // user-provided label for manual, system label for safety backups
+	CreatedByID  uuid.UUID                 `bson:"created_by_id" json:"createdById"`
 }

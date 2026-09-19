@@ -397,6 +397,9 @@ var uuidRe = regexp.MustCompile(`[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0
 type Rebaser struct {
 	mu    sync.Mutex
 	Calls []wiki.RebaseRequest
+	// DrawingCalls records the scene rebases a run performed, so a test can
+	// assert a drawing took the scene route rather than the prose one.
+	DrawingCalls []wiki.RebaseDrawingRequest
 	// FailBodyContaining makes the call fail when the body contains this.
 	FailBodyContaining string
 }
@@ -724,4 +727,55 @@ func (r *JobRepo) Delete(_ context.Context, id uuid.UUID) error {
 	defer r.mu.Unlock()
 	delete(r.Jobs, id)
 	return nil
+}
+
+// RebaseDrawing is the scene counterpart of RebaseDocument.
+//
+// The fake treats ContentState as an opaque string, exactly as the prose fake
+// does, and rewrites any wiki image id it finds using the same IDMap. That is
+// enough to test what the materialiser is responsible for — that a drawing
+// goes through this call, that the mapping reaches it, and that unmapped
+// images are reported — without reimplementing Y.js here.
+func (r *Rebaser) RebaseDrawing(_ context.Context, req wiki.RebaseDrawingRequest) (wiki.RebaseDrawingResult, error) {
+	r.mu.Lock()
+	r.DrawingCalls = append(r.DrawingCalls, req)
+	r.mu.Unlock()
+
+	body := string(req.ContentState)
+	if r.FailBodyContaining != "" && strings.Contains(body, r.FailBodyContaining) {
+		return wiki.RebaseDrawingResult{}, errors.New("simulated drawing rebase failure")
+	}
+
+	res := wiki.RebaseDrawingResult{}
+	seen := map[string]struct{}{}
+
+	out := uuidRe.ReplaceAllStringFunc(body, func(id string) string {
+		lower := strings.ToLower(id)
+		mapped, ok := req.IDMap[lower]
+		if !ok {
+			for k, v := range req.IDMap {
+				if strings.EqualFold(k, lower) {
+					mapped, ok = v, true
+				}
+			}
+		}
+		if ok {
+			lower = strings.ToLower(mapped)
+			res.Remapped++
+		} else {
+			res.Unmapped = append(res.Unmapped, lower)
+			return lower
+		}
+		if _, dup := seen[lower]; !dup {
+			seen[lower] = struct{}{}
+			res.ImageReferences = append(res.ImageReferences, lower)
+		}
+		return lower
+	})
+
+	res.ContentState = []byte(out)
+	res.Content = out
+	res.ElementCount = strings.Count(out, "element") + 1
+	res.VersionSum = res.ElementCount
+	return res, nil
 }

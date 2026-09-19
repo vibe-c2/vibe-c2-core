@@ -17,6 +17,7 @@ import (
 	"io"
 
 	"github.com/google/uuid"
+	"github.com/vibe-c2/vibe-c2-core/core/pkg/models"
 )
 
 // Plan is the normalised, in-memory description of what an import will
@@ -64,6 +65,12 @@ type Page struct {
 
 	IsTemplate       bool
 	SourceTemplateID *uuid.UUID
+
+	// Kind is what the body is. A drawing's ContentState is an Excalidraw
+	// scene, which the rebase pipeline cannot process — it rebuilds the CRDT
+	// from a ProseMirror tree and would drop the scene's root key entirely.
+	// The materialiser refuses those pages rather than importing them empty.
+	Kind models.WikiDocumentKind
 
 	ContentState []byte
 	Markdown     string

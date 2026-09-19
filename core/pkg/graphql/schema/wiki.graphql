@@ -17,6 +17,18 @@ enum WikiDocumentBackupTrigger {
   MANUAL
 }
 
+# What a page's body is. DOCUMENT is prose — a ProseMirror tree in the Y.js
+# room's "default" fragment, projected to the Markdown `content` field below.
+# DRAWING is an Excalidraw scene in the same room under its own root key, and
+# has no Markdown body: `content` is always empty for one, so read `kind`
+# rather than inferring emptiness from `content` or `hasContent`.
+#
+# Pages created before drawings existed report DOCUMENT.
+enum WikiDocumentKind {
+  DOCUMENT
+  DRAWING
+}
+
 enum PresenceAction {
   JOINED
   LEFT
@@ -43,16 +55,21 @@ type WikiDocument {
   parentDocumentId: ID
   childDocuments: [WikiDocument!]!
   title: String!
+  # What this page's body is. Branch on this before treating `content`,
+  # `excerpt` or `hasContent` as meaningful — a DRAWING carries none of them.
+  kind: WikiDocumentKind!
   content: String!
   emoji: String!
   color: String!
   icon: String!
   sortOrder: String!
   childCount: Int!
-  # True when the document's derived Markdown body has any non-whitespace
-  # content. Server-computed from `content` so callers can cheaply tell a real
-  # page from an empty container ("folder") without fetching the body — used by
-  # the create-from-template picker to hide contentless templates.
+  # True when this page has a body at all, so callers can cheaply tell a real
+  # page from an empty container ("folder") without fetching it — used by the
+  # create-from-template picker to hide contentless templates. Kind-aware: for
+  # a DOCUMENT it means the derived Markdown has non-whitespace content, and
+  # for a DRAWING it means the scene has at least one element. Computing it
+  # from `content` alone would report every drawing as empty forever.
   hasContent: Boolean!
   # The opening of the body as plain text, for hover previews and any other
   # surface that wants a taste of the page without shipping its whole body.
@@ -157,11 +174,16 @@ type WikiDocumentBackup {
   id: ID!
   documentId: ID!
   title: String!
+  # The document's kind at the moment of the snapshot. Branch on it before
+  # diffing `content` — for a DRAWING both sides of any such diff are empty,
+  # so a text diff would report "no changes" however much the scene moved.
+  kind: WikiDocumentKind!
   content: String!
   trigger: WikiDocumentBackupTrigger!
   description: String!
   # Byte length of the content at backup time. Server-computed so the list
   # query can surface size without shipping full content for every row.
+  # Reports the CRDT state's size for a DRAWING, whose Markdown is always empty.
   contentLength: Int!
   # Null for AUTO (system-created) backups and safety backups whose originating user was deleted.
   createdBy: User
@@ -238,6 +260,10 @@ type WikiDocumentVisitConnection {
 input CreateWikiDocumentInput {
   parentDocumentId: ID
   title: String!
+  # Defaults to DOCUMENT. A DRAWING page starts empty and is filled in by the
+  # canvas over the collaborative session, so passing `content` with it is
+  # refused rather than silently dropped.
+  kind: WikiDocumentKind
   content: String
   emoji: String
   color: String

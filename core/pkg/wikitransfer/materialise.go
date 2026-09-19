@@ -33,10 +33,15 @@ type Ingestor interface {
 	DiscardFile(ctx context.Context, fileID uuid.UUID) error
 }
 
-// Rebaser is the one sidecar call the materialiser makes. Satisfied by
-// *wiki.HocuspocusClient.
+// Rebaser is the sidecar call the materialiser makes to move a page's body
+// onto the target's ids. Satisfied by *wiki.HocuspocusClient.
+//
+// Two methods rather than one with a mode: a prose body and a drawing share no
+// input, no remapping rules and no output projection, so a single call would
+// be one signature with two disjoint halves.
 type Rebaser interface {
 	RebaseDocument(ctx context.Context, req wiki.RebaseRequest) (wiki.RebaseResult, error)
+	RebaseDrawing(ctx context.Context, req wiki.RebaseDrawingRequest) (wiki.RebaseDrawingResult, error)
 }
 
 // Target says where a plan lands.
@@ -299,7 +304,30 @@ func (r *run) materialise(
 	doc := r.newDocument(page, parentID, parentPath, sortOrder, humanPath)
 	ingested := r.ingestAttachments(ctx, page, doc, humanPath)
 
-	if page.HasBody() {
+	// A drawing takes its own route. RebaseDocument rebuilds the CRDT from a
+	// ProseMirror tree, so sending a scene through it would drop the scene's
+	// root key entirely and land the page looking empty — which is why the two
+	// are separate calls rather than one with a flag.
+	if page.Kind.IsDrawing() {
+		if len(page.ContentState) > 0 {
+			res, err := r.m.rebaser.RebaseDrawing(ctx, wiki.RebaseDrawingRequest{
+				ContentState: page.ContentState,
+				IDMap:        r.idMap,
+			})
+			if err != nil {
+				r.discard(ctx, ingested)
+				r.skipSubtree(page, humanPath, "drawing_rebase_failed: "+err.Error())
+				return nil
+			}
+			applyDrawingProjection(doc, res)
+			// The page still imports without them; the operator is told which
+			// pictures did not come with it rather than discovering empty
+			// frames on the canvas later.
+			for _, id := range res.Unmapped {
+				r.report.warn(humanPath, "missing_drawing_image: "+id)
+			}
+		}
+	} else if page.HasBody() {
 		res, err := r.m.rebaser.RebaseDocument(ctx, wiki.RebaseRequest{
 			ContentState:      page.ContentState,
 			Markdown:          page.Markdown,
@@ -368,6 +396,9 @@ func (r *run) newDocument(page *Page, parentID *uuid.UUID, parentPath []uuid.UUI
 		PathIDs:          append([]uuid.UUID(nil), parentPath...),
 		Title:            title,
 		TitleLower:       strings.ToLower(title),
+		// Without this an imported drawing lands as a prose page whose body
+		// happens to be a scene nothing can read.
+		Kind:             page.Kind.Or(),
 		Emoji:            emoji,
 		Icon:             icon,
 		Color:            page.Color,
@@ -493,6 +524,26 @@ func applyProjection(doc *models.WikiDocument, res wiki.RebaseResult, operationI
 	doc.CredentialReferences = parseIDs(res.CredentialReferences)
 	doc.HashReferences = parseIDs(res.HashReferences)
 	doc.HostReferences = parseIDs(res.HostReferences)
+}
+
+// applyDrawingProjection is applyProjection's counterpart for a scene.
+//
+// Deliberately narrow: a drawing references no documents, credentials, hashes
+// or hosts, so those indexes stay empty rather than being carried over from a
+// prose page's shape. Images are the one attachment a canvas can hold, and
+// indexing them is what stops the sweeper reclaiming their blobs.
+//
+// No schema version is stamped. That gate guards the ProseMirror schema, and a
+// drawing has none — claiming one would make the collab endpoint refuse
+// clients over a schema the page does not use.
+func applyDrawingProjection(doc *models.WikiDocument, res wiki.RebaseDrawingResult) {
+	now := time.Now().UTC()
+	doc.Content = res.Content
+	doc.ContentState = res.ContentState
+	doc.ContentStateAt = &now
+	doc.ImageReferences = parseIDs(res.ImageReferences)
+	doc.DrawingElementCount = res.ElementCount
+	doc.DrawingVersionSum = res.VersionSum
 }
 
 func parseIDs(in []string) []uuid.UUID {

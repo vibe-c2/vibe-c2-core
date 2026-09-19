@@ -26,6 +26,8 @@ var (
 	findingsMD string
 	//go:embed skillassets/tasks.md
 	tasksMD string
+	//go:embed skillassets/drawings.md
+	drawingsMD string
 	//go:embed skillassets/attachments.md
 	attachmentsMD string
 	//go:embed skillassets/icons.md
@@ -55,6 +57,7 @@ var referenceGuides = []referenceGuide{
 	{"wiki", "reading, editing and templating pages", wikiMD},
 	{"findings", "recording hosts, credentials and hashes", findingsMD},
 	{"tasks", "proposing, linking and closing tasks", tasksMD},
+	{"drawings", "reading and editing a page's canvas", drawingsMD},
 	{"attachments", "reading and adding files on a page", attachmentsMD},
 	{"icons", "when and how to give a page an icon", iconsMD},
 	{"skills", "finding, installing and publishing skills", skillsMD},

@@ -199,6 +199,13 @@ models:
     model:
       - github.com/vibe-c2/vibe-c2-core/core/pkg/models.WikiDocumentBackupTrigger
 
+  # Map the page-kind enum to our existing Go type. Its zero value marshals as
+  # DOCUMENT, which is what satisfies the non-null schema field for every row
+  # written before the field existed.
+  WikiDocumentKind:
+    model:
+      - github.com/vibe-c2/vibe-c2-core/core/pkg/models.WikiDocumentKind
+
   # Map the GraphQL "WikiDocumentVisit" type to our existing model. The
   # `document` field is a relation lookup — we store DocumentID and resolve
   # the live WikiDocument at query time so renamed/moved docs render with

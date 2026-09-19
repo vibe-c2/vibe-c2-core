@@ -17,6 +17,7 @@ type createWikiDocumentArgs struct {
 	IdempotencyKey
 	OperationID string `json:"operation_id,omitempty" jsonschema:"Operation id; omit for the operator's current one."`
 	Title       string `json:"title,omitempty"        jsonschema:"Page title. Required unless template_id is given."`
+	Kind        string `json:"kind,omitempty"         jsonschema:"document (default) for a Markdown page, or drawing for an Excalidraw canvas you then fill in with edit_wiki_drawing."`
 	Content     string `json:"content,omitempty"      jsonschema:"Markdown body, up to 1 MB in one call. Ignored with template_id."`
 	ParentID    string `json:"parent_id,omitempty"    jsonschema:"Parent page id."`
 	TemplateID  string `json:"template_id,omitempty"  jsonschema:"Copy this template's structure and content, from list_wiki_templates."`
@@ -61,6 +62,19 @@ func handleCreateWikiDocument(ctx context.Context, s *Server, args createWikiDoc
 		return toolResult{}, refuse("title is required unless template_id is given.")
 	}
 
+	kind := models.WikiDocumentKind(strings.ToLower(strings.TrimSpace(args.Kind)))
+	if !kind.Valid() {
+		return toolResult{}, refuse(
+			"unknown kind %q. Use document for a Markdown page or drawing for a canvas.", args.Kind)
+	}
+	// A drawing is filled in through edit_wiki_drawing, so Markdown handed to
+	// this call has nowhere to go. Refusing beats dropping it silently and
+	// leaving the agent to wonder where its content went.
+	if kind.IsDrawing() && args.Content != "" {
+		return toolResult{}, refuse(
+			"a drawing page has no Markdown body. Create it without content, then draw on it with edit_wiki_drawing.")
+	}
+
 	// Create through the resolver so nesting depth, title limits, the ancestor
 	// path and the domain event are all handled the same way they are for a
 	// human. Content is applied afterwards, because it needs the CRDT seeding
@@ -72,6 +86,7 @@ func handleCreateWikiDocument(ctx context.Context, s *Server, args createWikiDoc
 
 	doc, err := s.deps.WikiDocs.CreateWikiDocument(ctx, opID.String(), model.CreateWikiDocumentInput{
 		Title:            args.Title,
+		Kind:             &kind,
 		ParentDocumentID: optionalString(args.ParentID),
 		Emoji:            emoji,
 		Icon:             icon,
@@ -280,6 +295,12 @@ func handleEditWikiDocument(ctx context.Context, s *Server, args editWikiDocumen
 		return toolResult{}, err
 	}
 
+	// This path calls EditMarkdown directly rather than going through
+	// writeBody, so it needs the kind guard of its own.
+	if err := requireProse(doc, "edit"); err != nil {
+		return toolResult{}, err
+	}
+
 	if args.OldText == "" {
 		return toolResult{}, refuse(
 			"old_text is required: it is the snippet to replace. To add to the end of a page " +
@@ -392,6 +413,14 @@ func handleUpdateWikiDocument(ctx context.Context, s *Server, args updateWikiDoc
 // implementation refused that case, which meant the more engaged the operator
 // was with a page, the less the agent could help with it.
 func (s *Server) writeBody(ctx context.Context, doc *models.WikiDocument, body string, mode wiki.ApplyMode) (wiki.ApplyMarkdownResult, error) {
+	// Kind first: writing Markdown into a drawing corrupts it silently (see
+	// wiki_kind.go), so this must be refused before any of the checks below
+	// decide the body is acceptable. Every Markdown write tool reaches the
+	// sidecar through here, which is what makes this the right chokepoint.
+	if err := requireProse(doc, "write"); err != nil {
+		return wiki.ApplyMarkdownResult{}, err
+	}
+
 	// Size is checked before anything else: it is true whatever the rest of
 	// the deployment looks like, and it is the more useful thing to say.
 	//

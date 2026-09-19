@@ -57,6 +57,7 @@ func New(deps Deps) *Server {
 	registerHashTools(s)
 	registerTaskTools(s)
 	registerWikiTools(s)
+	registerWikiDrawingTools(s)
 	registerTimelineTools(s)
 	registerAttachmentTools(s)
 	registerFocusTools(s)

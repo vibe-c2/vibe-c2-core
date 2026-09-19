@@ -218,6 +218,17 @@ var releases = []Release{
 			"SKILL.md folds the local-paths rule and the dates rule into one: a page carries nothing that is true only on your machine or only today.",
 		},
 	},
+	{
+		Version: 25,
+		Date:    "2026-09-19",
+		Notes: []string{
+			"Wiki pages can now be drawings as well as prose. A drawing page holds an Excalidraw canvas instead of Markdown, and get_wiki_drawing / edit_wiki_drawing are how you read and change one. Both work while the operator has the canvas open: an edit merges and appears on their screen as it lands, and `watchers` tells you whether anyone was looking.",
+			"Read a drawing before editing it. Edits address shapes by id, and the ids come from get_wiki_drawing — an update or delete naming a shape that is not there changes nothing and says so rather than inventing it.",
+			"Elements are Excalidraw's own shape, and only `type` is required: rectangle, ellipse, diamond, text, arrow, line, freedraw, image or frame. Position, size, colour and the rest are optional and filled in for you. Do not send seeds or version nonces.",
+			"The Markdown tools refuse a drawing and the drawing tools refuse a prose page, in both cases naming the tool that does work. A drawing has no Markdown body, so get_wiki_document cannot read one and update_wiki_document must not be pointed at one.",
+			"reference/drawings.md is the guide for all of this. SKILL.md lost a line of its own prose to make room for pointing at it, which is the trade: the always-on brief stays the size it was.",
+		},
+	},
 }
 
 // Releases returns the full history, oldest first. A copy, so callers cannot

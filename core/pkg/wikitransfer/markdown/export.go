@@ -180,6 +180,16 @@ func planPlacements(scope *wikitransfer.Scope, rootSlug string) []placement {
 }
 
 func (r *exportRun) writeDoc(ctx context.Context, doc models.WikiDocument, docPath string) {
+	// A drawing has no Markdown. Rendering it anyway produces an empty .md
+	// file that claims the page was exported, which is worse than admitting it
+	// was not: the operator only discovers the loss when they open the zip
+	// looking for a diagram. Record the skip so the report names it.
+	if doc.Kind.IsDrawing() {
+		r.report.Skip(docPath, "drawing_not_representable_as_markdown")
+		r.advance()
+		return
+	}
+
 	body, err := r.e.renderer.YjsToMarkdown(ctx, doc.ContentState)
 	if err != nil {
 		r.report.Skip(docPath, "render_failed: "+err.Error())
