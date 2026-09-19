@@ -6,6 +6,7 @@ import (
 	"io"
 	"net/http"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -157,6 +158,14 @@ func (s *Server) DownloadSkillHandler() gin.HandlerFunc {
 			c.JSON(http.StatusBadRequest, responses.NewErrorResponse("name is required"))
 			return
 		}
+		// The built-in skill is generated rather than stored, so it has no
+		// registry row to stream. It is served here, on the path an agent
+		// already uses, so there is one download URL to know rather than two —
+		// the human route stays for the UI.
+		if skills.IsReserved(strings.ToLower(strings.TrimSpace(name))) {
+			s.serveBuiltinSkill(c)
+			return
+		}
 		version := 0
 		if rawVersion := c.Query("version"); rawVersion != "" {
 			parsed, convErr := strconv.Atoi(rawVersion)
@@ -279,4 +288,33 @@ type publishSkillView struct {
 	Checksum    string `json:"checksum"`
 	DownloadURL string `json:"downloadUrl"`
 	Note        string `json:"note"`
+}
+
+// serveBuiltinSkill streams the generated bundle to an agent.
+//
+// Always the current version: it is rendered per request from the live tool
+// registry, so there is no older one to ask for and a version parameter would
+// be a promise this cannot keep.
+//
+// The download is recorded against the key's owner exactly as a human download
+// is. Whether the bytes actually reach their client is unknowable either way —
+// a person who downloads and never unzips is already indistinguishable from
+// one who installs — so treating an agent fetching on their behalf as the same
+// event keeps one meaning for the flag rather than two.
+func (s *Server) serveBuiltinSkill(c *gin.Context) {
+	c.Header("Content-Type", "application/zip")
+	c.Header("Content-Disposition", `attachment; filename="`+SkillName+`-skill.zip"`)
+	c.Header("X-Content-Type-Options", "nosniff")
+	// Generated per request from the live registry, so it must not be cached
+	// anywhere between here and the caller.
+	c.Header("Cache-Control", "private, no-store")
+	c.Status(http.StatusOK)
+
+	if err := s.SkillZip(c.Writer); err != nil {
+		// The status is already committed by the time a zip fails mid-write,
+		// so there is nothing useful to send; log and stop.
+		s.deps.Logger.Error("mcp: failed to write the built-in skill bundle", zap.Error(err))
+		return
+	}
+	s.recordSkillDownload(c)
 }

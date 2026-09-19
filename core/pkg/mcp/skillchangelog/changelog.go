@@ -249,6 +249,15 @@ var releases = []Release{
 			"The name is reserved, so nobody can publish a skill called vibe-c2 or vibe-c2-anything. If you were about to report the built-in skill as missing from the registry, this is why it is not there.",
 		},
 	},
+	{
+		Version: 28,
+		Date:    "2026-09-19",
+		Notes: []string{
+			"Superseding v27: the built-in vibe-c2 skill IS in find_skills now, marked builtIn, alongside the published ones. Explaining an absence was the wrong fix — a listing that silently leaves something out invites the reader to conclude it does not exist, and twice it did.",
+			"You can download it. get_skill vibe-c2 returns a download URL your agent key can fetch, the same as any published skill. Unzip it into the operator's skills directory when your copy is behind this server, and tell them to start a new session so their client loads it. It cannot be loaded into the session you are in: whatever skill you are running was loaded when the session began.",
+			"It has no owner and no version history, because it is rendered from the live tool registry on every download rather than stored. The name stays reserved, so nobody can publish under it.",
+		},
+	},
 }
 
 // Releases returns the full history, oldest first. A copy, so callers cannot

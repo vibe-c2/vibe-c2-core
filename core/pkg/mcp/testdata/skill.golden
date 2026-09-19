@@ -3,7 +3,7 @@
 name: vibe-c2
 description: Work an offensive security engagement in Vibe C2 — hosts, credentials, hashes, tasks, wiki notes and the operation timeline — through its MCP tools. Use whenever connected to a Vibe C2 MCP endpoint, or when the user mentions an operation, findings, or engagement notes.
 metadata:
-  version: "27"
+  version: "28"
 ---
 
 # Vibe C2
@@ -174,7 +174,7 @@ Milestones only: a task closed, a credential recovered, a hash cracked, and what
 
 Working methods other operators have published, packaged the way this skill is. See skills.md.
 
-- `find_skills` — Skills operators have published on this server: shared working methods, packaged the way your own skill is.
+- `find_skills` — Skills operators have published on this server: shared working methods, packaged the way your own skill is, plus the built-in vibe-c2 skill itself (marked builtIn).
 - `get_skill` — One skill in full: its version history and the URL to download the bundle from with your agent key.
 
 ==================== vibe-c2/reference/structure.md
@@ -717,12 +717,16 @@ a particular appliance. They are packaged exactly the way this skill is.
 `find_skills` lists them, `get_skill` gives you one in full. Both return
 descriptions, never bundles.
 
-The registry holds *published* skills only. `vibe-c2` is not among them and
-never will be: it is the built-in skill — the one you are reading now — it is
-generated from the live tool registry on every download, and an operator
-installs it from the server rather than publishing it. So a listing without it
-is a complete listing, not a missing entry, and the name is reserved so nobody
-can publish anything under it.
+`vibe-c2` is in the list too, marked `builtIn`. It is the skill you are
+reading now: generated from the live tool registry on every download rather
+than published by anyone, so it has an owner of nobody and no version history.
+`get_skill` gives you its download URL like any other.
+
+Fetching it is how you update an operator's copy when yours is behind the
+server — unzip it into their skills directory and tell them to start a new
+session. You cannot load it into the session you are in: whatever skill you
+are running was loaded when the session began. The name is reserved, so
+nobody can publish anything under it.
 
 ## Installing one
 

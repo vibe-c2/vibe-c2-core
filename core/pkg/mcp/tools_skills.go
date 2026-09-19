@@ -8,6 +8,7 @@ import (
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/vibe-c2/vibe-c2-core/core/pkg/graphql/gqlctx"
+	"github.com/vibe-c2/vibe-c2-core/core/pkg/mcp/skillchangelog"
 	"github.com/vibe-c2/vibe-c2-core/core/pkg/models"
 	"github.com/vibe-c2/vibe-c2-core/core/pkg/skills"
 )
@@ -42,6 +43,13 @@ type skillView struct {
 	// Mine marks a skill published by the operator who owns this agent key,
 	// which is also the only one this key may publish a new version of.
 	Mine bool `json:"mine"`
+	// BuiltIn marks the skill this server generates rather than one an
+	// operator published. It is listed because an inventory that silently
+	// omits a skill invites the reader to conclude it does not exist — which
+	// is what kept happening — but it behaves differently enough to flag:
+	// nobody owns it, it has no version history, and it is rebuilt from the
+	// live tool registry on every download.
+	BuiltIn bool `json:"builtIn,omitempty"`
 }
 
 // skillDetailView adds the history and the two things an agent needs in order
@@ -69,9 +77,8 @@ func registerSkillTools(s *Server) {
 	register(s, &mcp.Tool{
 		Name: "find_skills",
 		Description: "Skills operators have published on this server: shared working methods, " +
-			"packaged the way your own skill is. Returns names and descriptions, not the bundles. " +
-			"The built-in vibe-c2 skill is not in the registry — it is the one you are already " +
-			"running — so a listing without it is complete, not missing an entry.",
+			"packaged the way your own skill is, plus the built-in vibe-c2 skill itself " +
+			"(marked builtIn). Returns names and descriptions, not the bundles.",
 	}, readTool, handleFindSkills)
 
 	register(s, &mcp.Tool{
@@ -91,7 +98,12 @@ func handleFindSkills(ctx context.Context, s *Server, args findSkillsArgs) (tool
 	}
 
 	viewer := viewerID(ctx)
-	matched := make([]skillView, 0, len(all))
+	matched := make([]skillView, 0, len(all)+1)
+	// First, because it is the one every agent already has and the one a
+	// listing used to be silent about.
+	if builtin, ok := builtinSkillView(args.Query); ok {
+		matched = append(matched, builtin)
+	}
 	for _, skill := range all {
 		if !matchesSkillQuery(skill, args.Query) {
 			continue
@@ -109,20 +121,6 @@ func handleFindSkills(ctx context.Context, s *Server, args findSkillsArgs) (tool
 	if len(matched) == 0 {
 		notes = append(notes, "Nobody has published a skill matching that yet.")
 	}
-	// Asking the registry for the built-in skill is the one search whose empty
-	// result means something other than "not here". It is generated per
-	// download from the live tool registry rather than published, and it is
-	// already installed — the agent asking is running it. Without this the
-	// honest conclusion from an empty result is that the skill does not exist.
-	// Checked on the raw query rather than through NormalizeName, which
-	// rejects reserved names outright — it is the guard that stops anyone
-	// publishing one, so it cannot be used to recognise one.
-	if skills.IsReserved(strings.ToLower(strings.TrimSpace(args.Query))) {
-		notes = append(notes, fmt.Sprintf(
-			"%q is the built-in skill, not a registry entry: it is the one you are "+
-				"already running, an operator installs it from the server, and the name "+
-				"is reserved so nobody can publish under it.", args.Query))
-	}
 
 	result, err := newPage(matched, "", notes...)
 	if err != nil {
@@ -132,6 +130,14 @@ func handleFindSkills(ctx context.Context, s *Server, args findSkillsArgs) (tool
 }
 
 func handleGetSkill(ctx context.Context, s *Server, args getSkillArgs) (toolResult, error) {
+	// Answered before the registry is consulted: the built-in has no row, and
+	// a lookup would report the skill missing.
+	if skills.IsReserved(strings.ToLower(strings.TrimSpace(args.Name))) {
+		return toolResult{
+			Payload: builtinSkillDetail(),
+			Summary: "read the built-in skill " + SkillName,
+		}, nil
+	}
 	if s.deps.Skills == nil {
 		return toolResult{}, refuse("this server has no skill registry configured.")
 	}
@@ -213,4 +219,41 @@ func asRefusal(err error) error {
 		return refusal{err: svcErr}
 	}
 	return err
+}
+
+// builtinSkillView is the generated skill as a listing row, when the query
+// admits it. Version is the release it would be rendered at right now, which
+// is the only version there is.
+func builtinSkillView(query string) (skillView, bool) {
+	q := strings.ToLower(strings.TrimSpace(query))
+	if q != "" &&
+		!strings.Contains(SkillName, q) &&
+		!strings.Contains(strings.ToLower(skillDescription), q) {
+		return skillView{}, false
+	}
+	return skillView{
+		Name:        SkillName,
+		Description: skillDescription,
+		Version:     skillchangelog.Current(),
+		BuiltIn:     true,
+	}, true
+}
+
+// builtinSkillDetail is get_skill for the generated bundle.
+//
+// No version history: it is rendered from the live tool registry on every
+// download, so an older release cannot be reproduced and listing the numbers
+// would imply they could be fetched.
+func builtinSkillDetail() skillDetailView {
+	view, _ := builtinSkillView("")
+	return skillDetailView{
+		skillView:   view,
+		DownloadURL: fmt.Sprintf("%s?name=%s", skillDownloadPath, SkillName),
+		HowToUse: fmt.Sprintf(
+			"GET %s?name=%s with your agent key and unzip it into the operator's "+
+				"skills directory, then tell them to start a new session so their "+
+				"client loads it. It cannot be loaded into this session: the skill you "+
+				"are reading was loaded when this one began.",
+			skillDownloadPath, SkillName),
+	}
 }

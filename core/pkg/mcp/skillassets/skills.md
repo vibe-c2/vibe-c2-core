@@ -7,12 +7,16 @@ a particular appliance. They are packaged exactly the way this skill is.
 `find_skills` lists them, `get_skill` gives you one in full. Both return
 descriptions, never bundles.
 
-The registry holds *published* skills only. `vibe-c2` is not among them and
-never will be: it is the built-in skill — the one you are reading now — it is
-generated from the live tool registry on every download, and an operator
-installs it from the server rather than publishing it. So a listing without it
-is a complete listing, not a missing entry, and the name is reserved so nobody
-can publish anything under it.
+`vibe-c2` is in the list too, marked `builtIn`. It is the skill you are
+reading now: generated from the live tool registry on every download rather
+than published by anyone, so it has an owner of nobody and no version history.
+`get_skill` gives you its download URL like any other.
+
+Fetching it is how you update an operator's copy when yours is behind the
+server — unzip it into their skills directory and tell them to start a new
+session. You cannot load it into the session you are in: whatever skill you
+are running was loaded when the session began. The name is reserved, so
+nobody can publish anything under it.
 
 ## Installing one
 
