@@ -209,6 +209,15 @@ var releases = []Release{
 			"Existing credentials are migrated on deploy: a true becomes VALID, a false becomes UNKNOWN rather than INVALID, since the old guidance had agents set true the moment a credential worked and left everything untried on false.",
 		},
 	},
+	{
+		Version: 24,
+		Date:    "2026-09-19",
+		Notes: []string{
+			"Do not stamp a wiki fact with when you collected it. A line like \"Collected 2026-09-19 from public sources\" is a sentence about the agent, not the subject, and it turns into a lie the first time somebody adds to the paragraph under it — which is what these pages are for. The page footer already records who last changed it and when.",
+			"Dates still belong wherever the date is itself the fact: a certificate expiry, when a password was set. The timeline is unaffected; it is the engagement's history and dating it is the point.",
+			"SKILL.md folds the local-paths rule and the dates rule into one: a page carries nothing that is true only on your machine or only today.",
+		},
+	},
 }
 
 // Releases returns the full history, oldest first. A copy, so callers cannot
