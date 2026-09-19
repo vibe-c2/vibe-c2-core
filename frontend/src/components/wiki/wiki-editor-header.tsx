@@ -131,18 +131,25 @@ export function WikiEditorHeader({
           default in sync with the tree row (page glyph for leaves, folder
           glyph once children exist). isExpanded stays true here: the user
           is viewing the doc, so its content is "open" by definition.
-          Template documents render a fixed, locked glyph instead of the
-          picker — the icon can't drift while a doc is a template. */}
-      {doc.isTemplate ? (
+          Templates and drawings render a fixed, locked glyph instead of the
+          picker — the icon can't drift while a doc is one of those. */}
+      {doc.isTemplate || doc.kind === "DRAWING" ? (
         <Tooltip>
           <TooltipTrigger
             render={
               <span className="flex size-7 shrink-0 items-center justify-center" />
             }
           >
-            <DocumentIcon isTemplate color={doc.color} size={18} />
+            <DocumentIcon
+              isTemplate={doc.isTemplate}
+              isDrawing={doc.kind === "DRAWING"}
+              color={doc.color}
+              size={18}
+            />
           </TooltipTrigger>
-          <TooltipContent>Template — icon is fixed</TooltipContent>
+          <TooltipContent>
+            {doc.isTemplate ? "Template — icon is fixed" : "Drawing — icon is fixed"}
+          </TooltipContent>
         </Tooltip>
       ) : (
         <DocumentIconPicker
@@ -383,7 +390,11 @@ export function WikiEditorHeader({
 
         {/* Export — PDF via the print route, Markdown via a modal. Not gated
             on isEditor: exporting is reading. */}
-        <WikiExportMenu documentId={doc.id} title={doc.title} />
+        <WikiExportMenu
+          documentId={doc.id}
+          title={doc.title}
+          isDrawing={doc.kind === "DRAWING"}
+        />
 
         {/* Zoom toggle — not gated on isEditor (focus reading is useful
             without edit rights). */}

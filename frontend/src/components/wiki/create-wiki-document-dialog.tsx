@@ -34,7 +34,7 @@ interface CreateWikiDocumentDialogProps {
   operationId: string
 }
 
-type CreateMode = "regular" | "template"
+type CreateMode = "regular" | "drawing" | "template"
 
 // Adaptive default: renders as a page icon on a leaf doc, swaps to a
 // folder once children land. Picked here over the legacy "📂" emoji so a
@@ -181,6 +181,7 @@ export function CreateWikiDocumentDialog({ operationId }: CreateWikiDocumentDial
         operationId,
         input: {
           title,
+          kind: mode === "drawing" ? "DRAWING" : "DOCUMENT",
           emoji: iconValue.emoji || undefined,
           icon: iconValue.icon || undefined,
           color: iconValue.color || undefined,
@@ -192,7 +193,9 @@ export function CreateWikiDocumentDialog({ operationId }: CreateWikiDocumentDial
       handleClose()
       // One-shot signal — the editor reads + clears this when it mounts for the
       // new doc, so the caret lands inside the empty body without a click.
-      setPendingFocusDocId(newId)
+      // A drawing has no caret to place, and setting it would leave the flag
+      // uncleared for whichever page the operator opens next.
+      if (mode !== "drawing") setPendingFocusDocId(newId)
       navigate(`/wiki/${newId}`)
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to create document")
@@ -226,7 +229,7 @@ export function CreateWikiDocumentDialog({ operationId }: CreateWikiDocumentDial
         <Tabs
           value={mode}
           onValueChange={(v) => {
-            if (v === "regular" || v === "template") {
+            if (v === "regular" || v === "drawing" || v === "template") {
               setMode(v)
               setError(null)
             }
@@ -235,6 +238,9 @@ export function CreateWikiDocumentDialog({ operationId }: CreateWikiDocumentDial
           <TabsList className="w-full">
             <TabsTrigger value="regular" className="flex-1">
               Blank document
+            </TabsTrigger>
+            <TabsTrigger value="drawing" className="flex-1">
+              Drawing
             </TabsTrigger>
             <TabsTrigger value="template" className="flex-1">
               From template
@@ -249,12 +255,21 @@ export function CreateWikiDocumentDialog({ operationId }: CreateWikiDocumentDial
             </div>
           )}
 
-          {mode === "regular" ? (
+          {mode === "regular" || mode === "drawing" ? (
             <div className="flex items-center gap-2">
-              <DocumentIconPicker value={iconValue} onSelect={handleIconSelect} />
+              {/* No picker for a drawing: it renders a fixed glyph, the same
+                  way a template does, so anything chosen here would be stored
+                  and never shown. */}
+              {mode === "drawing" ? (
+                <span className="flex size-9 shrink-0 items-center justify-center text-muted-foreground">
+                  <DocumentIcon isDrawing size={18} />
+                </span>
+              ) : (
+                <DocumentIconPicker value={iconValue} onSelect={handleIconSelect} />
+              )}
               <Input
                 name="title"
-                placeholder="Document title"
+                placeholder={mode === "drawing" ? "Drawing title" : "Document title"}
                 required
                 autoFocus
                 maxLength={200}

@@ -37,6 +37,7 @@ export const WikiDocumentTreeFields = graphql(`
     sortOrder
     childCount
     hasContent
+    kind
     isTemplate
     sourceTemplateId
     checklistTotal
@@ -88,6 +89,7 @@ export const WikiDocumentFields = graphql(`
     parentDocumentId
     ancestors { id title emoji icon color isDeleted }
     title
+    kind
     content
     emoji
     color
@@ -129,6 +131,7 @@ export const WikiDocumentBackupDetailFields = graphql(`
     id
     documentId
     title
+    kind
     content
     contentLength
     trigger
@@ -334,6 +337,7 @@ export const WikiDocumentPreviewQuery = graphql(`
       ...WikiDocumentLiteFields
       excerpt(maxLength: $excerptLength)
       hasContent
+      kind
       childCount
       updatedAt
       ancestors {

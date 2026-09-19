@@ -1,3 +1,4 @@
+import fs from "fs"
 import path from "path"
 import tailwindcss from "@tailwindcss/vite"
 import react from "@vitejs/plugin-react"
@@ -39,8 +40,62 @@ function lucideFixTsExtension(): Plugin {
   }
 }
 
+// Excalidraw loads its hand-drawn fonts at runtime rather than bundling them.
+// Given no window.EXCALIDRAW_ASSET_PATH it resolves them against its own CDN,
+// and when that path is set it still keeps the CDN as a *fallback* candidate —
+// so a wrong path degrades into a silent internet dependency rather than a
+// visible error. This platform is deployed where there is no internet, so the
+// fonts are served from our own origin instead.
+//
+// Served out of node_modules rather than committed to public/: the font tree
+// is ~13 MB (Xiaolai, the CJK family, is all but 0.5 MB of it) and none of it
+// belongs in git. Nothing here enters the JS bundle — these are static files
+// fetched on demand, and only for a font actually used on a canvas.
+//
+// See EXCALIDRAW_ASSET_PATH in main.tsx, which must agree with the base below.
+const EXCALIDRAW_ASSET_BASE = "/excalidraw-assets/"
+
+function excalidrawAssets(): Plugin {
+  const fontsDir = path.resolve(
+    __dirname,
+    "node_modules/@excalidraw/excalidraw/dist/prod/fonts",
+  )
+
+  return {
+    name: "excalidraw-assets",
+
+    // Dev server: map the same public path onto the package directory, so
+    // development and production resolve fonts identically.
+    configureServer(server) {
+      server.middlewares.use(EXCALIDRAW_ASSET_BASE, (req, res, next) => {
+        const rel = decodeURIComponent((req.url ?? "").split("?")[0])
+        // Serve only from inside the font tree — reject any traversal.
+        const target = path.resolve(fontsDir, "." + rel.replace(/^\/fonts/, ""))
+        if (!target.startsWith(fontsDir) || !fs.existsSync(target)) {
+          next()
+          return
+        }
+        res.setHeader("Content-Type", "font/woff2")
+        fs.createReadStream(target).pipe(res)
+      })
+    },
+
+    // Build: copy the tree into the output so the deployed origin serves it.
+    async writeBundle(options) {
+      const outDir = options.dir ?? path.resolve(__dirname, "dist")
+      const dest = path.join(outDir, EXCALIDRAW_ASSET_BASE.replace(/^\//, ""), "fonts")
+      await fs.promises.cp(fontsDir, dest, { recursive: true })
+    },
+  }
+}
+
 export default defineConfig({
-  plugins: [lucideFixTsExtension(), react(), tailwindcss()],
+  plugins: [
+    lucideFixTsExtension(),
+    excalidrawAssets(),
+    react(),
+    tailwindcss(),
+  ],
   build: {
     rollupOptions: {
       // icon-catalog.ts statically imports a curated set of lucide icons (for

@@ -1,0 +1,133 @@
+/* Excalidraw measures its canvas from its container, so the container has to
+   have a real height rather than one derived from its content — an
+   unconstrained flex child collapses to zero and the canvas renders blank with
+   no error anywhere. */
+.wiki-drawing-canvas {
+  position: relative;
+  min-height: 0;
+  height: 100%;
+  width: 100%;
+}
+
+.wiki-drawing-canvas .excalidraw {
+  height: 100%;
+  width: 100%;
+}
+
+/* Excalidraw's chrome, in this app's design language.
+   ---------------------------------------------------------------------------
+   Excalidraw themes itself entirely through CSS custom properties defined on
+   `.excalidraw`, so this is a variable remap rather than a fight with its
+   stylesheet: no !important, no reaching into its class names, and nothing
+   that breaks when the library's internal markup changes. Only its own
+   variables are set here — the moment this file starts styling `.Island` or
+   `.ToolIcon` directly, it has become a fork that happens to live in our repo.
+
+   Declared twice, the second time against `.theme--dark`, purely for
+   specificity: Excalidraw's own dark values live on `.excalidraw.theme--dark`,
+   which ties with `.wiki-drawing-canvas .excalidraw` and would otherwise be
+   decided by stylesheet order. The declarations are identical because our
+   tokens already resolve through `.dark` — the canvas follows the app's theme
+   by construction rather than by keeping a second palette in step.
+
+   Values map to the app's tokens, not to fixed colours, so a change to the
+   design system reaches the canvas with no edit here.
+
+   Before adding a variable here, look up what Excalidraw's own default for it
+   is and match that *role* — a light default is a surface, a dark one is ink.
+   The names do not tell you: `--color-muted` defaults to #d6d6d6 and is used
+   as a border colour, `--color-muted-background` defaults to #3d3d3d and is
+   used as a text colour, and `--color-on-primary-container` is near-black ink
+   drawn on the light `--color-primary-light` tint rather than on the solid
+   primary. Mapping any of those by name alone paints a glyph in its own
+   background colour and it simply vanishes, with nothing to see in devtools
+   but a correctly-applied variable. */
+.wiki-drawing-canvas .excalidraw,
+.wiki-drawing-canvas .excalidraw.theme--dark {
+  /* Type and shape. Excalidraw ships Assistant for its UI; the app is Geist,
+     and mixed UI type is the single most obvious tell that a panel is foreign.
+     Its own hand-drawn canvas fonts are untouched — those are content. */
+  --ui-font: var(--font-sans);
+  --border-radius-md: calc(var(--radius) - 2px);
+  --border-radius-lg: var(--radius);
+
+  /* Surfaces. Islands are the floating panels (toolbar, zoom, properties);
+     surface-low/mid/high are the newer chrome's greys, which Excalidraw tints
+     faintly lavender by default. */
+  --island-bg-color: var(--popover);
+  --popup-bg-color: var(--popover);
+  --popup-secondary-bg-color: var(--muted);
+  --default-bg-color: var(--background);
+  --color-surface-lowest: var(--background);
+  --color-surface-low: var(--muted);
+  --color-surface-mid: var(--muted);
+  --color-surface-high: var(--accent);
+  --color-surface-primary-container: var(--accent);
+
+  /* Text. */
+  --text-primary-color: var(--foreground);
+  --popup-text-color: var(--popover-foreground);
+  --color-on-surface: var(--foreground);
+  /* Named backwards, both of them: see the note above. */
+  --color-muted: var(--border);
+  --color-muted-background: var(--muted-foreground);
+
+  /* Borders. */
+  --default-border-color: var(--border);
+  --dialog-border-color: var(--border);
+  --color-border-outline: var(--border);
+  --color-border-outline-variant: var(--border);
+  --button-border: var(--border);
+  --button-hover-border: var(--border);
+  --button-active-border: var(--ring);
+
+  /* Buttons. Excalidraw fills an active button with the solid brand colour and
+     writes on it in white; this uses the app's idiom instead — a light accent
+     container with normal foreground ink. The pair has to move together, which
+     is why --button-color is the foreground rather than --primary-foreground:
+     dark ink on the light container, not the white that a solid fill wants. */
+  --button-color: var(--foreground);
+  --button-hover-color: var(--primary);
+  --button-hover-bg: var(--accent);
+  --button-active-bg: var(--accent);
+
+  /* Inputs. */
+  --input-bg-color: var(--background);
+  --input-hover-bg-color: var(--muted);
+  --input-border-color: var(--input);
+  --input-label-color: var(--muted-foreground);
+
+  /* Brand. This is what colours the selected tool, and it is the loudest
+     difference between stock Excalidraw and this app: its violet against our
+     near-neutral primary. */
+  --color-primary: var(--primary);
+  --color-primary-hover: var(--primary-accent);
+  --color-primary-darker: var(--primary-accent);
+  --color-primary-darkest: var(--primary);
+  --color-primary-light: var(--accent);
+  /* Ink on the light primary tint above, NOT on the solid primary — this is
+     the one that blanked the hand tool when it was mapped to the white
+     --primary-foreground. */
+  --color-on-primary-container: var(--foreground);
+  --color-brand-hover: var(--primary-accent);
+  --color-brand-active: var(--primary);
+  /* The outline around your own selected shapes. Excalidraw reads this off the
+     container's computed style at render time, falling back to its violet, so
+     it is a real variable rather than one it merely defines. Remote selections
+     are not themed here — each peer's is drawn in their own cursor colour. */
+  --color-selection: var(--primary);
+
+  /* Focus and danger, so a destructive action on the canvas reads the same as
+     one anywhere else in the app. */
+  --focus-highlight-color: var(--ring);
+  --color-danger: var(--destructive);
+  /* Body text inside a danger dialog, which Excalidraw sets to plain black —
+     the danger is carried by the surrounding colour, not by the prose. */
+  --color-danger-text: var(--foreground);
+  --color-danger-background: var(--muted);
+  /* A tinted container with red ink, like the default, rather than a solid red
+     fill: a solid fill needs light ink over it, and this app's light-ink token
+     turns near-black in dark mode. */
+  --button-destructive-bg-color: var(--muted);
+  --button-destructive-color: var(--destructive);
+}

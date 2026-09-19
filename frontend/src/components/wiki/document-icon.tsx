@@ -1,5 +1,5 @@
 import { Suspense, type CSSProperties } from "react"
-import { LayoutTemplateIcon } from "lucide-react"
+import { LayoutTemplateIcon, ShapesIcon } from "lucide-react"
 import {
   ADAPTIVE_ICON_NAME,
   type IconComponent,
@@ -44,6 +44,17 @@ interface DocumentIconProps {
    * still applies so a template can be tinted.
    */
   isTemplate?: boolean
+  /**
+   * When true the document is a drawing: a fixed drawing glyph is rendered in
+   * place of the stored emoji/icon, and the icon is locked wherever it can be
+   * edited, exactly as isTemplate behaves.
+   *
+   * A corner marker over the chosen icon was tried first and does not work: the
+   * tree's icon slot is 20px, so a sub-mark small enough to sit in it is
+   * illegible and still covers a quarter of the glyph it annotates. The kind
+   * needs the whole slot or none of it.
+   */
+  isDrawing?: boolean
 }
 
 /**
@@ -70,6 +81,7 @@ export function DocumentIcon({
   hasChildren = false,
   isExpanded = false,
   isTemplate = false,
+  isDrawing = false,
 }: DocumentIconProps) {
   /* eslint-disable react-hooks/static-components */
   // color ? {color} : undefined keeps an empty string from becoming an empty
@@ -82,6 +94,21 @@ export function DocumentIcon({
   if (isTemplate) {
     return (
       <LayoutTemplateIcon
+        className={cn("shrink-0", className)}
+        size={size}
+        style={style}
+        aria-hidden
+      />
+    )
+  }
+  // Drawings likewise render a fixed glyph. Checked after isTemplate rather
+  // than before it: locking a template's icon exists to keep "editing this
+  // changes every page forked from it later" unmissable, and that warning is
+  // the more consequential of the two. The intersection is rare — a drawing
+  // that is also a template shows the template glyph.
+  if (isDrawing) {
+    return (
+      <ShapesIcon
         className={cn("shrink-0", className)}
         size={size}
         style={style}

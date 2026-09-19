@@ -5,6 +5,7 @@ import { useMyOperationRole } from "@/graphql/hooks/operations"
 import { useWikiDocument } from "@/graphql/hooks/wiki"
 import { PrintModeProvider } from "@/hooks/use-print-mode"
 import { WikiEditor } from "@/components/wiki/wiki-editor"
+import { WikiDrawingPrintBody } from "@/components/wiki/drawing/wiki-drawing-print-body"
 import { DocumentIcon } from "@/components/wiki/document-icon"
 import { Skeleton } from "@/components/ui/skeleton"
 import "./wiki-print.css"
@@ -225,12 +226,22 @@ function WikiPrintPageInner({
           <h1 className="wiki-print-title">{doc.title || "Untitled"}</h1>
         </header>
         <div className="wiki-print-body">
-          <WikiEditor
-            documentId={documentId}
-            operationId={operationId}
-            isEditor={false}
-            onReady={handleEditorReady}
-          />
+          {/* A drawing has no Tiptap body, so mounting the editor here would
+              wait forever on a readiness signal that never comes and print the
+              placeholder once the timeout fired. */}
+          {doc.kind === "DRAWING" ? (
+            <WikiDrawingPrintBody
+              documentId={documentId}
+              onReady={handleEditorReady}
+            />
+          ) : (
+            <WikiEditor
+              documentId={documentId}
+              operationId={operationId}
+              isEditor={false}
+              onReady={handleEditorReady}
+            />
+          )}
         </div>
       </article>
     </div>

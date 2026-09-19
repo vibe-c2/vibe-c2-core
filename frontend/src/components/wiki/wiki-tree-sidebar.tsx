@@ -55,6 +55,7 @@ import {
 import { useWikiSubtreeExpansion } from "@/components/wiki/use-wiki-subtree-expansion"
 import type {
   WikiDocumentChildrenQuery,
+  WikiDocumentKind,
   WikiDocumentTreeFieldsFragment,
 } from "@/graphql/gql/graphql"
 
@@ -69,6 +70,9 @@ export interface TreeNode {
   childCount: number
   /** True when this document is flagged as a reusable template. */
   isTemplate: boolean
+  /** What the page's body is. Carried so a row can mark a drawing without
+   * overriding the icon the operator chose for it. */
+  kind: WikiDocumentKind
   // Children are lazy — empty until the branch is expanded and its
   // useWikiDocumentChildren query returns. `childCount` drives the expand
   // caret independently so leaves can be distinguished without a fetch.

@@ -12,6 +12,8 @@ import { WikiMarkdownExportDialog } from "@/components/wiki/wiki-markdown-export
 interface WikiExportMenuProps {
   documentId: string
   title: string
+  /** A drawing has no Markdown body, so that option is not offered for one. */
+  isDrawing?: boolean
 }
 
 /**
@@ -23,7 +25,11 @@ interface WikiExportMenuProps {
  *
  * Not gated on edit rights: exporting is reading.
  */
-export function WikiExportMenu({ documentId, title }: WikiExportMenuProps) {
+export function WikiExportMenu({
+  documentId,
+  title,
+  isDrawing = false,
+}: WikiExportMenuProps) {
   const [markdownOpen, setMarkdownOpen] = useState(false)
 
   return (
@@ -60,10 +66,16 @@ export function WikiExportMenu({ documentId, title }: WikiExportMenuProps) {
             PDF
           </DropdownMenuItem>
 
-          <DropdownMenuItem onClick={() => setMarkdownOpen(true)}>
-            <FileTextIcon className="size-4" />
-            Markdown
-          </DropdownMenuItem>
+          {/* Offered only for prose. A drawing renders to an empty .md file,
+              and an export that silently produces nothing is worse than one
+              that is not on the menu. Images are exported from the canvas
+              itself, which already has Excalidraw's own PNG/SVG export. */}
+          {!isDrawing && (
+            <DropdownMenuItem onClick={() => setMarkdownOpen(true)}>
+              <FileTextIcon className="size-4" />
+              Markdown
+            </DropdownMenuItem>
+          )}
         </DropdownMenuContent>
       </DropdownMenu>
 

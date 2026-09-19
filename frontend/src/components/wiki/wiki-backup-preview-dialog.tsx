@@ -81,10 +81,15 @@ function PreviewBody({
   );
   const current = docData?.wikiDocument;
 
+  // A drawing has no Markdown on either side, so a text diff compares "" with
+  // "" and reports no changes however much the scene moved — the one answer
+  // this dialog must never give. Drawings are summarised by size instead.
+  const isDrawing = backup?.kind === "DRAWING";
+
   const diff = useMemo<DiffResult | null>(() => {
-    if (!backup || !current) return null;
+    if (!backup || !current || isDrawing) return null;
     return computeDiff(backup.content ?? "", current.content ?? "");
-  }, [backup, current]);
+  }, [backup, current, isDrawing]);
 
   if (backupLoading || !backup) {
     return (
@@ -123,7 +128,9 @@ function PreviewBody({
           <span className="truncate">{backup.title || "Untitled"}</span>
         </DialogTitle>
         <DialogDescription>
-          Line-level diff between this snapshot and the current document.
+          {isDrawing
+            ? "Snapshot of this drawing's canvas. Restoring replaces every shape currently on it."
+            : "Line-level diff between this snapshot and the current document."}
         </DialogDescription>
         <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs text-muted-foreground">
           <span
@@ -159,6 +166,8 @@ function PreviewBody({
             <Skeleton className="h-3 w-5/6" />
             <Skeleton className="h-3 w-2/3" />
           </div>
+        ) : isDrawing ? (
+          <DrawingSnapshotSummary bytes={backup.contentLength} />
         ) : !diff || diff.rows.length === 0 ? (
           <EmptyState bothEmpty={bothEmpty} />
         ) : (
@@ -211,6 +220,24 @@ function DiffSummary({
       <span className="text-rose-700 dark:text-rose-400">−{diff.removes}</span>{" "}
       since snapshot
     </span>
+  );
+}
+
+/**
+ * What a drawing snapshot can honestly say about itself.
+ *
+ * Not a rendered preview: the scene lives in the snapshot's CRDT bytes, and
+ * decoding and rendering one inside a confirmation dialog would pull in the
+ * whole canvas chunk to answer a question the operator is about to answer by
+ * restoring anyway. The size is the honest signal — and unlike the text diff
+ * it replaces, it actually moves when the drawing does.
+ */
+function DrawingSnapshotSummary({ bytes }: { bytes: number }) {
+  return (
+    <div className="space-y-1 px-3 py-6 text-center text-muted-foreground">
+      <p className="italic">A drawing canvas cannot be shown as a text diff.</p>
+      <p className="text-xs">Snapshot size: {formatBytes(bytes)}</p>
+    </div>
   );
 }
 

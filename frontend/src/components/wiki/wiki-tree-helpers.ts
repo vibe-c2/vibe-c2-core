@@ -181,6 +181,7 @@ export function rowToTreeNode(row: WikiDocumentTreeFieldsFragment): TreeNode {
     parentId: row.parentDocumentId ?? null,
     childCount: row.childCount,
     isTemplate: row.isTemplate,
+    kind: row.kind,
     children: [],
   }
 }

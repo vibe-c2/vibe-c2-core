@@ -90,8 +90,9 @@ export function WikiTreeRowMenuItems({
           Rename
         </Item>
       )}
-      {/* Template documents render a fixed glyph, so the icon is locked. */}
-      {isEditor && !node.isTemplate && (
+      {/* Templates and drawings both render a fixed glyph, so the icon is
+          locked for them. */}
+      {isEditor && !node.isTemplate && node.kind !== "DRAWING" && (
         <Item onClick={onStartIconPicker}>
           <SmileIcon className="mr-2 size-4" />
           Change icon

@@ -233,6 +233,7 @@ function WikiTreeRowImpl({
                       hasChildren
                       isExpanded={isExpanded}
                       isTemplate={node.isTemplate}
+                      isDrawing={node.kind === "DRAWING"}
                     />
                   </span>
                   <ChevronRightIcon
@@ -248,6 +249,7 @@ function WikiTreeRowImpl({
                   icon={node.icon}
                   color={node.color}
                   isTemplate={node.isTemplate}
+                  isDrawing={node.kind === "DRAWING"}
                 />
               )}
             </span>

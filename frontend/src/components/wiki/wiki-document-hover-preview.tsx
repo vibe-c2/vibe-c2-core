@@ -138,7 +138,13 @@ function WikiDocumentPreviewBody({ id }: { id: string }) {
         )}
       </header>
 
-      {doc.hasContent && doc.excerpt ? (
+      {doc.kind === "DRAWING" ? (
+        // A drawing has no text to preview, and saying "empty" over a finished
+        // diagram is worse than saying nothing about its contents.
+        <p className="text-sm italic text-muted-foreground">
+          {doc.hasContent ? "A drawing." : "An empty drawing."}
+        </p>
+      ) : doc.hasContent && doc.excerpt ? (
         <p className="line-clamp-6 text-sm leading-relaxed text-foreground/90">
           {doc.excerpt}
         </p>

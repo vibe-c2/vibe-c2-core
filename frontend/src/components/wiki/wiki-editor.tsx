@@ -41,6 +41,7 @@ import { WikiNoticeExtension } from "@/components/wiki/wiki-notice-node"
 import { WikiChecklistItemExtension } from "@/components/wiki/wiki-checklist-item-node"
 import { WikiHighlightMark } from "@/components/wiki/wiki-highlight-mark"
 import { WikiEscapeEdgeBlock } from "@/components/wiki/wiki-escape-edge-block"
+import { isDrawingRoom } from "@/components/wiki/drawing/drawing-scene"
 import {
   extractClipboardImages,
   extractDropImages,
@@ -528,8 +529,15 @@ export function WikiEditor({
   // One-time migration: if a document was authored with the textarea editor
   // (Y.Text on "content" key), the XmlFragment on "default" will be empty.
   // Copy the plain text into the rich editor so legacy content is preserved.
+  //
+  // A drawing page's "default" fragment is empty permanently, not legacily, so
+  // it matches this condition forever. Routing means this editor should never
+  // mount on one (see wiki-content-area.tsx) — the guard is here because if
+  // that routing ever breaks, the symptom without it is a prose body being
+  // written into a drawing's room, which nothing would report.
   useEffect(() => {
     if (!isReady || !editor) return
+    if (isDrawingRoom(ydoc)) return
     const xmlFragment = ydoc.getXmlFragment("default")
     if (xmlFragment.length > 0) return
 
