@@ -48,6 +48,66 @@ function elementsOf(document: Y.Doc): Y.Map<NormalizedElement> {
 }
 
 /**
+ * How many *people* have this document open.
+ *
+ * Not getConnectionsCount(), which is `connections.size + directConnectionsCount`
+ * and therefore counts the server-side seat this very request is holding. Using
+ * it reports one watcher on a page nobody has open, and the caller is told
+ * "the operator saw your edit appear" about an empty room. getConnections()
+ * returns only the real WebSocket clients, which is the question being asked.
+ */
+function watcherCount(server: Hocuspocus, documentId: string): number {
+  return server.documents.get(roomName(documentId))?.getConnections().length ?? 0;
+}
+
+/**
+ * Wire the other half of every arrow binding.
+ *
+ * Excalidraw binds an arrow to a shape from both ends: the arrow names the
+ * shape in startBinding/endBinding, and the shape names the arrow back in its
+ * boundElements. With only the arrow's half the connection renders correctly
+ * and is inert — drag the shape and the arrow stays behind, which is exactly
+ * the failure that survives review, because the picture looks right until
+ * somebody edits it.
+ *
+ * Done here rather than in the normalizer because the shape being bound to is
+ * usually already on the canvas, so this needs the scene rather than just the
+ * incoming batch. Shapes that cannot be found are skipped: binding to an id
+ * that is not there is a caller mistake the arrow already records, and
+ * inventing a shape to satisfy it would be worse.
+ */
+function wireBindings(
+  elements: Y.Map<NormalizedElement>,
+  incoming: NormalizedElement[],
+): void {
+  for (const arrow of incoming) {
+    if (arrow.type !== "arrow" && arrow.type !== "line") continue;
+
+    for (const end of ["startBinding", "endBinding"] as const) {
+      const bound = arrow[end] as { elementId?: string } | null | undefined;
+      const targetID = bound?.elementId;
+      if (!targetID) continue;
+
+      const target = elements.get(targetID);
+      if (!target) continue;
+
+      const existing = Array.isArray(target.boundElements)
+        ? (target.boundElements as { id?: string }[])
+        : [];
+      if (existing.some((b) => b?.id === arrow.id)) continue;
+
+      elements.set(targetID, {
+        ...target,
+        boundElements: [...existing, { id: arrow.id, type: "arrow" }],
+        // The shape changed, so its version has to move or no peer will take
+        // the update — see the note on applyMode.
+        version: (target.version ?? 1) + 1,
+      });
+    }
+  }
+}
+
+/**
  * Apply one write to the scene.
  *
  * Versions are bumped on every path that changes an element, because the
@@ -64,6 +124,7 @@ function applyMode(
   switch (mode) {
     case "add": {
       for (const el of incoming) elements.set(el.id, el);
+      wireBindings(elements, incoming);
       return incoming.length;
     }
 
@@ -82,6 +143,10 @@ function applyMode(
         });
         applied++;
       }
+      // Bindings are wired here too: an arrow that gains a binding by update
+      // needs the same reciprocal entry on the shape as one that arrived with
+      // it, or the connection is half-made and the shape drags away from it.
+      wireBindings(elements, incoming);
       return applied;
     }
 
@@ -116,6 +181,7 @@ function applyMode(
         });
       }
       for (const el of incoming) elements.set(el.id, el);
+      wireBindings(elements, incoming);
       return incoming.length;
     }
   }
@@ -168,8 +234,7 @@ export function setupDrawingApi(app: Express, server: Hocuspocus): void {
 
         res.status(200).json({
           elements,
-          watchers:
-            server.documents.get(roomName(documentId))?.getConnectionsCount() ?? 0,
+          watchers: watcherCount(server, documentId),
         });
       } catch (err) {
         const message = err instanceof Error ? err.message : "read failed";
@@ -262,8 +327,7 @@ export function setupDrawingApi(app: Express, server: Hocuspocus): void {
           ok: true,
           mode,
           applied,
-          watchers:
-            server.documents.get(roomName(documentId))?.getConnectionsCount() ?? 0,
+          watchers: watcherCount(server, documentId),
         });
       } catch (err) {
         const message = err instanceof Error ? err.message : "apply failed";

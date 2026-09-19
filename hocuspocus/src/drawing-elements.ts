@@ -51,6 +51,39 @@ export interface NormalizedElement {
   isDeleted: boolean;
 }
 
+/** One end of an arrow, once normalized. */
+interface ElementBinding {
+  elementId: string;
+  focus: number;
+  gap: number;
+}
+
+/**
+ * Accept a binding as either Excalidraw's own object or the bare id of the
+ * shape to bind to, and fill the rest.
+ *
+ * `focus` and `gap` are geometry Excalidraw recomputes as soon as anything
+ * moves; requiring a caller to invent them is asking for numbers that are
+ * wrong the moment they are used. 0 means "aim at the centre", which is what
+ * dragging an arrow onto a shape produces.
+ */
+function binding(value: unknown): ElementBinding | null {
+  if (typeof value === "string" && value !== "") {
+    return { elementId: value, focus: 0, gap: 4 };
+  }
+  if (typeof value === "object" && value !== null) {
+    const v = value as Record<string, unknown>;
+    if (typeof v.elementId === "string" && v.elementId !== "") {
+      return {
+        elementId: v.elementId,
+        focus: typeof v.focus === "number" ? v.focus : 0,
+        gap: typeof v.gap === "number" ? v.gap : 4,
+      };
+    }
+  }
+  return null;
+}
+
 export class DrawingElementError extends Error {}
 
 function randomInteger(): number {
@@ -196,26 +229,86 @@ function linearFields(el: Record<string, unknown>): Record<string, unknown> {
   return {
     points,
     lastCommittedPoint: el.lastCommittedPoint ?? null,
-    startBinding: el.startBinding ?? null,
-    endBinding: el.endBinding ?? null,
+    startBinding: binding(el.startBinding),
+    endBinding: binding(el.endBinding),
     startArrowhead: el.startArrowhead ?? null,
     endArrowhead: el.endArrowhead ?? (el.type === "arrow" ? "arrow" : null),
     elbowed: el.elbowed === true,
   };
 }
 
-/** Normalize a batch, naming which entry failed. An agent that is told only
- * "invalid element" has to bisect its own payload to find out which. */
+/**
+ * Build the text element that sits inside a shape, for the `label` shorthand.
+ *
+ * Excalidraw models a labelled box as two elements — the shape, and a text
+ * whose containerId points at it — and the pair only holds together if the
+ * shape *also* lists the text in its boundElements. Half-wiring it looks
+ * correct until somebody drags the box and the words stay behind. That is
+ * bookkeeping, not composition, so it is done here rather than asked for.
+ */
+function labelFor(container: NormalizedElement, text: string): NormalizedElement {
+  const fontSize = 16;
+  const width = Number(container.width) || 100;
+  const height = Number(container.height) || 100;
+  const lines = text.split("\n").length;
+
+  return normalizeElement({
+    type: "text",
+    id: `${container.id}-label`,
+    text,
+    fontSize,
+    containerId: container.id,
+    textAlign: "center",
+    verticalAlign: "middle",
+    strokeColor: container.strokeColor,
+    // Excalidraw re-lays a bound label out on load; these are a sane starting
+    // box so nothing jumps on first render.
+    x: Number(container.x) + 8,
+    y: Number(container.y) + height / 2 - (fontSize * 1.25 * lines) / 2,
+    width: Math.max(width - 16, 16),
+    height: fontSize * 1.25 * lines,
+  });
+}
+
+/**
+ * Normalize a batch, expanding the `label` shorthand and naming which entry
+ * failed — an agent told only "invalid element" has to bisect its own payload
+ * to find out which.
+ *
+ * A shape carrying `label` comes back as two elements, already wired to each
+ * other in both directions.
+ */
 export function normalizeElements(input: unknown): NormalizedElement[] {
   if (!Array.isArray(input)) {
     throw new DrawingElementError("elements must be an array");
   }
-  return input.map((el, i) => {
+
+  const out: NormalizedElement[] = [];
+  input.forEach((raw, i) => {
+    let el: NormalizedElement;
     try {
-      return normalizeElement(el);
+      el = normalizeElement(raw);
     } catch (err) {
       const reason = err instanceof Error ? err.message : String(err);
       throw new DrawingElementError(`element ${i}: ${reason}`);
     }
+
+    const label = (raw as Record<string, unknown>)?.label;
+    if (typeof label !== "string" || label.trim() === "") {
+      out.push(el);
+      return;
+    }
+    if (el.type === "text") {
+      throw new DrawingElementError(
+        `element ${i}: a text element carries its words in \`text\`, not \`label\``,
+      );
+    }
+
+    const text = labelFor(el, label);
+    const bound = Array.isArray(el.boundElements) ? el.boundElements : [];
+    out.push({ ...el, boundElements: [...bound, { id: text.id, type: "text" }] });
+    out.push(text);
   });
+
+  return out;
 }

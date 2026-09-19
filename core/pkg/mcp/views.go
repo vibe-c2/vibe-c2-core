@@ -152,6 +152,17 @@ type wikiDocView struct {
 	// page made from it afterwards. Without this an agent cannot tell one from
 	// an ordinary page.
 	IsTemplate bool `json:"isTemplate,omitempty"`
+	// Kind is present only on a page that is NOT ordinary prose, for the same
+	// reason IsTemplate is: without it an agent scanning a listing cannot tell
+	// a drawing from a page, so it aims the Markdown tools at a canvas and
+	// spends a call learning otherwise. The argument is stronger here than for
+	// templates — a template merely warrants caution, a drawing refuses the
+	// call outright.
+	//
+	// Omitted for DOCUMENT rather than spelled out on every row: almost every
+	// page is prose, and a field that reads "document" on ninety-nine rows out
+	// of a hundred is noise that hides the one row that matters.
+	Kind string `json:"kind,omitempty"`
 
 	// Emoji and Icon travel with every row so an agent can see what the
 	// operator's pages already use without opening them one by one. Choosing
@@ -402,6 +413,9 @@ func toWikiDocView(d *models.WikiDocument) wikiDocView {
 		Title:      d.Title,
 		IsTemplate: d.IsTemplate,
 		Emoji:      d.Emoji,
+	}
+	if d.Kind.IsDrawing() {
+		view.Kind = string(models.WikiDocumentKindDrawing)
 	}
 	// The adaptive icon is the default every page gets when nobody chose
 	// anything, so reporting it would drown the handful of deliberate choices

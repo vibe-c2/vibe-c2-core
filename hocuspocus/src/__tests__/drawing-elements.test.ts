@@ -139,3 +139,63 @@ test("elements must be an array", () => {
     DrawingElementError,
   );
 });
+
+// A labelled box is two elements the way Excalidraw models it, and the pair
+// only holds together if the shape lists the text back. Half-wiring it looks
+// correct until somebody drags the box and the words stay behind — which is
+// bookkeeping, not composition, so the caller should not have to do it.
+test("label expands into a bound text element, wired both ways", () => {
+  const [box, label] = normalizeElements([
+    { type: "rectangle", id: "p1", x: 80, y: 160, width: 200, height: 90, label: "Scoping" },
+  ]);
+
+  assert.equal(box.type, "rectangle");
+  assert.equal(label.type, "text");
+  assert.equal(label.text, "Scoping");
+  // The text points at its container...
+  assert.equal(label.containerId, "p1");
+  // ...and the container points back.
+  assert.deepEqual(box.boundElements, [{ id: label.id, type: "text" }]);
+});
+
+test("label is centred in its container", () => {
+  const [, label] = normalizeElements([
+    { type: "rectangle", id: "p1", width: 200, height: 90, label: "x" },
+  ]);
+  assert.equal(label.textAlign, "center");
+  assert.equal(label.verticalAlign, "middle");
+});
+
+test("label on a text element is refused rather than silently ignored", () => {
+  assert.throws(
+    () => normalizeElements([{ type: "text", text: "a", label: "b" }]),
+    (err: unknown) => err instanceof DrawingElementError && /`text`/.test(err.message),
+  );
+});
+
+test("a shape without a label is still one element", () => {
+  assert.equal(normalizeElements([{ type: "rectangle" }]).length, 1);
+});
+
+// Excalidraw recomputes focus and gap the moment anything moves, so asking a
+// caller to invent them is asking for numbers that are wrong on arrival.
+test("an arrow binds to a shape by bare id", () => {
+  const el = normalizeElement({ type: "arrow", startBinding: "p1", endBinding: "p2" });
+
+  assert.deepEqual(el.startBinding, { elementId: "p1", focus: 0, gap: 4 });
+  assert.deepEqual(el.endBinding, { elementId: "p2", focus: 0, gap: 4 });
+});
+
+test("an explicit binding object keeps the focus and gap it was given", () => {
+  const el = normalizeElement({
+    type: "arrow",
+    startBinding: { elementId: "p1", focus: 0.5, gap: 12 },
+  });
+  assert.deepEqual(el.startBinding, { elementId: "p1", focus: 0.5, gap: 12 });
+});
+
+test("an unbound arrow stays unbound", () => {
+  const el = normalizeElement({ type: "arrow" });
+  assert.equal(el.startBinding, null);
+  assert.equal(el.endBinding, null);
+});

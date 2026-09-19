@@ -423,8 +423,13 @@ export function setupApplyApi(app: Express, server: Hocuspocus): void {
           spliceFragment(fragment, blocks);
         }
 
+        // getConnections() rather than getConnectionsCount(): the latter is
+        // `connections.size + directConnectionsCount`, so it counts the
+        // server-side seat this request is holding and reports one watcher on
+        // a page nobody has open — telling the agent "the operator saw your
+        // edit" about an empty room.
         const connections =
-          server.documents.get(roomName(documentId))?.getConnectionsCount() ?? 0;
+          server.documents.get(roomName(documentId))?.getConnections().length ?? 0;
 
         if (edit) {
           // Refusals are 409: the document is fine, the request did not fit

@@ -229,6 +229,18 @@ var releases = []Release{
 			"reference/drawings.md is the guide for all of this. SKILL.md lost a line of its own prose to make room for pointing at it, which is the trade: the always-on brief stays the size it was.",
 		},
 	},
+	{
+		Version: 26,
+		Date:    "2026-09-19",
+		Notes: []string{
+			"A page listing now marks a drawing: rows in list_wiki_tree and search_wiki carry kind:\"drawing\". Rows without it are prose. Until now nothing told you which was which, so the only way to find out was to aim a tool at one and be refused.",
+			"Put words on a shape with `label` rather than composing the text element yourself. Excalidraw models a labelled box as a shape plus a bound text, and the pair only holds if each names the other — `label` builds and wires both.",
+			"Connect an arrow with `startBinding`/`endBinding`, each the id of a shape. An unbound arrow is decoration: it does not follow the shapes when they move, so a diagram that looked right falls apart the first time somebody edits it. This was the quiet failure in agent-drawn diagrams before now.",
+			"get_wiki_drawing summarises a canvas over 120 shapes — counts by type plus every label — instead of listing all of it. The Markdown side has always done this at 8 KB; a canvas had no such backstop and could spend your whole context on one read.",
+			"Creating a page with no body no longer reports watchers and attachment counts about a write that never happened.",
+			"Draw when the operator asks for a drawing, and otherwise write the page. A drawing exists for them, not for you: a topology or an attack path is far faster for a person to read as a picture, while you read a canvas as a list of shapes and lose the prose you could have searched, quoted and edited precisely. Turning notes into a diagram uninvited hands the operator shapes when they wanted sentences.",
+		},
+	},
 }
 
 // Releases returns the full history, oldest first. A copy, so callers cannot

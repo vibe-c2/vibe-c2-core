@@ -96,12 +96,22 @@ func handleCreateWikiDocument(ctx context.Context, s *Server, args createWikiDoc
 		return toolResult{}, fmt.Errorf("failed to create wiki page: %w", err)
 	}
 
-	var written wiki.ApplyMarkdownResult
-	if args.Content != "" {
-		var err error
-		if written, err = s.writeBody(ctx, doc, args.Content, wiki.ApplyReplace); err != nil {
-			return toolResult{}, err
-		}
+	// A page created with no body — every drawing, and a prose page meant as a
+	// container — wrote nothing, so the write result has nothing to report.
+	// Returning it anyway states "watchers: 0, attachmentCards: 0" about a
+	// write that never happened, which reads as a fact rather than as an
+	// absence.
+	if args.Content == "" {
+		return toolResult{
+			Payload:     toWikiDocView(doc),
+			OperationID: &opID,
+			Summary:     fmt.Sprintf("created wiki page %s", doc.Title),
+		}, nil
+	}
+
+	written, err := s.writeBody(ctx, doc, args.Content, wiki.ApplyReplace)
+	if err != nil {
+		return toolResult{}, err
 	}
 
 	return toolResult{

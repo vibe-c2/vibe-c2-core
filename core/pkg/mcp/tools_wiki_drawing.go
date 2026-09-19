@@ -35,7 +35,7 @@ type editWikiDrawingArgs struct {
 	// Elements is Excalidraw's own element shape. Every field but `type` is
 	// optional — the server fills in the bookkeeping (seed, nonce, group ids)
 	// that nobody composing a diagram should have to supply.
-	Elements   []map[string]any `json:"elements,omitempty"    jsonschema:"Excalidraw elements. Only 'type' is required per element (rectangle, ellipse, diamond, text, arrow, line, freedraw, image, frame); x, y, width, height, text, strokeColor and the rest are optional and defaulted. Not used with mode:delete."`
+	Elements   []map[string]any `json:"elements,omitempty"    jsonschema:"Excalidraw elements. Only 'type' is required per element (rectangle, ellipse, diamond, text, arrow, line, freedraw, image, frame); x, y, width, height, strokeColor and the rest are optional and defaulted. Put words on a shape with 'label'. Connect an arrow with 'startBinding'/'endBinding' set to a shape id, or it will not follow that shape when it moves. Not used with mode:delete."`
 	ElementIDs []string         `json:"element_ids,omitempty" jsonschema:"Ids to erase, from get_wiki_drawing. Only for mode:delete."`
 }
 
@@ -43,7 +43,9 @@ func registerWikiDrawingTools(s *Server) {
 	register(s, &mcp.Tool{
 		Name: "get_wiki_drawing",
 		Description: "Read a drawing page's canvas: every shape with its id, position and label. " +
-			"Use it before editing one, because edits address shapes by the ids this returns.",
+			"Use it before editing one, because edits address shapes by the ids this returns. " +
+			"A canvas over 120 shapes comes back summarised, with its labels; pass " +
+			"view:\"full\" for the complete element JSON.",
 	}, readTool, handleGetWikiDrawing)
 
 	register(s, &mcp.Tool{
@@ -82,11 +84,30 @@ type drawingSceneView struct {
 	wikiDocView
 	Elements []drawingElementView `json:"elements,omitempty"`
 	// Full is populated only for view:"full".
-	Full     []map[string]any `json:"fullElements,omitempty"`
-	Count    int              `json:"elementCount"`
-	Watchers int              `json:"watchers,omitempty"`
-	Notes    []string         `json:"notes,omitempty"`
+	Full []map[string]any `json:"fullElements,omitempty"`
+	// Shapes counts the scene by element type, and is what a large drawing
+	// returns instead of listing every shape.
+	Shapes map[string]int `json:"shapes,omitempty"`
+	// Labels is every piece of text on a large canvas. A diagram is navigated
+	// by its words, so these are what survive when the shapes are summarised.
+	Labels   []drawingElementView `json:"labels,omitempty"`
+	Count    int                  `json:"elementCount"`
+	Watchers int                  `json:"watchers,omitempty"`
+	Notes    []string             `json:"notes,omitempty"`
 }
+
+// summaryAboveElements is where a plain read stops listing every shape.
+//
+// The Markdown side has had this since it existed: a page over 8 KB answers a
+// default read with its outline, because the alternative is spending an
+// agent's context on a body it did not ask for. A canvas needs the same
+// backstop and did not have one — a few hundred shapes is an ordinary diagram
+// and an extraordinary response.
+//
+// The summary keeps every label, because the words are how a diagram is
+// navigated, and counts the rest by type. An agent that needs a specific
+// shape's id asks for view:"full".
+const summaryAboveElements = 120
 
 func handleGetWikiDrawing(ctx context.Context, s *Server, args getWikiDrawingArgs) (toolResult, error) {
 	doc, err := s.loadWikiDocument(ctx, args.DocumentID, models.OperationRoleViewer)
@@ -112,12 +133,28 @@ func handleGetWikiDrawing(ctx context.Context, s *Server, args getWikiDrawingArg
 		Count:       len(scene.Elements),
 		Watchers:    scene.Watchers,
 	}
-	if args.View == "full" {
+	switch {
+	case args.View == "full":
 		view.Full = make([]map[string]any, 0, len(scene.Elements))
 		for _, el := range scene.Elements {
 			view.Full = append(view.Full, el)
 		}
-	} else {
+
+	case len(scene.Elements) > summaryAboveElements:
+		view.Shapes = map[string]int{}
+		for _, el := range scene.Elements {
+			kind := stringField(el, "type")
+			view.Shapes[kind]++
+			if kind == "text" {
+				view.Labels = append(view.Labels, summariseElement(el))
+			}
+		}
+		view.Notes = append(view.Notes, fmt.Sprintf(
+			"This canvas has %d shapes, so it is summarised rather than listed. "+
+				"Every label is above; ask for view:\"full\" if you need a particular "+
+				"shape's id or geometry.", len(scene.Elements)))
+
+	default:
 		view.Elements = make([]drawingElementView, 0, len(scene.Elements))
 		for _, el := range scene.Elements {
 			view.Elements = append(view.Elements, summariseElement(el))

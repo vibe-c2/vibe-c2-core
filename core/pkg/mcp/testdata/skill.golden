@@ -3,7 +3,7 @@
 name: vibe-c2
 description: Work an offensive security engagement in Vibe C2 — hosts, credentials, hashes, tasks, wiki notes and the operation timeline — through its MCP tools. Use whenever connected to a Vibe C2 MCP endpoint, or when the user mentions an operation, findings, or engagement notes.
 metadata:
-  version: "25"
+  version: "26"
 ---
 
 # Vibe C2
@@ -514,12 +514,27 @@ network maps, attack paths, infrastructure sketches. A drawing has no Markdown
 body at all. `get_wiki_document` and the Markdown write tools refuse one, and
 the drawing tools refuse a prose page; both refusals name the tool that works.
 
+A drawing is for the operator, not for you. A topology, an attack path, a
+sequence of hops — a person reads those far faster as a picture than as
+paragraphs, which is the whole reason the page kind exists. You gain nothing
+from it: you read a canvas as a list of shapes, and prose you can search,
+quote and edit precisely.
+
+So draw when the operator asks for a drawing, and otherwise write the page.
+Do not turn notes into a diagram because it seems helpful: a diagram is a
+claim about how something is laid out, it is harder to correct than a
+paragraph, and an operator who wanted prose now has to read shapes.
+
+Pages are marked: a row in `list_wiki_tree` or `search_wiki` carrying
+`kind:"drawing"` is a canvas. Rows without it are prose.
+
 ## Reading
 
 `get_wiki_drawing` lists every shape with its id, kind, position and label.
-Read before editing: edits address shapes by these ids. `view:"full"` returns
-the complete element JSON and is rarely what you want — the default view is
-what you compose edits from.
+Read before editing: edits address shapes by these ids. Over 120 shapes it
+returns a summary instead — counts by type plus every label, because a diagram
+is navigated by its words. `view:"full"` returns the complete element JSON and
+is rarely what you want.
 
 ## Drawing
 
@@ -539,15 +554,23 @@ makes every shape you draw wobble identically — visibly machine-made, in a
 tool whose whole look is that it is not.
 
 ```json
-{"type": "rectangle", "x": 100, "y": 200, "width": 160, "height": 80}
-{"type": "text", "x": 120, "y": 230, "text": "Domain Controller"}
-{"type": "arrow", "x": 260, "y": 240, "width": 140, "height": 0}
+{"type": "rectangle", "id": "dc", "x": 100, "y": 200, "width": 160,
+ "height": 80, "label": "Domain Controller"}
+{"type": "rectangle", "id": "jump", "x": 400, "y": 200, "label": "Jump host"}
+{"type": "arrow", "x": 270, "y": 240, "width": 120, "height": 0,
+ "startBinding": "dc", "endBinding": "jump"}
 ```
 
-A labelled box is two elements, the way Excalidraw models it: the shape, and a
-`text` element whose `containerId` is the shape's id. Without the
-`containerId` the words are a note that happens to sit on top of a box, and
-moving the box leaves them behind.
+**Label a shape with `label`.** Excalidraw models a labelled box as two
+elements — the shape plus a `text` whose `containerId` names it — and the pair
+only holds together if the shape lists the text back. `label` builds both and
+wires them. Writing the text element yourself still works; wire both halves if
+you do, or the words stay behind the first time somebody drags the box.
+
+**Connect arrows with `startBinding` / `endBinding`,** each the id of the
+shape to attach to. An unbound arrow is decoration: it sits where you put it
+and does not follow the shapes when they move, so a diagram that looked right
+falls apart the first time it is edited. `focus` and `gap` are filled in.
 
 An arrow is drawn from its points, not its box. Give it `width`/`height` and
 the points are derived; give explicit `points` when it should bend.
@@ -567,10 +590,6 @@ before somebody else edited the canvas: read it again.
 `create_wiki_document` with `kind:"drawing"`, then draw on it. Passing
 `content` with that kind is refused — there is nowhere for Markdown to go on a
 canvas.
-
-Propose a drawing rather than assuming one: a diagram is a claim about how
-something is laid out, and a wrong one is harder to correct than a wrong
-paragraph.
 ==================== vibe-c2/reference/attachments.md
 # Attachments
 
