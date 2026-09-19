@@ -24,7 +24,7 @@ function element(
   versionNonce = 1,
   extra: Partial<ExcalidrawElement> = {},
 ): ExcalidrawElement {
-  return { id, version, versionNonce, ...extra } as ExcalidrawElement
+  return { id, version, versionNonce, ...extra } as unknown as ExcalidrawElement
 }
 
 describe("shouldKeepLocal", () => {
@@ -210,5 +210,86 @@ describe("the scene as Y.js state", () => {
     applyUpdate(b, encodeStateAsUpdate(a))
 
     expect(readElements(a)).toEqual(readElements(b))
+  })
+})
+
+describe("paint order", () => {
+  // The bug this exists to prevent: elements live in a Y.Map keyed by id,
+  // which has no order, and Yjs iterates it by CRDT structure — so two peers
+  // saw different arrays for identical state. Excalidraw paints the array back
+  // to front, so an arrow was over the box for one person and under it for the
+  // other, with nothing looking wrong to either.
+  test("is computed from the elements, not from map iteration", () => {
+    const doc = new YDoc()
+    // Deliberately inserted in an order that is not the paint order.
+    writeLocalElements(
+      doc,
+      [
+        { ...element("front", 1), z: 2 } as unknown as ExcalidrawElement,
+        { ...element("back", 1), z: 0 } as unknown as ExcalidrawElement,
+        { ...element("middle", 1), z: 1 } as unknown as ExcalidrawElement,
+      ],
+      new Map(),
+    )
+
+    expect(readElements(doc).map((el) => el.id)).toEqual(["back", "middle", "front"])
+  })
+
+  // What the operator asked for: arrows under the boxes.
+  test("a negative layer puts a shape behind everything a person drew", () => {
+    const doc = new YDoc()
+    writeLocalElements(
+      doc,
+      [
+        { ...element("box", 1), index: "a1" } as unknown as ExcalidrawElement,
+        { ...element("arrow", 1), z: -1 } as unknown as ExcalidrawElement,
+      ],
+      new Map(),
+    )
+
+    expect(readElements(doc).map((el) => el.id)).toEqual(["arrow", "box"])
+  })
+
+  // Shapes a person drew carry Excalidraw's fractional index and no z. Their
+  // arrangement has to survive, which means ordering by that index rather than
+  // ignoring it — which is what we used to do.
+  test("hand-drawn shapes keep the order the app gave them", () => {
+    const doc = new YDoc()
+    writeLocalElements(
+      doc,
+      [
+        { ...element("third", 1), index: "a3" } as unknown as ExcalidrawElement,
+        { ...element("first", 1), index: "a1" } as unknown as ExcalidrawElement,
+        { ...element("second", 1), index: "a2" } as unknown as ExcalidrawElement,
+      ],
+      new Map(),
+    )
+
+    expect(readElements(doc).map((el) => el.id)).toEqual(["first", "second", "third"])
+  })
+
+  // Two peers must agree, whatever order their maps happen to iterate in.
+  test("two clients paint the same scene in the same order", () => {
+    const a = new YDoc()
+    const b = new YDoc()
+    writeLocalElements(a, [{ ...element("one", 1), z: 5 } as unknown as ExcalidrawElement], new Map())
+    writeLocalElements(b, [{ ...element("two", 1), z: 1 } as unknown as ExcalidrawElement], new Map())
+
+    const updateA = encodeStateAsUpdate(a)
+    applyUpdate(a, encodeStateAsUpdate(b))
+    applyUpdate(b, updateA)
+
+    expect(readElements(a).map((el) => el.id)).toEqual(readElements(b).map((el) => el.id))
+    expect(readElements(a).map((el) => el.id)).toEqual(["two", "one"])
+  })
+
+  test("the sort is total, so ties never reorder between reads", () => {
+    const doc = new YDoc()
+    writeLocalElements(
+      doc,
+      [element("bbb", 1), element("aaa", 1), element("ccc", 1)],
+      new Map(),
+    )
+    expect(readElements(doc).map((el) => el.id)).toEqual(["aaa", "bbb", "ccc"])
   })
 })

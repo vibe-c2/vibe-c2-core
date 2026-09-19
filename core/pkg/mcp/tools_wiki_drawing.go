@@ -35,7 +35,7 @@ type editWikiDrawingArgs struct {
 	// Elements is Excalidraw's own element shape. Every field but `type` is
 	// optional — the server fills in the bookkeeping (seed, nonce, group ids)
 	// that nobody composing a diagram should have to supply.
-	Elements   []map[string]any `json:"elements,omitempty"    jsonschema:"Excalidraw elements. Only 'type' is required per element (rectangle, ellipse, diamond, text, arrow, line, freedraw, image, frame); x, y, width, height, strokeColor and the rest are optional and defaulted. Put words on a shape with 'label' — the shape is sized to fit it unless you set width. Connect an arrow with 'startBinding'/'endBinding' set to a shape id, or it will not follow that shape when it moves. Not used with mode:delete."`
+	Elements   []map[string]any `json:"elements,omitempty"    jsonschema:"Excalidraw elements. Only 'type' is required per element (rectangle, ellipse, diamond, text, arrow, line, freedraw, image, frame); x, y, width, height, strokeColor and the rest are optional and defaulted. Put words on a shape with 'label' — the shape is sized to fit it unless you set width. Layer with 'z': higher covers lower, 0 is where hand-drawn shapes sit, so z:-1 puts arrows under the boxes. Connect an arrow with 'startBinding'/'endBinding' set to a shape id, or it will not follow that shape when it moves. Not used with mode:delete."`
 	ElementIDs []string         `json:"element_ids,omitempty" jsonschema:"Ids to erase, from get_wiki_drawing. Only for mode:delete."`
 }
 
@@ -83,6 +83,9 @@ type drawingElementView struct {
 	// Text is the shape's words, for a text element. It is the single most
 	// useful field for working out what a diagram says.
 	Text string `json:"text,omitempty"`
+	// Z is the element's layer. Reported so the order of the list is
+	// explainable: the elements come back back-to-front, and this says why.
+	Z float64 `json:"z,omitempty"`
 	// ContainerID is set on a label bound to a shape, which is how Excalidraw
 	// models "a box with writing in it" — without it an agent cannot tell a
 	// caption apart from a free-floating note.
@@ -91,6 +94,7 @@ type drawingElementView struct {
 
 type drawingSceneView struct {
 	wikiDocView
+	// Elements come back in paint order: back first, front last.
 	Elements []drawingElementView `json:"elements,omitempty"`
 	// Full is populated only for view:"full".
 	Full []map[string]any `json:"fullElements,omitempty"`
@@ -189,6 +193,7 @@ func summariseElement(el wiki.DrawingElement) drawingElementView {
 		Width:       floatField(el, "width"),
 		Height:      floatField(el, "height"),
 		Text:        stringField(el, "text"),
+		Z:           floatField(el, "z"),
 		ContainerID: stringField(el, "containerId"),
 
 		Points:       sliceField(el, "points"),

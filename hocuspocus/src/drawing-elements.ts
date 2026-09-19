@@ -261,10 +261,15 @@ export function normalizeElement(input: unknown): NormalizedElement {
     updated: num(el.updated, Date.now(), "updated"),
     link: el.link ?? null,
     locked: el.locked === true,
-    // Fractional index for z-order. Left null deliberately: Excalidraw repairs
-    // invalid indices when a scene is ingested, and a made-up one would order
-    // agent-drawn shapes against each other by accident rather than by intent.
+    // Excalidraw's own fractional index. Left as it arrived — it is the app's
+    // to maintain, and it is what orders shapes a person drew. Agent-written
+    // elements have none, which is what `z` below is for.
     index: el.index ?? null,
+    // Layer. Our own field, because an agent needs an integer it can reason
+    // about ("put the arrows under the boxes") where Excalidraw's index is an
+    // opaque fractional key. Absent here and assigned on write, so that a
+    // shape with no opinion lands on top of what is already there.
+    ...(typeof el.z === "number" && Number.isFinite(el.z) ? { z: el.z } : {}),
   };
 
   switch (type) {
@@ -483,6 +488,7 @@ const NUMERIC_FIELDS = new Set([
   "fontSize",
   "fontFamily",
   "lineHeight",
+  "z",
 ]);
 
 /**

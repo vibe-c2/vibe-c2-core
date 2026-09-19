@@ -278,6 +278,16 @@ var releases = []Release{
 			"Sizing accounts for scripts that are physically wider: CJK, Hangul, fullwidth forms and emoji measure about twice Latin at the same font size. Cyrillic and Greek measure like Latin, so they are not inflated.",
 		},
 	},
+	{
+		Version: 31,
+		Date:    "2026-09-20",
+		Notes: []string{
+			"Layer a shape with `z`: higher covers lower. Shapes a person drew sit at 0, so z:-1 puts your arrows under their boxes and z:1 floats a note over everything. Shapes sent without a z stack on top in the order you sent them.",
+			"get_wiki_drawing returns elements back-to-front, so the list itself is the layering, and each element reports its z.",
+			"This also fixes something that was quietly broken: paint order used to come from the order a Y.Map happened to iterate, which Yjs derives from CRDT structure rather than insertion. Two people in the same room saw different orders for identical state — an arrow over the box for one of them and under it for the other, with nothing looking wrong to either. Order is now computed from the elements themselves, so every client agrees.",
+			"Within a layer, the order of shapes a person drew is preserved from Excalidraw's own fractional index, which was previously ignored — rearranging shapes in the app and reloading used to lose the arrangement.",
+		},
+	},
 }
 
 // Releases returns the full history, oldest first. A copy, so callers cannot

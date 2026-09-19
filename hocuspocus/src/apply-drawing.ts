@@ -18,6 +18,7 @@ import type { Hocuspocus } from "@hocuspocus/server";
 import type * as Y from "yjs";
 
 import { readRawBody, requireSignature } from "./internal-auth.js";
+import { inPaintOrder, layerOf } from "./drawing-order.js";
 import { DRAWING_ROOT_KEY } from "./drawing-projection.js";
 import {
   DrawingElementError,
@@ -60,6 +61,30 @@ function elementsOf(document: Y.Doc): Y.Map<NormalizedElement> {
  */
 function watcherCount(server: Hocuspocus, documentId: string): number {
   return server.documents.get(roomName(documentId))?.getConnections().length ?? 0;
+}
+
+/**
+ * Give every element in a batch a layer, so the order it was sent in is the
+ * order it is painted.
+ *
+ * Elements that named a layer keep it — that is the point of the field. The
+ * rest stack above whatever is already on the canvas, in the order they
+ * arrived, which is what drawing feels like: the last thing you put down is
+ * on top.
+ */
+function assignLayers(
+  elements: Y.Map<NormalizedElement>,
+  incoming: NormalizedElement[],
+): NormalizedElement[] {
+  let top = 0;
+  for (const existing of elements.values()) {
+    if (existing && !existing.isDeleted) top = Math.max(top, layerOf(existing));
+  }
+
+  let next = top + 1;
+  return incoming.map((el) =>
+    typeof el.z === "number" ? el : { ...el, z: next++ },
+  );
 }
 
 /** A shape's box, for working out where an arrow meets its edge. */
@@ -230,10 +255,11 @@ function applyMode(
       // in the scene. Placing first silently fell back to the default stroke
       // for every arrow in the batch, which is the collapse this was meant to
       // prevent — three arrows to three different boxes, one visible line.
-      for (const el of incoming) elements.set(el.id, el);
-      placeBoundArrows(elements, incoming);
-      wireBindings(elements, incoming);
-      return incoming.length;
+      const layered = assignLayers(elements, incoming);
+      for (const el of layered) elements.set(el.id, el);
+      placeBoundArrows(elements, layered);
+      wireBindings(elements, layered);
+      return layered.length;
     }
 
     case "update": {
@@ -306,10 +332,11 @@ function applyMode(
       // in the scene. Placing first silently fell back to the default stroke
       // for every arrow in the batch, which is the collapse this was meant to
       // prevent — three arrows to three different boxes, one visible line.
-      for (const el of incoming) elements.set(el.id, el);
-      placeBoundArrows(elements, incoming);
-      wireBindings(elements, incoming);
-      return incoming.length;
+      const layered = assignLayers(elements, incoming);
+      for (const el of layered) elements.set(el.id, el);
+      placeBoundArrows(elements, layered);
+      wireBindings(elements, layered);
+      return layered.length;
     }
   }
 }
@@ -415,8 +442,11 @@ export function setupDrawingApi(app: Express, server: Hocuspocus): void {
 
         let elements: NormalizedElement[] = [];
         await connection.transact((document) => {
-          elements = [...elementsOf(document).values()].filter(
-            (el) => el && !el.isDeleted,
+          // Returned in paint order rather than whatever order the map
+          // iterates: back first, front last, so what covers what is readable
+          // from the list itself.
+          elements = inPaintOrder(
+            [...elementsOf(document).values()].filter((el) => el && !el.isDeleted),
           );
         });
 

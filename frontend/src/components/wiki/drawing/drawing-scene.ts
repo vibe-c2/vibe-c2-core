@@ -30,6 +30,12 @@ import { Map as YMap } from "yjs"
 import type { Doc as YDoc } from "yjs"
 import type { ExcalidrawElement } from "@excalidraw/excalidraw/element/types"
 
+/** An element's layer: our own integer, absent on anything Excalidraw made. */
+function layerOf(el: ExcalidrawElement): number {
+  const z = (el as { z?: unknown }).z
+  return typeof z === "number" && Number.isFinite(z) ? z : 0
+}
+
 /** The Y.Doc root key holding the scene. Tiptap owns "default"; this is ours. */
 export const DRAWING_ROOT_KEY = "excalidraw"
 
@@ -88,10 +94,51 @@ export function isDrawingRoom(ydoc: YDoc): boolean {
   return getElementsMap(ydoc).size > 0
 }
 
-/** Every element in the shared scene, including deleted tombstones — Excalidraw
- * expects to receive those and filters them itself. */
+/**
+ * The order shapes are painted in, and therefore what covers what.
+ *
+ * Excalidraw takes a flat array and paints it back to front, so the array IS
+ * the z-order. Our elements live in a Y.Map keyed by id, which has no order —
+ * and handing back its iteration order was a real bug rather than an
+ * approximation: Yjs orders that map by CRDT structure, so two people in the
+ * same room saw different arrays for identical state. An arrow could be over
+ * the box for one of them and under it for the other, with nothing looking
+ * wrong to either.
+ *
+ * The key, derived identically by every client:
+ *
+ *   1. `z`, our own integer layer. Absent means 0, which is where everything a
+ *      person draws sits, so an agent can put something behind the whole
+ *      drawing with -1 without knowing what is already there.
+ *   2. `index`, Excalidraw's fractional key, within a layer — this is what
+ *      preserves the order of shapes a person drew and rearranged in the app.
+ *   3. `id`, so the sort is total.
+ *
+ * Mirrored in hocuspocus/src/drawing-order.ts. The two must agree exactly: a
+ * canvas that sorts differently from the server is the same bug in a new place.
+ */
+function compareElements(a: ExcalidrawElement, b: ExcalidrawElement): number {
+  // `z` is ours, not Excalidraw's, so it is read off the element rather than
+  // declared on its type — the library has no idea the field exists and must
+  // not: carrying it is the only thing we need from it.
+  const az = layerOf(a)
+  const bz = layerOf(b)
+  if (az !== bz) return az - bz
+
+  // Fractional indices compare as plain strings; that is the scheme's whole
+  // point. One that is absent sorts first, so an agent-written shape sits
+  // behind a person's within the same layer until given a layer of its own.
+  const ai = typeof a.index === "string" ? a.index : ""
+  const bi = typeof b.index === "string" ? b.index : ""
+  if (ai !== bi) return ai < bi ? -1 : 1
+
+  return a.id < b.id ? -1 : a.id > b.id ? 1 : 0
+}
+
+/** Every element in the shared scene in paint order, including deleted
+ * tombstones — Excalidraw expects to receive those and filters them itself. */
 export function readElements(ydoc: YDoc): ExcalidrawElement[] {
-  return [...getElementsMap(ydoc).values()]
+  return [...getElementsMap(ydoc).values()].sort(compareElements)
 }
 
 export function readSharedAppState(ydoc: YDoc): SharedAppState {
@@ -124,10 +171,10 @@ export function shouldKeepLocal(
 /**
  * Merge the shared scene into the canvas's current elements.
  *
- * Order follows the shared scene, with any purely-local element (one this
- * client has drawn but not yet flushed) appended. Excalidraw renders in array
- * order, so a stable ordering matters: reordering on every remote update would
- * make z-order flicker while someone else draws.
+ * The result is returned in paint order, which is what Excalidraw renders
+ * from. Every client computes that order from the elements themselves rather
+ * than from the order an update arrived in, so two canvases showing the same
+ * scene agree about what is on top.
  */
 export function mergeRemoteElements(
   local: readonly ExcalidrawElement[],
@@ -145,7 +192,10 @@ export function mergeRemoteElements(
   for (const localEl of local) {
     if (!taken.has(localEl.id)) merged.push(localEl)
   }
-  return merged
+  // Sorted rather than left in arrival order: the merged array is the z-order,
+  // and taking it from whichever peer's update happened to arrive first is how
+  // two canvases end up disagreeing about what is on top.
+  return merged.sort(compareElements)
 }
 
 /**
