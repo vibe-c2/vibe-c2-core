@@ -86,6 +86,99 @@ function binding(value: unknown): ElementBinding | null {
 
 export class DrawingElementError extends Error {}
 
+// Text measurement, for sizing a box to what it holds.
+// ---------------------------------------------------------------------------
+// A shape whose width was left to the default held a label that did not fit:
+// `{"type":"rectangle","label":"Domain Controller"}` produced a 100px box
+// around roughly 130px of text, the words ran over the border, and nothing
+// said so. Free-standing text had the same problem from the same default.
+//
+// Exact measurement needs the font and a renderer, neither of which exists
+// here. This is a deliberate approximation, and it errs wide: a box slightly
+// too large is untidy, a box too small clips the words. Anyone who wants exact
+// geometry can still send explicit width and height, which always win.
+
+const LABEL_PAD_X = 16;
+const LABEL_PAD_Y = 12;
+const LINE_HEIGHT = 1.25;
+/** Where a long label starts wrapping instead of growing a very wide box. */
+const LABEL_MAX_TEXT_WIDTH = 320;
+const MIN_LABELLED_WIDTH = 100;
+const MIN_LABELLED_HEIGHT = 48;
+
+/**
+ * Whether a character occupies a full em rather than roughly half of one.
+ *
+ * CJK, Hangul, fullwidth forms and emoji are about twice the width of Latin at
+ * the same font size. Cyrillic and Greek are not — they measure like Latin, so
+ * they are deliberately absent. Getting this wrong truncates labels in exactly
+ * the scripts nobody tests with.
+ */
+function isWideChar(cp: number): boolean {
+  return (
+    (cp >= 0x1100 && cp <= 0x115f) ||
+    (cp >= 0x2e80 && cp <= 0xa4cf) ||
+    (cp >= 0xac00 && cp <= 0xd7a3) ||
+    (cp >= 0xf900 && cp <= 0xfaff) ||
+    (cp >= 0xfe30 && cp <= 0xfe6f) ||
+    (cp >= 0xff00 && cp <= 0xff60) ||
+    (cp >= 0xffe0 && cp <= 0xffe6) ||
+    (cp >= 0x1f300 && cp <= 0x1faff)
+  );
+}
+
+/** Advance width of one line, in pixels. 0.6em is a reasonable mean for the
+ * proportional faces Excalidraw ships. */
+function lineWidth(line: string, fontSize: number): number {
+  let width = 0;
+  for (const ch of line) {
+    const cp = ch.codePointAt(0) ?? 0;
+    width += isWideChar(cp) ? fontSize : fontSize * 0.6;
+  }
+  return width;
+}
+
+/**
+ * Measure a string as it would be laid out, wrapping greedily at maxWidth.
+ *
+ * The wrap is counted, never inserted: Excalidraw re-wraps bound text to its
+ * container on open, so a newline written in here would fight that and render
+ * differently from what was measured. Only the line *count* is needed, to know
+ * how tall the box must be.
+ */
+export function measureText(
+  text: string,
+  fontSize: number,
+  maxWidth = LABEL_MAX_TEXT_WIDTH,
+): { width: number; height: number } {
+  let widest = 0;
+  let lines = 0;
+
+  for (const paragraph of text.split("\n")) {
+    const words = paragraph.split(/\s+/).filter(Boolean);
+    if (words.length === 0) {
+      lines += 1;
+      continue;
+    }
+
+    let current = "";
+    for (const word of words) {
+      const candidate = current === "" ? word : `${current} ${word}`;
+      if (current !== "" && lineWidth(candidate, fontSize) > maxWidth) {
+        widest = Math.max(widest, lineWidth(current, fontSize));
+        lines += 1;
+        current = word;
+      } else {
+        current = candidate;
+      }
+    }
+    widest = Math.max(widest, lineWidth(current, fontSize));
+    lines += 1;
+  }
+
+  return { width: widest, height: Math.max(1, lines) * fontSize * LINE_HEIGHT };
+}
+
 function randomInteger(): number {
   return Math.floor(Math.random() * 2 ** 31);
 }
@@ -132,13 +225,23 @@ export function normalizeElement(input: unknown): NormalizedElement {
     );
   }
 
+  // A text element's box comes from its words unless the caller sized it.
+  // The old 100x100 default clipped anything longer than a short word.
+  let defaultWidth = 100;
+  let defaultHeight = 100;
+  if (type === "text" && typeof el.text === "string" && el.text !== "") {
+    const measured = measureText(el.text, num(el.fontSize, DEFAULTS.fontSize, "fontSize"));
+    defaultWidth = Math.ceil(measured.width);
+    defaultHeight = Math.ceil(measured.height);
+  }
+
   const base: NormalizedElement = {
     id: typeof el.id === "string" && el.id !== "" ? el.id : randomID(),
     type,
     x: num(el.x, 0, "x"),
     y: num(el.y, 0, "y"),
-    width: num(el.width, 100, "width"),
-    height: num(el.height, 100, "height"),
+    width: num(el.width, defaultWidth, "width"),
+    height: num(el.height, defaultHeight, "height"),
     angle: num(el.angle, 0, "angle"),
     strokeColor: el.strokeColor ?? DEFAULTS.strokeColor,
     backgroundColor: el.backgroundColor ?? DEFAULTS.backgroundColor,
@@ -219,12 +322,24 @@ function linearFields(el: Record<string, unknown>): Record<string, unknown> {
   // an arrow with no points renders as nothing at all. Default to a straight
   // run across the element's own box so a caller that gave only geometry still
   // gets a visible line.
+  // Points decide where a line is drawn; width and height do not. When the
+  // caller gave neither points nor a binding, a straight run across the
+  // element's own box is the only sensible guess.
+  //
+  // When it DID give a binding, the points are left empty for the apply step
+  // to derive from the shapes being connected — it has the scene and this does
+  // not. Guessing from width/height there is how eighteen arrows bound to
+  // eighteen different boxes were all drawn as the same stroke: the bindings
+  // were right, the geometry was identical, and the result said applied: 18.
+  const bound = el.startBinding !== undefined || el.endBinding !== undefined;
   const points = Array.isArray(el.points) && el.points.length >= 2
     ? el.points
-    : [
-        [0, 0],
-        [num(el.width, 100, "width"), num(el.height, 0, "height")],
-      ];
+    : bound
+      ? []
+      : [
+          [0, 0],
+          [num(el.width, 100, "width"), num(el.height, 0, "height")],
+        ];
 
   return {
     points,
@@ -235,6 +350,30 @@ function linearFields(el: Record<string, unknown>): Record<string, unknown> {
     endArrowhead: el.endArrowhead ?? (el.type === "arrow" ? "arrow" : null),
     elbowed: el.elbowed === true,
   };
+}
+
+/**
+ * Grow a shape so its label fits, leaving any dimension the caller set alone.
+ *
+ * Only ever grows. A caller who asked for a 400px box and gave it one word
+ * meant the 400px; a caller who gave no width meant "whatever it takes".
+ */
+function sizeToLabel(
+  el: NormalizedElement,
+  label: string,
+  widthGiven: boolean,
+  heightGiven: boolean,
+): NormalizedElement {
+  const measured = measureText(label, 16);
+  const next = { ...el };
+
+  if (!widthGiven) {
+    next.width = Math.max(MIN_LABELLED_WIDTH, Math.ceil(measured.width) + LABEL_PAD_X * 2);
+  }
+  if (!heightGiven) {
+    next.height = Math.max(MIN_LABELLED_HEIGHT, Math.ceil(measured.height) + LABEL_PAD_Y * 2);
+  }
+  return next;
 }
 
 /**
@@ -304,11 +443,92 @@ export function normalizeElements(input: unknown): NormalizedElement[] {
       );
     }
 
-    const text = labelFor(el, label);
-    const bound = Array.isArray(el.boundElements) ? el.boundElements : [];
-    out.push({ ...el, boundElements: [...bound, { id: text.id, type: "text" }] });
+    // Size the box to the label, unless the caller sized it themselves. A
+    // shape left at the default width held a label wider than itself and the
+    // words ran over the border, with nothing to say so.
+    const source = raw as Record<string, unknown>;
+    const sized = sizeToLabel(
+      el,
+      label,
+      typeof source.width === "number",
+      typeof source.height === "number",
+    );
+
+    const text = labelFor(sized, label);
+    const bound = Array.isArray(sized.boundElements) ? sized.boundElements : [];
+    out.push({ ...sized, boundElements: [...bound, { id: text.id, type: "text" }] });
     out.push(text);
   });
 
   return out;
+}
+
+/** A partial change to an element that already exists. Only `id` is required
+ * and only supplied fields are carried. */
+export interface ElementPatch {
+  id: string;
+  [key: string]: unknown;
+}
+
+/** Fields whose value must be a finite number when supplied. */
+const NUMERIC_FIELDS = new Set([
+  "x",
+  "y",
+  "width",
+  "height",
+  "angle",
+  "strokeWidth",
+  "roughness",
+  "opacity",
+  "fontSize",
+  "fontFamily",
+  "lineHeight",
+]);
+
+/**
+ * Normalize an update.
+ *
+ * Deliberately NOT normalizeElement: that fills every absent field with a
+ * default, which is right for a new shape and destroys an existing one. An
+ * update that set only `x` used to hand back a complete element carrying
+ * y = 0, width = 100, height = 100 and no boundElements, and the merge
+ * overwrote the shape with it — the caller moved a box and silently reset its
+ * size and detached its label, while the result said applied: 1.
+ *
+ * So a patch carries exactly the keys it was given. `type` is not required —
+ * the element is identified by id and already has one — and `text` may be
+ * anything, since only a brand-new text element needs words to exist at all.
+ */
+export function normalizePatches(input: unknown): ElementPatch[] {
+  if (!Array.isArray(input)) {
+    throw new DrawingElementError("elements must be an array");
+  }
+
+  return input.map((raw, i) => {
+    if (typeof raw !== "object" || raw === null || Array.isArray(raw)) {
+      throw new DrawingElementError(`element ${i}: each element must be an object`);
+    }
+    const el = raw as Record<string, unknown>;
+    const id = el.id;
+    if (typeof id !== "string" || id === "") {
+      throw new DrawingElementError(
+        `element ${i}: an update names the shape to change by id — read the drawing to get them`,
+      );
+    }
+
+    const patch: ElementPatch = { id };
+    for (const [key, value] of Object.entries(el)) {
+      if (key === "id" || value === undefined) continue;
+      if (NUMERIC_FIELDS.has(key)) {
+        patch[key] = num(value, 0, `element ${i}: ${key}`);
+        continue;
+      }
+      if (key === "startBinding" || key === "endBinding") {
+        patch[key] = binding(value);
+        continue;
+      }
+      patch[key] = value;
+    }
+    return patch;
+  });
 }

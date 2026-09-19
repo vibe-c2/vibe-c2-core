@@ -22,6 +22,8 @@ import { DRAWING_ROOT_KEY } from "./drawing-projection.js";
 import {
   DrawingElementError,
   normalizeElements,
+  normalizePatches,
+  type ElementPatch,
   type NormalizedElement,
 } from "./drawing-elements.js";
 
@@ -58,6 +60,105 @@ function elementsOf(document: Y.Doc): Y.Map<NormalizedElement> {
  */
 function watcherCount(server: Hocuspocus, documentId: string): number {
   return server.documents.get(roomName(documentId))?.getConnections().length ?? 0;
+}
+
+/** A shape's box, for working out where an arrow meets its edge. */
+interface Box {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}
+
+function boxOf(el: NormalizedElement | undefined): Box | null {
+  if (!el) return null;
+  const x = Number(el.x);
+  const y = Number(el.y);
+  const width = Number(el.width);
+  const height = Number(el.height);
+  if (![x, y, width, height].every(Number.isFinite)) return null;
+  return { x, y, width, height };
+}
+
+/** Where a ray from the box's centre leaves its edge, heading towards `to`. */
+function edgePoint(box: Box, to: { x: number; y: number }, gap: number): { x: number; y: number } {
+  const cx = box.x + box.width / 2;
+  const cy = box.y + box.height / 2;
+  const dx = to.x - cx;
+  const dy = to.y - cy;
+  if (dx === 0 && dy === 0) return { x: cx, y: cy };
+
+  const halfW = box.width / 2;
+  const halfH = box.height / 2;
+  // Scale the direction until it touches whichever edge it reaches first.
+  const scale = Math.min(
+    dx === 0 ? Infinity : halfW / Math.abs(dx),
+    dy === 0 ? Infinity : halfH / Math.abs(dy),
+  );
+  const length = Math.hypot(dx, dy);
+  const padded = scale + (length === 0 ? 0 : gap / length);
+  return { x: cx + dx * padded, y: cy + dy * padded };
+}
+
+/**
+ * Place a bound arrow's stroke between the shapes it connects.
+ *
+ * A binding says which shapes an arrow belongs to. It does not say where the
+ * line goes — Excalidraw recomputes that when a person drags something, but a
+ * scene written from outside has never been dragged, so whatever geometry
+ * arrived is what is drawn. Left to the caller, every arrow in an org chart
+ * has to be hand-placed, and getting that wrong looks exactly like getting it
+ * right: the write succeeds and the canvas shows one stroke.
+ *
+ * So an arrow that names both ends and brought no points of its own gets a
+ * straight run between the two boxes' edges. Not routed — nothing here avoids
+ * a sibling or bends round a frame — but correct and, crucially, different for
+ * every pair, which is the property that was missing.
+ */
+function placeBoundArrow(
+  elements: Y.Map<NormalizedElement>,
+  arrow: NormalizedElement,
+): NormalizedElement {
+  const points = arrow.points;
+  if (Array.isArray(points) && points.length >= 2) return arrow;
+
+  const start = boxOf(elements.get((arrow.startBinding as { elementId?: string })?.elementId ?? ""));
+  const end = boxOf(elements.get((arrow.endBinding as { elementId?: string })?.elementId ?? ""));
+  if (!start || !end) {
+    // Nothing to measure against. A visible default beats an invisible arrow.
+    return { ...arrow, points: [[0, 0], [Number(arrow.width) || 100, 0]] };
+  }
+
+  const gap = 4;
+  const from = edgePoint(start, { x: end.x + end.width / 2, y: end.y + end.height / 2 }, gap);
+  const to = edgePoint(end, { x: start.x + start.width / 2, y: start.y + start.height / 2 }, gap);
+
+  return {
+    ...arrow,
+    x: from.x,
+    y: from.y,
+    width: Math.abs(to.x - from.x),
+    height: Math.abs(to.y - from.y),
+    points: [
+      [0, 0],
+      [to.x - from.x, to.y - from.y],
+    ],
+  };
+}
+
+/** Place every bound arrow in a batch, once the shapes they name are all in
+ * the scene. */
+function placeBoundArrows(
+  elements: Y.Map<NormalizedElement>,
+  batch: readonly NormalizedElement[],
+): void {
+  for (const el of batch) {
+    if (el.type !== "arrow" && el.type !== "line") continue;
+    const current = elements.get(el.id);
+    if (!current) continue;
+    const placed = placeBoundArrow(elements, current);
+    if (placed !== current) elements.set(el.id, placed);
+  }
 }
 
 /**
@@ -119,34 +220,54 @@ function applyMode(
   elements: Y.Map<NormalizedElement>,
   mode: DrawingMode,
   incoming: NormalizedElement[],
+  patches: ElementPatch[],
   elementIDs: string[],
 ): number {
   switch (mode) {
     case "add": {
+      // Written first, then the arrows are placed: an arrow bound to a box
+      // that arrived in the same batch can only be measured once that box is
+      // in the scene. Placing first silently fell back to the default stroke
+      // for every arrow in the batch, which is the collapse this was meant to
+      // prevent — three arrows to three different boxes, one visible line.
       for (const el of incoming) elements.set(el.id, el);
+      placeBoundArrows(elements, incoming);
       wireBindings(elements, incoming);
       return incoming.length;
     }
 
     case "update": {
       let applied = 0;
-      for (const el of incoming) {
-        const existing = elements.get(el.id);
+      for (const patch of patches) {
+        const existing = elements.get(patch.id);
         // An update naming an element that is not there is a mistake worth
         // reporting rather than an insert worth performing — the usual cause
         // is a stale id from a read taken before somebody else's deletion.
         if (!existing) continue;
-        elements.set(el.id, {
+
+        // Only the fields that were sent. Merging a fully-defaulted element
+        // here is what used to reset a shape's size and detach its label when
+        // the caller meant to move it — see normalizePatches.
+        const { label, ...fields } = patch;
+        let next: NormalizedElement = {
           ...existing,
-          ...el,
+          ...fields,
           version: (existing.version ?? 1) + 1,
-        });
+        };
+        if (next.type === "arrow" || next.type === "line") {
+          next = placeBoundArrow(elements, next);
+        }
+        elements.set(patch.id, next);
+
+        if (typeof label === "string") {
+          retitleLabel(elements, next, label);
+        }
         applied++;
       }
       // Bindings are wired here too: an arrow that gains a binding by update
       // needs the same reciprocal entry on the shape as one that arrived with
       // it, or the connection is half-made and the shape drags away from it.
-      wireBindings(elements, incoming);
+      wireBindings(elements, patches as unknown as NormalizedElement[]);
       return applied;
     }
 
@@ -180,11 +301,78 @@ function applyMode(
           version: (existing.version ?? 1) + 1,
         });
       }
+      // Written first, then the arrows are placed: an arrow bound to a box
+      // that arrived in the same batch can only be measured once that box is
+      // in the scene. Placing first silently fell back to the default stroke
+      // for every arrow in the batch, which is the collapse this was meant to
+      // prevent — three arrows to three different boxes, one visible line.
       for (const el of incoming) elements.set(el.id, el);
+      placeBoundArrows(elements, incoming);
       wireBindings(elements, incoming);
       return incoming.length;
     }
   }
+}
+
+/**
+ * Change the words on a shape that already has a bound label.
+ *
+ * Without this, `label` on an update would be written onto the shape as a
+ * stray field and the visible text would not move — the caller would be told
+ * the update applied and see nothing change.
+ */
+function retitleLabel(
+  elements: Y.Map<NormalizedElement>,
+  container: NormalizedElement,
+  label: string,
+): void {
+  const bound = Array.isArray(container.boundElements)
+    ? (container.boundElements as { id?: string; type?: string }[])
+    : [];
+  const textID = bound.find((b) => b?.type === "text")?.id;
+  if (!textID) return;
+
+  const text = elements.get(textID);
+  if (!text) return;
+
+  elements.set(textID, {
+    ...text,
+    text: label,
+    // originalText is what Excalidraw re-wraps from when the container is
+    // resized; leaving it behind makes the label revert to the old words.
+    originalText: label,
+    version: (text.version ?? 1) + 1,
+  });
+}
+
+/**
+ * Warn when a write leaves shapes stacked exactly on top of one another.
+ *
+ * A successful write and a pile of overlapping arrows are indistinguishable
+ * from the result: both say applied: N. Eighteen arrows given the same
+ * geometry draw one stroke, and nothing in the response or in a default read
+ * says so, because the outline view lists eighteen distinct ids.
+ *
+ * Reported rather than refused: stacking is legitimate now and then, and a
+ * tool that guesses at intent and blocks the write is worse than one that
+ * says what it saw.
+ */
+function stackedGeometry(written: readonly NormalizedElement[]): string | null {
+  const seen = new Map<string, number>();
+  for (const el of written) {
+    if (el.isDeleted) continue;
+    const signature = JSON.stringify([el.type, el.x, el.y, el.width, el.height, el.points ?? null]);
+    seen.set(signature, (seen.get(signature) ?? 0) + 1);
+  }
+
+  const worst = [...seen.values()].reduce((a, b) => Math.max(a, b), 0);
+  if (worst < 2) return null;
+  return (
+    `${worst} of these shapes share identical position and geometry, so they are ` +
+    `drawn on top of each other and read as one. Arrows bound to different shapes ` +
+    `still need distinct geometry — or omit points entirely and let the server ` +
+    `place them from the bindings.`
+  );
 }
 
 interface WireRequest {
@@ -278,6 +466,7 @@ export function setupDrawingApi(app: Express, server: Hocuspocus): void {
           : [];
 
       let incoming: NormalizedElement[] = [];
+      let patches: ElementPatch[] = [];
       if (mode === "delete") {
         if (elementIDs.length === 0) {
           res.status(400).json({ error: "elementIds field required for delete" });
@@ -285,7 +474,14 @@ export function setupDrawingApi(app: Express, server: Hocuspocus): void {
         }
       } else {
         try {
-          incoming = normalizeElements(body.elements ?? []);
+          // An update is a patch and is parsed as one: only the fields it
+          // names, with no defaults filled in. Anything else is a whole new
+          // element and gets the full treatment.
+          if (mode === "update") {
+            patches = normalizePatches(body.elements ?? []);
+          } else {
+            incoming = normalizeElements(body.elements ?? []);
+          }
         } catch (err) {
           // 422, not 500: the request is understood and wrong, and the message
           // names the offending entry so the agent can fix it in one turn.
@@ -294,13 +490,14 @@ export function setupDrawingApi(app: Express, server: Hocuspocus): void {
           res.status(422).json({ error: message });
           return;
         }
-        if (incoming.length === 0) {
+        const count = mode === "update" ? patches.length : incoming.length;
+        if (count === 0) {
           res.status(400).json({ error: "elements field required" });
           return;
         }
-        if (incoming.length > MAX_ELEMENTS_PER_CALL) {
+        if (count > MAX_ELEMENTS_PER_CALL) {
           res.status(413).json({
-            error: `that is ${incoming.length} elements and the limit for one call is ${MAX_ELEMENTS_PER_CALL}`,
+            error: `that is ${count} elements and the limit for one call is ${MAX_ELEMENTS_PER_CALL}`,
           });
           return;
         }
@@ -319,8 +516,18 @@ export function setupDrawingApi(app: Express, server: Hocuspocus): void {
         });
 
         let applied = 0;
+        let warning: string | null = null;
         await connection.transact((document) => {
-          applied = applyMode(elementsOf(document), mode, incoming, elementIDs);
+          const elements = elementsOf(document);
+          applied = applyMode(elements, mode, incoming, patches, elementIDs);
+          // Read back after the write, so the check describes what is on the
+          // canvas rather than what was asked for — geometry the server placed
+          // from bindings is included, and a stacked pile that survived is
+          // reported whichever way it got there.
+          warning = stackedGeometry(
+            (mode === "update" ? patches.map((p) => elements.get(p.id)) : [...elements.values()])
+              .filter((el): el is NormalizedElement => Boolean(el)),
+          );
         });
 
         res.status(200).json({
@@ -328,6 +535,7 @@ export function setupDrawingApi(app: Express, server: Hocuspocus): void {
           mode,
           applied,
           watchers: watcherCount(server, documentId),
+          ...(warning ? { warning } : {}),
         });
       } catch (err) {
         const message = err instanceof Error ? err.message : "apply failed";

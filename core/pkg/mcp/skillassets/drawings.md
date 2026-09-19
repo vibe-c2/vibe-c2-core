@@ -1,83 +1,87 @@
 # Drawings: reading and editing a canvas
 
-Some wiki pages are drawings rather than prose — an Excalidraw canvas for
-network maps, attack paths, infrastructure sketches. A drawing has no Markdown
-body at all. `get_wiki_document` and the Markdown write tools refuse one, and
-the drawing tools refuse a prose page; both refusals name the tool that works.
+Some wiki pages are an Excalidraw canvas rather than prose — network maps,
+attack paths, infrastructure sketches. A drawing has no Markdown body, so the
+Markdown tools refuse one and these refuse a prose page; both name the tool
+that works.
 
-A drawing is for the operator, not for you. A topology, an attack path, a
-sequence of hops — a person reads those far faster as a picture than as
-paragraphs, which is the whole reason the page kind exists. You gain nothing
-from it: you read a canvas as a list of shapes, and prose you can search,
-quote and edit precisely.
-
-So draw when the operator asks for a drawing, and otherwise write the page.
-Do not turn notes into a diagram because it seems helpful: a diagram is a
-claim about how something is laid out, it is harder to correct than a
-paragraph, and an operator who wanted prose now has to read shapes.
+A drawing is for the operator, not for you: they read a topology far faster
+as a picture, while you read a canvas as a list of shapes. So draw when asked,
+and otherwise write the page — a diagram nobody asked for hands them shapes
+when they wanted sentences, and is harder to correct than a paragraph.
 
 Pages are marked: a row in `list_wiki_tree` or `search_wiki` carrying
 `kind:"drawing"` is a canvas. Rows without it are prose.
 
 ## Reading
 
-`get_wiki_drawing` lists every shape with its id, kind, position and label.
-Read before editing: edits address shapes by these ids. Over 120 shapes it
-returns a summary instead — counts by type plus every label, because a diagram
-is navigated by its words. `view:"full"` returns the complete element JSON and
-is rarely what you want.
+`get_wiki_drawing` lists every shape: id, type, position, label, and for
+arrows their points and bindings. Read before editing — edits address shapes
+by these ids, and the points are how you see two arrows drawn on top of each
+other rather than side by side. Over 120 shapes it summarises. `view:"full"`
+adds rendering fields, rarely needed.
 
 ## Drawing
 
 `edit_wiki_drawing` changes the canvas.
 
 - `mode:"add"` (default) puts new shapes on it.
-- `mode:"update"` changes existing shapes by id.
+- `mode:"update"` patches existing shapes by id: only the fields you send
+  change, the rest is left alone. Send `label` to retitle a bound label.
 - `mode:"delete"` erases them, by `element_ids`.
 - `mode:"replace"` swaps the whole scene in one transaction.
 
-Elements are Excalidraw's own shape, and only `type` is required: `rectangle`,
+Elements are Excalidraw's own shape; only `type` is required: `rectangle`,
 `ellipse`, `diamond`, `text`, `arrow`, `line`, `freedraw`, `image`, `frame`.
-Position, size, colour and the rest are optional and filled in for you.
-
-Do not send `seed` or `versionNonce`. They are generated, and a fixed seed
-makes every shape you draw wobble identically — visibly machine-made, in a
-tool whose whole look is that it is not.
+Position, colour and the rest are optional. A labelled shape is sized to fit
+its label, so give `width` only when you want a particular one — and then make
+it big enough. Do not send `seed` or `versionNonce`.
 
 ```json
-{"type": "rectangle", "id": "dc", "x": 100, "y": 200, "width": 160,
- "height": 80, "label": "Domain Controller"}
-{"type": "rectangle", "id": "jump", "x": 400, "y": 200, "label": "Jump host"}
-{"type": "arrow", "x": 270, "y": 240, "width": 120, "height": 0,
- "startBinding": "dc", "endBinding": "jump"}
+{"type":"rectangle","id":"dc","x":100,"y":200,"width":160,"height":80,
+ "label":"Domain Controller"}
+{"type":"rectangle","id":"jump","x":400,"y":200,"label":"Jump host"}
+{"type":"arrow","startBinding":"dc","endBinding":"jump"}
 ```
 
-**Label a shape with `label`.** Excalidraw models a labelled box as two
-elements — the shape plus a `text` whose `containerId` names it — and the pair
-only holds together if the shape lists the text back. `label` builds both and
-wires them. Writing the text element yourself still works; wire both halves if
-you do, or the words stay behind the first time somebody drags the box.
+**Label a shape with `label`.** Excalidraw models a labelled box as a shape
+plus a `text` whose `containerId` names it, holding only if the shape lists
+the text back. `label` builds and wires both; by hand you must wire both
+halves or the words stay behind when the box moves.
 
 **Connect arrows with `startBinding` / `endBinding`,** each the id of the
-shape to attach to. An unbound arrow is decoration: it sits where you put it
-and does not follow the shapes when they move, so a diagram that looked right
-falls apart the first time it is edited. `focus` and `gap` are filled in.
+shape to attach to. Two things follow, easily confused:
 
-An arrow is drawn from its points, not its box. Give it `width`/`height` and
-the points are derived; give explicit `points` when it should bend.
+- It glues the ends, so the arrow follows those shapes when somebody drags
+  them. An unbound arrow is decoration and falls behind on first edit.
+- Give a bound arrow no `points` and the server draws a straight stroke
+  between the two shapes' edges. That is the easy way to draw a tree: name the
+  ends, send no geometry.
+
+It is **not** a routing engine — a straight line, nothing avoiding siblings.
+Send `points` for an elbow.
+
+An arrow is drawn from its points, not its box, and identical points draw
+identical strokes: twenty arrows sharing geometry are one visible line and a
+result saying `applied: 20`. The response warns when shapes land exactly on
+top of each other; the reliable habit is to let bindings place them.
+
+Coordinates grow right and down, with no canvas edge. A shape at x: 3000 is
+real and off the screen of anyone at the origin, so an empty-looking canvas is
+worth a read before a redraw.
 
 ## Working alongside the operator
 
-Edits land on the live canvas. They merge as the operator draws rather than
-overwriting, and appear on their screen as they land — `watchers` on the
-result says whether anyone was in fact looking.
+Edits merge as the operator draws and appear on their screen as they land;
+`watchers` says whether anyone was looking.
 
-An `update` or `delete` matching no shape changes nothing and says so, rather
-than creating one. That almost always means the ids came from a read taken
-before somebody else edited the canvas: read it again.
+When a layout has gone wrong in several places, `mode:"replace"` with the
+whole scene beats a run of patches: one coherent change, rather than a
+sequence that must be right about its starting state each time. Replace means
+"this is the entire canvas now" — anything left out is gone.
 
-## Creating one
+An `update` or `delete` matching no shape changes nothing and says so rather
+than creating one — usually stale ids. Read it again.
 
-`create_wiki_document` with `kind:"drawing"`, then draw on it. Passing
-`content` with that kind is refused — there is nowhere for Markdown to go on a
-canvas.
+Create one with `create_wiki_document` and `kind:"drawing"`, then draw on it;
+passing `content` with that kind is refused.

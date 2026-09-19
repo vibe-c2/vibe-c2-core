@@ -258,6 +258,26 @@ var releases = []Release{
 			"It has no owner and no version history, because it is rendered from the live tool registry on every download rather than stored. The name stays reserved, so nobody can publish under it.",
 		},
 	},
+	{
+		Version: 29,
+		Date:    "2026-09-20",
+		Notes: []string{
+			"mode:\"update\" is a patch now. It used to fill every field you left out with a default before merging, so moving a box reset its size to 100x100, sent y to 0 and detached its label — while the result said applied: 1. Only the fields you send change. It also no longer demands `type` on a shape you identified by id, and `label` retitles a bound label.",
+			"A bound arrow with no points is placed for you: the server draws a straight stroke between the two shapes' edges. Give arrows bindings and no geometry and a tree draws itself. It is still not a routing engine — straight lines only, nothing avoids a sibling.",
+			"Identical points draw identical strokes. Twenty arrows sharing geometry are one visible line and a result saying applied: 20, so the response now warns when shapes land exactly on top of each other. get_wiki_drawing's default view carries points and bindings for arrows, which is how you see the overlap at all.",
+			"Coordinates grow right and down and there is no canvas edge. A shape at x: 3000 is real and off the screen of anyone looking at the origin — read a canvas that looks empty before redrawing it.",
+			"When a layout has gone wrong in several places, mode:\"replace\" with the whole scene beats a run of patches: one coherent change rather than a sequence that must be right about its starting state each time.",
+		},
+	},
+	{
+		Version: 30,
+		Date:    "2026-09-20",
+		Notes: []string{
+			"A labelled shape is now sized to fit its label. It used to keep the 100px default whatever the words were, so anything longer than about ten characters ran over its own border with nothing to say so. Set width yourself only when you want a particular one — an explicit size is never overridden, and only the dimension you leave out is chosen for you.",
+			"Free-standing text is sized to its own words for the same reason; it used to be a fixed 100x100 box. A long label wraps rather than growing one absurdly wide box.",
+			"Sizing accounts for scripts that are physically wider: CJK, Hangul, fullwidth forms and emoji measure about twice Latin at the same font size. Cyrillic and Greek measure like Latin, so they are not inflated.",
+		},
+	},
 }
 
 // Releases returns the full history, oldest first. A copy, so callers cannot

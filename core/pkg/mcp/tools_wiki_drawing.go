@@ -35,7 +35,7 @@ type editWikiDrawingArgs struct {
 	// Elements is Excalidraw's own element shape. Every field but `type` is
 	// optional — the server fills in the bookkeeping (seed, nonce, group ids)
 	// that nobody composing a diagram should have to supply.
-	Elements   []map[string]any `json:"elements,omitempty"    jsonschema:"Excalidraw elements. Only 'type' is required per element (rectangle, ellipse, diamond, text, arrow, line, freedraw, image, frame); x, y, width, height, strokeColor and the rest are optional and defaulted. Put words on a shape with 'label'. Connect an arrow with 'startBinding'/'endBinding' set to a shape id, or it will not follow that shape when it moves. Not used with mode:delete."`
+	Elements   []map[string]any `json:"elements,omitempty"    jsonschema:"Excalidraw elements. Only 'type' is required per element (rectangle, ellipse, diamond, text, arrow, line, freedraw, image, frame); x, y, width, height, strokeColor and the rest are optional and defaulted. Put words on a shape with 'label' — the shape is sized to fit it unless you set width. Connect an arrow with 'startBinding'/'endBinding' set to a shape id, or it will not follow that shape when it moves. Not used with mode:delete."`
 	ElementIDs []string         `json:"element_ids,omitempty" jsonschema:"Ids to erase, from get_wiki_drawing. Only for mode:delete."`
 }
 
@@ -71,6 +71,15 @@ type drawingElementView struct {
 	Y      float64 `json:"y"`
 	Width  float64 `json:"width,omitempty"`
 	Height float64 `json:"height,omitempty"`
+	// Points is where a line actually goes, for arrows and lines. Carried in
+	// the default view because without it two arrows drawn on top of each
+	// other are indistinguishable from two arrows side by side: the ids
+	// differ, the geometry does not, and the canvas shows one stroke.
+	Points []any `json:"points,omitempty"`
+	// Bindings name the shapes an arrow is attached to. An arrow can be bound
+	// correctly and still drawn in the wrong place, so both matter.
+	StartBinding string `json:"startBinding,omitempty"`
+	EndBinding   string `json:"endBinding,omitempty"`
 	// Text is the shape's words, for a text element. It is the single most
 	// useful field for working out what a diagram says.
 	Text string `json:"text,omitempty"`
@@ -181,7 +190,30 @@ func summariseElement(el wiki.DrawingElement) drawingElementView {
 		Height:      floatField(el, "height"),
 		Text:        stringField(el, "text"),
 		ContainerID: stringField(el, "containerId"),
+
+		Points:       sliceField(el, "points"),
+		StartBinding: bindingTarget(el, "startBinding"),
+		EndBinding:   bindingTarget(el, "endBinding"),
 	}
+}
+
+func sliceField(el wiki.DrawingElement, key string) []any {
+	if v, ok := el[key].([]any); ok {
+		return v
+	}
+	return nil
+}
+
+// bindingTarget pulls the bound shape's id out of Excalidraw's binding object,
+// which also carries focus and gap — geometry the server maintains and nobody
+// composing a diagram needs to see.
+func bindingTarget(el wiki.DrawingElement, key string) string {
+	binding, ok := el[key].(map[string]any)
+	if !ok {
+		return ""
+	}
+	id, _ := binding["elementId"].(string)
+	return id
 }
 
 func stringField(el wiki.DrawingElement, key string) string {
@@ -265,6 +297,9 @@ func handleEditWikiDrawing(ctx context.Context, s *Server, args editWikiDrawingA
 		Mode:        string(mode),
 		Applied:     result.Applied,
 		Watchers:    result.Watchers,
+	}
+	if result.Warning != "" {
+		view.Notes = append(view.Notes, result.Warning)
 	}
 	if result.Watchers > 0 {
 		view.Notes = append(view.Notes,

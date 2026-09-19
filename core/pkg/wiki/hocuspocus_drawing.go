@@ -78,6 +78,10 @@ type drawingApplyRequest struct {
 type ApplyDrawingResult struct {
 	Applied  int `json:"applied"`
 	Watchers int `json:"watchers"`
+	// Warning describes something the write did that succeeded and is probably
+	// not what was meant — shapes stacked exactly on top of one another, most
+	// often. Empty when there is nothing to say.
+	Warning string `json:"warning,omitempty"`
 }
 
 // ReadDrawing returns the scene as it stands in the live room.
