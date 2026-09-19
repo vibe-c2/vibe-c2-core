@@ -3,7 +3,7 @@
 name: vibe-c2
 description: Work an offensive security engagement in Vibe C2 — hosts, credentials, hashes, tasks, wiki notes and the operation timeline — through its MCP tools. Use whenever connected to a Vibe C2 MCP endpoint, or when the user mentions an operation, findings, or engagement notes.
 metadata:
-  version: "26"
+  version: "27"
 ---
 
 # Vibe C2
@@ -716,6 +716,13 @@ a particular appliance. They are packaged exactly the way this skill is.
 
 `find_skills` lists them, `get_skill` gives you one in full. Both return
 descriptions, never bundles.
+
+The registry holds *published* skills only. `vibe-c2` is not among them and
+never will be: it is the built-in skill — the one you are reading now — it is
+generated from the live tool registry on every download, and an operator
+installs it from the server rather than publishing it. So a listing without it
+is a complete listing, not a missing entry, and the name is reserved so nobody
+can publish anything under it.
 
 ## Installing one
 

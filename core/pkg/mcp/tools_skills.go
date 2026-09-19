@@ -69,7 +69,9 @@ func registerSkillTools(s *Server) {
 	register(s, &mcp.Tool{
 		Name: "find_skills",
 		Description: "Skills operators have published on this server: shared working methods, " +
-			"packaged the way your own skill is. Returns names and descriptions, not the bundles.",
+			"packaged the way your own skill is. Returns names and descriptions, not the bundles. " +
+			"The built-in vibe-c2 skill is not in the registry — it is the one you are already " +
+			"running — so a listing without it is complete, not missing an entry.",
 	}, readTool, handleFindSkills)
 
 	register(s, &mcp.Tool{
@@ -106,6 +108,20 @@ func handleFindSkills(ctx context.Context, s *Server, args findSkillsArgs) (tool
 	}
 	if len(matched) == 0 {
 		notes = append(notes, "Nobody has published a skill matching that yet.")
+	}
+	// Asking the registry for the built-in skill is the one search whose empty
+	// result means something other than "not here". It is generated per
+	// download from the live tool registry rather than published, and it is
+	// already installed — the agent asking is running it. Without this the
+	// honest conclusion from an empty result is that the skill does not exist.
+	// Checked on the raw query rather than through NormalizeName, which
+	// rejects reserved names outright — it is the guard that stops anyone
+	// publishing one, so it cannot be used to recognise one.
+	if skills.IsReserved(strings.ToLower(strings.TrimSpace(args.Query))) {
+		notes = append(notes, fmt.Sprintf(
+			"%q is the built-in skill, not a registry entry: it is the one you are "+
+				"already running, an operator installs it from the server, and the name "+
+				"is reserved so nobody can publish under it.", args.Query))
 	}
 
 	result, err := newPage(matched, "", notes...)

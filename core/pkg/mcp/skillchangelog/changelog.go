@@ -241,6 +241,14 @@ var releases = []Release{
 			"Draw when the operator asks for a drawing, and otherwise write the page. A drawing exists for them, not for you: a topology or an attack path is far faster for a person to read as a picture, while you read a canvas as a list of shapes and lose the prose you could have searched, quoted and edited precisely. Turning notes into a diagram uninvited hands the operator shapes when they wanted sentences.",
 		},
 	},
+	{
+		Version: 27,
+		Date:    "2026-09-19",
+		Notes: []string{
+			"find_skills lists published skills only. The built-in vibe-c2 skill is not among them and never will be: it is the one you are already running, generated from the live tool registry on every download, and installed by an operator rather than published. A listing without it is a complete listing, not a missing entry — and searching the registry for it now says so rather than returning nothing.",
+			"The name is reserved, so nobody can publish a skill called vibe-c2 or vibe-c2-anything. If you were about to report the built-in skill as missing from the registry, this is why it is not there.",
+		},
+	},
 }
 
 // Releases returns the full history, oldest first. A copy, so callers cannot

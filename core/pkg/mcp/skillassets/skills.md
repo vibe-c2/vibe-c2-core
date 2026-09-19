@@ -7,6 +7,13 @@ a particular appliance. They are packaged exactly the way this skill is.
 `find_skills` lists them, `get_skill` gives you one in full. Both return
 descriptions, never bundles.
 
+The registry holds *published* skills only. `vibe-c2` is not among them and
+never will be: it is the built-in skill — the one you are reading now — it is
+generated from the live tool registry on every download, and an operator
+installs it from the server rather than publishing it. So a listing without it
+is a complete listing, not a missing entry, and the name is reserved so nobody
+can publish anything under it.
+
 ## Installing one
 
 `get_skill` returns a `downloadUrl`. Fetch it with your agent key and unzip it
