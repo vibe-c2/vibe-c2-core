@@ -121,6 +121,7 @@ function WikiDocumentPreviewBody({ id }: { id: string }) {
           <span className="flex size-4 shrink-0 items-center justify-center">
             <DocumentIcon
               emoji={doc.emoji}
+              isDrawing={doc.kind === "DRAWING"}
               icon={doc.icon}
               color={doc.color}
               isTemplate={doc.isTemplate}

@@ -770,6 +770,7 @@ type ComplexityRoot struct {
 		ID        func(childComplexity int) int
 		Icon      func(childComplexity int) int
 		IsDeleted func(childComplexity int) int
+		Kind      func(childComplexity int) int
 		Title     func(childComplexity int) int
 	}
 
@@ -5033,6 +5034,12 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.WikiDocumentAncestor.IsDeleted(childComplexity), true
+	case "WikiDocumentAncestor.kind":
+		if e.ComplexityRoot.WikiDocumentAncestor.Kind == nil {
+			break
+		}
+
+		return e.ComplexityRoot.WikiDocumentAncestor.Kind(childComplexity), true
 	case "WikiDocumentAncestor.title":
 		if e.ComplexityRoot.WikiDocumentAncestor.Title == nil {
 			break
@@ -8084,6 +8091,10 @@ type WikiDocumentAncestor {
   emoji: String!
   icon: String!
   color: String!
+  # Carried for the same reason the icon is: a breadcrumb renders the page's
+  # glyph, and a drawing's glyph is fixed rather than taken from ` + "`" + `icon` + "`" + `.
+  # Without this a drawing in a breadcrumb trail shows as an ordinary page.
+  kind: WikiDocumentKind!
   isDeleted: Boolean!
 }
 
@@ -34468,6 +34479,8 @@ func (ec *executionContext) fieldContext_WikiDocument_ancestors(_ context.Contex
 				return ec.fieldContext_WikiDocumentAncestor_icon(ctx, field)
 			case "color":
 				return ec.fieldContext_WikiDocumentAncestor_color(ctx, field)
+			case "kind":
+				return ec.fieldContext_WikiDocumentAncestor_kind(ctx, field)
 			case "isDeleted":
 				return ec.fieldContext_WikiDocumentAncestor_isDeleted(ctx, field)
 			}
@@ -34996,6 +35009,35 @@ func (ec *executionContext) fieldContext_WikiDocumentAncestor_color(_ context.Co
 		IsResolver: false,
 		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
 			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _WikiDocumentAncestor_kind(ctx context.Context, field graphql.CollectedField, obj *model.WikiDocumentAncestor) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_WikiDocumentAncestor_kind,
+		func(ctx context.Context) (any, error) {
+			return obj.Kind, nil
+		},
+		nil,
+		ec.marshalNWikiDocumentKind2githubᚗcomᚋvibeᚑc2ᚋvibeᚑc2ᚑcoreᚋcoreᚋpkgᚋmodelsᚐWikiDocumentKind,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_WikiDocumentAncestor_kind(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "WikiDocumentAncestor",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type WikiDocumentKind does not have child fields")
 		},
 	}
 	return fc, nil
@@ -49440,6 +49482,11 @@ func (ec *executionContext) _WikiDocumentAncestor(ctx context.Context, sel ast.S
 			}
 		case "color":
 			out.Values[i] = ec._WikiDocumentAncestor_color(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "kind":
+			out.Values[i] = ec._WikiDocumentAncestor_kind(ctx, field, obj)
 			if out.Values[i] == graphql.Null {
 				out.Invalids++
 			}

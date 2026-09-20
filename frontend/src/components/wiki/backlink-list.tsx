@@ -96,6 +96,7 @@ export function BacklinkList({
                     emoji={doc.emoji}
                     icon={doc.icon}
                     color={doc.color}
+                    isDrawing={doc.kind === "DRAWING"}
                     // Nudge the icon down a hair so it baselines with the
                     // title text on multi-line rows.
                     className={cn(showFullPath && "mt-0.5")}

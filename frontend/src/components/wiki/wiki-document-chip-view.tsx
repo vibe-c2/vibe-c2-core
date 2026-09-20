@@ -20,6 +20,8 @@ export interface WikiDocumentChipDoc {
   icon?: string | null
   color?: string | null
   isTemplate?: boolean | null
+  /** A drawing renders a fixed glyph rather than the stored icon. */
+  kind?: string | null
   deletedAt?: string | null
 }
 
@@ -168,6 +170,7 @@ export const WikiDocumentChipView = forwardRef<
           emoji={doc.emoji}
           icon={doc.icon}
           color={doc.color}
+          isDrawing={doc.kind === "DRAWING"}
           isTemplate={!!doc.isTemplate}
         />
       </span>

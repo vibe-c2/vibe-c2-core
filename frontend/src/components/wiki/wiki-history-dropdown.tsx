@@ -166,6 +166,7 @@ function HistoryRow({ visit, now, onClose }: HistoryRowProps) {
         emoji={visit.document.emoji}
         icon={visit.document.icon}
         color={visit.document.color}
+        isDrawing={visit.document.kind === "DRAWING"}
         size={16}
         className="mt-0.5 shrink-0"
       />

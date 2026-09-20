@@ -723,6 +723,7 @@ export function WikiTreeSidebar({
                     emoji={activeDoc.emoji}
                     icon={activeDoc.icon}
                     color={activeDoc.color}
+                    isDrawing={activeDoc.kind === "DRAWING"}
                     hasChildren={activeDoc.childCount > 0}
                   />
                   <span className="truncate">{activeDoc.title}</span>

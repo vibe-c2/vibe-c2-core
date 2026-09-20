@@ -277,6 +277,7 @@ function ModalBody({ operationId, isOpen, onClose }: ModalBodyProps) {
                         emoji={hit.emoji}
                         icon={hit.icon}
                         color={hit.color}
+                        isDrawing={hit.kind === "DRAWING"}
                         className="mt-0.5"
                       />
                     </Link>

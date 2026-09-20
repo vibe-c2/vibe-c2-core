@@ -336,6 +336,7 @@ export function CreateWikiDocumentDialog({ operationId }: CreateWikiDocumentDial
                           >
                             <DocumentIcon
                               emoji={tpl.emoji}
+                              isDrawing={tpl.kind === "DRAWING"}
                               icon={tpl.icon}
                               color={tpl.color}
                               hasChildren={false}

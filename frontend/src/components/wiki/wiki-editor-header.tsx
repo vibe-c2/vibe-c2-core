@@ -44,6 +44,8 @@ interface AncestorNode {
   emoji: string
   icon: string
   color: string
+  /** A drawing renders a fixed glyph rather than the stored icon. */
+  kind?: string | null
 }
 
 export function WikiEditorHeader({
@@ -202,6 +204,7 @@ export function WikiEditorHeader({
                     emoji={node.emoji}
                     icon={node.icon}
                     color={node.color}
+                    isDrawing={node.kind === "DRAWING"}
                     hasChildren
                   />
                   <span className="truncate">{node.title}</span>
@@ -275,6 +278,7 @@ export function WikiEditorHeader({
                   emoji={child.emoji}
                   icon={child.icon}
                   color={child.color}
+                  isDrawing={child.kind === "DRAWING"}
                   hasChildren={child.childCount > 0}
                 />
                 <span className="min-w-0 flex-1 truncate">{child.title || "Untitled"}</span>
@@ -323,6 +327,7 @@ export function WikiEditorHeader({
                     emoji={ref.emoji}
                     icon={ref.icon}
                     color={ref.color}
+                    isDrawing={ref.kind === "DRAWING"}
                   />
                   <span className="min-w-0 flex-1 truncate">
                     {ref.title || "Untitled"}

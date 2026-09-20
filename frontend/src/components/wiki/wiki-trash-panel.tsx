@@ -286,6 +286,7 @@ function RestoreCascadeDialog({
                   emoji={d.emoji}
                   icon={d.icon}
                   color={d.color}
+                  isDrawing={d.kind === "DRAWING"}
                   size={14}
                 />
                 <span className="truncate">{d.title}</span>
@@ -340,7 +341,12 @@ function TrashItem({
         aria-hidden
         className="mt-0.5 flex size-7 shrink-0 items-center justify-center rounded-md bg-muted text-sm"
       >
-        <DocumentIcon emoji={doc.emoji} icon={doc.icon} color={doc.color} />
+        <DocumentIcon
+          emoji={doc.emoji}
+          icon={doc.icon}
+          color={doc.color}
+          isDrawing={doc.kind === "DRAWING"}
+        />
       </span>
       <div className="min-w-0 flex-1">
         <div className="flex items-baseline gap-2">

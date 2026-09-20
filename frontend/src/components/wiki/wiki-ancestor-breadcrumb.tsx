@@ -23,6 +23,8 @@ export interface AncestorCrumb {
   emoji: string
   icon: string
   color?: string | null
+  /** A drawing renders a fixed glyph rather than the stored icon. */
+  kind?: string | null
   isDeleted: boolean
 }
 
@@ -169,6 +171,7 @@ function Crumb({ crumb, highlightQuery, onCrumbClick, onCrumbSelect }: CrumbProp
       <DocumentIcon
         emoji={crumb.emoji}
         icon={crumb.icon}
+        isDrawing={crumb.kind === "DRAWING"}
         size={12}
         className="text-[11px]"
       />

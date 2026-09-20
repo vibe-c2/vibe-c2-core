@@ -35,6 +35,9 @@ interface DestinationChoice {
   emoji: string
   icon: string
   color: string
+  /** A drawing renders a fixed glyph rather than the stored icon. The root
+   * choice is not a document and carries none. */
+  kind?: string | null
 }
 
 const ROOT_CHOICE: DestinationChoice = {
@@ -92,6 +95,7 @@ export function MoveWikiDocumentDialog({
           emoji: doc.emoji,
           icon: doc.icon,
           color: doc.color,
+          kind: doc.kind,
         })
       },
     })
@@ -238,6 +242,7 @@ function DestinationCard({
           emoji={choice.emoji}
           icon={choice.icon}
           color={choice.color}
+          isDrawing={choice.kind === "DRAWING"}
           className="shrink-0"
         />
       )}

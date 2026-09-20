@@ -58,6 +58,7 @@ export const WikiDocumentLiteFields = graphql(`
     emoji
     icon
     color
+    kind
     isTemplate
     deletedAt
   }
@@ -72,8 +73,9 @@ export const WikiDocumentBacklinkFields = graphql(`
     emoji
     icon
     color
+    kind
     updatedAt
-    ancestors { id title emoji icon color isDeleted }
+    ancestors { id title emoji icon color kind isDeleted }
   }
 `)
 
@@ -87,7 +89,7 @@ export const WikiDocumentFields = graphql(`
     id
     operationId
     parentDocumentId
-    ancestors { id title emoji icon color isDeleted }
+    ancestors { id title emoji icon color kind isDeleted }
     title
     kind
     content
@@ -156,7 +158,8 @@ export const WikiDocumentVisitListFields = graphql(`
       emoji
       icon
       color
-      ancestors { id title emoji icon color isDeleted }
+      kind
+      ancestors { id title emoji icon color kind isDeleted }
     }
   }
 `)
@@ -267,8 +270,9 @@ export const WikiRecentDocumentsQuery = graphql(`
           emoji
           icon
           color
+          kind
           parentDocumentId
-          ancestors { id title emoji icon color isDeleted }
+          ancestors { id title emoji icon color kind isDeleted }
           createdAt
           updatedAt
           lastUpdatedAt
@@ -305,8 +309,9 @@ export const WikiSearchQuery = graphql(`
           emoji
           icon
           color
+          kind
           parentDocumentId
-          ancestors { id title emoji icon color isDeleted }
+          ancestors { id title emoji icon color kind isDeleted }
           createdBy { id username }
         }
         snippet
@@ -370,10 +375,11 @@ export const WikiDocumentTrashQuery = graphql(`
           emoji
           icon
           color
+          kind
           deletedAt
           deletedBy { id username }
           createdAt
-          ancestors { id title emoji icon color isDeleted }
+          ancestors { id title emoji icon color kind isDeleted }
         }
         cursor
       }
@@ -550,7 +556,7 @@ export const RestoreWikiDocumentMutation = graphql(`
 export const WikiDocumentTrashedDescendantsQuery = graphql(`
   query WikiDocumentTrashedDescendants($documentId: ID!) {
     wikiDocumentTrashedDescendants(documentId: $documentId) {
-      id title emoji icon color
+      id title emoji icon color kind
     }
   }
 `)

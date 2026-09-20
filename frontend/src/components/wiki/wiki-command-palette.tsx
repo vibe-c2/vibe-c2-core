@@ -37,6 +37,8 @@ export interface PickedWikiDocument {
   emoji: string;
   icon: string;
   color: string;
+  /** A drawing renders a fixed glyph rather than the stored icon. */
+  kind?: string | null;
 }
 
 // One result row as projected by the WikiSearch query (document + snippet +
@@ -577,7 +579,12 @@ function RowDocLabel({
 }) {
   return (
     <>
-      <DocumentIcon emoji={doc.emoji} icon={doc.icon} color={doc.color} />
+      <DocumentIcon
+        emoji={doc.emoji}
+        icon={doc.icon}
+        color={doc.color}
+        isDrawing={doc.kind === "DRAWING"}
+      />
       <span className="truncate text-sm font-medium">
         <HighlightedSubstring text={doc.title || "Untitled"} query={query} />
       </span>

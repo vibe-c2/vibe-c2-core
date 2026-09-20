@@ -2593,6 +2593,7 @@ func (r *wikiDocumentResolver) WikiDocumentAncestors(ctx context.Context, obj *m
 			Emoji:     a.Emoji,
 			Icon:      a.Icon,
 			Color:     a.Color,
+			Kind:      a.Kind.Or(),
 			IsDeleted: a.DeletedAt != nil,
 		})
 	}
@@ -2643,6 +2644,7 @@ func preloadAncestorEntries(
 			Emoji:     a.Emoji,
 			Icon:      a.Icon,
 			Color:     a.Color,
+			Kind:      a.Kind.Or(),
 			IsDeleted: a.DeletedAt != nil,
 		}
 	}

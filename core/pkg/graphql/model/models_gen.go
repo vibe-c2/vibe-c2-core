@@ -534,12 +534,13 @@ type UserSuggestion struct {
 }
 
 type WikiDocumentAncestor struct {
-	ID        string `json:"id"`
-	Title     string `json:"title"`
-	Emoji     string `json:"emoji"`
-	Icon      string `json:"icon"`
-	Color     string `json:"color"`
-	IsDeleted bool   `json:"isDeleted"`
+	ID        string                  `json:"id"`
+	Title     string                  `json:"title"`
+	Emoji     string                  `json:"emoji"`
+	Icon      string                  `json:"icon"`
+	Color     string                  `json:"color"`
+	Kind      models.WikiDocumentKind `json:"kind"`
+	IsDeleted bool                    `json:"isDeleted"`
 }
 
 type WikiDocumentBackupConnection struct {

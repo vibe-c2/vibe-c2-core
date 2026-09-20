@@ -127,6 +127,10 @@ type WikiDocumentAncestor {
   emoji: String!
   icon: String!
   color: String!
+  # Carried for the same reason the icon is: a breadcrumb renders the page's
+  # glyph, and a drawing's glyph is fixed rather than taken from `icon`.
+  # Without this a drawing in a breadcrumb trail shows as an ordinary page.
+  kind: WikiDocumentKind!
   isDeleted: Boolean!
 }
 

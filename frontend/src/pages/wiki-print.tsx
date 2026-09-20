@@ -218,6 +218,7 @@ function WikiPrintPageInner({
           <div className="wiki-print-icon">
             <DocumentIcon
               emoji={doc.emoji}
+              isDrawing={doc.kind === "DRAWING"}
               icon={doc.icon}
               color={doc.color}
               size={32}
