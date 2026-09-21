@@ -6,6 +6,7 @@ import {
   DRAWING_ROOT_KEY,
   LOCAL_ORIGIN,
   getElementsMap,
+  locallyEditingIDs,
   mergeRemoteElements,
   readElements,
   seedLastSeen,
@@ -51,6 +52,48 @@ describe("shouldKeepLocal", () => {
   test("an element this client has never seen is always taken", () => {
     expect(shouldKeepLocal(undefined, element("a", 1))).toBe(false)
   })
+
+  // The bug behind "the pencil only works when I am alone on the drawing".
+  // A stroke in flight is published on every pointermove, so the shared map
+  // holds this client's own copy at the same version AND the same nonce. Under
+  // a strict `<` tiebreak that copy won, and the canvas swapped the element
+  // object Excalidraw was mutating for an identical clone — the stroke froze
+  // where it was and committed truncated.
+  test("keeps local when the remote copy is this client's own write echoed back", () => {
+    const mine = element("a", 3, 10)
+    const echo = element("a", 3, 10)
+    expect(shouldKeepLocal(mine, echo)).toBe(true)
+  })
+
+  test("an element under an active local gesture outranks a newer remote one", () => {
+    const stroke = element("a", 2)
+    const newer = element("a", 99)
+    expect(shouldKeepLocal(stroke, newer)).toBe(false)
+    expect(shouldKeepLocal(stroke, newer, new Set(["a"]))).toBe(true)
+    // The guard is per element: everything else still merges normally.
+    expect(shouldKeepLocal(stroke, newer, new Set(["other"]))).toBe(false)
+  })
+})
+
+describe("locallyEditingIDs", () => {
+  test("collects every appState slot that holds an element mid-gesture", () => {
+    expect(
+      locallyEditingIDs({
+        newElement: { id: "stroke" },
+        resizingElement: { id: "box" },
+        multiElement: { id: "line" },
+        editingTextElement: { id: "label" },
+        editingLinearElement: { elementId: "arrow" },
+      }),
+    ).toEqual(new Set(["stroke", "box", "line", "label", "arrow"]))
+  })
+
+  test("is empty when nothing is under the pointer", () => {
+    expect(locallyEditingIDs({})).toEqual(new Set())
+    expect(locallyEditingIDs({ newElement: null, editingLinearElement: null })).toEqual(
+      new Set(),
+    )
+  })
 })
 
 describe("mergeRemoteElements", () => {
@@ -58,33 +101,83 @@ describe("mergeRemoteElements", () => {
     const local = [element("a", 5), element("b", 1)]
     const remote = [element("a", 2), element("b", 9)]
 
-    const merged = mergeRemoteElements(local, remote)
+    const { elements } = mergeRemoteElements(local, remote)
 
-    expect(merged.map((el) => [el.id, el.version])).toEqual([
+    expect(elements.map((el) => [el.id, el.version])).toEqual([
       ["a", 5],
       ["b", 9],
     ])
   })
 
   test("appends an element that exists only locally", () => {
-    const merged = mergeRemoteElements([element("local-only", 1)], [element("a", 1)])
-    expect(merged.map((el) => el.id)).toEqual(["a", "local-only"])
+    const { elements } = mergeRemoteElements([element("local-only", 1)], [element("a", 1)])
+    expect(elements.map((el) => el.id)).toEqual(["a", "local-only"])
   })
 
   // Excalidraw renders in array order, so reordering on every remote update
   // would make z-order flicker while somebody else is drawing.
   test("follows the shared scene's order", () => {
-    const merged = mergeRemoteElements(
+    const { elements } = mergeRemoteElements(
       [element("c", 1), element("a", 1)],
       [element("a", 1), element("b", 1), element("c", 1)],
     )
-    expect(merged.map((el) => el.id)).toEqual(["a", "b", "c"])
+    expect(elements.map((el) => el.id)).toEqual(["a", "b", "c"])
   })
 
   test("keeps deleted tombstones, which Excalidraw filters itself", () => {
-    const merged = mergeRemoteElements([], [element("gone", 2, 1, { isDeleted: true })])
-    expect(merged).toHaveLength(1)
-    expect(merged[0].isDeleted).toBe(true)
+    const { elements } = mergeRemoteElements([], [element("gone", 2, 1, { isDeleted: true })])
+    expect(elements).toHaveLength(1)
+    expect(elements[0].isDeleted).toBe(true)
+  })
+
+  // Excalidraw drives a gesture by mutating one element object in place, so
+  // the merge has to hand back that same object — an equal-valued clone is a
+  // different element as far as the canvas is concerned.
+  test("preserves object identity for elements the local copy wins", () => {
+    const mine = element("a", 5)
+    const { elements } = mergeRemoteElements([mine], [element("a", 2)])
+    expect(elements[0]).toBe(mine)
+  })
+
+  test("does not swap the element under an active gesture", () => {
+    const stroke = element("stroke", 2)
+    const { elements } = mergeRemoteElements(
+      [stroke],
+      [element("stroke", 40)],
+      new Set(["stroke"]),
+    )
+    expect(elements[0]).toBe(stroke)
+  })
+
+  // `accepted` feeds lastSeen, which means "version this client has published".
+  // Recording a locally-won element there would convince writeLocalElements
+  // that an unpublished version was already out in the room.
+  test("reports only the versions actually taken from the shared scene", () => {
+    const { accepted } = mergeRemoteElements(
+      [element("mine", 5), element("local-only", 3)],
+      [element("mine", 2), element("theirs", 9)],
+    )
+    expect(accepted).toEqual(new Map([["theirs", 9]]))
+  })
+
+  test("a local change that coincides with a remote update still publishes", () => {
+    const doc = new YDoc()
+    const seen = seedLastSeen([])
+
+    // This client draws, and publishes what it has so far.
+    writeLocalElements(doc, [element("stroke", 4)], seen)
+
+    // Somebody else's update lands. The merge reads the whole shared map back,
+    // which includes this client's own stroke.
+    const { accepted } = mergeRemoteElements(
+      [element("stroke", 5)],
+      [element("stroke", 4), element("theirs", 1)],
+    )
+    for (const [id, version] of accepted) seen.set(id, version)
+
+    // The final state of the stroke is still this client's to publish.
+    expect(writeLocalElements(doc, [element("stroke", 5)], seen)).toBe(1)
+    expect(readElements(doc).find((el) => el.id === "stroke")?.version).toBe(5)
   })
 })
 

@@ -21,6 +21,7 @@ import { getCursorColor } from "@/lib/cursor-colors"
 import {
   LOCAL_ORIGIN,
   getElementsMap,
+  locallyEditingIDs,
   mergeRemoteElements,
   readElements,
   readSharedAppState,
@@ -121,7 +122,7 @@ export function useDrawingSync({
   // Shared scene to canvas.
   useEffect(() => {
     if (!api) return
-    const elements = getElementsMap(ydoc)
+    const shared = getElementsMap(ydoc)
 
     const handler = (_event: unknown, transaction: { origin: unknown }) => {
       // Our own writes come back through here too. Applying them would at best
@@ -131,26 +132,33 @@ export function useDrawingSync({
       // Including deleted: tombstones are how Excalidraw learns that somebody
       // else erased a shape. Merging against the non-deleted view would keep
       // resurrecting it.
-      const merged = mergeRemoteElements(
+      //
+      // The appState is read at merge time rather than captured: what the
+      // pointer is holding changes between one remote update and the next, and
+      // this handler outlives any one gesture.
+      const { elements, accepted } = mergeRemoteElements(
         api.getSceneElementsIncludingDeleted(),
         readElements(ydoc),
+        locallyEditingIDs(api.getAppState()),
       )
-      // These versions are now what this client holds, so record them —
-      // otherwise the next local change republishes everything that just
-      // arrived, and two clients bounce the same elements back and forth.
+      // The versions taken from the room are now what this client holds, so
+      // record them — otherwise the next local change republishes everything
+      // that just arrived, and two clients bounce the same elements back and
+      // forth. Only those: an element whose local copy won is still unpublished
+      // at its local version, and marking it seen would strand it here.
       const seen = lastSeen()
-      for (const el of merged) seen.set(el.id, el.version)
+      for (const [id, version] of accepted) seen.set(id, version)
 
       // A peer's image arrives as an element carrying a wiki image id, with no
       // file entry on this client — the canvas would render an empty frame.
       // Register the ones we do not have; the bytes come from the URL.
-      registerWikiImages(api, merged)
+      registerWikiImages(api, elements)
 
-      api.updateScene({ elements: merged })
+      api.updateScene({ elements })
     }
 
-    elements.observe(handler)
-    return () => elements.unobserve(handler)
+    shared.observe(handler)
+    return () => shared.unobserve(handler)
   }, [ydoc, api, lastSeen])
 
   // Images the canvas has taken on but not yet stored. Tracked so a slow

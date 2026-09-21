@@ -151,21 +151,95 @@ export function readSharedAppState(ydoc: YDoc): SharedAppState {
 }
 
 /**
+ * The ids of elements this client is in the middle of editing.
+ *
+ * An element under an active gesture must never be swapped for a copy that
+ * arrived from the room, however that copy compares by version. Excalidraw
+ * drives a gesture by mutating one element object *in place* — the freehand
+ * stroke growing under the pointer is `appState.newElement`, and every
+ * pointermove calls `mutateElement` on that exact object. The scene renders
+ * from its own array, so replacing the object there leaves the gesture
+ * mutating something the canvas no longer draws: the stroke stops dead at the
+ * point the swap happened and is committed truncated on pointerup.
+ *
+ * The same holds for a resize, a multi-point line being clicked out, a text
+ * element being typed into, and a line whose points are being dragged.
+ *
+ * Mirrors `shouldDiscardRemoteElement` in Excalidraw's own collab layer
+ * (data/reconcile.ts), which guards the same appState slots.
+ */
+export function locallyEditingIDs(appState: LocalEditingAppState): Set<string> {
+  const ids = new Set<string>()
+  for (const el of [
+    appState.newElement,
+    appState.resizingElement,
+    appState.multiElement,
+    appState.editingTextElement,
+  ]) {
+    if (el?.id) ids.add(el.id)
+  }
+  const linear = appState.editingLinearElement?.elementId
+  if (linear) ids.add(linear)
+  return ids
+}
+
+/** The slice of Excalidraw's appState that says what is under the pointer.
+ * Structural rather than an import of `AppState`, so the merge rules stay
+ * testable without conjuring a whole appState. */
+export interface LocalEditingAppState {
+  newElement?: { id: string } | null
+  resizingElement?: { id: string } | null
+  multiElement?: { id: string } | null
+  editingTextElement?: { id: string } | null
+  editingLinearElement?: { elementId: string } | null
+}
+
+/**
  * Excalidraw's own conflict rule, applied to one element.
  *
  * Returns true when the local copy should be kept and the remote one dropped:
- * a higher version wins, and an equal version is broken by the lower nonce.
- * The nonce tiebreak is arbitrary but it must be *consistent* — every client
- * has to reach the same answer independently, or two canvases settle into
- * different states and neither ever learns it.
+ * an element under an active local gesture always wins, then a higher version,
+ * and an equal version is broken by the lower nonce. The nonce tiebreak is
+ * arbitrary but it must be *consistent* — every client has to reach the same
+ * answer independently, or two canvases settle into different states and
+ * neither ever learns it.
+ *
+ * An *equal* nonce keeps local too, and that is not a tiebreak at all: two
+ * independently-authored edits never collide on a 32-bit random nonce at the
+ * same version, so equality means the remote copy IS this client's own last
+ * write, read back out of the shared map. The two are the same element with
+ * the same content, and the only thing taking the remote one changes is object
+ * identity — which is exactly what a gesture in flight cannot survive, per
+ * locallyEditingIDs above. Preferring local here costs nothing (the values are
+ * identical, so every client still converges) and removes the whole class of
+ * self-echo swaps.
  */
 export function shouldKeepLocal(
   local: ExcalidrawElement | undefined,
   remote: ExcalidrawElement,
+  locallyEditing?: ReadonlySet<string>,
 ): boolean {
   if (!local) return false
+  if (locallyEditing?.has(local.id)) return true
   if (local.version > remote.version) return true
-  return local.version === remote.version && local.versionNonce < remote.versionNonce
+  return local.version === remote.version && local.versionNonce <= remote.versionNonce
+}
+
+export interface MergeResult {
+  /** The scene to hand to Excalidraw, in paint order. */
+  elements: ExcalidrawElement[]
+  /**
+   * Element id to version, for the elements actually taken from the shared
+   * scene.
+   *
+   * This is what the caller folds into `lastSeen`, and it deliberately omits
+   * every element where the local copy won. Recording those too would tell
+   * `writeLocalElements` that a version this client has never published is
+   * already out there, and it would skip it — so the last change of a gesture
+   * that happened to coincide with somebody else's update would stay on the
+   * one screen it was drawn on, forever.
+   */
+  accepted: Map<string, number>
 }
 
 /**
@@ -175,18 +249,28 @@ export function shouldKeepLocal(
  * from. Every client computes that order from the elements themselves rather
  * than from the order an update arrived in, so two canvases showing the same
  * scene agree about what is on top.
+ *
+ * `locallyEditing` protects whatever is under this client's pointer from being
+ * replaced mid-gesture — see locallyEditingIDs.
  */
 export function mergeRemoteElements(
   local: readonly ExcalidrawElement[],
   remote: readonly ExcalidrawElement[],
-): ExcalidrawElement[] {
+  locallyEditing?: ReadonlySet<string>,
+): MergeResult {
   const localByID = new Map(local.map((el) => [el.id, el]))
   const merged: ExcalidrawElement[] = []
+  const accepted = new Map<string, number>()
   const taken = new Set<string>()
 
   for (const remoteEl of remote) {
     const localEl = localByID.get(remoteEl.id)
-    merged.push(shouldKeepLocal(localEl, remoteEl) ? (localEl as ExcalidrawElement) : remoteEl)
+    if (shouldKeepLocal(localEl, remoteEl, locallyEditing)) {
+      merged.push(localEl as ExcalidrawElement)
+    } else {
+      merged.push(remoteEl)
+      accepted.set(remoteEl.id, remoteEl.version)
+    }
     taken.add(remoteEl.id)
   }
   for (const localEl of local) {
@@ -195,7 +279,7 @@ export function mergeRemoteElements(
   // Sorted rather than left in arrival order: the merged array is the z-order,
   // and taking it from whichever peer's update happened to arrive first is how
   // two canvases end up disagreeing about what is on top.
-  return merged.sort(compareElements)
+  return { elements: merged.sort(compareElements), accepted }
 }
 
 /**
