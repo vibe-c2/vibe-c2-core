@@ -47,13 +47,17 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
           gap between scoped items — otherwise stacked p-2 padding from two
           groups doubles the visual gap. */}
       <SidebarContent className="flex flex-col">
-        <NavMain
-          items={
-            scopedOperation
-              ? [...navigationGlobalItems, ...navigationOperationItems]
-              : navigationGlobalItems
-          }
-        />
+        {/* data-tour anchors the walkthrough step that explains why Tasks and
+            Timeline appear only once an operation is scoped. */}
+        <div data-tour="nav-operation-items">
+          <NavMain
+            items={
+              scopedOperation
+                ? [...navigationGlobalItems, ...navigationOperationItems]
+                : navigationGlobalItems
+            }
+          />
+        </div>
         {visibleAdminItems.length > 0 && (
           <div className="mt-auto">
             <NavMain items={visibleAdminItems} />

@@ -652,6 +652,10 @@ export function WikiTreeSidebar({
       <div
         ref={setScrollAndRootRef}
         data-wiki-tree-scroll
+        // Final stop of the first-login walkthrough: the tour lands here so a
+        // new operator leaves it looking at their operation's pages rather than
+        // at a dialog telling them about them.
+        data-tour="wiki-tree"
         className="flex-1 overflow-y-auto px-1 py-1"
       >
         {rootsLoading ? (

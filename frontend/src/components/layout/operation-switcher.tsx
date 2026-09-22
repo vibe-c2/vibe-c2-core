@@ -164,6 +164,10 @@ export function OperationSwitcher() {
   return (
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger
+        // Anchor for the first-login walkthrough's opening step. The tour finds
+        // its targets by this attribute rather than by class or structure, so
+        // restyling the sidebar cannot silently unhook the guide.
+        data-tour="operation-switcher"
         render={
           <SidebarMenuButton
             size="lg"
@@ -238,6 +242,11 @@ export function OperationSwitcher() {
       </PopoverTrigger>
 
       <PopoverContent
+        // The walkthrough reads this element's existence as proof the operator
+        // found the switcher, and spotlights it for the "pick one" step. The
+        // popover rather than the list inside it: the panel opening is the
+        // lesson, and the search box above the rows is part of what to show.
+        data-tour="operation-list"
         // Sized independently of the trigger. Anchoring to the sidebar's width
         // (16rem, less padding) left almost every name and description cut off,
         // and the collapsed sidebar would have pinned it narrower still. Capped

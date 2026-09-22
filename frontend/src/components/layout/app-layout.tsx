@@ -18,6 +18,7 @@ import { WikiCommandPalette } from "@/components/wiki/wiki-command-palette"
 import { TaskPickerDialog } from "@/components/tasks/task-picker-dialog"
 import { SkillUpdateDialog } from "@/components/keys/skill-update-dialog"
 import { CommunitySkillUpdateDialog } from "@/components/skills/community-skill-update-dialog"
+import { OnboardingTour } from "@/components/onboarding/onboarding-tour"
 
 export function AppLayout() {
   const sidebarOpen = useAppStore((s) => s.sidebarOpen)
@@ -92,6 +93,11 @@ export function AppLayout() {
             downloaded the skill. */}
         <SkillUpdateDialog />
       <CommunitySkillUpdateDialog />
+      {/* First-login walkthrough. Global for the same reason the prompts above
+          are: it starts on whichever page the operator landed on and finishes
+          on the wiki, so no single page can own it. Renders nothing for anyone
+          who has been through it. */}
+      <OnboardingTour />
       </SidebarProvider>
     </TooltipProvider>
   )

@@ -15,6 +15,7 @@ import { Permissions } from "@/constants/permissions"
 import { useInfiniteOperations } from "@/graphql/hooks/operations"
 import { useOperationStore } from "@/stores/operations"
 import { useScopedOperationStore } from "@/stores/scoped-operation"
+import { useOnboardingStore } from "@/stores/onboarding"
 import { CreateOperationDialog } from "@/components/operations/create-operation-dialog"
 import {
   gettingStartedVariant,
@@ -28,6 +29,7 @@ export function GettingStartedPanel() {
   const hasPermission = useAuthStore((s) => s.hasPermission)
   const scopeOperation = useScopedOperationStore((s) => s.scopeOperation)
   const openCreateDialog = useOperationStore((s) => s.openCreateDialog)
+  const startTour = useOnboardingStore((s) => s.start)
 
   // Same query variables the operation switcher uses, so the two share one
   // cache entry: this panel warms the switcher's list, and opening it right
@@ -89,6 +91,13 @@ export function GettingStartedPanel() {
               the sidebar.
             </p>
           )}
+          {/* The way back in for anyone who skipped the walkthrough, or who
+              wants it again on a second engagement. */}
+          <div className="pt-1">
+            <Button variant="outline" size="sm" onClick={startTour}>
+              Show me around
+            </Button>
+          </div>
         </>
       )}
 
