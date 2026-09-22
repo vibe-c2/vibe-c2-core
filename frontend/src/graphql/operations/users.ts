@@ -20,6 +20,18 @@ export const MeQuery = graphql(`
       skillDownloadedVersion
       skillDownloadedAt
       skillUpdateSnoozedVersion
+      onboardingCompletedAt
+    }
+  }
+`)
+
+// Records that the caller finished or dismissed the first-login guide. Set
+// once on the server, so calling it twice is harmless.
+export const CompleteOnboardingMutation = graphql(`
+  mutation CompleteOnboarding {
+    completeOnboarding {
+      id
+      onboardingCompletedAt
     }
   }
 `)

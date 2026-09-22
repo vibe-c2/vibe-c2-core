@@ -52,6 +52,12 @@ type User struct {
 	// dismissed the update prompt for. The prompt stays hidden until a release
 	// newer than this ships. Zero means nothing dismissed.
 	SkillUpdateSnoozedVersion int `bson:"skill_update_snoozed_version,omitempty" json:"-"`
+	// OnboardingCompletedAt is when this operator finished (or dismissed) the
+	// first-login guide. Nil means they never have, which is what makes the
+	// guide appear. Server-side rather than in the browser because the guide
+	// would otherwise replay on every new browser, private window and cleared
+	// cache — and operators share workstations.
+	OnboardingCompletedAt *time.Time `bson:"onboarding_completed_at,omitempty" json:"-"`
 }
 
 // SkillDownload is one recorded download of the agent skill.

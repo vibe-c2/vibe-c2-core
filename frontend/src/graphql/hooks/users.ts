@@ -17,6 +17,7 @@ import {
   DeleteUserDocument,
   UpdateOwnProfileDocument,
   SetHiddenIdentitiesDocument,
+  CompleteOnboardingDocument,
   UserChangedDocument,
 } from "@/graphql/gql/graphql"
 
@@ -202,6 +203,40 @@ export function useUserChangedSubscription() {
       // Always invalidate list queries so the table refetches.
       queryClient.invalidateQueries({ queryKey: userKeys.lists() })
       queryClient.invalidateQueries({ queryKey: userKeys.infiniteLists() })
+    },
+  })
+}
+
+/**
+ * Record that the operator has finished or dismissed the first-login guide.
+ *
+ * Optimistic, because the guide closes on click and must not reopen while the
+ * round trip is in flight. A failure rolls the cache back rather than
+ * retrying: the worst case is the guide offering itself again next session,
+ * which is a far better outcome than an error toast nobody can act on.
+ */
+export function useCompleteOnboarding() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: () => graphqlClient(CompleteOnboardingDocument),
+    onMutate: async () => {
+      await queryClient.cancelQueries({ queryKey: userKeys.me() })
+      const previous = queryClient.getQueryData<MeQuery>(userKeys.me())
+      if (previous?.me) {
+        queryClient.setQueryData<MeQuery>(userKeys.me(), {
+          ...previous,
+          me: { ...previous.me, onboardingCompletedAt: new Date().toISOString() },
+        })
+      }
+      return { previous }
+    },
+    onError: (_err, _vars, context) => {
+      if (context?.previous) {
+        queryClient.setQueryData(userKeys.me(), context.previous)
+      }
+    },
+    onSettled: () => {
+      queryClient.invalidateQueries({ queryKey: userKeys.me() })
     },
   })
 }
