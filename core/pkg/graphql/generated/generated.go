@@ -308,7 +308,7 @@ type ComplexityRoot struct {
 		AdminRevokeSession            func(childComplexity int, id string) int
 		BulkImportHashes              func(childComplexity int, operationID string, input model.BulkImportHashesInput) int
 		ChangeTaskStage               func(childComplexity int, input model.ChangeTaskStageInput) int
-		CompleteOnboarding            func(childComplexity int) int
+		CompleteGuide                 func(childComplexity int, guide string) int
 		CreateAgentKey                func(childComplexity int, input model.CreateAgentKeyInput) int
 		CreateCredential              func(childComplexity int, operationID string, input model.CreateCredentialInput) int
 		CreateCustomTimelineEvent     func(childComplexity int, operationID string, input model.CreateCustomTimelineEventInput) int
@@ -697,10 +697,10 @@ type ComplexityRoot struct {
 	User struct {
 		Active                    func(childComplexity int) int
 		AuthSource                func(childComplexity int) int
+		CompletedGuides           func(childComplexity int) int
 		CreatedAt                 func(childComplexity int) int
 		HiddenIdentities          func(childComplexity int) int
 		ID                        func(childComplexity int) int
-		OnboardingCompletedAt     func(childComplexity int) int
 		Roles                     func(childComplexity int) int
 		SkillDownloadedAt         func(childComplexity int) int
 		SkillDownloadedVersion    func(childComplexity int) int
@@ -960,7 +960,7 @@ type MutationResolver interface {
 	DeleteUser(ctx context.Context, id string) (bool, error)
 	UpdateOwnProfile(ctx context.Context, input model.UpdateUserInput) (*models.User, error)
 	SetHiddenIdentities(ctx context.Context, names []string) (*models.User, error)
-	CompleteOnboarding(ctx context.Context) (*models.User, error)
+	CompleteGuide(ctx context.Context, guide string) (*models.User, error)
 	CreateOperation(ctx context.Context, input model.CreateOperationInput) (*models.Operation, error)
 	UpdateOperation(ctx context.Context, id string, input model.UpdateOperationInput) (*models.Operation, error)
 	DeleteOperation(ctx context.Context, id string) (bool, error)
@@ -1172,7 +1172,6 @@ type UserResolver interface {
 	SkillDownloadedVersion(ctx context.Context, obj *models.User) (*int, error)
 	SkillDownloadedAt(ctx context.Context, obj *models.User) (*string, error)
 	SkillUpdateSnoozedVersion(ctx context.Context, obj *models.User) (*int, error)
-	OnboardingCompletedAt(ctx context.Context, obj *models.User) (*string, error)
 }
 type WikiDocumentResolver interface {
 	ID(ctx context.Context, obj *models.WikiDocument) (string, error)
@@ -2286,12 +2285,17 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.Mutation.ChangeTaskStage(childComplexity, args["input"].(model.ChangeTaskStageInput)), true
-	case "Mutation.completeOnboarding":
-		if e.ComplexityRoot.Mutation.CompleteOnboarding == nil {
+	case "Mutation.completeGuide":
+		if e.ComplexityRoot.Mutation.CompleteGuide == nil {
 			break
 		}
 
-		return e.ComplexityRoot.Mutation.CompleteOnboarding(childComplexity), true
+		args, err := ec.field_Mutation_completeGuide_args(ctx, rawArgs)
+		if err != nil {
+			return 0, false
+		}
+
+		return e.ComplexityRoot.Mutation.CompleteGuide(childComplexity, args["guide"].(string)), true
 	case "Mutation.createAgentKey":
 		if e.ComplexityRoot.Mutation.CreateAgentKey == nil {
 			break
@@ -4697,6 +4701,12 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.User.AuthSource(childComplexity), true
+	case "User.completedGuides":
+		if e.ComplexityRoot.User.CompletedGuides == nil {
+			break
+		}
+
+		return e.ComplexityRoot.User.CompletedGuides(childComplexity), true
 	case "User.createdAt":
 		if e.ComplexityRoot.User.CreatedAt == nil {
 			break
@@ -4715,12 +4725,6 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.User.ID(childComplexity), true
-	case "User.onboardingCompletedAt":
-		if e.ComplexityRoot.User.OnboardingCompletedAt == nil {
-			break
-		}
-
-		return e.ComplexityRoot.User.OnboardingCompletedAt(childComplexity), true
 	case "User.roles":
 		if e.ComplexityRoot.User.Roles == nil {
 			break
@@ -6825,9 +6829,9 @@ type User {
   skillDownloadedAt: String
   # The newest release whose update prompt they dismissed. Null when none.
   skillUpdateSnoozedVersion: Int
-  # When this operator finished or dismissed the first-login guide, ISO 8601.
-  # Null means they never have, and the SPA shows the guide.
-  onboardingCompletedAt: String
+  # In-app guides this operator has finished or dismissed, by id. A guide that
+  # is not listed is one the SPA will still offer.
+  completedGuides: [String!]!
 }
 
 # Minimal user info for autocomplete pickers (e.g., adding operation members).
@@ -7076,11 +7080,13 @@ type Mutation {
   setHiddenIdentities(names: [String!]!): User!
     @hasPermission(permission: "user:update:own")
 
-  # completeOnboarding records that the caller finished or dismissed the
-  # first-login guide, so it does not come back on their next session.
-  # Idempotent: the first call wins and later ones return the user unchanged,
-  # so a guide that is finished twice in two tabs is not an error.
-  completeOnboarding: User!
+  # completeGuide records that the caller finished or dismissed one in-app
+  # guide, so it does not come back on their next session. The id must be one
+  # the server knows.
+  #
+  # Idempotent: completing the same guide twice returns the user unchanged, so
+  # two tabs finishing one guide at the same moment is not an error.
+  completeGuide(guide: String!): User!
     @hasPermission(permission: "user:update:own")
 
   # createOperation registers a new operation.
@@ -8661,6 +8667,17 @@ func (ec *executionContext) field_Mutation_changeTaskStage_args(ctx context.Cont
 		return nil, err
 	}
 	args["input"] = arg0
+	return args, nil
+}
+
+func (ec *executionContext) field_Mutation_completeGuide_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
+	var err error
+	args := map[string]any{}
+	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "guide", ec.unmarshalNString2string)
+	if err != nil {
+		return nil, err
+	}
+	args["guide"] = arg0
 	return args, nil
 }
 
@@ -13085,8 +13102,8 @@ func (ec *executionContext) fieldContext_Credential_createdBy(_ context.Context,
 				return ec.fieldContext_User_skillDownloadedAt(ctx, field)
 			case "skillUpdateSnoozedVersion":
 				return ec.fieldContext_User_skillUpdateSnoozedVersion(ctx, field)
-			case "onboardingCompletedAt":
-				return ec.fieldContext_User_onboardingCompletedAt(ctx, field)
+			case "completedGuides":
+				return ec.fieldContext_User_completedGuides(ctx, field)
 			}
 			return nil, fmt.Errorf("no field named %q was found under type User", field.Name)
 		},
@@ -13483,8 +13500,8 @@ func (ec *executionContext) fieldContext_CredentialComment_author(_ context.Cont
 				return ec.fieldContext_User_skillDownloadedAt(ctx, field)
 			case "skillUpdateSnoozedVersion":
 				return ec.fieldContext_User_skillUpdateSnoozedVersion(ctx, field)
-			case "onboardingCompletedAt":
-				return ec.fieldContext_User_onboardingCompletedAt(ctx, field)
+			case "completedGuides":
+				return ec.fieldContext_User_completedGuides(ctx, field)
 			}
 			return nil, fmt.Errorf("no field named %q was found under type User", field.Name)
 		},
@@ -14419,8 +14436,8 @@ func (ec *executionContext) fieldContext_Hash_createdBy(_ context.Context, field
 				return ec.fieldContext_User_skillDownloadedAt(ctx, field)
 			case "skillUpdateSnoozedVersion":
 				return ec.fieldContext_User_skillUpdateSnoozedVersion(ctx, field)
-			case "onboardingCompletedAt":
-				return ec.fieldContext_User_onboardingCompletedAt(ctx, field)
+			case "completedGuides":
+				return ec.fieldContext_User_completedGuides(ctx, field)
 			}
 			return nil, fmt.Errorf("no field named %q was found under type User", field.Name)
 		},
@@ -15381,8 +15398,8 @@ func (ec *executionContext) fieldContext_Host_createdBy(_ context.Context, field
 				return ec.fieldContext_User_skillDownloadedAt(ctx, field)
 			case "skillUpdateSnoozedVersion":
 				return ec.fieldContext_User_skillUpdateSnoozedVersion(ctx, field)
-			case "onboardingCompletedAt":
-				return ec.fieldContext_User_onboardingCompletedAt(ctx, field)
+			case "completedGuides":
+				return ec.fieldContext_User_completedGuides(ctx, field)
 			}
 			return nil, fmt.Errorf("no field named %q was found under type User", field.Name)
 		},
@@ -16460,8 +16477,8 @@ func (ec *executionContext) fieldContext_Mutation_createUser(ctx context.Context
 				return ec.fieldContext_User_skillDownloadedAt(ctx, field)
 			case "skillUpdateSnoozedVersion":
 				return ec.fieldContext_User_skillUpdateSnoozedVersion(ctx, field)
-			case "onboardingCompletedAt":
-				return ec.fieldContext_User_onboardingCompletedAt(ctx, field)
+			case "completedGuides":
+				return ec.fieldContext_User_completedGuides(ctx, field)
 			}
 			return nil, fmt.Errorf("no field named %q was found under type User", field.Name)
 		},
@@ -16545,8 +16562,8 @@ func (ec *executionContext) fieldContext_Mutation_updateUser(ctx context.Context
 				return ec.fieldContext_User_skillDownloadedAt(ctx, field)
 			case "skillUpdateSnoozedVersion":
 				return ec.fieldContext_User_skillUpdateSnoozedVersion(ctx, field)
-			case "onboardingCompletedAt":
-				return ec.fieldContext_User_onboardingCompletedAt(ctx, field)
+			case "completedGuides":
+				return ec.fieldContext_User_completedGuides(ctx, field)
 			}
 			return nil, fmt.Errorf("no field named %q was found under type User", field.Name)
 		},
@@ -16689,8 +16706,8 @@ func (ec *executionContext) fieldContext_Mutation_updateOwnProfile(ctx context.C
 				return ec.fieldContext_User_skillDownloadedAt(ctx, field)
 			case "skillUpdateSnoozedVersion":
 				return ec.fieldContext_User_skillUpdateSnoozedVersion(ctx, field)
-			case "onboardingCompletedAt":
-				return ec.fieldContext_User_onboardingCompletedAt(ctx, field)
+			case "completedGuides":
+				return ec.fieldContext_User_completedGuides(ctx, field)
 			}
 			return nil, fmt.Errorf("no field named %q was found under type User", field.Name)
 		},
@@ -16774,8 +16791,8 @@ func (ec *executionContext) fieldContext_Mutation_setHiddenIdentities(ctx contex
 				return ec.fieldContext_User_skillDownloadedAt(ctx, field)
 			case "skillUpdateSnoozedVersion":
 				return ec.fieldContext_User_skillUpdateSnoozedVersion(ctx, field)
-			case "onboardingCompletedAt":
-				return ec.fieldContext_User_onboardingCompletedAt(ctx, field)
+			case "completedGuides":
+				return ec.fieldContext_User_completedGuides(ctx, field)
 			}
 			return nil, fmt.Errorf("no field named %q was found under type User", field.Name)
 		},
@@ -16794,14 +16811,15 @@ func (ec *executionContext) fieldContext_Mutation_setHiddenIdentities(ctx contex
 	return fc, nil
 }
 
-func (ec *executionContext) _Mutation_completeOnboarding(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
+func (ec *executionContext) _Mutation_completeGuide(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
 		ec.OperationContext,
 		field,
-		ec.fieldContext_Mutation_completeOnboarding,
+		ec.fieldContext_Mutation_completeGuide,
 		func(ctx context.Context) (any, error) {
-			return ec.Resolvers.Mutation().CompleteOnboarding(ctx)
+			fc := graphql.GetFieldContext(ctx)
+			return ec.Resolvers.Mutation().CompleteGuide(ctx, fc.Args["guide"].(string))
 		},
 		func(ctx context.Context, next graphql.Resolver) graphql.Resolver {
 			directive0 := next
@@ -16828,7 +16846,7 @@ func (ec *executionContext) _Mutation_completeOnboarding(ctx context.Context, fi
 	)
 }
 
-func (ec *executionContext) fieldContext_Mutation_completeOnboarding(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+func (ec *executionContext) fieldContext_Mutation_completeGuide(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
 	fc = &graphql.FieldContext{
 		Object:     "Mutation",
 		Field:      field,
@@ -16858,11 +16876,22 @@ func (ec *executionContext) fieldContext_Mutation_completeOnboarding(_ context.C
 				return ec.fieldContext_User_skillDownloadedAt(ctx, field)
 			case "skillUpdateSnoozedVersion":
 				return ec.fieldContext_User_skillUpdateSnoozedVersion(ctx, field)
-			case "onboardingCompletedAt":
-				return ec.fieldContext_User_onboardingCompletedAt(ctx, field)
+			case "completedGuides":
+				return ec.fieldContext_User_completedGuides(ctx, field)
 			}
 			return nil, fmt.Errorf("no field named %q was found under type User", field.Name)
 		},
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			err = ec.Recover(ctx, r)
+			ec.Error(ctx, err)
+		}
+	}()
+	ctx = graphql.WithFieldContext(ctx, fc)
+	if fc.Args, err = ec.field_Mutation_completeGuide_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
+		ec.Error(ctx, err)
+		return fc, err
 	}
 	return fc, nil
 }
@@ -19499,8 +19528,8 @@ func (ec *executionContext) fieldContext_Mutation_snoozeSkillUpdate(ctx context.
 				return ec.fieldContext_User_skillDownloadedAt(ctx, field)
 			case "skillUpdateSnoozedVersion":
 				return ec.fieldContext_User_skillUpdateSnoozedVersion(ctx, field)
-			case "onboardingCompletedAt":
-				return ec.fieldContext_User_onboardingCompletedAt(ctx, field)
+			case "completedGuides":
+				return ec.fieldContext_User_completedGuides(ctx, field)
 			}
 			return nil, fmt.Errorf("no field named %q was found under type User", field.Name)
 		},
@@ -22949,8 +22978,8 @@ func (ec *executionContext) fieldContext_OperationMember_user(_ context.Context,
 				return ec.fieldContext_User_skillDownloadedAt(ctx, field)
 			case "skillUpdateSnoozedVersion":
 				return ec.fieldContext_User_skillUpdateSnoozedVersion(ctx, field)
-			case "onboardingCompletedAt":
-				return ec.fieldContext_User_onboardingCompletedAt(ctx, field)
+			case "completedGuides":
+				return ec.fieldContext_User_completedGuides(ctx, field)
 			}
 			return nil, fmt.Errorf("no field named %q was found under type User", field.Name)
 		},
@@ -23660,8 +23689,8 @@ func (ec *executionContext) fieldContext_Query_me(_ context.Context, field graph
 				return ec.fieldContext_User_skillDownloadedAt(ctx, field)
 			case "skillUpdateSnoozedVersion":
 				return ec.fieldContext_User_skillUpdateSnoozedVersion(ctx, field)
-			case "onboardingCompletedAt":
-				return ec.fieldContext_User_onboardingCompletedAt(ctx, field)
+			case "completedGuides":
+				return ec.fieldContext_User_completedGuides(ctx, field)
 			}
 			return nil, fmt.Errorf("no field named %q was found under type User", field.Name)
 		},
@@ -23734,8 +23763,8 @@ func (ec *executionContext) fieldContext_Query_user(ctx context.Context, field g
 				return ec.fieldContext_User_skillDownloadedAt(ctx, field)
 			case "skillUpdateSnoozedVersion":
 				return ec.fieldContext_User_skillUpdateSnoozedVersion(ctx, field)
-			case "onboardingCompletedAt":
-				return ec.fieldContext_User_onboardingCompletedAt(ctx, field)
+			case "completedGuides":
+				return ec.fieldContext_User_completedGuides(ctx, field)
 			}
 			return nil, fmt.Errorf("no field named %q was found under type User", field.Name)
 		},
@@ -28393,8 +28422,8 @@ func (ec *executionContext) fieldContext_Session_user(_ context.Context, field g
 				return ec.fieldContext_User_skillDownloadedAt(ctx, field)
 			case "skillUpdateSnoozedVersion":
 				return ec.fieldContext_User_skillUpdateSnoozedVersion(ctx, field)
-			case "onboardingCompletedAt":
-				return ec.fieldContext_User_onboardingCompletedAt(ctx, field)
+			case "completedGuides":
+				return ec.fieldContext_User_completedGuides(ctx, field)
 			}
 			return nil, fmt.Errorf("no field named %q was found under type User", field.Name)
 		},
@@ -31490,8 +31519,8 @@ func (ec *executionContext) fieldContext_Task_assignees(_ context.Context, field
 				return ec.fieldContext_User_skillDownloadedAt(ctx, field)
 			case "skillUpdateSnoozedVersion":
 				return ec.fieldContext_User_skillUpdateSnoozedVersion(ctx, field)
-			case "onboardingCompletedAt":
-				return ec.fieldContext_User_onboardingCompletedAt(ctx, field)
+			case "completedGuides":
+				return ec.fieldContext_User_completedGuides(ctx, field)
 			}
 			return nil, fmt.Errorf("no field named %q was found under type User", field.Name)
 		},
@@ -31709,8 +31738,8 @@ func (ec *executionContext) fieldContext_Task_createdBy(_ context.Context, field
 				return ec.fieldContext_User_skillDownloadedAt(ctx, field)
 			case "skillUpdateSnoozedVersion":
 				return ec.fieldContext_User_skillUpdateSnoozedVersion(ctx, field)
-			case "onboardingCompletedAt":
-				return ec.fieldContext_User_onboardingCompletedAt(ctx, field)
+			case "completedGuides":
+				return ec.fieldContext_User_completedGuides(ctx, field)
 			}
 			return nil, fmt.Errorf("no field named %q was found under type User", field.Name)
 		},
@@ -31764,8 +31793,8 @@ func (ec *executionContext) fieldContext_Task_lastUpdatedBy(_ context.Context, f
 				return ec.fieldContext_User_skillDownloadedAt(ctx, field)
 			case "skillUpdateSnoozedVersion":
 				return ec.fieldContext_User_skillUpdateSnoozedVersion(ctx, field)
-			case "onboardingCompletedAt":
-				return ec.fieldContext_User_onboardingCompletedAt(ctx, field)
+			case "completedGuides":
+				return ec.fieldContext_User_completedGuides(ctx, field)
 			}
 			return nil, fmt.Errorf("no field named %q was found under type User", field.Name)
 		},
@@ -32608,8 +32637,8 @@ func (ec *executionContext) fieldContext_TimelineEvent_actor(_ context.Context, 
 				return ec.fieldContext_User_skillDownloadedAt(ctx, field)
 			case "skillUpdateSnoozedVersion":
 				return ec.fieldContext_User_skillUpdateSnoozedVersion(ctx, field)
-			case "onboardingCompletedAt":
-				return ec.fieldContext_User_onboardingCompletedAt(ctx, field)
+			case "completedGuides":
+				return ec.fieldContext_User_completedGuides(ctx, field)
 			}
 			return nil, fmt.Errorf("no field named %q was found under type User", field.Name)
 		},
@@ -33382,28 +33411,28 @@ func (ec *executionContext) fieldContext_User_skillUpdateSnoozedVersion(_ contex
 	return fc, nil
 }
 
-func (ec *executionContext) _User_onboardingCompletedAt(ctx context.Context, field graphql.CollectedField, obj *models.User) (ret graphql.Marshaler) {
+func (ec *executionContext) _User_completedGuides(ctx context.Context, field graphql.CollectedField, obj *models.User) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
 		ec.OperationContext,
 		field,
-		ec.fieldContext_User_onboardingCompletedAt,
+		ec.fieldContext_User_completedGuides,
 		func(ctx context.Context) (any, error) {
-			return ec.Resolvers.User().OnboardingCompletedAt(ctx, obj)
+			return obj.CompletedGuides, nil
 		},
 		nil,
-		ec.marshalOString2ᚖstring,
+		ec.marshalNString2ᚕstringᚄ,
 		true,
-		false,
+		true,
 	)
 }
 
-func (ec *executionContext) fieldContext_User_onboardingCompletedAt(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+func (ec *executionContext) fieldContext_User_completedGuides(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
 	fc = &graphql.FieldContext{
 		Object:     "User",
 		Field:      field,
-		IsMethod:   true,
-		IsResolver: true,
+		IsMethod:   false,
+		IsResolver: false,
 		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
 			return nil, errors.New("field of type String does not have child fields")
 		},
@@ -33560,8 +33589,8 @@ func (ec *executionContext) fieldContext_UserEdge_node(_ context.Context, field 
 				return ec.fieldContext_User_skillDownloadedAt(ctx, field)
 			case "skillUpdateSnoozedVersion":
 				return ec.fieldContext_User_skillUpdateSnoozedVersion(ctx, field)
-			case "onboardingCompletedAt":
-				return ec.fieldContext_User_onboardingCompletedAt(ctx, field)
+			case "completedGuides":
+				return ec.fieldContext_User_completedGuides(ctx, field)
 			}
 			return nil, fmt.Errorf("no field named %q was found under type User", field.Name)
 		},
@@ -33731,8 +33760,8 @@ func (ec *executionContext) fieldContext_UserEvent_user(_ context.Context, field
 				return ec.fieldContext_User_skillDownloadedAt(ctx, field)
 			case "skillUpdateSnoozedVersion":
 				return ec.fieldContext_User_skillUpdateSnoozedVersion(ctx, field)
-			case "onboardingCompletedAt":
-				return ec.fieldContext_User_onboardingCompletedAt(ctx, field)
+			case "completedGuides":
+				return ec.fieldContext_User_completedGuides(ctx, field)
 			}
 			return nil, fmt.Errorf("no field named %q was found under type User", field.Name)
 		},
@@ -34702,8 +34731,8 @@ func (ec *executionContext) fieldContext_WikiDocument_createdBy(_ context.Contex
 				return ec.fieldContext_User_skillDownloadedAt(ctx, field)
 			case "skillUpdateSnoozedVersion":
 				return ec.fieldContext_User_skillUpdateSnoozedVersion(ctx, field)
-			case "onboardingCompletedAt":
-				return ec.fieldContext_User_onboardingCompletedAt(ctx, field)
+			case "completedGuides":
+				return ec.fieldContext_User_completedGuides(ctx, field)
 			}
 			return nil, fmt.Errorf("no field named %q was found under type User", field.Name)
 		},
@@ -34757,8 +34786,8 @@ func (ec *executionContext) fieldContext_WikiDocument_lastUpdatedBy(_ context.Co
 				return ec.fieldContext_User_skillDownloadedAt(ctx, field)
 			case "skillUpdateSnoozedVersion":
 				return ec.fieldContext_User_skillUpdateSnoozedVersion(ctx, field)
-			case "onboardingCompletedAt":
-				return ec.fieldContext_User_onboardingCompletedAt(ctx, field)
+			case "completedGuides":
+				return ec.fieldContext_User_completedGuides(ctx, field)
 			}
 			return nil, fmt.Errorf("no field named %q was found under type User", field.Name)
 		},
@@ -34899,8 +34928,8 @@ func (ec *executionContext) fieldContext_WikiDocument_deletedBy(_ context.Contex
 				return ec.fieldContext_User_skillDownloadedAt(ctx, field)
 			case "skillUpdateSnoozedVersion":
 				return ec.fieldContext_User_skillUpdateSnoozedVersion(ctx, field)
-			case "onboardingCompletedAt":
-				return ec.fieldContext_User_onboardingCompletedAt(ctx, field)
+			case "completedGuides":
+				return ec.fieldContext_User_completedGuides(ctx, field)
 			}
 			return nil, fmt.Errorf("no field named %q was found under type User", field.Name)
 		},
@@ -35522,8 +35551,8 @@ func (ec *executionContext) fieldContext_WikiDocumentBackup_createdBy(_ context.
 				return ec.fieldContext_User_skillDownloadedAt(ctx, field)
 			case "skillUpdateSnoozedVersion":
 				return ec.fieldContext_User_skillUpdateSnoozedVersion(ctx, field)
-			case "onboardingCompletedAt":
-				return ec.fieldContext_User_onboardingCompletedAt(ctx, field)
+			case "completedGuides":
+				return ec.fieldContext_User_completedGuides(ctx, field)
 			}
 			return nil, fmt.Errorf("no field named %q was found under type User", field.Name)
 		},
@@ -43704,9 +43733,9 @@ func (ec *executionContext) _Mutation(ctx context.Context, sel ast.SelectionSet)
 			if out.Values[i] == graphql.Null {
 				out.Invalids++
 			}
-		case "completeOnboarding":
+		case "completeGuide":
 			out.Values[i] = ec.OperationContext.RootResolverMiddleware(innerCtx, func(ctx context.Context) (res graphql.Marshaler) {
-				return ec._Mutation_completeOnboarding(ctx, field)
+				return ec._Mutation_completeGuide(ctx, field)
 			})
 			if out.Values[i] == graphql.Null {
 				out.Invalids++
@@ -48637,39 +48666,11 @@ func (ec *executionContext) _User(ctx context.Context, sel ast.SelectionSet, obj
 			}
 
 			out.Concurrently(i, func(ctx context.Context) graphql.Marshaler { return innerFunc(ctx, out) })
-		case "onboardingCompletedAt":
-			field := field
-
-			innerFunc := func(ctx context.Context, _ *graphql.FieldSet) (res graphql.Marshaler) {
-				defer func() {
-					if r := recover(); r != nil {
-						ec.Error(ctx, ec.Recover(ctx, r))
-					}
-				}()
-				res = ec._User_onboardingCompletedAt(ctx, field, obj)
-				return res
+		case "completedGuides":
+			out.Values[i] = ec._User_completedGuides(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				atomic.AddUint32(&out.Invalids, 1)
 			}
-
-			if field.Deferrable != nil {
-				dfs, ok := deferred[field.Deferrable.Label]
-				di := 0
-				if ok {
-					dfs.AddField(field)
-					di = len(dfs.Values) - 1
-				} else {
-					dfs = graphql.NewFieldSet([]graphql.CollectedField{field})
-					deferred[field.Deferrable.Label] = dfs
-				}
-				dfs.Concurrently(di, func(ctx context.Context) graphql.Marshaler {
-					return innerFunc(ctx, dfs)
-				})
-
-				// don't run the out.Concurrently() call below
-				out.Values[i] = graphql.Null
-				continue
-			}
-
-			out.Concurrently(i, func(ctx context.Context) graphql.Marshaler { return innerFunc(ctx, out) })
 		default:
 			panic("unknown field " + strconv.Quote(field.Name))
 		}

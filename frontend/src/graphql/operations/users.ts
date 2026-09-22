@@ -20,18 +20,18 @@ export const MeQuery = graphql(`
       skillDownloadedVersion
       skillDownloadedAt
       skillUpdateSnoozedVersion
-      onboardingCompletedAt
+      completedGuides
     }
   }
 `)
 
-// Records that the caller finished or dismissed the first-login guide. Set
-// once on the server, so calling it twice is harmless.
-export const CompleteOnboardingMutation = graphql(`
-  mutation CompleteOnboarding {
-    completeOnboarding {
+// Records that the caller finished or dismissed one in-app guide. Idempotent on
+// the server, so calling it twice is harmless.
+export const CompleteGuideMutation = graphql(`
+  mutation CompleteGuide($guide: String!) {
+    completeGuide(guide: $guide) {
       id
-      onboardingCompletedAt
+      completedGuides
     }
   }
 `)

@@ -78,8 +78,6 @@ models:
         resolver: true         # *SkillDownload -> nullable ISO 8601 string
       skillUpdateSnoozedVersion:
         resolver: true         # 0 -> null
-      onboardingCompletedAt:
-        resolver: true         # *time.Time -> nullable ISO 8601 string
 
   # Map the GraphQL "OperationRole" enum to our existing OperationRole type.
   # The Go type implements MarshalGQL/UnmarshalGQL for case conversion.

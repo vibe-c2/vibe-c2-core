@@ -52,12 +52,25 @@ type User struct {
 	// dismissed the update prompt for. The prompt stays hidden until a release
 	// newer than this ships. Zero means nothing dismissed.
 	SkillUpdateSnoozedVersion int `bson:"skill_update_snoozed_version,omitempty" json:"-"`
-	// OnboardingCompletedAt is when this operator finished (or dismissed) the
-	// first-login guide. Nil means they never have, which is what makes the
-	// guide appear. Server-side rather than in the browser because the guide
-	// would otherwise replay on every new browser, private window and cleared
+	// CompletedGuides are the in-app guides this operator has finished or
+	// dismissed, by id (see GuideIDs). A guide not listed here is one they have
+	// never been shown, which is what makes it appear.
+	//
+	// A list rather than a flag per guide so adding the next one costs no schema
+	// change, and server-side rather than in the browser because a local flag
+	// would replay every guide on each new browser, private window and cleared
 	// cache — and operators share workstations.
-	OnboardingCompletedAt *time.Time `bson:"onboarding_completed_at,omitempty" json:"-"`
+	CompletedGuides []string `bson:"completed_guides" json:"-"`
+}
+
+// GuideIDs are the in-app guides an operator can complete. The server
+// validates against this set so a typo in the SPA cannot quietly record a
+// guide that does not exist and suppress nothing.
+var GuideIDs = map[string]bool{
+	// First login: how to scope an operation, ending on its wiki.
+	"welcome": true,
+	// First time in a document: the "/" menu and what it can insert.
+	"slash-menu": true,
 }
 
 // SkillDownload is one recorded download of the agent skill.

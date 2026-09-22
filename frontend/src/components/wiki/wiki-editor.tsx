@@ -591,6 +591,8 @@ export function WikiEditor({
       {tocVisible && isReady && <WikiEditorToc editor={editor} />}
       <div
         className="flex-1 overflow-y-auto px-4 py-2"
+        // Anchor for the document guide's "type /" step.
+        data-tour="editor-body"
         onMouseDown={(e) => {
           if (!isEditor || !editor) return
           if (e.target !== e.currentTarget) return

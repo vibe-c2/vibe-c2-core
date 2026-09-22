@@ -70,9 +70,9 @@ type User {
   skillDownloadedAt: String
   # The newest release whose update prompt they dismissed. Null when none.
   skillUpdateSnoozedVersion: Int
-  # When this operator finished or dismissed the first-login guide, ISO 8601.
-  # Null means they never have, and the SPA shows the guide.
-  onboardingCompletedAt: String
+  # In-app guides this operator has finished or dismissed, by id. A guide that
+  # is not listed is one the SPA will still offer.
+  completedGuides: [String!]!
 }
 
 # Minimal user info for autocomplete pickers (e.g., adding operation members).
@@ -321,11 +321,13 @@ type Mutation {
   setHiddenIdentities(names: [String!]!): User!
     @hasPermission(permission: "user:update:own")
 
-  # completeOnboarding records that the caller finished or dismissed the
-  # first-login guide, so it does not come back on their next session.
-  # Idempotent: the first call wins and later ones return the user unchanged,
-  # so a guide that is finished twice in two tabs is not an error.
-  completeOnboarding: User!
+  # completeGuide records that the caller finished or dismissed one in-app
+  # guide, so it does not come back on their next session. The id must be one
+  # the server knows.
+  #
+  # Idempotent: completing the same guide twice returns the user unchanged, so
+  # two tabs finishing one guide at the same moment is not an error.
+  completeGuide(guide: String!): User!
     @hasPermission(permission: "user:update:own")
 
   # createOperation registers a new operation.

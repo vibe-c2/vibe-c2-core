@@ -97,7 +97,10 @@ export const SlashMenu = forwardRef<SlashMenuHandle, SlashMenuProps>(function Sl
 
   if (items.length === 0) {
     return (
-      <div className="z-50 w-64 rounded-lg bg-popover p-2 text-sm text-popover-foreground shadow-md ring-1 ring-foreground/10">
+      <div
+        data-tour="slash-menu"
+        className="z-50 w-64 rounded-lg bg-popover p-2 text-sm text-popover-foreground shadow-md ring-1 ring-foreground/10"
+      >
         <div className="px-2 py-1.5 text-muted-foreground">No results</div>
       </div>
     )
@@ -106,6 +109,11 @@ export const SlashMenu = forwardRef<SlashMenuHandle, SlashMenuProps>(function Sl
   return (
     <div
       ref={listRef}
+      // The document guide spotlights this, and reads its presence as proof the
+      // operator found the menu. Also on the no-results branch above: they found
+      // it either way, and a guide that stalls because the query matched nothing
+      // would be the worse failure.
+      data-tour="slash-menu"
       className="z-50 max-h-72 w-64 overflow-y-auto rounded-lg bg-popover p-1 text-sm text-popover-foreground shadow-md ring-1 ring-foreground/10"
       role="listbox"
     >

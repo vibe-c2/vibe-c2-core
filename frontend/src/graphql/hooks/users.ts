@@ -17,7 +17,7 @@ import {
   DeleteUserDocument,
   UpdateOwnProfileDocument,
   SetHiddenIdentitiesDocument,
-  CompleteOnboardingDocument,
+  CompleteGuideDocument,
   UserChangedDocument,
 } from "@/graphql/gql/graphql"
 
@@ -208,24 +208,27 @@ export function useUserChangedSubscription() {
 }
 
 /**
- * Record that the operator has finished or dismissed the first-login guide.
+ * Record that the operator has finished or dismissed one in-app guide.
  *
  * Optimistic, because the guide closes on click and must not reopen while the
  * round trip is in flight. A failure rolls the cache back rather than
  * retrying: the worst case is the guide offering itself again next session,
  * which is a far better outcome than an error toast nobody can act on.
  */
-export function useCompleteOnboarding() {
+export function useCompleteGuide() {
   const queryClient = useQueryClient()
   return useMutation({
-    mutationFn: () => graphqlClient(CompleteOnboardingDocument),
-    onMutate: async () => {
+    mutationFn: (guide: string) => graphqlClient(CompleteGuideDocument, { guide }),
+    onMutate: async (guide) => {
       await queryClient.cancelQueries({ queryKey: userKeys.me() })
       const previous = queryClient.getQueryData<MeQuery>(userKeys.me())
       if (previous?.me) {
         queryClient.setQueryData<MeQuery>(userKeys.me(), {
           ...previous,
-          me: { ...previous.me, onboardingCompletedAt: new Date().toISOString() },
+          me: {
+            ...previous.me,
+            completedGuides: [...previous.me.completedGuides, guide],
+          },
         })
       }
       return { previous }

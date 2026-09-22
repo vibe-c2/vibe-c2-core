@@ -3,6 +3,7 @@ package resolver
 import (
 	"context"
 	"fmt"
+	"slices"
 	"strings"
 	"time"
 
@@ -27,7 +28,7 @@ type IUserResolver interface {
 	UpdateOwnProfile(ctx context.Context, input model.UpdateUserInput) (*models.User, error)
 	SetHiddenIdentities(ctx context.Context, names []string) (*models.User, error)
 	SnoozeSkillUpdate(ctx context.Context, version int) (*models.User, error)
-	CompleteOnboarding(ctx context.Context) (*models.User, error)
+	CompleteGuide(ctx context.Context, guide string) (*models.User, error)
 
 	// Queries
 	Me(ctx context.Context) (*models.User, error)
@@ -320,33 +321,38 @@ func (r *userResolver) SnoozeSkillUpdate(ctx context.Context, version int) (*mod
 	return &updated, nil
 }
 
-// CompleteOnboarding records that the caller has finished or dismissed the
-// first-login guide. The SPA stops showing it from the next session on.
+// CompleteGuide records that the caller has finished or dismissed one in-app
+// guide. The SPA stops offering it from the next session on.
 //
-// Set-once and idempotent: the stored timestamp is when they *first* got
-// through it, and a second call returns the user untouched. Two tabs finishing
-// the guide at the same moment is a normal thing to do, not an error, and the
-// caller has nothing useful to do with a failure either way.
-func (r *userResolver) CompleteOnboarding(ctx context.Context) (*models.User, error) {
+// Idempotent: a guide already in the list is returned untouched. Two tabs
+// finishing one guide at the same moment is a normal thing to do, not an error,
+// and the caller has nothing useful to do with a failure either way.
+//
+// Unknown ids are refused rather than stored. A typo in the SPA would otherwise
+// record a guide nothing ever reads and silently suppress nothing, which is the
+// kind of bug that only shows up as "why does the guide keep coming back".
+func (r *userResolver) CompleteGuide(ctx context.Context, guide string) (*models.User, error) {
 	authInfo := gqlctx.AuthFromContext(ctx)
 	uid, err := uuid.Parse(authInfo.UserID)
 	if err != nil {
 		return nil, fmt.Errorf("invalid user ID in token: %w", err)
+	}
+	if !models.GuideIDs[guide] {
+		return nil, fmt.Errorf("unknown guide %q", guide)
 	}
 
 	user, err := r.userRepo.FindByID(ctx, uid)
 	if err != nil {
 		return nil, fmt.Errorf("user not found: %w", err)
 	}
-	if user.OnboardingCompletedAt != nil {
+	if slices.Contains(user.CompletedGuides, guide) {
 		return &user, nil
 	}
 
-	now := time.Now().UTC()
 	if err := r.userRepo.Update(ctx, &user, map[string]interface{}{
-		"onboarding_completed_at": now,
+		"completed_guides": append(user.CompletedGuides, guide),
 	}); err != nil {
-		return nil, fmt.Errorf("failed to complete onboarding: %w", err)
+		return nil, fmt.Errorf("failed to complete guide: %w", err)
 	}
 
 	updated, err := r.userRepo.FindByID(ctx, uid)

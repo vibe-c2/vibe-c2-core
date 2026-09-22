@@ -1,18 +1,19 @@
-// The first-login walkthrough: a spotlight over one control at a time, with a
-// card explaining it.
+// The in-app guides: a spotlight over one control at a time, with a card
+// explaining it.
 //
-// Mounted globally from AppLayout, like the skill-update prompt, because it
-// crosses surfaces — it starts on whatever page the operator landed on and ends
-// on the wiki.
+// Mounted globally from AppLayout, like the skill-update prompt, because they
+// cross surfaces — the welcome guide starts on whatever page the operator landed
+// on and ends on the wiki.
 //
-// Hand-rolled rather than pulled from a tour library: the machine already has
-// to observe real app state (an operation becoming scoped, a popover mounting),
-// which is the hard half, and what is left is a rectangle and a card. A library
-// would add a dependency for the easy half and still need this file to drive it.
+// Hand-rolled rather than pulled from a tour library: the machines already have
+// to observe real app state (an operation becoming scoped, a popover mounting,
+// the "/" menu opening), which is the hard half, and what is left is a rectangle
+// and a card. A library would add a dependency for the easy half and still need
+// this file to drive it.
 
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react"
-import { useLocation, useNavigate } from "react-router"
-import { XIcon } from "lucide-react"
+import { useLocation, useNavigate, useParams } from "react-router"
+import { MousePointerClickIcon, XIcon } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
@@ -21,9 +22,15 @@ import { useAuthStore } from "@/stores/auth"
 import { useIsMobile } from "@/hooks/use-mobile"
 import { useOnboardingStore } from "@/stores/onboarding"
 import { useScopedOperationStore } from "@/stores/scoped-operation"
-import { useMe } from "@/graphql/hooks/users"
-import { useCompleteOnboarding } from "@/graphql/hooks/users"
-import { TOUR_STEPS, tourStep } from "@/components/onboarding/tour-steps"
+import { useMe, useCompleteGuide } from "@/graphql/hooks/users"
+import { useInfiniteOperations } from "@/graphql/hooks/operations"
+import {
+  lastStep,
+  stepNumber,
+  tourStep,
+  tourSteps,
+  type GuideID,
+} from "@/components/onboarding/tour-steps"
 import { placeCard, type Placement, type Rect } from "@/components/onboarding/tour-placement"
 
 /** How often the spotlight re-measures its target. Cheap (one
@@ -45,58 +52,105 @@ function rectOf(element: Element): Rect {
 }
 
 export function OnboardingTour() {
-  const step = useOnboardingStore((s) => s.step)
+  const guide = useOnboardingStore((s) => s.guide)
 
-  // The auto-offer decision and the tour itself are separate components so the
-  // measuring loop below only ever runs while the tour is on screen.
+  // The auto-offer decisions and the tour itself are separate components so the
+  // measuring loop below only ever runs while a guide is on screen.
   return (
     <>
-      <TourAutoStart />
-      {step ? <TourOverlay /> : null}
+      <GuideAutoStart />
+      {guide ? <TourOverlay guide={guide} /> : null}
     </>
   )
 }
 
 /**
- * Starts the tour once for an operator who has never been through it.
+ * Offers each guide once, to an operator who has never been through it.
  *
- * Gated on having somewhere to go: the walkthrough's second step is "pick an
- * operation", so running it for someone who belongs to none would spotlight an
- * empty list. Those operators get the getting-started panel's "ask an admin"
+ * The welcome guide is gated on having somewhere to go: its second step is "pick
+ * an operation", so running it for someone who belongs to none would spotlight
+ * an empty list. Those operators get the getting-started panel's "ask an admin"
  * branch instead, which is the only honest advice available to them.
+ *
+ * It is deliberately NOT gated on nothing being scoped. A remembered scope is
+ * not evidence of understanding: it is restored from localStorage on login, so
+ * an operator who picked an operation on their first day and came back on their
+ * second would have the guide suppressed forever, with the server still
+ * recording that they had never seen it. `me.completedGuides` is the only thing
+ * that decides. Someone already scoped fast-forwards past the two picking steps
+ * instead — see reduce().
+ *
+ * The document guide waits until the operator is actually in a page — which is
+ * where creating their first document lands them, and also catches anyone added
+ * to an operation that already has pages.
  */
-function TourAutoStart() {
+function GuideAutoStart() {
   const isMobile = useIsMobile()
   const { data: me } = useMe()
   const userId = useAuthStore((s) => s.user?.userId)
   const scopedOperation = useScopedOperationStore((s) => s.scopedOperation)
+  const running = useOnboardingStore((s) => s.guide)
   const offered = useOnboardingStore((s) => s.offered)
   const start = useOnboardingStore((s) => s.start)
   const dismissedLocally = useOnboardingStore((s) => s.dismissedLocally)
 
+  // Same query variables the switcher and the getting-started panel use, so all
+  // three share one cache entry rather than each fetching the list.
+  const { data: operations } = useInfiniteOperations({ search: null, first: 20 })
+  const operationCount = operations?.pages[0]?.operations.totalCount
+
+  // In a wiki document rather than on the tree-only wiki route.
+  const { documentId } = useParams()
+
   useEffect(() => {
-    if (offered || isMobile || !userId) return
-    // Undefined while `me` is in flight — deciding now would flash a tour at
+    if (running || isMobile || !userId) return
+    // Undefined while `me` is in flight — deciding now would flash a guide at
     // someone who finished it months ago.
     if (!me?.me) return
-    if (me.me.onboardingCompletedAt) return
-    if (dismissedLocally(userId)) return
-    // Somebody already working in an operation does not need to be told how to
-    // choose one; they found it without us.
-    if (scopedOperation) return
-    start()
-  }, [offered, isMobile, userId, me, scopedOperation, dismissedLocally, start])
+    const completed = me.me.completedGuides
+
+    const eligible = (guide: GuideID) =>
+      !completed.includes(guide) && !offered.includes(guide) && !dismissedLocally(userId, guide)
+
+    // Welcome first: an operator mid-way through it should not have the document
+    // guide interrupt, and it runs before any document is open anyway.
+    if (eligible("welcome")) {
+      // Undefined while the list is in flight; a scope already in hand answers
+      // the question without it.
+      if (!scopedOperation && operationCount === undefined) return
+      if (!scopedOperation && operationCount === 0) return
+      start("welcome")
+      return
+    }
+    // A page has to be open, and the welcome guide must be behind them — it
+    // finishes by pointing at the tree, which is exactly where they click
+    // through to a page.
+    if (documentId && scopedOperation && eligible("slash-menu")) {
+      start("slash-menu")
+    }
+  }, [
+    running,
+    isMobile,
+    userId,
+    me,
+    offered,
+    documentId,
+    scopedOperation,
+    operationCount,
+    dismissedLocally,
+    start,
+  ])
 
   return null
 }
 
-function TourOverlay() {
+function TourOverlay({ guide }: { guide: GuideID }) {
   const stepID = useOnboardingStore((s) => s.step)
   const send = useOnboardingStore((s) => s.send)
-  const skip = useOnboardingStore((s) => s.skip)
+  const skipGuide = useOnboardingStore((s) => s.skip)
   const setSidebarOpen = useAppStore((s) => s.setSidebarOpen)
   const scopedOperation = useScopedOperationStore((s) => s.scopedOperation)
-  const completeOnboarding = useCompleteOnboarding()
+  const completeGuide = useCompleteGuide()
   const navigate = useNavigate()
   const { pathname } = useLocation()
 
@@ -104,14 +158,14 @@ function TourOverlay() {
   const [targetRect, setTargetRect] = useState<Rect | null>(null)
   const [placement, setPlacement] = useState<Placement | null>(null)
 
-  const step = stepID ? tourStep(stepID) : null
-  const stepNumber = TOUR_STEPS.findIndex((s) => s.id === stepID) + 1
+  const step = stepID ? tourStep(guide, stepID) : null
+  const total = tourSteps(guide).length
 
-  // Every target except the wiki tree lives in the sidebar, and a collapsed or
-  // closed sidebar would leave the spotlight pointing at nothing.
+  // The welcome guide's targets all live in the sidebar, and a closed one would
+  // leave the spotlight pointing at nothing. Harmless for the document guide.
   useEffect(() => {
-    setSidebarOpen(true)
-  }, [stepID, setSidebarOpen])
+    if (guide === "welcome") setSidebarOpen(true)
+  }, [guide, stepID, setSidebarOpen])
 
   // A step that names a route takes the operator there. Guarded on pathname so
   // it does not fight a manual navigation away mid-step.
@@ -131,8 +185,8 @@ function TourOverlay() {
   }, [scopedId, send])
 
   // Measure the current target, and report any *other* step's target
-  // appearing — that is how "open the switcher" is confirmed, without lifting
-  // the popover's open state out of the component that owns it.
+  // appearing — that is how "open the switcher" and "type /" are confirmed,
+  // without lifting open state out of the components that own it.
   const measure = useCallback(() => {
     if (!step) return
     const element = document.querySelector(targetSelector(step.target))
@@ -173,23 +227,23 @@ function TourOverlay() {
     )
   }, [targetRect])
 
-  const finish = useCallback(() => {
+  const record = useCallback(() => {
     // Fire and forget: the mutation is optimistic and a failure only means the
-    // tour offers itself again next session, which beats blocking the operator
+    // guide offers itself again next session, which beats blocking the operator
     // behind an error they cannot act on.
-    completeOnboarding.mutate()
-  }, [completeOnboarding])
+    completeGuide.mutate(guide)
+  }, [completeGuide, guide])
 
   const handleSkip = useCallback(() => {
-    skip()
-    finish()
-  }, [skip, finish])
+    skipGuide()
+    record()
+  }, [skipGuide, record])
 
   const handleAdvance = useCallback(() => {
-    const isLast = stepID === TOUR_STEPS[TOUR_STEPS.length - 1].id
+    const isLast = stepID === lastStep(guide)
     send({ type: "manual" })
-    if (isLast) finish()
-  }, [stepID, send, finish])
+    if (isLast) record()
+  }, [stepID, guide, send, record])
 
   // Escape leaves. A guide with no way out is a trap.
   useEffect(() => {
@@ -202,25 +256,51 @@ function TourOverlay() {
 
   if (!step) return null
 
+  // A step with no button of its own is waiting on the operator, so the
+  // spotlight beacons and the card states the action.
+  const isWaiting = !step.action
+
   return (
     // pointer-events-none throughout: the operator has to be able to click the
-    // very control being pointed at, and a forgiving overlay beats a modal one
-    // that blocks anything the measured rect gets slightly wrong.
+    // very control being pointed at — and to keep typing into the page, for the
+    // "/" step — so a forgiving overlay beats a modal one that blocks anything
+    // the measured rect gets slightly wrong.
     <div className="pointer-events-none fixed inset-0 z-50">
       {targetRect ? (
-        <div
-          aria-hidden
-          className="absolute rounded-lg ring-2 ring-primary transition-all duration-200"
-          style={{
-            top: targetRect.top - SPOTLIGHT_PAD,
-            left: targetRect.left - SPOTLIGHT_PAD,
-            width: targetRect.width + SPOTLIGHT_PAD * 2,
-            height: targetRect.height + SPOTLIGHT_PAD * 2,
-            // The dim is the cutout's own shadow, so the hole needs no mask and
-            // stays perfectly aligned with the ring as the rect animates.
-            boxShadow: "0 0 0 9999px color-mix(in oklab, var(--background) 72%, transparent)",
-          }}
-        />
+        <>
+          <div
+            aria-hidden
+            className="absolute rounded-lg ring-2 ring-primary transition-all duration-200"
+            style={{
+              top: targetRect.top - SPOTLIGHT_PAD,
+              left: targetRect.left - SPOTLIGHT_PAD,
+              width: targetRect.width + SPOTLIGHT_PAD * 2,
+              height: targetRect.height + SPOTLIGHT_PAD * 2,
+              // The dim is the cutout's own shadow, so the hole needs no mask
+              // and stays aligned with the ring as the rect animates.
+              boxShadow:
+                "0 0 0 9999px color-mix(in oklab, var(--background) 72%, transparent)",
+            }}
+          />
+          {/* Beacon rings, on their own elements so their animated box-shadow
+              does not fight the cutout's 9999px dim. Two, offset in time, so
+              one is always mid-flight. */}
+          {isWaiting
+            ? ["animate-guide-beacon", "animate-guide-beacon-delayed"].map((animation) => (
+                <div
+                  key={animation}
+                  aria-hidden
+                  className={cn("absolute rounded-lg", animation)}
+                  style={{
+                    top: targetRect.top - SPOTLIGHT_PAD,
+                    left: targetRect.left - SPOTLIGHT_PAD,
+                    width: targetRect.width + SPOTLIGHT_PAD * 2,
+                    height: targetRect.height + SPOTLIGHT_PAD * 2,
+                  }}
+                />
+              ))
+            : null}
+        </>
       ) : null}
 
       <div
@@ -238,12 +318,12 @@ function TourOverlay() {
       >
         <div className="flex items-start justify-between gap-3">
           <p className="text-xs font-medium tracking-wide text-muted-foreground uppercase">
-            Step {stepNumber} of {TOUR_STEPS.length}
+            Step {stepNumber(guide, step.id)} of {total}
           </p>
           <button
             type="button"
             onClick={handleSkip}
-            aria-label="Skip the walkthrough"
+            aria-label="Skip this guide"
             className="-mr-1 -mt-1 flex size-6 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
           >
             <XIcon className="size-3.5" />
@@ -257,7 +337,20 @@ function TourOverlay() {
           {step.body}
         </p>
 
-        <div className="mt-4 flex items-center justify-between gap-2">
+        {/* The instruction, for a step with no button. Given the weight of a
+            call to action rather than a muted aside — this is the one line the
+            operator has to read to get any further. */}
+        {step.cta ? (
+          <p
+            aria-live="polite"
+            className="mt-3 flex items-start gap-2 rounded-lg bg-primary/10 px-3 py-2 text-sm font-medium text-foreground ring-1 ring-primary/30"
+          >
+            <MousePointerClickIcon className="mt-0.5 size-4 shrink-0 text-primary" />
+            {step.cta}
+          </p>
+        ) : null}
+
+        <div className="mt-4 flex items-center justify-end gap-2">
           <Button variant="ghost" size="sm" onClick={handleSkip}>
             Skip
           </Button>
@@ -265,11 +358,7 @@ function TourOverlay() {
             <Button size="sm" onClick={handleAdvance}>
               {step.action}
             </Button>
-          ) : (
-            // Steps waiting on a real action say what they are waiting for,
-            // rather than offering a button that would skip the lesson.
-            <p className="text-xs text-muted-foreground">Waiting for you…</p>
-          )}
+          ) : null}
         </div>
       </div>
     </div>

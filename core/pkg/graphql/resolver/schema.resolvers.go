@@ -39,9 +39,9 @@ func (r *mutationResolver) SetHiddenIdentities(ctx context.Context, names []stri
 	return r.UserResolver.SetHiddenIdentities(ctx, names)
 }
 
-// CompleteOnboarding records that the caller finished the first-login guide.
-func (r *mutationResolver) CompleteOnboarding(ctx context.Context) (*models.User, error) {
-	return r.UserResolver.CompleteOnboarding(ctx)
+// CompleteGuide records that the caller finished or dismissed one in-app guide.
+func (r *mutationResolver) CompleteGuide(ctx context.Context, guide string) (*models.User, error) {
+	return r.UserResolver.CompleteGuide(ctx, guide)
 }
 
 // CreateOperation creates a new operation.
@@ -181,16 +181,6 @@ func (r *userResolver) SkillUpdateSnoozedVersion(ctx context.Context, obj *model
 	}
 	v := obj.SkillUpdateSnoozedVersion
 	return &v, nil
-}
-
-// OnboardingCompletedAt is when the operator finished the first-login guide,
-// ISO 8601; nil when they never have.
-func (r *userResolver) OnboardingCompletedAt(ctx context.Context, obj *models.User) (*string, error) {
-	if obj.OnboardingCompletedAt == nil {
-		return nil, nil
-	}
-	at := obj.OnboardingCompletedAt.Format(time.RFC3339)
-	return &at, nil
 }
 
 // Mutation returns generated.MutationResolver implementation.

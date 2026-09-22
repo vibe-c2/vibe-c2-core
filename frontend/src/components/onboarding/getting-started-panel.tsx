@@ -94,7 +94,7 @@ export function GettingStartedPanel() {
           {/* The way back in for anyone who skipped the walkthrough, or who
               wants it again on a second engagement. */}
           <div className="pt-1">
-            <Button variant="outline" size="sm" onClick={startTour}>
+            <Button variant="outline" size="sm" onClick={() => startTour("welcome")}>
               Show me around
             </Button>
           </div>

@@ -174,3 +174,37 @@
     animation: auth-shake 0.4s cubic-bezier(0.36, 0.07, 0.19, 0.97) both;
   }
 }
+
+/* Guide spotlight beacon. A step that waits for the operator to press something
+   has to make that something unmissable, so the ring around it pulses outward
+   instead of sitting still — the static ring read as decoration and people did
+   not realise they were being asked to act.
+   Two rings offset in time so there is always one mid-flight; both animate
+   box-shadow spread rather than transform, so the pulse radiates from the
+   element's real edge whatever its size, and nothing reflows. */
+@keyframes guide-beacon {
+  0% {
+    box-shadow: 0 0 0 0 color-mix(in oklab, var(--color-primary) 55%, transparent);
+  }
+  70% {
+    box-shadow: 0 0 0 12px color-mix(in oklab, var(--color-primary) 0%, transparent);
+  }
+  100% {
+    box-shadow: 0 0 0 0 color-mix(in oklab, var(--color-primary) 0%, transparent);
+  }
+}
+@media (prefers-reduced-motion: no-preference) {
+  .animate-guide-beacon {
+    animation: guide-beacon 1.9s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+  }
+  .animate-guide-beacon-delayed {
+    animation: guide-beacon 1.9s cubic-bezier(0.4, 0, 0.6, 1) 0.95s infinite;
+  }
+}
+/* Reduced motion keeps a solid, slightly heavier ring: the point is "act here",
+   which must survive the animation being switched off. */
+@media (prefers-reduced-motion: reduce) {
+  .animate-guide-beacon {
+    box-shadow: 0 0 0 4px color-mix(in oklab, var(--color-primary) 45%, transparent);
+  }
+}
