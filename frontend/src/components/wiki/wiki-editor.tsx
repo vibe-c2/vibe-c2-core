@@ -56,6 +56,7 @@ import {
   extractMarkdownFromClipboard,
   markdownToSlice,
 } from "@/components/wiki/wiki-markdown-paste"
+import { pastePlan } from "@/components/wiki/wiki-paste-plan"
 import { toast } from "sonner"
 import { clipboardFileShortfall } from "@/components/wiki/wiki-clipboard-files"
 import "./wiki-editor.css"
@@ -164,22 +165,32 @@ export function WikiEditor({
           return true
         }
 
-        // Markdown source paste — StarterKit only registers *typed* input
-        // rules, so pasted headings/lists/fences/links would otherwise land
-        // as flat plaintext. See wiki-markdown-paste.ts for the conversion
-        // pipeline. Pastes inside a code block stay literal so the markers
-        // remain part of the source the user is copying in.
-        if (view.state.selection.$from.parent.type.name !== "codeBlock") {
-          const markdown = extractMarkdownFromClipboard(event.clipboardData)
-          if (markdown !== null) {
-            event.preventDefault()
-            const slice = markdownToSlice(markdown, view.state.schema)
-            view.dispatch(view.state.tr.replaceSelection(slice))
-            return true
-          }
-        }
+        // Text paste. What happens — and crucially whether the dispatch asks
+        // ProseMirror to reveal the caret — is decided by pastePlan; see
+        // wiki-paste-plan.ts for why a code-block paste must not scroll.
+        const inCodeBlock = view.state.selection.$from.parent.type.name === "codeBlock"
+        const plainText = event.clipboardData?.getData("text/plain")
+        const markdown = inCodeBlock
+          ? null
+          : extractMarkdownFromClipboard(event.clipboardData)
+        const plan = pastePlan({
+          inCodeBlock,
+          plainText,
+          hasMarkdown: markdown !== null,
+        })
 
-        return false
+        if (plan.kind === "passthrough") return false
+
+        event.preventDefault()
+        const tr = view.state.tr
+        if (plan.kind === "code-literal") {
+          const { from, to } = view.state.selection
+          tr.insertText(plainText as string, from, to)
+        } else {
+          tr.replaceSelection(markdownToSlice(markdown as string, view.state.schema))
+        }
+        view.dispatch(plan.scrollIntoView ? tr.scrollIntoView() : tr)
+        return true
       },
       handleDrop: (view, event) => {
         if (!isEditor) return false

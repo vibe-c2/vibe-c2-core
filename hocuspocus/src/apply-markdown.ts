@@ -235,8 +235,64 @@ function spliceFragment(fragment: XmlFragment, blocks: DetachedBlock[]): void {
  * subtree, which is exactly the granularity wanted: two blocks are "the same"
  * when replacing one with the other would be a no-op.
  */
+/**
+ * A block's identity for splicing: what it would look like if it came back
+ * through Markdown.
+ *
+ * NOT `String(node)`. That serializes the raw Y.js node, attributes and all,
+ * and the two sides of the comparison are built from different schemas. The
+ * existing blocks were written by the browser, whose `codeBlock` carries a
+ * client-generated `blockId` (a per-viewer collapse key, see the SPA's
+ * wiki-code-block). The incoming blocks come from `wikiSchema` here, which does
+ * not declare that attribute and whose Markdown serializer could not round-trip
+ * it anyway. So every code block compared unequal on every edit, whatever its
+ * content: the common prefix stopped at the first one and the suffix at the
+ * last, and a "minimal splice" rewrote the entire span between them. On a
+ * technical page with code near the top and bottom, that is the whole document —
+ * which is why an agent edit reloaded the page and threw the reader's scroll
+ * position away, and why every code block lost the id its collapse state is
+ * keyed on and was then re-assigned a fresh one by each client.
+ *
+ * Comparing on the schema this module actually knows about fixes the class, not
+ * just `blockId`: any attribute the server cannot see is one it must not let
+ * decide whether a block changed.
+ */
 function nodeKey(node: XmlElement | XmlText | unknown): string {
+  if (node instanceof XmlText) {
+    // The delta, not the string: it carries the inline marks, which do survive
+    // a Markdown round trip and therefore do mean the block changed.
+    return "#text:" + JSON.stringify(node.toDelta().map(normalizeDelta));
+  }
+
+  if (node instanceof XmlElement) {
+    const name = node.nodeName;
+    const declared = wikiSchema.nodes[name]?.spec.attrs;
+    const attrs = Object.entries(node.getAttributes())
+      // An unknown node type keeps all of its attributes: we have no grounds to
+      // call any of them cosmetic, and a false "unchanged" is worse than a
+      // false "changed" — the latter costs a rewrite, the former drops an edit.
+      .filter(([key]) => !declared || key in declared)
+      .sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))
+      .map(([key, value]) => `${key}=${JSON.stringify(value ?? null)}`);
+    const children = node.toArray().map(nodeKey).join("");
+    return `<${name}${attrs.map((a) => " " + a).join("")}>${children}</${name}>`;
+  }
+
   return String(node);
+}
+
+/** One delta op with any mark this schema does not know about dropped, for the
+ *  same reason the element attributes above are filtered. */
+function normalizeDelta(op: { insert?: unknown; attributes?: Record<string, unknown> }) {
+  if (!op.attributes) return { insert: op.insert };
+  const marks = Object.keys(op.attributes)
+    .filter((mark) => mark in wikiSchema.marks)
+    .sort();
+  if (marks.length === 0) return { insert: op.insert };
+  return {
+    insert: op.insert,
+    attributes: Object.fromEntries(marks.map((mark) => [mark, op.attributes![mark]])),
+  };
 }
 
 /**
@@ -485,6 +541,7 @@ export const __testing = {
   markdownToDetachedBlocks,
   cloneNode,
   spliceFragment,
+  nodeKey,
   editFragment,
   diagnoseNoMatch,
   countOccurrences,
