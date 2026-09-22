@@ -16,6 +16,7 @@ import { RiskProfitMatrix } from "@/components/tasks/risk-profit-matrix"
 import { CredentialDetailsDialog } from "@/components/findings/credential-details-dialog"
 import { EditCredentialDialog } from "@/components/findings/edit-credential-dialog"
 import { DeleteCredentialDialog } from "@/components/findings/delete-credential-dialog"
+import { GettingStartedPanel } from "@/components/onboarding/getting-started-panel"
 import { cn } from "@/lib/utils"
 
 export function TasksPage() {
@@ -33,20 +34,11 @@ export function TasksPage() {
   // session-scoped to the kanban flow.
 
   // The Tasks feature is operation-scoped — there is no global aggregate
-  // (per the spec / user decision). When no operation is scoped, prompt
-  // the user to pick one via the operation switcher.
+  // (per the spec / user decision). With nothing scoped this is also the first
+  // surface a new operator lands on (/ redirects here), so the unscoped state
+  // carries the getting-started guide rather than a bare "nothing selected".
   if (!scopedOperation) {
-    return (
-      <div className="flex flex-1 items-center justify-center p-6">
-        <div className="max-w-md text-center">
-          <KanbanSquareIcon className="mx-auto mb-3 size-10 text-muted-foreground" />
-          <h2 className="text-lg font-medium">No operation selected</h2>
-          <p className="text-sm text-muted-foreground">
-            Pick an operation from the switcher above to plan and track tasks.
-          </p>
-        </div>
-      </div>
-    )
+    return <GettingStartedPanel />
   }
 
   return <TasksPageInner operationId={scopedOperation.id} />
