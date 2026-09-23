@@ -29,7 +29,8 @@ type getWikiDocumentArgs struct {
 	DocumentID string `json:"document_id" jsonschema:"Page id."`
 	Outline    bool   `json:"outline,omitempty" jsonschema:"Return headings and section sizes instead of text."`
 	Section    string `json:"section,omitempty" jsonschema:"Return only this heading and what nests under it, as the outline names it."`
-	Full       bool   `json:"full,omitempty"    jsonschema:"Return the whole body even when the page is large. Pages over 8 KB otherwise return their outline."`
+	Full       bool   `json:"full,omitempty"    jsonschema:"Return the body even when the page is large; pages over 8 KB otherwise return their outline. A body over 40 KB still comes back truncated with an offset to continue from."`
+	Offset     int    `json:"offset,omitempty"  jsonschema:"Resume a truncated read at this byte offset — the number the previous read reported. Pair with full:true, or with the same section:."`
 }
 
 func registerWikiTools(s *Server) {
@@ -61,7 +62,9 @@ func registerWikiTools(s *Server) {
 		Name: "get_wiki_document",
 		Description: "One wiki page as Markdown. Small pages return their body; pages over 8 KB " +
 			"return an outline instead, so pass section:\"<heading>\" for the part you need " +
-			"or full:true for everything.",
+			"or full:true for everything. A body or section over 40 KB comes back truncated " +
+			"with truncated:true and a byte offset in the text; read the rest by repeating the " +
+			"call with offset: set to that number.",
 	}, readTool, handleGetWikiDocument)
 
 	register(s, &mcp.Tool{
@@ -246,7 +249,7 @@ func handleGetWikiDocument(ctx context.Context, s *Server, args getWikiDocumentA
 		return outlineResult(doc, markdown), nil
 	}
 	if args.Section != "" {
-		return sectionResult(doc, markdown, args.Section)
+		return sectionResult(doc, markdown, args.Section, args.Offset)
 	}
 	if outlineByDefault(args, markdown) {
 		result := outlineResult(doc, markdown)
@@ -257,16 +260,25 @@ func handleGetWikiDocument(ctx context.Context, s *Server, args getWikiDocumentA
 		return result, nil
 	}
 
-	body, truncated := truncateBody(markdown)
+	start := clampBodyOffset(markdown, args.Offset)
+	body, truncated, shown := truncateBody(markdown[start:])
+	if truncated {
+		body += "\n\n" + continuationSentinel("full:true", start, shown, len(markdown))
+	}
 	view := wikiDocDetailView{
 		wikiDocView: toWikiDocView(doc),
 		Content:     body,
 		UpdatedAt:   formatTime(doc.UpdateAt),
 		Truncated:   truncated,
 	}
+	if start > 0 {
+		view.Notes = append(view.Notes, fmt.Sprintf(
+			"Continued from byte %d of %d; this is part of the page.", start, len(markdown)))
+	}
 	// A big page that reached here has no headings (or full:true was passed),
-	// so the section path cannot help; say so only when it could.
-	if !args.Full && len(markdown) > outlineHintBytes {
+	// so the section path cannot help; say so only when it could, and not when
+	// this is the continuation of an earlier read.
+	if !args.Full && args.Offset == 0 && len(markdown) > outlineHintBytes {
 		view.Notes = append(view.Notes,
 			"This page has no headings, so it cannot be read in sections.")
 	}
@@ -290,7 +302,7 @@ const outlineHintBytes = 8 * 1024
 // hundred bytes and the agent chooses what to fetch next. A page without
 // headings has no sections to offer, so it is sent whole.
 func outlineByDefault(args getWikiDocumentArgs, markdown string) bool {
-	if args.Full || args.Outline || args.Section != "" {
+	if args.Full || args.Outline || args.Section != "" || args.Offset > 0 {
 		return false
 	}
 	return len(markdown) > outlineHintBytes && hasHeadings(markdown)
@@ -334,7 +346,7 @@ func outlineResult(doc *models.WikiDocument, markdown string) toolResult {
 	}
 }
 
-func sectionResult(doc *models.WikiDocument, markdown, heading string) (toolResult, error) {
+func sectionResult(doc *models.WikiDocument, markdown, heading string, offset int) (toolResult, error) {
 	text, matches := sliceSection(markdown, heading)
 	if matches == 0 {
 		if available := headingList(markdown); available != "" {
@@ -346,7 +358,11 @@ func sectionResult(doc *models.WikiDocument, markdown, heading string) (toolResu
 				"the section argument.", doc.Title)
 	}
 
-	body, truncated := truncateBody(text)
+	start := clampBodyOffset(text, offset)
+	body, truncated, shown := truncateBody(text[start:])
+	if truncated {
+		body += "\n\n" + continuationSentinel(fmt.Sprintf("section:%q", heading), start, shown, len(text))
+	}
 	view := wikiDocDetailView{
 		wikiDocView: toWikiDocView(doc),
 		Content:     body,

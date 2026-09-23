@@ -110,7 +110,11 @@ func (s *Server) readResource(ctx context.Context, req *mcp.ReadResourceRequest)
 		if err != nil || doc.OperationID != opID {
 			return nil, fmt.Errorf("wiki page not found")
 		}
-		body, _ := truncateBody(s.documentMarkdown(ctx, doc))
+		md := s.documentMarkdown(ctx, doc)
+		body, truncated, shown := truncateBody(md)
+		if truncated {
+			body += "\n\n" + continuationSentinel("get_wiki_document full:true", 0, shown, len(md))
+		}
 		return textResource(uri, resourceMIMEText, body), nil
 	case "host":
 		host, err := s.deps.Hosts.Host(ctx, id)

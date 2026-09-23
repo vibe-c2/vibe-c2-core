@@ -288,6 +288,14 @@ var releases = []Release{
 			"Within a layer, the order of shapes a person drew is preserved from Excalidraw's own fractional index, which was previously ignored — rearranging shapes in the app and reloading used to lose the arrangement.",
 		},
 	},
+	{
+		Version: 32,
+		Date:    "2026-09-23",
+		Notes: []string{
+			"get_wiki_document reads longer than 40 KB now continue instead of ending there. A truncated body or section reports the byte offset it stopped at; pass that back as offset: — full:true again for a whole body, the same section: for a section — to read the next part, until truncated is false. Before this the tail of a long page was simply unreachable.",
+			"Text above the first heading is in no section, so section: cannot fetch it and only full:true reaches it. The outline already reports its size as bytes above the first heading; wiki.md now says so, and to treat a read as complete only once truncated is false.",
+		},
+	},
 }
 
 // Releases returns the full history, oldest first. A copy, so callers cannot

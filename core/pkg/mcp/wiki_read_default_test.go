@@ -24,6 +24,7 @@ func TestOutlineByDefault(t *testing.T) {
 	}{
 		{"large page with headings", getWikiDocumentArgs{}, big, true},
 		{"large page, full requested", getWikiDocumentArgs{Full: true}, big, false},
+		{"large page, continuing at an offset", getWikiDocumentArgs{Offset: 100}, big, false},
 		{"large page, section requested", getWikiDocumentArgs{Section: "Second"}, big, false},
 		{"large page, outline requested", getWikiDocumentArgs{Outline: true}, big, false},
 		{"small page", getWikiDocumentArgs{}, small, false},

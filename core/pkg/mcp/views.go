@@ -2,11 +2,12 @@ package mcp
 
 import (
 	"fmt"
-	"github.com/vibe-c2/vibe-c2-core/core/pkg/wiki"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"github.com/vibe-c2/vibe-c2-core/core/pkg/models"
+	"github.com/vibe-c2/vibe-c2-core/core/pkg/wiki"
 )
 
 // Compact views of domain objects.
@@ -450,19 +451,49 @@ func formatTime(t time.Time) string {
 	return t.UTC().Format(time.RFC3339)
 }
 
-// maxWikiBodyBytes bounds a single document body. Well under the response
-// budget so the envelope and metadata always fit alongside it.
+// maxWikiBodyBytes bounds a single document body per read. Well under the
+// response budget so the envelope and metadata always fit alongside it. A body
+// past this is not lost: it is cut here and continued from an offset the read
+// reports, so the whole page stays reachable — see get_wiki_document.
 const maxWikiBodyBytes = 40 * 1024
 
-// truncateBody cuts an over-long document at a line boundary where it can, so
-// the agent gets whole paragraphs rather than a severed sentence.
-func truncateBody(body string) (string, bool) {
+// truncateBody returns the largest prefix of body that fits one read, whether
+// it had to cut, and how many bytes of body that prefix covers — the offset a
+// continued read resumes from. The cut lands on a rune boundary, and on a line
+// break in the back half where there is one, so the agent gets whole
+// paragraphs rather than a severed sentence.
+func truncateBody(body string) (string, bool, int) {
 	if len(body) <= maxWikiBodyBytes {
-		return body, false
+		return body, false, len(body)
 	}
-	cut := body[:maxWikiBodyBytes]
+	cut := truncateUTF8(body, maxWikiBodyBytes)
 	if idx := strings.LastIndexByte(cut, '\n'); idx > maxWikiBodyBytes/2 {
 		cut = cut[:idx]
 	}
-	return cut + fmt.Sprintf("\n\n…[truncated: %d of %d bytes shown]", len(cut), len(body)), true
+	return cut, true, len(cut)
+}
+
+// clampBodyOffset resolves a caller-supplied byte offset to a rune boundary
+// within text, so a continued read never resumes in the middle of a character.
+func clampBodyOffset(text string, offset int) int {
+	if offset <= 0 {
+		return 0
+	}
+	if offset >= len(text) {
+		return len(text)
+	}
+	for offset < len(text) && !utf8.RuneStart(text[offset]) {
+		offset++
+	}
+	return offset
+}
+
+// continuationSentinel is the line appended to a truncated body so the "there
+// is more" signal travels in the text itself, not only in the truncated flag a
+// client might drop. It names the byte window shown and the exact call that
+// fetches the rest — full:true for a whole body, section:"<heading>" for a
+// section — with the offset to pass.
+func continuationSentinel(mode string, start, shown, total int) string {
+	return fmt.Sprintf("…[showing bytes %d–%d of %d — read the rest with %s, offset:%d]",
+		start, start+shown, total, mode, start+shown)
 }

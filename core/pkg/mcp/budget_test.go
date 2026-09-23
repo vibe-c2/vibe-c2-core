@@ -3,6 +3,7 @@ package mcp
 import (
 	"strings"
 	"testing"
+	"unicode/utf8"
 )
 
 func TestClampPageSize(t *testing.T) {
@@ -97,24 +98,44 @@ func TestFit_RespectsTheByteBudget(t *testing.T) {
 	}
 }
 
-// A document longer than the budget is cut, flagged, and cut at a line break
-// so the agent reads whole paragraphs rather than a severed sentence.
+// A document longer than the budget is cut at a line break and reports how many
+// bytes it showed — the offset a continued read resumes from. The prefix is a
+// real prefix of the input (the truncation notice is composed by the caller, so
+// a continued read can slice cleanly at the reported offset), never over the cap
+// and never split across a rune.
 func TestTruncateBody(t *testing.T) {
 	short := "# Notes\n\nnothing much here"
-	if body, truncated := truncateBody(short); truncated || body != short {
-		t.Fatalf("short body was altered: truncated=%v", truncated)
+	if body, truncated, n := truncateBody(short); truncated || body != short || n != len(short) {
+		t.Fatalf("short body was altered: truncated=%v n=%d", truncated, n)
 	}
 
 	long := strings.Repeat("a line of engagement notes\n", 4000)
-	body, truncated := truncateBody(long)
+	body, truncated, n := truncateBody(long)
 	if !truncated {
 		t.Fatal("oversized body was not truncated")
 	}
-	if !strings.Contains(body, "truncated") {
-		t.Fatalf("truncated body does not say so: %q", body[len(body)-80:])
+	if n != len(body) {
+		t.Fatalf("reported %d bytes shown but returned %d", n, len(body))
 	}
-	if len(body) > maxWikiBodyBytes+128 {
-		t.Fatalf("truncated body is %d bytes, over the %d limit", len(body), maxWikiBodyBytes)
+	if body != long[:n] {
+		t.Fatal("the shown text is not a prefix of the input, so a continued read would not line up")
+	}
+	if len(body) > maxWikiBodyBytes {
+		t.Fatalf("truncated body is %d bytes, over the %d cap", len(body), maxWikiBodyBytes)
+	}
+
+	// A multibyte rune straddling the cap must not be split — a continued read
+	// resuming at the reported offset would otherwise start mid-character.
+	wide := strings.Repeat("€", 20000) // 3 bytes each, 60000 bytes total
+	wb, wtrunc, wn := truncateBody(wide)
+	if !wtrunc {
+		t.Fatal("oversized multibyte body was not truncated")
+	}
+	if !utf8.ValidString(wb) {
+		t.Fatal("truncation split a rune")
+	}
+	if wn != len(wb) || wb != wide[:wn] {
+		t.Fatalf("multibyte prefix does not line up: n=%d len=%d", wn, len(wb))
 	}
 }
 
