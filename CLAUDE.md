@@ -28,6 +28,7 @@ cd core && go build ./...
 cd core && golangci-lint run       # static analysis; config is core/.golangci.yml
 make test                          # all Go tests with -race
 make test PKG=./pkg/mcp/...        # single package
+make test-integration              # repository tests against a real MongoDB (needs `make infra`)
 ```
 
 `make test` rather than a bare `go test`: `pkg/environment` validates required
@@ -47,6 +48,26 @@ CI sets the five env vars inline instead of calling `make test`, because the
 Makefile does a hard `include .env` and `.env` is untracked, so any `make`
 target fails in a fresh checkout. Keep the two lists in sync when a new
 required setting is added to `pkg/environment`.
+
+### Repository integration tests
+
+`make test-integration` runs the tests in `pkg/repository` that need a real
+server: keyset pagination, sort direction, the `_id` tiebreaker, the wiki search
+branches, projections, and BSON encoding. They are opt-in through
+`INTEGRATION_MONGO_URI` and skip without it, so `make test` and CI are
+unaffected.
+
+They exist because the rest of this package's tests are pure-function — they
+assert on the `bson.M` a builder returns and never execute a query, which leaves
+the half of the layer only a server can answer unverified. A reversed sort or a
+page that drops one row returns plausible data, not an error.
+
+Each test uses its own scratch database (`itest_*`) via `database.Connect`, so
+they never touch the database named in `.env`, and drops its collections
+afterwards. When adding one, check it fails when the behaviour it describes is
+broken — several obvious-looking assertions here do not, because `$text` and a
+regex branch can cover for each other, and `searchPattern` is byte-identical to
+`regexp.QuoteMeta` for any input without quotes.
 
 `core/.golangci.yml` is kept green: a linter that fires on existing code gets
 the code fixed, or stays out with a note in the config saying why. `nilerr`

@@ -56,16 +56,25 @@ func (d *QmgoDatabase) DoTransaction(ctx context.Context, fn func(ctx context.Co
 func NewDatabase(ctx context.Context) (Database, error) {
 	env := environment.GetEnvironmentSettings()
 
-	uri := env.MongoURI
-	if uri == "" {
+	if env.MongoURI == "" {
 		return nil, fmt.Errorf("MONGO_URI is not configured")
 	}
-
-	dbName := env.MongoDatabase
-	if dbName == "" {
+	if env.MongoDatabase == "" {
 		return nil, fmt.Errorf("MONGO_DATABASE is not configured")
 	}
+	return Connect(ctx, env.MongoURI, env.MongoDatabase)
+}
 
+// Connect opens a connection to an explicitly named database, with the same
+// retry and ping behaviour as NewDatabase.
+//
+// NewDatabase resolves the URI and database name from the environment and
+// delegates here. Taking them as arguments keeps "where the settings come
+// from" separate from "how the connection is made", which is what lets a test
+// point at a scratch database without the process-wide environment deciding
+// for it — writing test rows into a developer's own database is a mistake worth
+// making structurally impossible.
+func Connect(ctx context.Context, uri, dbName string) (Database, error) {
 	var client *qmgo.Client
 	var err error
 

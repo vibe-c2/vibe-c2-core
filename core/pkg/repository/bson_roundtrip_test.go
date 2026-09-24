@@ -21,16 +21,16 @@ import (
 // executed every query through v1's, and the two happened to agree because
 // bson.M is map[string]interface{} in both.
 //
-// Opt-in: set ROUNDTRIP_MONGO_URI to a disposable database. It writes to
+// Opt-in: set INTEGRATION_MONGO_URI to a disposable database. It writes to
 // bson_roundtrip.probe and drops it afterwards. Skipped in CI, which has no
 // broker or database.
 //
 // It drives qmgo directly rather than database.Collection because the
 // encoding is qmgo's; the wrapper only forwards.
 func TestBSONRoundTrip(t *testing.T) {
-	uri := os.Getenv("ROUNDTRIP_MONGO_URI")
+	uri := os.Getenv("INTEGRATION_MONGO_URI")
 	if uri == "" {
-		t.Skip("ROUNDTRIP_MONGO_URI not set")
+		t.Skip("INTEGRATION_MONGO_URI not set; skipping repository integration test")
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
 	defer cancel()

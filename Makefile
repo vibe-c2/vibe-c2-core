@@ -1,4 +1,4 @@
-.PHONY: test infra infra-stop infra-reset services services-stop services-reset services-rebuild seaweedfs-reset sso sso-stop swag gqlgen gqlcodegen frontend help
+.PHONY: test test-integration infra infra-stop infra-reset services services-stop services-reset services-rebuild seaweedfs-reset sso sso-stop swag gqlgen gqlcodegen frontend help
 
 include .env
 export
@@ -47,6 +47,18 @@ seaweedfs-reset: ## Reset only SeaweedFS volumes (clears bucket state; keeps Mon
 		docker volume rm "$${project}_$${vol}" 2>/dev/null || true; \
 	done
 	@echo "Done. Run 'make services' to recreate SeaweedFS with fresh state."
+
+test-integration: ## Run the repository integration tests against the running MongoDB (needs `make infra`)
+	@echo "Running repository integration tests against MONGO_URI"
+	@echo "These write to scratch databases named itest_* and drop their collections afterwards."
+	cd core && \
+	JWT_SECRET_KEY=$(or $(JWT_SECRET_KEY),test) \
+	MONGO_URI=$(or $(MONGO_URI),mongodb://localhost:27017) \
+	MONGO_DATABASE=$(or $(MONGO_DATABASE),test) \
+	RABBITMQ_DEFAULT_USER=$(or $(RABBITMQ_DEFAULT_USER),test) \
+	RABBITMQ_DEFAULT_PASS=$(or $(RABBITMQ_DEFAULT_PASS),test) \
+	INTEGRATION_MONGO_URI=$(MONGO_URI) \
+	go test -count=1 -v ./pkg/repository/ -run 'TestIntegration|TestBSONRoundTrip'
 
 swag: ## swag: Generates or updates the Swagger/OpenAPI documentation files.
 	@echo "Generating API documentation"
