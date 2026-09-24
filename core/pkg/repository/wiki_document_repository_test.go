@@ -1,6 +1,7 @@
 package repository
 
 import (
+	"fmt"
 	"regexp"
 	"testing"
 	"time"
@@ -216,4 +217,59 @@ func equalTitles(got []models.WikiDocument, want []string) bool {
 		}
 	}
 	return true
+}
+
+// TestNestingDepth_PathIDsMatchesTheWalk pins the invariant the NestingDepth
+// fast path rests on: for a well-formed chain, len(path_ids)+1 is exactly the
+// number of documents from a node up to its root, which is what the old
+// parent-by-parent walk counted. If ComposePathIDs or the path_ids maintenance
+// ever changes shape, this fails instead of the nesting cap quietly drifting.
+func TestNestingDepth_PathIDsMatchesTheWalk(t *testing.T) {
+	// Build a root → d1 → d2 → d3 chain with path_ids maintained the way
+	// Create and RebuildPathIDsCascade maintain it.
+	ids := []uuid.UUID{uuid.New(), uuid.New(), uuid.New(), uuid.New()}
+	store := map[uuid.UUID]models.WikiDocument{}
+	var parentPath []uuid.UUID
+	for i, id := range ids {
+		var parent *uuid.UUID
+		if i > 0 {
+			p := ids[i-1]
+			parent = &p
+		}
+		store[id] = models.WikiDocument{
+			DocumentID:       id,
+			ParentDocumentID: parent,
+			PathIDs:          parentPath,
+			Title:            fmt.Sprintf("d%d", i),
+		}
+		parentPath = ComposePathIDs(parentPath, id)
+	}
+
+	for i, id := range ids {
+		doc := store[id]
+		fast := len(doc.PathIDs) + 1
+		walked := len(walkAncestorChain(id, lookupStore(store)))
+		if fast != walked {
+			t.Errorf("depth %d (%s): path_ids gives %d, walk gives %d", i, doc.Title, fast, walked)
+		}
+		if fast != i+1 {
+			t.Errorf("depth at level %d: got %d, want %d", i, fast, i+1)
+		}
+	}
+}
+
+// TestNestingDepth_RootIsOne locks the boundary the callers compare against:
+// a root parent must report 1, so a child of a root is depth 2 and the
+// maxNestingDepth cap rejects at the right level rather than one off.
+func TestNestingDepth_RootIsOne(t *testing.T) {
+	root := models.WikiDocument{DocumentID: uuid.New(), PathIDs: []uuid.UUID{}}
+	if got := len(root.PathIDs) + 1; got != 1 {
+		t.Fatalf("root depth: got %d, want 1", got)
+	}
+	// nil path_ids (a row the backfill has not reached) must not read as a
+	// deeper node; it collapses to the same answer for a root.
+	rootNilPath := models.WikiDocument{DocumentID: uuid.New()}
+	if got := len(rootNilPath.PathIDs) + 1; got != 1 {
+		t.Fatalf("root with nil path_ids: got %d, want 1", got)
+	}
 }

@@ -764,24 +764,37 @@ func walkAncestorChain(startID uuid.UUID, lookup func(uuid.UUID) (models.WikiDoc
 	return chain
 }
 
-// NestingDepth returns the depth of the given document by walking up the tree.
-// A root document has depth 0, its direct child has depth 1, etc.
+// NestingDepth returns the number of documents in the chain from the given
+// document up to its root, counting itself: a root returns 1, a root's child 2.
+// Callers pass the prospective parent of a new document and compare against
+// maxNestingDepth, so this is on the create / reparent / duplicate path.
+//
+// path_ids is the materialized ancestor chain excluding self and is maintained
+// on every insert and reparent (see Create and RebuildPathIDsCascade), so the
+// answer is one read: len(path_ids) + 1. The previous implementation walked
+// parent_document_id one FindOne per level, which cost up to maxNestingDepth
+// sequential round trips on every mutation.
 func (r *wikiDocumentRepository) NestingDepth(ctx context.Context, parentID uuid.UUID) (int, error) {
-	depth := 0
-	currentID := parentID
-
-	for {
-		var doc models.WikiDocument
-		err := r.coll.FindOne(ctx, bson.M{"document_id": currentID}).One(&doc)
-		if err != nil {
-			return 0, err
-		}
-		depth++
-		if doc.ParentDocumentID == nil {
-			return depth, nil
-		}
-		currentID = *doc.ParentDocumentID
+	doc, err := r.FindByID(ctx, parentID)
+	if err != nil {
+		return 0, err
 	}
+	// A non-root document with an empty path means the invariant was broken
+	// for this row — a legacy insert the startup backfill has not reached, or
+	// a reparent that failed midway. Fall back to the shared ancestor walk,
+	// which is bounded and cycle-guarded, rather than under-reporting the
+	// depth and letting the nesting cap be bypassed.
+	if len(doc.PathIDs) == 0 && doc.ParentDocumentID != nil {
+		chain := walkAncestorChain(doc.DocumentID, func(id uuid.UUID) (models.WikiDocument, bool) {
+			d, err := r.FindByID(ctx, id)
+			if err != nil {
+				return models.WikiDocument{}, false
+			}
+			return d, true
+		})
+		return len(chain), nil
+	}
+	return len(doc.PathIDs) + 1, nil
 }
 
 func (r *wikiDocumentRepository) SoftDelete(ctx context.Context, doc *models.WikiDocument, deletedByID uuid.UUID) error {
