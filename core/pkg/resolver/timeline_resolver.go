@@ -210,6 +210,21 @@ func (r *timelineResolver) TimelineEventsByDay(
 		return nil, err
 	}
 
+	// Warm the user memo so the per-event Actor and ActorLabel resolvers stop
+	// issuing a lookup each — and two each, for an event whose page selects
+	// both fields. ActorLabels does the same batching for the MCP timeline
+	// tool; this is the GraphQL side of it. Best-effort: both resolvers still
+	// fall through to the repository.
+	actorUIDs := make([]uuid.UUID, 0, len(events))
+	for i := range events {
+		if events[i].ActorID != nil {
+			actorUIDs = append(actorUIDs, *events[i].ActorID)
+		}
+	}
+	if err := gqlctx.PreloadUsers(ctx, r.userRepo, actorUIDs); err != nil {
+		logger.From(ctx).Warn("preload timeline actors", zap.Error(err))
+	}
+
 	edges := make([]*model.TimelineEventEdge, 0, len(events))
 	for i := range events {
 		ev := &events[i]
@@ -516,7 +531,7 @@ func (r *timelineResolver) Actor(ctx context.Context, obj *models.OperationEvent
 	if obj.ActorID == nil {
 		return nil, nil
 	}
-	user, err := r.userRepo.FindByID(ctx, *obj.ActorID)
+	user, err := gqlctx.LoadUser(ctx, r.userRepo, *obj.ActorID)
 	if err != nil {
 		return nil, nil
 	}
@@ -542,7 +557,7 @@ func (r *timelineResolver) ActorKind(_ context.Context, obj *models.OperationEve
 func (r *timelineResolver) ActorLabel(ctx context.Context, obj *models.OperationEvent) (string, error) {
 	owner := ""
 	if obj.ActorID != nil {
-		if user, err := r.userRepo.FindByID(ctx, *obj.ActorID); err == nil {
+		if user, err := gqlctx.LoadUser(ctx, r.userRepo, *obj.ActorID); err == nil {
 			owner = user.Username
 		}
 	}

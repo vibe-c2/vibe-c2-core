@@ -122,6 +122,11 @@ type ICredentialRepository interface {
 	// FindNamesByIDs returns only credential_id and name for the given ids,
 	// in one round trip. For naming references without loading secrets.
 	FindNamesByIDs(ctx context.Context, ids []uuid.UUID) ([]models.Credential, error)
+	// FindByIDs returns the full credentials for the given ids in one round
+	// trip, in unspecified order — callers that need the caller's ordering
+	// index the result themselves. Use FindNamesByIDs instead when only the
+	// label is needed, so secrets are not read.
+	FindByIDs(ctx context.Context, ids []uuid.UUID) ([]models.Credential, error)
 
 	// Multi-operation variants — used by the "global / cross-operation" Findings
 	// view where the caller has selected several operations to search across.
@@ -222,6 +227,17 @@ func (r *credentialRepository) findWithCursor(ctx context.Context, base bson.M, 
 	}
 
 	return creds, err
+}
+
+func (r *credentialRepository) FindByIDs(ctx context.Context, ids []uuid.UUID) ([]models.Credential, error) {
+	if len(ids) == 0 {
+		return nil, nil
+	}
+	var creds []models.Credential
+	if err := r.coll.Find(ctx, bson.M{"credential_id": bson.M{"$in": ids}}).All(&creds); err != nil {
+		return nil, fmt.Errorf("find by ids: %w", err)
+	}
+	return creds, nil
 }
 
 func (r *credentialRepository) FindNamesByIDs(ctx context.Context, ids []uuid.UUID) ([]models.Credential, error) {

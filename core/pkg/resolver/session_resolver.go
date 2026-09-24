@@ -406,7 +406,7 @@ func (r *sessionResolver) UserID(_ context.Context, obj *models.Session) (string
 }
 
 func (r *sessionResolver) User(ctx context.Context, obj *models.Session) (*models.User, error) {
-	user, err := r.userRepo.FindByID(ctx, obj.UserID)
+	user, err := gqlctx.LoadUser(ctx, r.userRepo, obj.UserID)
 	if err != nil {
 		return nil, fmt.Errorf("session user not found: %w", err)
 	}

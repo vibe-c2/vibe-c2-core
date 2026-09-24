@@ -221,6 +221,8 @@ func NewHandler(
 	//     through gqlctx.LoadOperation, and a list response runs one per row,
 	//     all fetching the same document. Without a memo on the context
 	//     LoadOperation degrades to an uncached FindByID.
+	//   - user memo: createdBy, lastUpdatedBy, actor, assignees and friends are
+	//     per-row field resolvers over a handful of distinct operators.
 	//   - wiki tree loader: lets tree queries hand precomputed childCount and
 	//     ancestor values to the per-document field resolvers.
 	// A subscription operation is itself long-lived — it stays open as long as
@@ -232,6 +234,7 @@ func NewHandler(
 			return next(ctx)
 		}
 		ctx = gqlctx.WithOperationMemo(ctx)
+		ctx = gqlctx.WithUserMemo(ctx)
 		ctx = resolver.WithWikiTreeLoader(ctx, resolver.NewWikiTreeLoader())
 		return next(ctx)
 	})

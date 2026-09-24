@@ -869,12 +869,35 @@ func (r *taskResolver) listTasks(ctx context.Context, opUID uuid.UUID, filter re
 		return nil, fmt.Errorf("failed to list tasks: %w", err)
 	}
 
+	// Warm the user memo from the rows we are about to return, so the
+	// createdBy / lastUpdatedBy / assignees field resolvers below become map
+	// lookups instead of one query each, per row, per field. Best-effort: a
+	// failure here costs speed, not correctness, because every one of those
+	// resolvers still falls through to the repository.
+	if err := gqlctx.PreloadUsers(ctx, r.userRepo, taskUserIDs(tasks)); err != nil {
+		logger.From(ctx).Warn("preload task users", zap.Error(err))
+	}
+
 	// Cursor time field must match the repo's sort field for this list mode
 	// or hasNextPage skipping rows mid-page. DONE column sorts by done_at;
 	// every other stage sorts by createAt. Falls back to createAt when
 	// done_at is unexpectedly nil (legacy row pre-backfill).
 	useDoneAt := filter.Stage == models.TaskStageDone
 	return buildTaskConnection(tasks, args, total, useDoneAt), nil
+}
+
+// taskUserIDs collects every user id the Task field resolvers may ask for.
+// Duplicates and nils are dropped by PreloadUsers, so this stays a plain sweep.
+func taskUserIDs(tasks []models.Task) []uuid.UUID {
+	ids := make([]uuid.UUID, 0, len(tasks)*2)
+	for i := range tasks {
+		ids = append(ids, tasks[i].CreatedByID)
+		if tasks[i].LastUpdatedByID != nil {
+			ids = append(ids, *tasks[i].LastUpdatedByID)
+		}
+		ids = append(ids, tasks[i].AssigneeIDs...)
+	}
+	return ids
 }
 
 // buildTaskConnection turns a slice of tasks plus pagination args into a
@@ -1039,14 +1062,21 @@ func (r *taskResolver) Assignees(ctx context.Context, obj *models.Task) ([]*mode
 	if len(obj.AssigneeIDs) == 0 {
 		return []*models.User{}, nil
 	}
+	users, err := r.userRepo.FindByIDs(ctx, obj.AssigneeIDs)
+	if err != nil {
+		return nil, fmt.Errorf("failed to load assignees: %w", err)
+	}
+	byID := make(map[uuid.UUID]*models.User, len(users))
+	for i := range users {
+		byID[users[i].UserID] = &users[i]
+	}
+	// Walk AssigneeIDs rather than the result: FindByIDs returns rows in
+	// unspecified order, and the array order is what the UI renders.
 	out := make([]*models.User, 0, len(obj.AssigneeIDs))
 	for _, uid := range obj.AssigneeIDs {
-		u, err := r.userRepo.FindByID(ctx, uid)
-		if err != nil {
-			continue
+		if u, ok := byID[uid]; ok {
+			out = append(out, u)
 		}
-		uCopy := u
-		out = append(out, &uCopy)
 	}
 	return out, nil
 }
@@ -1061,14 +1091,23 @@ func (r *taskResolver) WikiReferences(ctx context.Context, obj *models.Task) ([]
 	if len(obj.WikiReferences) == 0 {
 		return []*models.WikiDocument{}, nil
 	}
+	docs, err := r.wikiRepo.FindByIDs(ctx, obj.WikiReferences)
+	if err != nil {
+		return nil, fmt.Errorf("failed to load wiki references: %w", err)
+	}
+	byID := make(map[uuid.UUID]*models.WikiDocument, len(docs))
+	for i := range docs {
+		if docs[i].DeletedAt != nil {
+			continue // trashed documents stay dropped, as before
+		}
+		byID[docs[i].DocumentID] = &docs[i]
+	}
+	// Preserve the wiki_references array order; FindByIDs does not.
 	out := make([]*models.WikiDocument, 0, len(obj.WikiReferences))
 	for _, did := range obj.WikiReferences {
-		doc, err := r.wikiRepo.FindByID(ctx, did)
-		if err != nil || doc.DeletedAt != nil {
-			continue
+		if d, ok := byID[did]; ok {
+			out = append(out, d)
 		}
-		docCopy := doc
-		out = append(out, &docCopy)
 	}
 	return out, nil
 }
@@ -1079,14 +1118,20 @@ func (r *taskResolver) CredentialReferences(ctx context.Context, obj *models.Tas
 	if len(obj.CredentialReferences) == 0 {
 		return []*models.Credential{}, nil
 	}
+	creds, err := r.credRepo.FindByIDs(ctx, obj.CredentialReferences)
+	if err != nil {
+		return nil, fmt.Errorf("failed to load credential references: %w", err)
+	}
+	byID := make(map[uuid.UUID]*models.Credential, len(creds))
+	for i := range creds {
+		byID[creds[i].CredentialID] = &creds[i]
+	}
+	// Preserve the credential_references array order; FindByIDs does not.
 	out := make([]*models.Credential, 0, len(obj.CredentialReferences))
 	for _, cid := range obj.CredentialReferences {
-		c, err := r.credRepo.FindByID(ctx, cid)
-		if err != nil {
-			continue
+		if c, ok := byID[cid]; ok {
+			out = append(out, c)
 		}
-		cCopy := c
-		out = append(out, &cCopy)
 	}
 	return out, nil
 }
@@ -1095,7 +1140,7 @@ func (r *taskResolver) CreatedBy(ctx context.Context, obj *models.Task) (*models
 	if obj.CreatedByID == uuid.Nil {
 		return nil, nil
 	}
-	u, err := r.userRepo.FindByID(ctx, obj.CreatedByID)
+	u, err := gqlctx.LoadUser(ctx, r.userRepo, obj.CreatedByID)
 	if err != nil {
 		return nil, nil // creator deleted — render as null
 	}
@@ -1106,7 +1151,7 @@ func (r *taskResolver) LastUpdatedBy(ctx context.Context, obj *models.Task) (*mo
 	if obj.LastUpdatedByID == nil || *obj.LastUpdatedByID == uuid.Nil {
 		return nil, nil
 	}
-	u, err := r.userRepo.FindByID(ctx, *obj.LastUpdatedByID)
+	u, err := gqlctx.LoadUser(ctx, r.userRepo, *obj.LastUpdatedByID)
 	if err != nil {
 		return nil, nil
 	}

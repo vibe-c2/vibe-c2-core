@@ -593,7 +593,7 @@ func (r *operationResolver) UpdatedAt(ctx context.Context, obj *models.Operation
 // OperationMemberUser resolves the User field on an OperationMember.
 // Fetches the full User object from the database by the member's UserID.
 func (r *operationResolver) OperationMemberUser(ctx context.Context, obj *models.OperationMember) (*models.User, error) {
-	user, err := r.userRepo.FindByID(ctx, obj.UserID)
+	user, err := gqlctx.LoadUser(ctx, r.userRepo, obj.UserID)
 	if err != nil {
 		return nil, fmt.Errorf("member user not found: %w", err)
 	}

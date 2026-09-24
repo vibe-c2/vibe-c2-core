@@ -43,6 +43,15 @@ func (m *mockCredRepo) FindByOperationIDWithCursor(ctx context.Context, opID uui
 func (m *mockCredRepo) CountByOperationID(ctx context.Context, opID uuid.UUID, filter repository.CredentialFilter) (int64, error) {
 	return m.countByOperationIDFn(ctx, opID, filter)
 }
+func (m *mockCredRepo) FindByIDs(ctx context.Context, ids []uuid.UUID) ([]models.Credential, error) {
+	out := make([]models.Credential, 0, len(ids))
+	for _, id := range ids {
+		if c, err := m.findByIDFn(ctx, id); err == nil {
+			out = append(out, c)
+		}
+	}
+	return out, nil
+}
 func (m *mockCredRepo) FindNamesByIDs(ctx context.Context, ids []uuid.UUID) ([]models.Credential, error) {
 	out := make([]models.Credential, 0, len(ids))
 	for _, id := range ids {

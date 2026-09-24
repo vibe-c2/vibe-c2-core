@@ -2648,7 +2648,7 @@ func (r *wikiDocumentResolver) WikiDocumentBacklinksField(ctx context.Context, o
 }
 
 func (r *wikiDocumentResolver) WikiDocumentCreatedBy(ctx context.Context, obj *models.WikiDocument) (*models.User, error) {
-	user, err := r.userRepo.FindByID(ctx, obj.CreatedByID)
+	user, err := gqlctx.LoadUser(ctx, r.userRepo, obj.CreatedByID)
 	if err != nil {
 		return nil, nil
 	}
@@ -2659,7 +2659,7 @@ func (r *wikiDocumentResolver) WikiDocumentLastUpdatedBy(ctx context.Context, ob
 	if obj.LastUpdatedByID == nil {
 		return nil, nil
 	}
-	user, err := r.userRepo.FindByID(ctx, *obj.LastUpdatedByID)
+	user, err := gqlctx.LoadUser(ctx, r.userRepo, *obj.LastUpdatedByID)
 	if err != nil {
 		return nil, nil
 	}
@@ -2678,7 +2678,7 @@ func (r *wikiDocumentResolver) WikiDocumentDeletedBy(ctx context.Context, obj *m
 	if obj.DeletedByID == nil {
 		return nil, nil
 	}
-	user, err := r.userRepo.FindByID(ctx, *obj.DeletedByID)
+	user, err := gqlctx.LoadUser(ctx, r.userRepo, *obj.DeletedByID)
 	if err != nil {
 		return nil, nil
 	}
@@ -2735,7 +2735,7 @@ func (r *wikiDocumentResolver) WikiDocumentBackupCreatedBy(ctx context.Context, 
 	if obj.CreatedByID == uuid.Nil {
 		return nil, nil
 	}
-	user, err := r.userRepo.FindByID(ctx, obj.CreatedByID)
+	user, err := gqlctx.LoadUser(ctx, r.userRepo, obj.CreatedByID)
 	if err != nil {
 		return nil, nil
 	}

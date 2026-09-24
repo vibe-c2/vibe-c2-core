@@ -377,7 +377,7 @@ func (r *hostResolver) CreatedBy(ctx context.Context, obj *models.Host) (*models
 	if obj.CreatedByID == uuid.Nil {
 		return nil, nil
 	}
-	user, err := r.userRepo.FindByID(ctx, obj.CreatedByID)
+	user, err := gqlctx.LoadUser(ctx, r.userRepo, obj.CreatedByID)
 	if err != nil {
 		return nil, nil
 	}

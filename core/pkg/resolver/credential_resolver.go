@@ -849,7 +849,7 @@ func (r *credentialResolver) CreatedBy(ctx context.Context, obj *models.Credenti
 	if obj.CreatedByID == uuid.Nil {
 		return nil, nil
 	}
-	user, err := r.userRepo.FindByID(ctx, obj.CreatedByID)
+	user, err := gqlctx.LoadUser(ctx, r.userRepo, obj.CreatedByID)
 	if err != nil {
 		// Treat a missing creator as nullable rather than failing the whole query.
 		return nil, nil
@@ -900,7 +900,7 @@ func (r *credentialResolver) CommentAuthor(ctx context.Context, obj *models.Cred
 	if obj.AuthorID == uuid.Nil {
 		return nil, nil
 	}
-	user, err := r.userRepo.FindByID(ctx, obj.AuthorID)
+	user, err := gqlctx.LoadUser(ctx, r.userRepo, obj.AuthorID)
 	if err != nil {
 		return nil, nil
 	}
