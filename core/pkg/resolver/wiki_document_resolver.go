@@ -1693,32 +1693,20 @@ func (r *wikiDocumentResolver) WikiDocuments(ctx context.Context, operationID st
 		preloadAncestorEntries(ctx, loader, r.docRepo, docs, opUID)
 	}
 
-	edges := make([]*model.WikiDocumentEdge, len(docs))
-	for i := range docs {
-		// Cursor encodes the timestamp from the sort column so pagination
-		// stays correct in both sort modes. The encoded shape is identical;
-		// the resolver/repo agree on the field via filter.Sort.
-		var cursorTime time.Time
-		if filter.Sort == repository.SortByLastUpdatedAt && docs[i].LastUpdatedAt != nil {
-			cursorTime = *docs[i].LastUpdatedAt
-		} else {
-			cursorTime = docs[i].CreateAt
-		}
-		cursor := pagination.EncodeCursor(cursorTime, docs[i].Id)
-		edges[i] = &model.WikiDocumentEdge{
-			Node:   &docs[i],
-			Cursor: cursor,
-		}
-	}
-
-	pageInfo := pagination.PageInfo{
-		HasNextPage:     args.Forward && hasMore,
-		HasPreviousPage: (!args.Forward && hasMore) || (args.Forward && args.Cursor != nil),
-	}
-	if len(edges) > 0 {
-		pageInfo.StartCursor = &edges[0].Cursor
-		pageInfo.EndCursor = &edges[len(edges)-1].Cursor
-	}
+	edges, pageInfo := pagination.BuildEdges(docs, args,
+		func(d *models.WikiDocument) string {
+			// Cursor encodes the timestamp from the sort column so pagination
+			// stays correct in both sort modes. The encoded shape is identical;
+			// the resolver/repo agree on the field via filter.Sort.
+			cursorTime := d.CreateAt
+			if filter.Sort == repository.SortByLastUpdatedAt && d.LastUpdatedAt != nil {
+				cursorTime = *d.LastUpdatedAt
+			}
+			return pagination.EncodeCursor(cursorTime, d.Id)
+		},
+		func(d *models.WikiDocument, cursor string) *model.WikiDocumentEdge {
+			return &model.WikiDocumentEdge{Node: d, Cursor: cursor}
+		})
 
 	return &model.WikiDocumentConnection{
 		Edges:      edges,
@@ -2094,31 +2082,22 @@ func (r *wikiDocumentResolver) WikiDocumentTrash(ctx context.Context, operationI
 		docs = docs[:args.Limit]
 	}
 
-	edges := make([]*model.WikiDocumentEdge, len(docs))
-	for i := range docs {
-		// Encode cursor on deleted_at (the trash sort key) instead of createAt
-		// so seek-pagination matches the listing order. Falls back to CreateAt
-		// only as a defensive guard against a corrupt row with deleted_at=nil
-		// slipping through the filter — should never happen in practice.
-		t := docs[i].CreateAt
-		if docs[i].DeletedAt != nil {
-			t = *docs[i].DeletedAt
-		}
-		cursor := pagination.EncodeCursor(t, docs[i].Id)
-		edges[i] = &model.WikiDocumentEdge{
-			Node:   &docs[i],
-			Cursor: cursor,
-		}
-	}
-
-	pageInfo := pagination.PageInfo{
-		HasNextPage:     args.Forward && hasMore,
-		HasPreviousPage: (!args.Forward && hasMore) || (args.Forward && args.Cursor != nil),
-	}
-	if len(edges) > 0 {
-		pageInfo.StartCursor = &edges[0].Cursor
-		pageInfo.EndCursor = &edges[len(edges)-1].Cursor
-	}
+	edges, pageInfo := pagination.BuildEdges(docs, args,
+		func(d *models.WikiDocument) string {
+			// Encode cursor on deleted_at (the trash sort key) instead of
+			// createAt so seek-pagination matches the listing order. Falls back
+			// to CreateAt only as a defensive guard against a corrupt row with
+			// deleted_at=nil slipping through the filter — never happens in
+			// practice.
+			t := d.CreateAt
+			if d.DeletedAt != nil {
+				t = *d.DeletedAt
+			}
+			return pagination.EncodeCursor(t, d.Id)
+		},
+		func(d *models.WikiDocument, cursor string) *model.WikiDocumentEdge {
+			return &model.WikiDocumentEdge{Node: d, Cursor: cursor}
+		})
 
 	return &model.WikiDocumentConnection{
 		Edges:      edges,
@@ -2370,28 +2349,11 @@ func (r *wikiDocumentResolver) WikiDocumentBackups(ctx context.Context, document
 		return nil, fmt.Errorf("failed to list backups: %w", err)
 	}
 
-	hasMore := int64(len(backups)) > args.Limit
-	if hasMore {
-		backups = backups[:args.Limit]
-	}
-
-	edges := make([]*model.WikiDocumentBackupEdge, len(backups))
-	for i := range backups {
-		cursor := pagination.EncodeCursor(backups[i].CreateAt, backups[i].Id)
-		edges[i] = &model.WikiDocumentBackupEdge{
-			Node:   &backups[i],
-			Cursor: cursor,
-		}
-	}
-
-	pageInfo := pagination.PageInfo{
-		HasNextPage:     args.Forward && hasMore,
-		HasPreviousPage: (!args.Forward && hasMore) || (args.Forward && args.Cursor != nil),
-	}
-	if len(edges) > 0 {
-		pageInfo.StartCursor = &edges[0].Cursor
-		pageInfo.EndCursor = &edges[len(edges)-1].Cursor
-	}
+	edges, pageInfo := pagination.BuildEdges(backups, args,
+		func(b *models.WikiDocumentBackup) string { return pagination.EncodeCursor(b.CreateAt, b.Id) },
+		func(b *models.WikiDocumentBackup, cursor string) *model.WikiDocumentBackupEdge {
+			return &model.WikiDocumentBackupEdge{Node: b, Cursor: cursor}
+		})
 
 	return &model.WikiDocumentBackupConnection{
 		Edges:      edges,

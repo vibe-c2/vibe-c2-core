@@ -883,32 +883,17 @@ func (r *taskResolver) listTasks(ctx context.Context, opUID uuid.UUID, filter re
 // useDoneAt controls which field is encoded in the cursor: true uses
 // done_at (DONE column), false uses createAt (every other list mode).
 func buildTaskConnection(tasks []models.Task, args pagination.Args, total int64, useDoneAt bool) *model.TaskConnection {
-	hasMore := int64(len(tasks)) > args.Limit
-	if hasMore {
-		tasks = tasks[:args.Limit]
-	}
-
-	edges := make([]*model.TaskEdge, len(tasks))
-	for i := range tasks {
-		cursorTime := tasks[i].CreateAt
-		if useDoneAt && tasks[i].DoneAt != nil {
-			cursorTime = *tasks[i].DoneAt
-		}
-		cursor := pagination.EncodeCursor(cursorTime, tasks[i].Id)
-		edges[i] = &model.TaskEdge{
-			Node:   &tasks[i],
-			Cursor: cursor,
-		}
-	}
-
-	pageInfo := pagination.PageInfo{
-		HasNextPage:     args.Forward && hasMore,
-		HasPreviousPage: (!args.Forward && hasMore) || (args.Forward && args.Cursor != nil),
-	}
-	if len(edges) > 0 {
-		pageInfo.StartCursor = &edges[0].Cursor
-		pageInfo.EndCursor = &edges[len(edges)-1].Cursor
-	}
+	edges, pageInfo := pagination.BuildEdges(tasks, args,
+		func(t *models.Task) string {
+			cursorTime := t.CreateAt
+			if useDoneAt && t.DoneAt != nil {
+				cursorTime = *t.DoneAt
+			}
+			return pagination.EncodeCursor(cursorTime, t.Id)
+		},
+		func(t *models.Task, cursor string) *model.TaskEdge {
+			return &model.TaskEdge{Node: t, Cursor: cursor}
+		})
 
 	return &model.TaskConnection{
 		Edges:      edges,

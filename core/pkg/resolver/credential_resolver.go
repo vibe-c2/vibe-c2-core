@@ -605,29 +605,13 @@ func (r *credentialResolver) Credentials(ctx context.Context, operationID string
 		return nil, fmt.Errorf("failed to list credentials: %w", err)
 	}
 
-	hasMore := int64(len(creds)) > args.Limit
-	if hasMore {
-		creds = creds[:args.Limit]
-	}
-
-	edges := make([]*model.CredentialEdge, len(creds))
-	for i := range creds {
+	edges, pageInfo := pagination.BuildEdges(creds, args,
 		// Edge cursors are sort-specific: they carry the active sort
 		// column's value (see CredentialSort.Cursor).
-		edges[i] = &model.CredentialEdge{
-			Node:   &creds[i],
-			Cursor: sortSpec.Cursor(&creds[i]),
-		}
-	}
-
-	pageInfo := pagination.PageInfo{
-		HasNextPage:     args.Forward && hasMore,
-		HasPreviousPage: (!args.Forward && hasMore) || (args.Forward && args.Cursor != nil),
-	}
-	if len(edges) > 0 {
-		pageInfo.StartCursor = &edges[0].Cursor
-		pageInfo.EndCursor = &edges[len(edges)-1].Cursor
-	}
+		func(c *models.Credential) string { return sortSpec.Cursor(c) },
+		func(c *models.Credential, cursor string) *model.CredentialEdge {
+			return &model.CredentialEdge{Node: c, Cursor: cursor}
+		})
 
 	return &model.CredentialConnection{
 		Edges:      edges,
@@ -772,29 +756,13 @@ func (r *credentialResolver) MyCredentials(ctx context.Context, operationIDs []s
 		return nil, fmt.Errorf("failed to list credentials: %w", err)
 	}
 
-	hasMore := int64(len(creds)) > args.Limit
-	if hasMore {
-		creds = creds[:args.Limit]
-	}
-
-	edges := make([]*model.CredentialEdge, len(creds))
-	for i := range creds {
+	edges, pageInfo := pagination.BuildEdges(creds, args,
 		// Edge cursors are sort-specific: they carry the active sort
 		// column's value (see CredentialSort.Cursor).
-		edges[i] = &model.CredentialEdge{
-			Node:   &creds[i],
-			Cursor: sortSpec.Cursor(&creds[i]),
-		}
-	}
-
-	pageInfo := pagination.PageInfo{
-		HasNextPage:     args.Forward && hasMore,
-		HasPreviousPage: (!args.Forward && hasMore) || (args.Forward && args.Cursor != nil),
-	}
-	if len(edges) > 0 {
-		pageInfo.StartCursor = &edges[0].Cursor
-		pageInfo.EndCursor = &edges[len(edges)-1].Cursor
-	}
+		func(c *models.Credential) string { return sortSpec.Cursor(c) },
+		func(c *models.Credential, cursor string) *model.CredentialEdge {
+			return &model.CredentialEdge{Node: c, Cursor: cursor}
+		})
 
 	return &model.CredentialConnection{
 		Edges:      edges,

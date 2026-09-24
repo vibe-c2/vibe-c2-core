@@ -434,27 +434,11 @@ func (r *userResolver) Users(ctx context.Context, search *string, sortBy *model.
 		return nil, fmt.Errorf("failed to list users: %w", err)
 	}
 
-	hasMore := int64(len(users)) > args.Limit
-	if hasMore {
-		users = users[:args.Limit]
-	}
-
-	edges := make([]*model.UserEdge, len(users))
-	for i := range users {
-		edges[i] = &model.UserEdge{
-			Node:   &users[i],
-			Cursor: sortSpec.Cursor(&users[i]),
-		}
-	}
-
-	pageInfo := pagination.PageInfo{
-		HasNextPage:     args.Forward && hasMore,
-		HasPreviousPage: (!args.Forward && hasMore) || (args.Forward && args.Cursor != nil),
-	}
-	if len(edges) > 0 {
-		pageInfo.StartCursor = &edges[0].Cursor
-		pageInfo.EndCursor = &edges[len(edges)-1].Cursor
-	}
+	edges, pageInfo := pagination.BuildEdges(users, args,
+		func(u *models.User) string { return sortSpec.Cursor(u) },
+		func(u *models.User, cursor string) *model.UserEdge {
+			return &model.UserEdge{Node: u, Cursor: cursor}
+		})
 
 	return &model.UserConnection{
 		Edges:      edges,

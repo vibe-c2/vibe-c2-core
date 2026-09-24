@@ -761,26 +761,11 @@ func buildHashListFilter(search *string, statuses []models.HashStatus, tags []st
 }
 
 func buildHashConnection(hashes []models.Hash, args pagination.Args, total int) *model.HashConnection {
-	hasMore := int64(len(hashes)) > args.Limit
-	if hasMore {
-		hashes = hashes[:args.Limit]
-	}
-	edges := make([]*model.HashEdge, len(hashes))
-	for i := range hashes {
-		cursor := pagination.EncodeCursor(hashes[i].CreateAt, hashes[i].Id)
-		edges[i] = &model.HashEdge{
-			Node:   &hashes[i],
-			Cursor: cursor,
-		}
-	}
-	pageInfo := pagination.PageInfo{
-		HasNextPage:     args.Forward && hasMore,
-		HasPreviousPage: (!args.Forward && hasMore) || (args.Forward && args.Cursor != nil),
-	}
-	if len(edges) > 0 {
-		pageInfo.StartCursor = &edges[0].Cursor
-		pageInfo.EndCursor = &edges[len(edges)-1].Cursor
-	}
+	edges, pageInfo := pagination.BuildEdges(hashes, args,
+		func(h *models.Hash) string { return pagination.EncodeCursor(h.CreateAt, h.Id) },
+		func(h *models.Hash, cursor string) *model.HashEdge {
+			return &model.HashEdge{Node: h, Cursor: cursor}
+		})
 	return &model.HashConnection{
 		Edges:      edges,
 		PageInfo:   &pageInfo,

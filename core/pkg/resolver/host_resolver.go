@@ -337,27 +337,11 @@ func (r *hostResolver) Hosts(ctx context.Context, operationID string, search *st
 		return nil, fmt.Errorf("failed to list hosts: %w", err)
 	}
 
-	hasMore := int64(len(hosts)) > args.Limit
-	if hasMore {
-		hosts = hosts[:args.Limit]
-	}
-
-	edges := make([]*model.HostEdge, len(hosts))
-	for i := range hosts {
-		edges[i] = &model.HostEdge{
-			Node:   &hosts[i],
-			Cursor: sortSpec.Cursor(&hosts[i]),
-		}
-	}
-
-	pageInfo := pagination.PageInfo{
-		HasNextPage:     args.Forward && hasMore,
-		HasPreviousPage: (!args.Forward && hasMore) || (args.Forward && args.Cursor != nil),
-	}
-	if len(edges) > 0 {
-		pageInfo.StartCursor = &edges[0].Cursor
-		pageInfo.EndCursor = &edges[len(edges)-1].Cursor
-	}
+	edges, pageInfo := pagination.BuildEdges(hosts, args,
+		func(h *models.Host) string { return sortSpec.Cursor(h) },
+		func(h *models.Host, cursor string) *model.HostEdge {
+			return &model.HostEdge{Node: h, Cursor: cursor}
+		})
 
 	return &model.HostConnection{
 		Edges:      edges,

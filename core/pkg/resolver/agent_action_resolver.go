@@ -100,27 +100,11 @@ func (r *agentActionResolver) MyAgentActions(
 		return nil, fmt.Errorf("failed to read agent activity: %w", err)
 	}
 
-	hasMore := int64(len(actions)) > args.Limit
-	if hasMore {
-		actions = actions[:args.Limit]
-	}
-
-	edges := make([]*model.AgentActionEdge, len(actions))
-	for i := range actions {
-		edges[i] = &model.AgentActionEdge{
-			Node:   &actions[i],
-			Cursor: repository.AgentActionCursor(&actions[i]),
-		}
-	}
-
-	pageInfo := pagination.PageInfo{
-		HasNextPage:     args.Forward && hasMore,
-		HasPreviousPage: (!args.Forward && hasMore) || (args.Forward && args.Cursor != nil),
-	}
-	if len(edges) > 0 {
-		pageInfo.StartCursor = &edges[0].Cursor
-		pageInfo.EndCursor = &edges[len(edges)-1].Cursor
-	}
+	edges, pageInfo := pagination.BuildEdges(actions, args,
+		repository.AgentActionCursor,
+		func(a *models.AgentAction, cursor string) *model.AgentActionEdge {
+			return &model.AgentActionEdge{Node: a, Cursor: cursor}
+		})
 
 	return &model.AgentActionConnection{
 		Edges:      edges,

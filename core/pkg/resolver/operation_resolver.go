@@ -509,27 +509,11 @@ func (r *operationResolver) Operations(ctx context.Context, search *string, sort
 		return nil, fmt.Errorf("failed to list operations: %w", err)
 	}
 
-	hasMore := int64(len(ops)) > args.Limit
-	if hasMore {
-		ops = ops[:args.Limit]
-	}
-
-	edges := make([]*model.OperationEdge, len(ops))
-	for i := range ops {
-		edges[i] = &model.OperationEdge{
-			Node:   &ops[i],
-			Cursor: sortSpec.Cursor(&ops[i]),
-		}
-	}
-
-	pageInfo := pagination.PageInfo{
-		HasNextPage:     args.Forward && hasMore,
-		HasPreviousPage: (!args.Forward && hasMore) || (args.Forward && args.Cursor != nil),
-	}
-	if len(edges) > 0 {
-		pageInfo.StartCursor = &edges[0].Cursor
-		pageInfo.EndCursor = &edges[len(edges)-1].Cursor
-	}
+	edges, pageInfo := pagination.BuildEdges(ops, args,
+		func(o *models.Operation) string { return sortSpec.Cursor(o) },
+		func(o *models.Operation, cursor string) *model.OperationEdge {
+			return &model.OperationEdge{Node: o, Cursor: cursor}
+		})
 
 	return &model.OperationConnection{
 		Edges:      edges,
