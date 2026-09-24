@@ -75,8 +75,11 @@ jobs:
 
       # Config lives at core/.golangci.yml, which documents the enabled set and
       # why the excluded linters are excluded.
+      #
+      # The action major must match the golangci-lint major: v2 of the linter
+      # needs v7 of the action, and v6 rejects a v2 version string outright.
       - name: golangci-lint
-        uses: golangci/golangci-lint-action@v6
+        uses: golangci/golangci-lint-action@v7
         with:
           version: v2.13.2
           working-directory: core
