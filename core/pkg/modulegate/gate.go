@@ -9,11 +9,9 @@ package modulegate
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"time"
 
-	"github.com/qiniu/qmgo"
 	"github.com/vibe-c2/vibe-c2-core/core/pkg/cache"
 	"github.com/vibe-c2/vibe-c2-core/core/pkg/models"
 	"github.com/vibe-c2/vibe-c2-core/core/pkg/repository"
@@ -64,7 +62,7 @@ func (g *Gate) IsRegistered(ctx context.Context, instance string) (bool, error) 
 
 	reg, err := g.repo.FindByInstance(ctx, instance)
 	if err != nil {
-		if errors.Is(err, qmgo.ErrNoSuchDocuments) {
+		if repository.IsNotFound(err) {
 			return false, nil // never registered — do not cache
 		}
 		return false, fmt.Errorf("registry lookup for instance %q: %w", instance, err)

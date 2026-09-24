@@ -839,22 +839,17 @@ func (r *credentialResolver) ViewerCanModerateComments(ctx context.Context, obj 
 	}
 	op, err := gqlctx.LoadOperation(ctx, r.operationRepo, obj.OperationID)
 	if err != nil {
-		return false, nil
+		if repository.IsNotFound(err) {
+			return false, nil // operation is gone; nobody can moderate it
+		}
+		return false, fmt.Errorf("failed to load operation: %w", err)
 	}
 	return authorization.AuthorizeOperationRole(ctx, &op, models.OperationRoleAdmin) == nil, nil
 }
 
 // CreatedBy resolves the User who created the credential, or nil if that user was deleted.
 func (r *credentialResolver) CreatedBy(ctx context.Context, obj *models.Credential) (*models.User, error) {
-	if obj.CreatedByID == uuid.Nil {
-		return nil, nil
-	}
-	user, err := gqlctx.LoadUser(ctx, r.userRepo, obj.CreatedByID)
-	if err != nil {
-		// Treat a missing creator as nullable rather than failing the whole query.
-		return nil, nil
-	}
-	return &user, nil
+	return loadNullableUser(ctx, r.userRepo, obj.CreatedByID, "credential creator")
 }
 
 // BacklinkCount resolves the cheap count form of Credential.backlinks. Used
@@ -897,14 +892,7 @@ func (r *credentialResolver) CommentID(ctx context.Context, obj *models.Credenti
 // account was deleted. Mirrors CreatedBy — a missing author must not null
 // out the entire credential payload via GraphQL error propagation.
 func (r *credentialResolver) CommentAuthor(ctx context.Context, obj *models.CredentialComment) (*models.User, error) {
-	if obj.AuthorID == uuid.Nil {
-		return nil, nil
-	}
-	user, err := gqlctx.LoadUser(ctx, r.userRepo, obj.AuthorID)
-	if err != nil {
-		return nil, nil
-	}
-	return &user, nil
+	return loadNullableUser(ctx, r.userRepo, obj.AuthorID, "comment author")
 }
 
 // CommentCreatedAt converts the comment timestamp to an ISO 8601 string.

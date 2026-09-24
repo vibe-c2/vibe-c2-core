@@ -682,22 +682,17 @@ func (r *hashResolver) Credential(ctx context.Context, obj *models.Hash) (*model
 	}
 	cred, err := r.credRepo.FindByID(ctx, *obj.CredentialID)
 	if err != nil {
-		// Treat a missing credential as nullable so a stale link does not
-		// fail the whole hash query.
-		return nil, nil
+		if repository.IsNotFound(err) {
+			// A stale link must not fail the whole hash query.
+			return nil, nil
+		}
+		return nil, fmt.Errorf("failed to load linked credential: %w", err)
 	}
 	return &cred, nil
 }
 
 func (r *hashResolver) CreatedBy(ctx context.Context, obj *models.Hash) (*models.User, error) {
-	if obj.CreatedByID == uuid.Nil {
-		return nil, nil
-	}
-	user, err := gqlctx.LoadUser(ctx, r.userRepo, obj.CreatedByID)
-	if err != nil {
-		return nil, nil
-	}
-	return &user, nil
+	return loadNullableUser(ctx, r.userRepo, obj.CreatedByID, "hash creator")
 }
 
 func (r *hashResolver) CreatedAt(_ context.Context, obj *models.Hash) (string, error) {

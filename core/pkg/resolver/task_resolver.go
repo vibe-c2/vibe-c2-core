@@ -1137,25 +1137,14 @@ func (r *taskResolver) CredentialReferences(ctx context.Context, obj *models.Tas
 }
 
 func (r *taskResolver) CreatedBy(ctx context.Context, obj *models.Task) (*models.User, error) {
-	if obj.CreatedByID == uuid.Nil {
-		return nil, nil
-	}
-	u, err := gqlctx.LoadUser(ctx, r.userRepo, obj.CreatedByID)
-	if err != nil {
-		return nil, nil // creator deleted — render as null
-	}
-	return &u, nil
+	return loadNullableUser(ctx, r.userRepo, obj.CreatedByID, "task creator")
 }
 
 func (r *taskResolver) LastUpdatedBy(ctx context.Context, obj *models.Task) (*models.User, error) {
 	if obj.LastUpdatedByID == nil || *obj.LastUpdatedByID == uuid.Nil {
 		return nil, nil
 	}
-	u, err := gqlctx.LoadUser(ctx, r.userRepo, *obj.LastUpdatedByID)
-	if err != nil {
-		return nil, nil
-	}
-	return &u, nil
+	return loadNullableUser(ctx, r.userRepo, *obj.LastUpdatedByID, "task editor")
 }
 
 func (r *taskResolver) LastUpdatedAt(_ context.Context, obj *models.Task) (*string, error) {

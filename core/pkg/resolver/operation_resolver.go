@@ -538,7 +538,10 @@ func (r *operationResolver) MyOperationRole(ctx context.Context, operationID str
 	auth := gqlctx.AuthFromContext(ctx)
 	callerUID, err := uuid.Parse(auth.UserID)
 	if err != nil {
-		return nil, nil
+		// Not a lookup failure: an unparseable subject means there is no
+		// authenticated caller, so there is no role to report. Returning an
+		// error here would leak that the operation exists.
+		return nil, nil //nolint:nilerr // no caller == no role, not a failure
 	}
 
 	if models.IsPublicOperation(uid) {

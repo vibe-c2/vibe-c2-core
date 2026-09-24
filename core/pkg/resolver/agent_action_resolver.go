@@ -164,7 +164,10 @@ func (r *agentActionResolver) Operation(ctx context.Context, obj *models.AgentAc
 	}
 	op, err := gqlctx.LoadOperation(ctx, r.opsRepo, *obj.OperationID)
 	if err != nil {
-		return nil, nil
+		if repository.IsNotFound(err) {
+			return nil, nil // operation deleted; the action still happened
+		}
+		return nil, fmt.Errorf("failed to load operation: %w", err)
 	}
 	return &op, nil
 }

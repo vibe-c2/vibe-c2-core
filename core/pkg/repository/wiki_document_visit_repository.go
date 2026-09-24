@@ -131,9 +131,11 @@ func (r *wikiDocumentVisitRepository) PruneToLimit(ctx context.Context, userID, 
 		"operation_id": operationID,
 	}).Sort("-visited_at", "-_id").Skip(limit - 1).Limit(1).One(&cutoff)
 	if err != nil {
-		// No row at the cutoff position means the user is under the cap.
-		// qmgo returns mongo.ErrNoDocuments-style errors here; we just no-op.
-		return nil
+		if IsNotFound(err) {
+			// No row at the cutoff position: the user is under the cap.
+			return nil
+		}
+		return fmt.Errorf("find visit cutoff: %w", err)
 	}
 
 	// Delete everything strictly older than the cutoff row.

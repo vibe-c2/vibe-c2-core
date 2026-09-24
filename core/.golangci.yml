@@ -28,6 +28,11 @@ linters:
     - makezero # append to a make([]T, n) slice
     - rowserrcheck
     - nilnesserr
+    # nilerr catches "the call failed, so return nil" — which is how a Mongo
+    # timeout used to render as "this account was deleted" on every row of a
+    # page. repository.IsNotFound now makes the distinction, so the remaining
+    # deliberate cases carry a //nolint:nilerr saying why.
+    - nilerr
     # --- dead code and redundancy ---
     - unused
     - unconvert
@@ -37,11 +42,6 @@ linters:
   # Linters considered and deliberately left out, so the next person does not
   # have to re-derive why:
   #
-  #   nilerr       — 23 hits, nearly all the deliberate "row was deleted →
-  #                  render null" pattern in field resolvers. The real fix is a
-  #                  repository.ErrNotFound sentinel so a Mongo timeout stops
-  #                  looking like a deleted row; enable this once that lands,
-  #                  and the remaining hits become the bugs it is meant to find.
   #   contextcheck — 6 hits, all background work that intentionally outlives
   #                  the request (shutdown paths, the transfer job runner).
   #   prealloc     — style only, and wrong often enough to be noise.

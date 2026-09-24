@@ -2,13 +2,11 @@ package resolver
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"strings"
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/qiniu/qmgo"
 	"github.com/vibe-c2/vibe-c2-core/core/pkg/authorization"
 	"github.com/vibe-c2/vibe-c2-core/core/pkg/eventbus"
 	"github.com/vibe-c2/vibe-c2-core/core/pkg/graphql/gqlctx"
@@ -1944,9 +1942,11 @@ func (r *wikiDocumentResolver) WikiDocumentTreeRevealPath(ctx context.Context, d
 
 	target, err := r.docRepo.FindByID(ctx, docUID)
 	if err != nil {
-		// Not found — return empty rather than error; the sidebar treats this
-		// as "no reveal" and falls back to roots.
-		return []*models.WikiDocument{}, nil
+		if repository.IsNotFound(err) {
+			// The sidebar treats empty as "no reveal" and falls back to roots.
+			return []*models.WikiDocument{}, nil
+		}
+		return nil, fmt.Errorf("failed to load document: %w", err)
 	}
 	if target.DeletedAt != nil {
 		return []*models.WikiDocument{}, nil
@@ -2003,7 +2003,7 @@ func (r *wikiDocumentResolver) WikiDocumentDescendantIDs(ctx context.Context, do
 	}
 
 	target, err := r.docRepo.FindByID(ctx, docUID)
-	if errors.Is(err, qmgo.ErrNoSuchDocuments) {
+	if repository.IsNotFound(err) {
 		// Genuinely absent doc → empty exclusion set (the picker just won't
 		// hide anything; the reorder mutation still rejects an illegal move).
 		// Real infra errors fall through below so they surface instead of
@@ -2458,7 +2458,10 @@ func (r *wikiDocumentResolver) WikiDocumentParentDocument(ctx context.Context, o
 	}
 	parent, err := r.docRepo.FindByID(ctx, *obj.ParentDocumentID)
 	if err != nil {
-		return nil, nil // parent may have been deleted
+		if repository.IsNotFound(err) {
+			return nil, nil // parent may have been deleted
+		}
+		return nil, fmt.Errorf("failed to load parent document: %w", err)
 	}
 	return &parent, nil
 }
@@ -2539,8 +2542,11 @@ func (r *wikiDocumentResolver) WikiDocumentAncestors(ctx context.Context, obj *m
 
 	chain, err := r.docRepo.FindAncestors(ctx, *obj.ParentDocumentID)
 	if err != nil {
-		// Degrade silently — the rest of the row is still useful.
-		return []*model.WikiDocumentAncestor{}, nil
+		if repository.IsNotFound(err) {
+			// Degrade silently — the rest of the row is still useful.
+			return []*model.WikiDocumentAncestor{}, nil
+		}
+		return nil, fmt.Errorf("failed to load ancestors: %w", err)
 	}
 	out := make([]*model.WikiDocumentAncestor, 0, len(chain))
 	for _, a := range chain {
@@ -2648,22 +2654,14 @@ func (r *wikiDocumentResolver) WikiDocumentBacklinksField(ctx context.Context, o
 }
 
 func (r *wikiDocumentResolver) WikiDocumentCreatedBy(ctx context.Context, obj *models.WikiDocument) (*models.User, error) {
-	user, err := gqlctx.LoadUser(ctx, r.userRepo, obj.CreatedByID)
-	if err != nil {
-		return nil, nil
-	}
-	return &user, nil
+	return loadNullableUser(ctx, r.userRepo, obj.CreatedByID, "document creator")
 }
 
 func (r *wikiDocumentResolver) WikiDocumentLastUpdatedBy(ctx context.Context, obj *models.WikiDocument) (*models.User, error) {
 	if obj.LastUpdatedByID == nil {
 		return nil, nil
 	}
-	user, err := gqlctx.LoadUser(ctx, r.userRepo, *obj.LastUpdatedByID)
-	if err != nil {
-		return nil, nil
-	}
-	return &user, nil
+	return loadNullableUser(ctx, r.userRepo, *obj.LastUpdatedByID, "document editor")
 }
 
 func (r *wikiDocumentResolver) WikiDocumentLastUpdatedAt(ctx context.Context, obj *models.WikiDocument) (*string, error) {
@@ -2678,11 +2676,7 @@ func (r *wikiDocumentResolver) WikiDocumentDeletedBy(ctx context.Context, obj *m
 	if obj.DeletedByID == nil {
 		return nil, nil
 	}
-	user, err := gqlctx.LoadUser(ctx, r.userRepo, *obj.DeletedByID)
-	if err != nil {
-		return nil, nil
-	}
-	return &user, nil
+	return loadNullableUser(ctx, r.userRepo, *obj.DeletedByID, "document deleter")
 }
 
 func (r *wikiDocumentResolver) WikiDocumentLastBackupAt(ctx context.Context, obj *models.WikiDocument) (*string, error) {
@@ -2732,14 +2726,7 @@ func (r *wikiDocumentResolver) WikiDocumentBackupContentLength(ctx context.Conte
 }
 
 func (r *wikiDocumentResolver) WikiDocumentBackupCreatedBy(ctx context.Context, obj *models.WikiDocumentBackup) (*models.User, error) {
-	if obj.CreatedByID == uuid.Nil {
-		return nil, nil
-	}
-	user, err := gqlctx.LoadUser(ctx, r.userRepo, obj.CreatedByID)
-	if err != nil {
-		return nil, nil
-	}
-	return &user, nil
+	return loadNullableUser(ctx, r.userRepo, obj.CreatedByID, "backup creator")
 }
 
 func (r *wikiDocumentResolver) WikiDocumentBackupCreatedAt(ctx context.Context, obj *models.WikiDocumentBackup) (string, error) {

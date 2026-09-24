@@ -36,14 +36,14 @@ func (f *fakeAPIKeyRepo) put(k models.APIKey) {
 func (f *fakeAPIKeyRepo) FindByKeyID(_ context.Context, keyID string) (models.APIKey, error) {
 	k, ok := f.byKeyID[keyID]
 	if !ok {
-		return models.APIKey{}, errors.New("not found")
+		return models.APIKey{}, repository.ErrNotFound
 	}
 	return k, nil
 }
 func (f *fakeAPIKeyRepo) FindByUserID(_ context.Context, userID uuid.UUID) (models.APIKey, error) {
 	k, ok := f.byUserID[userID]
 	if !ok {
-		return models.APIKey{}, errors.New("not found")
+		return models.APIKey{}, repository.ErrNotFound
 	}
 	return k, nil
 }

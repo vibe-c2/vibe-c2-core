@@ -377,11 +377,7 @@ func (r *hostResolver) CreatedBy(ctx context.Context, obj *models.Host) (*models
 	if obj.CreatedByID == uuid.Nil {
 		return nil, nil
 	}
-	user, err := gqlctx.LoadUser(ctx, r.userRepo, obj.CreatedByID)
-	if err != nil {
-		return nil, nil
-	}
-	return &user, nil
+	return loadNullableUser(ctx, r.userRepo, obj.CreatedByID, "host creator")
 }
 
 // CreatedAt converts the qmgo DefaultField timestamp to an ISO 8601 string.

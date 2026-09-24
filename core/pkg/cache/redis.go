@@ -177,7 +177,11 @@ func GetCachedData[T any](c Cache, ctx context.Context, cacheKey string, output 
 
 	cachedData, err := c.Get(ctx, cacheKey)
 	if err != nil {
-		return false, nil
+		// A cache that cannot be read is a cache miss: the caller recomputes
+		// from the source of truth, which is always correct, just slower.
+		// Redis being down must not fail requests that merely hoped for a
+		// cached answer.
+		return false, nil //nolint:nilerr // unreachable cache == miss, by design
 	}
 
 	if err := json.Unmarshal([]byte(cachedData), output); err != nil {

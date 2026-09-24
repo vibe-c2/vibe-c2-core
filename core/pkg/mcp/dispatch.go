@@ -94,7 +94,7 @@ func register[A any](s *Server, tool *mcp.Tool, kind toolKind, fn handlerFunc[A]
 			// Tool errors are returned to the model as content, not as
 			// protocol errors: the agent is supposed to read them and adjust.
 			// A protocol error would abort the turn instead.
-			return &mcp.CallToolResult{
+			return &mcp.CallToolResult{ //nolint:nilerr // tool error travels as content, by protocol
 				IsError: true,
 				Content: []mcp.Content{&mcp.TextContent{Text: err.Error()}},
 			}, nil, nil
@@ -109,7 +109,8 @@ func register[A any](s *Server, tool *mcp.Tool, kind toolKind, fn handlerFunc[A]
 
 		encoded, encErr := encodeResult(result.Payload)
 		if encErr != nil {
-			return &mcp.CallToolResult{
+			// Same contract as above: the agent reads the failure and adjusts.
+			return &mcp.CallToolResult{ //nolint:nilerr // encode error travels as content, by protocol
 				IsError: true,
 				Content: []mcp.Content{&mcp.TextContent{Text: "failed to encode result: " + encErr.Error()}},
 			}, nil, nil

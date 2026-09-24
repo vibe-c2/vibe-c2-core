@@ -57,12 +57,10 @@ func (r *apiKeyResolver) MyAPIKey(ctx context.Context) (*models.APIKey, error) {
 	}
 	key, err := r.repo.FindByUserID(ctx, uid)
 	if err != nil {
-		// "no document" is the common "not yet generated" path. Distinguishing
-		// it from real errors here is awkward (qmgo wraps mongo errors), so we
-		// fall through and let the resolver return nil. The trade-off: a real
-		// DB outage shows as "no key" rather than a clean error. Acceptable
-		// for now — the next mutation will surface the error.
-		return nil, nil
+		if repository.IsNotFound(err) {
+			return nil, nil // no key generated yet — the common path
+		}
+		return nil, fmt.Errorf("failed to load API key: %w", err)
 	}
 	return &key, nil
 }

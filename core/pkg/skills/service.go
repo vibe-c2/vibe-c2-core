@@ -6,13 +6,11 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
-	"errors"
 	"fmt"
 	"io"
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/qiniu/qmgo"
 	"go.uber.org/zap"
 
 	"github.com/vibe-c2/vibe-c2-core/core/pkg/blob"
@@ -491,5 +489,5 @@ func objectKey(skillID uuid.UUID, version int) string {
 }
 
 func isNotFound(err error) bool {
-	return errors.Is(err, qmgo.ErrNoSuchDocuments)
+	return repository.IsNotFound(err)
 }

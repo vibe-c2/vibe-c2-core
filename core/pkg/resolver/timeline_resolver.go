@@ -531,11 +531,7 @@ func (r *timelineResolver) Actor(ctx context.Context, obj *models.OperationEvent
 	if obj.ActorID == nil {
 		return nil, nil
 	}
-	user, err := gqlctx.LoadUser(ctx, r.userRepo, *obj.ActorID)
-	if err != nil {
-		return nil, nil
-	}
-	return &user, nil
+	return loadNullableUser(ctx, r.userRepo, *obj.ActorID, "event actor")
 }
 
 // ActorKind lets the client distinguish an action the operator performed
