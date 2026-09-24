@@ -335,7 +335,7 @@ func (wic *WikiImageController) callerCanEdit(c *gin.Context, doc *models.WikiDo
 	if isAppAdminFromContext(c) {
 		return true
 	}
-	op, err := wic.opRepo.FindByID(c.Request.Context(), doc.OperationID)
+	op, err := gqlctx.LoadOperation(c.Request.Context(), wic.opRepo, doc.OperationID)
 	if err != nil {
 		return false
 	}
@@ -355,7 +355,7 @@ func (wic *WikiImageController) callerIsOperationMember(c *gin.Context, opID uui
 	if isAppAdminFromContext(c) {
 		return true
 	}
-	op, err := wic.opRepo.FindByID(c.Request.Context(), opID)
+	op, err := gqlctx.LoadOperation(c.Request.Context(), wic.opRepo, opID)
 	if err != nil {
 		return false
 	}

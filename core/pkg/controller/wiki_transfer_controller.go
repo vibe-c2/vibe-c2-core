@@ -108,7 +108,7 @@ func (wtc *WikiTransferController) StartExport(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, responses.NewErrorResponse("invalid operationId"))
 		return
 	}
-	op, err := wtc.opRepo.FindByID(c.Request.Context(), opID)
+	op, err := gqlctx.LoadOperation(c.Request.Context(), wtc.opRepo, opID)
 	if err != nil {
 		c.JSON(http.StatusNotFound, responses.NewErrorResponse("operation not found"))
 		return
@@ -197,7 +197,7 @@ func (wtc *WikiTransferController) StartImport(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, responses.NewErrorResponse("invalid operationId"))
 		return
 	}
-	op, err := wtc.opRepo.FindByID(c.Request.Context(), opID)
+	op, err := gqlctx.LoadOperation(c.Request.Context(), wtc.opRepo, opID)
 	if err != nil {
 		c.JSON(http.StatusNotFound, responses.NewErrorResponse("operation not found"))
 		return
@@ -299,7 +299,7 @@ func (wtc *WikiTransferController) ListJobs(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, responses.NewErrorResponse("invalid operationId"))
 		return
 	}
-	op, err := wtc.opRepo.FindByID(c.Request.Context(), opID)
+	op, err := gqlctx.LoadOperation(c.Request.Context(), wtc.opRepo, opID)
 	if err != nil {
 		c.JSON(http.StatusNotFound, responses.NewErrorResponse("operation not found"))
 		return
@@ -395,7 +395,7 @@ func (wtc *WikiTransferController) loadAuthorisedJob(c *gin.Context) (models.Wik
 		c.JSON(http.StatusNotFound, responses.NewErrorResponse("job not found"))
 		return models.WikiTransferJob{}, false
 	}
-	op, err := wtc.opRepo.FindByID(c.Request.Context(), j.OperationID)
+	op, err := gqlctx.LoadOperation(c.Request.Context(), wtc.opRepo, j.OperationID)
 	if err != nil {
 		c.JSON(http.StatusNotFound, responses.NewErrorResponse("operation not found"))
 		return models.WikiTransferJob{}, false

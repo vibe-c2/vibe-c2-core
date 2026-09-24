@@ -9,6 +9,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/vibe-c2/vibe-c2-core/core/pkg/auth"
 	"github.com/vibe-c2/vibe-c2-core/core/pkg/authorization"
+	"github.com/vibe-c2/vibe-c2-core/core/pkg/graphql/gqlctx"
 	"github.com/vibe-c2/vibe-c2-core/core/pkg/graphql/model"
 	"github.com/vibe-c2/vibe-c2-core/core/pkg/models"
 	"github.com/vibe-c2/vibe-c2-core/core/pkg/repository"
@@ -264,7 +265,7 @@ func (r *agentKeyResolver) validateScopes(ctx context.Context, ids []string) ([]
 		}
 		seen[opID] = struct{}{}
 
-		op, err := r.opsRepo.FindByID(ctx, opID)
+		op, err := gqlctx.LoadOperation(ctx, r.opsRepo, opID)
 		if err != nil {
 			return nil, fmt.Errorf("operation %s not found", raw)
 		}
@@ -292,7 +293,7 @@ func (r *agentKeyResolver) ID(_ context.Context, obj *models.AgentKey) (string, 
 func (r *agentKeyResolver) OperationScopes(ctx context.Context, obj *models.AgentKey) ([]*models.Operation, error) {
 	out := make([]*models.Operation, 0, len(obj.OperationScopes))
 	for _, opID := range obj.OperationScopes {
-		op, err := r.opsRepo.FindByID(ctx, opID)
+		op, err := gqlctx.LoadOperation(ctx, r.opsRepo, opID)
 		if err != nil {
 			continue
 		}

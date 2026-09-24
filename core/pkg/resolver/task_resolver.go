@@ -1032,7 +1032,7 @@ func (r *taskResolver) OperationIDField(_ context.Context, obj *models.Task) (st
 }
 
 func (r *taskResolver) Operation(ctx context.Context, obj *models.Task) (*models.Operation, error) {
-	op, err := r.operationRepo.FindByID(ctx, obj.OperationID)
+	op, err := gqlctx.LoadOperation(ctx, r.operationRepo, obj.OperationID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to load operation: %w", err)
 	}

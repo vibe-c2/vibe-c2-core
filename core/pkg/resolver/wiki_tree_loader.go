@@ -7,9 +7,9 @@ package resolver
 // the parent query runs one aggregation (or one bulk fetch) and the field
 // resolvers become map lookups.
 //
-// One instance per HTTP request, attached to context in the GraphQL handler.
-// Sub-resolvers may run in parallel under gqlgen, so the maps are guarded by
-// an RWMutex.
+// One instance per GraphQL operation, attached to context by the handler's
+// AroundOperations hook. Sub-resolvers may run in parallel under gqlgen, so
+// the maps are guarded by an RWMutex.
 //
 // When the loader is absent from context (non-HTTP paths, subscriptions,
 // callers that didn't precompute) the field resolvers fall back to a live
@@ -100,7 +100,9 @@ func (l *WikiTreeLoader) Ancestor(id uuid.UUID) (*model.WikiDocumentAncestor, bo
 }
 
 // WithWikiTreeLoader returns ctx with the given loader attached. Called once
-// per HTTP request by the GraphQL handler.
+// per GraphQL operation by the handler's AroundOperations hook — not per HTTP
+// request, because one WebSocket request carries many operations and would
+// otherwise share a single loader across all of them.
 func WithWikiTreeLoader(ctx context.Context, l *WikiTreeLoader) context.Context {
 	return context.WithValue(ctx, wikiTreeLoaderKey{}, l)
 }

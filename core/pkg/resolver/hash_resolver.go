@@ -659,7 +659,7 @@ func (r *hashResolver) OperationIDField(_ context.Context, obj *models.Hash) (st
 }
 
 func (r *hashResolver) Operation(ctx context.Context, obj *models.Hash) (*models.Operation, error) {
-	op, err := r.operationRepo.FindByID(ctx, obj.OperationID)
+	op, err := gqlctx.LoadOperation(ctx, r.operationRepo, obj.OperationID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to load operation: %w", err)
 	}

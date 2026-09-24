@@ -16,6 +16,7 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/99designs/gqlgen/graphql"
 	"github.com/99designs/gqlgen/graphql/handler"
 	"github.com/99designs/gqlgen/graphql/handler/extension"
 	"github.com/99designs/gqlgen/graphql/handler/lru"
@@ -207,6 +208,34 @@ func NewHandler(
 		Cache: lru.New[string](100),
 	})
 
+	// --- Per-operation loaders ---
+	// Both of these are request-scoped caches, and "request" here has to mean
+	// one GraphQL operation, not one HTTP request: the same handler serves
+	// GET /graphql/ws, where the HTTP request context lives for the lifetime
+	// of the socket. Attaching them to the Gin request context would let one
+	// subscription connection serve hours-stale operations and child counts.
+	// AroundOperations runs once per query/mutation/subscription on every
+	// transport, which is exactly the lifetime these caches want.
+	//
+	//   - operation memo: every authorize-against-the-operation check funnels
+	//     through gqlctx.LoadOperation, and a list response runs one per row,
+	//     all fetching the same document. Without a memo on the context
+	//     LoadOperation degrades to an uncached FindByID.
+	//   - wiki tree loader: lets tree queries hand precomputed childCount and
+	//     ancestor values to the per-document field resolvers.
+	// A subscription operation is itself long-lived — it stays open as long as
+	// the client is subscribed — so it gets neither cache. Its resolvers
+	// re-authorize per event against live repository reads, which is what makes
+	// a membership revocation take effect on a connected client.
+	srv.AroundOperations(func(ctx context.Context, next graphql.OperationHandler) graphql.ResponseHandler {
+		if oc := graphql.GetOperationContext(ctx); oc.Operation != nil && oc.Operation.Operation == ast.Subscription {
+			return next(ctx)
+		}
+		ctx = gqlctx.WithOperationMemo(ctx)
+		ctx = resolver.WithWikiTreeLoader(ctx, resolver.NewWikiTreeLoader())
+		return next(ctx)
+	})
+
 	// Return a Gin handler that bridges auth context and delegates to gqlgen.
 	return func(c *gin.Context) {
 		// Extract auth info from Gin's context (set by JWTAuth middleware)
@@ -221,10 +250,11 @@ func NewHandler(
 			CurrentSessionID: c.GetString("sessionID"),
 		})
 
-		// Per-request scratch space for tree-style queries to share precomputed
-		// childCount values with the per-document field resolver, killing the
-		// N+1 Count() storm. See resolver.WikiTreeLoader.
-		ctx = resolver.WithWikiTreeLoader(ctx, resolver.NewWikiTreeLoader())
+		// Per-operation scratch space (wiki tree loader, operation memo) is
+		// attached by the AroundOperations hook above, not here: this handler
+		// also serves GET /graphql/ws, whose request context lives as long as
+		// the socket. Anything cached here would be shared by every operation
+		// on that connection for hours.
 
 		// Replace the request context with our auth-enriched context.
 		c.Request = c.Request.WithContext(ctx)

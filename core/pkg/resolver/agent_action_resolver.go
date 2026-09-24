@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/vibe-c2/vibe-c2-core/core/pkg/graphql/gqlctx"
 	"github.com/vibe-c2/vibe-c2-core/core/pkg/graphql/model"
 	"github.com/vibe-c2/vibe-c2-core/core/pkg/models"
 	"github.com/vibe-c2/vibe-c2-core/core/pkg/pagination"
@@ -177,7 +178,7 @@ func (r *agentActionResolver) Operation(ctx context.Context, obj *models.AgentAc
 	if obj.OperationID == nil {
 		return nil, nil
 	}
-	op, err := r.opsRepo.FindByID(ctx, *obj.OperationID)
+	op, err := gqlctx.LoadOperation(ctx, r.opsRepo, *obj.OperationID)
 	if err != nil {
 		return nil, nil
 	}

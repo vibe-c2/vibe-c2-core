@@ -839,7 +839,7 @@ func (r *credentialResolver) OperationIDField(ctx context.Context, obj *models.C
 // to the caller, which means they had at least viewer access to its op via
 // the parent query (Credential / Credentials / MyCredentials).
 func (r *credentialResolver) Operation(ctx context.Context, obj *models.Credential) (*models.Operation, error) {
-	op, err := r.operationRepo.FindByID(ctx, obj.OperationID)
+	op, err := gqlctx.LoadOperation(ctx, r.operationRepo, obj.OperationID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to load operation: %w", err)
 	}
@@ -869,7 +869,7 @@ func (r *credentialResolver) ViewerCanModerateComments(ctx context.Context, obj 
 			return true, nil
 		}
 	}
-	op, err := r.operationRepo.FindByID(ctx, obj.OperationID)
+	op, err := gqlctx.LoadOperation(ctx, r.operationRepo, obj.OperationID)
 	if err != nil {
 		return false, nil
 	}

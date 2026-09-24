@@ -380,7 +380,7 @@ func (r *hostResolver) OperationIDField(ctx context.Context, obj *models.Host) (
 // is upstream: the host was already returned to the caller, which means they
 // had at least viewer access to its operation via the parent query.
 func (r *hostResolver) Operation(ctx context.Context, obj *models.Host) (*models.Operation, error) {
-	op, err := r.operationRepo.FindByID(ctx, obj.OperationID)
+	op, err := gqlctx.LoadOperation(ctx, r.operationRepo, obj.OperationID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to load operation: %w", err)
 	}

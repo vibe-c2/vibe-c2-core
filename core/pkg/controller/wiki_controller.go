@@ -89,7 +89,7 @@ func (wc *WikiController) CollabTicket(c *gin.Context) {
 	}
 
 	// Check operation membership (role >= operator)
-	op, err := wc.operationRepo.FindByID(c.Request.Context(), doc.OperationID)
+	op, err := gqlctx.LoadOperation(c.Request.Context(), wc.operationRepo, doc.OperationID)
 	if err != nil {
 		c.JSON(http.StatusNotFound, responses.ErrorResponse{Error: "operation not found"})
 		return

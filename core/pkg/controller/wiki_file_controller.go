@@ -425,7 +425,7 @@ func (wfc *WikiFileController) callerCanEdit(c *gin.Context, doc *models.WikiDoc
 	if isAppAdminFromContext(c) {
 		return true
 	}
-	op, err := wfc.opRepo.FindByID(c.Request.Context(), doc.OperationID)
+	op, err := gqlctx.LoadOperation(c.Request.Context(), wfc.opRepo, doc.OperationID)
 	if err != nil {
 		return false
 	}
@@ -444,7 +444,7 @@ func (wfc *WikiFileController) callerIsOperationMember(c *gin.Context, opID uuid
 	if isAppAdminFromContext(c) {
 		return true
 	}
-	op, err := wfc.opRepo.FindByID(c.Request.Context(), opID)
+	op, err := gqlctx.LoadOperation(c.Request.Context(), wfc.opRepo, opID)
 	if err != nil {
 		return false
 	}

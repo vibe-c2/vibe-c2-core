@@ -265,6 +265,11 @@ func (a *App) NewRouter() *gin.Engine {
 
 		// Wiki collab ticket (protected by JWT, issues short-lived ticket for Hocuspocus)
 		wikiGroup := v1.Group("/wiki")
+		// Every route below authorizes against the operation named in the
+		// request; the memo lets those checks share one fetch. Scoped to this
+		// group rather than v1 because /graphql/ws lives on v1 and holds its
+		// request context open for the life of the socket.
+		wikiGroup.Use(middleware.OperationMemo())
 		wikiGroup.POST("/collab-ticket", wikiCtrl.CollabTicket)
 
 		// Wiki image uploads & proxy reads. GET bypasses CSRF (safe method)
