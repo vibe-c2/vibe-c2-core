@@ -160,7 +160,7 @@ func (s *S3Store) Get(ctx context.Context, key string) (io.ReadCloser, ObjectInf
 	// minio-go lazily opens the body so Stat failures surface here.
 	stat, err := obj.Stat()
 	if err != nil {
-		obj.Close()
+		_ = obj.Close() // already returning an error; nothing to add
 		return nil, ObjectInfo{}, fmt.Errorf("blob: stat %q: %w", key, err)
 	}
 

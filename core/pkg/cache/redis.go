@@ -50,7 +50,7 @@ func NewRedisCache(ctx context.Context, cfg RedisConfig) (Cache, error) {
 	}
 
 	if err != nil {
-		client.Close()
+		_ = client.Close() // already returning an error; nothing to add
 		return nil, fmt.Errorf("failed to connect to Redis after 3 attempts: %w", err)
 	}
 

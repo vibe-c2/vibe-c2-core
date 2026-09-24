@@ -85,7 +85,7 @@ func NewDatabase(ctx context.Context) (Database, error) {
 	}
 
 	if err := client.Ping(10); err != nil {
-		client.Close(ctx)
+		_ = client.Close(ctx) // already returning an error; nothing to add
 		return nil, fmt.Errorf("MongoDB ping failed: %w", err)
 	}
 

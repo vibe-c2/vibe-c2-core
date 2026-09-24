@@ -29,8 +29,6 @@ func optionalInt(v, sentinel int) *int {
 	return &v
 }
 
-func boolPtr(v bool) *bool { return &v }
-
 // parseUUIDArg keeps id validation messages consistent across tools.
 func parseUUIDArg(value, field string) (uuid.UUID, error) {
 	id, err := uuid.Parse(value)

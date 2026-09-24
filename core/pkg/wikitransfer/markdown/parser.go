@@ -244,7 +244,6 @@ func indexOfUploadsSegment(segments []string) int {
 func buildDocTree(collectionName string, entries []mdEntry) []*Doc {
 	// Index every .md by its parent directory (relative to the collection
 	// root). Root docs have parent dir == "".
-	type key struct{ dir, base string }
 	byPath := map[string]mdEntry{} // relPath → entry
 	for _, e := range entries {
 		byPath[e.relPath] = e
@@ -288,7 +287,6 @@ func buildDocTree(collectionName string, entries []mdEntry) []*Doc {
 
 	_ = byPath
 	_ = collectionName
-	_ = key{}
 	return build("")
 }
 

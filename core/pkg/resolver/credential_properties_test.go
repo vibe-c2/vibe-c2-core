@@ -118,7 +118,6 @@ func TestNormalizeCredentialProperties(t *testing.T) {
 	}
 
 	for _, tc := range cases {
-		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
 			out, err := normalizeCredentialProperties(tc.in)
 			if tc.wantErr != "" {

@@ -165,7 +165,7 @@ func NewRedisTokenStore(ctx context.Context, cfg RedisTokenStoreConfig) (TokenSt
 		}
 	}
 	if err != nil {
-		client.Close()
+		_ = client.Close() // already returning an error; nothing to add
 		return nil, fmt.Errorf("failed to connect to Redis token store after 3 attempts: %w", err)
 	}
 

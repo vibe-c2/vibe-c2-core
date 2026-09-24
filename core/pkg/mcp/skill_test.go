@@ -133,7 +133,7 @@ func TestSkill_ZipLayout(t *testing.T) {
 			t.Fatalf("open %s: %v", f.Name, err)
 		}
 		content, _ := io.ReadAll(rc)
-		rc.Close()
+		_ = rc.Close()
 		if len(content) == 0 {
 			t.Errorf("%s is empty", f.Name)
 		}

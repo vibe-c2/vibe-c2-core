@@ -288,7 +288,7 @@ func TestPublish_SecondVersionKeepsTheFirst(t *testing.T) {
 	if err != nil {
 		t.Fatalf("downloading version 1: %v", err)
 	}
-	body.Close()
+	_ = body.Close()
 	if row.Version != 1 || row.ObjectKey != first.Version.ObjectKey {
 		t.Errorf("version 1 resolved to %+v, want the original bundle", row)
 	}

@@ -30,15 +30,6 @@ func strDeref(p *string) string {
 	return *p
 }
 
-// boolDeref returns the pointed-to bool or the fallback for nil. Used to
-// flatten optional GraphQL Input pointer fields with a documented default.
-func boolDeref(p *bool, fallback bool) bool {
-	if p == nil {
-		return fallback
-	}
-	return *p
-}
-
 // strDerefOr returns the pointed-to string or the fallback for nil. Unlike
 // strDeref it preserves an explicit empty string ("" overrides the fallback),
 // which matters for optional overrides where nil means "inherit" but "" means

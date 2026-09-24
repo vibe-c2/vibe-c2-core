@@ -12,15 +12,15 @@ import (
 	"github.com/vibe-c2/vibe-c2-core/core/pkg/maintenance/attachmentaudit"
 )
 
-//	@title			VibeC2 Core API
-//	@version		1.0
-//	@description	Command-and-control core backend API.
-//	@basePath		/api/v1
+// @title			VibeC2 Core API
+// @version		1.0
+// @description	Command-and-control core backend API.
+// @basePath		/api/v1
 //
-//	@securityDefinitions.apikey	BearerAuth
-//	@in							header
-//	@name						Authorization
-//	@description				Bearer JWT token (e.g. "Bearer eyJhb...")
+// @securityDefinitions.apikey	BearerAuth
+// @in							header
+// @name						Authorization
+// @description				Bearer JWT token (e.g. "Bearer eyJhb...")
 func main() {
 	// Maintenance subcommands run instead of the server and exit. They ship in
 	// the same binary so they're runnable in production via

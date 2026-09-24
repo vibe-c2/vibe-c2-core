@@ -1,0 +1,83 @@
+name: Core CI
+
+# Tests and static analysis for the Go backend. This is the gate that
+# publish-core.yml does not provide: that workflow only builds and pushes the
+# image, so before this existed nothing ran `go test` or a linter on any push
+# or pull request, despite the suite passing under -race.
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - "core/**"
+      - ".github/workflows/ci-core.yml"
+  pull_request:
+    branches:
+      - main
+    paths:
+      - "core/**"
+      - ".github/workflows/ci-core.yml"
+  workflow_dispatch:
+
+# A newer push to the same branch makes an in-flight run obsolete.
+concurrency:
+  group: core-ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    name: Test (race)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: core/go.mod
+          cache-dependency-path: core/go.sum
+
+      - name: Verify go.mod is tidy
+        working-directory: core
+        run: |
+          go mod tidy -diff
+
+      - name: Build
+        working-directory: core
+        run: go build ./...
+
+      # The unit suite is hermetic — no Mongo, Redis or RabbitMQ required. The
+      # env vars only satisfy environment.init(), which refuses to load with
+      # required settings missing. Mirrors the `make test` target.
+      - name: Test
+        working-directory: core
+        env:
+          JWT_SECRET_KEY: test
+          MONGO_URI: mongodb://localhost:27017
+          MONGO_DATABASE: test
+          RABBITMQ_DEFAULT_USER: test
+          RABBITMQ_DEFAULT_PASS: test
+        run: go test -race -count=1 ./...
+
+  lint:
+    name: Lint
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: core/go.mod
+          cache-dependency-path: core/go.sum
+
+      # Config lives at core/.golangci.yml, which documents the enabled set and
+      # why the excluded linters are excluded.
+      - name: golangci-lint
+        uses: golangci/golangci-lint-action@v6
+        with:
+          version: v2.13.2
+          working-directory: core
+          args: --timeout 10m

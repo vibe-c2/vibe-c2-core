@@ -104,7 +104,7 @@ func (w *exportWorld) run(t *testing.T) (map[string]string, *wikitransfer.Export
 			t.Fatal(err)
 		}
 		data, _ := io.ReadAll(rc)
-		rc.Close()
+		_ = rc.Close()
 		entries[f.Name] = string(data)
 	}
 	return entries, report

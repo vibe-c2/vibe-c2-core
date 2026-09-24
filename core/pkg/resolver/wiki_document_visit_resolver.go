@@ -140,7 +140,7 @@ func (r *wikiDocumentVisitResolver) WikiDocumentHistory(ctx context.Context, ope
 	if offset != nil && *offset > 0 {
 		off = int64(*offset)
 	}
-	lim := int64(MaxWikiVisitHistory)
+	lim := MaxWikiVisitHistory
 	if limit != nil && *limit > 0 {
 		lim = int64(*limit)
 		if lim > MaxWikiVisitHistory {

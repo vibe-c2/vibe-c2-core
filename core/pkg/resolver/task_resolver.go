@@ -168,10 +168,10 @@ func (r *taskResolver) CreateTask(ctx context.Context, input model.CreateTaskInp
 		return nil, fmt.Errorf("description exceeds %d characters", maxTaskDescriptionLen)
 	}
 
-	if err := validateScoreInput(int(input.RiskScore), "risk"); err != nil {
+	if err := validateScoreInput(input.RiskScore, "risk"); err != nil {
 		return nil, err
 	}
-	if err := validateScoreInput(int(input.ProfitScore), "profit"); err != nil {
+	if err := validateScoreInput(input.ProfitScore, "profit"); err != nil {
 		return nil, err
 	}
 

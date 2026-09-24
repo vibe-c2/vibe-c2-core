@@ -1,0 +1,93 @@
+# golangci-lint configuration for the core backend.
+#
+# Run locally with:  cd core && golangci-lint run
+# CI runs the same command, so a clean local run means a clean CI run.
+#
+# Two rules for this file:
+#
+#  1. The enabled set is kept green. A linter that fires on existing code gets
+#     the code fixed, or stays out with a note below — never left failing, or
+#     the whole gate gets ignored and stops being a gate.
+#  2. errcheck is the reason this file exists. Twenty-one repository
+#     constructors used to drop the error from CreateIndexes, so an index that
+#     failed to build left every query on that collection doing a collection
+#     scan, with a healthy-looking service and no log line. go vet does not
+#     catch that class. This does.
+version: "2"
+
+linters:
+  default: none
+  enable:
+    # --- correctness ---
+    - govet
+    - errcheck # unchecked errors; see note 2 above
+    - staticcheck
+    - ineffassign
+    - bodyclose # leaked HTTP response bodies
+    - durationcheck # multiplying two durations
+    - makezero # append to a make([]T, n) slice
+    - rowserrcheck
+    - nilnesserr
+    # --- dead code and redundancy ---
+    - unused
+    - unconvert
+    - wastedassign
+    - copyloopvar
+
+  # Linters considered and deliberately left out, so the next person does not
+  # have to re-derive why:
+  #
+  #   nilerr       — 23 hits, nearly all the deliberate "row was deleted →
+  #                  render null" pattern in field resolvers. The real fix is a
+  #                  repository.ErrNotFound sentinel so a Mongo timeout stops
+  #                  looking like a deleted row; enable this once that lands,
+  #                  and the remaining hits become the bugs it is meant to find.
+  #   contextcheck — 6 hits, all background work that intentionally outlives
+  #                  the request (shutdown paths, the transfer job runner).
+  #   prealloc     — style only, and wrong often enough to be noise.
+
+  settings:
+    errcheck:
+      exclude-functions:
+        - (*github.com/gin-gonic/gin.Context).Error
+      check-type-assertions: false
+      check-blank: false
+
+    staticcheck:
+      # SA (correctness) and S (simplification) stay on. ST (naming/style) and
+      # QF (editor quickfix suggestions) are opinions, not defects.
+      checks:
+        - all
+        - -ST*
+        - -QF*
+
+  exclusions:
+    generated: lax
+    rules:
+      # gqlgen and swag own these; regenerating would undo any fix.
+      - path: pkg/graphql/generated/
+        linters: [errcheck, govet, staticcheck, unused, unconvert, wastedassign, ineffassign]
+      - path: pkg/graphql/model/models_gen\.go
+        linters: [errcheck, staticcheck, unused]
+      - path: docs/
+        linters: [errcheck, govet, staticcheck, unused, unconvert, wastedassign, ineffassign]
+      # A deferred Close has nowhere to return an error to. Closes that matter
+      # — a written file, a flushed upload — are not deferred and stay checked.
+      - linters: [errcheck]
+        source: '^\s*defer .*\.Close\('
+      # gqlgen's Marshaler interface is `MarshalGQL(w io.Writer)` with no error
+      # return, so these Fprintf calls have nowhere to report to. The writer is
+      # gqlgen's response buffer, which does not fail.
+      - linters: [errcheck]
+        source: '^\s*fmt\.Fprint(f|ln)?\(w, '
+
+formatters:
+  enable:
+    - gofmt
+  exclusions:
+    generated: lax
+
+issues:
+  # A new linter finding should fail the build, not scroll past.
+  max-issues-per-linter: 0
+  max-same-issues: 0
