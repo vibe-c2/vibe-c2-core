@@ -25,6 +25,7 @@ make swag               # regenerate Swagger/OpenAPI docs
 
 # Run Go commands directly (from core/ directory)
 cd core && go build ./...
+cd core && golangci-lint run       # static analysis; config is core/.golangci.yml
 make test                          # all Go tests with -race
 make test PKG=./pkg/mcp/...        # single package
 ```
@@ -35,6 +36,26 @@ settings in `init()` and reads `.env` from the working directory, which under
 `MONGO_DATABASE`, `RABBITMQ_DEFAULT_USER` and `RABBITMQ_DEFAULT_PASS` in the
 environment every package that imports it fatals before running a test. The
 target fills in dummies for whichever of the five `.env` does not provide.
+
+### CI and the lint gate
+
+`.github/workflows/ci-core.yml` runs build, `go mod tidy -diff`,
+`go test -race` and `golangci-lint` on every push and PR touching `core/**`.
+`publish-core.yml` only builds and pushes the image — it is not a gate.
+
+CI sets the five env vars inline instead of calling `make test`, because the
+Makefile does a hard `include .env` and `.env` is untracked, so any `make`
+target fails in a fresh checkout. Keep the two lists in sync when a new
+required setting is added to `pkg/environment`.
+
+`core/.golangci.yml` is kept green: a linter that fires on existing code gets
+the code fixed, or stays out with a note in the config saying why. `nilerr`
+and `contextcheck` are currently out and documented there — `nilerr` should be
+enabled once a `repository.ErrNotFound` sentinel exists, since today's 23 hits
+are almost all the deliberate "row was deleted, render null" pattern in field
+resolvers. errcheck is the linter that earns the file: `go vet` does not catch
+a dropped error return, which is how 21 repository constructors silently
+discarded `CreateIndexes` failures.
 
 The dev container runs air for hot reload on port 8002. GraphQL playground (Altair) is at `GET /api/v1/graphql` in development mode.
 
@@ -69,6 +90,7 @@ HTTP Request
 | `graphql/` | gqlgen wiring, schema, generated code, context utils (`gqlctx`) |
 | `resolver/` | GraphQL business logic, entity-scoped (user, operation) |
 | `repository/` | MongoDB data access via qmgo ODM |
+| `database/` | qmgo connection + `Database`/`Collection` proxies; index setup and startup verification (`indexes.go`) |
 | `models/` | Domain structs with qmgo's `DefaultField` for timestamps |
 | `middleware/` | JWT auth, RBAC, CORS, request logging, panic recovery |
 | `cache/` | Redis cache with noop fallback |
@@ -125,3 +147,38 @@ After editing `schema.graphql`, run `make gqlgen` to regenerate.
 ### Interface Contracts
 
 All major components are interface-based: `IAuthProvider`, `IUserRepository`, `IOperationRepository`, `Database`, `Collection`, `Cache`, `TokenStore`, `IUserResolver`, `IOperationResolver`. New implementations must satisfy these interfaces.
+
+**Indexes are declared per repository and verified at startup.** A constructor
+calls `db.EnsureIndexes(ctx, collection, models)` rather than
+`coll.CreateIndexes`. `EnsureIndexes` returns nothing on purpose: constructors
+are single-value, and an error return would just be dropped at every call site
+— which is the bug it replaced. Failures are recorded on the `Database` and
+`NewApp` drains them via `IndexSetupErr()`, refusing to boot. A failed index
+build is fatal because Mongo answers the query anyway, by scanning the
+collection: the service looks healthy and just gets slower as data grows. The
+usual cause is a changed definition rejected with `IndexOptionsConflict`, which
+needs a deliberate drop or migration. See `pkg/database/indexes.go`.
+
+### Per-request caches
+
+Two request-scoped caches accelerate list and tree queries, and **"request"
+means one GraphQL operation, not one HTTP request**:
+
+- `gqlctx.WithOperationMemo` / `gqlctx.LoadOperation` — almost every resolver
+  authorizes against its operation, and a list response does so once per row,
+  all fetching the same document. Authorize through `LoadOperation`, not
+  `operationRepo.FindByID`, or the fetch is not shared. The exception is a
+  re-read after a write (`operation_resolver.go` does this): the memo would
+  return the pre-write copy, so those stay on `FindByID`.
+- `resolver.WikiTreeLoader` — lets a tree query hand precomputed `childCount`
+  and ancestor values to the per-document field resolvers.
+
+Both are attached by the `AroundOperations` hook in `graphql/handler.go`, not by
+the Gin handler. The same handler serves `POST /graphql` and `GET /graphql/ws`,
+and a WebSocket request context lives as long as the socket — anything cached
+there would be shared by every operation on that connection for hours.
+Subscriptions are deliberately excluded for the same reason: they are
+long-lived and must re-authorize per event against live reads, or a membership
+revocation would never reach a connected client. REST gets the memo from
+`middleware.OperationMemo()`, mounted on the wiki group only — not `v1`, which
+would sweep in `/graphql/ws`.
