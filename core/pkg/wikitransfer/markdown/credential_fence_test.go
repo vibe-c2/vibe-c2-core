@@ -169,3 +169,19 @@ func (c *countingLookup) FindByID(ctx context.Context, id uuid.UUID) (models.Cre
 	*c.calls++
 	return c.inner.FindByID(ctx, id)
 }
+
+// The hydrator keys on the fence info-string; a body still carrying the
+// pre-rename spelling must hydrate identically to a current one.
+func TestHydrateCredentialFences_AcceptsBothSpellings(t *testing.T) {
+	opID, credID := uuid.New(), uuid.New()
+	lookup := &fakeCredLookup{by: map[uuid.UUID]models.Credential{
+		credID: {CredentialID: credID, OperationID: opID, Name: "svc-sql"},
+	}}
+	for _, info := range []string{"logos-credential", "vibe-credential"} {
+		body := "```" + info + "\n{\"id\": \"" + credID.String() + "\"}\n```"
+		_, hyd, tomb := hydrateCredentialFences(context.Background(), body, opID, lookup)
+		if hyd != 1 || tomb != 0 {
+			t.Fatalf("%s: hyd=%d tomb=%d, want hyd=1 tomb=0", info, hyd, tomb)
+		}
+	}
+}

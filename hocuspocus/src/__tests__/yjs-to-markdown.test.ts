@@ -254,3 +254,25 @@ test("an ordinary link is not turned into a chip", () => {
   });
   assert.ok(!kinds.some((k) => k.endsWith("Reference")), `made a chip: ${kinds.join(",")}`);
 });
+
+// The rename is self-healing: a body still carrying the pre-Logos spellings
+// lowers into the same nodes, and the next save writes them back out under the
+// current ones. This is what lets the swap to Logos images be a plain image
+// change — every page that gets saved fixes its own derived markdown, and the
+// startup backfill sweeps the rest.
+test("legacy vibe:// chips re-serialize as logos://", () => {
+  const legacy =
+    "reached [host](vibe://host/11111111-1111-1111-1111-111111111111) " +
+    "see [page](vibe://doc/33333333-3333-3333-3333-333333333333)";
+  const out = roundTripViaYjs(legacy);
+  assert.ok(out.includes("logos://host/11111111-1111-1111-1111-111111111111"));
+  assert.ok(out.includes("logos://doc/33333333-3333-3333-3333-333333333333"));
+  assert.ok(!out.includes("vibe://"), `old scheme survived: ${out}`);
+});
+
+test("legacy vibe-credential fence re-serializes as logos-credential", () => {
+  const legacy = '```vibe-credential\n{\n  "id": "44444444-4444-4444-4444-444444444444"\n}\n```';
+  const out = roundTripDirect(legacy);
+  assert.ok(out.includes("```logos-credential"), `not rewritten: ${out}`);
+  assert.ok(!out.includes("vibe-credential"), `old fence survived: ${out}`);
+});

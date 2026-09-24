@@ -25,7 +25,11 @@ import (
 
 // credentialFenceInfo is the info-string the sidecar keys on. It must stay in
 // step with CREDENTIAL_FENCE_INFO in hocuspocus/src/markdown-serializer.ts.
-const credentialFenceInfo = "vibe-credential"
+const credentialFenceInfo = "logos-credential"
+
+// legacyCredentialFenceInfo is the pre-Logos spelling. Accepted on the way in
+// so a page written before the rename still validates; never suggested.
+const legacyCredentialFenceInfo = "vibe-credential"
 
 // checkCredentialFences refuses markdown carrying a credential fence the
 // renderer would not turn into a chip.
@@ -42,7 +46,7 @@ func checkCredentialFences(markdown string) error {
 	var body strings.Builder
 
 	finish := func() error {
-		if info != credentialFenceInfo {
+		if info != credentialFenceInfo && info != legacyCredentialFenceInfo {
 			return nil
 		}
 		return validateCredentialFenceBody(body.String())

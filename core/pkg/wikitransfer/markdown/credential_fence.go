@@ -15,7 +15,19 @@ import (
 // every credential reference fence. Mirrors CREDENTIAL_FENCE_INFO in
 // hocuspocus/src/markdown-serializer.ts — any change here MUST be made in
 // both places at once or the export and the importer will silently drift.
-const credentialFenceInfo = "vibe-credential"
+const credentialFenceInfo = "logos-credential"
+
+// legacyCredentialFenceInfo is the pre-Logos spelling, matched on read only.
+// Stored markdown is rewritten by the startup backfill and by every save, so
+// this exists for rows neither has reached yet.
+const legacyCredentialFenceInfo = "vibe-credential"
+
+// containsCredentialFence is the cheap pre-check the walkers use before
+// running the regex, widened to either spelling.
+func containsCredentialFence(body string) bool {
+	return strings.Contains(body, credentialFenceInfo) ||
+		strings.Contains(body, legacyCredentialFenceInfo)
+}
 
 // credentialFencePattern matches a fenced code block whose info-string is
 // exactly `vibe-credential`. The body (group 1) is captured greedily up to
@@ -25,7 +37,8 @@ const credentialFenceInfo = "vibe-credential"
 //
 // Multiline `(?s)` flag is set so `.` matches newlines inside the body.
 var credentialFencePattern = regexp.MustCompile(
-	"(?s)```" + credentialFenceInfo + "\\s*\\n(.*?)\\n```",
+	"(?s)```(?:" + credentialFenceInfo + "|" + legacyCredentialFenceInfo +
+		")\\s*\\n(.*?)\\n```",
 )
 
 // CredentialLookup is the export-side credential resolver. Alias of the
@@ -54,7 +67,7 @@ func hydrateCredentialFences(
 	docOperationID uuid.UUID,
 	lookup CredentialLookup,
 ) (rewritten string, hydrated int, tombstoned int) {
-	if lookup == nil || !strings.Contains(body, credentialFenceInfo) {
+	if lookup == nil || !containsCredentialFence(body) {
 		return body, 0, 0
 	}
 
@@ -218,7 +231,7 @@ func toFenceProperties(in []models.CredentialProperty) []fenceProperty {
 // CollectCredentialIDs returns the distinct credential ids named by the
 // body's vibe-credential fences, tombstones excluded.
 func CollectCredentialIDs(body string) []uuid.UUID {
-	if !strings.Contains(body, credentialFenceInfo) {
+	if !containsCredentialFence(body) {
 		return nil
 	}
 	seen := map[uuid.UUID]struct{}{}

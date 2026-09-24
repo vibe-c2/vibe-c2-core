@@ -16,6 +16,35 @@ import (
 
 const wikiDocumentCollection = "wiki_documents"
 
+// referenceSchemeBackfillPipeline rewrites the pre-Logos spellings in a derived
+// markdown body. Mongo-side so the whole collection is one round trip.
+//
+// `content` is a projection of content_state, not the source of truth, so this
+// is safe to re-run and safe to lose: Hocuspocus re-derives it on the next save
+// of each page. It exists because the rebuild path reads *this* field — a page
+// whose CRDT has to be reconstructed is reconstructed from the markdown, and a
+// parser that no longer knows the old scheme would lower the chips into plain
+// links and code fences instead. Rewriting up front removes that window.
+func referenceSchemeBackfillPipeline() []bson.M {
+	return []bson.M{{"$set": bson.M{"content": bson.M{
+		"$replaceAll": bson.M{
+			"input": bson.M{"$replaceAll": bson.M{
+				"input":       "$content",
+				"find":        "vibe://",
+				"replacement": "logos://",
+			}},
+			"find":        "vibe-credential",
+			"replacement": "logos-credential",
+		},
+	}}}}
+}
+
+// referenceSchemeBackfillFilter selects only rows still carrying an old
+// spelling, so a second boot matches nothing and does no work.
+func referenceSchemeBackfillFilter() bson.M {
+	return bson.M{"content": bson.M{"$regex": "vibe://|vibe-credential"}}
+}
+
 // WikiDocumentSort selects the column used for cursor pagination in
 // FindByOperationIDWithCursor and the matching index. The zero value is
 // SortByCreatedAt, which matches the legacy behaviour.
@@ -54,6 +83,9 @@ type WikiDocumentFilter struct {
 
 // IWikiDocumentRepository defines the interface for WikiDocument database operations.
 type IWikiDocumentRepository interface {
+	// BackfillReferenceScheme rewrites pre-Logos chip and credential-fence
+	// spellings in the derived markdown body. Idempotent; returns rows changed.
+	BackfillReferenceScheme(ctx context.Context) (int64, error)
 	Create(ctx context.Context, doc *models.WikiDocument) error
 	FindByID(ctx context.Context, id uuid.UUID) (models.WikiDocument, error)
 	// FindByIDs returns documents matching any id in `ids`, in unspecified
@@ -1173,4 +1205,16 @@ func buildWikiDocumentFilter(opID uuid.UUID, filter WikiDocumentFilter) bson.M {
 	}
 
 	return f
+}
+
+// BackfillReferenceScheme implements IWikiDocumentRepository.
+func (r *wikiDocumentRepository) BackfillReferenceScheme(ctx context.Context) (int64, error) {
+	res, err := r.coll.UpdateAll(ctx, referenceSchemeBackfillFilter(), referenceSchemeBackfillPipeline())
+	if err != nil {
+		return 0, fmt.Errorf("backfill reference scheme: %w", err)
+	}
+	if res == nil {
+		return 0, nil
+	}
+	return res.ModifiedCount, nil
 }

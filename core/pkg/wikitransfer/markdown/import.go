@@ -125,7 +125,7 @@ func canonicalURL(att *wikitransfer.Attachment) string {
 // collectCredentialFences reads every vibe-credential fence in body into
 // the plan's payload map, and tombstone fences into the tombstone set.
 func collectCredentialFences(body string, into map[uuid.UUID]wikitransfer.CredentialPayload, tombstones map[uuid.UUID]struct{}) {
-	if !strings.Contains(body, credentialFenceInfo) {
+	if !containsCredentialFence(body) {
 		return
 	}
 	for _, m := range credentialFencePattern.FindAllStringSubmatch(body, -1) {

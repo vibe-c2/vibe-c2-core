@@ -204,7 +204,7 @@ func CollectAttachmentRefs(body string) (images, files []uuid.UUID) {
 // referenceLinkPattern matches the `vibe://<kind>/<id>` links the sidecar
 // serializer emits for inline chips (see REFERENCE_CHIP_KINDS in
 // hocuspocus/src/markdown-serializer.ts).
-var referenceLinkPattern = regexp.MustCompile(`\]\(vibe://(doc|host|hash)/([0-9a-fA-F-]{36})\)`)
+var referenceLinkPattern = regexp.MustCompile(`\]\((?:logos|vibe)://(doc|host|hash)/([0-9a-fA-F-]{36})\)`)
 
 // CollectReferenceLinks returns the distinct page, host and hash ids a
 // rendered body links to.

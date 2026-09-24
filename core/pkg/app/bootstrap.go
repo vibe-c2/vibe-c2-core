@@ -375,4 +375,19 @@ func runStartupBackfills(ctx context.Context, l *zap.Logger, repos *Repositories
 	} else if n > 0 {
 		l.Info("credential validity backfill complete", zap.Int64("rows", n))
 	}
+
+	// Move derived wiki markdown onto the current chip and credential-fence
+	// spellings. Must run before a build that only understands the new ones,
+	// because the CRDT rebuild path reads this field. See
+	// referenceSchemeBackfillPipeline.
+	if n, err := repos.WikiDocument.BackfillReferenceScheme(ctx); err != nil {
+		l.Warn("wiki reference scheme backfill failed", zap.Error(err))
+	} else if n > 0 {
+		l.Info("wiki reference scheme backfill complete", zap.Int64("rows", n))
+	}
+	if n, err := repos.WikiDocumentBackup.BackfillReferenceScheme(ctx); err != nil {
+		l.Warn("wiki backup reference scheme backfill failed", zap.Error(err))
+	} else if n > 0 {
+		l.Info("wiki backup reference scheme backfill complete", zap.Int64("rows", n))
+	}
 }

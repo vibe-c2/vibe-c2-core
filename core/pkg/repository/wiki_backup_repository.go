@@ -2,6 +2,7 @@ package repository
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/google/uuid"
 	opts "github.com/qiniu/qmgo/options"
@@ -16,6 +17,9 @@ const wikiDocumentBackupCollection = "wiki_document_backups"
 
 // IWikiDocumentBackupRepository defines the interface for WikiDocumentBackup database operations.
 type IWikiDocumentBackupRepository interface {
+	// BackfillReferenceScheme mirrors the document-side backfill: a restored
+	// backup must not reintroduce a spelling the parser no longer writes.
+	BackfillReferenceScheme(ctx context.Context) (int64, error)
 	Create(ctx context.Context, backup *models.WikiDocumentBackup) error
 	FindByID(ctx context.Context, id uuid.UUID) (models.WikiDocumentBackup, error)
 	FindByDocumentIDWithCursor(ctx context.Context, docID uuid.UUID, trigger *models.WikiDocumentBackupTrigger, cursor *pagination.Cursor, limit int64, forward bool) ([]models.WikiDocumentBackup, error)
@@ -105,4 +109,16 @@ func (r *wikiDocumentBackupRepository) DeleteByDocumentID(ctx context.Context, d
 func (r *wikiDocumentBackupRepository) DeleteByOperationID(ctx context.Context, opID uuid.UUID) error {
 	_, err := r.coll.RemoveAll(ctx, bson.M{"operation_id": opID})
 	return err
+}
+
+// BackfillReferenceScheme implements IWikiDocumentBackupRepository.
+func (r *wikiDocumentBackupRepository) BackfillReferenceScheme(ctx context.Context) (int64, error) {
+	res, err := r.coll.UpdateAll(ctx, referenceSchemeBackfillFilter(), referenceSchemeBackfillPipeline())
+	if err != nil {
+		return 0, fmt.Errorf("backfill reference scheme: %w", err)
+	}
+	if res == nil {
+		return 0, nil
+	}
+	return res.ModifiedCount, nil
 }

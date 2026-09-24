@@ -49,3 +49,21 @@ func TestRewriteReferenceLinks_EmptyTextFallsBackToLabel(t *testing.T) {
 		t.Fatalf("got %q", got)
 	}
 }
+
+// Chips serialized before the rename must still be resolved on export,
+// otherwise a raw scheme leaks into an archive meant for foreign tools.
+func TestRewriteReferenceLinks_AcceptsBothSchemes(t *testing.T) {
+	host := uuid.New()
+	resolve := func(kind string, id uuid.UUID) (referenceTarget, bool) {
+		if kind == "host" && id == host {
+			return referenceTarget{Text: "in-bgp01"}, true
+		}
+		return referenceTarget{}, false
+	}
+	for _, scheme := range []string{"logos://", "vibe://"} {
+		got := rewriteReferenceLinks("on [host]("+scheme+"host/"+host.String()+")", resolve)
+		if got != "on in-bgp01" {
+			t.Fatalf("%s: got %q, want %q", scheme, got, "on in-bgp01")
+		}
+	}
+}

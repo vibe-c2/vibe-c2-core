@@ -24,6 +24,8 @@ import { wikiSchema } from "./wiki-schema.js";
 import {
   CHECKLIST_CONTAINER,
   CREDENTIAL_FENCE_INFO,
+  LEGACY_CREDENTIAL_FENCE_INFO,
+  LEGACY_REFERENCE_LINK_SCHEME,
   REFERENCE_CHIP_KINDS,
   REFERENCE_LINK_SCHEME,
 } from "./markdown-serializer.js";
@@ -99,7 +101,9 @@ function recogniseCredentialFenceRule(state: StateCore): void {
   for (const token of state.tokens) {
     if (token.type !== "fence") continue;
     const info = (token.info ?? "").trim();
-    if (info !== CREDENTIAL_FENCE_INFO) continue;
+    if (info !== CREDENTIAL_FENCE_INFO && info !== LEGACY_CREDENTIAL_FENCE_INFO) {
+      continue;
+    }
 
     let parsed: { id?: unknown } | null = null;
     try {
@@ -853,9 +857,13 @@ function lowerReferenceLinksToChips(doc: Node): Node {
 
 /** The inline atom a reference href names, or null when it names none. */
 function chipForHref(href: string): Node | null {
-  if (!href.startsWith(REFERENCE_LINK_SCHEME)) return null;
+  // Either spelling lowers to the same chip; only the current one is written.
+  const scheme = [REFERENCE_LINK_SCHEME, LEGACY_REFERENCE_LINK_SCHEME].find(
+    (s) => href.startsWith(s),
+  );
+  if (!scheme) return null;
 
-  const rest = href.slice(REFERENCE_LINK_SCHEME.length);
+  const rest = href.slice(scheme.length);
   const slash = rest.indexOf("/");
   if (slash === -1) return null;
 

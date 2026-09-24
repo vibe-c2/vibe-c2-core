@@ -99,9 +99,21 @@ func TestCheckCredentialFences_RefusalShowsTheShape(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected a refusal")
 	}
-	for _, want := range []string{"vibe-credential", "\"id\""} {
+	for _, want := range []string{"logos-credential", "\"id\""} {
 		if !strings.Contains(err.Error(), want) {
 			t.Errorf("refusal does not show %q: %v", want, err)
 		}
+	}
+}
+
+// A page written before the rename still has to validate: the backfill and the
+// next save move it forward, but a refusal in the meantime would block an agent
+// from editing a page it did nothing wrong to.
+func TestCheckCredentialFences_AcceptsLegacySpelling(t *testing.T) {
+	if err := checkCredentialFences("```vibe-credential\n{\"id\": \"9f1c\"}\n```"); err != nil {
+		t.Fatalf("legacy fence refused: %v", err)
+	}
+	if err := checkCredentialFences("```vibe-credential\nnot json\n```"); err == nil {
+		t.Fatal("legacy fence with a bad body should still be refused")
 	}
 }

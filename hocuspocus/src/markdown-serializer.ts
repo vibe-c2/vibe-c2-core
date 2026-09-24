@@ -31,7 +31,14 @@ const NOTICE_VARIANTS = new Set(["info", "success", "warning", "tip"]);
 // orchestrator and the parser's lifter both key on this exact value, so
 // any code that wants to recognise a credential fence should reference
 // this constant rather than the literal.
-export const CREDENTIAL_FENCE_INFO = "vibe-credential";
+export const CREDENTIAL_FENCE_INFO = "logos-credential";
+
+// The pre-Logos spelling. Only ever *read*: a document whose derived markdown
+// was written before the rename still has to lower back into a credential
+// block, otherwise the chip silently degrades into a plain code fence. The
+// backfill rewrites stored markdown, but this keeps an un-backfilled row (or
+// an older export pasted in by hand) working.
+export const LEGACY_CREDENTIAL_FENCE_INFO = "vibe-credential";
 
 // Container name for a checklist item. Registered on the markdown-it side
 // alongside the notice variants.
@@ -45,7 +52,12 @@ export const CHECKLIST_CONTAINER = "checklist";
 // The map is the single source of truth for both directions — the serializer
 // writes these hrefs and the parser lowers them back — so a new chip type is
 // one entry rather than two matching regexes.
-export const REFERENCE_LINK_SCHEME = "vibe://";
+export const REFERENCE_LINK_SCHEME = "logos://";
+
+// The pre-Logos scheme, read-only for the same reason as the legacy fence
+// info-string above. Never written: every save re-serializes chips under
+// REFERENCE_LINK_SCHEME, which is what makes the rename self-healing.
+export const LEGACY_REFERENCE_LINK_SCHEME = "vibe://";
 
 export interface ReferenceChipKind {
   /** Path segment after the scheme, e.g. "host" in vibe://host/<id>. */

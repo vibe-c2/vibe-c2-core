@@ -12,7 +12,7 @@ import (
 // generic word the serializer uses ("page", "host", "hash") because the
 // sidecar only sees ids; the exporter is the first place that knows what
 // the id names.
-var referenceLinkFull = regexp.MustCompile(`\[([^\]\n]*)\]\(vibe://(doc|host|hash)/([0-9a-fA-F-]{36})\)`)
+var referenceLinkFull = regexp.MustCompile(`\[([^\]\n]*)\]\((?:logos|vibe)://(doc|host|hash)/([0-9a-fA-F-]{36})\)`)
 
 // referenceTarget is what a chip becomes in the foreign markdown. An empty
 // Href renders as plain text — the reader still sees what was referenced,
