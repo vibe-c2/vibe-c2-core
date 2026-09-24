@@ -7,7 +7,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/vibe-c2/vibe-c2-core/core/pkg/database"
-	v1bson "go.mongodb.org/mongo-driver/bson"
+	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/mongo"
 	"go.mongodb.org/mongo-driver/mongo/options"
 )
@@ -59,7 +59,7 @@ func dropLegacyBrokenIndex(ctx context.Context, raw *mongo.Collection) {
 
 func createWikiTextIndex(ctx context.Context, raw *mongo.Collection) {
 	_, err := raw.Indexes().CreateOne(ctx, mongo.IndexModel{
-		Keys: v1bson.D{
+		Keys: bson.D{
 			{Key: "title", Value: "text"},
 			{Key: "content", Value: "text"},
 		},
@@ -67,7 +67,7 @@ func createWikiTextIndex(ctx context.Context, raw *mongo.Collection) {
 			SetName(wikiTextIndexName).
 			// Weight title matches 10x vs content — a query matching the title
 			// should rank above a query matching only the body.
-			SetWeights(v1bson.M{"title": 10, "content": 1}).
+			SetWeights(bson.M{"title": 10, "content": 1}).
 			// "none" disables English stemming & stop-words. Better for wiki
 			// content that contains code identifiers and mixed language.
 			SetDefaultLanguage("none"),
@@ -86,9 +86,9 @@ func createWikiTextIndex(ctx context.Context, raw *mongo.Collection) {
 // (filter matches zero docs). Uses UpdateMany — no driver-level limits that
 // would silently truncate.
 func backfillTitleLower(ctx context.Context, raw *mongo.Collection) {
-	filter := v1bson.M{"title_lower": v1bson.M{"$exists": false}}
-	update := v1bson.A{
-		v1bson.M{"$set": v1bson.M{"title_lower": v1bson.M{"$toLower": "$title"}}},
+	filter := bson.M{"title_lower": bson.M{"$exists": false}}
+	update := bson.A{
+		bson.M{"$set": bson.M{"title_lower": bson.M{"$toLower": "$title"}}},
 	}
 	res, err := raw.UpdateMany(ctx, filter, update)
 	if err != nil {
@@ -124,9 +124,9 @@ func isIndexNotFound(err error) bool {
 // work without the index; only scoped search degrades to "ignores scope" until
 // the backfill finishes on a subsequent boot.
 func backfillPathIDs(ctx context.Context, raw *mongo.Collection) {
-	cur, err := raw.Aggregate(ctx, []v1bson.M{
-		{"$match": v1bson.M{"path_ids": v1bson.M{"$exists": false}}},
-		{"$group": v1bson.M{"_id": "$operation_id"}},
+	cur, err := raw.Aggregate(ctx, []bson.M{
+		{"$match": bson.M{"path_ids": bson.M{"$exists": false}}},
+		{"$group": bson.M{"_id": "$operation_id"}},
 	})
 	if err != nil {
 		log.Printf("wiki search setup: path_ids backfill: list ops failed: %v", err)
@@ -166,13 +166,13 @@ type pathDocMeta struct {
 }
 
 func backfillPathIDsForOperation(ctx context.Context, raw *mongo.Collection, opID uuid.UUID) (int64, error) {
-	opt := options.Find().SetProjection(v1bson.M{
+	opt := options.Find().SetProjection(bson.M{
 		"document_id":        1,
 		"parent_document_id": 1,
 		"path_ids":           1,
 		"_id":                0,
 	})
-	cur, err := raw.Find(ctx, v1bson.M{"operation_id": opID}, opt)
+	cur, err := raw.Find(ctx, bson.M{"operation_id": opID}, opt)
 	if err != nil {
 		return 0, err
 	}
@@ -230,8 +230,8 @@ func backfillPathIDsForOperation(ctx context.Context, raw *mongo.Collection, opI
 			continue
 		}
 		writes = append(writes, mongo.NewUpdateOneModel().
-			SetFilter(v1bson.M{"document_id": d.DocumentID}).
-			SetUpdate(v1bson.M{"$set": v1bson.M{"path_ids": newPath}}))
+			SetFilter(bson.M{"document_id": d.DocumentID}).
+			SetUpdate(bson.M{"$set": bson.M{"path_ids": newPath}}))
 	}
 	if len(writes) == 0 {
 		return 0, nil

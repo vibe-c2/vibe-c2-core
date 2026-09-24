@@ -5,7 +5,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/vibe-c2/vibe-c2-core/core/pkg/models"
-	"go.mongodb.org/mongo-driver/v2/bson"
+	"go.mongodb.org/mongo-driver/bson"
 )
 
 // TestBuildTaskFilter_OperationAndActiveByDefault verifies the bare filter

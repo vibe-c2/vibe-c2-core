@@ -9,10 +9,9 @@ import (
 	opts "github.com/qiniu/qmgo/options"
 	"github.com/vibe-c2/vibe-c2-core/core/pkg/database"
 	"github.com/vibe-c2/vibe-c2-core/core/pkg/models"
-	v1bson "go.mongodb.org/mongo-driver/bson"
+	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/bson/primitive"
 	"go.mongodb.org/mongo-driver/mongo/options"
-	"go.mongodb.org/mongo-driver/v2/bson"
 )
 
 const wikiDocumentVisitCollection = "wiki_document_visits"
@@ -85,17 +84,17 @@ func (r *wikiDocumentVisitRepository) Upsert(ctx context.Context, userID, operat
 		return models.WikiDocumentVisit{}, fmt.Errorf("raw collection: %w", err)
 	}
 
-	filter := v1bson.M{
+	filter := bson.M{
 		"user_id":      userID,
 		"operation_id": operationID,
 		"document_id":  documentID,
 	}
-	update := v1bson.M{
-		"$set": v1bson.M{
+	update := bson.M{
+		"$set": bson.M{
 			"visited_at": visitedAt,
 			"updateAt":   visitedAt,
 		},
-		"$setOnInsert": v1bson.M{
+		"$setOnInsert": bson.M{
 			"_id":      primitive.NewObjectID(),
 			"createAt": visitedAt,
 		},

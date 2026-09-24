@@ -7,7 +7,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/vibe-c2/vibe-c2-core/core/pkg/models"
-	v1bson "go.mongodb.org/mongo-driver/bson"
+	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/mongo"
 	"go.mongodb.org/mongo-driver/mongo/options"
 	"golang.org/x/sync/errgroup"
@@ -103,7 +103,7 @@ func (r *wikiDocumentRepository) SearchByOperationID(
 		return r.browseByOperationID(ctx, raw, opID, scopeParentID, offset, limit)
 	}
 
-	baseFilter := v1bson.M{
+	baseFilter := bson.M{
 		"operation_id": opID,
 		"deleted_at":   nil,
 	}
@@ -115,9 +115,9 @@ func (r *wikiDocumentRepository) SearchByOperationID(
 	// replacing the previous O(depth) FindDescendants BFS that shipped full
 	// documents just to extract IDs.
 	if scopeParentID != nil {
-		baseFilter["$or"] = v1bson.A{
-			v1bson.M{"document_id": *scopeParentID},
-			v1bson.M{"path_ids": *scopeParentID},
+		baseFilter["$or"] = bson.A{
+			bson.M{"document_id": *scopeParentID},
+			bson.M{"path_ids": *scopeParentID},
 		}
 	}
 
@@ -271,15 +271,15 @@ func (r *wikiDocumentRepository) browseByOperationID(
 // as the search path — the scope doc itself plus all descendants via the
 // materialized path_ids chain. Extracted as a pure function so the scope
 // handling is unit-testable without a live Mongo.
-func buildWikiBrowseMatch(opID uuid.UUID, scopeParentID *uuid.UUID) v1bson.M {
-	match := v1bson.M{
+func buildWikiBrowseMatch(opID uuid.UUID, scopeParentID *uuid.UUID) bson.M {
+	match := bson.M{
 		"operation_id": opID,
 		"deleted_at":   nil,
 	}
 	if scopeParentID != nil {
-		match["$or"] = v1bson.A{
-			v1bson.M{"document_id": *scopeParentID},
-			v1bson.M{"path_ids": *scopeParentID},
+		match["$or"] = bson.A{
+			bson.M{"document_id": *scopeParentID},
+			bson.M{"path_ids": *scopeParentID},
 		}
 	}
 	return match
@@ -290,21 +290,21 @@ func buildWikiBrowseMatch(opID uuid.UUID, scopeParentID *uuid.UUID) v1bson.M {
 // were never edited (null last_updated_at) stay visible and stably ordered,
 // with _id as the final tiebreaker. Content + the synthetic sort key are
 // projected away — browse rows never render a snippet.
-func buildWikiBrowsePipeline(match v1bson.M, offset, limit int64) mongo.Pipeline {
+func buildWikiBrowsePipeline(match bson.M, offset, limit int64) mongo.Pipeline {
 	return mongo.Pipeline{
 		{{Key: "$match", Value: match}},
-		{{Key: "$addFields", Value: v1bson.M{
-			"effective_updated": v1bson.M{
-				"$ifNull": v1bson.A{"$last_updated_at", "$createAt"},
+		{{Key: "$addFields", Value: bson.M{
+			"effective_updated": bson.M{
+				"$ifNull": bson.A{"$last_updated_at", "$createAt"},
 			},
 		}}},
-		{{Key: "$sort", Value: v1bson.D{
+		{{Key: "$sort", Value: bson.D{
 			{Key: "effective_updated", Value: -1},
 			{Key: "_id", Value: -1},
 		}}},
 		{{Key: "$skip", Value: offset}},
 		{{Key: "$limit", Value: limit}},
-		{{Key: "$project", Value: v1bson.M{
+		{{Key: "$project", Value: bson.M{
 			"content":           0,
 			"content_state":     0,
 			"effective_updated": 0,
@@ -330,12 +330,12 @@ func (r *wikiDocumentRepository) hydratePageContent(ctx context.Context, page []
 	if err != nil {
 		return err
 	}
-	opt := options.Find().SetProjection(v1bson.M{
+	opt := options.Find().SetProjection(bson.M{
 		"document_id": 1,
 		"content":     1,
 		"_id":         0,
 	})
-	cur, err := raw.Find(ctx, v1bson.M{"document_id": v1bson.M{"$in": ids}}, opt)
+	cur, err := raw.Find(ctx, bson.M{"document_id": bson.M{"$in": ids}}, opt)
 	if err != nil {
 		return fmt.Errorf("hydrate page content: %w", err)
 	}
@@ -425,14 +425,14 @@ func mergeSearchHits(branches ...[]WikiDocumentSearchHit) []WikiDocumentSearchHi
 func (r *wikiDocumentRepository) searchTitlePrefix(
 	ctx context.Context,
 	raw *mongo.Collection,
-	baseFilter v1bson.M,
+	baseFilter bson.M,
 	query string,
 ) ([]WikiDocumentSearchHit, error) {
-	filter := v1bson.M{}
+	filter := bson.M{}
 	for k, v := range baseFilter {
 		filter[k] = v
 	}
-	filter["title_lower"] = v1bson.M{
+	filter["title_lower"] = bson.M{
 		"$regex": searchPrefixPattern(strings.ToLower(query)),
 	}
 
@@ -440,9 +440,9 @@ func (r *wikiDocumentRepository) searchTitlePrefix(
 	// the page hydrates content separately. Shipping content for up to
 	// mergeFetchCap candidates was the dominant payload before this fix.
 	opt := options.Find().
-		SetSort(v1bson.D{{Key: "title_lower", Value: 1}}).
+		SetSort(bson.D{{Key: "title_lower", Value: 1}}).
 		SetLimit(mergeFetchCap).
-		SetProjection(v1bson.M{"content": 0, "content_state": 0})
+		SetProjection(bson.M{"content": 0, "content_state": 0})
 
 	cur, err := raw.Find(ctx, filter, opt)
 	if err != nil {
@@ -474,21 +474,21 @@ func (r *wikiDocumentRepository) searchTitlePrefix(
 func (r *wikiDocumentRepository) searchTitleSubstring(
 	ctx context.Context,
 	raw *mongo.Collection,
-	baseFilter v1bson.M,
+	baseFilter bson.M,
 	query string,
 ) ([]WikiDocumentSearchHit, error) {
-	filter := v1bson.M{}
+	filter := bson.M{}
 	for k, v := range baseFilter {
 		filter[k] = v
 	}
-	filter["title_lower"] = v1bson.M{
+	filter["title_lower"] = bson.M{
 		"$regex": searchPattern(strings.ToLower(query)),
 	}
 
 	opt := options.Find().
-		SetSort(v1bson.D{{Key: "title_lower", Value: 1}}).
+		SetSort(bson.D{{Key: "title_lower", Value: 1}}).
 		SetLimit(mergeFetchCap).
-		SetProjection(v1bson.M{"content": 0, "content_state": 0})
+		SetProjection(bson.M{"content": 0, "content_state": 0})
 
 	cur, err := raw.Find(ctx, filter, opt)
 	if err != nil {
@@ -520,14 +520,14 @@ func (r *wikiDocumentRepository) searchTitleSubstring(
 func (r *wikiDocumentRepository) searchContentSubstring(
 	ctx context.Context,
 	raw *mongo.Collection,
-	baseFilter v1bson.M,
+	baseFilter bson.M,
 	query string,
 ) ([]WikiDocumentSearchHit, error) {
-	filter := v1bson.M{}
+	filter := bson.M{}
 	for k, v := range baseFilter {
 		filter[k] = v
 	}
-	filter["content"] = v1bson.M{
+	filter["content"] = bson.M{
 		"$regex":   searchPattern(query),
 		"$options": "i",
 	}
@@ -536,9 +536,9 @@ func (r *wikiDocumentRepository) searchContentSubstring(
 	// content server-side (that's the match condition) but Mongo can return
 	// just the metadata. Saves the per-doc payload on the wire and in Go GC.
 	opt := options.Find().
-		SetSort(v1bson.D{{Key: "createAt", Value: -1}}).
+		SetSort(bson.D{{Key: "createAt", Value: -1}}).
 		SetLimit(mergeFetchCap).
-		SetProjection(v1bson.M{"content": 0, "content_state": 0})
+		SetProjection(bson.M{"content": 0, "content_state": 0})
 
 	cur, err := raw.Find(ctx, filter, opt)
 	if err != nil {
@@ -567,7 +567,7 @@ func (r *wikiDocumentRepository) searchContentSubstring(
 func (r *wikiDocumentRepository) searchFullText(
 	ctx context.Context,
 	raw *mongo.Collection,
-	baseFilter v1bson.M,
+	baseFilter bson.M,
 	query string,
 ) ([]WikiDocumentSearchHit, error) {
 	search, ok := buildTextSearchPhrase(query)
@@ -575,24 +575,24 @@ func (r *wikiDocumentRepository) searchFullText(
 		return nil, nil
 	}
 
-	filter := v1bson.M{}
+	filter := bson.M{}
 	for k, v := range baseFilter {
 		filter[k] = v
 	}
-	filter["$text"] = v1bson.M{"$search": search}
+	filter["$text"] = bson.M{"$search": search}
 
 	// Exclusion projection — keeps `content`/`content_state` off the wire while
 	// auto-including any future WikiDocument fields (no drift vs the other two
 	// branches which also exclude content). `$meta` may be combined with an
 	// exclusion projection since MongoDB 4.4.
 	opt := options.Find().
-		SetProjection(v1bson.M{
+		SetProjection(bson.M{
 			"content":       0,
 			"content_state": 0,
-			"score":         v1bson.M{"$meta": "textScore"},
+			"score":         bson.M{"$meta": "textScore"},
 		}).
-		SetSort(v1bson.D{
-			{Key: "score", Value: v1bson.M{"$meta": "textScore"}},
+		SetSort(bson.D{
+			{Key: "score", Value: bson.M{"$meta": "textScore"}},
 			{Key: "createAt", Value: -1},
 		}).
 		SetLimit(mergeFetchCap)

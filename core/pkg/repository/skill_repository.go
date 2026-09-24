@@ -8,9 +8,8 @@ import (
 	opts "github.com/qiniu/qmgo/options"
 	"github.com/vibe-c2/vibe-c2-core/core/pkg/database"
 	"github.com/vibe-c2/vibe-c2-core/core/pkg/models"
-	v1bson "go.mongodb.org/mongo-driver/bson"
+	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/mongo/options"
-	"go.mongodb.org/mongo-driver/v2/bson"
 )
 
 const (
@@ -130,8 +129,8 @@ func (r *skillRepository) ReserveNextVersion(ctx context.Context, skillID uuid.U
 	}
 	var updated models.Skill
 	err = raw.FindOneAndUpdate(ctx,
-		v1bson.M{"skill_id": skillID},
-		v1bson.M{"$inc": v1bson.M{"current_version": 1}},
+		bson.M{"skill_id": skillID},
+		bson.M{"$inc": bson.M{"current_version": 1}},
 		options.FindOneAndUpdate().SetReturnDocument(options.After),
 	).Decode(&updated)
 	if err != nil {

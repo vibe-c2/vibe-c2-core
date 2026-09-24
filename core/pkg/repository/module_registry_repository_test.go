@@ -5,7 +5,7 @@ import (
 	"time"
 
 	"github.com/vibe-c2/vibe-c2-core/core/pkg/models"
-	"go.mongodb.org/mongo-driver/v2/bson"
+	"go.mongodb.org/mongo-driver/bson"
 )
 
 func TestRegisteredInstanceFilter_ScopesToRegistered(t *testing.T) {

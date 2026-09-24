@@ -10,10 +10,9 @@ import (
 	opts "github.com/qiniu/qmgo/options"
 	"github.com/vibe-c2/vibe-c2-core/core/pkg/database"
 	"github.com/vibe-c2/vibe-c2-core/core/pkg/models"
-	v1bson "go.mongodb.org/mongo-driver/bson"
+	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/mongo"
 	"go.mongodb.org/mongo-driver/mongo/options"
-	"go.mongodb.org/mongo-driver/v2/bson"
 )
 
 const wikiTransferJobCollection = "wiki_transfer_jobs"
@@ -82,14 +81,14 @@ func (r *wikiTransferJobRepository) Claim(ctx context.Context, now time.Time) (m
 		return job, fmt.Errorf("raw collection: %w", err)
 	}
 	res := raw.FindOneAndUpdate(ctx,
-		v1bson.M{"status": models.WikiTransferQueued},
-		v1bson.M{"$set": v1bson.M{
+		bson.M{"status": models.WikiTransferQueued},
+		bson.M{"$set": bson.M{
 			"status":     models.WikiTransferRunning,
 			"started_at": now,
 			"updateAt":   now,
 		}},
 		options.FindOneAndUpdate().
-			SetSort(v1bson.D{{Key: "createAt", Value: 1}}).
+			SetSort(bson.D{{Key: "createAt", Value: 1}}).
 			SetReturnDocument(options.After),
 	)
 	if err := res.Decode(&job); err != nil {

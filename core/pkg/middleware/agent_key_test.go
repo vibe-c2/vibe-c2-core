@@ -14,7 +14,7 @@ import (
 	"github.com/vibe-c2/vibe-c2-core/core/pkg/auth"
 	"github.com/vibe-c2/vibe-c2-core/core/pkg/models"
 	"github.com/vibe-c2/vibe-c2-core/core/pkg/repository"
-	"go.mongodb.org/mongo-driver/v2/bson"
+	"go.mongodb.org/mongo-driver/bson"
 )
 
 // --- Fake ---

@@ -4,7 +4,7 @@ import (
 	"testing"
 
 	"github.com/google/uuid"
-	v1bson "go.mongodb.org/mongo-driver/bson"
+	"go.mongodb.org/mongo-driver/bson"
 )
 
 // TestBuildTextSearchPhrase_QuotesAndStripsEmbeddedQuotes proves the $text
@@ -108,7 +108,7 @@ func TestBuildWikiBrowseMatch_Scoped(t *testing.T) {
 	scopeID := uuid.New()
 	m := buildWikiBrowseMatch(opID, &scopeID)
 
-	or, ok := m["$or"].(v1bson.A)
+	or, ok := m["$or"].(bson.A)
 	if !ok {
 		t.Fatalf("expected $or to be bson.A, got %T", m["$or"])
 	}
@@ -116,11 +116,11 @@ func TestBuildWikiBrowseMatch_Scoped(t *testing.T) {
 		t.Fatalf("expected 2 $or clauses (self, descendants), got %d", len(or))
 	}
 
-	self, ok := or[0].(v1bson.M)
+	self, ok := or[0].(bson.M)
 	if !ok || self["document_id"] != scopeID {
 		t.Fatalf("first $or clause should match document_id = scope, got %v", or[0])
 	}
-	desc, ok := or[1].(v1bson.M)
+	desc, ok := or[1].(bson.M)
 	if !ok || desc["path_ids"] != scopeID {
 		t.Fatalf("second $or clause should match path_ids = scope, got %v", or[1])
 	}
@@ -147,21 +147,21 @@ func TestBuildWikiBrowsePipeline_OrdersNewestUpdatedFirst(t *testing.T) {
 	}
 
 	// $addFields coalesces last_updated_at → createAt.
-	addFields, ok := p[1][0].Value.(v1bson.M)
+	addFields, ok := p[1][0].Value.(bson.M)
 	if !ok {
 		t.Fatalf("$addFields value type = %T", p[1][0].Value)
 	}
-	eff, ok := addFields["effective_updated"].(v1bson.M)
+	eff, ok := addFields["effective_updated"].(bson.M)
 	if !ok {
 		t.Fatalf("effective_updated type = %T", addFields["effective_updated"])
 	}
-	coalesce, ok := eff["$ifNull"].(v1bson.A)
+	coalesce, ok := eff["$ifNull"].(bson.A)
 	if !ok || len(coalesce) != 2 || coalesce[0] != "$last_updated_at" || coalesce[1] != "$createAt" {
 		t.Fatalf("$ifNull = %v, want [$last_updated_at $createAt]", eff["$ifNull"])
 	}
 
 	// $sort: effective_updated DESC, then _id DESC.
-	sort, ok := p[2][0].Value.(v1bson.D)
+	sort, ok := p[2][0].Value.(bson.D)
 	if !ok || len(sort) != 2 {
 		t.Fatalf("$sort = %v, want 2-key bson.D", p[2][0].Value)
 	}
@@ -181,7 +181,7 @@ func TestBuildWikiBrowsePipeline_OrdersNewestUpdatedFirst(t *testing.T) {
 	}
 
 	// $project drops content so browse rows never ship the body payload.
-	proj, ok := p[5][0].Value.(v1bson.M)
+	proj, ok := p[5][0].Value.(bson.M)
 	if !ok {
 		t.Fatalf("$project value type = %T", p[5][0].Value)
 	}

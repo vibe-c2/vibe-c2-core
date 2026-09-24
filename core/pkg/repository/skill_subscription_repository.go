@@ -8,9 +8,8 @@ import (
 	opts "github.com/qiniu/qmgo/options"
 	"github.com/vibe-c2/vibe-c2-core/core/pkg/database"
 	"github.com/vibe-c2/vibe-c2-core/core/pkg/models"
-	v1bson "go.mongodb.org/mongo-driver/bson"
+	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/mongo/options"
-	"go.mongodb.org/mongo-driver/v2/bson"
 )
 
 const skillSubscriptionCollection = "skill_subscriptions"
@@ -61,11 +60,11 @@ func (r *skillSubscriptionRepository) RecordDownload(ctx context.Context, userID
 	// quietly mark the operator as behind; $set on the timestamp because the
 	// interesting fact there is when they last took a copy of anything.
 	_, err = raw.UpdateOne(ctx,
-		v1bson.M{"user_id": userID, "skill_id": skillID},
-		v1bson.M{
-			"$max": v1bson.M{"downloaded_version": version},
-			"$set": v1bson.M{"downloaded_at": at, "updateAt": at},
-			"$setOnInsert": v1bson.M{
+		bson.M{"user_id": userID, "skill_id": skillID},
+		bson.M{
+			"$max": bson.M{"downloaded_version": version},
+			"$set": bson.M{"downloaded_at": at, "updateAt": at},
+			"$setOnInsert": bson.M{
 				"user_id":  userID,
 				"skill_id": skillID,
 				"createAt": at,

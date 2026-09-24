@@ -24,7 +24,6 @@ require (
 	github.com/vibe-c2/vibe-c2-golang-protocol v0.2.1
 	github.com/wagslane/go-rabbitmq v0.15.0
 	go.mongodb.org/mongo-driver v1.17.1
-	go.mongodb.org/mongo-driver/v2 v2.5.0
 	go.uber.org/zap v1.27.1
 	golang.org/x/crypto v0.49.0
 	golang.org/x/image v0.39.0
@@ -58,6 +57,7 @@ require (
 	github.com/tinylib/msgp v1.6.1 // indirect
 	github.com/urfave/cli/v3 v3.7.0 // indirect
 	github.com/yosida95/uritemplate/v3 v3.0.2 // indirect
+	go.mongodb.org/mongo-driver/v2 v2.5.0 // indirect
 	golang.org/x/mod v0.34.0 // indirect
 	golang.org/x/time v0.15.0 // indirect
 	golang.org/x/tools v0.43.0 // indirect
