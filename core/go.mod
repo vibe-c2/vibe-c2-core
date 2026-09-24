@@ -23,7 +23,7 @@ require (
 	github.com/vektah/gqlparser/v2 v2.5.32
 	github.com/vibe-c2/vibe-c2-golang-protocol v0.2.1
 	github.com/wagslane/go-rabbitmq v0.15.0
-	go.mongodb.org/mongo-driver v1.17.1
+	go.mongodb.org/mongo-driver v1.17.10
 	go.uber.org/zap v1.27.1
 	golang.org/x/crypto v0.49.0
 	golang.org/x/image v0.39.0
