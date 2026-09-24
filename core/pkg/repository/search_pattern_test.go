@@ -3,6 +3,9 @@ package repository
 import (
 	"regexp"
 	"testing"
+
+	"github.com/google/uuid"
+	"go.mongodb.org/mongo-driver/v2/bson"
 )
 
 func TestSearchPattern(t *testing.T) {
@@ -99,6 +102,157 @@ func TestSearchPatternMatching(t *testing.T) {
 			if got := rx.MatchString(tt.value); got != tt.matches {
 				t.Errorf("search %q against %q: matched = %v, want %v",
 					tt.search, tt.value, got, tt.matches)
+			}
+		})
+	}
+}
+
+func TestSearchPrefixPattern(t *testing.T) {
+	tests := []struct {
+		name   string
+		search string
+		want   string
+	}{
+		{
+			name:   "plain term is an escaped prefix",
+			search: "10.1.142",
+			want:   `^10\.1\.142`,
+		},
+		{
+			name:   "quoted term anchors the front and the token end",
+			search: `"admin"`,
+			want:   `^admin\b`,
+		},
+		{
+			name:   "quoted term ending in a non-word char leaves the back open",
+			search: `"10.1.142."`,
+			want:   `^10\.1\.142\.`,
+		},
+		{
+			name:   "lone quote is literal, not the exact-match syntax",
+			search: `"`,
+			want:   `^"`,
+		},
+		{
+			name:   "empty quotes are literal",
+			search: `""`,
+			want:   `^""`,
+		},
+		{
+			name:   "metacharacters cannot escape the anchor",
+			search: "(a+)+",
+			want:   `^\(a\+\)\+`,
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := searchPrefixPattern(tc.search); got != tc.want {
+				t.Errorf("searchPrefixPattern(%q) = %q, want %q", tc.search, got, tc.want)
+			}
+			// Whatever we build must compile, or the branch 500s at query time.
+			if _, err := regexp.Compile(searchPrefixPattern(tc.search)); err != nil {
+				t.Errorf("pattern for %q does not compile: %v", tc.search, err)
+			}
+		})
+	}
+}
+
+// TestSearchPrefixPatternMatching states the prefix semantics as behaviour:
+// anchored at the front, and whole-token at the back only when quoted.
+func TestSearchPrefixPatternMatching(t *testing.T) {
+	cases := []struct {
+		search  string
+		subject string
+		want    bool
+	}{
+		// Unquoted: pure prefix.
+		{"admin", "admin", true},
+		{"admin", "administrator", true},
+		{"admin", "admin panel", true},
+		{"admin", "the admin", false}, // anchored — must start the title
+		// Quoted: prefix AND ends on a token boundary.
+		{`"admin"`, "admin", true},
+		{`"admin"`, "admin panel", true},
+		{`"admin"`, "administrator", false}, // the differentiating case
+		{`"admin"`, "the admin", false},
+	}
+
+	for _, c := range cases {
+		re, err := regexp.Compile(searchPrefixPattern(c.search))
+		if err != nil {
+			t.Fatalf("compile %q: %v", c.search, err)
+		}
+		if got := re.MatchString(c.subject); got != c.want {
+			t.Errorf("search %q against %q = %v, want %v", c.search, c.subject, got, c.want)
+		}
+	}
+}
+
+// TestQuotedSearchIsUniformAcrossEntities is the regression test for the bug
+// this file's helper exists to prevent. Three filters inlined regexp.QuoteMeta
+// instead of calling searchPattern, so a quoted query — the documented
+// whole-token syntax the frontend offers and credentials/hosts/users/hashes
+// honour — was compiled into a regex matching the literal quote characters.
+// A search that returned rows on hosts returned nothing at all on tasks,
+// operations and wiki documents.
+//
+// Asserting on every entity together is deliberate: a new list filter that
+// reaches for QuoteMeta fails here rather than shipping the same silent hole.
+func TestQuotedSearchIsUniformAcrossEntities(t *testing.T) {
+	opID := uuid.New()
+	const want = `\badmin\b` // what searchPattern produces for `"admin"`
+
+	extract := func(t *testing.T, f bson.M) string {
+		t.Helper()
+		or, ok := f["$or"].(bson.A)
+		if !ok || len(or) == 0 {
+			t.Fatalf("filter has no $or clause: %#v", f)
+		}
+		first, ok := or[0].(bson.M)
+		if !ok {
+			t.Fatalf("unexpected $or entry: %#v", or[0])
+		}
+		for _, v := range first {
+			rx, ok := v.(bson.M)
+			if !ok {
+				t.Fatalf("field value is not a regex doc: %#v", v)
+			}
+			pattern, _ := rx["$regex"].(string)
+			return pattern
+		}
+		t.Fatal("no field in the first $or entry")
+		return ""
+	}
+
+	filters := map[string]bson.M{
+		// Previously correct — the baseline the others must match.
+		"host":       buildHostFilter(opID, HostFilter{Search: `"admin"`}),
+		"hash":       buildHashFilter(opID, HashFilter{Search: `"admin"`}),
+		"credential": buildCredentialFilter(opID, CredentialFilter{Search: `"admin"`}),
+		// Previously broken — matched the quote characters literally.
+		"task":         buildTaskFilter(opID, TaskFilter{Search: `"admin"`}),
+		"operation":    buildOperationSearchFilter(`"admin"`),
+		"wikiDocument": buildWikiDocumentFilter(opID, WikiDocumentFilter{Search: `"admin"`}),
+	}
+
+	for name, f := range filters {
+		t.Run(name, func(t *testing.T) {
+			got := extract(t, f)
+			if got != want {
+				t.Errorf("quoted search on %s produced %q, want %q", name, got, want)
+			}
+			// The concrete failure the old code caused: no possible subject
+			// matched, because the pattern demanded literal quote characters.
+			re, err := regexp.Compile(got)
+			if err != nil {
+				t.Fatalf("pattern %q does not compile: %v", got, err)
+			}
+			if !re.MatchString("admin") {
+				t.Errorf("%s: pattern %q does not match \"admin\" — the original bug", name, got)
+			}
+			if re.MatchString("administrator") {
+				t.Errorf("%s: pattern %q leaked substring semantics", name, got)
 			}
 		})
 	}

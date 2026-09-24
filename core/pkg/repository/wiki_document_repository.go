@@ -3,7 +3,6 @@ package repository
 import (
 	"context"
 	"fmt"
-	"regexp"
 	"time"
 
 	"github.com/google/uuid"
@@ -1144,9 +1143,10 @@ func buildWikiDocumentFilter(opID uuid.UUID, filter WikiDocumentFilter) bson.M {
 	}
 
 	if filter.Search != "" {
-		// Escape user input so regex metacharacters are treated literally.
-		// Protects against ReDoS (e.g. `(a+)+$`) and unintended broad matches (`.*`).
-		regex := bson.M{"$regex": regexp.QuoteMeta(filter.Search), "$options": "i"}
+		// searchPattern escapes regex metacharacters (guarding against ReDoS
+		// such as `(a+)+$` and broad matches such as `.*`) and implements the
+		// shared query language, including the quoted whole-token form.
+		regex := bson.M{"$regex": searchPattern(filter.Search), "$options": "i"}
 		f["$or"] = bson.A{
 			bson.M{"title": regex},
 			bson.M{"content": regex},

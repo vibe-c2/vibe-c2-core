@@ -3,7 +3,6 @@ package repository
 import (
 	"context"
 	"fmt"
-	"regexp"
 	"strings"
 
 	"github.com/google/uuid"
@@ -419,7 +418,7 @@ func mergeSearchHits(branches ...[]WikiDocumentSearchHit) []WikiDocumentSearchHi
 }
 
 // searchTitlePrefix uses the {operation_id, title_lower} compound index with
-// an anchored, non-case-insensitive regex. Works because title_lower is
+// an anchored, non-case-insensitive regex (see searchPrefixPattern). Works because title_lower is
 // already lowercased at write time, so anchored `^hello` matches via IXSCAN.
 // Snippets are not generated here — the caller fills them in for the final
 // page only, after merge + slice.
@@ -434,7 +433,7 @@ func (r *wikiDocumentRepository) searchTitlePrefix(
 		filter[k] = v
 	}
 	filter["title_lower"] = v1bson.M{
-		"$regex": "^" + regexp.QuoteMeta(strings.ToLower(query)),
+		"$regex": searchPrefixPattern(strings.ToLower(query)),
 	}
 
 	// Project away `content` — snippets only render for the final page, and
@@ -469,8 +468,9 @@ func (r *wikiDocumentRepository) searchTitlePrefix(
 // lowercased at write time, so the regex doesn't need the "i" option and
 // piggybacks on the {operation_id, title_lower} index.
 //
-// The regex is escaped (regexp.QuoteMeta) so user input like "(a+)+" is
-// matched literally and cannot trigger catastrophic backtracking.
+// searchPattern escapes the input so user input like "(a+)+" is matched
+// literally and cannot trigger catastrophic backtracking, and applies the
+// shared query language — a double-quoted query matches whole tokens only.
 func (r *wikiDocumentRepository) searchTitleSubstring(
 	ctx context.Context,
 	raw *mongo.Collection,
@@ -482,7 +482,7 @@ func (r *wikiDocumentRepository) searchTitleSubstring(
 		filter[k] = v
 	}
 	filter["title_lower"] = v1bson.M{
-		"$regex": regexp.QuoteMeta(strings.ToLower(query)),
+		"$regex": searchPattern(strings.ToLower(query)),
 	}
 
 	opt := options.Find().
@@ -514,8 +514,9 @@ func (r *wikiDocumentRepository) searchTitleSubstring(
 // pre-filter uses the {operation_id, deleted_at} index, so the scan is bounded
 // to one operation's active docs. Capped at mergeFetchCap.
 //
-// The regex is escaped (regexp.QuoteMeta) so user input like "(a+)+" is
-// matched literally and cannot trigger catastrophic backtracking.
+// searchPattern escapes the input so user input like "(a+)+" is matched
+// literally and cannot trigger catastrophic backtracking, and applies the
+// shared query language — a double-quoted query matches whole tokens only.
 func (r *wikiDocumentRepository) searchContentSubstring(
 	ctx context.Context,
 	raw *mongo.Collection,
@@ -527,7 +528,7 @@ func (r *wikiDocumentRepository) searchContentSubstring(
 		filter[k] = v
 	}
 	filter["content"] = v1bson.M{
-		"$regex":   regexp.QuoteMeta(query),
+		"$regex":   searchPattern(query),
 		"$options": "i",
 	}
 

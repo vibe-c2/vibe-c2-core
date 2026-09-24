@@ -7,8 +7,14 @@ import (
 )
 
 // searchPattern converts a raw user search string into a MongoDB $regex
-// pattern. Shared by every repository that implements text search so the
-// query language is identical across credentials, hosts, users and hashes.
+// pattern. Every repository that implements text search goes through here, so
+// the query language is identical across credentials, hosts, users, hashes,
+// tasks, operations and wiki documents.
+//
+// Reach for this rather than inlining regexp.QuoteMeta at a call site. A bare
+// QuoteMeta gets the escaping right and the query language wrong: a quoted
+// query then matches the quote characters literally, so a search that works
+// on hosts returns nothing on the entity that inlined it.
 //
 // Default semantics: case-insensitive substring. The input is escaped with
 // regexp.QuoteMeta, so operators can paste values containing regex
@@ -27,6 +33,27 @@ func searchPattern(search string) string {
 		return wordBounded(term)
 	}
 	return regexp.QuoteMeta(search)
+}
+
+// searchPrefixPattern is the anchored form of searchPattern, used by the
+// wiki title-prefix branch where the term has to start the field. The leading
+// `^` is what lets MongoDB answer the regex from the {operation_id,
+// title_lower} index, so it is always present and always first.
+//
+// Quoting additionally requires the match to end on a word boundary: "admin"
+// matches the titles "admin" and "admin panel" but not "administrator". The
+// trailing \b does not affect index selection — the prefix literal still
+// drives the scan.
+func searchPrefixPattern(search string) string {
+	if term, ok := cutQuotes(search); ok {
+		pattern := "^" + regexp.QuoteMeta(term)
+		runes := []rune(term)
+		if isWordRune(runes[len(runes)-1]) {
+			pattern += `\b`
+		}
+		return pattern
+	}
+	return "^" + regexp.QuoteMeta(search)
 }
 
 // cutQuotes strips one pair of surrounding double quotes. A lone quote,

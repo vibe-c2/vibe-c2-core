@@ -11,9 +11,10 @@ import type { TopoNode, Topology } from "@/lib/topology/derive"
 // Substring (not prefix) so "0.5." finds 10.0.5.x without anchoring games.
 //
 // Wrapping the query in double quotes opts into whole-token matching — the
-// same syntax the server-side searches (credentials, hosts, users, hashes)
-// understand, see core/pkg/repository/search_pattern.go. "10.0.5.1" matches
-// 10.0.5.1 but not 10.0.5.13.
+// same syntax every server-side search understands (credentials, hosts, users,
+// hashes, tasks, operations, wiki documents), see
+// core/pkg/repository/search_pattern.go. "10.0.5.1" matches 10.0.5.1 but not
+// 10.0.5.13.
 
 export function matchTopology(t: Topology, query: string): string[] {
   const q = query.trim()

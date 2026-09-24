@@ -3,7 +3,6 @@ package repository
 import (
 	"context"
 	"fmt"
-	"regexp"
 	"time"
 
 	"github.com/google/uuid"
@@ -481,10 +480,11 @@ func buildTaskFilter(opID uuid.UUID, f TaskFilter) bson.M {
 	}
 
 	if f.Search != "" {
-		// Escape user input so regex metacharacters are treated literally —
-		// same ReDoS guard used by wiki and credential filters.
-		escaped := regexp.QuoteMeta(f.Search)
-		rx := bson.M{"$regex": escaped, "$options": "i"}
+		// searchPattern escapes regex metacharacters (the ReDoS guard) and
+		// implements the shared query language, including the quoted
+		// whole-token form. Do not inline QuoteMeta here: a quoted query would
+		// then match the quote characters literally and return nothing.
+		rx := bson.M{"$regex": searchPattern(f.Search), "$options": "i"}
 		q["$or"] = bson.A{
 			bson.M{"name": rx},
 			bson.M{"description": rx},
