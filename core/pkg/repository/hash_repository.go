@@ -76,7 +76,7 @@ type hashRepository struct {
 func NewHashRepository(db database.Database) IHashRepository {
 	coll := db.Collection(hashCollection)
 
-	coll.CreateIndexes(context.Background(), []opts.IndexModel{
+	db.EnsureIndexes(context.Background(), hashCollection, []opts.IndexModel{
 		{Key: []string{"hash_id"}, IndexOptions: new(options.IndexOptions).SetUnique(true)},
 		{Key: []string{"operation_id"}},
 		// Unique per-operation hash value — the dedupe guarantee for bulk import.

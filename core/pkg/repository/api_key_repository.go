@@ -34,7 +34,7 @@ type apiKeyRepository struct {
 func NewAPIKeyRepository(db database.Database) IAPIKeyRepository {
 	coll := db.Collection(apiKeyCollection)
 
-	coll.CreateIndexes(context.Background(), []opts.IndexModel{
+	db.EnsureIndexes(context.Background(), apiKeyCollection, []opts.IndexModel{
 		{Key: []string{"key_id"}, IndexOptions: new(options.IndexOptions).SetUnique(true)},
 		{Key: []string{"user_id"}, IndexOptions: new(options.IndexOptions).SetUnique(true)},
 	})

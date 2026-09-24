@@ -81,7 +81,7 @@ type skillRepository struct {
 
 func NewSkillRepository(db database.Database) ISkillRepository {
 	coll := db.Collection(skillCollection)
-	coll.CreateIndexes(context.Background(), []opts.IndexModel{
+	db.EnsureIndexes(context.Background(), skillCollection, []opts.IndexModel{
 		{Key: []string{"skill_id"}, IndexOptions: new(options.IndexOptions).SetUnique(true)},
 		{Key: []string{"name"}, IndexOptions: new(options.IndexOptions).SetUnique(true)},
 		{Key: []string{"owner_user_id"}},
@@ -89,7 +89,7 @@ func NewSkillRepository(db database.Database) ISkillRepository {
 	})
 
 	versions := db.Collection(skillVersionCollection)
-	versions.CreateIndexes(context.Background(), []opts.IndexModel{
+	db.EnsureIndexes(context.Background(), skillVersionCollection, []opts.IndexModel{
 		{Key: []string{"skill_version_id"}, IndexOptions: new(options.IndexOptions).SetUnique(true)},
 		{Key: []string{"skill_id", "version"}, IndexOptions: new(options.IndexOptions).SetUnique(true)},
 	})

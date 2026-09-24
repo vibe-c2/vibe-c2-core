@@ -92,7 +92,7 @@ type hostRepository struct {
 func NewHostRepository(db database.Database) IHostRepository {
 	coll := db.Collection(hostCollection)
 
-	coll.CreateIndexes(context.Background(), []opts.IndexModel{
+	db.EnsureIndexes(context.Background(), hostCollection, []opts.IndexModel{
 		{Key: []string{"host_id"}, IndexOptions: new(options.IndexOptions).SetUnique(true)},
 		{Key: []string{"operation_id"}},
 		{Key: []string{"operation_id", "-createAt", "-_id"}}, // Supports cursor-based pagination

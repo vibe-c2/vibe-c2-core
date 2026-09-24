@@ -51,7 +51,7 @@ type moduleRegistryRepository struct {
 func NewModuleRegistryRepository(db database.Database) IModuleRegistryRepository {
 	coll := db.Collection(moduleRegistryCollection)
 
-	coll.CreateIndexes(context.Background(), []opts.IndexModel{
+	db.EnsureIndexes(context.Background(), moduleRegistryCollection, []opts.IndexModel{
 		{Key: []string{"instance"}, IndexOptions: new(options.IndexOptions).SetUnique(true)},
 		// Reaper scans by status; module_type for operator queries.
 		{Key: []string{"status"}},

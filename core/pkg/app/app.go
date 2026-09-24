@@ -163,6 +163,17 @@ func NewApp() (*App, error) {
 		ModuleRegistry:     repository.NewModuleRegistryRepository(db),
 	}
 
+	// Every repository above declared its indexes as it was built. A failed
+	// build is fatal: Mongo would still answer every query, by scanning the
+	// collection, so the service would come up healthy and simply get slower
+	// as the data grows. The usual cause is a changed index definition that
+	// needs a deliberate drop or migration — see database/indexes.go.
+	if err := db.IndexSetupErr(); err != nil {
+		l.Error("database index setup failed; refusing to start with unindexed collections",
+			zap.Error(err))
+		return nil, fmt.Errorf("database index setup failed: %w", err)
+	}
+
 	// Initialize cache (noop fallback is acceptable for caching)
 	redisCfg := cache.RedisConfig{
 		Host:         e.RedisHost,

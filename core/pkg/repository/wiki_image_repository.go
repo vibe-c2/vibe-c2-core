@@ -33,7 +33,7 @@ type wikiImageRepository struct {
 func NewWikiImageRepository(db database.Database) IWikiImageRepository {
 	coll := db.Collection(wikiImageCollection)
 
-	coll.CreateIndexes(context.Background(), []opts.IndexModel{
+	db.EnsureIndexes(context.Background(), wikiImageCollection, []opts.IndexModel{
 		{Key: []string{"image_id"}, IndexOptions: new(options.IndexOptions).SetUnique(true)},
 		{Key: []string{"document_id"}},
 		{Key: []string{"operation_id"}},

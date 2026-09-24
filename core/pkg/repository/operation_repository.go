@@ -91,7 +91,7 @@ type operationRepository struct {
 func NewOperationRepository(db database.Database) IOperationRepository {
 	coll := db.Collection(operationCollection)
 
-	coll.CreateIndexes(context.Background(), []opts.IndexModel{
+	db.EnsureIndexes(context.Background(), operationCollection, []opts.IndexModel{
 		{Key: []string{"operation_id"}, IndexOptions: new(options.IndexOptions).SetUnique(true)},
 		{Key: []string{"name"}, IndexOptions: new(options.IndexOptions).SetUnique(true)},
 		{Key: []string{"members.user_id"}},

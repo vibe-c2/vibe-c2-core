@@ -33,7 +33,7 @@ type wikiFileRepository struct {
 func NewWikiFileRepository(db database.Database) IWikiFileRepository {
 	coll := db.Collection(wikiFileCollection)
 
-	coll.CreateIndexes(context.Background(), []opts.IndexModel{
+	db.EnsureIndexes(context.Background(), wikiFileCollection, []opts.IndexModel{
 		{Key: []string{"file_id"}, IndexOptions: new(options.IndexOptions).SetUnique(true)},
 		{Key: []string{"document_id"}},
 		{Key: []string{"operation_id"}},

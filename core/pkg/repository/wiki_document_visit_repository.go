@@ -64,7 +64,7 @@ type wikiDocumentVisitRepository struct {
 func NewWikiDocumentVisitRepository(db database.Database) IWikiDocumentVisitRepository {
 	coll := db.Collection(wikiDocumentVisitCollection)
 
-	coll.CreateIndexes(context.Background(), []opts.IndexModel{
+	db.EnsureIndexes(context.Background(), wikiDocumentVisitCollection, []opts.IndexModel{
 		// Unique dedup invariant — at most one row per (user, operation, document).
 		{
 			Key:          []string{"user_id", "operation_id", "document_id"},

@@ -33,7 +33,7 @@ type wikiDocumentBackupRepository struct {
 func NewWikiDocumentBackupRepository(db database.Database) IWikiDocumentBackupRepository {
 	coll := db.Collection(wikiDocumentBackupCollection)
 
-	coll.CreateIndexes(context.Background(), []opts.IndexModel{
+	db.EnsureIndexes(context.Background(), wikiDocumentBackupCollection, []opts.IndexModel{
 		{Key: []string{"backup_id"}, IndexOptions: new(options.IndexOptions).SetUnique(true)},
 		{Key: []string{"document_id", "-createAt"}},
 		{Key: []string{"operation_id"}},

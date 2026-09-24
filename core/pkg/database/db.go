@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/qiniu/qmgo"
+	opts "github.com/qiniu/qmgo/options"
 	"github.com/vibe-c2/vibe-c2-core/core/pkg/environment"
 )
 
@@ -17,12 +18,21 @@ type Database interface {
 	Ping(timeout int64) error
 	Collection(name string) Collection
 	DoTransaction(ctx context.Context, fn func(ctx context.Context) (interface{}, error)) (interface{}, error)
+
+	// EnsureIndexes creates a collection's indexes. It deliberately returns
+	// nothing: repository constructors are single-value, and an error return
+	// here would just be dropped at 21 call sites — which is the bug this
+	// replaces. Failures are recorded on the Database and reported once by
+	// IndexSetupErr, which startup checks. See indexes.go.
+	EnsureIndexes(ctx context.Context, collection string, models []opts.IndexModel)
+	IndexSetupErr() error
 }
 
 // QmgoDatabase implements Database by wrapping a qmgo Client and Database.
 type QmgoDatabase struct {
 	client *qmgo.Client
 	db     *qmgo.Database
+	indexRecord
 }
 
 func (d *QmgoDatabase) Close(ctx context.Context) error {

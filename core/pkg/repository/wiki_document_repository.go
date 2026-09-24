@@ -191,7 +191,7 @@ type wikiDocumentRepository struct {
 func NewWikiDocumentRepository(db database.Database) IWikiDocumentRepository {
 	coll := db.Collection(wikiDocumentCollection)
 
-	coll.CreateIndexes(context.Background(), []opts.IndexModel{
+	db.EnsureIndexes(context.Background(), wikiDocumentCollection, []opts.IndexModel{
 		{Key: []string{"document_id"}, IndexOptions: new(options.IndexOptions).SetUnique(true)},
 		{Key: []string{"operation_id", "deleted_at"}},
 		{Key: []string{"operation_id", "parent_document_id", "deleted_at"}},

@@ -49,7 +49,7 @@ type wikiTransferJobRepository struct {
 // NewWikiTransferJobRepository builds the repository and its indexes.
 func NewWikiTransferJobRepository(db database.Database) IWikiTransferJobRepository {
 	coll := db.Collection(wikiTransferJobCollection)
-	coll.CreateIndexes(context.Background(), []opts.IndexModel{
+	db.EnsureIndexes(context.Background(), wikiTransferJobCollection, []opts.IndexModel{
 		{Key: []string{"job_id"}, IndexOptions: new(options.IndexOptions).SetUnique(true)},
 		{Key: []string{"operation_id", "-createAt"}},
 		{Key: []string{"status", "createAt"}},

@@ -42,7 +42,7 @@ func NewAgentKeyRepository(db database.Database) IAgentKeyRepository {
 
 	// key_id and agent_key_id are unique; user_id is NOT — several agent keys
 	// per owner is the point of this collection.
-	coll.CreateIndexes(context.Background(), []opts.IndexModel{
+	db.EnsureIndexes(context.Background(), agentKeyCollection, []opts.IndexModel{
 		{Key: []string{"key_id"}, IndexOptions: new(options.IndexOptions).SetUnique(true)},
 		{Key: []string{"agent_key_id"}, IndexOptions: new(options.IndexOptions).SetUnique(true)},
 		{Key: []string{"user_id"}},

@@ -158,7 +158,7 @@ type credentialRepository struct {
 func NewCredentialRepository(db database.Database) ICredentialRepository {
 	coll := db.Collection(credentialCollection)
 
-	coll.CreateIndexes(context.Background(), []opts.IndexModel{
+	db.EnsureIndexes(context.Background(), credentialCollection, []opts.IndexModel{
 		{Key: []string{"credential_id"}, IndexOptions: new(options.IndexOptions).SetUnique(true)},
 		{Key: []string{"operation_id"}},
 		{Key: []string{"operation_id", "tags"}},

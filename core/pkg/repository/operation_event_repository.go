@@ -163,7 +163,7 @@ type operationEventRepository struct {
 func NewOperationEventRepository(db database.Database) IOperationEventRepository {
 	coll := db.Collection(operationEventCollection)
 
-	coll.CreateIndexes(context.Background(), []opts.IndexModel{
+	db.EnsureIndexes(context.Background(), operationEventCollection, []opts.IndexModel{
 		{Key: []string{"event_id"}, IndexOptions: new(options.IndexOptions).SetUnique(true)},
 		{Key: []string{"operation_id", "-occurred_at"}},
 		{Key: []string{"operation_id", "subject_kind", "-occurred_at"}},

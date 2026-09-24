@@ -85,7 +85,7 @@ func NewAgentActionRepository(db database.Database) IAgentActionRepository {
 
 	// Both read paths sort newest-first within a scope, so the indexes are
 	// compound rather than on the scope alone.
-	coll.CreateIndexes(context.Background(), []opts.IndexModel{
+	db.EnsureIndexes(context.Background(), agentActionCollection, []opts.IndexModel{
 		{Key: []string{"operation_id", "-occurred_at"}},
 		{Key: []string{"owner_user_id", "-occurred_at"}},
 		{Key: []string{"agent_key_id", "-occurred_at"}},

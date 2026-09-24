@@ -45,7 +45,7 @@ type skillSubscriptionRepository struct {
 
 func NewSkillSubscriptionRepository(db database.Database) ISkillSubscriptionRepository {
 	coll := db.Collection(skillSubscriptionCollection)
-	coll.CreateIndexes(context.Background(), []opts.IndexModel{
+	db.EnsureIndexes(context.Background(), skillSubscriptionCollection, []opts.IndexModel{
 		{Key: []string{"user_id", "skill_id"}, IndexOptions: new(options.IndexOptions).SetUnique(true)},
 		{Key: []string{"skill_id"}},
 	})

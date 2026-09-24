@@ -52,7 +52,7 @@ type sessionRepository struct {
 func NewSessionRepository(db database.Database) ISessionRepository {
 	coll := db.Collection(sessionCollection)
 
-	coll.CreateIndexes(context.Background(), []opts.IndexModel{
+	db.EnsureIndexes(context.Background(), sessionCollection, []opts.IndexModel{
 		{Key: []string{"session_id"}, IndexOptions: new(options.IndexOptions).SetUnique(true)},
 		{Key: []string{"user_id", "-createAt"}},
 		{Key: []string{"-createAt", "-_id"}}, // cursor pagination

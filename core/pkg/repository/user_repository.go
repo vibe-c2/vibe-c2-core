@@ -85,7 +85,7 @@ type userRepository struct {
 func NewUserRepository(db database.Database) IUserRepository {
 	coll := db.Collection(userCollection)
 
-	coll.CreateIndexes(context.Background(), []opts.IndexModel{
+	db.EnsureIndexes(context.Background(), userCollection, []opts.IndexModel{
 		{Key: []string{"username"}, IndexOptions: new(options.IndexOptions).SetUnique(true)},
 		{Key: []string{"user_id"}, IndexOptions: new(options.IndexOptions).SetUnique(true)},
 		{Key: []string{"-createAt", "-_id"}}, // Supports cursor-based pagination

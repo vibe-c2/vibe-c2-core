@@ -138,7 +138,7 @@ type taskRepository struct {
 func NewTaskRepository(db database.Database) ITaskRepository {
 	coll := db.Collection(taskCollection)
 
-	coll.CreateIndexes(context.Background(), []opts.IndexModel{
+	db.EnsureIndexes(context.Background(), taskCollection, []opts.IndexModel{
 		// Unique business id.
 		{Key: []string{"task_id"}, IndexOptions: new(options.IndexOptions).SetUnique(true)},
 		// Base list: operation scope + trashed filter.
