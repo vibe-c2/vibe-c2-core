@@ -205,8 +205,15 @@ func NewWikiDocumentRepository(db database.Database) IWikiDocumentRepository {
 		// matches the actual query shape.
 		{
 			Key: []string{"operation_id", "-last_updated_at", "-_id"},
+			// $type: "date" is how "present and not null" is expressed in a
+			// partial filter. The obvious {$exists: true, $ne: null} is not
+			// accepted: MongoDB desugars $ne to $not, which partial filters
+			// reject, and it fails the whole CreateIndexes batch rather than
+			// just this index — so every other index on the collection
+			// disappears with it. $type matches a BSON date only, excluding
+			// both a missing field and an explicit null.
 			IndexOptions: new(options.IndexOptions).SetPartialFilterExpression(bson.M{
-				"last_updated_at": bson.M{"$exists": true, "$ne": nil},
+				"last_updated_at": bson.M{"$type": "date"},
 				"deleted_at":      nil,
 			}),
 		},
@@ -252,11 +259,20 @@ func NewWikiDocumentRepository(db database.Database) IWikiDocumentRepository {
 		// read is a pure index scan. Templates are rare, so the partial filter
 		// keeps this index tiny regardless of total document count.
 		{
+			// Explicitly named. Its key is the same shape as the plain
+			// {operation_id, title_lower} index above, so both would
+			// auto-generate the name operation_id_1_title_lower_1 and the
+			// second to be built would fail with IndexKeySpecsConflict —
+			// taking the whole CreateIndexes batch down with it. They are two
+			// different indexes serving two different queries, so the fix is a
+			// distinct name rather than dropping either.
 			Key: []string{"operation_id", "title_lower"},
-			IndexOptions: new(options.IndexOptions).SetPartialFilterExpression(bson.M{
-				"is_template": true,
-				"deleted_at":  nil,
-			}),
+			IndexOptions: new(options.IndexOptions).
+				SetName("wiki_templates_idx").
+				SetPartialFilterExpression(bson.M{
+					"is_template": true,
+					"deleted_at":  nil,
+				}),
 		},
 	})
 
@@ -395,9 +411,12 @@ func (r *wikiDocumentRepository) FindByOperationIDWithCursor(ctx context.Context
 
 	sortField := filter.Sort.SortField()
 	if filter.Sort == SortByLastUpdatedAt {
-		// Match the partial index filter — rows without last_updated_at have
-		// nothing to sort against and must be excluded from this list mode.
-		mongoFilter["last_updated_at"] = bson.M{"$exists": true, "$ne": nil}
+		// Match the partial index filter exactly — the planner only uses a
+		// partial index when the query is provably a subset of its filter, so
+		// this predicate has to be the same $type check the index declares.
+		// Rows without last_updated_at have nothing to sort against and are
+		// excluded from this list mode either way.
+		mongoFilter["last_updated_at"] = bson.M{"$type": "date"}
 	}
 
 	mongoFilter = pagination.ApplyCursorFilterOn(mongoFilter, cursor, forward, sortField)
