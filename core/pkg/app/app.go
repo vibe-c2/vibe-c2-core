@@ -17,7 +17,6 @@ import (
 	"github.com/vibe-c2/vibe-c2-core/core/pkg/database"
 	"github.com/vibe-c2/vibe-c2-core/core/pkg/environment"
 	"github.com/vibe-c2/vibe-c2-core/core/pkg/eventbus"
-	"github.com/vibe-c2/vibe-c2-core/core/pkg/events"
 	"github.com/vibe-c2/vibe-c2-core/core/pkg/lifecycle"
 	"github.com/vibe-c2/vibe-c2-core/core/pkg/logger"
 	"github.com/vibe-c2/vibe-c2-core/core/pkg/mcp"
@@ -26,10 +25,7 @@ import (
 	"github.com/vibe-c2/vibe-c2-core/core/pkg/repository"
 	"github.com/vibe-c2/vibe-c2-core/core/pkg/skills"
 	"github.com/vibe-c2/vibe-c2-core/core/pkg/wiki"
-	"github.com/vibe-c2/vibe-c2-core/core/pkg/wikitransfer"
-	"github.com/vibe-c2/vibe-c2-core/core/pkg/wikitransfer/bundle"
 	transferjob "github.com/vibe-c2/vibe-c2-core/core/pkg/wikitransfer/job"
-	transfermd "github.com/vibe-c2/vibe-c2-core/core/pkg/wikitransfer/markdown"
 
 	"go.uber.org/zap"
 )
@@ -125,226 +121,37 @@ type App struct {
 	// conditionChecker setupmanager.IConditionChecker
 }
 
+// NewApp brings the service up, one subsystem at a time. The order is
+// load-bearing — see bootstrap.go, which holds the stages.
 func NewApp() (*App, error) {
 	e := environment.GetEnvironmentSettings()
-
-	// Initialize logger
 	l := logger.NewLogger(e.Debug)
-
 	ctx := context.Background()
 
-	// Initialize database
-	db, err := database.NewDatabase(ctx)
+	infra, err := newInfrastructure(ctx, e, l)
 	if err != nil {
-		return nil, fmt.Errorf("failed to initialize database: %w", err)
+		return nil, err
 	}
+	repos := infra.repos
 
-	// Initialize repositories
-	repos := &Repositories{
-		User:               repository.NewUserRepository(db),
-		Operation:          repository.NewOperationRepository(db),
-		Session:            repository.NewSessionRepository(db),
-		WikiDocument:       repository.NewWikiDocumentRepository(db),
-		WikiDocumentBackup: repository.NewWikiDocumentBackupRepository(db),
-		WikiDocumentVisit:  repository.NewWikiDocumentVisitRepository(db),
-		WikiImage:          repository.NewWikiImageRepository(db),
-		WikiFile:           repository.NewWikiFileRepository(db),
-		WikiTransferJob:    repository.NewWikiTransferJobRepository(db),
-		Skill:              repository.NewSkillRepository(db),
-		SkillSubscription:  repository.NewSkillSubscriptionRepository(db),
-		Credential:         repository.NewCredentialRepository(db),
-		Hash:               repository.NewHashRepository(db),
-		Host:               repository.NewHostRepository(db),
-		Task:               repository.NewTaskRepository(db),
-		OperationEvent:     repository.NewOperationEventRepository(db),
-		APIKey:             repository.NewAPIKeyRepository(db),
-		AgentKey:           repository.NewAgentKeyRepository(db), // wrapped with auth-cache eviction below
-		AgentAction:        repository.NewAgentActionRepository(db),
-		ModuleRegistry:     repository.NewModuleRegistryRepository(db),
-	}
-
-	// Every repository above declared its indexes as it was built. A failed
-	// build is fatal: Mongo would still answer every query, by scanning the
-	// collection, so the service would come up healthy and simply get slower
-	// as the data grows. The usual cause is a changed index definition that
-	// needs a deliberate drop or migration — see database/indexes.go.
-	if err := db.IndexSetupErr(); err != nil {
-		l.Error("database index setup failed; refusing to start with unindexed collections",
-			zap.Error(err))
-		return nil, fmt.Errorf("database index setup failed: %w", err)
-	}
-
-	// Initialize cache (noop fallback is acceptable for caching)
-	redisCfg := cache.RedisConfig{
-		Host:         e.RedisHost,
-		Port:         e.RedisPort,
-		Password:     e.RedisPassword,
-		CacheEnabled: e.CacheEnabled,
-		Logger:       l,
-	}
-	c, err := cache.NewRedisCache(ctx, redisCfg)
+	authSvc, err := newAuthStack(ctx, e, l)
 	if err != nil {
-		l.Warn("Failed to initialize Redis cache, continuing without cache", zap.Error(err))
-		c = cache.NewNoopCache()
-	}
-	// Agent-key auth is cached per key for a short TTL; every key mutation
-	// must evict that entry, so the repository is wrapped once the cache
-	// exists.
-	repos.AgentKey = repository.NewAgentKeyRepositoryWithAuthCache(repos.AgentKey, c)
-
-	// Derive the AES-256 key for encrypting grace shadow payloads (used by
-	// both the token store and the auth controller).
-	graceKey := auth.DeriveGraceKey(e.JWTSecretKey)
-
-	// Initialize token store (failure is fatal — auth requires durable session storage)
-	tokenStore, err := auth.NewRedisTokenStore(ctx, auth.RedisTokenStoreConfig{
-		Host:               e.RedisHost,
-		Port:               e.RedisPort,
-		Password:           e.RedisPassword,
-		DB:                 1,
-		Logger:             l,
-		GraceEncryptionKey: graceKey,
-	})
-	if err != nil {
-		return nil, fmt.Errorf("failed to initialize token store (required): %w", err)
+		return nil, err
 	}
 
-	// Auth configuration — all values come from environment. Dev devs who
-	// want short TTLs to exercise refresh paths set AUTH_ACCESS_TTL in
-	// their compose.
-	authCfg := authConfig{
-		accessTTL:         e.AuthAccessTTL,
-		refreshTTL:        e.AuthRefreshTTL,
-		refreshGraceTTL:   e.AuthRefreshGraceTTL,
-		graceKey:          graceKey,
-		csrfEnabled:       e.AuthCSRFEnabled,
-		localLoginEnabled: e.AuthLocalLoginEnabled,
-		oidcHandshakeKey:  auth.DeriveKey(e.JWTSecretKey, "oidc-handshake"),
-	}
-	authProvider := auth.NewAuthProvider(e.JWTSecretKey, authCfg.accessTTL)
-
-	// Optional single sign-on. Discovery failure is logged, not fatal: an
-	// identity-provider outage must not take the local break-glass login
-	// down with it. The wrapper retries discovery on the next SSO attempt.
-	var oidcProvider *oidc.LazyProvider
-	if e.OIDC.Enabled {
-		discoverCtx, cancel := context.WithTimeout(ctx, e.OIDC.HTTPTimeout)
-		oidcProvider, err = oidc.NewLazyProvider(discoverCtx, oidcConfigFromEnv(e))
-		cancel()
-		if err != nil {
-			l.Error("oidc: discovery failed at startup; SSO unavailable until it succeeds",
-				zap.String("issuer", e.OIDC.IssuerURL), zap.Error(err))
-		} else {
-			l.Info("oidc: provider discovered", zap.String("issuer", e.OIDC.IssuerURL))
-		}
-	}
-
-	// Initialize event bus
+	// The bus has to exist before anything that publishes on it.
 	bus := eventbus.NewEventBus(l)
 
-	// Initialize wiki integration
-	presenceTracker := wiki.NewPresenceTracker(l)
-	hpClient := wiki.NewHocuspocusClient(e.HocuspocusURL, e.HocuspocusWebhookSecret, l)
-
-	// Parse auto-backup interval
-	backupInterval, err := time.ParseDuration(e.WikiAutoBackupInterval)
+	wikiSvc, err := newWikiStack(ctx, e, l, repos, bus)
 	if err != nil {
-		l.Warn("Invalid WIKI_AUTO_BACKUP_INTERVAL, using default 30m", zap.Error(err))
-		backupInterval = 30 * time.Minute
+		return nil, err
 	}
-	backupScheduler := wiki.NewBackupScheduler(repos.WikiDocument, repos.WikiDocumentBackup, l, backupInterval)
+	transfer := newTransferStack(e, l, repos, bus, wikiSvc)
 
-	// Image storage: SeaweedFS S3 gateway. Bucket is created on first run.
-	imageStore, err := blob.NewS3Store(ctx, blob.S3Config{
-		Endpoint:  e.SeaweedFSS3Endpoint,
-		AccessKey: e.SeaweedFSS3AccessKey,
-		SecretKey: e.SeaweedFSS3SecretKey,
-		Bucket:    e.WikiImageBucket,
-	})
-	if err != nil {
-		return nil, fmt.Errorf("failed to initialize wiki image store: %w", err)
-	}
-	imageProcessor := wiki.NewImageProcessor(e.WikiImageMaxDimension)
-	imageSweeper := wiki.NewImageSweeper(
-		repos.WikiDocument, repos.WikiImage, imageStore, l,
-		e.WikiImageSweeperInterval, e.WikiImageSweeperGrace, e.WikiSweeperDryRun,
-	)
-
-	// File storage: same SeaweedFS S3 gateway, separate bucket so lifecycle
-	// policies and retention can be tuned independently from images.
-	fileStore, err := blob.NewS3Store(ctx, blob.S3Config{
-		Endpoint:  e.SeaweedFSS3Endpoint,
-		AccessKey: e.SeaweedFSS3AccessKey,
-		SecretKey: e.SeaweedFSS3SecretKey,
-		Bucket:    e.WikiFileBucket,
-	})
-	if err != nil {
-		return nil, fmt.Errorf("failed to initialize wiki file store: %w", err)
-	}
-	fileSweeper := wiki.NewFileSweeper(
-		repos.WikiDocument, repos.WikiFile, fileStore, l,
-		e.WikiFileSweeperInterval, e.WikiFileSweeperGrace, e.WikiSweeperDryRun,
-	)
-
-	// Community skill bundles: a third bucket on the same gateway. Separate
-	// from the wiki buckets because these are not engagement data and should
-	// not share their retention or their sweepers — nothing here is ever
-	// garbage collected, since a version somebody installed must stay
-	// downloadable.
-	skillStore, err := blob.NewS3Store(ctx, blob.S3Config{
-		Endpoint:  e.SeaweedFSS3Endpoint,
-		AccessKey: e.SeaweedFSS3AccessKey,
-		SecretKey: e.SeaweedFSS3SecretKey,
-		Bucket:    e.SkillBucket,
-	})
-	if err != nil {
-		return nil, fmt.Errorf("failed to initialize skill store: %w", err)
-	}
-	skillService := skills.NewService(repos.Skill, repos.SkillSubscription, skillStore, e.SkillMaxSize, l).WithEventBus(bus)
-
-	// Wiki transfer pipeline: one materialiser shared by both import
-	// formats, one writer per export format, all driven by a background
-	// runner. Attachments go through the same ingest helpers a browser
-	// upload uses, so the controllers are built here rather than in the
-	// router.
-	wikiImageCtrl := controller.NewWikiImageController(
-		repos.WikiDocument, repos.WikiImage, repos.Operation,
-		imageStore, imageProcessor, l,
-		controller.WikiImageControllerConfig{MaxSize: e.WikiImageMaxSize},
-	)
-	wikiFileCtrl := controller.NewWikiFileController(
-		repos.WikiDocument, repos.WikiFile, repos.Operation,
-		fileStore, l,
-		controller.WikiFileControllerConfig{
-			MaxSize:            e.WikiFileMaxSize,
-			DeniedContentTypes: e.WikiFileDeniedContentTypes,
-		},
-	)
-	materialiser := wikitransfer.NewMaterialiser(
-		repos.WikiDocument, repos.Credential, repos.Host, repos.Hash,
-		controller.NewWikiTransferIngestor(wikiImageCtrl, wikiFileCtrl),
-		hpClient, bus, l,
-	)
-	bundleWriter := bundle.NewWriter(
-		repos.WikiImage, repos.WikiFile, imageStore, fileStore,
-		repos.Host, repos.Hash, repos.Credential, hpClient, l,
-		bundle.Config{InstallationID: e.InstallationID},
-	)
-	mdExporter := transfermd.NewExporter(
-		repos.WikiImage, repos.WikiFile, imageStore, fileStore,
-		repos.WikiDocument, repos.Host, repos.Hash,
-		hpClient, repos.Credential, l, transfermd.Config{},
-	)
-	transferRunner := transferjob.NewRunner(
-		repos.WikiTransferJob, repos.WikiDocument, repos.Operation, fileStore,
-		materialiser, bundleWriter, mdExporter, bus, l,
-		transferjob.Config{ArtifactTTL: e.WikiTransferArtifactTTL},
-	)
-
-	// Registration gate: read-through cache over the module registry, shared by
-	// the data-plane sync controller (reads) and the lifecycle handlers (cache
-	// busting on deregister/death). TTL = heartbeat interval.
-	moduleGate := modulegate.New(repos.ModuleRegistry, c, e.ModuleHeartbeatInterval, l)
+	// Registration gate: read-through cache over the module registry, shared
+	// by the data-plane sync controller (reads) and the lifecycle handlers
+	// (cache busting on deregister/death). TTL = heartbeat interval.
+	moduleGate := modulegate.New(repos.ModuleRegistry, infra.cache, e.ModuleHeartbeatInterval, l)
 
 	// Module-lifecycle control plane over AMQP. A reachable broker is a hard
 	// dependency — initLifecycle returns an error and core refuses to boot if
@@ -367,91 +174,38 @@ func NewApp() (*App, error) {
 	//   confEngine := confengine.NewConfigurationEngine(repos..., bus)
 	// ------------------------------------
 
-	// Persist domain events into operation_events so the Timeline page can
-	// render historical activity. New event types are added by appending to
-	// events.Logger.Topics(), no further wiring required here.
-	eventLogger := events.NewLogger(repos.OperationEvent, repos.Operation, repos.Credential, repos.Hash, bus, l)
-	bus.Subscribe(eventLogger.Topics(), eventLogger.Handle)
+	subscribeEventHandlers(ctx, l, repos, bus, wikiSvc.hpClient)
 
-	// Backfill once on first deploy. Idempotent via deterministic event IDs;
-	// non-blocking on partial failure so a slow seed never blocks startup.
-	if err := eventLogger.BackfillIfEmpty(ctx); err != nil {
-		l.Warn("event logger: backfill failed", zap.Error(err))
-	}
-
-	// Stamp done_at on any legacy DONE-stage task that predates the field.
-	// Idempotent and bounded by the DONE-without-done_at row count, so it
-	// is cheap on subsequent boots (zero rows to update).
-	if n, err := repos.Task.BackfillDoneAt(ctx); err != nil {
-		l.Warn("task done_at backfill failed", zap.Error(err))
-	} else if n > 0 {
-		l.Info("task done_at backfill complete", zap.Int64("rows", n))
-	}
-
-	// Give every pre-three-state credential a validity. See
-	// BackfillValidity for why a legacy false becomes UNKNOWN.
-	if n, err := repos.Credential.BackfillValidity(ctx); err != nil {
-		l.Warn("credential validity backfill failed", zap.Error(err))
-	} else if n > 0 {
-		l.Info("credential validity backfill complete", zap.Int64("rows", n))
-	}
-
-	// Subscribe to operation membership changes for wiki role enforcement.
-	// When a user is removed from an operation or demoted below operator,
-	// disconnect their active Hocuspocus WebSocket connections.
-	bus.Subscribe(
-		[]eventbus.Topic{eventbus.TopicOperationMemberRemoved},
-		func(_ context.Context, event eventbus.Event) {
-			if p, ok := event.Payload.(eventbus.OperationMemberPayload); ok {
-				_ = hpClient.DisconnectUser(context.Background(), p.MemberID, p.OperationID)
-			}
-		},
-	)
-	// Any role change: force-disconnect the affected user so their next
-	// Hocuspocus connection re-fetches a fresh collab ticket with the
-	// up-to-date readOnly flag. Cheaper and more correct than trying to
-	// mutate the live connection's readOnly state in place.
-	bus.Subscribe(
-		[]eventbus.Topic{eventbus.TopicOperationMemberUpdated},
-		func(_ context.Context, event eventbus.Event) {
-			if p, ok := event.Payload.(eventbus.OperationMemberPayload); ok {
-				_ = hpClient.DisconnectUser(context.Background(), p.MemberID, p.OperationID)
-			}
-		},
-	)
-
-	app := &App{
+	return &App{
 		logger:          l,
-		db:              db,
+		db:              infra.db,
 		env:             e,
 		repos:           repos,
-		authProvider:    authProvider,
-		cache:           c,
-		tokenStore:      tokenStore,
+		authProvider:    authSvc.provider,
+		cache:           infra.cache,
+		tokenStore:      authSvc.tokenStore,
 		eventBus:        bus,
-		authCfg:         authCfg,
-		oidcProvider:    oidcProvider,
-		presenceTracker: presenceTracker,
-		hpClient:        hpClient,
-		backupScheduler: backupScheduler,
-		imageStore:      imageStore,
-		imageProcessor:  imageProcessor,
-		imageSweeper:    imageSweeper,
-		fileStore:       fileStore,
-		fileSweeper:     fileSweeper,
-		skillService:    skillService,
-		transferRunner:  transferRunner,
-		wikiImageCtrl:   wikiImageCtrl,
-		wikiFileCtrl:    wikiFileCtrl,
+		authCfg:         authSvc.cfg,
+		oidcProvider:    authSvc.oidc,
+		presenceTracker: wikiSvc.presence,
+		hpClient:        wikiSvc.hpClient,
+		backupScheduler: wikiSvc.backupScheduler,
+		imageStore:      wikiSvc.imageStore,
+		imageProcessor:  wikiSvc.imageProcessor,
+		imageSweeper:    wikiSvc.imageSweeper,
+		fileStore:       wikiSvc.fileStore,
+		fileSweeper:     wikiSvc.fileSweeper,
+		skillService:    wikiSvc.skillService,
+		transferRunner:  transfer.runner,
+		wikiImageCtrl:   transfer.imageCtrl,
+		wikiFileCtrl:    transfer.fileCtrl,
 		sweepersEnabled: e.WikiSweeperEnabled,
 		mqClient:        mqClient,
 		rpcServer:       rpcServer,
 		reaper:          reaper,
 		moduleGate:      moduleGate,
 		moduleService:   moduleService,
-	}
-
-	return app, nil
+	}, nil
 }
 
 // initLifecycle stands up the AMQP control plane: the broker connection, the
